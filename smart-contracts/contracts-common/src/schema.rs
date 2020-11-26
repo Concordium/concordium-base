@@ -56,10 +56,15 @@ impl Contract {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum Fields {
+    /// Named fields, e.g., `struct Foo {x: u64, y: u32}`.
     Named(Vec<(String, Type)>),
+    /// Unnamed fields, e.g., `struct Foo(u64, u32)`
     Unnamed(Vec<Type>),
-    /// No fields
-    Unit,
+    /// No fields. Note that this is distinct from an empty set of named or
+    /// unnamed fields. That is, in Rust there is a (albeit trivial) difference
+    /// between `struct Foo {}`, `struct Foo`, and `struct Foo()`, all of which
+    /// are valid, but will have different representations.
+    None,
 }
 
 // TODO: Extend with LEB128
@@ -156,7 +161,7 @@ impl SchemaType for ContractAddress {
 impl<T: SchemaType> SchemaType for Option<T> {
     fn get_type() -> Type {
         Type::Enum(vec![
-            ("None".to_string(), Fields::Unit),
+            ("None".to_string(), Fields::None),
             ("Some".to_string(), Fields::Unnamed(vec![T::get_type()])),
         ])
     }
@@ -234,7 +239,7 @@ impl Serial for Fields {
                 out.write_u8(1)?;
                 fields.serial(out)?;
             }
-            Fields::Unit => {
+            Fields::None => {
                 out.write_u8(2)?;
             }
         }
@@ -248,7 +253,7 @@ impl Deserial for Fields {
         match idx {
             0 => Ok(Fields::Named(source.get()?)),
             1 => Ok(Fields::Unnamed(source.get()?)),
-            2 => Ok(Fields::Unit),
+            2 => Ok(Fields::None),
             _ => Err(ParseError::default()),
         }
     }
@@ -479,7 +484,7 @@ mod impls {
                     }
                     Ok(Value::Array(values))
                 }
-                Fields::Unit => Ok(Value::Array(vec![])),
+                Fields::None => Ok(Value::Array(vec![])),
             }
         }
     }

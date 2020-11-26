@@ -226,7 +226,7 @@ fn contract_function_schema_tokens(
 /// details and limitations.
 ///
 /// In addition to the attributes supported by `derive(Serial)`, this derivation
-/// macro supports the `skip_order_check` attribute. If applied to a field the
+/// macro supports the `ensure_ordered` attribute. If applied to a field the
 /// of type `BTreeMap` or `BTreeSet` deserialization will additionally ensure
 /// that there keys are in strictly increasing order. By default deserialization
 /// only ensures uniqueness.
@@ -235,7 +235,7 @@ fn contract_function_schema_tokens(
 /// ```
 /// #[derive(Deserial)]
 /// struct Foo {
-///     #[concordium(set_size_length = 1, skip_order_check)]
+///     #[concordium(set_size_length = 1, ensure_ordered)]
 ///     bar: BTreeSet<u8>,
 /// }
 /// ```
@@ -250,7 +250,7 @@ const CONCORDIUM_FIELD_ATTRIBUTE: &str = "concordium";
 
 /// A list of valid concordium field attributes
 const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 5] =
-    ["size_length", "set_size_length", "map_size_length", "string_size_length", "skip_order_check"];
+    ["size_length", "set_size_length", "map_size_length", "string_size_length", "ensure_ordered"];
 
 fn get_concordium_field_attributes(attributes: &[syn::Attribute]) -> Vec<syn::Meta> {
     attributes
@@ -339,35 +339,35 @@ fn impl_deserial_field(
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
         let size = format_ident!("u{}", 8 * l);
-        if contains_attribute(&f.attrs, "skip_order_check") {
-            quote! {
-                let #ident = {
-                    let len = #size::deserial(#source)?;
-                    deserial_map_no_length_no_order_check(#source, len as usize)?
-                };
-            }
-        } else {
+        if contains_attribute(&f.attrs, "ensure_ordered") {
             quote! {
                 let #ident = {
                     let len = #size::deserial(#source)?;
                     deserial_map_no_length(#source, len as usize)?
                 };
             }
-        }
-    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
-        let size = format_ident!("u{}", 8 * l);
-        if contains_attribute(&f.attrs, "skip_order_check") {
+        } else {
             quote! {
                 let #ident = {
                     let len = #size::deserial(#source)?;
-                    deserial_set_no_length_no_order_check(#source, len as usize)?
+                    deserial_map_no_length_no_order_check(#source, len as usize)?
+                };
+            }
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+        let size = format_ident!("u{}", 8 * l);
+        if contains_attribute(&f.attrs, "ensure_ordered") {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_set_no_length(#source, len as usize)?
                 };
             }
         } else {
             quote! {
                 let #ident = {
                     let len = #size::deserial(#source)?;
-                    deserial_set_no_length(#source, len as usize)?
+                    deserial_set_no_length_no_order_check(#source, len as usize)?
                 };
             }
         }
@@ -707,7 +707,7 @@ pub fn serialize_derive(input: TokenStream) -> TokenStream {
 ///
 ///
 /// # Example
-/// ```rust
+/// ```ignore
 /// #[contract_state(contract = "my_contract")]
 /// #[derive(SchemaType)]
 /// struct MyContractState {
@@ -838,12 +838,12 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
             let fields_tokens: Vec<_> = fields.iter().map(schema_type_field_type).collect();
             quote! { concordium_sc_base::schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
         }
-        syn::Fields::Unit => quote! { concordium_sc_base::schema::Fields::Unit },
+        syn::Fields::Unit => quote! { concordium_sc_base::schema::Fields::None },
     }
 }
 
-/// Derive the appropriate export for an annotated test function, when targeting
-/// wasm32, otherwise behaves like #[test].
+/// Derive the appropriate export for an annotated test function, when feature
+/// "wasm-test" is enabled, otherwise behaves like #[test].
 #[proc_macro_attribute]
 pub fn concordium_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let test_fn_ast: syn::ItemFn =

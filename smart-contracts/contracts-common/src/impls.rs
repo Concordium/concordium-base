@@ -498,11 +498,20 @@ impl<K: Serial + Ord, V: Serial> Serial for BTreeMap<K, V> {
 }
 
 /// The deserialization of maps assumes their size as a u32.
-/// Deserialization will only succeed if the key-value pairs are ordered.
-impl<K: Deserial + Ord + Copy, V: Deserial> Deserial for BTreeMap<K, V> {
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization **does not** ensure
+/// the ordering of the keys, it only ensures that there are no duplicates.
+/// Serializing a `BTreeMap` via its `Serial` instance will lay out elements
+/// by the increasing order of keys. As a consequence deserializing, and
+/// serializing back is in general not the identity. This could have
+/// consequences if the data is hashed, or the byte representation
+/// is used in some other way directly. In those cases the a canonical
+/// order should be ensured to avoid subtle, difficult to diagnose,
+/// bugs.
+impl<K: Deserial + Ord, V: Deserial> Deserial for BTreeMap<K, V> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
-        deserial_map_no_length(source, len as usize)
+        deserial_map_no_length_no_order_check(source, len as usize)
     }
 }
 
@@ -518,11 +527,20 @@ impl<K: Serial + Ord> Serial for BTreeSet<K> {
 }
 
 /// The deserialization of sets assumes their size as a u32.
-/// Deserialization will only succeed if the keys are ordered.
-impl<K: Deserial + Ord + Copy> Deserial for BTreeSet<K> {
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization **does not** ensure
+/// the ordering of the keys, it only ensures that there are no duplicates.
+/// Serializing a `BTreeSet` via its `Serial` instance will lay out elements
+/// by the increasing order. As a consequence deserializing, and
+/// serializing back is in general not the identity. This could have
+/// consequences if the data is hashed, or the byte representation
+/// is used in some other way directly. In those cases the a canonical
+/// order should be ensured to avoid subtle, difficult to diagnose,
+/// bugs.
+impl<K: Deserial + Ord> Deserial for BTreeSet<K> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
-        deserial_set_no_length(source, len as usize)
+        deserial_set_no_length_no_order_check(source, len as usize)
     }
 }
 
