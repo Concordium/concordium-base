@@ -1,6 +1,6 @@
 use crate::{build::*, schema_json::*};
 use clap::AppSettings;
-use contracts_common::{from_bytes, to_bytes};
+use contracts_common::{from_bytes, to_bytes, Amount};
 use std::{
     fs,
     fs::File,
@@ -48,20 +48,20 @@ enum Command {
         )]
         schema_embed: bool,
         #[structopt(
-            name = "schema-output",
-            long = "schema-output",
+            name = "schema-out",
+            long = "schema-out",
             short = "s",
             help = "Builds the contract schema and writes it to file at specified location."
         )]
-        schema_output: Option<PathBuf>,
+        schema_out: Option<PathBuf>,
     },
 }
 
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(name = "runner")]
 struct Runner {
-    #[structopt(name = "source", long = "source", help = "Binary module source.")]
-    source: PathBuf,
+    #[structopt(name = "module", long = "module", help = "Binary module source.")]
+    module: PathBuf,
     #[structopt(
         name = "out-bin",
         long = "out-bin",
@@ -71,7 +71,8 @@ struct Runner {
     #[structopt(
         name = "out-json",
         long = "out-json",
-        help = "Where to write the new contract state to in JSON format."
+        help = "Where to write the new contract state to in JSON format, requiring the module to \
+                have an appropriate schema embedded or otherwise provided by --schema."
     )]
     out_json: Option<PathBuf>,
     #[structopt(
@@ -83,10 +84,10 @@ struct Runner {
     #[structopt(
         name = "amount",
         long = "amount",
-        help = "The amount of micro GTU to invoke the method with.",
+        help = "The amount of GTU to invoke the method with.",
         default_value = "0"
     )]
-    amount: u64,
+    amount: Amount,
     #[structopt(
         name = "schema",
         long = "schema",
@@ -139,7 +140,7 @@ enum RunCommand {
         #[structopt(flatten)]
         runner: Runner,
     },
-    #[structopt(name = "receive", about = "Invoke a receive method of a module.")]
+    #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
         #[structopt(
             name = "contract",
@@ -222,14 +223,14 @@ pub fn main() {
                 exit(1);
             }
 
-            let source = fs::read(&runner.source).expect("Could not read module file.");
+            let module = fs::read(&runner.module).expect("Could not read module file.");
 
             let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
                 let bytes = fs::read(schema_path).expect("Failed reading schema file");
                 let schema = from_bytes(&bytes).expect("Failed to parse schema file");
                 Some(schema)
             } else {
-                get_embedded_schema(&source).ok()
+                get_embedded_schema(&module).ok()
             };
 
             let contract_schema_opt = module_schema_opt
@@ -331,8 +332,8 @@ pub fn main() {
                     };
                     let name = format!("init_{}", contract_name);
                     let res = invoke_init_with_metering_from_source(
-                        &source,
-                        runner.amount,
+                        &module,
+                        runner.amount.micro_gtu,
                         init_ctx,
                         &name,
                         parameter,
@@ -417,8 +418,8 @@ pub fn main() {
 
                     let name = format!("{}.{}", contract_name, func);
                     let res = invoke_receive_with_metering_from_source(
-                        &source,
-                        runner.amount,
+                        &module,
+                        runner.amount.micro_gtu,
                         receive_ctx,
                         &init_state,
                         &name,
@@ -513,9 +514,9 @@ pub fn main() {
         }
         Command::Build {
             schema_embed,
-            schema_output,
+            schema_out,
         } => {
-            let build_schema = schema_embed || schema_output.is_some();
+            let build_schema = schema_embed || schema_out.is_some();
             let schema_to_embed = if build_schema {
                 let module_schema = match build_contract_schema() {
                     Ok(schema) => schema,
@@ -534,7 +535,7 @@ pub fn main() {
                     module_schema_bytes.len()
                 );
 
-                if let Some(schema_out) = schema_output {
+                if let Some(schema_out) = schema_out {
                     eprintln!("Writing schema to {}.", schema_out.to_string_lossy());
                     fs::write(schema_out, &module_schema_bytes).unwrap();
                 }

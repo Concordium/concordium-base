@@ -1,17 +1,7 @@
 #[cfg(not(feature = "std"))]
-use core::convert;
+use core::{convert, fmt, iter, ops, str};
 #[cfg(feature = "std")]
-use std::convert;
-
-#[cfg(not(feature = "std"))]
-use core::ops::{Add, AddAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-#[cfg(feature = "std")]
-use std::ops::{Add, AddAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-
-#[cfg(not(feature = "std"))]
-use core::iter::Sum;
-#[cfg(feature = "std")]
-use std::iter::Sum;
+use std::{convert, fmt, iter, ops, str};
 
 /// Size of an account address when serialized in binary.
 /// NB: This is different from the Base58 representation.
@@ -39,6 +29,111 @@ impl<'de> SerdeDeserialize<'de> for Amount {
     fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         let s = String::deserialize(des)?;
         let micro_gtu = s.parse::<u64>().map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
+        Ok(Amount {
+            micro_gtu,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AmountParseError {
+    Overflow,
+    ExpectedDot,
+    ExpectedDigit,
+    ExpectedMore,
+    ExpectedDigitOrDot,
+    AtMostSixDecimals,
+}
+
+impl fmt::Display for AmountParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AmountParseError::*;
+        match self {
+            Overflow => write!(f, "Amount overflow."),
+            ExpectedDot => write!(f, "Expected dot."),
+            ExpectedDigit => write!(f, "Expected digit."),
+            ExpectedMore => write!(f, "Expected more input."),
+            ExpectedDigitOrDot => write!(f, "Expected digit or dot."),
+            AtMostSixDecimals => write!(f, "Amounts can have at most six decimals."),
+        }
+    }
+}
+
+/// Parse from string in GTU units. The input string must be of the form
+/// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
+/// that that part is optional.
+///
+/// - if `n` starts with 0 then it must be 0l
+/// - `m` can have at most 6 digits, and must have at least 1
+/// - both `n` and `m` must be non-negative.
+impl str::FromStr for Amount {
+    type Err = AmountParseError;
+
+    fn from_str(v: &str) -> Result<Self, Self::Err> {
+        let mut micro_gtu: u64 = 0;
+        let mut after_dot = 0;
+        let mut state = 0;
+        for c in v.chars() {
+            match state {
+                0 => {
+                    // looking at the first character.
+                    if let Some(d) = c.to_digit(10) {
+                        if d == 0 {
+                            state = 1;
+                        } else {
+                            micro_gtu = u64::from(d);
+                            state = 2;
+                        }
+                    } else {
+                        return Err(AmountParseError::ExpectedDigit);
+                    }
+                }
+                1 => {
+                    // we want to be looking at a dot now (unless we reached the end, in which case
+                    // this is not reachable anyhow)
+                    if c != '.' {
+                        return Err(AmountParseError::ExpectedDot);
+                    } else {
+                        state = 3;
+                    }
+                }
+                2 => {
+                    // we are reading a normal number until we hit the dot.
+                    if let Some(d) = c.to_digit(10) {
+                        micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_gtu = micro_gtu
+                            .checked_add(u64::from(d))
+                            .ok_or(AmountParseError::Overflow)?;
+                    } else if c == '.' {
+                        state = 3;
+                    } else {
+                        return Err(AmountParseError::ExpectedDigitOrDot);
+                    }
+                }
+                3 => {
+                    // we're reading after the dot.
+                    if after_dot >= 6 {
+                        return Err(AmountParseError::AtMostSixDecimals);
+                    }
+                    if let Some(d) = c.to_digit(10) {
+                        micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_gtu = micro_gtu
+                            .checked_add(u64::from(d))
+                            .ok_or(AmountParseError::Overflow)?;
+                        after_dot += 1;
+                    } else {
+                        return Err(AmountParseError::ExpectedDigit);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        if state == 0 || state >= 3 && after_dot == 0 {
+            return Err(AmountParseError::ExpectedMore);
+        }
+        for _ in 0..6 - after_dot {
+            micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+        }
         Ok(Amount {
             micro_gtu,
         })
@@ -120,7 +215,7 @@ impl Amount {
     }
 }
 
-impl Mul<u64> for Amount {
+impl ops::Mul<u64> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -131,7 +226,7 @@ impl Mul<u64> for Amount {
     }
 }
 
-impl Mul<Amount> for u64 {
+impl ops::Mul<Amount> for u64 {
     type Output = Amount;
 
     #[inline(always)]
@@ -142,7 +237,7 @@ impl Mul<Amount> for u64 {
     }
 }
 
-impl Add<Amount> for Amount {
+impl ops::Add<Amount> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -153,7 +248,7 @@ impl Add<Amount> for Amount {
     }
 }
 
-impl Sub<Amount> for Amount {
+impl ops::Sub<Amount> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -164,7 +259,7 @@ impl Sub<Amount> for Amount {
     }
 }
 
-impl Rem<u64> for Amount {
+impl ops::Rem<u64> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -175,28 +270,28 @@ impl Rem<u64> for Amount {
     }
 }
 
-impl Sum for Amount {
+impl iter::Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::from_micro_gtu(0), Add::add)
+        iter.fold(Amount::from_micro_gtu(0), ops::Add::add)
     }
 }
 
-impl AddAssign for Amount {
+impl ops::AddAssign for Amount {
     #[inline(always)]
     fn add_assign(&mut self, other: Amount) { *self = *self + other; }
 }
 
-impl SubAssign for Amount {
+impl ops::SubAssign for Amount {
     #[inline(always)]
     fn sub_assign(&mut self, other: Amount) { *self = *self - other; }
 }
 
-impl MulAssign<u64> for Amount {
+impl ops::MulAssign<u64> for Amount {
     #[inline(always)]
     fn mul_assign(&mut self, other: u64) { *self = *self * other; }
 }
 
-impl RemAssign<u64> for Amount {
+impl ops::RemAssign<u64> for Amount {
     #[inline(always)]
     fn rem_assign(&mut self, other: u64) { *self = *self % other; }
 }
@@ -340,7 +435,7 @@ mod serde_impl {
     use std::fmt;
 
     // Parse from string assuming base58 check encoding.
-    impl std::str::FromStr for AccountAddress {
+    impl str::FromStr for AccountAddress {
         type Err = ();
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {
