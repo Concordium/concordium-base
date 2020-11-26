@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Serialize as S
 import qualified Data.Text as Text
+import Data.Maybe
 import Data.Int
 import System.Random
 import Control.Monad
@@ -93,10 +94,8 @@ genPayload = oneof [genDeployModule,
 --                  genCredential,
                     genAddBaker,
                     genRemoveBaker,
-                    genUpdateBakerAccount,
-                    genUpdateBakerSignKey,
-                    genDelegateStake,
-                    genUndelegateStake,
+                    genUpdateBakerStake,
+                    genUpdateBakerKeys,
                     genUpdateAccountKeys,
                     genAddAccountKeys,
                     genRemoveAccountKeys,
@@ -144,33 +143,25 @@ genPayload = oneof [genDeployModule,
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
           abSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
           (abAggregationVerifyKey, abProofAggregation) <- genAggregationVerifyKeyAndProof
-          abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
-          abProofAccount <- genAccountOwnershipProof
+          abBakingStake <- arbitrary
+          abRestakeEarnings <- arbitrary
           return AddBaker{..}
 
-        genRemoveBaker = do
-          rbId <- genBakerId
-          return RemoveBaker{..}
+        genRemoveBaker = return RemoveBaker
 
-        genUpdateBakerAccount = do
-          ubaId <- genBakerId
-          ubaAddress <- genAddress
-          ubaProof <- genAccountOwnershipProof
-          return UpdateBakerAccount{..}
+        genUpdateBakerStake = do
+          (ubsStake, ubsRestakeEarnings) <- (arbitrary :: Gen (Maybe Amount, Maybe Bool)) `suchThat` (\(a, b) -> isJust a || isJust b)
+          return UpdateBakerStake{..}
 
-        genUpdateBakerSignKey = do
-          ubsId <- genBakerId
-          ubsKey <- BlockSig.verifyKey <$> genBlockKeyPair
-          ubsProof <- genDlogProof
-          return UpdateBakerSignKey{..}
-
-        genBakerId = BakerId <$> arbitrary
-
-        genDelegateStake = DelegateStake <$> genBakerId
-
-        genUndelegateStake = return UndelegateStake
+        genUpdateBakerKeys = do
+          ubkElectionVerifyKey <- VRF.publicKey <$> arbitrary
+          ubkSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
+          (ubkAggregationVerifyKey, ubkProofAggregation) <- genAggregationVerifyKeyAndProof
+          ubkProofSig <- genDlogProof
+          ubkProofElection <- genDlogProof
+          return UpdateBakerKeys{..}
 
         -- generate an increasing list of key indices.
         genIndices = do
