@@ -59,7 +59,7 @@ pub enum Fields {
     Named(Vec<(String, Type)>),
     Unnamed(Vec<Type>),
     /// No fields
-    Unit,
+    Empty,
 }
 
 // TODO: Extend with LEB128
@@ -156,7 +156,7 @@ impl SchemaType for ContractAddress {
 impl<T: SchemaType> SchemaType for Option<T> {
     fn get_type() -> Type {
         Type::Enum(vec![
-            ("None".to_string(), Fields::Unit),
+            ("None".to_string(), Fields::Empty),
             ("Some".to_string(), Fields::Unnamed(vec![T::get_type()])),
         ])
     }
@@ -234,7 +234,7 @@ impl Serial for Fields {
                 out.write_u8(1)?;
                 fields.serial(out)?;
             }
-            Fields::Unit => {
+            Fields::Empty => {
                 out.write_u8(2)?;
             }
         }
@@ -248,7 +248,7 @@ impl Deserial for Fields {
         match idx {
             0 => Ok(Fields::Named(source.get()?)),
             1 => Ok(Fields::Unnamed(source.get()?)),
-            2 => Ok(Fields::Unit),
+            2 => Ok(Fields::Empty),
             _ => Err(ParseError::default()),
         }
     }
@@ -479,7 +479,7 @@ mod impls {
                     }
                     Ok(Value::Array(values))
                 }
-                Fields::Unit => Ok(Value::Array(vec![])),
+                Fields::Empty => Ok(Value::Array(vec![])),
             }
         }
     }
