@@ -1,11 +1,8 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::{collections::*, *};
-
-/*
- * A contract that acts like an account (can send, store and accept GTU), but
- * requires n > 1 ordained accounts to agree to the sending of GTU before it
- * is accepted. This is useful for storing GTU where the security of just one
- * account isn’t considered high enough.
+/*!
+ * A contract that acts like an account (can send, store and accept GTU),
+ * but requires n > 1 ordained accounts to agree to the sending of GTU
+ * before it is accepted. This is useful for storing GTU where the security
+ * of just one account isn’t considered high enough.
  *
  * Transfer requests time out if not agreed to within the contract's
  * specified time-to-live for transfer requests
@@ -23,32 +20,34 @@ use concordium_sc_base::{collections::*, *};
  *   agreement of at least n of those accounts, but can send to any account.
  *
  * At the point when a transfer/withdrawal is requested, the account balance
- * is checked. Either there are not enough funds and the request is rejected,
- * or there are enough funds and the requested sum is set aside (and can be
- * re-added to the balance if the request times out).
+ * is checked. Either there are not enough funds and the request is
+ * rejected, or there are enough funds and the requested sum is set aside
+ * (and can be re-added to the balance if the request times out).
  *
- * TODO Consider allowing the person who initially made the request to cancel
- * it, iff it is still outstanding
+ * TODO Consider allowing the person who initially made the request to
+ * cancel it, iff it is still outstanding
  */
+
+#![cfg_attr(not(feature = "std"), no_std)]
+use concordium_sc_base::{collections::*, *};
 
 // Types
 #[derive(Serialize, SchemaType)]
 enum Message {
-    // Indicates that the user sending the message would like to make a request
+    /// Indicates that the user sending the message would like to make a request
     // to send funds to the given address with the given ID and amount.
     // This is a no-op if the given ID already exists and has not timed out.
     RequestTransfer(TransferRequestId, Amount, AccountAddress),
 
-    // Indicates that the user sending the message votes in favour of the
-    // transfer with the given ID and amount to the given account address.
-    // This is a no-op if the given ID does not exist (potentially due to timing
-    // out), or exists with a different amount or address.
+    /// Indicates that the user sending the message votes in favour of the
+    /// transfer with the given ID and amount to the given account address.
+    /// This is a no-op if the given ID does not exist (potentially due to
+    /// timing out), or exists with a different amount or address.
     SupportTransfer(TransferRequestId, Amount, AccountAddress),
 }
 
 type TransferRequestId = u64;
 
-// TODO Is seconds the correct unit?
 type TransferRequestTimeToLiveMilliseconds = u64;
 type TimeoutSlotTimeMilliseconds = u64;
 
@@ -62,22 +61,22 @@ struct TransferRequest {
 
 #[derive(Serialize, SchemaType)]
 struct InitParams {
-    // Who is authorized to withdraw funds from this lockup (must be non-empty)
+    /// Who is authorized to withdraw funds from this lockup (must be non-empty)
     #[concordium(set_size_length = 1)]
     account_holders: BTreeSet<AccountAddress>,
 
-    // How many of the account holders need to agree before funds are released
+    /// How many of the account holders need to agree before funds are released
     transfer_agreement_threshold: u8,
 
-    // How long to wait before dropping a request due to lack of support
-    // N.B. If this is set too long, in practice the chain might !ome busy
-    //      enough that requests time out before they can be agreed to by all
-    //      parties, so be wary of setting this too low. On the other hand,
-    //      if this is set too high, a bunch of pending requests can get into
-    //      a murky state where some account holders may consider the request obsolete,
-    //      only for another account holder to "resurrect" it, so having _some_
-    //      time out gives some security against old requests being surprisingly
-    //      accepted.
+    /// How long to wait before dropping a request due to lack of support
+    /// N.B. If this is set too long, in practice the chain might !ome busy
+    /// enough that requests time out before they can be agreed to by all
+    /// parties, so be wary of setting this too low. On the other hand,
+    /// if this is set too high, a bunch of pending requests can get into
+    /// a murky state where some account holders may consider the request
+    /// obsolete, only for another account holder to "resurrect" it, so
+    /// having _some_ time out gives some security against old requests
+    /// being surprisingly accepted.
     transfer_request_ttl: TransferRequestTimeToLiveMilliseconds,
 }
 

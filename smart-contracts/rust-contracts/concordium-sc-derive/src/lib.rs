@@ -838,7 +838,7 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
             let fields_tokens: Vec<_> = fields.iter().map(schema_type_field_type).collect();
             quote! { concordium_sc_base::schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
         }
-        syn::Fields::Unit => quote! { concordium_sc_base::schema::Fields::Empty },
+        syn::Fields::Unit => quote! { concordium_sc_base::schema::Fields::None },
     }
 }
 

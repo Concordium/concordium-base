@@ -319,6 +319,6 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 bail!("JSON Array required for unnamed fields");
             }
         }
-        Fields::Empty => Ok(()),
+        Fields::None => Ok(()),
     }
 }
