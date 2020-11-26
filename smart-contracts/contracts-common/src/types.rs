@@ -1,17 +1,7 @@
 #[cfg(not(feature = "std"))]
-use core::convert;
+use core::{convert, fmt, iter, ops, str};
 #[cfg(feature = "std")]
-use std::convert;
-
-#[cfg(not(feature = "std"))]
-use core::ops::{Add, AddAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-#[cfg(feature = "std")]
-use std::ops::{Add, AddAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-
-#[cfg(not(feature = "std"))]
-use core::iter::Sum;
-#[cfg(feature = "std")]
-use std::iter::Sum;
+use std::{convert, fmt, iter, ops, str};
 
 /// Size of an account address when serialized in binary.
 /// NB: This is different from the Base58 representation.
@@ -45,7 +35,6 @@ impl<'de> SerdeDeserialize<'de> for Amount {
     }
 }
 
-#[cfg(feature = "std")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmountParseError {
     Overflow,
@@ -56,8 +45,7 @@ pub enum AmountParseError {
     AtMostSixDecimals,
 }
 
-#[cfg(feature = "std")]
-impl std::fmt::Display for AmountParseError {
+impl fmt::Display for AmountParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use AmountParseError::*;
         match self {
@@ -78,8 +66,7 @@ impl std::fmt::Display for AmountParseError {
 /// - if `n` starts with 0 then it must be 0l
 /// - `m` can have at most 6 digits, and must have at least 1
 /// - both `n` and `m` must be non-negative.
-#[cfg(feature = "std")]
-impl std::str::FromStr for Amount {
+impl str::FromStr for Amount {
     type Err = AmountParseError;
 
     fn from_str(v: &str) -> Result<Self, Self::Err> {
@@ -228,7 +215,7 @@ impl Amount {
     }
 }
 
-impl Mul<u64> for Amount {
+impl ops::Mul<u64> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -239,7 +226,7 @@ impl Mul<u64> for Amount {
     }
 }
 
-impl Mul<Amount> for u64 {
+impl ops::Mul<Amount> for u64 {
     type Output = Amount;
 
     #[inline(always)]
@@ -250,7 +237,7 @@ impl Mul<Amount> for u64 {
     }
 }
 
-impl Add<Amount> for Amount {
+impl ops::Add<Amount> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -261,7 +248,7 @@ impl Add<Amount> for Amount {
     }
 }
 
-impl Sub<Amount> for Amount {
+impl ops::Sub<Amount> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -272,7 +259,7 @@ impl Sub<Amount> for Amount {
     }
 }
 
-impl Rem<u64> for Amount {
+impl ops::Rem<u64> for Amount {
     type Output = Self;
 
     #[inline(always)]
@@ -283,28 +270,28 @@ impl Rem<u64> for Amount {
     }
 }
 
-impl Sum for Amount {
+impl iter::Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::from_micro_gtu(0), Add::add)
+        iter.fold(Amount::from_micro_gtu(0), ops::Add::add)
     }
 }
 
-impl AddAssign for Amount {
+impl ops::AddAssign for Amount {
     #[inline(always)]
     fn add_assign(&mut self, other: Amount) { *self = *self + other; }
 }
 
-impl SubAssign for Amount {
+impl ops::SubAssign for Amount {
     #[inline(always)]
     fn sub_assign(&mut self, other: Amount) { *self = *self - other; }
 }
 
-impl MulAssign<u64> for Amount {
+impl ops::MulAssign<u64> for Amount {
     #[inline(always)]
     fn mul_assign(&mut self, other: u64) { *self = *self * other; }
 }
 
-impl RemAssign<u64> for Amount {
+impl ops::RemAssign<u64> for Amount {
     #[inline(always)]
     fn rem_assign(&mut self, other: u64) { *self = *self % other; }
 }
@@ -448,7 +435,7 @@ mod serde_impl {
     use std::fmt;
 
     // Parse from string assuming base58 check encoding.
-    impl std::str::FromStr for AccountAddress {
+    impl str::FromStr for AccountAddress {
         type Err = ();
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {

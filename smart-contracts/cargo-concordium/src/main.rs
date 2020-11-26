@@ -1,13 +1,12 @@
 use crate::{build::*, schema_json::*};
 use clap::AppSettings;
-use contracts_common::{from_bytes, to_bytes};
+use contracts_common::{from_bytes, to_bytes, Amount};
 use std::{
     fs,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
     process::exit,
-    str::FromStr,
 };
 use structopt::StructOpt;
 use wasm_chain_integration::*;
@@ -88,7 +87,7 @@ struct Runner {
         help = "The amount of GTU to invoke the method with.",
         default_value = "0"
     )]
-    amount: String,
+    amount: Amount,
     #[structopt(
         name = "schema",
         long = "schema",
@@ -223,8 +222,6 @@ pub fn main() {
                 println!("Error: Only one parameter is allowed.");
                 exit(1);
             }
-            let amount =
-                contracts_common::Amount::from_str(&runner.amount).expect("Invalid amount");
 
             let module = fs::read(&runner.module).expect("Could not read module file.");
 
@@ -336,7 +333,7 @@ pub fn main() {
                     let name = format!("init_{}", contract_name);
                     let res = invoke_init_with_metering_from_source(
                         &module,
-                        amount.micro_gtu,
+                        runner.amount.micro_gtu,
                         init_ctx,
                         &name,
                         parameter,
@@ -422,7 +419,7 @@ pub fn main() {
                     let name = format!("{}.{}", contract_name, func);
                     let res = invoke_receive_with_metering_from_source(
                         &module,
-                        amount.micro_gtu,
+                        runner.amount.micro_gtu,
                         receive_ctx,
                         &init_state,
                         &name,
