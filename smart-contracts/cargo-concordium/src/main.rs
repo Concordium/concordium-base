@@ -206,6 +206,9 @@ pub fn main() {
     {
         ansi_term::enable_ansi_support();
     }
+    let error_style = ansi_term::Colour::Red.bold();
+    let success_style = ansi_term::Colour::Green.bold();
+
     let cmd = {
         let app = CargoCommand::clap()
             .setting(AppSettings::ArgRequiredElseHelp)
@@ -528,14 +531,14 @@ pub fn main() {
             schema_embed,
             schema_out,
             out,
-            cargo_args
+            cargo_args,
         } => {
             let build_schema = schema_embed || schema_out.is_some();
             let schema_to_embed = if build_schema {
                 match build_contract_schema(&cargo_args) {
                     Ok(schema) => Some(schema),
                     Err(err) => {
-                        eprintln!("Failed building schema {}", err);
+                        eprintln!("   Failed building schema {}", err);
                         exit(1)
                     }
                 }
@@ -549,21 +552,21 @@ pub fn main() {
                 }
                 let module_schema_bytes = to_bytes(module_schema);
                 eprintln!(
-                    "\nTotal size of the module schema is: {} bytes",
+                    "\n   Total size of the module schema is: {} bytes",
                     module_schema_bytes.len()
                 );
 
                 if let Some(schema_out) = schema_out {
-                    eprintln!("Writing schema to {}.", schema_out.to_string_lossy());
+                    eprintln!("   Writing schema to {}.", schema_out.to_string_lossy());
                     fs::write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
-                    eprintln!("Embedding schema into contract module.");
+                    eprintln!("   Embedding schema into contract module.");
                 }
             }
             match res {
-                Ok(_) => eprintln!("\nDone building your smart contract."),
-                Err(err) => eprintln!("\nFailed building your smart contract: {}", err),
+                Ok(_) => eprintln!("\n   {}", success_style.paint("Finished")),
+                Err(err) => eprintln!("\n   {}: {}", error_style.paint("Failed"), err),
             }
         }
     }
@@ -573,18 +576,22 @@ fn print_contract_schema(
     contract_name: &str,
     contract_schema: &contracts_common::schema::Contract,
 ) {
-    println!("\nContract schema: '{}' in total {} bytes", contract_name, to_bytes(contract_schema).len());
+    println!(
+        "\n   Contract schema: '{}' in total {} bytes",
+        contract_name,
+        to_bytes(contract_schema).len()
+    );
     if let Some(state_schema) = &contract_schema.state {
-        println!("  state: {} bytes", to_bytes(state_schema).len());
+        println!("     state: {} bytes", to_bytes(state_schema).len());
     }
     if let Some(init_schema) = &contract_schema.init {
-        println!("  init: {} bytes", to_bytes(init_schema).len())
+        println!("     init: {} bytes", to_bytes(init_schema).len())
     }
 
     if !contract_schema.receive.is_empty() {
-        println!("  receive:");
+        println!("     receive:");
         for (method_name, param_type) in contract_schema.receive.iter() {
-            println!("   - '{}': {} bytes", method_name, to_bytes(param_type).len());
+            println!("      - '{}': {} bytes", method_name, to_bytes(param_type).len());
         }
     }
 }

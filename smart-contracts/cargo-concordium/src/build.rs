@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use ansi_term::{Color, Style};
 use anyhow::Context;
 use cargo_toml::Manifest;
@@ -6,6 +5,7 @@ use contracts_common::*;
 use std::{
     fs::File,
     io::Read,
+    path::PathBuf,
     process::{Command, Stdio},
 };
 use wasm_chain_integration::{
@@ -21,7 +21,11 @@ use wasm_transform::{
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
-pub fn build_contract(embed_schema: &Option<schema::Module>, out: Option<PathBuf>, cargo_args: &Vec<String>) -> anyhow::Result<()> {
+pub fn build_contract(
+    embed_schema: &Option<schema::Module>,
+    out: Option<PathBuf>,
+    cargo_args: &[String],
+) -> anyhow::Result<()> {
     let manifest = Manifest::from_path("Cargo.toml")
         .map_err(|err| anyhow::anyhow!("Failed reading manifest: {}", err))?;
     let package =
@@ -55,7 +59,7 @@ pub fn build_contract(embed_schema: &Option<schema::Module>, out: Option<PathBuf
 
     validate_module(&ConcordiumAllowedImports, &skeleton)?;
 
-    let out_filename = out.unwrap_or(PathBuf::from(filename));
+    let out_filename = out.unwrap_or_else(|| PathBuf::from(filename));
 
     let mut wasm_file = File::create(&out_filename)?;
 
@@ -81,7 +85,7 @@ pub fn build_contract(embed_schema: &Option<schema::Module>, out: Option<PathBuf
 
 /// Generates the contract schema by compiling with the 'build-schema' feature
 /// Then extracts the schema from the schema build
-pub fn build_contract_schema(cargo_args: &Vec<String>) -> anyhow::Result<schema::Module> {
+pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Module> {
     let manifest =
         Manifest::from_path("Cargo.toml").context("Failed reading Cargo.toml manifest.")?;
 
