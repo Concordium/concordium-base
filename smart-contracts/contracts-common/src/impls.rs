@@ -1,9 +1,7 @@
 use crate::{traits::*, types::*};
 
 #[cfg(not(feature = "std"))]
-use alloc::collections;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{boxed::Box, collections::*, string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
 use core::{mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
