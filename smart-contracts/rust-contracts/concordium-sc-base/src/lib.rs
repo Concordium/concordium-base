@@ -16,8 +16,24 @@
 //! default-features = false
 //! ```
 //! In your project's `Cargo.toml` file.
+//!
+//! The library is meant to be used as a standard library for developing smart
+//! contracts. For this reason it re-exports a number of definitions from other
+//! libraries.
+//!
+//! # Global allocator.
+//! Importing this library has a side-effect of setting  the allocator to [wee_alloc](https://docs.rs/wee_alloc/)
+//! which is a memory allocator aimed at small code footprint.
+//! This allocator is designed to be used in contexts where there are a few
+//! large allocations up-front, and the memory later used during the lifetime of
+//! the program. Frequent small allocations will have bad performance, and
+//! should be avoided.
+//!
+//! # Panic handler
+//! When compiled without the `std` feature this crate sets the panic handler
+//! to a no-op.
 
-#![cfg_attr(not(feature = "std"), no_std, feature(alloc_error_handler))]
+#![cfg_attr(not(feature = "std"), no_std, feature(alloc_error_handler, core_intrinsics))]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -34,7 +50,7 @@ pub use std::process::abort as trap;
 
 #[cfg(not(feature = "std"))]
 #[panic_handler]
-fn abort_panic(_info: &core::panic::PanicInfo) -> ! { loop {} }
+fn abort_panic(_info: &core::panic::PanicInfo) -> ! { core::intrinsics::abort() }
 
 // Provide some re-exports to make it easier to use the library.
 // This should be expanded in the future.

@@ -111,7 +111,10 @@ macro_rules! fail {
     };
     ($($arg:tt),+) => {
         {
+            #[cfg(feature = "std")]
             let msg = format!($($arg),+);
+            #[cfg(not(feature = "std"))]
+            let msg = &alloc::format!($($arg),+);
             $crate::test_infrastructure::report_error(&msg, file!(), line!(), column!());
             panic!(msg)
         }
