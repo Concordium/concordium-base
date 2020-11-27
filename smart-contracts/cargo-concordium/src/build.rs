@@ -3,8 +3,7 @@ use anyhow::Context;
 use cargo_toml::Manifest;
 use contracts_common::*;
 use std::{
-    fs::File,
-    io::Read,
+    fs,
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -25,7 +24,7 @@ pub fn build_contract(
     embed_schema: &Option<schema::Module>,
     out: Option<PathBuf>,
     cargo_args: &[String],
-) -> anyhow::Result<()> {
+) -> anyhow::Result<usize> {
     let manifest = Manifest::from_path("Cargo.toml")
         .map_err(|err| anyhow::anyhow!("Failed reading manifest: {}", err))?;
     let package =
@@ -47,9 +46,7 @@ pub fn build_contract(
         to_snake_case(package.name)
     );
 
-    let mut wasm_file = File::open(&filename)?;
-    let mut wasm = vec![];
-    wasm_file.read_to_end(&mut wasm)?;
+    let wasm = fs::read(&filename)?;
 
     let mut skeleton =
         parse_skeleton(&wasm).map_err(|err| anyhow::anyhow!("Failed parsing skeleton: {}", err))?;
@@ -59,9 +56,7 @@ pub fn build_contract(
 
     validate_module(&ConcordiumAllowedImports, &skeleton)?;
 
-    let out_filename = out.unwrap_or_else(|| PathBuf::from(filename));
-
-    let mut wasm_file = File::create(&out_filename)?;
+    let mut output_bytes = Vec::new();
 
     // Embed schema custom section
     if let Some(schema) = embed_schema {
@@ -74,13 +69,16 @@ pub fn build_contract(
             contents: &schema_bytes,
         };
 
-        skeleton.output(&mut wasm_file)?;
-        write_custom_section(&mut wasm_file, &custom_section)?;
+        skeleton.output(&mut output_bytes)?;
+        write_custom_section(&mut output_bytes, &custom_section)?;
     } else {
-        skeleton.output(&mut wasm_file)?;
+        skeleton.output(&mut output_bytes)?;
     }
 
-    Ok(())
+    let out_filename = out.unwrap_or_else(|| PathBuf::from(filename));
+    let total_module_len = output_bytes.len();
+    fs::write(out_filename, output_bytes)?;
+    Ok(total_module_len)
 }
 
 /// Generates the contract schema by compiling with the 'build-schema' feature
