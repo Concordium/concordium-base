@@ -533,6 +533,8 @@ pub fn main() {
             out,
             cargo_args,
         } => {
+            let bold_style = ansi_term::Style::new().bold();
+
             let build_schema = schema_embed || schema_out.is_some();
             let schema_to_embed = if build_schema {
                 match build_contract_schema(&cargo_args) {
@@ -547,13 +549,15 @@ pub fn main() {
             };
             let res = build_contract(&schema_to_embed, out, &cargo_args);
             if let Some(module_schema) = &schema_to_embed {
+                eprintln!("\n   Module schema includes:");
                 for (contract_name, contract_schema) in module_schema.contracts.iter() {
                     print_contract_schema(&contract_name, &contract_schema);
                 }
                 let module_schema_bytes = to_bytes(module_schema);
                 eprintln!(
-                    "\n   Total size of the module schema is: {} bytes",
-                    module_schema_bytes.len()
+                    "\n   Total size of the module schema is {} {}",
+                    bold_style.paint(module_schema_bytes.len().to_string()),
+                    bold_style.paint("B")
                 );
 
                 if let Some(schema_out) = schema_out {
@@ -561,12 +565,19 @@ pub fn main() {
                     fs::write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
-                    eprintln!("   Embedding schema into contract module.");
+                    eprintln!("   Embedding schema into module.\n");
                 }
             }
             match res {
-                Ok(_) => eprintln!("\n   {}", success_style.paint("Finished")),
-                Err(err) => eprintln!("\n   {}: {}", error_style.paint("Failed"), err),
+                Ok(byte_len) => {
+                    let size = format!("{}.{:03} KB", byte_len / 1000, byte_len % 1000);
+                    eprintln!(
+                        "    {} smart contract module {}",
+                        success_style.paint("Finished"),
+                        bold_style.paint(size)
+                    )
+                }
+                Err(err) => eprintln!("      {} {}", error_style.paint("Failed"), err),
             }
         }
     }
@@ -576,22 +587,30 @@ fn print_contract_schema(
     contract_name: &str,
     contract_schema: &contracts_common::schema::Contract,
 ) {
+    let max_length_receive_opt =
+        contract_schema.receive.iter().map(|(n, _)| n.chars().count()).max();
+    let colon_position = max_length_receive_opt.map(|m| m.max(5)).unwrap_or(5);
     println!(
-        "\n   Contract schema: '{}' in total {} bytes",
+        "\n     Contract schema: '{}' in total {} B.",
         contract_name,
         to_bytes(contract_schema).len()
     );
     if let Some(state_schema) = &contract_schema.state {
-        println!("     state: {} bytes", to_bytes(state_schema).len());
+        println!("       state   : {} B", to_bytes(state_schema).len());
     }
     if let Some(init_schema) = &contract_schema.init {
-        println!("     init: {} bytes", to_bytes(init_schema).len())
+        println!("       init    : {} B", to_bytes(init_schema).len())
     }
 
     if !contract_schema.receive.is_empty() {
-        println!("     receive:");
+        println!("       receive");
         for (method_name, param_type) in contract_schema.receive.iter() {
-            println!("      - '{}': {} bytes", method_name, to_bytes(param_type).len());
+            println!(
+                "        - {:width$} : {} B",
+                format!("'{}'", method_name),
+                to_bytes(param_type).len(),
+                width = colon_position + 2
+            );
         }
     }
 }
