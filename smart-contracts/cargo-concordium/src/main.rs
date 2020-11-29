@@ -570,7 +570,7 @@ pub fn main() {
             }
             match res {
                 Ok(byte_len) => {
-                    let size = format!("{}.{:03} KB", byte_len / 1000, byte_len % 1000);
+                    let size = format!("{}.{:03} kB", byte_len / 1000, byte_len % 1000);
                     eprintln!(
                         "    {} smart contract module {}",
                         success_style.paint("Finished"),
