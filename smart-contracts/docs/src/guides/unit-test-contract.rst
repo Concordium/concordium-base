@@ -8,8 +8,8 @@ This guide will show you how to write unit tests for a smart contract written in
 Rust.
 For testing a smart contract Wasm module see :ref:`local-simulate`.
 
-a smart contracts in Rust is written as a library and we can unit test like a
-library by having a test module in the same file as our contract.
+A smart contracts in Rust is written as a library and we can unit test like a
+library by annotating functions with a ``#[test]`` attribute.
 
 .. code-block:: rust
 
@@ -31,13 +31,17 @@ Running the test can be done using ``cargo``::
     cargo test
 
 Which by default compiles the contract and tests to machine code for your local
-machine and run them.
+target (most likely ``x86_64``), and run them. This kind of testing can be useful in
+initial development and for testing functional correctness. But because there
+are a number of differences in the different platforms, for example `wasm32` is
+a 32-bit platform, meaning pointers are 4 bytes, comprehensive testing should
+involve testing on the target platform.
 
 Writing unit tests
 ====================
 
 The structure of a unit test is usually setting up some state, running some unit
-of code, followed by a bunch of assertions about the state and output of the
+of code, followed by a number of assertions about the state and output of the
 code.
 
 If the contract functions are written using ``#[init(..)]`` or
@@ -78,7 +82,8 @@ Running tests in Wasm
 ======================
 
 Compiling the tests to machine code is sufficient for most cases, but it is also
-possible to compile the tests to Wasm and run them using an interpreter.
+possible to compile the tests to Wasm and run them using the exact intepreter
+that is used by the nodes.
 This makes the test environment closer to the run environment on chain and could
 in some cases catch more bugs.
 
@@ -115,7 +120,7 @@ The unit test have to be annotated with ``#[concordium_test]`` instead of
     }
 
 The ``#[concordium_test]`` macro sets up our tests to be run in Wasm, when
-compiled with the ``wasm-test`` feature, and otherwise fallbacks to behave just
+compiled with the ``wasm-test`` feature, and otherwise falls back to behave just
 like ``#[test]``, meaning it is still possible to run unit tests targeting
 native code using ``cargo test``.
 

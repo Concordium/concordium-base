@@ -116,7 +116,7 @@ This is up to the developer of the contract.
 Interacting with an instance
 ============================
 
-A smart contract module include functions for interacting with a smart contract
+A smart contract module includes functions for interacting with a smart contract
 instance.
 
 .. note::
@@ -143,15 +143,3 @@ by the host environment to read and write.
 
 .. seealso::
     See :ref:`host-functions-state` for the reference of these functions.
-
-Floating point numbers
-======================
-Although Wasm have support floating point numbers, a smart contract is
-disallowed to use them.
-It is even disallowed for the Wasm module to contain a floating point number
-type, which would reject the module during validation.
-
-The reasoning behind, is that manipulating floating point numbers in Wasm is
-not fully deterministic.
-This could introduce problems for reaching consensus in the blockchain, as
-nodes reach different conclusions.

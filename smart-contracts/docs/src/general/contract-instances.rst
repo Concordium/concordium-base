@@ -4,17 +4,22 @@
 Smart contract instances
 ========================
 
-To use functionality provided by a smart contract, one must first create a
-*smart contract instance* from a deployed :ref:`smart contract
-module<contract-module>`.
-The functionality is archive by interacting with this smart contract instance.
+A **smart contract instance** is smart contract module together with a specific
+state and amount of GTU tokens. Each instance thus by definition has its own
+state and can hold GTU tokens. Multiple smart contract instances can be created
+from the same module. For example, for the auction contract, there could be
+multiple instances, each one dedicated to bidding for a specific item, with
+their own participants.
+
+Smart contract instances can be created from a deployed :ref:`smart contract
+module<contract-module>` via the ``init`` transaction which invokes the
+requested function in the *smart contract module*. This function can take a
+parameter. Its end result is required to be the initial smart contract state of
+the instance.
 
 .. note::
     A smart contract instance is often just called an instance, when it is clear
     from the context it is a smart contract instance.
-
-Multiple instances can be created for of a smart contract and each instance have
-its own GTU balance, state and a log of events.
 
 .. graphviz::
     :align: center
@@ -48,6 +53,16 @@ its own GTU balance, state and a log of events.
         Boardgame:n -> Crowdfunding;
     }
 
+State of a smart contract instance
+==================================
+
+The state of a smart contract instance consists of two parts, the user-defined
+state and the amount of GTU the contract holds. When referring to state we
+typically mean only the user-defined state. The reason for treating the GTU
+amount separately is that the GTU can only be spent and received according to
+rules of the network, e.g., contracts cannot create new GTU, nor can they
+destroy it.
+
 Instantiating a smart contract on chain
 =======================================
 
@@ -61,20 +76,21 @@ a reference to deployed smart contract module and the name of the
 The transaction can also include an amount of GTU, which is added to the
 balance of the smart contract instance.
 An argument for the function is supplied as part of the transaction in the form
-of a list of bytes.
+of an array of bytes.
 
-To summaries; the transaction includes:
+To summarize; the transaction includes:
 
-- Reference to smart contract module.
+- Reference to the smart contract module.
 - Name of the ``init``-function.
-- Parameter for ``init``-function.
+- Parameter for the ``init``-function.
 - Amount of GTU for the instance.
 
-If the ``init``-function is successful, it setups the initial state of the
-instance and balance. The instance is given an address on the chain and the
-account who send the transaction becomes the owner of the instance.
-If the function rejects, no instance is created and only the transaction for
-creating the instance is visible on chain.
+The ``init`` function can signal that it does not wish to create a new instance
+with those parameters. If the ``init``-function accepts the parameters, it sets
+up the initial state of the instance and its balance. The instance is given an
+address on the chain and the account who send the transaction becomes the owner
+of the instance. If the function rejects, no instance is created and only the
+transaction for creating the instance is visible on chain.
 
 .. seealso::
     See :ref:`initialize-contract` guide for how to do this.
@@ -83,37 +99,19 @@ Instance state
 ==============
 
 Every smart contract instance holds its own state, which is represented on the
-chain as a list of bytes.
+chain as an array of bytes.
 The instance uses functions provided by the host environment to read, write and
 resize the state.
 
 .. seealso::
     See :ref:`host-functions-state` for the reference of these functions.
 
-The size of the state is accounted for through the usage of *gas*.
-
-.. todo::
-    Check if the above about state account through gas is correct and add more.
+Smart contract state is limited in size. Currently the limit on smart contract
+state is 16KiB.
 
 .. seealso::
     Check out :ref:`resource-accounting` for more on this.
 
-
-Logging events
-==============
-
-A smart contract instance also holds a log for events for event the smart
-contract deem interesting, and are logged using a function supplied by the host
-environment.
-
-.. seealso::
-    See :ref:`host-functions-log` for the reference of this function.
-
-These event logs are retained by bakers and included in transaction summaries to
-facilitate interaction of smart contracts and off-chain code.
-
-These logs are paid for as if it were part of the instance state, and in most
-cases it would only make sense to log a few bytes to reduce cost.
 
 Interacting with an instance
 ============================
@@ -138,6 +136,24 @@ To summaries; the transaction includes:
 
 .. _contract-instance-actions:
 
+Logging events
+==============
+
+Each smart contract method execution, be it the ``init`` or ``receive`` function
+can log events. These are designed for off-chain use, so that actors outside of
+the chain can monitor for events and react on them. Logs are not accessible to
+smart contracts, or any other actor on the chain. Events can be logged using a
+function supplied by the host environment.
+
+.. seealso::
+    See :ref:`host-functions-log` for the reference of this function.
+
+These event logs are retained by bakers and included in transaction summaries.
+
+Logging an event has an associated cost, similar to the cost of writing to the
+contract's state. In most cases it would only make sense to log a few bytes to
+reduce cost.
+
 Action description
 ------------------
 
@@ -148,21 +164,22 @@ The possible actions a contract can produce are:
 
 - **Accept** Do nothing, always succeeds.
 - **Simple transfer** Send some amount of GTU from the balance of the instance
-  to some account.
-- **Send** Invoke ``receive``-function of a smart contract instance.
-
+  to the specified account.
+- **Send** Invoke ``receive``-function of the specified smart contract instance,
+  and optioanlly transfer some GTU from the balance of the instance, to the
+  receiving instance.
 
 If the actions fail to execute, the ``receive``-function is reverted, leaving
-the state and the balance of the instance unchanged.
-Only visible artifact is the transaction triggering ``receive``-function
-resulting in a rejection.
+the state and the balance of the instance unchanged. In such a case the only
+visible artifacts are the transaction triggering ``receive``-function resulting
+in a rejection, and payment for the execution.
 
 Action descriptions can be combined to describe a sequence of actions to be
 executed and have the second action to be executed depending on the first
 action.
 
-- **And** Try the second action if the first succeeds, otherwise fail.
-- **Or** Try the second action *only* if the first action fails.
+- **And** Try the second action **if** the first succeeds, otherwise fail.
+- **Or** Try the second action **only if** the first action fails.
 
 These combinators allow the action description to form a decision tree, where
 the leafs are the actions and the nodes are combinators.
@@ -190,3 +207,8 @@ the leafs are the actions and the nodes are combinators.
 .. seealso::
     See :ref:`host-functions-actions` for the reference of how to create the
     actions.
+
+The whole actions tree is executed **atomically**, and either leads to updates
+to all the relevant instances and accounts, or in case of rejection, to payment
+for execution, but no other changes. The account which sent the initiating
+transaction pays for execution of the entire tree.

@@ -3,14 +3,14 @@
 =============================
 Install tools for development
 =============================
-Before we can start developing smart contracts, we need to setup an environment.
+Before we can start developing smart contracts, we need to setup the
+environment.
 
 Rust and Cargo
 ==============
 First install rustup_, which will install both Rust_ and Cargo_ on your
 machine.
-Then use ``rustup`` to install the Wasm target, which is used by for
-compilation::
+Then use ``rustup`` to install the Wasm target, which is used for compilation::
 
     rustup target add wasm32-unknown-unknown
 
@@ -29,12 +29,8 @@ It is installed by running::
 
     cargo install cargo-concordium
 
-.. note::
-    Until the tool is release on crates.io_, you instead have to clone
-    the repo_ containing ``cargo-concordium`` and from the directory
-    ``cargo-concordium`` run::
-
-        cargo install --path .
+.. note:: Until the tool is released on crates.io_, you instead have to manually
+   download it and place it in your PATH.
 
 For a description of how to use the tool run::
 
@@ -44,7 +40,7 @@ Concordium Client
 =================
 
 To deploy smart contract modules and interact with the chain, make sure to have
-``concordium-client`` install on your local system.
+``concordium-client`` installed on your local system.
 
 .. todo::
     Link to install instructions
@@ -54,4 +50,3 @@ To deploy smart contract modules and interact with the chain, make sure to have
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _rustup: https://rustup.rs/
 .. _crates.io: https://crates.io/
-.. _repo: https://gitlab.com/Concordium/smart-contracts

@@ -19,15 +19,28 @@ Developing smart contracts in Rust
 ====================================
 
 On the concordium blockchain smart contracts are deployed as Wasm modules, but
-Wasm is designed as a compile target and is not suitable for writing by hand.
-Instead we can write our smart contract in the Rust_ programming language,
-which have good support for compiling to Wasm.
+Wasm is designed primarily as a compilation target and is not convenient for
+writing by hand. Instead we can write our smart contract in the Rust_
+programming language, which has good support for compiling to Wasm.
+
+.. note:: We emphasize that there is no requirement that contracts must be
+   written in Rust, this is simply the first SDK we provide. Manually written
+   Wasm, or Wasm compiled from C, C++, AssemblyScript_, and others, is equally
+   valid on the chain, as long as it adheres to the Wasm limitations we impose.
 
 .. seealso::
     See :ref:`contract-module` for more about smart contract modules.
 
 A smart contract module is developed in Rust as a library crate, which is then
-compiled to Wasm.
+compiled to Wasm. To obtain the correct exports the `crate-type` attribute must
+be set to ``["cdylib", "rlib"]`` in the manifest file:
+
+.. code-block::
+
+    ...
+    [lib]
+    crate-type = ["cdylib", "rlib"]
+    ...
 
 Writing a smart contract using ``concordium_sc_base``
 =====================================================
@@ -71,27 +84,54 @@ A simple counter example would look like:
         Ok(A::accept())
     }
 
-Here ``#[init(contract = "counter")]`` sets up the exported ``init``-function
-for a contract we name ``"counter"``, it ensures the state is set properly
-using host functions and the exported function follows the contract naming
-convention.
+There are a number of things to notice
 
-The ``#[receive(contract = "counter", name = "increment")]`` deserializes and
-supplies the state to be manipulated directly.
+- The type of the methods. The init methods must have the type as shown above,
+  the only freedom the user has is in choosing what the state type is. The same
+  applies to the receive method, with the additional requirement that the type
+  of the ``state`` variable must match the type returned by the ``init`` method.
+
+- The annotation ``#[init(contract = "counter")]`` marks the method it is
+  applied to as the ``init`` method of the contract named ``counter``.
+  Concretely this means that behind the scenes this macro generates an exported
+  function with the required signature and name `init_counter`.
+
+-  ``#[receive(contract = "counter", name = "increment")]`` deserializes and
+   supplies the state to be manipulated directly. Behind the scenes this
+   annotation also generates an exported function with name `counter.increment`
+   that has the required signature, and does all of the boilerplate of
+   deserializing the state into the required type ``State``.
+
+.. note:: Note that deserialization is not without cost, and in some cases the
+   user might want more fine-grained control over the use of host functions. For
+   such use-cases the annotations support a ``low_level`` option, which has less
+   overhead, but requires more from the user.
+
+.. todo::
+   Describe low-level
+
 
 Serializable state and parameters
 ---------------------------------
 
-On chain, the state of an instance is represented as bytes, and unless we work
-directly in bytes, the type of the contract state must be serializable to bytes.
+On chain, the state of an instance is represented as a byte array, and exposed
+in a similar interface as the ``File`` interface of the Rust standard library.
+
+Using the default interface described in the preceding section, the type of the
+contract state must be serializable in order for the generated code to be able
+to construct the structured from the serialized one.
 
 This can be done using the ``Serialize`` trait, which contains a functions for
-both serializing and deserializing between the type and bytes.
+both serializing and deserializing between values and their byte representation.
+
+.. note::
+   The ``Serialize`` interface does not support so-called zero-copy
+   deserialization at the moment. This is coming as well, but it does make the
+   interface more complex.
 
 The ``concordium_sc_base`` crate includes this trait and implementations for
 most types in the Rust standard library. It also includes macros for deriving
 the trait for user defined structs and enums.
-
 
 .. code-block:: rust
 
@@ -113,11 +153,10 @@ The same is necessary for parameters for ``init`` and ``receive``-functions.
 Building a smart contract module with ``cargo-concordium``
 ==========================================================
 
-The Rust compiler have support for compiling to Wasm using the
-``wasm32-unknown-unknown`` target.
-However even when compiling with ``--release`` the resulting build includes
-large sections of debug information, which are not useful for smart contracts on
-chain.
+The Rust compiler has good support for compiling to Wasm using the
+``wasm32-unknown-unknown`` target. However even when compiling with
+``--release`` the resulting build includes large sections of debug information
+in custom sections, which are not useful for smart contracts on chain.
 
 To optimize the build and allow for new features such as embedding schemas, we
 recommend using ``cargo-concordium`` to build smart contract.
@@ -143,13 +182,20 @@ Best practices
 Don't panic
 -----------
 
+.. todo::
+   Use trap instead.
+
 Avoid creating black holes
 --------------------------
 
-Move heavy calculations off-chian
+.. todo::
+   Contracts where funds cannot be recovered.
+
+Move heavy calculations off-chain
 ---------------------------------
 
 
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _crates.io: https://crates.io/
+.. _AssemblyScript: https://github.com/AssemblyScript

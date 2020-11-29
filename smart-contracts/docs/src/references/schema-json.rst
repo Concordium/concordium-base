@@ -199,13 +199,13 @@ In JSON a ``Person`` with an id of 500 and age 35 is written as:
 .. code-block:: json
 
     {
-        id: 500,
-        age: 35
+        "id": 500,
+        "age": 35
     }
 
 
 ``Unnamed``
----------
+-----------
 
 Supplied as a JSON array, with the fields as items corresponding to the types in
 the field schema.

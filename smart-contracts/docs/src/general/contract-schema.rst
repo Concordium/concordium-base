@@ -60,8 +60,9 @@ Embedding the schema into the smart contract module, distributes the schema
 together with the contract ensuring the correct schema is being used and also
 allows anyone to use it directly. The downside is that the smart contract module
 becomes bigger in size and therefore more expensive to deploy. But unless the
-smart contract uses very complex types for the state and parameters, this will
-not be a real issue for most users.
+smart contract uses very complex types for the state and parameters, the size of
+the schema is likely to be negligible compared to the size of the smart contract
+itself.
 
 Having the schema in a separate file, allows you to have the schema without
 paying for the extra bytes when deploying.
@@ -72,15 +73,14 @@ smart contract.
 The schema format
 =================
 
-Ironically, the schema itself is represented as bytes.
 A schema can contain the structure information for a smart contract module
 and for each contract it can contain the description of the state and
 parameters for ``init`` and each of the ``receive``-functions.
 Each of these descriptions are referred to as a *schema type* and are always
 optional to include in the schema.
 
-Currently the supported schema types are inspired by what is possible in the
-Rust programming language:
+Currently the supported schema types are inspired by what is commonly used in
+the Rust programming language:
 
 .. code-block:: rust
 
@@ -139,10 +139,9 @@ section`_ feature of Wasm modules.
 This allows Wasm modules to include a named section of bytes, which does not
 affect the semantics of running the Wasm module.
 
-Every contract schema to embed into a module, we add to a collection and add
-a custom section named ``concordium-schema-v1``.
-This collection is a list of pairs, containing the name of the contract encoded
-in UTF-8 and the contract schema bytes.
+All schemas are collected and added in one custom section named
+``concordium-schema-v1``. This collection is a list of pairs, containing the
+name of the contract encoded in UTF-8 and the contract schema bytes.
 
 .. _`custom section`: https://webassembly.github.io/spec/core/appendix/custom.html
 .. _`implementation in Rust`: https://gitlab.com/Concordium/smart-contracts/-/blob/master/contracts-common/src/schema.rs

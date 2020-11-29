@@ -39,6 +39,7 @@ The documentation is split into four categories
    general/contract-schema
    general/resource-accounting
    general/develop-contracts
+   general/contract-on-chain
 
 .. toctree::
    :maxdepth: 1
@@ -56,6 +57,7 @@ The documentation is split into four categories
    guides/unit-test-contract
    guides/local-simulate
    guides/build-schema
+   guides/no-std
 
 .. toctree::
    :maxdepth: 1

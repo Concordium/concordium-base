@@ -33,10 +33,10 @@ Counter contract
 We are now ready for writing our first smart contract for the Concordium
 blockchain.
 
-The contract we are going to build in this tutorial is a gonna act as a
-counter, which starts at 0 and exposes a function for incrementing.
-Since contracts and instances are public available, we also want to require that
-the counter only can be incremented by owner of the instance.
+The contract we are going to build in this tutorial is going to act as a
+counter, which starts at 0 and exposes a function for incrementing. Since
+contracts and instances are publicly available, we also want to require that the
+counter can only be incremented by owner of the instance.
 
 The contract itself is not that interesting or even a realistic use case of
 smart contracts, but it will be quick to understand and it enough for us to try
@@ -63,10 +63,9 @@ more readable.
 Specifying the contract state
 =============================
 
-First we specify the type of the contract state.
-The contract state could be any type and is typically a struct or an enum.
-Since our contract is going to be a simple counter, we just let the state
-be an integer::
+First we specify the type of the contract state. The contract state could be any
+type and is typically a ``struct`` or an ``enum``. Since our contract is going
+to be a simple counter, we just let the state be an integer::
 
     type State = u32;
 
@@ -127,11 +126,12 @@ Unsurprisingly we choose to call our contract "counter".
 Only one of the three parameters are used by our counter contract.
 Here is a brief description of what they are:
 
-- **ctx**: An object with a bunch of getter functions for accessing information
+- **ctx**: An object with a number of getter functions for accessing information
   about the current context, such as who invoke this function, the argument
   supplied and the current state of the chain.
 - **amount**: The amount of GTU included in the transaction which invoked this
-  function.
+  function. If the contract is initialized then this is the amount of GTU it
+  will hold.
 - **logger**: An object with functions for outputting to the event log of the
   smart contract.
 
@@ -149,10 +149,10 @@ Avoiding black holes
 ====================
 As we are not going to specify a way to extract GTU from this contract, the
 GTU send to an instance of the contract will be trapped.
-It is surprisingly easy to create smart contracts, which acts as black holes
+It is easy to create smart contracts, which acts as black holes
 preventing the GTU send to them from being accessible *ever* again.
 
-To prevent this, we let the contract instantiation fail, if some amount is
+To prevent this, we let the contract instantiation fail if a non-zero amount is
 sent to it.
 We do this with the ``ensure_eq!`` macro, which is given two arguments to
 compare for equality, if *not* equal it will make the contract reject the
@@ -167,13 +167,14 @@ deployed to the chain, since the protocol of the Concordium blockchain does not
 log the error messages of smart contracts rejecting, therefore adding error
 messages is only useful when testing.
 
-If you want to reject directly in your smart contract, you should use
-``bail!``, which is the smart contract equivalent of ``panic!``, while
-``ensure_eq!`` and ``ensure!`` corresponds to ``assert_eq!`` and ``assert!``
-respectively, and are using ``bail!`` internally.
-We strongly recommend using these over panicking and assertions, because they
-can give better error handling when testing and produces smaller code in the end
-as ``panic!`` generates code for unwinding even when compiled to Wasm.
+If you want to reject directly in your smart contract, you should use ``bail!``
+to terminate early. ``ensure_eq!`` and ``ensure!`` corresponds are using
+``bail!`` internally. We strongly recommend using these for when the intention
+is to signal a logic error, or malformed input. ``panic`` and equivalents should
+be reserved for unexpected error conditions. To reduce code size as much as
+possible we recommend using `concordium_sc_base::trap` in place of ``panic`` to
+reduce code size. There is no advantage in the unwinding logic that ``panic``
+provides, since this is not observable when the contract executes on the chain.
 
 Testing instantiation
 =====================
@@ -228,14 +229,14 @@ To construct the first argument for ``counter_init``, we use
     let ctx = InitContextTest::empty();
 
 As hinted by ``empty`` the name of the constructor, our context is empty, and if
-the contract try to access anything in the context the test will fail.
+the contract tries to access anything in the context the test will fail.
 This will be fine for now, since our contract does not access the context during
 initialization.
 You will see how to create a non-empty context a bit later in this tutorial.
 
 The second argument is the amount included with the transfer at initialization.
 On chain this is represented in microGTU as a ``u64``, but in Rust it is wrapped
-in a more convenient type, for technical reason, we won't get into here::
+in a more convenient type for added type-safety.::
 
     let amount = Amount::from_micro_gtu(0);
 
@@ -266,8 +267,8 @@ If instead the result is an ``Err``, we fail the test with an error message::
         Err(_) => fail!("Contract initialization failed.")
     };
 
-We use ``fail!`` to fail the test, this is just a small wrapper around
-``panic!``.
+We use ``fail!`` to fail the test, this is a small wrapper around
+``panic!`` which is designed for use with the ``wasm32`` target.
 
 .. note::
     ``fail!`` solves an issue with reporting errors, when tests are compiled to
@@ -327,7 +328,7 @@ owner to increment.
 A smart contract can expose zero or more functions for interacting with an
 instance. These functions are called ``receive``-functions, and can read and
 write to the state of the instance, access the state of the blockchain and
-returns a description of actions to be executed on chain.
+return a description of actions to be executed on chain.
 
 .. note::
     A continuation of the analogy to Object Oriented Programming;
@@ -345,7 +346,7 @@ and two ways to compose actions:
 
     - **And**: Runs the first action, if it succeeds runs the second action,
       otherwise results in rejection.
-    - **Or**: Runs the first action, if it fails, runs the second action,
+    - **Or**: Runs the first action, **if it fails**, runs the second action,
       otherwise results in success.
 
 Our simple counter contract is only going to use **Accept**, but we refer the
