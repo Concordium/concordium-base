@@ -33,24 +33,39 @@
 //! When compiled without the `std` feature this crate sets the panic handler
 //! to a no-op.
 
-#![cfg_attr(not(feature = "std"), no_std, feature(alloc_error_handler, core_intrinsics))]
+#![cfg_attr(not(feature = "std"), no_std, feature(alloc_error_handler))]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 #[alloc_error_handler]
-fn on_oom(_layout: alloc::alloc::Layout) -> ! { core::intrinsics::abort() }
+fn on_oom(_layout: alloc::alloc::Layout) -> ! {
+    #[cfg(target_arch = "wasm32")]
+    unsafe {
+        core::arch::wasm32::unreachable()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    loop {}
+}
 
 /// Abort execution immediately.
-#[cfg(not(feature = "std"))]
-pub use core::intrinsics::abort as trap;
 #[cfg(feature = "std")]
 pub use std::process::abort as trap;
+#[cfg(all(not(feature = "std"), target_arch = "wasm32"))]
+#[inline(always)]
+pub fn trap() -> ! { unsafe { core::arch::wasm32::unreachable() } }
 
 #[cfg(not(feature = "std"))]
 #[panic_handler]
-fn abort_panic(_info: &core::panic::PanicInfo) -> ! { core::intrinsics::abort() }
+fn abort_panic(_info: &core::panic::PanicInfo) -> ! {
+    #[cfg(target_arch = "wasm32")]
+    unsafe {
+        core::arch::wasm32::unreachable()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    loop {}
+}
 
 // Provide some re-exports to make it easier to use the library.
 // This should be expanded in the future.

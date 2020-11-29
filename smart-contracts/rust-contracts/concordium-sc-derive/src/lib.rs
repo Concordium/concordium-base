@@ -792,6 +792,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
 
     let out = quote! {
         #[automatically_derived]
+        #[cfg(feature = "build-schema")]
         impl concordium_sc_base::schema::SchemaType for #data_name {
             fn get_type() -> concordium_sc_base::schema::Type {
                 #body
