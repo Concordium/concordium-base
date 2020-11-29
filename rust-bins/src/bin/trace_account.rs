@@ -84,6 +84,10 @@ enum AdditionalDetails {
     SimpleTransfer(SimpleTransfer),
     #[serde(rename = "encryptedAmountTransfer")]
     EncryptedTransfer(EncryptedTransfer),
+    #[serde(rename = "transferToEncrypted")]
+    TransferToEncrypted(TransferToEncrypted),
+    #[serde(rename = "transferToPublic")]
+    TransferToPublic(TransferToPublic),
     #[serde(other)]
     Uninteresting,
 }
@@ -102,6 +106,23 @@ pub struct EncryptedTransfer {
     transfer_source:           AccountAddress,
     transfer_destination:      AccountAddress,
     encrypted_amount:          EncryptedAmount,
+    input_encrypted_amount:    EncryptedAmount,
+    new_self_encrypted_amount: EncryptedAmount,
+}
+
+#[derive(SerdeDeserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferToEncrypted {
+    transfer_source:           AccountAddress,
+    amount_subtracted:         Amount,
+    new_self_encrypted_amount: EncryptedAmount,
+}
+
+#[derive(SerdeDeserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferToPublic {
+    transfer_source:           AccountAddress,
+    amount_added:              Amount,
     input_encrypted_amount:    EncryptedAmount,
     new_self_encrypted_amount: EncryptedAmount,
 }
@@ -141,7 +162,6 @@ struct Trace {
     #[structopt(flatten)]
     source_type: Source,
 }
-
 fn main() {
     let app = Trace::clap()
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -354,7 +374,37 @@ fn main() {
                                         }
                                     }
                                 }
-                                AdditionalDetails::Uninteresting => {}
+                                AdditionalDetails::TransferToEncrypted(tte) => {
+                                    writeln!(
+                                        writer,
+                                        "[{}] {}: account {} shielded {} GTU\n    Block hash: \
+                                         {}\n    Transaction hash: {}",
+                                        pretty_time(tx.block_time),
+                                        i,
+                                        tte.transfer_source,
+                                        tte.amount_subtracted,
+                                        tx.block_hash,
+                                        tx.transaction_hash.as_ref().unwrap()
+                                    )
+                                    .expect("Could not write.");
+                                }
+                                AdditionalDetails::TransferToPublic(ttp) => {
+                                    writeln!(
+                                        writer,
+                                        "[{}] {}: account {} unshielded {} GTU\n    Block hash: \
+                                         {}\n    Transaction hash: {}",
+                                        pretty_time(tx.block_time),
+                                        i,
+                                        ttp.transfer_source,
+                                        ttp.amount_added,
+                                        tx.block_hash,
+                                        tx.transaction_hash.as_ref().unwrap()
+                                    )
+                                    .expect("Could not write.");
+                                }
+                                AdditionalDetails::Uninteresting => {
+                                    // do nothing for other transaction types.
+                                }
                             }
                             i += 1;
                         }
