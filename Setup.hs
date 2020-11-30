@@ -67,16 +67,16 @@ osxBuild static env verbosity = do
         if static
           then do
             let source = "../rust-src/target/release/lib" ++ lib ++ ".a"
-            let others = "./lib/lib" ++ lib ++ ".a"
-                target = "./lib/lib" ++ lib ++ ".dylib"
+            let target = "./lib/lib" ++ lib ++ ".a"
+                others = "./lib/lib" ++ lib ++ ".dylib"
             rawSystemExit verbosity "rm" ["-f", others]
             rawSystemExit verbosity "ln" ["-s", "-f", source, target]
             noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
             noticeNoWrap verbosity $ "Removed: " ++ others
           else do
             let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
-            let others = "./lib/lib" ++ lib ++ ".dylib"
-                target = "./lib/lib" ++ lib ++ ".a"
+            let others = "./lib/lib" ++ lib ++ ".a"
+                target = "./lib/lib" ++ lib ++ ".dylib"
             rawSystemExit verbosity "rm" ["-f", others]
             rawSystemExit verbosity "ln" ["-s", "-f", source, target]
             noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
