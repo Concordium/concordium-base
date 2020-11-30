@@ -4,8 +4,8 @@ mod ffi;
 mod types;
 
 use anyhow::{anyhow, bail, ensure};
+use concordium_contracts_common::*;
 use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE, MAX_PARAMETER_SIZE};
-use contracts_common::*;
 use machine::Value;
 use std::{
     collections::{BTreeMap, LinkedList},

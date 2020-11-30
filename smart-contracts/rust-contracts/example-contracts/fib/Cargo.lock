@@ -17,7 +17,7 @@ name = "concordium-sc-base"
 version = "0.1.0"
 dependencies = [
  "concordium-sc-derive",
- "contracts-common",
+ "concordium-contracts-common",
  "wee_alloc",
 ]
 
@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "contracts-common"
+name = "concordium-contracts-common"
 version = "0.1.0"
 
 [[package]]

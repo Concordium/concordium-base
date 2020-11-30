@@ -122,7 +122,7 @@ dependencies = [
  "anyhow",
  "cargo_toml",
  "clap",
- "contracts-common",
+ "concordium-contracts-common",
  "criterion",
  "hex",
  "serde_json",
@@ -173,7 +173,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "contracts-common"
+name = "concordium-contracts-common"
 version = "0.1.0"
 dependencies = [
  "base58check",
@@ -881,7 +881,7 @@ name = "wasm-chain-integration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "contracts-common",
+ "concordium-contracts-common",
  "libc",
  "wasm-transform",
 ]

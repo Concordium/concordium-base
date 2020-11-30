@@ -28,7 +28,7 @@ path = "../wasm-chain-integration/"
 [dev-dependencies]
 criterion = "0.3"
 
-[dependencies.contracts-common]
+[dependencies.concordium-contracts-common]
 version = "0.1"
-path = "../contracts-common"
+path = "../concordium-contracts-common"
 features = ["derive-serde", "std"]

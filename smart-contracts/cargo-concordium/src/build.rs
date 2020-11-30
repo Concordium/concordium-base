@@ -1,7 +1,7 @@
 use ansi_term::{Color, Style};
 use anyhow::Context;
 use cargo_toml::Manifest;
-use contracts_common::*;
+use concordium_contracts_common::*;
 use std::{
     fs,
     path::PathBuf,

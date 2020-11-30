@@ -1,5 +1,5 @@
 use crate::{convert, mem, prims::*, traits::*, types::*};
-use contracts_common::*;
+use concordium_contracts_common::*;
 
 use mem::MaybeUninit;
 
