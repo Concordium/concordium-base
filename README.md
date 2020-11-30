@@ -10,3 +10,8 @@ however to minimize code size this library supports toggling compilation
 with the `#![no_std]` attribute via the feature `std` which is enabled by
 default. Compilation without the `std` feature requires a nightly version of
 rust.
+
+# Work in progress.
+
+This library is under heavy development at the moment, so expect breaking
+changes.
