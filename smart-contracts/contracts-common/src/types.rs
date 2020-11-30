@@ -36,6 +36,10 @@ impl<'de> SerdeDeserialize<'de> for Amount {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// An error indicating why parsing of an amount failed.
+/// Since amount parsing is typically a user-facing activity
+/// this is fairly precise, so we can notify the user why we failed, and what
+/// they can do to fix it.
 pub enum AmountParseError {
     Overflow,
     ExpectedDot,
