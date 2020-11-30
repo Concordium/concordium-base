@@ -72,7 +72,7 @@ Testing stubs for the function arguments can be found in a submodule of
 .. seealso::
 
     For more information and examples see the crate documentation of
-    concordium-sc-base_.
+    concordium-sc-base.
 
 .. todo::
 
@@ -143,7 +143,9 @@ uses the test runner from ``cargo-concordium``.
     Instead use ``fail!`` and the ``claim!`` variants to do assertions when
     testing, as these reports back the error messages to the test runner before
     failing the test.
-    Both are part of concordium-sc-base_.
+    Both are part of ``concordium-sc-base``.
 
+.. todo::
 
-.. _concordium-sc-base: https://docs.rs/concordium-sc-base
+    use link concordium-sc-base: docs.rs/concordium-sc-base when crate
+    is published.

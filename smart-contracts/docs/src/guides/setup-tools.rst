@@ -29,7 +29,7 @@ It is installed by running::
 
     cargo install cargo-concordium
 
-.. note:: Until the tool is released on crates.io_, you instead have to manually
+.. note:: Until the tool is released on crates.io, you instead have to manually
    download it and place it in your PATH.
 
 For a description of how to use the tool run::
@@ -49,4 +49,3 @@ To deploy smart contract modules and interact with the chain, make sure to have
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _rustup: https://rustup.rs/
-.. _crates.io: https://crates.io/

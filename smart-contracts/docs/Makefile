@@ -27,3 +27,6 @@ dev:
 
 lint:
 	doc8 "$(SOURCEDIR)"
+
+clean:
+	rm -rf "$(BUILDDIR)"

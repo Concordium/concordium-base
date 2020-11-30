@@ -32,9 +32,9 @@ You add the library by opening ``Cargo.toml`` and just below the line saying
     concordium-sc-base = "1.0.0"
 
 .. note::
-    Until the dependency is released on crates.io_, you will also have to clone
-    the repository_ with ``concordium-sc-base`` and have the dependency to point at
-    the directory instead, by adding the following to ``Cargo.toml``::
+    Until the dependency is released on crates.io, you will also have to clone
+    the repository_ with ``concordium-sc-base`` and have the dependency to point
+    at the directory instead, by adding the following to ``Cargo.toml``::
 
         [dependencies]
         concordium-sc-base = { path = "./path/to/concordium-sc-base" }
@@ -49,7 +49,6 @@ You add the library by opening ``Cargo.toml`` and just below the line saying
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _rustup: https://rustup.rs/
-.. _crates.io: https://crates.io/
 .. _repository: https://gitlab.com/Concordium/smart-contracts
 
 

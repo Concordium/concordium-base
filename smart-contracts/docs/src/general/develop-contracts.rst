@@ -197,5 +197,4 @@ Move heavy calculations off-chain
 
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
-.. _crates.io: https://crates.io/
 .. _AssemblyScript: https://github.com/AssemblyScript

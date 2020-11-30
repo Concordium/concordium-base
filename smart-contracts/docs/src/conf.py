@@ -45,8 +45,8 @@ extensions = [
     # "sphinx.ext.imgconverter", # To support svg when targeting LaTeX
 ]
 
-todo_include_todos = False
-todo_emit_warnings = True
+# todo_include_todos = True
+# todo_emit_warnings = True
 # todo_link_only = True
 
 graphviz_fontname = "'Lato,proxima-nova,Helvetica Neue,Arial,sans-serif'"

@@ -3,9 +3,9 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-====================================================================
+========================================
 Concordium Smart Contract Documentation!
-====================================================================
+========================================
 
 Welcome to the documentation of Concordium smart contracts!
 
@@ -39,7 +39,6 @@ The documentation is split into four categories
    general/contract-schema
    general/resource-accounting
    general/develop-contracts
-   general/contract-on-chain
 
 .. toctree::
    :maxdepth: 1
@@ -74,9 +73,9 @@ The documentation is split into four categories
 
    references/schema-json
    references/host-fns
-   concordium-sc-base (crate docs) <https://crates.io/crates/concordium-sc-base>
    Rust contract examples (repo) <https://gitlab.com/Concordium/smart-contracts/-/tree/master/rust-contracts/example-contracts>
    Concordium user documentation <https://developers.concordium.com/testnet/docs>
 
 .. todo::
    Update user documentation link
+   Add link to crate docs for concordium-sc-base under references when crate is published
