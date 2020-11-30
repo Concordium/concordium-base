@@ -51,10 +51,10 @@ to setup your project.
 Open ``src/lib.rs`` in your editor and you'll see some code for writing tests.
 We will use this later, but just delete it for now.
 
-First we bring everything from the ``concordium-sc-base`` library into scope,
+First we bring everything from the ``concordium-std`` library into scope,
 by adding the line::
 
-    use concordium_sc_base::*;
+    use concordium_std::*;
 
 This library contains everything needed for writing our smart contract.
 It provides convenient wrappers around some low-level operations making our code
@@ -71,9 +71,9 @@ to be a simple counter, we just let the state be an integer::
 
 On the blockchain, the state of a smart contract is represented by an array of
 bytes, and it is important that our contract state is serializable to bytes.
-When using the ``concordium-sc-base`` library, this all boils down to our type
+When using the ``concordium-std`` library, this all boils down to our type
 for the contract state must implement the ``Serialized`` trait from
-``concordium-sc-base``.
+``concordium-std``.
 
 Luckily the library already contains implementations for most of the primitives
 and standard types in Rust, meaning ``u32`` already implements the trait, so no
@@ -112,7 +112,7 @@ The ``#[init(..)]`` macro
 =========================
 
 In Rust an ``init``-function can be specified as a regular function, annotated
-with the procedural macro from ``concordium_sc_base`` called ``#[init(..)]``.
+with the procedural macro from ``concordium_std`` called ``#[init(..)]``.
 The macro saves you from some details of setting up the function as
 external function and supplies a nicer interface for accessing information and
 event logging.
@@ -172,7 +172,7 @@ to terminate early. ``ensure_eq!`` and ``ensure!`` corresponds are using
 ``bail!`` internally. We strongly recommend using these for when the intention
 is to signal a logic error, or malformed input. ``panic`` and equivalents should
 be reserved for unexpected error conditions. To reduce code size as much as
-possible we recommend using `concordium_sc_base::trap` in place of ``panic`` to
+possible we recommend using `concordium_std::trap` in place of ``panic`` to
 reduce code size. There is no advantage in the unwinding logic that ``panic``
 provides, since this is not observable when the contract executes on the chain.
 
@@ -205,7 +205,7 @@ Rust, so we will not spend time on explaining any of the above code.
 
 For our first test, we wish to call the ``counter_init`` function as just a
 regular function, but we first need a way to construct the arguments.
-Luckily ``concordium_sc_base`` contains a submodule ``test_infrastructure`` with
+Luckily ``concordium_std`` contains a submodule ``test_infrastructure`` with
 stubs for all of this, so let us first bring everything from the submodule into
 scope.
 

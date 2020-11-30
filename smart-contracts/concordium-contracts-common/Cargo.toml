@@ -1,5 +1,5 @@
 [package]
-name = "contracts-common"
+name = "concordium-contracts-common"
 version = "0.1.0"
 authors = ["Concordium <info@concordium.com>"]
 edition = "2018"
@@ -28,7 +28,7 @@ std = []
 derive-serde = ["serde", "serde_json", "std", "base58check"]
 
 [lib]
-# Since we don't define an allocator in this trate, we can only produce an rlib
+# Since we don't define an allocator in this crate, we can only produce an rlib
 # directly.
 crate-type = ["rlib"]
 

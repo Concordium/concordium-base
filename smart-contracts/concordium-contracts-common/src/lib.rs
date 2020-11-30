@@ -12,7 +12,7 @@
 //! To use this library without the `std` feature you have to disable it, which
 //! can be done, for example, as follows.
 //! ```ignore
-//! [dependencies.concordium-sc-base]
+//! [dependencies.concordium-std]
 //! default-features = false
 //! ```
 //! In your project's `Cargo.toml` file.

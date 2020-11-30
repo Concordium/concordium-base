@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::*;
+use concordium_std::*;
 
 /* This Escrow contract is more a code sample than a real-world contract that
  * someone might want to use in production.
@@ -197,7 +197,7 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 #[concordium_cfg_test]
 pub mod tests {
     use super::*;
-    use concordium_sc_base::test_infrastructure::*;
+    use concordium_std::test_infrastructure::*;
 
     #[concordium_test]
     #[no_mangle]

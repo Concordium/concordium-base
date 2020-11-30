@@ -144,4 +144,4 @@ All schemas are collected and added in one custom section named
 name of the contract encoded in UTF-8 and the contract schema bytes.
 
 .. _`custom section`: https://webassembly.github.io/spec/core/appendix/custom.html
-.. _`implementation in Rust`: https://gitlab.com/Concordium/smart-contracts/-/blob/master/contracts-common/src/schema.rs
+.. _`implementation in Rust`: https://gitlab.com/Concordium/smart-contracts/-/blob/master/concordium-contracts-common/src/schema.rs

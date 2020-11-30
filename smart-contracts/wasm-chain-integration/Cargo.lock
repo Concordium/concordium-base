@@ -129,19 +129,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "const_fn"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c478836e029dcef17fb47c89023448c64f781a046e0300e257ad8225ae59afab"
-
-[[package]]
-name = "contracts-common"
+name = "concordium-contracts-common"
 version = "0.1.0"
 dependencies = [
  "base58check",
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "const_fn"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c478836e029dcef17fb47c89023448c64f781a046e0300e257ad8225ae59afab"
 
 [[package]]
 name = "criterion"
@@ -736,7 +736,7 @@ name = "wasm-chain-integration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "contracts-common",
+ "concordium-contracts-common",
  "criterion",
  "libc",
  "wasm-transform",

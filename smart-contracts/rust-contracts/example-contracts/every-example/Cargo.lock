@@ -28,16 +28,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "concordium-sc-base"
+name = "concordium-contracts-common"
+version = "0.1.0"
+
+[[package]]
+name = "concordium-std"
 version = "0.1.0"
 dependencies = [
- "concordium-sc-derive",
- "contracts-common",
+ "concordium-contracts-common",
+ "concordium-std-derive",
  "wee_alloc",
 ]
 
 [[package]]
-name = "concordium-sc-derive"
+name = "concordium-std-derive"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
@@ -46,15 +50,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "contracts-common"
-version = "0.1.0"
-
-[[package]]
 name = "counter"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]
@@ -77,7 +77,7 @@ name = "erc20"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]
@@ -85,7 +85,7 @@ name = "escrow"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]
@@ -107,7 +107,7 @@ name = "fib"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]
@@ -137,7 +137,7 @@ name = "lockup"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]
@@ -175,7 +175,7 @@ name = "rate-limited"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]
@@ -196,7 +196,7 @@ name = "simple-game"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
  "hex",
  "sha2",
 ]
@@ -217,7 +217,7 @@ name = "two-step-transfer"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]

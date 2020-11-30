@@ -5,7 +5,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-use contracts_common::*;
+use concordium_contracts_common::*;
 
 /// Objects which can access parameters to contracts.
 ///

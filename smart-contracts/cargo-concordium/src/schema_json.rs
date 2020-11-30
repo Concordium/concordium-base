@@ -1,5 +1,5 @@
 use anyhow::*;
-use contracts_common::{schema::*, *};
+use concordium_contracts_common::{schema::*, *};
 use serde_json::Value;
 use std::convert::TryInto;
 

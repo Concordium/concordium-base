@@ -9,10 +9,10 @@ host running smart contract Wasm module.
 .. warning::
     These functions are not meant to be called directly by smart contract writers.
     Instead used behind a more idiomatic language-specific API supplied by a
-    library, such as ``concordium-sc-base`` for Rust.
+    library, such as ``concordium-std`` for Rust.
 
     .. todo::
-        Link ``concordium-sc-base`` documentation.
+        Link ``concordium-std`` documentation.
 
 .. module:: concordium
 

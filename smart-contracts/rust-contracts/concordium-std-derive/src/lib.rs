@@ -67,7 +67,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[export_name = #wasm_export_fn_name]
             pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
-                use concordium_sc_base::{Logger, trap};
+                use concordium_std::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
                 let mut logger = Logger::init();
@@ -81,7 +81,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[export_name = #wasm_export_fn_name]
             pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
-                use concordium_sc_base::{Logger, trap};
+                use concordium_std::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
                 match #fn_name(&ctx, amount, &mut logger) {
@@ -142,7 +142,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
         #[export_name = #wasm_export_fn_name]
         pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
-            use concordium_sc_base::{SeekFrom, ContractState, Logger};
+            use concordium_std::{SeekFrom, ContractState, Logger};
             let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
             let mut logger = Logger::init();
@@ -159,7 +159,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[export_name = #wasm_export_fn_name]
             pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
-                use concordium_sc_base::{SeekFrom, ContractState, Logger, trap};
+                use concordium_std::{SeekFrom, ContractState, Logger, trap};
                 let ctx = ReceiveContextExtern::open(());
                 let mut logger = Logger::init();
                 let mut state_bytes = ContractState::open(());
@@ -213,8 +213,8 @@ fn contract_function_schema_tokens(
                 #[export_name = #schema_name]
                 pub extern "C" fn #schema_ident() -> *mut u8 {
                     let schema = <#parameter_ident as schema::SchemaType>::get_type();
-                    let schema_bytes = concordium_sc_base::to_bytes(&schema);
-                    concordium_sc_base::put_in_memory(&schema_bytes)
+                    let schema_bytes = concordium_std::to_bytes(&schema);
+                    concordium_std::put_in_memory(&schema_bytes)
                 }
             }
         }
@@ -745,9 +745,9 @@ pub fn contract_state(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[cfg(all(target_arch = "wasm32", feature = "build-schema"))]
         #[export_name = #wasm_schema_name]
         pub extern "C" fn #rust_schema_name() -> *mut u8 {
-            let schema = <#data_ident as concordium_sc_base::schema::SchemaType>::get_type();
-            let schema_bytes = concordium_sc_base::to_bytes(&schema);
-            concordium_sc_base::put_in_memory(&schema_bytes)
+            let schema = <#data_ident as concordium_std::schema::SchemaType>::get_type();
+            let schema_bytes = concordium_std::to_bytes(&schema);
+            concordium_std::put_in_memory(&schema_bytes)
         }
     };
     generate_schema_tokens.to_tokens(&mut out);
@@ -768,7 +768,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
         syn::Data::Struct(ref data) => {
             let fields_tokens = schema_type_fields(&data.fields);
             quote! {
-                concordium_sc_base::schema::Type::Struct(#fields_tokens)
+                concordium_std::schema::Type::Struct(#fields_tokens)
             }
         }
         syn::Data::Enum(ref data) => {
@@ -784,7 +784,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
                 })
                 .collect();
             quote! {
-                concordium_sc_base::schema::Type::Enum(vec! [ #(#variant_tokens),* ])
+                concordium_std::schema::Type::Enum(vec! [ #(#variant_tokens),* ])
             }
         }
         _ => unimplemented!("Union is not supported"),
@@ -793,8 +793,8 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     let out = quote! {
         #[automatically_derived]
         #[cfg(feature = "build-schema")]
-        impl concordium_sc_base::schema::SchemaType for #data_name {
-            fn get_type() -> concordium_sc_base::schema::Type {
+        impl concordium_std::schema::SchemaType for #data_name {
+            fn get_type() -> concordium_std::schema::Type {
                 #body
             }
         }
@@ -811,11 +811,11 @@ fn schema_type_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
     {
         let size = format_ident!("U{}", 8 * l);
         quote! {
-            <#field_type as concordium_sc_base::schema::SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
+            <#field_type as concordium_std::schema::SchemaType>::get_type().set_size_length(concordium_std::schema::SizeLength::#size)
         }
     } else {
         quote! {
-            <#field_type as concordium_sc_base::schema::SchemaType>::get_type()
+            <#field_type as concordium_std::schema::SchemaType>::get_type()
         }
     }
 }
@@ -833,13 +833,13 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
                     }
                 })
                 .collect();
-            quote! { concordium_sc_base::schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
+            quote! { concordium_std::schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
         }
         syn::Fields::Unnamed(_) => {
             let fields_tokens: Vec<_> = fields.iter().map(schema_type_field_type).collect();
-            quote! { concordium_sc_base::schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
+            quote! { concordium_std::schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
         }
-        syn::Fields::Unit => quote! { concordium_sc_base::schema::Fields::None },
+        syn::Fields::Unit => quote! { concordium_std::schema::Fields::None },
     }
 }
 

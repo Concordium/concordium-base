@@ -19,9 +19,9 @@ anyhow = "1.0.33"
 path = "../wasm-transform"
 version = "0"
 
-[dependencies.contracts-common]
+[dependencies.concordium-contracts-common]
 version = "0.1"
-path = "../contracts-common"
+path = "../concordium-contracts-common"
 features = ["derive-serde"]
 
 [lib]
