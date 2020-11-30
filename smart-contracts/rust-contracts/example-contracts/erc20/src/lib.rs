@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::{collections::*, *};
+use concordium_std::{collections::*, *};
 
 /*
  * An implementation of ERC-20 Token Standard used on the Ethereum network.
@@ -157,7 +157,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 #[concordium_cfg_test]
 pub mod tests {
     use super::*;
-    use concordium_sc_base::test_infrastructure::*;
+    use concordium_std::test_infrastructure::*;
 
     #[concordium_test]
     /// Initialise token/contract giving the owner

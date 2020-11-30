@@ -29,7 +29,7 @@
  */
 
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::{collections::*, *};
+use concordium_std::{collections::*, *};
 
 // Types
 #[derive(Serialize, SchemaType)]
@@ -284,7 +284,7 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 #[concordium_cfg_test]
 mod tests {
     use super::*;
-    use concordium_sc_base::test_infrastructure::*;
+    use concordium_std::test_infrastructure::*;
 
     fn sum_reserved_balance(state: &State) -> Amount {
         state.requests.iter().map(|(_, req)| req.transfer_amount).sum()

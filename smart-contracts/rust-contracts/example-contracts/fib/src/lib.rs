@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::*;
+use concordium_std::*;
 
 #[contract_state(contract = "fib")]
 #[derive(Serialize, SchemaType)]

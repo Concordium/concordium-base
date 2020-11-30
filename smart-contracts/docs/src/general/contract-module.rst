@@ -109,7 +109,7 @@ contract, we associate the functions using a naming scheme:
   contain the `.` symbol.
 
 .. note::
-    If you develop smart contracts using Rust and ``concordium-sc-base``, the
+    If you develop smart contracts using Rust and ``concordium-std``, the
     procedural macros ``#[init(...)]`` and ``#[receive(...)]`` sets up the
     correct naming scheme.
 

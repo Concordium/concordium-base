@@ -19,7 +19,7 @@ pkg
 *.state-*
 *.state
 
-/rust-contracts/concordium-sc-base/Cargo.lock
+/rust-contracts/concordium-std/Cargo.lock
 /concordium-contracts-common/Cargo.lock
 /wasm-transform/Cargo.lock
 docs/build

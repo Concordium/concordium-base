@@ -49,7 +49,7 @@ If the contract functions are written using ``#[init(..)]`` or
 
 .. code-block:: rust
 
-    use concordium_sc_base::*;
+    use concordium_std::*;
 
     #[init(contract = "my_contract")]
     fn contract_init(
@@ -67,12 +67,12 @@ If the contract functions are written using ``#[init(..)]`` or
     ) -> ReceiveResult<A> { ... }
 
 Testing stubs for the function arguments can be found in a submodule of
-``concordium-sc-base`` called ``test_infrastructure``.
+``concordium-std`` called ``test_infrastructure``.
 
 .. seealso::
 
     For more information and examples see the crate documentation of
-    concordium-sc-base.
+    concordium-std.
 
 .. todo::
 
@@ -143,9 +143,9 @@ uses the test runner from ``cargo-concordium``.
     Instead use ``fail!`` and the ``claim!`` variants to do assertions when
     testing, as these reports back the error messages to the test runner before
     failing the test.
-    Both are part of ``concordium-sc-base``.
+    Both are part of ``concordium-std``.
 
 .. todo::
 
-    use link concordium-sc-base: docs.rs/concordium-sc-base when crate
+    use link concordium-std: docs.rs/concordium-std when crate
     is published.

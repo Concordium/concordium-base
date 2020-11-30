@@ -42,10 +42,10 @@ be set to ``["cdylib", "rlib"]`` in the manifest file:
     crate-type = ["cdylib", "rlib"]
     ...
 
-Writing a smart contract using ``concordium_sc_base``
+Writing a smart contract using ``concordium_std``
 =====================================================
 
-It is recommended to use the ``concordium_sc_base`` crate, which provides a
+It is recommended to use the ``concordium_std`` crate, which provides a
 more Rust-like experience for developing smart contract modules and calling
 host functions.
 
@@ -56,7 +56,7 @@ A simple counter example would look like:
 
 .. code-block:: rust
 
-    use concordium_sc_base::*;
+    use concordium_std::*;
 
     type State = u32;
 
@@ -129,13 +129,13 @@ both serializing and deserializing between values and their byte representation.
    deserialization at the moment. This is coming as well, but it does make the
    interface more complex.
 
-The ``concordium_sc_base`` crate includes this trait and implementations for
+The ``concordium_std`` crate includes this trait and implementations for
 most types in the Rust standard library. It also includes macros for deriving
 the trait for user defined structs and enums.
 
 .. code-block:: rust
 
-    use concordium_sc_base::*;
+    use concordium_std::*;
 
     #[derive(Serialize)]
     struct MyState {

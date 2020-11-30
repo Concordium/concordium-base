@@ -17,7 +17,7 @@ name = "concordium-contracts-common"
 version = "0.1.0"
 
 [[package]]
-name = "concordium-sc-base"
+name = "concordium-std"
 version = "0.1.0"
 dependencies = [
  "concordium-contracts-common",
@@ -69,7 +69,7 @@ name = "rate-limited"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-sc-base",
+ "concordium-std",
 ]
 
 [[package]]

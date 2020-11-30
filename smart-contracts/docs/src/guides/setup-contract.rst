@@ -19,25 +19,25 @@ folders.
 Your directory should now contain a ``Cargo.toml`` file and a ``src``
 directory and some hidden files.
 
-Next is to add ``concordium-sc-base`` as a dependency.
+Next is to add ``concordium-std`` as a dependency.
 Which is a library for Rust containing procedural macros and functions for
 writing small and efficient smart contracts.
 
 You add the library by opening ``Cargo.toml`` and just below the line saying
-``[dependencies]`` add a new line with ``concordium-sc-base = "1.0.0"``.
+``[dependencies]`` add a new line with ``concordium-std = "1.0.0"``.
 
 .. code-block::
 
     [dependencies]
-    concordium-sc-base = "1.0.0"
+    concordium-std = "1.0.0"
 
 .. note::
     Until the dependency is released on crates.io, you will also have to clone
-    the repository_ with ``concordium-sc-base`` and have the dependency to point
+    the repository_ with ``concordium-std`` and have the dependency to point
     at the directory instead, by adding the following to ``Cargo.toml``::
 
         [dependencies]
-        concordium-sc-base = { path = "./path/to/concordium-sc-base" }
+        concordium-std = { path = "./path/to/concordium-std" }
 
 .. todo::
     Once the crate is released:

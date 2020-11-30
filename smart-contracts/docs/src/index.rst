@@ -78,4 +78,4 @@ The documentation is split into four categories
 
 .. todo::
    Update user documentation link
-   Add link to crate docs for concordium-sc-base under references when crate is published
+   Add link to crate docs for concordium-std under references when crate is published
