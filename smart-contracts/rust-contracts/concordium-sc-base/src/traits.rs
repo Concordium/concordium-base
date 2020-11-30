@@ -21,7 +21,7 @@ pub trait HasParameter: Read {
 
 /// Objects which can access chain metadata.
 pub trait HasChainMetadata {
-    /// Get time in miliseconds at the beginning of this block.
+    /// Get time in milliseconds at the beginning of this block.
     fn slot_time(&self) -> SlotTime;
     /// Get block height of the current block.
     fn block_height(&self) -> BlockHeight;
