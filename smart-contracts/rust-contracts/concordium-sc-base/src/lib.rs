@@ -100,7 +100,7 @@ mod prims;
 mod traits;
 mod types;
 pub use concordium_contracts_common::*;
-pub use concordium_sc_derive::*;
+pub use concordium_std_derive::*;
 pub use impls::*;
 pub use traits::*;
 pub use types::*;

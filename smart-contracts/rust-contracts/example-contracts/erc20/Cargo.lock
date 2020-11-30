@@ -13,26 +13,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 
 [[package]]
+name = "concordium-contracts-common"
+version = "0.1.0"
+
+[[package]]
 name = "concordium-sc-base"
 version = "0.1.0"
 dependencies = [
- "concordium-sc-derive",
  "concordium-contracts-common",
+ "concordium-std-derive",
  "wee_alloc",
 ]
 
 [[package]]
-name = "concordium-sc-derive"
+name = "concordium-std-derive"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "concordium-contracts-common"
-version = "0.1.0"
 
 [[package]]
 name = "erc20"

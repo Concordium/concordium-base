@@ -9,8 +9,8 @@ edition = "2018"
 # Reduce code size, at the cost of performance in allocation heavy-code.
 wee_alloc="0.4.5"
 
-[dependencies.concordium-sc-derive]
-path = "../concordium-sc-derive"
+[dependencies.concordium-std-derive]
+path = "../concordium-std-derive"
 version = "0.1"
 
 [dependencies.concordium-contracts-common]
