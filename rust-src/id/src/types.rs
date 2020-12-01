@@ -1943,6 +1943,28 @@ pub enum AccountCredential<
     },
 }
 
+/// A type encapsulating both types of credential values, analogous to
+/// AccountCredential.
+/// Serialization must match the one in Haskell.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(tag = "type", content = "contents")]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub enum AccountCredentialValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    #[serde(rename = "initial")]
+    Initial {
+        #[serde(flatten)]
+        icdi: InitialCredentialDeploymentValues<C, AttributeType>,
+    },
+    #[serde(rename = "normal")]
+    Normal {
+        #[serde(flatten)]
+        cdi: CredentialDeploymentValues<C, AttributeType>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
