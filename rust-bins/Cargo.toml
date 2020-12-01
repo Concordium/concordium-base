@@ -7,7 +7,7 @@ edition = "2018"
 [features]
 # Force openssl-sys to staticly link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
-vendored = ["openssl-sys/vendored"]
+vendored-ssl = ["openssl-sys/vendored"]
 
 [dependencies]
 clap = "2.33"
