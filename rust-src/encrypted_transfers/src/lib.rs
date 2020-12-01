@@ -7,7 +7,7 @@ extern crate itertools;
 
 mod ffi;
 pub mod proofs;
-mod types;
+pub mod types;
 
 use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
 use crypto_common::types::Amount;
