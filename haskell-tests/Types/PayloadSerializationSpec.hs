@@ -95,6 +95,7 @@ genPayload = oneof [genDeployModule,
                     genAddBaker,
                     genRemoveBaker,
                     genUpdateBakerStake,
+                    genUpdateBakerRestakeEarnings,
                     genUpdateBakerKeys,
                     genUpdateAccountKeys,
                     genAddAccountKeys,
@@ -151,9 +152,11 @@ genPayload = oneof [genDeployModule,
 
         genRemoveBaker = return RemoveBaker
 
-        genUpdateBakerStake = do
-          (ubsStake, ubsRestakeEarnings) <- (arbitrary :: Gen (Maybe Amount, Maybe Bool)) `suchThat` (\(a, b) -> isJust a || isJust b)
-          return UpdateBakerStake{..}
+        genUpdateBakerStake =
+          UpdateBakerStake <$> arbitrary
+        
+        genUpdateBakerRestakeEarnings =
+          UpdateBakerRestakeEarnings <$> arbitrary
 
         genUpdateBakerKeys = do
           ubkElectionVerifyKey <- VRF.publicKey <$> arbitrary
