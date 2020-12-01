@@ -13,7 +13,6 @@ stages:
   before_script:
     - rustc --version && cargo --version
     - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
-    - apt install libssl-dev
   cache:
     paths:
       - .stack
@@ -44,7 +43,7 @@ stages:
   cache: {}
   script:
     - ( cd rust-src && cargo clippy --color=always --all )
-    - ( cd rust-bins && cargo clippy --color=always --all )
+    - ( cd rust-bins && cargo clippy --features=vendored-ssl --color=always --all )
     - ( cd identity-provider-service && cargo clippy --features=vendored-ssl --color=always --all )
 
 "cargo:build-bench":
