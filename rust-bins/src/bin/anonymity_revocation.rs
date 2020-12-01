@@ -252,12 +252,17 @@ macro_rules! succeed_or_die {
 
 /// Decrypt encIdCredPubShare
 fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
-    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(dcr.credential), e => "Could not read credential from provided file because {}");
+    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(dcr.credential), e => "Could not read credential from provided file because {}");
 
     if credential.version != VERSION_0 {
         return Err("The version of the credential should be 0".to_owned());
     }
-    let credential = credential.value;
+    let credential = match credential.value {
+        AccountCredentialValues::Initial { .. } => {
+            return Err("Cannot decrypt data from initial account.".to_owned())
+        }
+        AccountCredentialValues::Normal { cdi } => cdi,
+    };
 
     let ar_data = credential.ar_data;
     let ar: ArData<ExampleCurve> = succeed_or_die!(read_json_from_file(dcr.ar_private), e => "Could not read anonymity revoker secret keys due to {}");
@@ -335,11 +340,17 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
 }
 
 fn handle_combine_id(cmb: Combine) -> Result<(), String> {
-    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential because {}.");
+    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential from provided file because {}");
+
     if credential.version != VERSION_0 {
-        return Err("The version should be 0".to_owned());
+        return Err("The version of the credential should be 0".to_owned());
     }
-    let credential = credential.value;
+    let credential = match credential.value {
+        AccountCredentialValues::Initial { .. } => {
+            return Err("Cannot decrypt data from initial account.".to_owned())
+        }
+        AccountCredentialValues::Normal { cdi } => cdi,
+    };
     let revocation_threshold = credential.threshold;
 
     let shares_values: Vec<_> = cmb.shares;
