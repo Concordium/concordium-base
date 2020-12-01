@@ -1,3 +1,14 @@
+//! This tool can be used to trace transactions on a given account.
+//! It needs access to the wallet-proxy to obtain a list of transactions on a
+//! given account.
+//!
+//! If the account secret key is provided then the tool will decrypt all
+//! encrypted transfers on the account.
+//!
+//! This tool is a proof-of-concept. It does not handle various kinds of
+//! failures gracefully, typically just aborting execution entirely if something
+//! unexpected happens.
+
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap::AppSettings;
 use client_server_helpers::read_json_from_file;
@@ -9,24 +20,7 @@ use structopt::StructOpt;
 
 type EncryptedAmount = encrypted_transfers::types::EncryptedAmount<id::constants::ArCurve>;
 
-#[derive(StructOpt)]
-struct WalletProxy {
-    #[structopt(
-        long = "source",
-        help = "Source of the data, dependent on the source-type.",
-        global = true
-    )]
-    source: url::Url,
-}
-#[derive(StructOpt)]
-enum Source {
-    #[structopt(
-        name = "wallet-proxy",
-        about = "Use the wallet-proxy as the transaction source."
-    )]
-    WalletProxy(WalletProxy),
-}
-// Should match what's output by the anonymity_revocation tool.
+/// Should match what's output by the anonymity_revocation tool.
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct RetrievalInput {
@@ -36,6 +30,7 @@ struct RetrievalInput {
     encryption_secret_key: Option<elgamal::SecretKey<id::constants::ArCurve>>,
 }
 
+/// A success response from the accTransactions endpoint of the wallet-proxy.
 #[derive(SerdeDeserialize)]
 struct GoodResponse {
     limit:        u64,
@@ -43,16 +38,29 @@ struct GoodResponse {
     transactions: Vec<TransactionResponse>,
 }
 
+/// Since we don't do anything with hashes we leave them as strings for this
+/// binary.
 type BlockHash = String;
 type TransactionHash = String;
 
+#[derive(Debug, SerdeDeserialize, PartialEq, Eq)]
+enum OriginType {
+    #[serde(rename = "self")]
+    Own, // named Own instead of Self because Self is a keyword
+    #[serde(rename = "account")]
+    Account,
+}
+
+/// Origin of the transaction, either "self" or "account", in the latter case
+/// the address is in the second field.
 #[derive(Debug, SerdeDeserialize)]
 struct Origin {
     #[serde(rename = "type")]
-    origin_type: String,
+    origin_type: OriginType,
     address: Option<AccountAddress>,
 }
 
+/// Interesting parts of the response for a single transaction.
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransactionResponse {
@@ -63,6 +71,7 @@ struct TransactionResponse {
     transaction_hash: Option<TransactionHash>,
     details:          Details,
 }
+/// Outcome of a transaction.
 #[derive(SerdeDeserialize, Eq, PartialEq)]
 enum Outcome {
     #[serde(rename = "success")]
@@ -70,12 +79,18 @@ enum Outcome {
     #[serde(rename = "reject")]
     Reject,
 }
+
+/// Details of a particular transaction. The actual details are transaction
+/// specific, and are thus handled by the enumeration `AdditionalDetails`.
 #[derive(SerdeDeserialize)]
 struct Details {
     outcome: Outcome,
     #[serde(flatten)]
     additional_details: AdditionalDetails,
 }
+
+/// Additional details of a transaction, itemized by transaction type.
+/// This should match what the wallet-proxy returns.
 #[derive(SerdeDeserialize, Debug)]
 #[serde(tag = "type")]
 #[allow(clippy::large_enum_variant)]
@@ -128,24 +143,45 @@ pub struct TransferToPublic {
 }
 
 #[derive(StructOpt)]
+struct WalletProxy {
+    #[structopt(
+        long = "source",
+        help = "Source of the data, dependent on the source-type.",
+        global = true
+    )]
+    source: url::Url,
+}
+#[derive(StructOpt)]
+enum Source {
+    #[structopt(
+        name = "wallet-proxy",
+        about = "Use the wallet-proxy as the transaction source."
+    )]
+    WalletProxy(WalletProxy),
+}
+
+#[derive(StructOpt)]
 struct Trace {
     #[structopt(
         long = "out",
-        help = "File to output the decryption to.",
+        help = "File to output the account trace to. If not provided the data is printed to \
+                stdout.",
         global = true
     )]
     out: Option<PathBuf>,
     #[structopt(
         long = "global",
         help = "File with cryptographic parameters.",
-        default_value = "global.json"
+        default_value = "global.json",
+        global = true
     )]
     global: PathBuf,
     #[structopt(
         help = "File with data about the account we need to decrypt. Required unless `--address` \
                 is provided.",
         required_unless = "address",
-        long = "input"
+        long = "input",
+        global = true
     )]
     input: Option<PathBuf>,
     #[structopt(
@@ -156,12 +192,14 @@ struct Trace {
     address: AccountAddress,
     #[structopt(
         help = "Optionally a decryption key to decrypt encrypted transfers.",
-        long = "decryption-key"
+        long = "decryption-key",
+        global = true
     )]
     decryption_key: Option<String>,
-    #[structopt(flatten)]
+    #[structopt(subcommand)]
     source_type: Source,
 }
+
 fn main() {
     let app = Trace::clap()
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -267,7 +305,7 @@ fn main() {
                             }
                             match &tx.details.additional_details {
                                 AdditionalDetails::SimpleTransfer(st) => {
-                                    if tx.origin.origin_type == "self" {
+                                    if tx.origin.origin_type == OriginType::Own {
                                         writeln!(
                                             writer,
                                             "[{}] {}: Outgoing transfer of {} GTU to account \
@@ -296,7 +334,7 @@ fn main() {
                                     }
                                 }
                                 AdditionalDetails::EncryptedTransfer(et) => {
-                                    if tx.origin.origin_type == "self" {
+                                    if tx.origin.origin_type == OriginType::Own {
                                         if let Some(sk) = &sk {
                                             let before = encrypted_transfers::decrypt_amount(
                                                 &table,
@@ -338,7 +376,7 @@ fn main() {
                                             )
                                             .expect("Could not write.");
                                         }
-                                    } else if tx.origin.origin_type == "account" {
+                                    } else if tx.origin.origin_type == OriginType::Account {
                                         if let Some(sk) = &sk {
                                             let amount = encrypted_transfers::decrypt_amount(
                                                 &table,
