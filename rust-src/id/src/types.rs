@@ -53,25 +53,31 @@ pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
 
+impl std::fmt::Display for AccountAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
+}
+
 // Parse from string assuming base58 check encoding.
 impl std::str::FromStr for AccountAddress {
-    type Err = ();
+    type Err = &'static str;
 
     fn from_str(v: &str) -> Result<Self, Self::Err> {
-        let (version, body) = v.from_base58check().map_err(|_| ())?;
+        let (version, body) = v
+            .from_base58check()
+            .map_err(|_| "The string is not valid base 58 check v1.")?;
         if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
             let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
             buf.copy_from_slice(&body);
             Ok(AccountAddress(buf))
         } else {
-            Err(())
+            Err("The string does not represent a valid Concordium address.")
         }
     }
 }
 
 impl SerdeSerialize for AccountAddress {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let b58_str = self.0.to_base58check(1);
+        let b58_str = self.to_string();
         ser.serialize_str(&b58_str)
     }
 }
@@ -1934,6 +1940,28 @@ pub enum AccountCredential<
     Normal {
         #[serde(flatten)]
         cdi: CredentialDeploymentInfo<P, C, AttributeType>,
+    },
+}
+
+/// A type encapsulating both types of credential values, analogous to
+/// AccountCredential.
+/// Serialization must match the one in Haskell.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(tag = "type", content = "contents")]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub enum AccountCredentialValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    #[serde(rename = "initial")]
+    Initial {
+        #[serde(flatten)]
+        icdi: InitialCredentialDeploymentValues<C, AttributeType>,
+    },
+    #[serde(rename = "normal")]
+    Normal {
+        #[serde(flatten)]
+        cdi: CredentialDeploymentValues<C, AttributeType>,
     },
 }
 

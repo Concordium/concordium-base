@@ -43,7 +43,7 @@ stages:
   cache: {}
   script:
     - ( cd rust-src && cargo clippy --color=always --all )
-    - ( cd rust-bins && cargo clippy --color=always --all )
+    - ( cd rust-bins && cargo clippy --features=vendored-ssl --color=always --all )
     - ( cd identity-provider-service && cargo clippy --features=vendored-ssl --color=always --all )
 
 "cargo:build-bench":
