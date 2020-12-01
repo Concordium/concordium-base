@@ -17,7 +17,6 @@ import Control.Monad.Reader
 import Data.Char
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
-import Data.Bits
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map as Map
 import qualified Data.Serialize.Put as P
