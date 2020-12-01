@@ -21,7 +21,8 @@ version = "0"
 
 [dependencies.concordium-contracts-common]
 version = "0.1"
-path = "../concordium-contracts-common"
+git = "https://github.com/Concordium/concordium-contracts-common.git"
+branch = "main"
 features = ["derive-serde"]
 
 [lib]
