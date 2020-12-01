@@ -216,11 +216,6 @@ struct CreateCredential {
                 present a fresh key-pair will be generated."
     )]
     account: Option<PathBuf>,
-    #[structopt(
-        long = "bin-out",
-        help = "File to output the binary transaction payload to."
-    )]
-    bin_out: Option<PathBuf>,
     #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
     out: Option<PathBuf>,
     #[structopt(
@@ -647,7 +642,9 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     };
 
-    let versioned_cdi = Versioned::new(VERSION_0, cdi);
+    let address = AccountAddress::new(&cdi.values.reg_id);
+
+    let versioned_cdi = Versioned::new(VERSION_0, AccountCredential::Normal { cdi });
 
     let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
 
@@ -655,8 +652,6 @@ fn handle_create_credential(cc: CreateCredential) {
         generator: *global_ctx.elgamal_generator(),
         scalar:    enc_key,
     };
-
-    let address = AccountAddress::new(&versioned_cdi.value.values.reg_id);
 
     let account_data_json = json!({
         "address": address,
@@ -694,20 +689,6 @@ fn handle_create_credential(cc: CreateCredential) {
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
                 output_json(&versioned_cdi);
-            }
-        }
-    }
-    if let Some(bin_file) = cc.bin_out {
-        match File::create(&bin_file) {
-            // This is a bit stupid, we should write directly to the sink.
-            Ok(mut file) => match file.write_all(&to_bytes(&versioned_cdi)) {
-                Ok(_) => println!("Wrote binary data to provided file."),
-                Err(e) => {
-                    eprintln!("Could not write binary to file because {}", e);
-                }
-            },
-            Err(e) => {
-                eprintln!("Could not write binary to file because {}", e);
             }
         }
     }
