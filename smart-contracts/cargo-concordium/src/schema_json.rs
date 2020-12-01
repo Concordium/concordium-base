@@ -1,5 +1,5 @@
 use anyhow::*;
-use contracts_common::{schema::*, *};
+use concordium_contracts_common::{schema::*, *};
 use serde_json::Value;
 use std::convert::TryInto;
 
@@ -319,6 +319,6 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 bail!("JSON Array required for unnamed fields");
             }
         }
-        Fields::Unit => Ok(()),
+        Fields::None => Ok(()),
     }
 }

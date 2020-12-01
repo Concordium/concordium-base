@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::*;
+use concordium_std::*;
 
 type State = u8;
 

@@ -1,6 +1,6 @@
 use crate::{build::*, schema_json::*};
 use clap::AppSettings;
-use contracts_common::{from_bytes, to_bytes, Amount};
+use concordium_contracts_common::{from_bytes, to_bytes, Amount};
 use std::{
     fs,
     fs::File,
@@ -385,14 +385,14 @@ pub fn main() {
                     ref context,
                     ..
                 } => {
-                    let mut receive_ctx: contracts_common::ReceiveContext = {
+                    let mut receive_ctx: concordium_contracts_common::ReceiveContext = {
                         let ctx_file = File::open(context).expect("Could not open context file.");
                         serde_json::from_reader(std::io::BufReader::new(ctx_file))
                             .expect("Could not parse receive context")
                     };
                     if let Some(balance) = balance {
                         receive_ctx.self_balance =
-                            contracts_common::Amount::from_micro_gtu(balance);
+                            concordium_contracts_common::Amount::from_micro_gtu(balance);
                     }
 
                     // initial state of the smart contract, read from either a binary or json file.
@@ -570,7 +570,7 @@ pub fn main() {
             }
             match res {
                 Ok(byte_len) => {
-                    let size = format!("{}.{:03} KB", byte_len / 1000, byte_len % 1000);
+                    let size = format!("{}.{:03} kB", byte_len / 1000, byte_len % 1000);
                     eprintln!(
                         "    {} smart contract module {}",
                         success_style.paint("Finished"),
@@ -585,7 +585,7 @@ pub fn main() {
 
 fn print_contract_schema(
     contract_name: &str,
-    contract_schema: &contracts_common::schema::Contract,
+    contract_schema: &concordium_contracts_common::schema::Contract,
 ) {
     let max_length_receive_opt =
         contract_schema.receive.iter().map(|(n, _)| n.chars().count()).max();

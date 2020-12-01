@@ -7,8 +7,6 @@
 *.a
 *.pdf
 *.csv
-*.svg
-*.html
 
 .stack-work
 target
@@ -21,6 +19,8 @@ pkg
 *.state-*
 *.state
 
-/rust-contracts/concordium-sc-base/Cargo.lock
-/contracts-common/Cargo.lock
+/rust-contracts/concordium-std/Cargo.lock
+/concordium-contracts-common/Cargo.lock
 /wasm-transform/Cargo.lock
+docs/build
+docs/src/_build

@@ -23,7 +23,7 @@ escrow = {path = "../escrow"}
 rate-limited = {path = "../rate-limited"}
 fib = {path = "../fib"}
 lockup = {path = "../lockup"}
-two-step-transfer = {path = "../two-step-transfer"}
+two-step-transfer = {git = "https://github.com/Concordium/example-smart-contracts", branch = "main"}
 simple-game = {path = "../simple-game"}
 
 [lib]

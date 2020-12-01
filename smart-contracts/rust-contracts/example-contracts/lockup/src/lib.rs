@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::*;
+use concordium_std::*;
 
 /* This contract allows GTU to be allocated to a user or group of users,
  * where those GTU vest over a period of time defined at the contract's

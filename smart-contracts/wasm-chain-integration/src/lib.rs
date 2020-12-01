@@ -4,8 +4,8 @@ mod ffi;
 mod types;
 
 use anyhow::{anyhow, bail, ensure};
+use concordium_contracts_common::*;
 use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE, MAX_PARAMETER_SIZE};
-use contracts_common::*;
 use machine::Value;
 use std::{
     collections::{BTreeMap, LinkedList},
@@ -65,6 +65,13 @@ pub struct Energy {
 /// If we keep it, the cost must be analyzed and put into perspective
 pub const MEMORY_COST_FACTOR: u32 = 100;
 
+#[derive(Debug)]
+pub(crate) struct OutOfEnergy;
+
+impl std::fmt::Display for OutOfEnergy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
+}
+
 impl Energy {
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {
@@ -72,7 +79,7 @@ impl Energy {
             Ok(())
         } else {
             self.energy = 0;
-            bail!("Out of energy.")
+            bail!(OutOfEnergy)
         }
     }
 
@@ -92,13 +99,7 @@ impl Energy {
     /// should be.
     pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()> {
         let to_charge = u64::from(num_pages) * u64::from(MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
-        if self.energy >= to_charge {
-            self.energy -= to_charge;
-        } else {
-            self.energy = 0;
-            bail!("Out of energy.");
-        }
-        Ok(())
+        self.tick_energy(to_charge)
     }
 }
 
@@ -560,7 +561,16 @@ pub fn invoke_init<C: RunnableCode>(
         init_ctx:          &init_ctx,
     };
 
-    let (res, _) = artifact.run(&mut host, init_name, &[Value::I64(amount as i64)])?;
+    let res = match artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]) {
+        Ok((res, _)) => res,
+        Err(e) => {
+            if e.downcast_ref::<OutOfEnergy>().is_some() {
+                return Ok(InitResult::OutOfEnergy);
+            } else {
+                return Err(e);
+            }
+        }
+    };
     let remaining_energy = host.energy.energy;
     if let Some(Value::I32(0)) = res {
         Ok(InitResult::Success {
@@ -640,7 +650,16 @@ pub fn invoke_receive<C: RunnableCode>(
         outcomes:          Outcome::new(),
     };
 
-    let (res, _) = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)])?;
+    let res = match artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]) {
+        Ok((res, _)) => res,
+        Err(e) => {
+            if e.downcast_ref::<OutOfEnergy>().is_some() {
+                return Ok(ReceiveResult::OutOfEnergy);
+            } else {
+                return Err(e);
+            }
+        }
+    };
     let remaining_energy = host.energy.energy;
     if let Some(Value::I32(n)) = res {
         // FIXME: We should filter out to only return the ones reachable from

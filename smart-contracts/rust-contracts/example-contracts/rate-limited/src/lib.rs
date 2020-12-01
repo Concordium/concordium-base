@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::*;
+use concordium_std::*;
 
 /* A contract that acts like an account (can send, store and accept GTU),
  * but requires that no more than x GTU be withdrawn every y time-units.
@@ -142,7 +142,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
 #[concordium_cfg_test]
 mod tests {
     use super::*;
-    use concordium_sc_base::test_infrastructure::*;
+    use concordium_std::test_infrastructure::*;
 
     #[concordium_test]
     /// Test that a valid transfer request is accepted

@@ -342,10 +342,9 @@ pub fn parse_skeleton<'a>(input: &'a [u8]) -> ParseResult<Skeleton<'a>> {
     })
 }
 
-/// Parse a name as specified by the Wasm specification. Concretely this means
-/// to parse. a vector of bytes and check that they are valid UTF8.
-/// TODO: Perhaps we should be more strict in our requirements, and just require
-/// ASCII printable characters.
+/// Parse a name as specified by the Wasm specification, with our own
+/// restrictions. The restriction we impose is that the name consists solely of
+/// ASCII characters.
 impl<'a> Parseable<'a> for Name {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let name_bytes = cursor.next()?;

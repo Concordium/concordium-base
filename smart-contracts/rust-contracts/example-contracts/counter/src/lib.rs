@@ -1,8 +1,9 @@
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
-use concordium_sc_base::*;
+use concordium_std::*;
 
 #[contract_state(contract = "counter")]
-#[derive(Serialize, SchemaType)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "std", derive(SchemaType))]
 struct State {
     step:          u8,
     current_count: u32,
@@ -79,7 +80,7 @@ fn contract_receive_optimized<
 #[concordium_cfg_test]
 mod tests {
     use super::*;
-    use concordium_sc_base::test_infrastructure::*;
+    use concordium_std::test_infrastructure::*;
 
     #[concordium_test]
     /// Test that init succeeds or fails based on what parameter and amount are.

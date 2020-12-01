@@ -51,14 +51,6 @@ stages:
     - cd wasm-transform
     - cargo test
 
-"concordium-sc-base cargo:test":
-  extends: .generic
-  stage: test
-  when: manual
-  script:
-    - cd rust-contracts/concordium-sc-base
-    - cargo test
-
 "counter cargo:test":
   extends: .generic
   stage: test
@@ -137,56 +129,6 @@ stages:
     - cd wasm-chain-integration
     - echo "Running clippy"
     - cargo clippy --color=always --tests --benches -- -Dclippy::all
-
-"contracts-common lint:fmt":
-  extends: .generic-lint
-  stage: lint
-  image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
-  script:
-    - cd contracts-common
-    - cargo fmt -- --color=always --check || (echo "Please run `cargo fmt` and amend your MR"; exit 1)
-
-"contracts-common  lint:clippy":
-  extends: .generic-lint
-  stage: lint
-  script:
-    - cd contracts-common
-    - echo "Running clippy"
-    - cargo clippy --color=always --tests -- -Dclippy::all
-
-"concordium-sc-base lint:fmt":
-  extends: .generic-lint
-  stage: lint
-  image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
-  script:
-    - cd rust-contracts/concordium-sc-base
-    - cargo fmt -- --color=always
-    - test $(git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | wc -l) -eq 0 || (echo 'You have introduced some unformatted code:'; git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | sed 's/^/* /'; echo 'Please run `cargo fmt` and amend your MR.'; exit 1)
-
-"concordium-sc-base lint:clippy":
-  extends: .generic-lint
-  stage: lint
-  script:
-    - cd rust-contracts/concordium-sc-base
-    - echo "Running clippy"
-    - cargo clippy --color=always --tests -- -Dclippy::all
-
-"concordium-sc-derive lint:fmt":
-  extends: .generic-lint
-  stage: lint
-  image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
-  script:
-    - cd rust-contracts/concordium-sc-derive
-    - cargo fmt -- --color=always
-    - test $(git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | wc -l) -eq 0 || (echo 'You have introduced some unformatted code:'; git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | sed 's/^/* /'; echo 'Please run `cargo fmt` and amend your MR.'; exit 1)
-
-"concordium-sc-derive lint:clippy":
-  extends: .generic-lint
-  stage: lint
-  script:
-    - cd rust-contracts/concordium-sc-derive
-    - echo "Running clippy"
-    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "counter lint:fmt":
   extends: .generic-lint
@@ -288,3 +230,32 @@ stages:
     - echo "Running clippy"
     - cargo clippy --color=always --tests -- -Dclippy::all
 
+.docs:
+  image: sphinxdoc/sphinx
+  before_script:
+    - cd docs
+    - pip install -r requirements.txt
+
+"docs linkcheck":
+  extends: .docs
+  stage: lint
+  script:
+    - make linkcheck
+
+"docs lint":
+  extends: .docs
+  stage: lint
+  script:
+    - make lint
+
+pages:
+  extends: .docs
+  stage: lint
+  when: manual
+  script:
+    - make html
+    - mkdir ../public
+    - cp -r build/html/* ../public
+  artifacts:
+    paths:
+      - public
