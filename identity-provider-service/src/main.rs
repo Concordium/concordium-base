@@ -242,7 +242,7 @@ impl DB {
     pub fn write_revocation_record(
         &self,
         key: &str,
-        record: &AnonymityRevocationRecord<ArCurve>,
+        record: AnonymityRevocationRecord<ArCurve>,
     ) -> anyhow::Result<()> {
         let _lock = self
             .pending
@@ -251,7 +251,10 @@ impl DB {
         {
             // FIXME: We should be careful to not overwrite here.
             let file = std::fs::File::create(self.root.join("revocation").join(key))?;
-            serde_json::to_writer(file, record)?;
+            serde_json::to_writer(file, &Versioned {
+                version: VERSION_0,
+                value:   record,
+            })?;
         } // close the file
           // and now drop the lock as well.
         Ok(())
@@ -977,7 +980,7 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
         max_accounts: alist.max_accounts,
     };
     let base16_id_cred_pub = base16_encode_string(&ar_record.id_cred_pub);
-    db.write_revocation_record(&base16_id_cred_pub, &ar_record)
+    db.write_revocation_record(&base16_id_cred_pub, ar_record)
 }
 
 #[cfg(test)]
