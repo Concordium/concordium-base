@@ -7,3 +7,7 @@
     /* Fixes logo is gone, when it is an svg */
     width: 100% !important;
 }
+
+.rst-content div.highlight .gp {
+    padding-right: 0.5em;
+}
