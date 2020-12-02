@@ -3,6 +3,9 @@
 module Concordium.Utils.Serialization where
 
 import Control.Monad
+import Data.ByteString(ByteString)
+import Data.ByteString.Short(ShortByteString)
+import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Serialize
@@ -140,3 +143,55 @@ getWithBytes g = do
             return (v, startRemain - endRemain)
         bytes <- label ("getting " ++ show size ++ " bytes") $ getByteString size
         return (v, bytes)
+
+-- |Get a bytestring with length serialized as big-endian 4 bytes.
+getByteStringWord32 :: Get ByteString
+getByteStringWord32 = do
+  len <- fromIntegral <$> getWord32be
+  getByteString len
+
+-- |Put a bytestring with length serialized as big-endian 4 bytes.
+-- This function assumes the string length fits into 4 bytes.
+putByteStringWord32 :: Putter ByteString
+putByteStringWord32 bs =
+  let len = fromIntegral (BS.length bs)
+  in putWord32be len <> putByteString bs
+
+-- |Get a bytestring with length serialized as big-endian 2 bytes.
+getByteStringWord16 :: Get ByteString
+getByteStringWord16 = do
+  len <- fromIntegral <$> getWord16be
+  getByteString len
+
+-- |Put a bytestring with length serialized as big-endian 2 bytes.
+-- This function assumes the string length fits into 2 bytes.
+putByteStringWord16 :: Putter ByteString
+putByteStringWord16 bs =
+  let len = fromIntegral (BS.length bs)
+  in putWord16be len <> putByteString bs
+
+-- |Get a bytestring with length serialized as big-endian 4 bytes.
+getShortByteStringWord32 :: Get ShortByteString
+getShortByteStringWord32 = do
+  len <- fromIntegral <$> getWord32be
+  getShortByteString len
+
+-- |Put a bytestring with length serialized as big-endian 4 bytes.
+-- This function assumes the string length fits into 4 bytes.
+putShortByteStringWord32 :: Putter ShortByteString
+putShortByteStringWord32 bs =
+  let len = fromIntegral (BSS.length bs)
+  in putWord32be len <> putShortByteString bs
+
+-- |Get a bytestring with length serialized as big-endian 2 bytes.
+getShortByteStringWord16 :: Get ShortByteString
+getShortByteStringWord16 = do
+  len <- fromIntegral <$> getWord16be
+  getShortByteString len
+
+-- |Put a bytestring with length serialized as big-endian 2 bytes.
+-- This function assumes the string length fits into 2 bytes.
+putShortByteStringWord16 :: Putter ShortByteString
+putShortByteStringWord16 bs =
+  let len = fromIntegral (BSS.length bs)
+  in putWord16be len <> putShortByteString bs
