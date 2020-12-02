@@ -1,9 +1,7 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
-use crypto_common_derive::*;
 use curve_arithmetic::Curve;
-use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{PublicKey, SecretKey};
 use id::types::*;
 use std::convert::TryFrom;
@@ -17,9 +15,10 @@ use structopt::StructOpt;
 use ff::{Field, PrimeField};
 use hkdf::Hkdf;
 use pairing::bls12_381::{Fr, FrRepr, G1, G2};
+use std::fs;
 #[derive(StructOpt)]
 struct KeygenIp {
-    #[structopt(long = "rand-input", help = "File with additional randomness.")]
+    #[structopt(long = "rand-input", help = "File with randomness.")]
     rand_input: PathBuf,
     #[structopt(
         long = "ip-identity",
@@ -37,7 +36,7 @@ struct KeygenIp {
         help = "Upper bound on messages signed by the IP",
         default_value = "30"
     )]
-    bound: usize,
+    bound: u32,
     #[structopt(long = "out", help = "File to output the secret keys to.")]
     out: PathBuf,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
@@ -46,7 +45,7 @@ struct KeygenIp {
 
 #[derive(StructOpt)]
 struct KeygenAr {
-    #[structopt(long = "rand-input", help = "File with additional randomness.")]
+    #[structopt(long = "rand-input", help = "File with randomness.")]
     rand_input: PathBuf,
     #[structopt(
         long = "ar-identity",
@@ -75,20 +74,13 @@ struct KeygenAr {
 #[structopt(
     about = "Tool for generating keys",
     author = "Concordium",
-    version = "0.36787944117"
+    version = "0.1"
 )]
 enum KeygenTool {
     #[structopt(name = "keygen-ip", about = "Generate identity provider keys")]
     KeygenIp(KeygenIp),
     #[structopt(name = "keygen-ar", about = "Generate anonymity revoker keys")]
     KeygenAr(KeygenAr),
-}
-
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-struct PrfWrapper<C: Curve> {
-    #[serde(rename = "prfKey")]
-    pub prf_key: prf::SecretKey<C>,
 }
 
 fn main() {
@@ -128,8 +120,10 @@ macro_rules! succeed_or_die {
 }
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
-    let bytes_from_file = succeed_or_die!(read_bytes_from_file(kgar.rand_input), e => "Could not read random input from provided file because {}");
-    let seed_32 = Sha256::new().chain(&bytes_from_file).finalize();
+    let bytes_from_file = succeed_or_die!(fs::read(kgar.rand_input), e => "Could not read random input from provided file because {}");
+    if bytes_from_file.len() < 64 {
+        return Err("Provided randomness should be of size at least 64 bytes".to_string());
+    }
     let global_ctx = {
         if let Some(gc) = read_global_context(kgar.global) {
             gc
@@ -141,8 +135,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     };
     let ar_base = global_ctx.on_chain_commitment_key.g;
     let key_info = b"elgamal_keys".as_ref();
-    let scalar =
-        succeed_or_die!(keygen_bls(&seed_32, &key_info), e => "Could not generate key because {}");
+    let scalar = succeed_or_die!(keygen_bls(&bytes_from_file, &key_info), e => "Could not generate key because {}");
     let ar_secret_key = SecretKey {
         generator: ar_base,
         scalar,
@@ -168,7 +161,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     };
     let ver_public_ar_info = Versioned::new(VERSION_0, ar_data.public_ar_info.clone());
     match write_json_to_file(&kgar.out, &ar_data) {
-        Ok(_) => println!("Wrote to {}.", kgar.out.to_string_lossy()),
+        Ok(_) => println!("Wrote private keys to {}.", kgar.out.to_string_lossy()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write private keys to file because {}",
@@ -177,7 +170,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         }
     }
     match write_json_to_file(&kgar.out_pub, &ver_public_ar_info) {
-        Ok(_) => println!("Wrote to {}.", kgar.out_pub.to_string_lossy()),
+        Ok(_) => println!("Wrote public keys to {}.", kgar.out_pub.to_string_lossy()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write public keys to file because {}",
@@ -189,11 +182,14 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 }
 
 fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
-    let bytes_from_file = succeed_or_die!(read_bytes_from_file(kgip.rand_input), e => "Could not read random input from provided file because {}");
-    let seed_32 = Sha256::new().chain(&bytes_from_file).finalize();
-    let ip_secret_key = succeed_or_die!(generate_ps_sk(kgip.bound, &seed_32), e => "Could not generate signature key for the Pointcheval-Sanders Signature Scheme because {}");
+    let bytes_from_file = succeed_or_die!(fs::read(kgip.rand_input), e => "Could not read random input from provided file because {}");
+    if bytes_from_file.len() < 64 {
+        return Err("Provided randomness should be of size at least 64 bytes".to_string());
+    }
+    // let seed_32 = Sha256::digest(&bytes_from_file);
+    let ip_secret_key = succeed_or_die!(generate_ps_sk(kgip.bound, &bytes_from_file), e => "Could not generate signature key for the Pointcheval-Sanders Signature Scheme because {}");
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
-    let ed_sk = succeed_or_die!(generate_ed_sk(&seed_32), e => "Could not generate signature key for EdDSA because {}");
+    let ed_sk = succeed_or_die!(generate_ed_sk(&bytes_from_file), e => "Could not generate signature key for EdDSA because {}");
     let ed_pk = ed25519_dalek::PublicKey::from(&ed_sk);
     let ip_cdi_verify_key = ed_pk;
     let ip_cdi_secret_key = ed_sk;
@@ -219,7 +215,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     };
     let versioned_ip_info_public = Versioned::new(VERSION_0, full_info.public_ip_info.clone());
     match write_json_to_file(&kgip.out, &full_info) {
-        Ok(_) => println!("Wrote to {}.", kgip.out.to_string_lossy()),
+        Ok(_) => println!("Wrote private to {}.", kgip.out.to_string_lossy()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON private keys write to file because {}",
@@ -229,7 +225,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     }
 
     match write_json_to_file(&kgip.out_pub, &versioned_ip_info_public) {
-        Ok(_) => println!("Wrote to {}.", kgip.out_pub.to_string_lossy()),
+        Ok(_) => println!("Wrote public keys to {}.", kgip.out_pub.to_string_lossy()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write public keys to file because {}",
@@ -280,13 +276,16 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength
 
 /// This function generates a secret key for the Pointcheval-Sanders Signature
 /// Scheme using the `keygen_bls` function above.
+/// It generates multiple scalars by calling keygen_bls with different values
+/// `key_info`. The integer n determines the number of scalars generated and
+/// must be less than 256.
 pub fn generate_ps_sk(
-    n: usize,
+    n: u32,
     ikm: &[u8],
 ) -> Result<ps_sig::secret::SecretKey<Bls12>, hkdf::InvalidLength> {
-    let mut ys: Vec<Fr> = Vec::with_capacity(n);
+    let mut ys: Vec<Fr> = Vec::with_capacity(n as usize);
     for i in 0..n {
-        let key = keygen_bls(&ikm, &[i as u8])?;
+        let key = keygen_bls(&ikm, &i.to_be_bytes()[..])?;
         ys.push(key);
     }
     let key = keygen_bls(&ikm, &[])?;
