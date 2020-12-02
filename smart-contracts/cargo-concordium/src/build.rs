@@ -25,10 +25,8 @@ pub fn build_contract(
     out: Option<PathBuf>,
     cargo_args: &[String],
 ) -> anyhow::Result<usize> {
-    let manifest = Manifest::from_path("Cargo.toml")
-        .map_err(|err| anyhow::anyhow!("Failed reading manifest: {}", err))?;
-    let package =
-        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest need to specify [package]"))?;
+    let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
+    let package = manifest.package.context("Manifest needs to specify [package]")?;
 
     Command::new("cargo")
         .arg("build")
@@ -39,22 +37,23 @@ pub fn build_contract(
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
-        .map_err(|err| anyhow::anyhow!("Failed building contract:\n{}", err))?;
+        .context("Could not use cargo build.")?;
 
     let filename = format!(
         "target/concordium/wasm32-unknown-unknown/release/{}.wasm",
         to_snake_case(package.name)
     );
 
-    let wasm = fs::read(&filename)?;
+    let wasm = fs::read(&filename).context("Could not read cargo build Wasm output.")?;
 
     let mut skeleton =
-        parse_skeleton(&wasm).map_err(|err| anyhow::anyhow!("Failed parsing skeleton: {}", err))?;
+        parse_skeleton(&wasm).context("Could not parse the skeleton of the module.")?;
 
     // Remove all custom sections to reduce the size of the module
     strip(&mut skeleton);
 
-    validate_module(&ConcordiumAllowedImports, &skeleton)?;
+    validate_module(&ConcordiumAllowedImports, &skeleton)
+        .context("Could not validate resulting smart contract module.")?;
 
     let mut output_bytes = Vec::new();
 
@@ -84,11 +83,8 @@ pub fn build_contract(
 /// Generates the contract schema by compiling with the 'build-schema' feature
 /// Then extracts the schema from the schema build
 pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Module> {
-    let manifest =
-        Manifest::from_path("Cargo.toml").context("Failed reading Cargo.toml manifest.")?;
-
-    let package =
-        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest needs to specify [package]"))?;
+    let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
+    let package = manifest.package.context("Manifest needs to specify [package]")?;
 
     Command::new("cargo")
         .arg("build")
@@ -100,15 +96,17 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
-        .with_context(|| "Failed building contract schemas.")?;
+        .context("Failed building contract schemas.")?;
 
     let filename = format!(
         "target/concordium/wasm32-unknown-unknown/release/{}.wasm",
         to_snake_case(package.name)
     );
 
-    let wasm = std::fs::read(filename).context("Failed reading contract schema output artifact")?;
-    let schema = generate_contract_schema(&wasm)?;
+    let wasm =
+        std::fs::read(filename).context("Could not read cargo build contract schema output.")?;
+    let schema = generate_contract_schema(&wasm)
+        .context("Could not generate module schema from Wasm module.")?;
     Ok(schema)
 }
 
@@ -119,16 +117,15 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
 /// Otherwise a boolean is returned, signifying whether the tests succeeded or
 /// failed.
 pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
-    let manifest =
-        Manifest::from_path("Cargo.toml").context("Failed reading Cargo.toml manifest.")?;
-    let package =
-        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest needs to specify [package]"))?;
+    let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
+    let package = manifest.package.context("Manifest needs to specify [package]")?;
 
     let mut cargo_args = Vec::new();
     cargo_args.push("build");
+    cargo_args.extend_from_slice(&["--release"]);
     cargo_args.extend_from_slice(&["--target", "wasm32-unknown-unknown"]);
     cargo_args.extend_from_slice(&["--features", "concordium-std/wasm-test"]);
-    cargo_args.extend_from_slice(&["--target-dir", "target/wasm-test"]);
+    cargo_args.extend_from_slice(&["--target-dir", "target/concordium"]);
 
     // Output what we are doing so that it is easier to debug if the user
     // has their own features or options.
@@ -146,7 +143,7 @@ pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
-        .with_context(|| "Failed building contract tests.")?;
+        .context("Failed building contract tests.")?;
     // Make sure that compilation succeeded before proceeding.
     anyhow::ensure!(
         result.status.success(),
@@ -156,7 +153,7 @@ pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
     // If we compiled successfully the artifact is in the place listed below.
     // So we load it, and try to run it.s
     let filename = format!(
-        "target/wasm-test/wasm32-unknown-unknown/debug/{}.wasm",
+        "target/concordium/wasm32-unknown-unknown/release/{}.wasm",
         to_snake_case(package.name)
     );
 
