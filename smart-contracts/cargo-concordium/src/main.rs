@@ -566,7 +566,8 @@ pub fn main() -> anyhow::Result<()> {
 
                 if let Some(schema_out) = schema_out {
                     eprintln!("   Writing schema to {}.", schema_out.to_string_lossy());
-                    fs::write(schema_out, &module_schema_bytes).context("Could not write schema file.")?;
+                    fs::write(schema_out, &module_schema_bytes)
+                        .context("Could not write schema file.")?;
                 }
                 if schema_embed {
                     eprintln!("   Embedding schema into module.\n");
