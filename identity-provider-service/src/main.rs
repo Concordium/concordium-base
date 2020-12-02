@@ -44,7 +44,7 @@ struct IdentityProviderServiceConfiguration {
     #[structopt(
         long = "anonymity-revokers",
         help = "File with the list of anonymity revokers as JSON.",
-        default_value = "identity_providers.json",
+        default_value = "anonymity_revokers.json",
         env = "ANONYMITY_REVOKERS"
     )]
     anonymity_revokers_file: PathBuf,
