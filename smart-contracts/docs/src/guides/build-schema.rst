@@ -21,14 +21,7 @@ Setup the contract for a schema
 In order to build the contract schema, we first have to prepare our smart
 contract for building the schema.
 
-First step is to add a ``build-schema`` feature to the ``Cargo.toml``::
-
-    ...
-    [features]
-    build-schema = []
-    ...
-
-Now we can choose which parts of our smart contract to included in the schema.
+We can choose which parts of our smart contract to included in the schema.
 The options are to include a schema for the contract state, and/or for each of
 the parameters of ``init``-functions and ``receive``-functions.
 

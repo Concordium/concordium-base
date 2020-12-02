@@ -8,8 +8,6 @@ edition = "2018"
 default = ["std"]
 
 std = ["concordium-std/std"]
-build-schema = []
-wasm-test = []
 
 [dependencies]
 byteorder = "1.3"

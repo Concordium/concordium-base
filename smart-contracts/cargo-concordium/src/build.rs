@@ -86,21 +86,11 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
-    anyhow::ensure!(
-        manifest.features.contains_key("build-schema"),
-        "Cargo.toml must contain the 'build-schema' feature to construct the schema
-
-    [features]
-    build-schema = []
-    ...
-"
-    );
-
     Command::new("cargo")
         .arg("build")
         .args(&["--target", "wasm32-unknown-unknown"])
         .arg("--release")
-        .args(&["--features", "build-schema"])
+        .args(&["--features", "concordium-std/build-schema"])
         .args(&["--target-dir", "target/concordium"])
         .args(cargo_args)
         .stdout(Stdio::inherit())
@@ -130,21 +120,11 @@ pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
-    anyhow::ensure!(
-        manifest.features.contains_key("wasm-test"),
-        "Cargo.toml must contain the 'wasm-test' feature to construct the test build
-
-    [features]
-    wasm-test = []
-    ...
-"
-    );
-
     let mut cargo_args = Vec::new();
     cargo_args.push("build");
     cargo_args.extend_from_slice(&["--release"]);
     cargo_args.extend_from_slice(&["--target", "wasm32-unknown-unknown"]);
-    cargo_args.extend_from_slice(&["--features", "wasm-test"]);
+    cargo_args.extend_from_slice(&["--features", "concordium-std/wasm-test"]);
     cargo_args.extend_from_slice(&["--target-dir", "target/concordium"]);
 
     // Output what we are doing so that it is easier to debug if the user
