@@ -43,8 +43,10 @@ instances.
     For a guide on how to initialize smart contracts from a deployed module see
     :ref:`initialize-contract`.
 
-Module Names
-------------
+.. _naming-a-module:
+
+Naming a module
+---------------
 
 Optionally, modules can be named, which makes referencing them easier. The name
 is only stored locally by ``concordium-client``, and is not visible on-chain.
@@ -84,10 +86,13 @@ until you find the module you are looking for. For example:
 
 .. code-block:: console
 
-   $concordium-client module inspect d121f262f3d34b9737faa5ded2135cf0b994c9c32fe90d7f11fae7cd31441e86
+   $concordium-client module inspect \
+            d121f262f3d34b9737faa5ded2135cf0b994c9c32fe90d7f11fae7cd31441e86
 
 To name the module ``foo``, run the following command:
 
 .. code-block:: console
 
-   $concordium-client module name d121f262f3d34b9737faa5ded2135cf0b994c9c32fe90d7f11fae7cd31441e86 --name foo
+   $concordium-client module name \
+            d121f262f3d34b9737faa5ded2135cf0b994c9c32fe90d7f11fae7cd31441e86 \
+            --name foo

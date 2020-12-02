@@ -44,7 +44,7 @@ tools.
 .. note::
 
     Tools like ``concordium-client`` can use a schema to serialize JSON into bytes
-    for when :ref:`specifying a parameter<init-passing-parameters>`, and deserialize the
+    for when :ref:`specifying a parameter<init-passing-parameter-json>`, and deserialize the
     state of contract instances to JSON.
 
 The schema is then either embedded into the smart contract module deployed
