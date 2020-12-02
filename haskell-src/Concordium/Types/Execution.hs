@@ -6,7 +6,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE BinaryLiterals #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -662,20 +661,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
                   | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
-                  | InsufficientStake -- ^The amount on the account was insufficient to cover the proposed stake
+                  | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
-                  -- | RemovingNonExistentBaker !BakerId
-                  -- | InvalidBakerRemoveSource !AccountAddress
-                  -- | UpdatingNonExistentBaker !BakerId
                   | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
-                  -- | DuplicateSignKey !BakerSignVerifyKey -- ^A baker with the given signing key already exists.
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
-                  -- |A transaction should be sent from the baker's current account, but is not.
-                  -- | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
-                  --                         nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
-                  --                       }
-                  -- |A transaction should be sent from a special account, but is not.
-                  -- | NotFromSpecialAccount
                   -- |Encountered index to which no account key belongs when removing or updating keys
                   | NonExistentAccountKey
                   -- |Attempted to add an account key to a key index already in use
@@ -755,6 +744,6 @@ addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerify
 addBakerChallenge addr elec sign agg = S.runPut $ S.put addr <> S.put elec <> S.put sign <> S.put agg
 
 -- |Generate the challenge for updating a baker's keys.
--- This is currently idential to 'addBakerChallenge'.
+-- This is currently identical to 'addBakerChallenge'.
 updateBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
 updateBakerKeyChallenge = addBakerChallenge
