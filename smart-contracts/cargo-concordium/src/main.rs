@@ -238,7 +238,8 @@ pub fn main() -> anyhow::Result<()> {
 
             let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
                 let bytes = fs::read(schema_path).context("Could not read schema file.")?;
-                let schema = from_bytes(&bytes).map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
+                let schema = from_bytes(&bytes)
+                    .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
                 Some(schema)
             } else {
                 let res = get_embedded_schema(&module);
@@ -527,7 +528,8 @@ pub fn main() -> anyhow::Result<()> {
         Command::Test {
             args,
         } => {
-            let success = build_and_run_wasm_test(&args).context("Could not build and run tests.")?;
+            let success =
+                build_and_run_wasm_test(&args).context("Could not build and run tests.")?;
             ensure!(success, "Test failed");
         }
         Command::Build {
