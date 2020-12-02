@@ -11,7 +11,7 @@ import Data.Time.Clock
 
 import Concordium.Types
 import Concordium.ID.Types
-import Concordium.ID.Parameters
+import Concordium.ID.DummyData
 
 import Control.Monad
 import qualified Data.Map.Strict as Map
@@ -80,18 +80,12 @@ genTransaction = do
 
 genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 genCredentialDeploymentInformation = do
-  -- cdvVerifyKey <- VerifyKey . BS.pack <$> vector 37
-  -- cdvSigScheme <- elements [Ed25519]
-  let arbitraryExisting = ExistingAccount <$> genAccountAddress
   let arbitraryNew = do
         nacc <- choose (1,255)
         keys <- replicateM nacc genVerifyKey
         threshold <- choose (1, nacc)
         return $ NewAccount keys (SignatureThreshold $ fromIntegral threshold)
-  cdvAccount <- oneof [
-      arbitraryExisting,
-      arbitraryNew
-    ]
+  cdvAccount <- arbitraryNew
   cdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
   cdvIpId <- IP_ID <$> arbitrary
   cdvArData <- Map.fromList <$> listOf (do

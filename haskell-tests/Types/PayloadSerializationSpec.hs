@@ -22,7 +22,7 @@ import qualified Concordium.Crypto.BlockSignature as BlockSig
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.Crypto.SignatureScheme
 import Concordium.ID.Types
-import Concordium.ID.Parameters
+import Concordium.ID.DummyData
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.Crypto.FFIDataTypes
@@ -109,17 +109,22 @@ genPayload = oneof [genDeployModule,
           n <- choose (0,1000)
           BS.pack <$> vector n
 
-        genText = do
-          n <- choose (0,1000)
-          Text.pack <$> vector n
+        -- These generators name contracts as numbers to make sure the names are valid.
+        genInitName :: Gen InitName
+        genInitName =
+          InitName . Text.pack . ("init_" ++) . show <$> (arbitrary :: Gen Word)
 
-        genInitName = InitName <$> genText
-        genReceiveName = ReceiveName <$> genText
+        genReceiveName :: Gen ReceiveName
+        genReceiveName = do
+          contract <- show <$> (arbitrary :: Gen Word)
+          receive <- show <$> (arbitrary :: Gen Word)
+          return . ReceiveName . Text.pack $ receive ++ "." ++ contract
+
         genParameter = do
           n <- choose (0,1000)
           Parameter . BSS.pack <$> vector n
 
-        genDeployModule = DeployModule <$> (WasmModule <$> arbitrary <*> genByteString)
+        genDeployModule = DeployModule <$> (WasmModule 0 <$> genByteString)
 
         genInit = do
           icAmount <- Amount <$> arbitrary

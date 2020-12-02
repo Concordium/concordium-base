@@ -6,7 +6,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE BinaryLiterals #-}
 module Concordium.Types.Execution where
 
@@ -27,7 +26,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Word
 import GHC.Generics
-import Language.Haskell.TH
 
 import qualified Concordium.Wasm as Wasm
 import Concordium.Types
@@ -410,23 +408,8 @@ safeSetFromAscList = go Set.empty Nothing
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
-#ifdef DISABLE_SMART_CONTRACTS
-$(reportWarning "Disabling smart contract related transactions." >> return [])
-decodePayload size (EncodedPayload s) =
-  let bs = BSS.fromShort s
-  in case BS.uncons bs of
-       Nothing -> Left "Empty string not a valid payload."
-       Just (ttype, _) ->
-         if ttype == 0 ||  -- the numbers here must match the serialization of the payload above (Serialize instance)
-            ttype == 1 ||
-            ttype == 2 then
-           Left "Unsupported transaction type."
-         else S.runGet (getPayload size) bs
-#else
-$(reportWarning "All transaction types allowed." >> return [])
-decodePayload size (EncodedPayload s) = S.runGet (getPayload size) . BSS.fromShort $ s
-#endif
 decodePayload :: PayloadSize -> EncodedPayload -> Either String Payload
+decodePayload size (EncodedPayload s) = S.runGet (getPayload size) . BSS.fromShort $ s
 {-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}
