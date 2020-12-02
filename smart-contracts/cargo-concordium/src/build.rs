@@ -26,8 +26,7 @@ pub fn build_contract(
     cargo_args: &[String],
 ) -> anyhow::Result<usize> {
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
-    let package =
-        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest need to specify [package]"))?;
+    let package = manifest.package.context("Manifest needs to specify [package]")?;
 
     Command::new("cargo")
         .arg("build")
@@ -85,8 +84,7 @@ pub fn build_contract(
 /// Then extracts the schema from the schema build
 pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Module> {
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
-    let package =
-        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest need to specify [package]"))?;
+    let package = manifest.package.context("Manifest needs to specify [package]")?;
 
     anyhow::ensure!(
         manifest.features.contains_key("build-schema"),
@@ -130,8 +128,7 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
 /// failed.
 pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
-    let package =
-        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest need to specify [package]"))?;
+    let package = manifest.package.context("Manifest needs to specify [package]")?;
 
     anyhow::ensure!(
         manifest.features.contains_key("wasm-test"),

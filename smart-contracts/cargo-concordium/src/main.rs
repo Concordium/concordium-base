@@ -202,6 +202,7 @@ pub fn main() -> anyhow::Result<()> {
         ansi_term::enable_ansi_support();
     }
     let success_style = ansi_term::Color::Green.bold();
+    let warning_style = ansi_term::Color::Yellow;
     let bold_style = ansi_term::Style::new().bold();
 
     let cmd = {
@@ -246,8 +247,7 @@ pub fn main() -> anyhow::Result<()> {
                 if let Err(err) = &res {
                     eprintln!(
                         "{}",
-                        ansi_term::Color::Yellow
-                            .paint(format!("Could not use embedded schema: {}", err))
+                        warning_style.paint(format!("Could not use embedded schema: {}", err))
                     );
                 }
                 res.ok()
@@ -370,13 +370,13 @@ pub fn main() -> anyhow::Result<()> {
                         } => {
                             eprintln!("Init call succeeded. The following logs were produced:");
                             print_result(state, logs)?;
-                            eprintln!("Energy spend is {}", runner.energy - remaining_energy)
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         InitResult::Reject {
                             remaining_energy,
                         } => {
                             eprintln!("Init call rejected.");
-                            eprintln!("Energy spend is {}", runner.energy - remaining_energy)
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         InitResult::OutOfEnergy => {
                             eprintln!("Init call terminated with out of energy.")
@@ -510,13 +510,13 @@ pub fn main() -> anyhow::Result<()> {
                                 }
                             }
 
-                            eprintln!("Energy spend is {}", runner.energy - remaining_energy)
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         ReceiveResult::Reject {
                             remaining_energy,
                         } => {
                             eprintln!("Receive call rejected.");
-                            eprintln!("Energy spend is {}", runner.energy - remaining_energy)
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         ReceiveResult::OutOfEnergy => {
                             eprintln!("Receive call terminated with: out of energy.")
@@ -566,7 +566,7 @@ pub fn main() -> anyhow::Result<()> {
 
                 if let Some(schema_out) = schema_out {
                     eprintln!("   Writing schema to {}.", schema_out.to_string_lossy());
-                    fs::write(schema_out, &module_schema_bytes).unwrap();
+                    fs::write(schema_out, &module_schema_bytes).context("Could not write schema file.")?;
                 }
                 if schema_embed {
                     eprintln!("   Embedding schema into module.\n");
