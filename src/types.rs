@@ -395,6 +395,46 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
+/// Time since unix epoch in milliseconds.
+pub type TimestampMillis = u64;
+
+/// Tag of an attribute
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub struct AttributeTag(pub(crate) u8);
+
+pub type AttributeValue = Vec<u8>;
+
+/// Policy on the credential of the account.
+#[derive(Clone)]
+pub struct Policy {
+    /// Beginning of the month in milliseconds since unix epoch.
+    pub created_at: TimestampMillis,
+    /// Beginning of the month where the credential is no longer valid, in
+    /// milliseconds since unix epoch.
+    pub valid_to: TimestampMillis,
+    /// List of attributes, ordered by the tag.
+    pub(crate) items: Vec<(AttributeTag, AttributeValue)>,
+}
+
+/// Currently defined attributes possible in a policy.
+pub mod attributes {
+    use super::AttributeTag;
+    pub const FIRST_NAME: AttributeTag = AttributeTag(0u8);
+    pub const LAST_NAME: AttributeTag = AttributeTag(1u8);
+    pub const SEX: AttributeTag = AttributeTag(2u8);
+    pub const DOB: AttributeTag = AttributeTag(3u8);
+    pub const COUNTRY_OF_RESIDENCE: AttributeTag = AttributeTag(4u8);
+    pub const NATIONALITY: AttributeTag = AttributeTag(5u8);
+    pub const ID_DOC_TYPE: AttributeTag = AttributeTag(6u8);
+    pub const ID_DOC_NUMBER: AttributeTag = AttributeTag(7u8);
+    pub const ID_DOC_ISSUER: AttributeTag = AttributeTag(8u8);
+    pub const ID_DOC_ISSUED_AT: AttributeTag = AttributeTag(9u8);
+    pub const ID_DOC_EXPIRES_AT: AttributeTag = AttributeTag(10u8);
+    pub const NATIONAL_ID_NO: AttributeTag = AttributeTag(11u8);
+    pub const TAX_ID_NO: AttributeTag = AttributeTag(12u8);
+}
+
 /// Zero-sized type to represent an error when reading bytes and deserializing.
 ///
 /// When using custom error types in your smart contract, it is convenient to
