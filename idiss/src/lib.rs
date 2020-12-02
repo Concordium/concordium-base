@@ -148,11 +148,11 @@ pub fn create_identity_object(
     let signature = sign_identity_object(&request.value, &ip_info, &alist, &ip_private_key)
         .map_err(show_err)?;
 
-    let ar_record = AnonymityRevocationRecord {
+    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
         id_cred_pub:  request.value.pub_info_for_ip.id_cred_pub,
         ar_data:      request.value.ip_ar_data.clone(),
         max_accounts: alist.max_accounts,
-    };
+    });
 
     let icdi = create_initial_cdi(
         &ip_info,
