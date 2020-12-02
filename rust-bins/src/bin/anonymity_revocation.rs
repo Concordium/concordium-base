@@ -208,13 +208,13 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
         }
     };
     if global_context.version != VERSION_0 {
-        return Err(format!("The version of the GlobalContext should be 0"));
+        return Err("The version of the GlobalContext should be 0".to_owned());
     }
     let global_context = global_context.value;
     let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(rid.ar_record), e => "Could not read ArRecord due to {}");
 
     if ar_record.version != VERSION_0 {
-        return Err(format!("The version of the ArRecord should be 0."));
+        return Err("The version of the ArRecord should be 0.".to_owned());
     }
     let max_account: u8 = ar_record.value.max_accounts;
     let g = global_context.on_chain_commitment_key.g;
@@ -483,9 +483,10 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
     ar_identities.sort();
     ar_identities.dedup();
     if ar_identities.len() < shares.len() {
-        return Err(format!(
-            "No duplicates among the anonymity revokers identities nor share numbers are allowed"
-        ));
+        return Err(
+            "No duplicates among the anonymity revokers identities nor share numbers are allowed."
+                .to_owned(),
+        );
     }
 
     let prf_key = reveal_prf_key(&shares);
