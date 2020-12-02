@@ -231,7 +231,10 @@ fn main() {
         },
         None => {
             let encryption_secret_key = match tr.decryption_key {
-                Some(dk) => match serde_json::from_str(&dk) {
+                Some(dk) => match hex::decode(&dk)
+                    .map_err(|e| failure::format_err!("Hex decoding error {}", e))
+                    .and_then(|bs| from_bytes(&mut std::io::Cursor::new(bs)))
+                {
                     Ok(v) => Some(v),
                     Err(e) => {
                         eprintln!("The provided decryption key is malformed due to: {}", e);
