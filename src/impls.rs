@@ -542,28 +542,6 @@ impl<K: Deserial + Ord> Deserial for BTreeSet<K> {
     }
 }
 
-impl Deserial for Policy {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let created_at = source.get()?;
-        let valid_to = source.get()?;
-        let len: u16 = source.get()?;
-        let mut items = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            let tag = AttributeTag(source.get()?);
-            let value_len: u8 = source.get()?;
-            let mut value = Vec::with_capacity(usize::from(value_len));
-            unsafe { value.set_len(usize::from(value_len)) };
-            source.read_exact(&mut value)?;
-            items.push((tag, value))
-        }
-        Ok(Self {
-            created_at,
-            valid_to,
-            items,
-        })
-    }
-}
-
 macro_rules! serialize_array_x {
     ($x:expr) => {
         /// Serialize the array by writing elements consecutively starting at 0.
@@ -672,13 +650,67 @@ impl ReceiveContext {
     pub fn self_address(&self) -> &ContractAddress { &self.self_address }
 }
 
-impl Policy {
-    /// Get the value of the given attribute, if present.
-    pub fn get_attribute(&self, tag: AttributeTag) -> Option<&AttributeValue> {
-        match self.items.binary_search_by_key(&tag, |x| x.0) {
-            Ok(idx) => Some(&self.items[idx].1),
-            Err(_) => None,
+pub struct ReadAttributeIterator<'a, R> {
+    pos:    u16,
+    len:    u16,
+    source: &'a mut R,
+}
+
+impl<'a, R: Read + 'a> Policy<ReadAttributeIterator<'a, R>> {
+    // /// Get the value of the given attribute, if present.
+    // pub fn get_attribute(&self, tag: AttributeTag) -> Option<&AttributeValue> {
+    //     match self.items.binary_search_by_key(&tag, |x| x.0) {
+    //         Ok(idx) => Some(&self.items[idx].1),
+    //         Err(_) => None,
+    //     }
+    // }
+
+    pub fn deserial(source: &'a mut R) -> ParseResult<Self> {
+        let created_at = source.get()?;
+        let valid_to = source.get()?;
+        let len: u16 = source.get()?;
+        let items = ReadAttributeIterator {
+            pos: 0,
+            len,
+            source,
+        };
+        Ok(Self {
+            created_at,
+            valid_to,
+            items,
+        })
+    }
+}
+
+impl Serial for AttributeTag {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
+}
+
+impl Deserial for AttributeTag {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { Ok(AttributeTag(source.get()?)) }
+}
+
+impl<'a, R: Read> ReadAttributeIterator<'a, R> {
+    /// Get the next attribute, storing it in the provided buffer.
+    /// The return value, if Some, is a pair of an attribute tag, and the length
+    /// of the attribute value.
+    ///
+    /// The reason this function is added here, and we don't simply implement
+    /// an Iterator for this type is that with the supplied buffer we can
+    /// iterate through the elements more efficiently, without any allocations,
+    /// the consumer being responsible for allocating the buffer.
+    pub fn next(&mut self, buf: &mut [u8; 31]) -> Option<(AttributeTag, u8)> {
+        if self.pos == self.len {
+            return None;
         }
+        let tag = AttributeTag::deserial(self.source).ok()?;
+        let value_len: u8 = self.source.get().ok()?;
+        if value_len > 31 {
+            // Should not happen because all attributes fit into 31 bytes.
+            return None;
+        }
+        self.source.read_exact(&mut buf[0..usize::from(value_len)]).ok()?;
+        Some((tag, value_len))
     }
 }
 

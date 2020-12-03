@@ -403,18 +403,18 @@ pub type TimestampMillis = u64;
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct AttributeTag(pub(crate) u8);
 
-pub type AttributeValue = Vec<u8>;
+pub type AttributeValue<'a> = &'a [u8];
 
 /// Policy on the credential of the account.
 #[derive(Clone)]
-pub struct Policy {
+pub struct Policy<Attributes> {
     /// Beginning of the month in milliseconds since unix epoch.
     pub created_at: TimestampMillis,
     /// Beginning of the month where the credential is no longer valid, in
     /// milliseconds since unix epoch.
     pub valid_to: TimestampMillis,
     /// List of attributes, ordered by the tag.
-    pub(crate) items: Vec<(AttributeTag, AttributeValue)>,
+    pub(crate) items: Attributes,
 }
 
 /// Currently defined attributes possible in a policy.
