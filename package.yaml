@@ -58,6 +58,7 @@ dependencies:
 - persistent >= 2.10
 - text >= 1.2
 - QuickCheck >= 2.12
+- scientific >= 0.3.2
 
 library:
   source-dirs: src
