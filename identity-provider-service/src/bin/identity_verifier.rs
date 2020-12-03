@@ -1,6 +1,8 @@
+use std::{collections::BTreeMap, fs};
+
 use log::info;
 use reqwest::header::LOCATION;
-use std::{collections::BTreeMap, fs};
+use rust_embed::RustEmbed;
 use structopt::StructOpt;
 use url::Url;
 use warp::{
@@ -27,6 +29,10 @@ struct Config {
     id_provider_url: Url,
 }
 
+#[derive(RustEmbed)]
+#[folder = "html/"]
+struct Asset;
+
 /// A small binary that simulates an identity verifier that always verifies an
 /// identity, and returns a verified attribute list.
 #[tokio::main]
@@ -39,9 +45,10 @@ async fn main() {
     let matches = app.get_matches();
     let opt = Config::from_clap(&matches);
 
-    // TODO Embed into binary.
-    let attribute_form = fs::read_to_string("html/attribute_form.html")
-        .expect("Unable to read attribute form HTML template file.");
+    let attribute_form = Asset::get("attribute_form.html").unwrap();
+    let attribute_form_html = std::str::from_utf8(attribute_form.as_ref())
+        .unwrap()
+        .to_string();
 
     let database_root = std::path::Path::new("database").to_path_buf();
     fs::create_dir_all(database_root.join("attributes"))
@@ -59,7 +66,7 @@ async fn main() {
                     id_cred_pub
                 );
                 let id_cred_pub_attribute_form =
-                    str::replace(attribute_form.as_str(), "$id_cred_pub$", &id_cred_pub);
+                    str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
                 Response::builder()
                     .header(CONTENT_TYPE, "text/html")
                     .body(id_cred_pub_attribute_form)
