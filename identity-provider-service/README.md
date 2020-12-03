@@ -15,7 +15,9 @@ To build the executables move to the identity-provider-service directory and run
 
 Navigate next to the generated binary and run (remember to update paths to your files):
 
-```./identity-provider-service --identity-provider identity_provider.json --anonymity-revokers anonymity_revokers.json --global-context global.json```
+```console
+./identity-provider-service --anonymity-revokers data/anonymity_revokers.json --identity-provider data/identity_provider.json --wallet-proxy-base url-for-wallet-proxy --retrieve-base identity-provider-service-base-url --global-context data/global.json
+```
 
 Here identity_provider_file.json points to the file path containing the JSON representation of the identity provider public and private keys.
 The `anonymity_revokers_file.json` refers to a file containing the JSON
@@ -30,15 +32,17 @@ An example of each file type can be found in the [./data](./data) subdirectory.
 
 The identity verifier is a supporting service that verifies the real-life
 identity of the user. In this POC we assume that the service has a REST API that
-the provider uses. The identity provider would redirect the initial request,
-after it has validated the cryptographic proofs, to the identity verifier, which
-would then verify the real-life identity by, e.g., asking the user to take
-photos, and provide documents.
+the provider uses. The identity provider redirects the caller, after it has 
+validated the cryptographic proofs, to the identity verifier, which would
+then verify the real-life identity, by e.g., asking the user to take photos, and
+provide documents. In the proof of concept the user can simply input all their
+personal attributes manually, and the identity verifier will accept them without
+challenging the information.
 
 The identity verifier can be run by using:
 
 ```console
-cargo run --release --bin identity_verifier
+cargo run --release --bin identity-verifier -- --id-provider-url url-for-identity-provider-service
 ```
 
 or directly running the binary `identity_verifier` in `./target/release/`.
@@ -55,9 +59,12 @@ the Android emulator calls the host machine.
 
 |Method|URL|Description|
 |---|---|---|
-|POST|`http://[hostname]:8100/api/identity`|The endpoint the wallet calls to initiate the identity creation flow.|
-|GET|`http://[hostname]:8100/api/identity/{base_16_encoded_id_cred_pub}`|The endpoint that exposes access to created identity objects. The caller will be redirected to this URL after creation of an identity object, so that they can retrieve it.|
-|POST|`http://[hostname]:8101/api/verify/`|An endpoint that simulates an identity verifier. The endpoint always returns OK 200 and provides a static attribute list independent of the caller.|
+|POST+GET|`http://[hostname]:[provider_port]/api/identity`|The endpoint the wallet calls to initiate the identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
+|GET|`http://[hostname]:[provider_port]/api/identity/create/{id_cred_pub}`|Endpoint that the identity verifier forwards the user to after having validated their attributes. If the user has created a valid set of attributes, then this endpoint will ensure that an identity is created.|
+|GET|`http://[hostname]:[provider_port]/api/identity/{base_16_encoded_id_cred_pub}`|The endpoint that exposes access to created identity objects. The caller will be redirected to this URL after creation of an identity object, so that they can retrieve it.|
+|GET|`http://[hostname]:[verifier_port]/api/verify/`|An endpoint that simulates an identity verifier. The endpoint presents an HTML form where the user can submit their attributes which will always be accepted. In a real world application the attributes would have to be verified.|
+|POST|`http://[hostname]:[verifier_port]/api/submit/`|Accepts submissions from the HTML for served by the verifier. The attributes are saved to a file database. No verification of the attributes are performed for the POC.|
+|GET|`http://[hostname]:[verifier_port]/api/verify/attributes/{id_cred_pub}`|Provides read access to saved attributes. The identity provider accesses this endpoint to get attributes, and assumes that if an attribute list exists, then the user has been verified successfully.|
 
 The initial POST request should have content-type `application/json` and the body should be a JSON object in the format
 ```json
@@ -79,11 +86,14 @@ for Android. The flow is as follows:
 
 1. Receive a request from a wallet on `http://[hostname]:8100/api/identity
 1. Deserialize `IdentityObjectRequest` and validate its contents by using the supplied library function 
-`id::identity_provider::validate_request`.
-1. Perform identity verification with the identity verifier, i.e. the identity of the given caller has to be verified.
-In the proof of concept the identity verifier is another service, which always verifies an identity and returns a 
-static attribute list for any identity.
-1. Create a signature for the received request and attribute list by using the supplied library function
+`id::identity_provider::validate_request`. The validated request is saved in the database.
+1. Forward the wallet to the identity verification attribute HTML form.
+1. The user fills out the attribute form and submits it to the identity verifier, which then saves the attributes
+to a file database. At this step the identity verifier should validate the attributes of the user, but for the POC
+the attributes are simply accepted at face value. Afterwards the user is forwarded back to the identity provider service
+that will perform the next step.
+1. Read the validated request from the database that matches the current flow. The attribute list for the given user
+is retrieved from the identity verifier. The request and attribute list are signed by using the supplied library function
 `id::identity_provider::sign_identity_object`.
 1. Save the corresponding revocation record that can be used by the anonymity revokers to identify the user.
 1. Generate the identity object which consists of the received request, the attribute list and the signature and 
