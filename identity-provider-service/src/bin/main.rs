@@ -793,10 +793,11 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
     }
 }
 
-/// Checks for a validated request and checks with the identity verifier if there is a verified
-/// attribute list for this person. If there is an attribute list, then it is used to create the
-/// identity object that is then signed and saved. If successful a re-direct to the URL where
-/// the identity object is available is returned.
+/// Checks for a validated request and checks with the identity verifier if
+/// there is a verified attribute list for this person. If there is an attribute
+/// list, then it is used to create the identity object that is then signed and
+/// saved. If successful a re-direct to the URL where the identity object is
+/// available is returned.
 async fn create_signed_identity_object(
     server_config: Arc<ServerConfig>,
     db: Arc<DB>,
