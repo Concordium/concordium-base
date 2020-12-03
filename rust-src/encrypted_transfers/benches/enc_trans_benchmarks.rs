@@ -39,7 +39,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let n = 32;
     let nm = n * m;
 
-    let context = GlobalContext::<SomeCurve>::generate_size(nm);
+    let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
     let generator = context.encryption_in_exponent_generator(); // h
     let s_value = Value::from(s);
     let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
@@ -119,7 +119,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let n = 32;
     let nm = n * m;
 
-    let context = GlobalContext::<SomeCurve>::generate_size(nm);
+    let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
     let generator = context.encryption_in_exponent_generator(); // h
     let s_value = Value::from(s);
     let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
@@ -178,9 +178,9 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
 
 criterion_group! {
     name = elgamal_benches;
-    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
+    config = Criterion::default().measurement_time(Duration::from_millis(100000)).sample_size(20);
     targets =
-        enc_trans_bench, sec_to_pub_bench
+        enc_trans_bench
 }
 
 criterion_main!(elgamal_benches);

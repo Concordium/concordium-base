@@ -499,31 +499,27 @@ instance FromJSON SignatureThreshold where
 
 -- |Data about which account this credential belongs to.
 data CredentialAccount =
-  ExistingAccount !AccountAddress
   -- | Create a new account. The list of keys must be non-empty and no longer
   -- than 255 elements.
-  | NewAccount ![AccountVerificationKey] !SignatureThreshold
+  NewAccount ![AccountVerificationKey] !SignatureThreshold
   deriving(Eq, Show)
 
 instance ToJSON CredentialAccount where
-  toJSON (ExistingAccount x) = toJSON x
   toJSON (NewAccount keys threshold) = object [
     "keys" .= keys,
     "threshold" .= threshold
     ]
 
 instance FromJSON CredentialAccount where
-  parseJSON (Object obj) = do
+  parseJSON = withObject "Credential account" $ \obj -> do
     keys <- obj .: "keys"
     when (null keys) $ fail "The list of keys must be non-empty."
     let len = length keys
     unless (len <= 255) $ fail "The list of keys must be no longer than 255 elements."
     threshold <- obj .:? "threshold" .!= fromIntegral (length keys) -- default to all the keys as a threshold
     return $! NewAccount keys threshold
-  parseJSON v = ExistingAccount <$> parseJSON v
 
 instance Serialize CredentialAccount where
-  put (ExistingAccount x) = S.putWord8 0 <> S.put x
   put (NewAccount keys threshold) = S.putWord8 1 <> do
       S.putWord8 (fromIntegral (length keys))
       mapM_ S.put keys
@@ -531,14 +527,13 @@ instance Serialize CredentialAccount where
 
   get =
     S.getWord8 >>= \case
-      0 -> ExistingAccount <$> S.get
       1 -> do
         len <- S.getWord8
         unless (len >= 1) $ fail "The list of keys must be non-empty and at most 255 elements long."
         keys <- replicateM (fromIntegral len) S.get
         threshold <- S.get
         return $! NewAccount keys threshold
-      _ -> fail "Input must be either an existing account or a new account with a list of keys and threshold."
+      _ -> fail "Input must be either a new account with a list of keys and threshold."
 
 data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Either an address of an existing account, or the list of keys the newly
@@ -559,10 +554,7 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
 } deriving(Eq, Show)
 
 credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
-credentialAccountAddress cdv =
-  case cdvAccount cdv of
-    ExistingAccount addr -> addr
-    _ -> addressFromRegId (cdvRegId cdv)
+credentialAccountAddress cdv = addressFromRegId (cdvRegId cdv)
 
 instance ToJSON CredentialDeploymentValues where
   toJSON CredentialDeploymentValues{..} =
