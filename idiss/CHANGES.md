@@ -2,15 +2,6 @@
 
 The `token` in the return value should not be URLencoded, it should just be plain JSON.
 
-The initial request should be a POST request with content-type application/json. The body should contain a JSON object
-of the form
-```json
-{
-    "idObjectRequest": {..}
-    "redirectURI": "..."
-}
-```
-
 # Additional keys
 
 The identity provider now needs to have an additional key for signing the initial account creation transaction.
@@ -56,11 +47,15 @@ In addition to this, the wallet-proxy might have connectivity issues, or connect
 # Return object
 
 The returned identity object should be expanded. In the past it was a JSON object with a single field `identityObject`. It should now be
-a JSON object with two fields
+a JSON object with three fields
 ```json
 {
     "identityObject": {..},
-    "accountAddress": "..."
+    "accountAddress": "...",
+    "credential": {..}
 }
 ```
-where accountAddress is the address of the initial account that will be created (returned by `create_initial_account` call).
+where accountAddress is the address of the initial account that will be created
+(returned by `create_initial_account` call), the credential is the initial
+credential that created the account (what is returned under the `request`
+heading above).

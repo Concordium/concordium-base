@@ -2,7 +2,7 @@
 module ConcordiumTests.Crypto.EncryptedTransfers where
 
 import Concordium.Crypto.EncryptedTransfers
-import Concordium.ID.Parameters
+import Concordium.ID.DummyData
 import Concordium.ID.Types
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Common.Amount

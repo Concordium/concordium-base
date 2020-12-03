@@ -30,7 +30,7 @@ fn bench_parts(c: &mut Criterion) {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
-    let global_context = GlobalContext::generate();
+    let global_context = GlobalContext::generate(String::from("genesis_string"));
     let ar_base = global_context.elgamal_generator();
 
     let ar1_secret_key = SecretKey::generate(ar_base, &mut csprng);

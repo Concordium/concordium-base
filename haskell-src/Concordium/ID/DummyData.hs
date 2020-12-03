@@ -10,29 +10,34 @@ import Concordium.ID.Types as ID
 import Concordium.ID.Parameters
 import Concordium.Crypto.FFIDataTypes
 import qualified Data.Aeson as AE
+import qualified Concordium.Crypto.SignatureScheme as SigScheme
 
 -- Derive a dummy registration id from an account address. This hashes the
 -- account address derived from the verification key, and uses it as a seed of a
 -- random number generator.
 {-# WARNING dummyRegId "Invalid credential Registration ID, only for testing." #-}
 dummyRegId :: AccountAddress -> ID.CredentialRegistrationID
-dummyRegId addr = ID.RegIdCred (generateGroupElementFromSeed globalContext (fromIntegral (IntHash.hash addr)))
+dummyRegId addr = ID.RegIdCred (generateGroupElementFromSeed dummyGlobalContext (fromIntegral (IntHash.hash addr)))
 
 -- Derive a dummy encryption secret key corresponding to the dummyRegId above.
 {-# WARNING dummyEncryptionSecretKey "Only use for testing, do not use in production." #-}
 dummyEncryptionSecretKey :: AccountAddress -> ElgamalSecretKey
-dummyEncryptionSecretKey addr = generateElgamalSecretKeyFromSeed globalContext (fromIntegral (IntHash.hash addr))
+dummyEncryptionSecretKey addr = generateElgamalSecretKeyFromSeed dummyGlobalContext (fromIntegral (IntHash.hash addr))
 
+{-# NOINLINE globalContext #-}
+{-# WARNING globalContext "Do not use in production." #-}
+globalContext :: GlobalContext
+globalContext = dummyGlobalContext
 
 -- This credential value is invalid and does not satisfy the invariants normally expected of credentials.
 -- Should only be used when only the existence of a credential is needed in testing, but the credential
 -- will neither be serialized, nor inspected.
 {-# WARNING dummyCredential "Invalid credential, only for testing." #-}
-dummyCredential :: ID.AccountAddress -> ID.CredentialValidTo -> ID.CredentialCreatedAt -> ID.AccountCredential
-dummyCredential address pValidTo pCreatedAt = ID.NormalAC $ ID.CredentialDeploymentValues
+dummyCredential :: AccountAddress -> SigScheme.VerifyKey -> ID.CredentialValidTo -> ID.CredentialCreatedAt -> ID.AccountCredential
+dummyCredential addr key pValidTo pCreatedAt = ID.NormalAC $ ID.CredentialDeploymentValues
     {
-      cdvAccount = ID.ExistingAccount address,
-      cdvRegId = dummyRegId address,
+      cdvAccount = ID.NewAccount [key] 1,
+      cdvRegId = dummyRegId addr,
       cdvIpId = ID.IP_ID 0,
       cdvThreshold = ID.Threshold 2,
       cdvArData = OrdMap.empty,

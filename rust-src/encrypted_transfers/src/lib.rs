@@ -7,7 +7,7 @@ extern crate itertools;
 
 mod ffi;
 pub mod proofs;
-mod types;
+pub mod types;
 
 use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
 use crypto_common::types::Amount;
@@ -153,13 +153,11 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     let sender_pk = &PublicKey::from(sender_sk);
-    // FIXME: Put context into random oracle
     let mut ro = RandomOracle::domain("EncryptedTransfer");
     ro.append_message(b"ctx", &ctx);
     ro.append_message(b"receiver_pk", &receiver_pk);
     ro.append_message(b"sender_pk", &sender_pk);
 
-    // FIXME: Make arguments more in line between gen_enc_trans and this.
     generate_proofs::gen_enc_trans(
         ctx,
         &mut ro,
@@ -292,7 +290,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -314,7 +312,7 @@ mod tests {
     #[test]
     fn test_scale() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -340,7 +338,7 @@ mod tests {
     #[test]
     fn test_encryption_randomness_zero() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let amount = Amount::from(csprng.gen::<u64>());
         let dummy_encryption = encrypt_amount_with_fixed_randomness(&context, amount);
@@ -370,7 +368,7 @@ mod tests {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<G1>::generate_size(nm);
+        let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
 
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
@@ -415,7 +413,7 @@ mod tests {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<G1>::generate_size(nm);
+        let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
 
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.

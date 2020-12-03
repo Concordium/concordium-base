@@ -157,7 +157,7 @@ pub fn test_pipeline() {
         ip_cdi_secret_key,
     } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
-    let global_ctx = GlobalContext::generate();
+    let global_ctx = GlobalContext::generate(String::from("genesis_string"));
 
     let (ars_infos, ars_secret) =
         test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
