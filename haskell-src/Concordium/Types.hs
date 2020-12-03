@@ -384,7 +384,7 @@ instance Show Address where
 
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField, ToJSON) via Word64
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField, ToJSON, Integral) via Word64
 
 -- | Time in seconds since the unix epoch
 newtype TransactionTime = TransactionTime { ttsSeconds :: Word64 }
