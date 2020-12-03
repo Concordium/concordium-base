@@ -10,7 +10,6 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -24,8 +23,53 @@ use pedersen_scheme::{
 };
 use rand::*;
 use random_oracle::RandomOracle;
-use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
+
+pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    context: &IPContext<P, C>,
+    id_cred_sec: &Value<C>,
+    prf_key: &prf::SecretKey<C>,
+    initial_account: &impl InitialAccountDataTrait,
+) -> Option<PublicInformationForIP<C>> {
+    let id_cred_pub = context
+        .global_context
+        .on_chain_commitment_key
+        .g
+        .mul_by_scalar(id_cred_sec);
+
+    // From create_credential:
+    // let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+    let reg_id_exponent = match prf_key.prf_exponent(0) {
+        Ok(exp) => exp,
+        Err(_) => return None,
+    };
+
+    // RegId as well as Prf key commitments must be computed
+    // with the same generators as in the commitment key.
+    let reg_id =  context
+        .global_context
+        .on_chain_commitment_key
+        .hide(
+            &Value::<C>::new(reg_id_exponent),
+            &PedersenRandomness::zero(),
+        ).0;
+
+    let vk_acc = InitialCredentialAccount {
+        account: NewAccount {
+            keys: initial_account.get_public_keys(),
+            threshold: initial_account.get_threshold(),
+        },
+    };
+
+    let pub_info_for_ip = PublicInformationForIP {
+        id_cred_pub,
+        reg_id,
+        vk_acc,
+        // policy
+    };
+
+    Some(pub_info_for_ip)
+}
 
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
@@ -37,64 +81,23 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IPContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
-    initial_account_data: &InitialAccountData,
+    initial_account: &impl InitialAccountDataTrait,
 ) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
-    let id_cred_pub = context
-        .global_context
-        .on_chain_commitment_key
-        .g
-        .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
 
     // PRF related computation
     let prf_key = &aci.prf_key;
 
-    // From create_credential:
-    // let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let reg_id_exponent = match aci.prf_key.prf_exponent(0) {
-        Ok(exp) => exp,
-        Err(_) => return None,
-    };
-
-    // RegId as well as Prf key commitments must be computed
-    // with the same generators as in the commitment key.
-    let reg_id = context
-        .global_context
-        .on_chain_commitment_key
-        .hide(
-            &Value::<C>::new(reg_id_exponent),
-            &PedersenRandomness::zero(),
-        )
-        .0;
-
-    let vk_acc = InitialCredentialAccount {
-        account: NewAccount {
-            keys:      initial_account_data
-                .keys
-                .values()
-                .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-                .collect::<Vec<_>>(),
-            threshold: initial_account_data.threshold,
-        },
-    };
-
     // Step 3: We should sign IDcred_PUB ,policy_ACC ,RegID_ACC ,vk_ACC ,pk_ACC
-    let pub_info_for_ip = PublicInformationForIP {
-        id_cred_pub,
-        reg_id,
-        vk_acc,
-        // policy
-    };
-    let to_sign = Sha256::digest(&to_bytes(&pub_info_for_ip));
+    let pub_info_for_ip = build_pub_info_for_ip(
+        context, &aci.cred_holder_info.id_cred.id_cred_sec, prf_key, initial_account
+    )?;
+
+    let id_cred_pub = pub_info_for_ip.id_cred_pub;
+    let reg_id = pub_info_for_ip.reg_id;
+
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: initial_account_data
-            .keys
-            .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
-            })
-            .collect(),
+        sigs: initial_account.sign_public_information_for_ip(&pub_info_for_ip),
     };
     // --
 
