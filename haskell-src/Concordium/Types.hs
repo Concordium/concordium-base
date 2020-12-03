@@ -22,6 +22,13 @@ module Concordium.Types (
   computeEnergyRate,
   computeCost,
 
+  -- * Mint and reward rates
+  MintRate(..),
+  RewardFraction(..),
+  makeRewardFraction,
+  addRewardFraction,
+  complementRewardFraction,
+
   -- * Time units
   Duration(..),
   durationToNominalDiffTime,
@@ -51,6 +58,7 @@ module Concordium.Types (
   Nonce(..),
   minNonce,
   AccountVerificationKey,
+  AccountIndex,
 
   -- * Smart contracts
   ModuleRef(..),
@@ -122,6 +130,7 @@ module Concordium.Types (
 
 import GHC.Generics
 import Data.Data (Typeable, Data)
+import Data.Scientific
 
 import Concordium.Common.Amount
 import qualified Concordium.Crypto.BlockSignature as Sig
@@ -182,7 +191,7 @@ instance (Show a) => Show (Hashed a) where
     show = show . _hashed
 
 -- * Types related to bakers.
-newtype BakerId = BakerId Word64
+newtype BakerId = BakerId AccountIndex
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
 
 instance S.Serialize BakerId where
@@ -290,6 +299,88 @@ computeCost
   -> Amount
 computeCost rate energy = ceiling (rate * fromIntegral energy)
 
+-- * Minting and rewards
+
+-- |A base-10 floating point number representation.
+-- The value is @mrMantissa * 10^(-mrExponent)@.
+-- Note: equality is currently structural, and not semantic.
+data MintRate = MintRate {
+  mrMantissa :: !Word32,
+  mrExponent :: !Word8
+} deriving (Eq)
+
+instance Show MintRate where
+  show MintRate{..} = show mrMantissa ++ "e-" ++ show mrExponent
+
+instance S.Serialize MintRate where
+  put MintRate{..} = S.put mrMantissa >> S.put mrExponent
+  get = do
+    mrMantissa <- S.get
+    mrExponent <- S.get
+    return MintRate{..}
+
+instance ToJSON MintRate where
+  toJSON MintRate{..} = Number (scientific (toInteger mrMantissa) (- fromIntegral mrExponent))
+
+instance FromJSON MintRate where
+  parseJSON (Number s0) = do
+    let s = normalize s0
+    unless (coefficient s >= 0 && coefficient s <= toInteger (maxBound :: Word32)) $ fail "Coefficient out of bounds"
+    unless (base10Exponent s <= 0 && base10Exponent s >= - (fromIntegral (maxBound :: Word8))) $ fail "Exponent out of bounds"
+    return MintRate {
+      mrMantissa = fromInteger (coefficient s),
+      mrExponent = fromIntegral (- (base10Exponent s))
+    }
+  parseJSON _ = fail "Not a number"
+
+
+-- |A fraction in [0,1], represented as parts per 100000.
+newtype RewardFraction = RewardFraction {fracPerHundredThousand :: Word32}
+  deriving newtype (Eq,Ord)
+
+hundredThousand :: Word32
+hundredThousand = 100000
+
+instance Show RewardFraction where
+  show (RewardFraction f) = show (fromIntegral f / 100000 :: Double)
+
+instance S.Serialize RewardFraction where
+  put (RewardFraction f) = S.put f
+  get = do
+    f <- S.get
+    unless (f <= hundredThousand) $ fail "Reward fraction out of bounds"
+    return (RewardFraction f)
+
+instance ToJSON RewardFraction where
+  toJSON (RewardFraction f) = Number (scientific (fromIntegral f) (-5))
+
+instance FromJSON RewardFraction where
+  parseJSON (Number s0) = do
+    let s = normalize s0
+    let ex = base10Exponent s
+    unless (ex <= 0 && ex >= -5) $ fail "Precision out of bounds"
+    let v = coefficient s * 10 ^ (5 + ex)
+    unless (v >= 0 && v <= fromIntegral hundredThousand) $ fail "Fraction out of bounds"
+    return (RewardFraction (fromIntegral v))
+  parseJSON _ = fail "Expected number"
+
+-- |Make a 'RewardFraction'.
+makeRewardFraction
+  :: Word32
+  -- ^Hundred thousandths
+  -> RewardFraction
+makeRewardFraction v = assert (v <= hundredThousand) (RewardFraction v)
+
+-- |Add two reward fractions.
+addRewardFraction :: RewardFraction -> RewardFraction -> Maybe RewardFraction
+addRewardFraction (RewardFraction a) (RewardFraction b)
+  | a + b <= hundredThousand = Just (RewardFraction (a + b))
+  | otherwise = Nothing
+
+-- |Compute @1 - f@.
+complementRewardFraction :: RewardFraction -> RewardFraction
+complementRewardFraction (RewardFraction a) = RewardFraction (hundredThousand - a)
+
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
 type VoterVRFPublicKey = VRF.PublicKey
@@ -349,6 +440,13 @@ instance Show ContractAddress where
 instance S.Serialize ContractAddress where
   get = ContractAddress <$> S.get <*> S.get
   put (ContractAddress i v) = S.put i <> S.put v
+
+-- |The index of an account. Starting with 0,
+-- each account is allocated a sequential @AccountIndex@
+-- when it is created.  For the most part, this is only
+-- used internally.  However, it is indirectly exposed through
+-- 'BakerId'.
+type AccountIndex = Word64
 
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
