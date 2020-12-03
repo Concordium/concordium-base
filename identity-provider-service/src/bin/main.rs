@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 use structopt::StructOpt;
+use url::Url;
 use warp::{http::StatusCode, hyper::header::LOCATION, Filter, Rejection, Reply};
 
 type ExampleAttributeList = AttributeList<id::constants::BaseField, AttributeKind>;
@@ -37,7 +38,7 @@ struct IdentityProviderServiceConfiguration {
     #[structopt(
         long = "identity-provider",
         help = "File with the identity provider as JSON.",
-        default_value = "identity_providers.json",
+        default_value = "identity_provider.json",
         env = "IDENTITY_PROVIDER"
     )]
     identity_provider_file: PathBuf,
@@ -76,7 +77,7 @@ struct IdentityProviderServiceConfiguration {
     wallet_proxy_base: url::Url,
 }
 
-#[derive(SerdeDeserialize)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 /// The identity object request sent by the wallet in the body of the POST
 /// request. The 'Deserialize' instance is automatically derived to parse the
 /// expected format.
@@ -215,6 +216,7 @@ impl DB {
         fs::create_dir_all(root.join("revocation"))?;
         fs::create_dir_all(root.join("identity"))?;
         fs::create_dir_all(root.join("pending"))?;
+        fs::create_dir_all(root.join("requests"))?;
         let mut hm = HashMap::new();
         for file in fs::read_dir(root.join("pending"))? {
             if let Ok(file) = file {
@@ -235,6 +237,38 @@ impl DB {
             backup_root,
             pending,
         })
+    }
+
+    /// Write the validated request, so that it can be retrieved and used to
+    /// create the identity object when the identity verifier calls with an
+    /// attribute list and a verification result.
+    pub fn write_request_record(
+        &self,
+        key: &str,
+        identity_object_request: &IdentityObjectRequest,
+    ) -> anyhow::Result<()> {
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        {
+            let file = std::fs::File::create(self.root.join("requests").join(key))?;
+            serde_json::to_writer(file, identity_object_request)?;
+        }
+        Ok(())
+    }
+
+    /// Read a validated request under the given key.
+    pub fn read_request_record(&self, key: &str) -> anyhow::Result<IdentityObjectRequest> {
+        let contents = {
+            let _lock = self
+                .pending
+                .lock()
+                .expect("Cannot acquire a lock, which means something is very wrong.");
+            fs::read_to_string(self.root.join("requests").join(key))?
+        }; // drop the lock at this point
+           // It is more efficient to read the whole thing, and then deserialize
+        Ok(from_str::<IdentityObjectRequest>(&contents)?)
     }
 
     /// Write the anonymity revocation record under the given key.
@@ -386,7 +420,7 @@ struct GetParameters {
 /// and only poll on queries for the identity.
 async fn followup(
     client: Client,
-    db: DB,
+    db: Arc<DB>,
     submission_url: url::Url,
     mut query_url_base: url::Url,
     key: String,
@@ -540,8 +574,15 @@ async fn main() -> anyhow::Result<()> {
 
     let server_config_validate = Arc::clone(&server_config);
     let server_config_validate_query = Arc::clone(&server_config);
-    // Endpoint for creating the identity object.
-    let create_identity = warp::post()
+    let server_config_forward = Arc::clone(&server_config);
+
+    let db_arc = Arc::new(db);
+    let verify_db = Arc::clone(&db_arc);
+    let create_db = Arc::clone(&db_arc);
+
+    // Endpoint for starting the identity creation flow. It will validate the
+    // request and forward the user to the identity verification service.
+    let verify_request = warp::post()
         .and(warp::filters::body::content_length_limit(50 * 1024))
         .and(warp::path!("api" / "identity"))
         .and(extract_and_validate_request(server_config_validate))
@@ -549,18 +590,32 @@ async fn main() -> anyhow::Result<()> {
             extract_and_validate_request_query(server_config_validate_query),
         ))
         .unify()
-        .and_then(move |idi| {
+        .map(move |idi| {
+            // TODO: How can I make use of the handle_rejection() like the create_identity
+            // filter does? Currently it will just fail hard here because I
+            // force unwrap.
+            save_validated_request(Arc::clone(&verify_db), idi, server_config_forward.clone())
+                .unwrap()
+        });
+
+    // Endpoint for creating identities. The identity verification service will
+    // forward the user to this endpoint after they have created a list of
+    // verified attributes.
+    let create_identity = warp::get()
+        .and(warp::path!("api" / "identity" / "create" / String))
+        .and_then(move |id_cred_pub: String| {
             create_signed_identity_object(
                 Arc::clone(&server_config),
-                db.clone(),
+                Arc::clone(&create_db),
                 client.clone(),
-                idi,
+                id_cred_pub,
             )
         });
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
-    let server = create_identity
+    let server = verify_request
         .or(retrieve_identity)
+        .or(create_identity)
         .recover(handle_rejection);
     warp::serve(server).run(([0, 0, 0, 0], opt.port)).await;
     Ok(())
@@ -576,6 +631,38 @@ macro_rules! ok_or_500 (
         }
     };
 );
+
+/// Save the validated request object to the database, and forward the calling
+/// user to the identity verification process.
+fn save_validated_request(
+    db: Arc<DB>,
+    identity_object_request: IdentityObjectRequest,
+    server_config: Arc<ServerConfig>,
+) -> Result<impl Reply, Rejection> {
+    let base_16_encoded_id_cred_pub = base16_encode_string(
+        &identity_object_request
+            .id_object_request
+            .value
+            .pub_info_for_ip
+            .id_cred_pub,
+    );
+
+    ok_or_500!(
+        db.write_request_record(&base_16_encoded_id_cred_pub, &identity_object_request),
+        "Could not write the valid request to database."
+    );
+
+    let attribute_form_url = format!(
+        "{}{}{}",
+        server_config.id_verification_url.to_string(),
+        "/",
+        base_16_encoded_id_cred_pub
+    );
+    Ok(warp::reply::with_status(
+        warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),
+        StatusCode::FOUND,
+    ))
+}
 
 /// Submit an account creation transaction. Return Ok if either the submission
 /// was successful or if it failed due to reasons unrelated to the request
@@ -640,6 +727,8 @@ enum IdRequestRejection {
     ReuseOfRegId,
     /// Malformed request.
     Malformed,
+    /// Missing validated request for the given id_cred_pub
+    NoValidRequest,
 }
 
 impl warp::reject::Reject for IdRequestRejection {}
@@ -690,6 +779,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
         let code = StatusCode::BAD_REQUEST;
         let message = "Malformed request.";
         Ok(mk_reply(message, code))
+    } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "No validated request was found for the given id_cred_pub.";
+        Ok(mk_reply(message, code))
     } else if err
         .find::<warp::filters::body::BodyDeserializeError>()
         .is_some()
@@ -710,18 +803,44 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
     server_config: Arc<ServerConfig>,
-    db: DB,
+    db: Arc<DB>,
     client: Client,
-    identity_object_input: IdentityObjectRequest,
+    id_cred_pub_input: String,
 ) -> Result<impl Reply, Rejection> {
+    // Read the validated request from the database.
+    let identity_object_input = match db.read_request_record(&id_cred_pub_input) {
+        Ok(request) => request,
+        Err(e) => {
+            error!(
+                "Unable to read validated request for id_cred_pub {}, {}",
+                id_cred_pub_input, e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::NoValidRequest));
+        }
+    };
+
+    let base16_encoded_id_cred_pub = base16_encode_string(
+        &identity_object_input
+            .id_object_request
+            .value
+            .pub_info_for_ip
+            .id_cred_pub,
+    );
     let request = identity_object_input.id_object_request.value;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
-    // always just return a static attribute list without doing any actual
-    // verification of an identity.
+    // return the attribute list that the user submitted to the identity verifier.
+    // If there is no attribute list, then it corresponds to the user not having
+    // been verified, and the request will fail.
+    let attribute_list_url = format!(
+        "{}{}{}",
+        server_config.id_verification_url.clone(),
+        "/attributes/",
+        base16_encoded_id_cred_pub
+    );
     let attribute_list = match client
-        .post(server_config.id_verification_url.clone())
+        .get(Url::parse(&attribute_list_url).unwrap())
         .send()
         .await
     {
@@ -988,10 +1107,10 @@ mod tests {
     #[test]
     fn test_successful_validation_and_response() {
         // Given
-        let request = include_str!("../data/valid_request.json");
-        let ip_data_contents = include_str!("../data/identity_provider.json");
-        let ar_info_contents = include_str!("../data/anonymity_revokers.json");
-        let global_context_contents = include_str!("../data/global.json");
+        let request = include_str!("../../data/valid_request.json");
+        let ip_data_contents = include_str!("../../data/identity_provider.json");
+        let ar_info_contents = include_str!("../../data/anonymity_revokers.json");
+        let global_context_contents = include_str!("../../data/global.json");
 
         let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
             .expect("File did not contain a valid IpData object as JSON.");
@@ -1028,10 +1147,10 @@ mod tests {
     #[test]
     fn test_verify_failed_validation() {
         // Given
-        let request = include_str!("../data/fail_validation_request.json");
-        let ip_data_contents = include_str!("../data/identity_provider.json");
-        let ar_info_contents = include_str!("../data/anonymity_revokers.json");
-        let global_context_contents = include_str!("../data/global.json");
+        let request = include_str!("../../data/fail_validation_request.json");
+        let ip_data_contents = include_str!("../../data/identity_provider.json");
+        let ar_info_contents = include_str!("../../data/anonymity_revokers.json");
+        let global_context_contents = include_str!("../../data/global.json");
 
         let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
             .expect("File did not contain a valid IpData object as JSON.");
