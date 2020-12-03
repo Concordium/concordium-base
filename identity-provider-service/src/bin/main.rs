@@ -590,12 +590,8 @@ async fn main() -> anyhow::Result<()> {
             extract_and_validate_request_query(server_config_validate_query),
         ))
         .unify()
-        .map(move |idi| {
-            // TODO: How can I make use of the handle_rejection() like the create_identity
-            // filter does? Currently it will just fail hard here because I
-            // force unwrap.
+        .and_then(move |idi| {
             save_validated_request(Arc::clone(&verify_db), idi, server_config_forward.clone())
-                .unwrap()
         });
 
     // Endpoint for creating identities. The identity verification service will
@@ -634,7 +630,7 @@ macro_rules! ok_or_500 (
 
 /// Save the validated request object to the database, and forward the calling
 /// user to the identity verification process.
-fn save_validated_request(
+async fn save_validated_request(
     db: Arc<DB>,
     identity_object_request: IdentityObjectRequest,
     server_config: Arc<ServerConfig>,
