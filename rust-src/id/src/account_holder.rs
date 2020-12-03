@@ -10,7 +10,6 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -24,7 +23,6 @@ use pedersen_scheme::{
 };
 use rand::*;
 use random_oracle::RandomOracle;
-use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
 /// Generate PreIdentityObject out of the account holder information,
@@ -37,7 +35,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IPContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
-    initial_account_data: &InitialAccountData,
+    initial_account: &impl InitialAccountDataTrait,
 ) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
     let id_cred_pub = context
@@ -69,12 +67,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let vk_acc = InitialCredentialAccount {
         account: NewAccount {
-            keys:      initial_account_data
-                .keys
-                .values()
-                .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-                .collect::<Vec<_>>(),
-            threshold: initial_account_data.threshold,
+            keys: initial_account.get_public_keys(),
+            threshold: initial_account.get_threshold(),
         },
     };
 
@@ -85,16 +79,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         vk_acc,
         // policy
     };
-    let to_sign = Sha256::digest(&to_bytes(&pub_info_for_ip));
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: initial_account_data
-            .keys
-            .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
-            })
-            .collect(),
+        sigs: initial_account.sign_public_information_for_ip(&pub_info_for_ip),
     };
     // --
 

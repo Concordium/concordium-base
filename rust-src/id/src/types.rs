@@ -1645,6 +1645,13 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
     }
 }
 
+/// This trait is used to create a preIdentityObject
+pub trait InitialAccountDataTrait {
+    fn get_threshold(&self) -> SignatureThreshold;
+    fn get_public_keys(&self) -> Vec<VerifyKey>;
+    fn sign_public_information_for_ip<C: Curve>(&self, info:  &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
+}
+
 /// Account data needed by the account holder to generate proofs to deploy the
 /// credential object. This contains all the keys on the account at the moment
 /// of credential deployment.
@@ -1682,6 +1689,33 @@ impl SerdeSerialize for AccountData {
         }
         map.serialize_entry("keys", &key_map)?;
         map.end()
+    }
+}
+
+impl InitialAccountDataTrait for InitialAccountData {
+    fn get_threshold(&self) -> SignatureThreshold {
+        return self.threshold;
+    }
+
+    fn get_public_keys(&self) -> Vec<VerifyKey> {
+        return self
+            .keys
+            .values()
+            .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
+            .collect::<Vec<_>>();
+    }
+
+
+    fn sign_public_information_for_ip<C: Curve>(&self, pub_info_for_ip: &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
+        let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
+        return self
+            .keys
+            .iter()
+            .map(|(&idx, kp)| {
+                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
+                (idx, expanded_sk.sign(&to_sign, &kp.public).into())
+            })
+            .collect();
     }
 }
 
