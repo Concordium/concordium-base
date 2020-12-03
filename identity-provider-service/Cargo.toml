@@ -46,5 +46,5 @@ path = "src/bin/identity_verifier.rs"
 name = "identity-verifier"
 
 [[bin]]
-path = "src/main.rs"
+path = "src/bin/main.rs"
 name = "identity-provider-service"
