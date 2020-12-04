@@ -18,5 +18,6 @@ services:
     environment:
       - MODE=identity-verifier
       - IDENTITY_VERIFIER_PORT=7012
+      - IDENTITY_PROVIDER_URL=http://identity-provider-service:7011
     ports:
       - "7012:7012"
