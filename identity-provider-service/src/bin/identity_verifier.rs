@@ -57,6 +57,9 @@ async fn main() {
     // The path for serving the attribute form to the caller. The HTML form has a
     // hidden field containing the id_cred_pub so that the session is preserved
     // across the flow.
+    // WARNING: This is not secure and is only for demonstration purposes. The
+    // id_cred_pub value is a fairly sensitive value that should not be passed
+    // around insecurely.
     let identity_verifier =
         warp::get()
             .and(warp::path!("api" / "verify" / String))
