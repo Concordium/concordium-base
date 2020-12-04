@@ -398,15 +398,26 @@ pub struct Cursor<T> {
 /// Time since unix epoch in milliseconds.
 pub type TimestampMillis = u64;
 
-/// Tag of an attribute
+/// Tag of an attribute. See the module [attributes](./attributes/index.html)
+/// for the currently supported attributes.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct AttributeTag(pub(crate) u8);
+pub struct AttributeTag(pub u8);
 
+/// A borrowed attribute value. The slice will have at most 31 bytes.
 pub type AttributeValue<'a> = &'a [u8];
 
+/// An owned counterpart of `AttributeValue`, more convenient for testing.
+pub type OwnedAttributeValue = Vec<u8>;
+
+/// A policy with a vector of attributes, fully allocated and owned.
+/// This is in contrast to a policy which is lazily read from a read source.
+/// The latter is useful for efficiency, this type is more useful for testing
+/// since the values are easier to construct.
+pub type OwnedPolicy = Policy<Vec<(AttributeTag, OwnedAttributeValue)>>;
+
 /// Policy on the credential of the account.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Policy<Attributes> {
     /// Beginning of the month in milliseconds since unix epoch.
     pub created_at: TimestampMillis,
@@ -414,7 +425,7 @@ pub struct Policy<Attributes> {
     /// milliseconds since unix epoch.
     pub valid_to: TimestampMillis,
     /// List of attributes, ordered by the tag.
-    pub(crate) items: Attributes,
+    pub items: Attributes,
 }
 
 /// Currently defined attributes possible in a policy.
