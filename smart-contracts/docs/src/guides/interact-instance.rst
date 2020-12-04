@@ -21,9 +21,9 @@ contract instance on-chain to interact with.
     For how to deploy a smart contract module see :ref:`deploy-module` and for
     how to create an instance see :ref:`initialize-contract`.
 
-Since interactions with a smart contract are transactions, you should also make sure
-to have ``concordium-client`` setup with an account with enough GTU to pay for
-the transactions.
+Since interactions with a smart contract are transactions, you should also make
+sure to have ``concordium-client`` setup with an account with enough GTU to pay
+for the transactions.
 
 .. note::
     The cost of this transaction depends on the size of the parameters send to
@@ -42,12 +42,13 @@ To update an instance with address ``0`` using the parameterless
 Passing parameters using JSON
 -----------------------------
 
-A JSON parameter can be passed if a :ref:`smart contract schema <contract-schema>` is supplied,
-either as a file or embedded in the module.
+A JSON parameter can be passed if a :ref:`smart contract schema
+<contract-schema>` is supplied, either as a file or embedded in the module.
 
 .. seealso::
 
-   :ref:`Read more about why and how to use smart contract schemas <contract-schema>`.
+   :ref:`Read more about why and how to use smart contract schemas
+        <contract-schema>`.
 
 To update an instance with address ``0`` using the ``receive``-function
 ``my_parameter_receive`` with the JSON parameter file ``my_parameter.json``, run
@@ -78,8 +79,8 @@ not needed.
 
 
 To update an instance with address ``0`` using the ``receive``-function
-``my_parameter_receive`` with the binary parameter file ``my_parameter.bin``, run
-the following command:
+``my_parameter_receive`` with the binary parameter file ``my_parameter.bin``,
+run the following command:
 
 .. code-block:: console
 

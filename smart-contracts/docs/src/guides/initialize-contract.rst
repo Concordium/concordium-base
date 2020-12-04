@@ -54,8 +54,8 @@ following command:
 Passing parameters using JSON
 -----------------------------
 
-A JSON parameter can be passed if a :ref:`smart contract schema <contract-schema>` is supplied,
-either as a file or embedded in the module.
+A JSON parameter can be passed if a :ref:`smart contract schema
+<contract-schema>` is supplied, either as a file or embedded in the module.
 
 .. seealso::
 
@@ -115,7 +115,8 @@ binary parameter file ``my_parameter.bin``, run the following command:
 Naming a contract instance
 ==========================
 
-Optionally, a contract instance can be named, which makes referencing them easier.
+Optionally, a contract instance can be named, which makes referencing them
+easier.
 The name is only stored locally by ``concordium-client``, and is not visible
 on-chain.
 
