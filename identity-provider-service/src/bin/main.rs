@@ -649,9 +649,8 @@ async fn save_validated_request(
     );
 
     let attribute_form_url = format!(
-        "{}{}{}",
+        "{}/{}",
         server_config.id_verification_url.to_string(),
-        "/",
         base_16_encoded_id_cred_pub
     );
     Ok(warp::reply::with_status(
