@@ -48,7 +48,7 @@ A JSON parameter can be passed if a :ref:`smart contract schema
 .. seealso::
 
    :ref:`Read more about why and how to use smart contract schemas
-        <contract-schema>`.
+   <contract-schema>`.
 
 To update an instance with address ``0`` using the ``receive``-function
 ``my_parameter_receive`` with the JSON parameter file ``my_parameter.json``, run
