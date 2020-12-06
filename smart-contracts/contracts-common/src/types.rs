@@ -1,4 +1,6 @@
 #[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
 use core::{convert, fmt, iter, ops, str};
 #[cfg(feature = "std")]
 use std::{convert, fmt, iter, ops, str};
