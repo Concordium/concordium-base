@@ -255,6 +255,9 @@ struct InitHost<'a> {
     state: State,
     /// The parameter to the init method.
     param: &'a [u8],
+    /// Serialized policy of the would be creator, in the same format that
+    /// `OwnedPolicy` would be serialized.
+    policy_bytes: &'a [u8],
     /// The init context for this invocation.
     init_ctx: &'a InitContext,
 }
@@ -271,6 +274,10 @@ struct ReceiveHost<'a> {
     state: State,
     /// The parameter to the init method.
     param: &'a [u8],
+    /// Serialized policy of the immediate sender, in the same format that
+    /// `OwnedPolicy` would be serialized. If the sender is a contract, this is
+    /// the policy of the owner account.
+    policy_bytes: &'a [u8],
     /// Outcomes of the execution, i.e., the actions tree.
     outcomes: Outcome,
     /// The receive context for this call.
@@ -281,6 +288,7 @@ pub trait HasCommon {
     fn logs(&mut self) -> &mut Logs;
     fn state(&mut self) -> &mut State;
     fn param(&self) -> &[u8];
+    fn policy_bytes(&self) -> &[u8];
     fn metadata(&self) -> &ChainMetadata;
 }
 
@@ -292,6 +300,8 @@ impl<'a> HasCommon for InitHost<'a> {
     fn param(&self) -> &[u8] { &self.param }
 
     fn metadata(&self) -> &ChainMetadata { &self.init_ctx.metadata }
+
+    fn policy_bytes(&self) -> &[u8] { &self.policy_bytes }
 }
 
 impl<'a> HasCommon for ReceiveHost<'a> {
@@ -302,6 +312,8 @@ impl<'a> HasCommon for ReceiveHost<'a> {
     fn param(&self) -> &[u8] { &self.param }
 
     fn metadata(&self) -> &ChainMetadata { &self.receive_ctx.metadata }
+
+    fn policy_bytes(&self) -> &[u8] { &self.policy_bytes }
 }
 
 fn call_common<C: HasCommon>(
@@ -321,6 +333,17 @@ fn call_common<C: HasCommon>(
             let write_end = start + length; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
             let end = std::cmp::min(offset + length, host.param().len());
+            ensure!(offset <= end, "Attempting to read non-existent parameter.");
+            let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
+            stack.push_value(amt as u32);
+        }
+        CommonFunc::GetPolicySection => {
+            let offset = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() } as usize;
+            let start = unsafe { stack.pop_u32() } as usize;
+            let write_end = start + length; // this cannot overflow on 64-bit machines.
+            ensure!(write_end <= memory.len(), "Illegal memory access.");
+            let end = std::cmp::min(offset + length, host.policy_bytes().len());
             ensure!(offset <= end, "Attempting to read non-existent parameter.");
             let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
             stack.push_value(amt as u32);
@@ -539,7 +562,9 @@ impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
     }
 }
 
-pub type Parameter = Vec<u8>;
+pub type Parameter<'a> = &'a [u8];
+
+pub type PolicyBytes<'a> = &'a [u8];
 
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<C: RunnableCode>(
@@ -547,18 +572,20 @@ pub fn invoke_init<C: RunnableCode>(
     amount: u64,
     init_ctx: InitContext,
     init_name: &str,
-    parameter: Parameter,
+    param: Parameter,
     energy: u64,
 ) -> ExecResult<InitResult> {
+    let policy_vec = to_bytes(&init_ctx.sender_policy);
     let mut host = InitHost {
-        energy:            Energy {
+        energy: Energy {
             energy,
         },
         activation_frames: MAX_ACTIVATION_FRAMES,
-        logs:              Logs::new(),
-        state:             State::new(None),
-        param:             &parameter,
-        init_ctx:          &init_ctx,
+        logs: Logs::new(),
+        state: State::new(None),
+        param,
+        policy_bytes: &policy_vec,
+        init_ctx: &init_ctx,
     };
 
     let res = match artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]) {
@@ -613,7 +640,8 @@ pub fn invoke_init_from_source(
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
-/// Invokes an init-function from Wasm module bytes, injects the module with
+/// Same as `invoke_init_from_source`, except that the module has cost
+/// accounting instructions inserted before the init function is called.
 /// metering.
 #[inline]
 pub fn invoke_init_with_metering_from_source(
@@ -638,6 +666,7 @@ pub fn invoke_receive<C: RunnableCode>(
     parameter: Parameter,
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
+    let policy_bytes_vec = to_bytes(&receive_ctx.sender_policy);
     let mut host = ReceiveHost {
         energy:            Energy {
             energy,
@@ -647,6 +676,7 @@ pub fn invoke_receive<C: RunnableCode>(
         state:             State::new(Some(current_state)),
         param:             &parameter,
         receive_ctx:       &receive_ctx,
+        policy_bytes:      &policy_bytes_vec,
         outcomes:          Outcome::new(),
     };
 

@@ -358,7 +358,7 @@ pub fn main() -> anyhow::Result<()> {
                         runner.amount.micro_gtu,
                         init_ctx,
                         &name,
-                        parameter,
+                        &parameter,
                         runner.energy,
                     )
                     .context("Invocation failed.")?;
@@ -392,7 +392,7 @@ pub fn main() -> anyhow::Result<()> {
                     ref context,
                     ..
                 } => {
-                    let mut receive_ctx: concordium_contracts_common::ReceiveContext = {
+                    let mut receive_ctx: wasm_chain_integration::ReceiveContext = {
                         let ctx_file = File::open(context).expect("Could not open context file.");
                         serde_json::from_reader(std::io::BufReader::new(ctx_file))
                             .context("Could not parse receive context")?
@@ -447,7 +447,7 @@ pub fn main() -> anyhow::Result<()> {
                         receive_ctx,
                         &init_state,
                         &name,
-                        parameter,
+                        &parameter,
                         runner.energy,
                     )
                     .context("Calling receive failed.")?;
