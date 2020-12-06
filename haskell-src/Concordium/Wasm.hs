@@ -26,6 +26,8 @@ import qualified Concordium.Crypto.SHA256 as H
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
+import Concordium.ID.Types
+import Data.Time
 
 type ModuleSource = ByteString
 
@@ -143,9 +145,11 @@ data ModuleInterface = ModuleInterface {
   } deriving(Eq, Show, Generic)
 
 -- |Additional data needed specifically by the init method of the contract.
-newtype InitContext = InitContext{
+data InitContext = InitContext{
   -- |Origin of the transaction; who is initializing the contract.
-  initOrigin :: AccountAddress
+  initOrigin :: !AccountAddress,
+  -- |Policy of the
+  icSenderPolicy :: !SenderPolicy
   }
 
 -- |Additional data needed specifically by the receive method of the contract.
@@ -161,7 +165,49 @@ data ReceiveContext = ReceiveContext
   , sender :: !Address
   -- |Owner of this smart contract instance.
   , owner :: !AccountAddress
+  -- |Policy exposed to the smart contract. Either the policy of the sender account,
+  -- or of the owner of the contract.
+  , rcSenderPolicy :: !SenderPolicy
   }
+
+data SenderPolicy = SenderPolicy {
+  -- |Identity of the identity provider who signed the identity object
+  -- that created the policy.
+  spIdentityProvider :: !IdentityProviderIdentity,
+  -- |Beginning of the month where the identity object was created.
+  spCreatedAt :: !Timestamp,
+  -- |Beginning of the month where the identity object is no longer valid.
+  spValidTo :: !Timestamp,
+  -- |Attributes, by increasing order of the attribute tag.
+  spItems :: ![(AttributeTag, AttributeValue)]
+  }
+
+mkSenderPolicy :: AccountCredential -> SenderPolicy
+mkSenderPolicy ac =
+    SenderPolicy{
+       spCreatedAt = createdAtTs,
+       spValidTo = validToTs,
+       spItems = Map.toAscList (pItems credentialPolicy),
+       spIdentityProvider = ipId ac
+       }
+
+    where credentialPolicy = policy ac
+          createdAtTs =
+            let ym = pCreatedAt credentialPolicy
+                year = toInteger (ymYear ym)
+                month = fromIntegral (ymMonth ym)
+                expiryDay = fromGregorian year month 1 -- unchecked, always valid
+            in utcTimeToTimestamp (UTCTime expiryDay 0)
+
+          validToTs =
+            let ym = pValidTo credentialPolicy
+                year = toInteger (ymYear ym)
+                month = fromIntegral (ymMonth ym)
+                expiryYear = if month == 12 then year + 1 else year
+                expiryMonth = if month == 12 then 1 else month + 1 -- (month % 12) + 1
+                expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
+            in utcTimeToTimestamp (UTCTime expiryDay 0)
+
 
 -- |Energy used by the Wasm interpreter.
 newtype InterpreterEnergy = InterpreterEnergy { iEnergy :: Word64 }
@@ -353,9 +399,12 @@ instance Serialize Parameter where
     unless (len <= maxParameterLen) $ fail "Parameter size exceeds limits."
     Parameter <$> getShortByteString (fromIntegral len)
 
-instance Serialize InitContext where
-  put (InitContext origin) = put origin
-  get = InitContext <$> get
+-- |Encode into a bytestring, using little endian serialization where appropriate.
+-- This should only be used when passing data to the smart-contracts engine.
+
+encodeInitContext :: InitContext -> ByteString
+encodeInitContext InitContext{..} =
+  runPut $ put initOrigin <> putSenderPolicy icSenderPolicy
 
 -- |Encode into a bytestring, using little endian serialization where
 -- appropriate.
@@ -367,7 +416,16 @@ encodeReceiveContext ReceiveContext{..} = runPut encoder
           putWord64le (_contractSubindex (contractSubindex selfAddress)) <>
           putWord64le (_amount selfBalance) <>
           put sender <>
-          put owner
+          put owner <>
+          putSenderPolicy rcSenderPolicy
+
+putSenderPolicy :: SenderPolicy -> Put
+putSenderPolicy SenderPolicy{spIdentityProvider = IP_ID ipIdentity,..} =
+  putWord32le ipIdentity <>
+  putWord64le (tsMillis spCreatedAt) <>
+  putWord64le (tsMillis spValidTo) <>
+  putWord16le (fromIntegral (length spItems)) <>
+  mapM_ (\(k, AttributeValue v) -> put k <> putWord8 (fromIntegral (BSS.length v)) <> putShortByteString v) spItems
 
 -- |Specialized deserializer for processing FFI data.
 --
