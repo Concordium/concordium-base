@@ -25,8 +25,8 @@ pub struct SecretKey<C: Pairing> {
     /// various operations.
     pub g_tilda: C::G2,
     #[size_length = 4]
-    pub(crate) ys: Vec<C::ScalarField>,
-    pub(crate) x: C::ScalarField,
+    pub ys: Vec<C::ScalarField>,
+    pub x: C::ScalarField,
 }
 
 impl<C: Pairing> PartialEq for SecretKey<C> {
