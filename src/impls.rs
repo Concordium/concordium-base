@@ -666,6 +666,7 @@ impl<'a, R: Read + 'a> Policy<ReadAttributeIterator<'a, R>> {
     // }
 
     pub fn deserial(source: &'a mut R) -> ParseResult<Self> {
+        let identity_provider = source.get()?;
         let created_at = source.get()?;
         let valid_to = source.get()?;
         let len: u16 = source.get()?;
@@ -675,6 +676,7 @@ impl<'a, R: Read + 'a> Policy<ReadAttributeIterator<'a, R>> {
             source,
         };
         Ok(Self {
+            identity_provider,
             created_at,
             valid_to,
             items,

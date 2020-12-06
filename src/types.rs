@@ -416,9 +416,15 @@ pub type OwnedAttributeValue = Vec<u8>;
 /// since the values are easier to construct.
 pub type OwnedPolicy = Policy<Vec<(AttributeTag, OwnedAttributeValue)>>;
 
+/// Index of the identity provider on the chain.
+/// An identity provider with the given index will not be replaced,
+/// so this is a stable identifier.
+pub type IdentityProvider = u32;
+
 /// Policy on the credential of the account.
 #[derive(Debug, Clone)]
 pub struct Policy<Attributes> {
+    pub identity_provider: IdentityProvider,
     /// Beginning of the month in milliseconds since unix epoch.
     pub created_at: TimestampMillis,
     /// Beginning of the month where the credential is no longer valid, in
