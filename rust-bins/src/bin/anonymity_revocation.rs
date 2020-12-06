@@ -288,7 +288,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
     };
     if let Some(json_file) = dcr.out {
         match write_json_to_file(&json_file, &share) {
-            Ok(_) => eprintln!("Wrote decryption to {}", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote decryption to {}", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not write JSON to file due to {}", e);
                 output_json(&share);
@@ -335,7 +335,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
     };
     if let Some(json_file) = dcr.out {
         match write_json_to_file(&json_file, &share) {
-            Ok(_) => eprintln!("Wrote decryption to {}.", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote decryption to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not write JSON to file because {}", e);
                 output_json(&share);
@@ -419,7 +419,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
     if let Some(json_file) = cmb.out {
         let json = json!({ "idCredPub": id_cred_pub_string });
         match write_json_to_file(&json_file, &json) {
-            Ok(_) => eprintln!("Wrote idCredPub to {}.", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote idCredPub to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
                 output_json(&json);
