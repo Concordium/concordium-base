@@ -436,9 +436,123 @@ pub struct Policy<Attributes> {
     pub items: Attributes,
 }
 
+#[cfg(feature = "derive-serde")]
+pub fn policy_deserialize<'de, D>(deserializer: D) -> Result<OwnedPolicy, D::Error>
+where
+    D: serde::Deserializer<'de>, {
+    deserializer.deserialize_map(policy_json::OwnedPolicyVisitor)
+}
+
+#[cfg(feature = "derive-serde")]
+mod policy_json {
+    use super::*;
+    use convert::{TryFrom, TryInto};
+
+    pub struct OwnedPolicyVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for OwnedPolicyVisitor {
+        type Value = OwnedPolicy;
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut map: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut idp = None;
+            let mut ca = None;
+            let mut vt = None;
+            let mut items = Vec::new();
+
+            let parse_date = |s: &str| {
+                if !s.chars().all(|c| c.is_numeric() && c.is_ascii()) || s.len() != 6 {
+                    return Err(serde::de::Error::custom("Incorrect YYYYMM format."));
+                }
+                let (s_year, s_month) = s.split_at(4);
+                let year =
+                    s_year.parse::<u16>().map_err(|_| serde::de::Error::custom("Invalid year."))?;
+                let month = s_month
+                    .parse::<u8>()
+                    .map_err(|_| serde::de::Error::custom("Invalid month."))?;
+                if month > 12 {
+                    return Err(serde::de::Error::custom("Month out of range."));
+                }
+                if year < 1000 {
+                    return Err(serde::de::Error::custom("Year out of range."));
+                }
+                let dt = chrono::naive::NaiveDate::from_ymd(i32::from(year), u32::from(month), 1)
+                    .and_hms(0, 0, 0);
+                let timestamp: TimestampMillis =
+                    dt.timestamp_millis().try_into().map_err(|_| {
+                        serde::de::Error::custom("Times before 1970 are not supported.")
+                    })?;
+                Ok(timestamp)
+            };
+
+            while let Some((k, v)) = map.next_entry::<String, serde_json::Value>()? {
+                match k.as_str() {
+                    "identityProvider" => {
+                        idp = Some(serde_json::from_value(v).map_err(|_| {
+                            serde::de::Error::custom("Unsupported identity provider value.")
+                        })?)
+                    }
+                    "createdAt" => {
+                        if let Some(s) = v.as_str() {
+                            ca = Some(parse_date(s)?);
+                        } else {
+                            return Err(serde::de::Error::custom("Unsupported creation format."));
+                        }
+                    }
+                    "validTo" => {
+                        if let Some(s) = v.as_str() {
+                            vt = Some(parse_date(s)?);
+                        } else {
+                            return Err(serde::de::Error::custom("Unsupported valid to format."));
+                        }
+                    }
+                    s => {
+                        match AttributeTag::try_from(s) {
+                            Ok(tag) => match v {
+                                serde_json::Value::String(value_string)
+                                    if value_string.as_bytes().len() <= 31 =>
+                                {
+                                    items.push((tag, value_string.into_bytes()))
+                                }
+                                _ => {
+                                    return Err(serde::de::Error::custom(
+                                        "Invalid attribute value. Attributes must be at most 31 \
+                                         characters in utf8 encoding.",
+                                    ))
+                                }
+                            },
+                            Err(_) => {
+                                // ignore this value otherwise.
+                            }
+                        }
+                    }
+                }
+            }
+            let identity_provider =
+                idp.ok_or_else(|| serde::de::Error::custom("Missing field 'identityProvider'"))?;
+            let created_at =
+                ca.ok_or_else(|| serde::de::Error::custom("Missing field 'createdAt'"))?;
+            let valid_to = vt.ok_or_else(|| serde::de::Error::custom("Missing field 'validTo'"))?;
+            Ok(Policy {
+                identity_provider,
+                created_at,
+                valid_to,
+                items,
+            })
+        }
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("an object representing a policy.")
+        }
+    }
+}
+
 /// Currently defined attributes possible in a policy.
 pub mod attributes {
-    use super::AttributeTag;
+    // NB: These names and values must match the rest of the Concordium ecosystem.
+    use super::{convert, AttributeTag};
     pub const FIRST_NAME: AttributeTag = AttributeTag(0u8);
     pub const LAST_NAME: AttributeTag = AttributeTag(1u8);
     pub const SEX: AttributeTag = AttributeTag(2u8);
@@ -452,6 +566,30 @@ pub mod attributes {
     pub const ID_DOC_EXPIRES_AT: AttributeTag = AttributeTag(10u8);
     pub const NATIONAL_ID_NO: AttributeTag = AttributeTag(11u8);
     pub const TAX_ID_NO: AttributeTag = AttributeTag(12u8);
+
+    // NB: These names must match the rest of the Concordium ecosystem.
+    impl<'a> convert::TryFrom<&'a str> for AttributeTag {
+        type Error = super::ParseError;
+
+        fn try_from(v: &'a str) -> Result<Self, Self::Error> {
+            match v {
+                "firstName" => Ok(FIRST_NAME),
+                "lastName" => Ok(LAST_NAME),
+                "sex" => Ok(SEX),
+                "dob" => Ok(DOB),
+                "countryOfResidence" => Ok(COUNTRY_OF_RESIDENCE),
+                "nationality" => Ok(NATIONALITY),
+                "idDocType" => Ok(ID_DOC_TYPE),
+                "idDocNo" => Ok(ID_DOC_NUMBER),
+                "idDocIssuer" => Ok(ID_DOC_ISSUER),
+                "idDocIssuedAt" => Ok(ID_DOC_ISSUED_AT),
+                "idDocExpiresAt" => Ok(ID_DOC_EXPIRES_AT),
+                "nationalIdNo" => Ok(NATIONAL_ID_NO),
+                "taxIdNo" => Ok(TAX_ID_NO),
+                _ => Err(super::ParseError {}),
+            }
+        }
+    }
 }
 
 /// Zero-sized type to represent an error when reading bytes and deserializing.
