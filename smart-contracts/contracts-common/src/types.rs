@@ -322,19 +322,6 @@ pub struct ContractAddress {
     pub subindex: u64,
 }
 
-/// Chain context accessible to the init methods.
-///
-/// TODO: We could optimize this to be initialized lazily
-#[cfg_attr(
-    feature = "derive-serde",
-    derive(SerdeSerialize, SerdeDeserialize),
-    serde(rename_all = "camelCase")
-)]
-pub struct InitContext {
-    pub metadata:    ChainMetadata,
-    pub init_origin: AccountAddress,
-}
-
 /// Either an address of an account, or contract.
 #[cfg_attr(
     feature = "derive-serde",
@@ -345,23 +332,6 @@ pub struct InitContext {
 pub enum Address {
     Account(AccountAddress),
     Contract(ContractAddress),
-}
-
-/// Chain context accessible to the receive methods.
-///
-/// TODO: We could optimize this to be initialized lazily.
-#[cfg_attr(
-    feature = "derive-serde",
-    derive(SerdeSerialize, SerdeDeserialize),
-    serde(rename_all = "camelCase")
-)]
-pub struct ReceiveContext {
-    pub metadata:     ChainMetadata,
-    pub invoker:      AccountAddress,  //32 bytes
-    pub self_address: ContractAddress, // 16 bytes
-    pub self_balance: Amount,          // 8 bytes
-    pub sender:       Address,         // 9 or 33 bytes
-    pub owner:        AccountAddress,  // 32 bytes
 }
 
 /// Sequential slot number

@@ -264,54 +264,6 @@ impl Deserial for Address {
     }
 }
 
-impl Serial for InitContext {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.metadata.serial(out)?;
-        self.init_origin.serial(out)
-    }
-}
-
-impl Deserial for InitContext {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let metadata = source.get()?;
-        let init_origin = source.get()?;
-        Ok(Self {
-            metadata,
-            init_origin,
-        })
-    }
-}
-
-impl Serial for ReceiveContext {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.metadata.serial(out)?;
-        self.invoker.serial(out)?;
-        self.self_address.serial(out)?;
-        self.self_balance.serial(out)?;
-        self.sender.serial(out)?;
-        self.owner.serial(out)
-    }
-}
-
-impl Deserial for ReceiveContext {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let metadata = source.get()?;
-        let invoker = source.get()?;
-        let self_address = source.get()?;
-        let self_balance = source.get()?;
-        let sender = source.get()?;
-        let owner = source.get()?;
-        Ok(ReceiveContext {
-            metadata,
-            invoker,
-            self_address,
-            self_balance,
-            sender,
-            owner,
-        })
-    }
-}
-
 impl Serial for ChainMetadata {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.slot_number.serial(out)?;
@@ -606,13 +558,6 @@ repeat_macro!(
     32
 );
 
-impl InitContext {
-    pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
-
-    /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
-}
-
 impl Address {
     pub fn matches_account(&self, acc: &AccountAddress) -> bool {
         if let Address::Account(ref my_acc) = self {
@@ -629,25 +574,6 @@ impl Address {
             false
         }
     }
-}
-
-impl ReceiveContext {
-    pub fn sender(&self) -> &Address { &self.sender }
-
-    /// Who invoked this transaction.
-    pub fn invoker(&self) -> &AccountAddress { &self.invoker }
-
-    /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
-
-    /// Who is the owner of this contract.
-    pub fn owner(&self) -> &AccountAddress { &self.owner }
-
-    /// Balance on the smart contract when it was invoked.
-    pub fn self_balance(&self) -> Amount { self.self_balance }
-
-    /// Address of the smart contract.
-    pub fn self_address(&self) -> &ContractAddress { &self.self_address }
 }
 
 impl Serial for AttributeTag {
