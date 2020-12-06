@@ -22,6 +22,10 @@ version = "1.0"
 optional = true
 version = "1.0"
 
+[dependencies.chrono]
+optional = true
+version = "0.4.19"
+
 [dependencies.base58check]
 optional = true
 version = "0.1"
@@ -31,7 +35,7 @@ default = ["std"]
 
 std = []
 
-derive-serde = ["serde", "serde_json", "std", "base58check"]
+derive-serde = ["serde", "serde_json", "std", "base58check", "chrono"]
 
 [lib]
 # Since we don't define an allocator in this crate, we can only produce an rlib
