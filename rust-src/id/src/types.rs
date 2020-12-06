@@ -526,6 +526,9 @@ impl std::str::FromStr for YearMonth {
     type Err = failure::Error;
 
     fn from_str(s: &str) -> Fallible<Self> {
+        if !s.chars().all(|c| c.is_ascii() && c.is_numeric()) {
+            bail!("Unsupported date in format YYYYMM")
+        }
         if s.len() != 6 {
             bail!("Invalid length of YYYYMM.")
         }
