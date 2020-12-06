@@ -344,7 +344,7 @@ fn call_common<C: HasCommon>(
             let write_end = start + length; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
             let end = std::cmp::min(offset + length, host.policy_bytes().len());
-            ensure!(offset <= end, "Attempting to read non-existent parameter.");
+            ensure!(offset <= end, "Attempting to read non-existent policy.");
             let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
             stack.push_value(amt as u32);
         }
