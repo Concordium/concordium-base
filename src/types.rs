@@ -406,11 +406,15 @@ pub struct Policy<Attributes> {
     pub items: Attributes,
 }
 
+/// This implementation of deserialize is only useful when used
+/// to deserialize JSON. Other formats could be implemented in the future.
 #[cfg(feature = "derive-serde")]
-pub fn policy_deserialize<'de, D>(deserializer: D) -> Result<OwnedPolicy, D::Error>
-where
-    D: serde::Deserializer<'de>, {
-    deserializer.deserialize_map(policy_json::OwnedPolicyVisitor)
+impl<'de> SerdeDeserialize<'de> for OwnedPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<OwnedPolicy, D::Error>
+    where
+        D: serde::Deserializer<'de>, {
+        deserializer.deserialize_map(policy_json::OwnedPolicyVisitor)
+    }
 }
 
 #[cfg(feature = "derive-serde")]
@@ -418,7 +422,7 @@ mod policy_json {
     use super::*;
     use convert::{TryFrom, TryInto};
 
-    pub struct OwnedPolicyVisitor;
+    pub(crate) struct OwnedPolicyVisitor;
 
     impl<'de> serde::de::Visitor<'de> for OwnedPolicyVisitor {
         type Value = OwnedPolicy;
