@@ -55,6 +55,10 @@ account invoked this function. An example of this context could be:
         "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
     }
 
+.. seealso::
+
+    For a reference of the context see :ref:`simulate-context`.
+
 
 Simulating updates
 ==================
@@ -98,3 +102,6 @@ An example of this context could be:
         "owner": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
     }
 
+.. seealso::
+
+    For a reference of the context see :ref:`simulate-context`.
