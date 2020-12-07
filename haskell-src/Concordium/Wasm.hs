@@ -149,7 +149,7 @@ data InitContext = InitContext{
   -- |Origin of the transaction; who is initializing the contract.
   initOrigin :: !AccountAddress,
   -- |Policy of the
-  icSenderPolicy :: !SenderPolicy
+  icSenderPolicies :: ![SenderPolicy]
   }
 
 -- |Additional data needed specifically by the receive method of the contract.
@@ -167,7 +167,7 @@ data ReceiveContext = ReceiveContext
   , owner :: !AccountAddress
   -- |Policy exposed to the smart contract. Either the policy of the sender account,
   -- or of the owner of the contract.
-  , rcSenderPolicy :: !SenderPolicy
+  , rcSenderPolicies :: ![SenderPolicy]
   }
 
 data SenderPolicy = SenderPolicy {
@@ -404,7 +404,7 @@ instance Serialize Parameter where
 
 encodeInitContext :: InitContext -> ByteString
 encodeInitContext InitContext{..} =
-  runPut $ put initOrigin <> putSenderPolicy icSenderPolicy
+  runPut $ put initOrigin <> putSenderPolicies icSenderPolicies
 
 -- |Encode into a bytestring, using little endian serialization where
 -- appropriate.
@@ -417,7 +417,18 @@ encodeReceiveContext ReceiveContext{..} = runPut encoder
           putWord64le (_amount selfBalance) <>
           put sender <>
           put owner <>
-          putSenderPolicy rcSenderPolicy
+          putSenderPolicies rcSenderPolicies
+
+-- |Put a list of policies in the format expected by smart contracts.
+-- This is __not__ intended for general use.
+putSenderPolicies :: [SenderPolicy] -> Put
+putSenderPolicies ps = do
+  putWord16le (fromIntegral (length ps))
+  forM_ ps $ \sp ->
+    let policyBytes = runPut $ putSenderPolicy sp
+    -- we put length information for each of the policies so that the consumer
+    -- can in principle skip through them.
+    in putWord16le (fromIntegral (BS.length policyBytes)) <> putByteString policyBytes
 
 putSenderPolicy :: SenderPolicy -> Put
 putSenderPolicy SenderPolicy{spIdentityProvider = IP_ID ipIdentity,..} =
@@ -429,7 +440,7 @@ putSenderPolicy SenderPolicy{spIdentityProvider = IP_ID ipIdentity,..} =
 
 -- |Specialized deserializer for processing FFI data.
 --
--- If we replace update the integration, we should also update this deserializer.
+-- If we update the integration, we should also update this deserializer.
 getSuccessfulResultData :: Get a -> Get (SuccessfulResultData a)
 getSuccessfulResultData messagesDecoder = do
   newState <- get
