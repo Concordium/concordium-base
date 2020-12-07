@@ -338,7 +338,7 @@ fn call_common<C: HasCommon>(
             ensure!(write_end <= memory.len(), "Illegal memory access.");
             let end = std::cmp::min(offset + length, host.policies_bytes().len());
             ensure!(offset <= end, "Attempting to read non-existent policy.");
-            let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
+            let amt = (&mut memory[start..write_end]).write(&host.policies_bytes()[offset..end])?;
             stack.push_value(amt as u32);
         }
         CommonFunc::LogEvent => {
