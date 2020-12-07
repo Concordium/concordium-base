@@ -255,11 +255,8 @@ struct InitHost<'a> {
     state: State,
     /// The parameter to the init method.
     param: &'a [u8],
-    /// Serialized policy of the would be creator, in the same format that
-    /// `OwnedPolicy` would be serialized.
-    policy_bytes: &'a [u8],
     /// The init context for this invocation.
-    init_ctx: &'a InitContext,
+    init_ctx: &'a InitContext<&'a [u8]>,
 }
 
 struct ReceiveHost<'a> {
@@ -274,21 +271,17 @@ struct ReceiveHost<'a> {
     state: State,
     /// The parameter to the init method.
     param: &'a [u8],
-    /// Serialized policy of the immediate sender, in the same format that
-    /// `OwnedPolicy` would be serialized. If the sender is a contract, this is
-    /// the policy of the owner account.
-    policy_bytes: &'a [u8],
     /// Outcomes of the execution, i.e., the actions tree.
     outcomes: Outcome,
     /// The receive context for this call.
-    receive_ctx: &'a ReceiveContext,
+    receive_ctx: &'a ReceiveContext<&'a [u8]>,
 }
 
 pub trait HasCommon {
     fn logs(&mut self) -> &mut Logs;
     fn state(&mut self) -> &mut State;
     fn param(&self) -> &[u8];
-    fn policy_bytes(&self) -> &[u8];
+    fn policies_bytes(&self) -> &[u8];
     fn metadata(&self) -> &ChainMetadata;
 }
 
@@ -301,7 +294,7 @@ impl<'a> HasCommon for InitHost<'a> {
 
     fn metadata(&self) -> &ChainMetadata { &self.init_ctx.metadata }
 
-    fn policy_bytes(&self) -> &[u8] { &self.policy_bytes }
+    fn policies_bytes(&self) -> &[u8] { &self.init_ctx.sender_policies }
 }
 
 impl<'a> HasCommon for ReceiveHost<'a> {
@@ -313,7 +306,7 @@ impl<'a> HasCommon for ReceiveHost<'a> {
 
     fn metadata(&self) -> &ChainMetadata { &self.receive_ctx.metadata }
 
-    fn policy_bytes(&self) -> &[u8] { &self.policy_bytes }
+    fn policies_bytes(&self) -> &[u8] { &self.receive_ctx.sender_policies }
 }
 
 fn call_common<C: HasCommon>(
@@ -343,7 +336,7 @@ fn call_common<C: HasCommon>(
             let start = unsafe { stack.pop_u32() } as usize;
             let write_end = start + length; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
-            let end = std::cmp::min(offset + length, host.policy_bytes().len());
+            let end = std::cmp::min(offset + length, host.policies_bytes().len());
             ensure!(offset <= end, "Attempting to read non-existent policy.");
             let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
             stack.push_value(amt as u32);
@@ -567,15 +560,20 @@ pub type Parameter<'a> = &'a [u8];
 pub type PolicyBytes<'a> = &'a [u8];
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<C: RunnableCode>(
+pub fn invoke_init<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
     artifact: Artifact<ProcessedImports, C>,
     amount: u64,
-    init_ctx: InitContext,
+    init_ctx: InitContext<P>,
     init_name: &str,
     param: Parameter,
     energy: u64,
 ) -> ExecResult<InitResult> {
-    let policy_vec = to_bytes(&init_ctx.sender_policy);
+    let sender_policies_aux = init_ctx.sender_policies.policies_to_bytes();
+    let init_ctx = InitContext {
+        sender_policies: sender_policies_aux.as_ref(),
+        metadata:        init_ctx.metadata,
+        init_origin:     init_ctx.init_origin,
+    };
     let mut host = InitHost {
         energy: Energy {
             energy,
@@ -584,7 +582,6 @@ pub fn invoke_init<C: RunnableCode>(
         logs: Logs::new(),
         state: State::new(None),
         param,
-        policy_bytes: &policy_vec,
         init_ctx: &init_ctx,
     };
 
@@ -614,10 +611,10 @@ pub fn invoke_init<C: RunnableCode>(
 
 /// Invokes an init-function from a given artifact *bytes*
 #[inline]
-pub fn invoke_init_from_artifact(
+pub fn invoke_init_from_artifact<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     artifact_bytes: &[u8],
     amount: u64,
-    init_ctx: InitContext,
+    init_ctx: InitContext<P>,
     init_name: &str,
     parameter: Parameter,
     energy: u64,
@@ -628,10 +625,10 @@ pub fn invoke_init_from_artifact(
 
 /// Invokes an init-function from Wasm module bytes
 #[inline]
-pub fn invoke_init_from_source(
+pub fn invoke_init_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
-    init_ctx: InitContext,
+    init_ctx: InitContext<P>,
     init_name: &str,
     parameter: Parameter,
     energy: u64,
@@ -644,10 +641,10 @@ pub fn invoke_init_from_source(
 /// accounting instructions inserted before the init function is called.
 /// metering.
 #[inline]
-pub fn invoke_init_with_metering_from_source(
+pub fn invoke_init_with_metering_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
-    init_ctx: InitContext,
+    init_ctx: InitContext<P>,
     init_name: &str,
     parameter: Parameter,
     energy: u64,
@@ -657,16 +654,25 @@ pub fn invoke_init_with_metering_from_source(
 }
 
 /// Invokes an receive-function from a given artifact
-pub fn invoke_receive<C: RunnableCode>(
+pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
     artifact: Artifact<ProcessedImports, C>,
     amount: u64,
-    receive_ctx: ReceiveContext,
+    receive_ctx: ReceiveContext<P>,
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
-    let policy_bytes_vec = to_bytes(&receive_ctx.sender_policy);
+    let sender_policies_aux = receive_ctx.sender_policies.policies_to_bytes();
+    let receive_ctx = ReceiveContext {
+        sender_policies: sender_policies_aux.as_ref(),
+        metadata:        receive_ctx.metadata,
+        invoker:         receive_ctx.invoker,
+        self_address:    receive_ctx.self_address,
+        self_balance:    receive_ctx.self_balance,
+        sender:          receive_ctx.sender,
+        owner:           receive_ctx.owner,
+    };
     let mut host = ReceiveHost {
         energy:            Energy {
             energy,
@@ -676,7 +682,6 @@ pub fn invoke_receive<C: RunnableCode>(
         state:             State::new(Some(current_state)),
         param:             &parameter,
         receive_ctx:       &receive_ctx,
-        policy_bytes:      &policy_bytes_vec,
         outcomes:          Outcome::new(),
     };
 
@@ -722,12 +727,38 @@ pub fn invoke_receive<C: RunnableCode>(
     }
 }
 
+/// A helper trait to support invoking contracts when the policy is given as a
+/// byte array, as well asd when it is given in structured form, such as
+/// Vec<OwnedPolicy>.
+pub trait SerialPolicies<R: AsRef<[u8]>> {
+    fn policies_to_bytes(&self) -> R;
+}
+
+impl<'a> SerialPolicies<&'a [u8]> for &'a [u8] {
+    fn policies_to_bytes(&self) -> &'a [u8] { self }
+}
+
+impl SerialPolicies<Vec<u8>> for Vec<OwnedPolicy> {
+    fn policies_to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        let len = self.len() as u16;
+        len.serial(&mut out).expect("Cannot fail writing to vec.");
+        for policy in self.iter() {
+            let bytes = to_bytes(policy);
+            let internal_len = bytes.len() as u16;
+            internal_len.serial(&mut out).expect("Cannot fail writing to vec.");
+            out.extend_from_slice(&bytes);
+        }
+        out
+    }
+}
+
 /// Invokes an receive-function from a given artifact *bytes*
 #[inline]
-pub fn invoke_receive_from_artifact(
+pub fn invoke_receive_from_artifact<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     artifact_bytes: &[u8],
     amount: u64,
-    receive_ctx: ReceiveContext,
+    receive_ctx: ReceiveContext<P>,
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
@@ -739,10 +770,10 @@ pub fn invoke_receive_from_artifact(
 
 /// Invokes an receive-function from Wasm module bytes
 #[inline]
-pub fn invoke_receive_from_source(
+pub fn invoke_receive_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
-    receive_ctx: ReceiveContext,
+    receive_ctx: ReceiveContext<P>,
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
@@ -755,10 +786,10 @@ pub fn invoke_receive_from_source(
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[inline]
-pub fn invoke_receive_with_metering_from_source(
+pub fn invoke_receive_with_metering_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
-    receive_ctx: ReceiveContext,
+    receive_ctx: ReceiveContext<P>,
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,

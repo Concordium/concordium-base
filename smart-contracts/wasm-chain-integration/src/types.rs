@@ -1,6 +1,5 @@
 use crate::*;
 use anyhow::bail;
-use concordium_contracts_common::Write;
 use serde::Deserialize as SerdeDeserialize;
 use wasm_transform::{
     artifact::TryFromImport,
@@ -18,11 +17,10 @@ pub const MAX_EXPORT_NAME_LEN: usize = 100;
 
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InitContext {
-    pub metadata: ChainMetadata,
-    pub init_origin: AccountAddress,
-    #[serde(deserialize_with = "policy_deserialize")]
-    pub sender_policy: OwnedPolicy,
+pub struct InitContext<Policies = Vec<OwnedPolicy>> {
+    pub metadata:        ChainMetadata,
+    pub init_origin:     AccountAddress,
+    pub sender_policies: Policies,
 }
 
 /// Chain context accessible to the receive methods.
@@ -30,25 +28,24 @@ pub struct InitContext {
 /// TODO: We could optimize this to be initialized lazily.
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceiveContext {
-    pub metadata: ChainMetadata,
-    pub invoker: AccountAddress,       //32 bytes
-    pub self_address: ContractAddress, // 16 bytes
-    pub self_balance: Amount,          // 8 bytes
-    pub sender: Address,               // 9 or 33 bytes
-    pub owner: AccountAddress,         // 32 bytes
-    #[serde(deserialize_with = "policy_deserialize")]
-    pub sender_policy: OwnedPolicy,
+pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
+    pub metadata:        ChainMetadata,
+    pub invoker:         AccountAddress,  //32 bytes
+    pub self_address:    ContractAddress, // 16 bytes
+    pub self_balance:    Amount,          // 8 bytes
+    pub sender:          Address,         // 9 or 33 bytes
+    pub owner:           AccountAddress,  // 32 bytes
+    pub sender_policies: Policies,
 }
 
-impl InitContext {
+impl<Policies> InitContext<Policies> {
     pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
 
     /// Get time in milliseconds at the beginning of this block.
     pub fn get_time(&self) -> u64 { self.metadata.slot_time }
 }
 
-impl ReceiveContext {
+impl<Policies> ReceiveContext<Policies> {
     pub fn sender(&self) -> &Address { &self.sender }
 
     /// Who invoked this transaction.
@@ -67,48 +64,18 @@ impl ReceiveContext {
     pub fn self_address(&self) -> &ContractAddress { &self.self_address }
 }
 
-impl Serial for InitContext {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.metadata.serial(out)?;
-        self.init_origin.serial(out)?;
-        self.sender_policy.serial(out)
-    }
-}
-
-impl Deserial for InitContext {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let metadata = source.get()?;
-        let init_origin = source.get()?;
-        let sender_policy = source.get()?;
-        Ok(Self {
-            metadata,
-            init_origin,
-            sender_policy,
-        })
-    }
-}
-
-impl Serial for ReceiveContext {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.metadata.serial(out)?;
-        self.invoker.serial(out)?;
-        self.self_address.serial(out)?;
-        self.self_balance.serial(out)?;
-        self.sender.serial(out)?;
-        self.owner.serial(out)?;
-        self.sender_policy.serial(out)
-    }
-}
-
-impl Deserial for ReceiveContext {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let metadata = source.get()?;
-        let invoker = source.get()?;
-        let self_address = source.get()?;
-        let self_balance = source.get()?;
-        let sender = source.get()?;
-        let owner = source.get()?;
-        let sender_policy = source.get()?;
+pub(crate) fn deserial_receive_context<'a>(
+    source: &'a [u8],
+) -> ParseResult<ReceiveContext<&'a [u8]>> {
+    let mut cursor = Cursor::new(source);
+    let metadata = cursor.get()?;
+    let invoker = cursor.get()?;
+    let self_address = cursor.get()?;
+    let self_balance = cursor.get()?;
+    let sender = cursor.get()?;
+    let owner = cursor.get()?;
+    if cursor.offset <= source.len() {
+        let sender_policies = &source[cursor.offset..];
         Ok(ReceiveContext {
             metadata,
             invoker,
@@ -116,8 +83,26 @@ impl Deserial for ReceiveContext {
             self_balance,
             sender,
             owner,
-            sender_policy,
+            sender_policies,
         })
+    } else {
+        Err(ParseError {})
+    }
+}
+
+pub(crate) fn deserial_init_context<'a>(source: &'a [u8]) -> ParseResult<InitContext<&'a [u8]>> {
+    let mut cursor = Cursor::new(source);
+    let metadata = cursor.get()?;
+    let init_origin = cursor.get()?;
+    if cursor.offset <= source.len() {
+        let sender_policies = &source[cursor.offset..];
+        Ok(InitContext {
+            metadata,
+            init_origin,
+            sender_policies,
+        })
+    } else {
+        Err(ParseError {})
     }
 }
 
@@ -290,16 +275,6 @@ impl ReceiveResult {
             }
         }
     }
-}
-
-pub enum Which<'a> {
-    Init {
-        init_ctx: &'a InitContext,
-    },
-    Receive {
-        receive_ctx:   &'a ReceiveContext,
-        current_state: &'a [u8],
-    },
 }
 
 #[repr(u8)]
