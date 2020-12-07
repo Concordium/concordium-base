@@ -1,7 +1,7 @@
 use crate::{build::*, schema_json::*};
 use anyhow::{bail, ensure, Context};
 use clap::AppSettings;
-use concordium_contracts_common::{from_bytes, to_bytes, Amount};
+use concordium_contracts_common::{from_bytes, to_bytes, Amount, OwnedPolicy};
 use std::{fs, fs::File, io::Read, path::PathBuf};
 use structopt::StructOpt;
 use wasm_chain_integration::*;
@@ -346,10 +346,9 @@ pub fn main() -> anyhow::Result<()> {
                     ref context,
                     ..
                 } => {
-                    let init_ctx = {
-                        let ctx_file =
-                            File::open(context).context("Could not open context file.")?;
-                        serde_json::from_reader(std::io::BufReader::new(ctx_file))
+                    let init_ctx: InitContext = {
+                        let ctx_file = fs::read(context).context("Could not open context file.")?;
+                        serde_json::from_slice(&ctx_file)
                             .context("Could not parse the init context JSON.")?
                     };
                     let name = format!("init_{}", contract_name);
@@ -392,9 +391,9 @@ pub fn main() -> anyhow::Result<()> {
                     ref context,
                     ..
                 } => {
-                    let mut receive_ctx: wasm_chain_integration::ReceiveContext = {
-                        let ctx_file = File::open(context).expect("Could not open context file.");
-                        serde_json::from_reader(std::io::BufReader::new(ctx_file))
+                    let mut receive_ctx: ReceiveContext<Vec<OwnedPolicy>> = {
+                        let ctx_file = fs::read(context).expect("Could not open context file.");
+                        serde_json::from_slice::<ReceiveContext<Vec<OwnedPolicy>>>(&ctx_file)
                             .context("Could not parse receive context")?
                     };
                     if let Some(balance) = balance {

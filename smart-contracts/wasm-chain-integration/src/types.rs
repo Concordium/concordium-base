@@ -14,7 +14,6 @@ pub const MAX_EXPORT_NAME_LEN: usize = 100;
 /// Chain context accessible to the init methods.
 ///
 /// TODO: We could optimize this to be initialized lazily
-
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitContext<Policies = Vec<OwnedPolicy>> {
