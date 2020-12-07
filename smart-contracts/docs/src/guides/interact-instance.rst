@@ -32,32 +32,78 @@ for the transactions.
 Interaction
 ===========
 
-To update an instance with address ``0`` using the parameterless
-``receive``-function ``my_receive`` run the following command:
+To update an instance with address index ``0`` using the parameterless
+``receive``-function ``my_receive`` while allowing up to 1000 energy to be used,
+run the following command:
 
 .. code-block:: console
 
-    concordium-client contract update 0 --func my_receive
+    concordium-client contract update 0 --func my_receive --energy 1000
 
-Passing parameters using JSON
------------------------------
+If successful, the transaction will be shown as successful.
 
-A JSON parameter can be passed if a :ref:`smart contract schema
+.. todo::
+
+   Show output once concordium-client has been updated to show it.
+
+Passing parameters in JSON format
+---------------------------------
+
+A parameter in JSON format can be passed if a :ref:`smart contract schema
 <contract-schema>` is supplied, either as a file or embedded in the module.
+The schema is used to serialize the JSON into binary.
 
 .. seealso::
 
    :ref:`Read more about why and how to use smart contract schemas
    <contract-schema>`.
 
-To update an instance with address ``0`` using the ``receive``-function
-``my_parameter_receive`` with the JSON parameter file ``my_parameter.json``, run
-the following command:
+To update an instance with address index ``0`` using the ``receive``-function
+``my_parameter_receive`` with a parameter file ``my_parameter.json`` in JSON
+format, run the following command:
 
 .. code-block:: console
 
    $concordium-client contract update 0 --func my_parameter_receive \
+            --energy 1000 \
             --parameter-json my_parameter.json
+
+If successful, the transaction will be shown as successful.
+
+.. todo::
+
+   Show output once concordium-client has been updated to show it.
+
+Otherwise, an error describing the problem is displayed.
+
+Common Errors
+^^^^^^^^^^^^^
+
+* Parameter of incorrect type:
+
+  * If the parameter provided in JSON format does not conform to the type
+    specified in the schema, an error message will be displayed. For example:
+
+    .. code-block:: console
+
+       Error: Could not decode parameters from file 'my_parameter.json' as JSON:
+       Expected value of type "UInt64", but got: "hello".
+       In field 'first_field'.
+       In {
+           "first_field": "hello",
+           "second_field": 42
+       }.
+
+* Insufficient energy allowed:
+
+  * If the update requires more energy than the maximum specified with
+    the ``--energy`` parameter, the transaction will fail with the following
+    message:
+
+    .. code-block:: console
+
+       Error: Transaction failed before it got committed. Most likely because it
+       was invalid.
 
 .. note::
 
@@ -69,29 +115,34 @@ the following command:
    GTU can also be transferred to a contract during updates using the
    ``--amount AMOUNT`` parameter.
 
+Passing parameters in binary format
+-----------------------------------
 
+When passing parameters in binary format, a
+:ref:`contract schema <contract-schema>` is not needed.
 
-Passing parameters using binary
--------------------------------
-
-When passing a binary parameter, a :ref:`contract schema <contract-schema>` is
-not needed.
-
-
-To update an instance with address ``0`` using the ``receive``-function
-``my_parameter_receive`` with the binary parameter file ``my_parameter.bin``,
-run the following command:
+To update an instance with address index ``0`` using the ``receive``-function
+``my_parameter_receive`` with a parameter file ``my_parameter.bin`` in binary
+format, run the following command:
 
 .. code-block:: console
 
    $concordium-client contract update 0 --func my_parameter_receive \
+            --energy 1000 \
             --parameter-bin my_parameter.bin
+
+
+If successful, the transaction will be shown as successful.
+
+.. todo::
+
+   Show output once concordium-client has been updated to show it.
 
 .. note::
 
    The parameter passed can be accessed through `parameter_cursor()`_ and
    subsequently deserialized automatically using `get()`_ or manually using
-   `read()`_ (or a similar function from the same Trait).
+   `read()`_ (or a similar function from the same trait).
 
 .. _parameter_cursor():
    https://docs.rs/concordium-std/0.2.0/concordium_std/trait.HasInitContext.html#tymethod.parameter_cursor
