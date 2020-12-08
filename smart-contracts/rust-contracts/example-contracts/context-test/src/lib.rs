@@ -52,11 +52,83 @@ fn contract_init_2(
             } else if &buf[..] != (1..=31).collect::<Vec<_>>().as_slice() {
                 return Ok(6);
             } else if policy.next_item(&mut buf).is_some() {
-                return Ok(4)
+                return Ok(4);
             }
         } else {
             return Ok(7);
         }
+    }
+    Ok(0)
+}
+
+#[init(contract = "context_test_3")]
+// expect an account with 2 policies.
+fn contract_init_3(
+    ctx: &impl HasInitContext,
+    _amount: Amount,
+    _logger: &mut impl HasLogger,
+) -> InitResult<u8> {
+    if ctx.policies().len() != 2 {
+        return Ok(1);
+    }
+    let mut policies = ctx.policies();
+    if let Some(mut policy) = policies.next() {
+        if policy.identity_provider() != 17 {
+            return Ok(2);
+        }
+        if policy.created_at() != policy.valid_to() {
+            return Ok(3);
+        }
+        let mut buf = [0u8; 31];
+        if let Some(p) = policy.next_item(&mut buf) {
+            if p.1 != 31 {
+                return Ok(4);
+            } else if p.0 != attributes::COUNTRY_OF_RESIDENCE {
+                return Ok(5);
+            } else if &buf[..] != (1..=31).collect::<Vec<_>>().as_slice() {
+                return Ok(6);
+            } else if policy.next_item(&mut buf).is_some() {
+                return Ok(7);
+            }
+        } else {
+            return Ok(8);
+        }
+    } else {
+        return Ok(9);
+    }
+    if let Some(mut policy) = policies.next() {
+        if policy.identity_provider() != 25 {
+            return Ok(10);
+        }
+        if policy.created_at() + 10 != policy.valid_to() {
+            return Ok(11);
+        }
+        let mut buf = [0u8; 31];
+        if let Some(p) = policy.next_item(&mut buf) {
+            if p.1 != 31 {
+                return Ok(12);
+            } else if p.0 != attributes::COUNTRY_OF_RESIDENCE {
+                return Ok(13);
+            } else if &buf[..] != (1..=31).collect::<Vec<_>>().as_slice() {
+                return Ok(14);
+            }
+        } else {
+            return Ok(16);
+        }
+        if let Some(p) = policy.next_item(&mut buf) {
+            if p.1 != 13 {
+                return Ok(17);
+            } else if p.0 != attributes::DOB {
+                return Ok(18);
+            } else if &buf[0..13] != vec![17; 13].as_slice() {
+                return Ok(19);
+            }
+        }
+        if policy.next_item(&mut buf).is_some() {
+            return Ok(20);
+        }
+    } else {
+        return Ok(21);
     }
     Ok(0)
 }
@@ -71,20 +143,20 @@ mod tests {
         let mut ctx = InitContextTest::empty();
         let policy = OwnedPolicy {
             identity_provider: 17,
-            created_at: 1,
-            valid_to: 1,
-            items: vec![(attributes::COUNTRY_OF_RESIDENCE, (1..=31).collect::<Vec<_>>())]
+            created_at:        1,
+            valid_to:          1,
+            items:             vec![(
+                attributes::COUNTRY_OF_RESIDENCE,
+                (1..=31).collect::<Vec<_>>(),
+            )],
         };
 
-        ctx.set_policies(vec![TestPolicy::new(policy)]);
+        ctx.push_policy(policy);
         let mut logger = LogRecorder::init();
 
         let out = contract_init_2(&ctx, Amount::from_micro_gtu(0), &mut logger);
 
-        let state = match out {
-            Ok(state) => state,
-            Err(_) => fail!("Contract initialization failed."),
-        };
+        let state = out.expect_report("Contract initialization failed.");
         claim_eq!(state, 0);
     }
 }
