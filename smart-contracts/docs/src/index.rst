@@ -73,6 +73,8 @@ The documentation is split into four categories
 
    references/schema-json
    references/host-fns
+   references/references-on-chain
+   references/local-settings
    Rust contract examples (repo) <https://github.com/Concordium/example-smart-contracts>
    Concordium user documentation <https://developers.concordium.com/testnet/docs>
 

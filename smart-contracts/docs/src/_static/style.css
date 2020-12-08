@@ -7,3 +7,13 @@
     /* Fixes logo is gone, when it is an svg */
     width: 100% !important;
 }
+
+.rst-content div.highlight .gp {
+    /* Adds padding to the right of '$' in code-blocks with terminal commands. */
+    padding-right: 0.5em;
+}
+
+.highlight .hll {
+    /* Increases contrast for highlighted lines in code-blocks. */
+    background-color: #bede7c !important;
+}

@@ -149,6 +149,89 @@ The same is necessary for parameters for ``init`` and ``receive``-functions.
     Strictly speaking we only need to deserialize bytes to our parameter type,
     but it is convenient to be able to serialize types when writing unit tests.
 
+.. _working-with-parameters:
+
+Working with parameters
+-----------------------
+
+Parameters for the ``init``- and ``receive``-functions are, like the instance
+state, represented as byte arrays.
+While the byte arrays can be used directly, they can also be deserialized into
+structured data.
+
+The simplest way to deserialize a parameter is through `get()`_-method from
+the `Get`_ trait.
+
+As an example, see the following contract in which the parameter
+``ReceiveParameter`` is deserialized on the highlighted line:
+
+.. code-block:: rust
+   :emphasize-lines: 27
+
+   use concordium_std::*;
+
+   type State = u32;
+
+   #[derive(Serialize)]
+   struct ReceiveParameter{
+       should_add: bool,
+       value: u32,
+   }
+
+   fn init<I: HasInitContext<()>, L: HasLogger>(
+       _ctx: &I,
+       _amount: Amount,
+       _logger: &mut L,
+   ) -> InitResult<State> {
+       let initial_state = 0;
+       Ok(initial_state)
+   }
+
+   #[receive(contract = "parameter_example", name = "receive")]
+   fn receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+       ctx: &R,
+       _amount: Amount,
+       _logger: &mut L,
+       state: &mut State,
+   ) -> ReceiveResult<A> {
+       let parameter: ReceiveParameter = ctx.parameter_cursor().get()?;
+       if parameter.should_add {
+           *state += parameter.value;
+       }
+       Ok(A::accept())
+   }
+
+The ``receive``-function above is inefficient in that it deserializes the
+``value`` even when it is not needed, i.e., when ``should_add`` is ``false``.
+
+To get more control, and in this case, more efficiency, we can deserialize the
+parameter using the `Read`_ trait:
+
+.. code-block:: rust
+   :emphasize-lines: 9, 12
+
+   #[receive(contract = "parameter_example", name = "receive_optimized")]
+   fn receive_optimized<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+       ctx: &R,
+       _amount: Amount,
+       __logger: &mut L,
+       state: &mut State,
+   ) -> ReceiveResult<A> {
+      let mut cursor = ctx.parameter_cursor();
+      let should_add: bool = cursor.read_u8()? != 0;
+        if should_add {
+           // Only decode the value if it is needed.
+           let value: u32 = cursor.read_u32()?;
+           *state += value;
+       }
+       Ok(A::accept())
+   }
+
+Notice that the ``value`` value is only deserialized if ``should_add`` is
+``true``.
+While the gain in efficiency is minimal in this example, it could have an
+substantial impact for certain kinds of smart contracts.
+
 
 Building a smart contract module with ``cargo-concordium``
 ==========================================================
@@ -198,3 +281,6 @@ Move heavy calculations off-chain
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _AssemblyScript: https://github.com/AssemblyScript
+.. _get(): https://docs.rs/concordium-std/latest/concordium_std/trait.Get.html#tymethod.get
+.. _Get: https://docs.rs/concordium-std/latest/concordium_std/trait.Get.html
+.. _Read: https://docs.rs/concordium-std/latest/concordium_std/trait.Read.html
