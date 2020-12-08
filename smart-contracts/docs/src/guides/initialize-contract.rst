@@ -167,11 +167,10 @@ If successful, the output should be similar to the following:
 
    Contract successfully initialized with address: {"index":0,"subindex":0}
 
-.. note::
+.. seealso::
 
-   The parameter passed can be accessed through `parameter_cursor()`_ and
-   subsequently deserialized automatically using `get()`_ or manually using
-   `read()`_ (or a similar function from the same trait).
+   For information on how to work with parameters in smart contracts, see
+   :ref:`working-with-parameters`.
 
 .. _naming-an-instance:
 
