@@ -32,9 +32,10 @@ unsafe extern "C" fn call_init(
     let res = std::panic::catch_unwind(|| {
         let wasm = slice_from_c_bytes!(artifact_bytes, artifact_bytes_len as usize);
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
-        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize).to_vec();
-        let init_ctx = from_bytes(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len as usize))
-            .expect("Precondition violation: invalid init ctx given by host.");
+        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let init_ctx =
+            deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len as usize))
+                .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res =
@@ -74,12 +75,14 @@ unsafe extern "C" fn call_receive(
 ) -> *mut u8 {
     let res = std::panic::catch_unwind(|| {
         let wasm = slice_from_c_bytes!(artifact_bytes, artifact_bytes_len as usize);
-        let receive_ctx =
-            from_bytes(slice_from_c_bytes!(receive_ctx_bytes, receive_ctx_bytes_len as usize))
-                .expect("Precondition violation: Should be given a valid receive context.");
+        let receive_ctx = deserial_receive_context(slice_from_c_bytes!(
+            receive_ctx_bytes,
+            receive_ctx_bytes_len as usize
+        ))
+        .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
         let state = slice_from_c_bytes!(state_bytes, state_bytes_len as usize);
-        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize).to_vec();
+        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive_from_artifact(
