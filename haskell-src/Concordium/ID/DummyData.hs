@@ -10,6 +10,8 @@ import Concordium.ID.Types as ID
 import Concordium.ID.Parameters
 import Concordium.Crypto.FFIDataTypes
 import qualified Data.Aeson as AE
+import qualified Data.FixedByteString as FBS
+import qualified Data.ByteString as BS
 import qualified Concordium.Crypto.SignatureScheme as SigScheme
 
 -- Derive a dummy registration id from an account address. This hashes the
@@ -34,7 +36,7 @@ globalContext = dummyGlobalContext
 -- will neither be serialized, nor inspected.
 {-# WARNING dummyCredential "Invalid credential, only for testing." #-}
 dummyCredential :: AccountAddress -> SigScheme.VerifyKey -> ID.CredentialValidTo -> ID.CredentialCreatedAt -> ID.AccountCredential
-dummyCredential addr key pValidTo pCreatedAt = ID.NormalAC $ ID.CredentialDeploymentValues
+dummyCredential addr key pValidTo pCreatedAt = ID.NormalAC (ID.CredentialDeploymentValues
     {
       cdvAccount = ID.NewAccount [key] 1,
       cdvRegId = dummyRegId addr,
@@ -46,7 +48,20 @@ dummyCredential addr key pValidTo pCreatedAt = ID.NormalAC $ ID.CredentialDeploy
         ..
         },
       ..
+    }) $
+    ID.CredentialDeploymentCommitments
+    {
+      cmmPrf = dummyCommitment,
+      cmmCredCounter = dummyCommitment,
+      cmmMaxAccounts = dummyCommitment,
+      cmmAttributes = OrdMap.empty,
+      cmmIdCredSecSharingCoeff = []
     }
+
+{-# WARNING dummyCommitment "Commitment with 0 inside, only for testing." #-}
+-- | This is a commitment to 0 with randomness 0.
+dummyCommitment :: ID.Commitment
+dummyCommitment = Commitment (FBS.fromByteString (BS.pack [192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
 
 {-# WARNING dummyMaxValidTo "Invalid validTo, only for testing." #-}
 dummyMaxValidTo :: ID.YearMonth
@@ -62,7 +77,7 @@ dummyCreatedAt = YearMonth 2020 3
 
 {-# WARNING readCredential "Do not use in production." #-}
 readCredential :: BSL.ByteString -> ID.CredentialDeploymentInformation
-readCredential bs = 
+readCredential bs =
   case AE.eitherDecode bs of
     Left err -> error $ "Cannot read credential because " ++ err
     Right d -> if vVersion d == 0 then vValue d else error "Incorrect credential version."
