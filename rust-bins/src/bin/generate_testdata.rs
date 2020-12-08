@@ -283,6 +283,20 @@ fn main() {
 
         // We also output a versioned CDI in JSON and binary, to test compatiblity with
         // the haskell serialization
+
+        let cdi_coms_file = File::create("cdi-coms.bin");
+        if let Err(err) = cdi_coms_file
+            .unwrap()
+            .write_all(&to_bytes(&cdi_1.proofs.commitments))
+        {
+            eprintln!(
+                "Could not output binary file cdi-coms.bin, because {}.",
+                err
+            );
+        } else {
+            println!("Output binary file cdi-coms.bin.");
+        }
+
         let ver_cdi_1 = Versioned::new(VERSION_0, cdi_1);
         if let Err(err) = write_json_to_file("cdi.json", &ver_cdi_1) {
             eprintln!("Could not output JSON file cdi.json, because {}.", err);
