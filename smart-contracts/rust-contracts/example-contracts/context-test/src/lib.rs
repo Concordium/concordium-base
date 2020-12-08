@@ -51,10 +51,40 @@ fn contract_init_2(
                 return Ok(5);
             } else if &buf[..] != (1..=31).collect::<Vec<_>>().as_slice() {
                 return Ok(6);
+            } else if policy.next_item(&mut buf).is_some() {
+                return Ok(4)
             }
         } else {
             return Ok(7);
         }
     }
     Ok(0)
+}
+
+#[concordium_cfg_test]
+mod tests {
+    use super::*;
+    use concordium_std::test_infrastructure::*;
+
+    #[concordium_test]
+    fn test_init_2_success() {
+        let mut ctx = InitContextTest::empty();
+        let policy = OwnedPolicy {
+            identity_provider: 17,
+            created_at: 1,
+            valid_to: 1,
+            items: vec![(attributes::COUNTRY_OF_RESIDENCE, (1..=31).collect::<Vec<_>>())]
+        };
+
+        ctx.set_policies(vec![TestPolicy::new(policy)]);
+        let mut logger = LogRecorder::init();
+
+        let out = contract_init_2(&ctx, Amount::from_micro_gtu(0), &mut logger);
+
+        let state = match out {
+            Ok(state) => state,
+            Err(_) => fail!("Contract initialization failed."),
+        };
+        claim_eq!(state, 0);
+    }
 }
