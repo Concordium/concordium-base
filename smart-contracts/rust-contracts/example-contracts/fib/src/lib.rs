@@ -9,11 +9,7 @@ pub struct State {
 
 #[init(contract = "fib")]
 #[inline(always)]
-fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    _ctx: &I,
-    _amount: Amount,
-    _logger: &mut L,
-) -> InitResult<State> {
+fn contract_init(_ctx: &impl HasInitContext<()>) -> InitResult<State> {
     let state = State {
         result: 0,
     };
@@ -23,12 +19,10 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 // Add the the nth Fibonacci number F(n) to this contract's state.
 // This is achieved by recursively sending messages to this receive method,
 // corresponding to the recursive evaluation F(n) = F(n-1) + F(n-2) (for n>1).
-#[receive(contract = "fib", name = "receive")]
 #[inline(always)]
-fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
-    ctx: &R,
-    _amount: Amount,
-    _logger: &mut L,
+#[receive(contract = "fib", name = "receive")]
+fn contract_receive<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     state: &mut State,
 ) -> ReceiveResult<A> {
     // Try to get the parameter (64bit unsigned integer).
@@ -46,12 +40,11 @@ fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
 
 // Calculates the nth Fibonacci number where n is the given amount and sets the
 // state to that number.
-#[receive(contract = "fib", name = "receive_calc_fib")]
 #[inline(always)]
-fn contract_receive_calc_fib<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
-    _ctx: &R,
+#[receive(contract = "fib", name = "receive_calc_fib", payable)]
+fn contract_receive_calc_fib<A: HasActions>(
+    _ctx: &impl HasReceiveContext<()>,
     amount: Amount,
-    _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
     state.result = fib(amount.micro_gtu);
