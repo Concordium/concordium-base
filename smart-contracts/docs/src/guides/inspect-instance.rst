@@ -50,8 +50,8 @@ The output should be similar to the following:
 
 .. seealso::
 
-   For more information about indexes and subindexes for instance addresses
-   see :ref:`references-and-addresses`.
+   For more information about contract instance addresses, see
+   :ref:`references-on-chain`.
 
 The level of detail of an inspection depends on whether the ``show`` command has
 access to a :ref:`contract schema <contract-schema>`.

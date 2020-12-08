@@ -50,6 +50,8 @@ instances.
    For a guide on how to initialize smart contracts from a deployed module see
    :ref:`initialize-contract`.
 
+   For more information about module references, see :ref:`references-on-chain`.
+
 .. _naming-a-module:
 
 Naming a module

@@ -70,6 +70,11 @@ format, run the following command:
 
 If successful, the transaction will be shown as successful.
 
+.. seealso::
+
+   For more information about contract instance addresses, see
+   :ref:`references-on-chain`.
+
 .. todo::
 
    Show output once concordium-client has been updated to show it.

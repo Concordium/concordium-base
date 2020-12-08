@@ -55,10 +55,13 @@ If successful, the output should be similar to the following:
 Seeing this message means that a new on-chain contract instance has been created
 with the address shown.
 
-.. note::
+.. seealso::
 
-   Using module references directly can be inconvenient so :ref:`adding local names
-   to them is recommended <naming-a-module>`.
+   For more information about module references and instance addresses,
+   see :ref:`references-on-chain`.
+
+   Using module references directly can be inconvenient; to name them, see
+   :ref:`naming-a-module`.
 
 .. _init-passing-parameter-json:
 
@@ -221,8 +224,8 @@ If successful, the output should be similar to the following:
 
 .. seealso::
 
-   For more information about indexes and subindexes for instance addresses
-   see :ref:`references-and-addresses`.
+   For more information about contract instance addresses, see
+   :ref:`references-on-chain`.
 
 .. _parameter_cursor():
    https://docs.rs/concordium-std/0.2.0/concordium_std/trait.HasInitContext.html#tymethod.parameter_cursor
