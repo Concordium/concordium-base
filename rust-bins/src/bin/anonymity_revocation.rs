@@ -80,12 +80,8 @@ struct Combine {
 
 #[derive(StructOpt)]
 struct ComputeRegIds {
-    #[structopt(
-        long = "max-account",
-        help = "Integer specifying the maximal account number that could have been used.",
-        default_value = "255"
-    )]
-    max_account: u8,
+    #[structopt(long = "ar-record", help = "The anonymity revocation record.")]
+    ar_record: PathBuf,
     #[structopt(long = "prf-key", help = "File containing the PRF key.")]
     prf_key: PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
@@ -164,19 +160,41 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        CombinePrf(cmb) => handle_combine_prf(cmb),
-        ComputeRegIds(rid) => handle_compute_regids(rid),
+        CombinePrf(cmb) => {
+            if let Err(e) = handle_combine_prf(cmb) {
+                eprintln!("{}", e)
+            }
+        }
+        ComputeRegIds(rid) => {
+            if let Err(e) = handle_compute_regids(rid) {
+                eprintln!("{}", e)
+            }
+        }
     }
 }
 
-fn handle_compute_regids(rid: ComputeRegIds) {
+macro_rules! succeed_or_die {
+    ($e:expr, $match:ident => $s:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err($match) => return Err(format!($s, $match)),
+        }
+    };
+    ($e:expr, $s:expr) => {
+        match $e {
+            Some(x) => x,
+            None => return Err($s.to_owned()),
+        }
+    };
+}
+
+fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
     let prf_wrapper: PrfWrapper<ExampleCurve> = {
         let file_name = rid.prf_key;
         match read_json_from_file(file_name) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Could not read credential because {}", e);
-                return;
+                return Err(format!("Could not read prf key due to {}", e));
             }
         }
     };
@@ -185,18 +203,20 @@ fn handle_compute_regids(rid: ComputeRegIds) {
         match read_json_from_file(file_name) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Could not read global context because {}", e);
-                return;
+                return Err(format!("Could not read global context because {}", e));
             }
         }
     };
     if global_context.version != VERSION_0 {
-        eprintln!("The version of the GlobalContext should be 0");
-        return;
+        return Err("The version of the GlobalContext should be 0".to_owned());
     }
     let global_context = global_context.value;
+    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(rid.ar_record), e => "Could not read ArRecord due to {}");
 
-    let max_account: u8 = rid.max_account;
+    if ar_record.version != VERSION_0 {
+        return Err("The version of the ArRecord should be 0.".to_owned());
+    }
+    let max_account: u8 = ar_record.value.max_accounts;
     let g = global_context.on_chain_commitment_key.g;
     let prf_key: prf::SecretKey<_> = prf_wrapper.prf_key;
 
@@ -232,22 +252,10 @@ fn handle_compute_regids(rid: ComputeRegIds) {
                 output_json(&regids);
             }
         }
+    } else {
+        output_json(&regids);
     }
-}
-
-macro_rules! succeed_or_die {
-    ($e:expr, $match:ident => $s:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err($match) => return Err(format!($s, $match)),
-        }
-    };
-    ($e:expr, $s:expr) => {
-        match $e {
-            Some(x) => x,
-            None => return Err($s.to_owned()),
-        }
-    };
+    Ok(())
 }
 
 /// Decrypt encIdCredPubShare
@@ -280,7 +288,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
     };
     if let Some(json_file) = dcr.out {
         match write_json_to_file(&json_file, &share) {
-            Ok(_) => eprintln!("Wrote decryption to {}", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote decryption to {}", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not write JSON to file due to {}", e);
                 output_json(&share);
@@ -327,7 +335,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
     };
     if let Some(json_file) = dcr.out {
         match write_json_to_file(&json_file, &share) {
-            Ok(_) => eprintln!("Wrote decryption to {}.", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote decryption to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not write JSON to file because {}", e);
                 output_json(&share);
@@ -411,7 +419,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
     if let Some(json_file) = cmb.out {
         let json = json!({ "idCredPub": id_cred_pub_string });
         match write_json_to_file(&json_file, &json) {
-            Ok(_) => eprintln!("Wrote idCredPub to {}.", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote idCredPub to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
                 output_json(&json);
@@ -421,22 +429,18 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
     Ok(())
 }
 
-fn handle_combine_prf(cmb: CombinePrf) {
-    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = {
-        let file_name = cmb.credential;
-        match read_json_from_file(file_name) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Could not read credential because {}", e);
-                return;
-            }
-        }
-    };
+fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
+    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential from provided file because {}");
+
     if credential.version != VERSION_0 {
-        eprintln!("The version should be 0");
-        return;
+        return Err("The version of the credential should be 0".to_owned());
     }
-    let credential = credential.value;
+    let credential = match credential.value {
+        AccountCredentialValues::Initial { .. } => {
+            return Err("Cannot use the initial account credential.".to_owned())
+        }
+        AccountCredentialValues::Normal { cdi } => cdi,
+    };
     let revocation_threshold = credential.threshold;
 
     let shares_values: Vec<_> = cmb.shares;
@@ -445,11 +449,10 @@ fn handle_combine_prf(cmb: CombinePrf) {
     let number_of_ars =
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
-        eprintln!(
+        return Err(format!(
             "Insufficient number of anonymity revokers ({}). Threshold is {}.",
             number_of_ars, revocation_threshold
-        );
-        return;
+        ));
     }
 
     let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ExampleCurve>> =
@@ -460,12 +463,11 @@ fn handle_combine_prf(cmb: CombinePrf) {
     for share_value in shares_values.iter() {
         match read_json_from_file(&share_value) {
             Err(y) => {
-                eprintln!(
+                return Err(format!(
                     "Could not read from ar file {}, error: {}",
                     share_value.to_string_lossy(),
                     y
-                );
-                return;
+                ));
             }
             Ok(val) => ar_decrypted_data_vec.push(val),
         }
@@ -481,10 +483,10 @@ fn handle_combine_prf(cmb: CombinePrf) {
     ar_identities.sort();
     ar_identities.dedup();
     if ar_identities.len() < shares.len() {
-        println!(
-            "No duplicates among the anonymity revokers identities nor share numbers are allowed"
+        return Err(
+            "No duplicates among the anonymity revokers identities nor share numbers are allowed."
+                .to_owned(),
         );
-        return;
     }
 
     let prf_key = reveal_prf_key(&shares);
@@ -501,4 +503,5 @@ fn handle_combine_prf(cmb: CombinePrf) {
             }
         }
     }
+    Ok(())
 }

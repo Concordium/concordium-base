@@ -80,7 +80,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IPContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
-    initial_account: &impl InitialAccountDataTrait,
+    initial_account: &impl InitialAccountDataWithSigning,
 ) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
 

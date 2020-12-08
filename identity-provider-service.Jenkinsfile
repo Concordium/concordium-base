@@ -26,7 +26,7 @@ pipeline {
                         returnStdout: true
                     ).trim()
                 }
-                sshagent(credentials: ['6a7625a8-34f4-4c39-b0be-ed5b49aabc16']) {
+                sshagent(credentials: ['jenkins-gitlab-ssh']) {
                     sh """\
                            docker build -t 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/identity-provider-service:$VERSION_TAG \
                              -f scripts/identity-provider-service.Dockerfile --ssh default --build-arg GENESIS_REF="${params.GENESIS_REF}" . --no-cache

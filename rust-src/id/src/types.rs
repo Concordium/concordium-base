@@ -526,6 +526,9 @@ impl std::str::FromStr for YearMonth {
     type Err = failure::Error;
 
     fn from_str(s: &str) -> Fallible<Self> {
+        if !s.chars().all(|c| c.is_ascii() && c.is_numeric()) {
+            bail!("Unsupported date in format YYYYMM")
+        }
         if s.len() != 6 {
             bail!("Invalid length of YYYYMM.")
         }
@@ -1649,6 +1652,9 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
 pub trait InitialAccountDataTrait {
     fn get_threshold(&self) -> SignatureThreshold;
     fn get_public_keys(&self) -> Vec<VerifyKey>;
+}
+
+pub trait InitialAccountDataWithSigning: InitialAccountDataTrait {
     fn sign_public_information_for_ip<C: Curve>(&self, info:  &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
@@ -1704,8 +1710,9 @@ impl InitialAccountDataTrait for InitialAccountData {
             .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
             .collect::<Vec<_>>();
     }
+}
 
-
+impl InitialAccountDataWithSigning for InitialAccountData {
     fn sign_public_information_for_ip<C: Curve>(&self, pub_info_for_ip: &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
         let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
         return self
