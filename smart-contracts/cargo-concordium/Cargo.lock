@@ -194,7 +194,7 @@ dependencies = [
 [[package]]
 name = "concordium-contracts-common"
 version = "0.2.0"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=expose-policy#b7c8d42af5985f9c218a67a2673afd53b15d5f49"
+source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#74cfdaf793ad31c7e09402324e1ad8cb38f00120"
 dependencies = [
  "base58check",
  "chrono",
@@ -754,9 +754,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.53"
+version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8833e20724c24de12bbaba5ad230ea61c3eafb05b881c7c9d3cfe8638b187e68"
+checksum = "9a2af957a63d6bd42255c359c93d9bfdb97076bd3b820897ce55ffbfbf107f44"
 dependencies = [
  "proc-macro2",
  "quote",
