@@ -35,7 +35,7 @@ source = "git+https://github.com/Concordium/concordium-contracts-common.git?bran
 [[package]]
 name = "concordium-std"
 version = "0.2.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=expose-policy#626db00e2000e7de626c28d1f452935b8d33b9f7"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=expose-policy#9f5b54973241fb1615410d9de022de378a46e2b0"
 dependencies = [
  "concordium-contracts-common",
  "concordium-std-derive",
@@ -45,7 +45,7 @@ dependencies = [
 [[package]]
 name = "concordium-std-derive"
 version = "0.3.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=expose-policy#626db00e2000e7de626c28d1f452935b8d33b9f7"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=expose-policy#9f5b54973241fb1615410d9de022de378a46e2b0"
 dependencies = [
  "proc-macro2",
  "quote",
