@@ -81,9 +81,9 @@ Testing stubs for the function arguments can be found in a submodule of
 Running tests in Wasm
 ======================
 
-Compiling the tests to machine code is sufficient for most cases, but it is also
-possible to compile the tests to Wasm and run them using the exact intepreter
-that is used by the nodes.
+Compiling the tests to native machine code is sufficient for most cases, but it
+is also possible to compile the tests to Wasm and run them using the exact
+interpreter that is used by the nodes.
 This makes the test environment closer to the run environment on chain and could
 in some cases catch more bugs.
 
@@ -93,13 +93,6 @@ uses the same Wasm interpreter as the one shipped in the Concordium nodes.
 .. seealso::
 
     For a guide of how to install ``cargo-concordium`` see :ref:`setup-tools`.
-
-First we need to add a ``wasm-test`` feature to the ``Cargo.toml``::
-
-    ...
-    [features]
-    wasm-test = []
-    ...
 
 The unit test have to be annotated with ``#[concordium_test]`` instead of
 ``#[test]`` and we use ``#[concordium_cfg_test]`` instead of ``#[cfg(test)]``:
@@ -120,20 +113,20 @@ The unit test have to be annotated with ``#[concordium_test]`` instead of
     }
 
 The ``#[concordium_test]`` macro sets up our tests to be run in Wasm, when
-compiled with the ``wasm-test`` feature, and otherwise falls back to behave just
-like ``#[test]``, meaning it is still possible to run unit tests targeting
-native code using ``cargo test``.
+``concordium-std`` is compiled with the ``wasm-test`` feature, and otherwise
+falls back to behave just like ``#[test]``, meaning it is still possible to run
+unit tests targeting native code using ``cargo test``.
 
-The macro ``#[concordium_cfg_test]`` is just an alias for ``#[cfg(any(test,
-feature="wasm-test))]``, allowing us to control when to include tests in the
-build.
+Similarly the macro ``#[concordium_cfg_test]`` includes our module when build
+``concordium-std`` with ``wasm-test`` otherwise behaves like ``#[test]``,
+allowing us to control when to include tests in the build.
 
 Tests can now be build and run using::
 
     cargo concordium test
 
-Which compiles the tests for Wasm with the ``wasm-test`` feature enabled and
-uses the test runner from ``cargo-concordium``.
+Which compiles the tests for Wasm with the ``wasm-test`` feature enabled for
+``concordium-std`` and uses the test runner from ``cargo-concordium``.
 
 .. warning::
 

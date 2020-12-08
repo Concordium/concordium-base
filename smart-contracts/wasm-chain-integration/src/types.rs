@@ -1,5 +1,6 @@
 use crate::*;
 use anyhow::bail;
+use serde::Deserialize as SerdeDeserialize;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
@@ -9,6 +10,100 @@ use wasm_transform::{
 
 /// Maximum length, in bytes, of an export function name.
 pub const MAX_EXPORT_NAME_LEN: usize = 100;
+
+/// Chain context accessible to the init methods.
+///
+/// TODO: We could optimize this to be initialized lazily
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitContext<Policies = Vec<OwnedPolicy>> {
+    pub metadata:        ChainMetadata,
+    pub init_origin:     AccountAddress,
+    pub sender_policies: Policies,
+}
+
+/// Chain context accessible to the receive methods.
+///
+/// TODO: We could optimize this to be initialized lazily.
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
+    pub metadata:        ChainMetadata,
+    pub invoker:         AccountAddress,  //32 bytes
+    pub self_address:    ContractAddress, // 16 bytes
+    pub self_balance:    Amount,          // 8 bytes
+    pub sender:          Address,         // 9 or 33 bytes
+    pub owner:           AccountAddress,  // 32 bytes
+    pub sender_policies: Policies,
+}
+
+impl<Policies> InitContext<Policies> {
+    pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
+
+    /// Get time in milliseconds at the beginning of this block.
+    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
+}
+
+impl<Policies> ReceiveContext<Policies> {
+    pub fn sender(&self) -> &Address { &self.sender }
+
+    /// Who invoked this transaction.
+    pub fn invoker(&self) -> &AccountAddress { &self.invoker }
+
+    /// Get time in milliseconds at the beginning of this block.
+    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
+
+    /// Who is the owner of this contract.
+    pub fn owner(&self) -> &AccountAddress { &self.owner }
+
+    /// Balance on the smart contract when it was invoked.
+    pub fn self_balance(&self) -> Amount { self.self_balance }
+
+    /// Address of the smart contract.
+    pub fn self_address(&self) -> &ContractAddress { &self.self_address }
+}
+
+pub(crate) fn deserial_receive_context<'a>(
+    source: &'a [u8],
+) -> ParseResult<ReceiveContext<&'a [u8]>> {
+    let mut cursor = Cursor::new(source);
+    let metadata = cursor.get()?;
+    let invoker = cursor.get()?;
+    let self_address = cursor.get()?;
+    let self_balance = cursor.get()?;
+    let sender = cursor.get()?;
+    let owner = cursor.get()?;
+    if cursor.offset <= source.len() {
+        let sender_policies = &source[cursor.offset..];
+        Ok(ReceiveContext {
+            metadata,
+            invoker,
+            self_address,
+            self_balance,
+            sender,
+            owner,
+            sender_policies,
+        })
+    } else {
+        Err(ParseError {})
+    }
+}
+
+pub(crate) fn deserial_init_context<'a>(source: &'a [u8]) -> ParseResult<InitContext<&'a [u8]>> {
+    let mut cursor = Cursor::new(source);
+    let metadata = cursor.get()?;
+    let init_origin = cursor.get()?;
+    if cursor.offset <= source.len() {
+        let sender_policies = &source[cursor.offset..];
+        Ok(InitContext {
+            metadata,
+            init_origin,
+            sender_policies,
+        })
+    } else {
+        Err(ParseError {})
+    }
+}
 
 pub enum InitResult {
     Success {
@@ -181,21 +276,12 @@ impl ReceiveResult {
     }
 }
 
-pub enum Which<'a> {
-    Init {
-        init_ctx: &'a InitContext,
-    },
-    Receive {
-        receive_ctx:   &'a ReceiveContext,
-        current_state: &'a [u8],
-    },
-}
-
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
+    GetPolicySection,
     LogEvent,
     LoadState,
     WriteState,
@@ -257,26 +343,27 @@ impl<'a> Parseable<'a> for ImportFunc {
             3 => Ok(ImportFunc::ChargeMemoryAlloc),
             4 => Ok(ImportFunc::Common(CommonFunc::GetParameterSize)),
             5 => Ok(ImportFunc::Common(CommonFunc::GetParameterSection)),
-            6 => Ok(ImportFunc::Common(CommonFunc::LogEvent)),
-            7 => Ok(ImportFunc::Common(CommonFunc::LoadState)),
-            8 => Ok(ImportFunc::Common(CommonFunc::WriteState)),
-            9 => Ok(ImportFunc::Common(CommonFunc::ResizeState)),
-            10 => Ok(ImportFunc::Common(CommonFunc::StateSize)),
-            11 => Ok(ImportFunc::Common(CommonFunc::GetSlotNumber)),
-            12 => Ok(ImportFunc::Common(CommonFunc::GetSlotTime)),
-            13 => Ok(ImportFunc::Common(CommonFunc::GetBlockHeight)),
-            14 => Ok(ImportFunc::Common(CommonFunc::GetFinalizedHeight)),
-            15 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
-            16 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Accept)),
-            17 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::SimpleTransfer)),
-            18 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Send)),
-            19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd)),
-            20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr)),
-            21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
-            22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
-            23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
-            24 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
-            25 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
+            6 => Ok(ImportFunc::Common(CommonFunc::GetPolicySection)),
+            7 => Ok(ImportFunc::Common(CommonFunc::LogEvent)),
+            8 => Ok(ImportFunc::Common(CommonFunc::LoadState)),
+            9 => Ok(ImportFunc::Common(CommonFunc::WriteState)),
+            10 => Ok(ImportFunc::Common(CommonFunc::ResizeState)),
+            11 => Ok(ImportFunc::Common(CommonFunc::StateSize)),
+            12 => Ok(ImportFunc::Common(CommonFunc::GetSlotNumber)),
+            13 => Ok(ImportFunc::Common(CommonFunc::GetSlotTime)),
+            14 => Ok(ImportFunc::Common(CommonFunc::GetBlockHeight)),
+            15 => Ok(ImportFunc::Common(CommonFunc::GetFinalizedHeight)),
+            16 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
+            17 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Accept)),
+            18 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::SimpleTransfer)),
+            19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Send)),
+            20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd)),
+            21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr)),
+            22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
+            23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
+            24 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
+            25 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
+            26 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
@@ -292,30 +379,31 @@ impl Output for ImportFunc {
             ImportFunc::Common(c) => match c {
                 CommonFunc::GetParameterSize => 4,
                 CommonFunc::GetParameterSection => 5,
-                CommonFunc::LogEvent => 6,
-                CommonFunc::LoadState => 7,
-                CommonFunc::WriteState => 8,
-                CommonFunc::ResizeState => 9,
-                CommonFunc::StateSize => 10,
-                CommonFunc::GetSlotNumber => 11,
-                CommonFunc::GetSlotTime => 12,
-                CommonFunc::GetBlockHeight => 13,
-                CommonFunc::GetFinalizedHeight => 14,
+                CommonFunc::GetPolicySection => 6,
+                CommonFunc::LogEvent => 7,
+                CommonFunc::LoadState => 8,
+                CommonFunc::WriteState => 9,
+                CommonFunc::ResizeState => 10,
+                CommonFunc::StateSize => 11,
+                CommonFunc::GetSlotNumber => 12,
+                CommonFunc::GetSlotTime => 13,
+                CommonFunc::GetBlockHeight => 14,
+                CommonFunc::GetFinalizedHeight => 15,
             },
             ImportFunc::InitOnly(io) => match io {
-                InitOnlyFunc::GetInitOrigin => 15,
+                InitOnlyFunc::GetInitOrigin => 16,
             },
             ImportFunc::ReceiveOnly(ro) => match ro {
-                ReceiveOnlyFunc::Accept => 16,
-                ReceiveOnlyFunc::SimpleTransfer => 17,
-                ReceiveOnlyFunc::Send => 18,
-                ReceiveOnlyFunc::CombineAnd => 19,
-                ReceiveOnlyFunc::CombineOr => 20,
-                ReceiveOnlyFunc::GetReceiveInvoker => 21,
-                ReceiveOnlyFunc::GetReceiveSelfAddress => 22,
-                ReceiveOnlyFunc::GetReceiveSelfBalance => 23,
-                ReceiveOnlyFunc::GetReceiveSender => 24,
-                ReceiveOnlyFunc::GetReceiveOwner => 25,
+                ReceiveOnlyFunc::Accept => 17,
+                ReceiveOnlyFunc::SimpleTransfer => 18,
+                ReceiveOnlyFunc::Send => 19,
+                ReceiveOnlyFunc::CombineAnd => 20,
+                ReceiveOnlyFunc::CombineOr => 21,
+                ReceiveOnlyFunc::GetReceiveInvoker => 22,
+                ReceiveOnlyFunc::GetReceiveSelfAddress => 23,
+                ReceiveOnlyFunc::GetReceiveSelfBalance => 24,
+                ReceiveOnlyFunc::GetReceiveSender => 25,
+                ReceiveOnlyFunc::GetReceiveOwner => 26,
             },
         };
         tag.output(out)
@@ -381,6 +469,7 @@ impl ValidateImportExport for ConcordiumAllowedImports {
                 "combine_or" => type_matches!(ty => [I32, I32]; I32),
                 "get_parameter_size" => type_matches!(ty => []; I32),
                 "get_parameter_section" => type_matches!(ty => [I32, I32, I32]; I32),
+                "get_policy_section" => type_matches!(ty => [I32, I32, I32]; I32),
                 "log_event" => type_matches!(ty => [I32, I32]),
                 "load_state" => type_matches!(ty => [I32, I32, I32]; I32),
                 "write_state" => type_matches!(ty => [I32, I32, I32]; I32),
@@ -457,6 +546,7 @@ impl TryFromImport for ProcessedImports {
                 "combine_or" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr),
                 "get_parameter_size" => ImportFunc::Common(CommonFunc::GetParameterSize),
                 "get_parameter_section" => ImportFunc::Common(CommonFunc::GetParameterSection),
+                "get_policy_section" => ImportFunc::Common(CommonFunc::GetPolicySection),
                 "log_event" => ImportFunc::Common(CommonFunc::LogEvent),
                 "load_state" => ImportFunc::Common(CommonFunc::LoadState),
                 "write_state" => ImportFunc::Common(CommonFunc::WriteState),

@@ -32,7 +32,7 @@ It can also be used to build contracts embedded with schemas (see section about 
 
 The [rust-contracts](./rust-contracts) aims to be organized into two (conceptually, technically three) parts.
 
-The first consisting of crates [concordium-std](./rust-contracts/concordium-std) and [concordium-std-derive](./rust-contracts/concordium-std-derive) contains Rust packages that are meant to be developed into the core API all Rust smart contracts use. It wraps the primitives that are allowed to be used on the chain in safer wrappers. The goal is to provide an API that spans from low-level, requiring the user to be very careful, but allowing precise control over resources, to a high-level one with more safety, but less efficiency for more advanced uses.
+The first consisting of crates [concordium-std](./concordium-std/concordium-std) and [concordium-std-derive](./concordium-std/concordium-std-derive) contains Rust packages that are meant to be developed into the core API all Rust smart contracts use. It wraps the primitives that are allowed to be used on the chain in safer wrappers. The goal is to provide an API that spans from low-level, requiring the user to be very careful, but allowing precise control over resources, to a high-level one with more safety, but less efficiency for more advanced uses.
 
 The `concordium-std` library is what is intended to be used directly, and the `concordium-std-derive` provides some procedural macros that are re-exported by `concordium-std`. These are used to remove the boilerplate FFI wrappers that are needed for each smart contract.
 Currently there are two macros `init` and `receive` that can be used to generate low-level init and receive functions.
@@ -194,9 +194,9 @@ The first and second can be done directly in the module the contract is written 
 The design is as follows.
 
 - Each of the host-provided parameters to the init and receive methods has its own trait.
-These are defined in [concordium-std/src/traits.rs](./rust-contracts/concordium-std/src/traits.rs).
-- The traits have implementations that are used when the contract is invoked with host functions. These are defined in [concordium-std/src/impls.rs](./rust-contracts/concordium-std/src/impls.rs).
-- Additionally, there are implementations of these traits that allow calling of smart contracts in a way that is easy to specify parameters, run the contract, and inspect the result, all entirely inside `Rust`. These are defined in [concordium-std/src/test_infrastructure.rs](./rust-contracts/concordium-std/src/test_infrastructure.rs), together with the wrappers that can be used for testing.
+These are defined in [concordium-std/src/traits.rs](./concordium-std/concordium-std/src/traits.rs).
+- The traits have implementations that are used when the contract is invoked with host functions. These are defined in [concordium-std/src/impls.rs](./concordium-std/concordium-std/src/impls.rs).
+- Additionally, there are implementations of these traits that allow calling of smart contracts in a way that is easy to specify parameters, run the contract, and inspect the result, all entirely inside `Rust`. These are defined in [concordium-std/src/test_infrastructure.rs](./concordium-std/concordium-std/src/test_infrastructure.rs), together with the wrappers that can be used for testing.
 - The intended use of this functionality is exemplified in the tests in the [counter-smart-contract](./rust-contracts/example-contracts/counter/src/lib.rs).
 
 Currently the only way to run tests is to compile to native code. This can be done by explicitly specifying the target as

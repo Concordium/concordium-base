@@ -75,7 +75,7 @@ The documentation is split into four categories
    references/host-fns
    references/references-on-chain
    references/local-settings
-   Rust contract examples (repo) <https://gitlab.com/Concordium/smart-contracts/-/tree/master/rust-contracts/example-contracts>
+   Rust contract examples (repo) <https://github.com/Concordium/example-smart-contracts>
    Concordium user documentation <https://developers.concordium.com/testnet/docs>
 
 .. todo::

@@ -1,13 +1,8 @@
 use crate::{build::*, schema_json::*};
+use anyhow::{bail, ensure, Context};
 use clap::AppSettings;
-use concordium_contracts_common::{from_bytes, to_bytes, Amount};
-use std::{
-    fs,
-    fs::File,
-    io::{Read, Write},
-    path::PathBuf,
-    process::exit,
-};
+use concordium_contracts_common::{from_bytes, to_bytes, Amount, OwnedPolicy};
+use std::{fs, fs::File, io::Read, path::PathBuf};
 use structopt::StructOpt;
 use wasm_chain_integration::*;
 
@@ -201,13 +196,14 @@ enum RunCommand {
     },
 }
 
-pub fn main() {
+pub fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
         ansi_term::enable_ansi_support();
     }
-    let error_style = ansi_term::Colour::Red.bold();
-    let success_style = ansi_term::Colour::Green.bold();
+    let success_style = ansi_term::Color::Green.bold();
+    let warning_style = ansi_term::Color::Yellow;
+    let bold_style = ansi_term::Style::new().bold();
 
     let cmd = {
         let app = CargoCommand::clap()
@@ -233,19 +229,28 @@ pub fn main() {
                 } => (contract_name, runner),
             };
 
-            if runner.parameter_bin_path.is_some() && runner.parameter_json_path.is_some() {
-                println!("Error: Only one parameter is allowed.");
-                exit(1);
-            }
+            ensure!(
+                !(runner.parameter_bin_path.is_some() && runner.parameter_json_path.is_some()),
+                "Both --parameter-bin and --parameter-json are supplied. Only one parameter is \
+                 allowed."
+            );
 
-            let module = fs::read(&runner.module).expect("Could not read module file.");
+            let module = fs::read(&runner.module).context("Could not read module file.")?;
 
             let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
-                let bytes = fs::read(schema_path).expect("Failed reading schema file");
-                let schema = from_bytes(&bytes).expect("Failed to parse schema file");
+                let bytes = fs::read(schema_path).context("Could not read schema file.")?;
+                let schema = from_bytes(&bytes)
+                    .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
                 Some(schema)
             } else {
-                get_embedded_schema(&module).ok()
+                let res = get_embedded_schema(&module);
+                if let Err(err) = &res {
+                    eprintln!(
+                        "{}",
+                        warning_style.paint(format!("Could not use embedded schema: {}", err))
+                    );
+                }
+                res.ok()
             };
 
             let contract_schema_opt = module_schema_opt
@@ -264,75 +269,76 @@ pub fn main() {
                     } => contract_schema.receive.get(&func),
                 });
 
-            let print_result = |state: State, logs: Logs| {
+            let print_result = |state: State, logs: Logs| -> anyhow::Result<()> {
                 for (i, item) in logs.iterate().enumerate() {
-                    println!("{}: {:#?}", i, item)
+                    eprintln!("{}: {:?}", i, item)
                 }
                 let state = &state.state;
-                let output = match (runner.ignore_state_schema, &contract_schema_state_opt) {
+                match (runner.ignore_state_schema, &contract_schema_state_opt) {
                     (false, Some(state_schema)) => {
                         let s = state_schema
                             .to_json_string_pretty(&state)
-                            .expect("Deserializing using state schema failed");
+                            .map_err(|_| anyhow::anyhow!("Could not encode state to JSON."))?;
                         if runner.schema_path.is_some() {
-                            format!("(Using provided schema)\n{}", s)
+                            eprintln!("The new state is: (Using provided schema)\n{}", s)
                         } else {
-                            format!("(Using embedded schema)\n{}", s)
+                            eprintln!("The new state is: (Using embedded schema)\n{}", s)
                         }
                     }
-                    _ => format!("(No schema found for contract state)\n{:?}", state),
+                    _ => eprintln!(
+                        "The new state is: (No schema found for contract state) {:?}\n",
+                        state
+                    ),
                 };
-                println!("The new state is: {}\n", output);
 
                 if let Some(file_path) = &runner.out_bin {
-                    let mut out_file =
-                        File::create(file_path).expect("Could not create output file.");
-                    out_file.write_all(&state).expect("Could not write out the state.")
+                    fs::write(file_path, &state).context("Could not write state to file")?;
                 }
                 if let Some(file_path) = &runner.out_json {
-                    contract_schema_opt.expect(
+                    contract_schema_opt.context(
                         "Schema is required for outputting state in JSON. No schema found for \
                          this contract.",
-                    );
-                    let schema_state = contract_schema_state_opt.as_ref().expect(
+                    )?;
+                    let schema_state = contract_schema_state_opt.as_ref().context(
                         "Schema is required for outputting state in JSON. No schema found the \
                          state in this contract.",
-                    );
+                    )?;
                     let json_string = schema_state
                         .to_json_string_pretty(&state)
-                        .expect("Failed encoding state to JSON.");
-                    fs::write(file_path, json_string).expect("Could not write out the state.");
+                        .map_err(|_| anyhow::anyhow!("Could not output contract state in JSON."))?;
+                    fs::write(file_path, json_string).context("Could not write out the state.")?;
                 }
+                Ok(())
             };
 
             let parameter = if let Some(param_file) = &runner.parameter_bin_path {
-                fs::read(&param_file).expect("Could read parameter file.")
+                fs::read(&param_file).context("Could not read parameter-bin file.")
             } else if let Some(param_file) = &runner.parameter_json_path {
-                // Find the right schema type
                 if contract_schema_opt.is_none() {
-                    println!(
-                        "Error: No schema found for contract, the schema is required for \
-                         inputting JSON."
-                    );
-                    exit(1);
-                }
-                let parameter_schema = contract_schema_func_opt
-                    .expect("Contract schema did not contain a schema for this parameter.");
+                    Err(anyhow::anyhow!(
+                        "No schema found for contract, a schema is required for using \
+                         --parameter-json."
+                    ))
+                } else {
+                    let parameter_schema = contract_schema_func_opt
+                        .context("Contract schema did not contain a schema for this parameter.")?;
 
-                let file = fs::read(&param_file).expect("Could read parameter file.");
-                let parameter_json: serde_json::Value =
-                    serde_json::from_slice(&file).expect("Failed parsing json");
-                let mut parameter_bytes = Vec::new();
-                write_bytes_from_json_schema_type(
-                    &parameter_schema,
-                    &parameter_json,
-                    &mut parameter_bytes,
-                )
-                .expect("Failed parsing bytes");
-                parameter_bytes
+                    let file = fs::read(&param_file).context("Could not read parameter file.")?;
+                    let parameter_json: serde_json::Value = serde_json::from_slice(&file)
+                        .context("Could not parse the JSON in parameter-json file.")?;
+                    let mut parameter_bytes = Vec::new();
+                    write_bytes_from_json_schema_type(
+                        &parameter_schema,
+                        &parameter_json,
+                        &mut parameter_bytes,
+                    )
+                    .context("Could not generate parameter bytes using schema and JSON.")?;
+                    Ok(parameter_bytes)
+                }
             } else {
-                Vec::new()
-            };
+                Ok(Vec::new())
+            }
+            .context("Could not get parameter.")?;
 
             match run_cmd {
                 RunCommand::Init {
@@ -340,10 +346,10 @@ pub fn main() {
                     ref context,
                     ..
                 } => {
-                    let init_ctx = {
-                        let ctx_file = File::open(context).expect("Could not open context file.");
-                        serde_json::from_reader(std::io::BufReader::new(ctx_file))
-                            .expect("Could not parse init context")
+                    let init_ctx: InitContext = {
+                        let ctx_file = fs::read(context).context("Could not open context file.")?;
+                        serde_json::from_slice(&ctx_file)
+                            .context("Could not parse the init context JSON.")?
                     };
                     let name = format!("init_{}", contract_name);
                     let res = invoke_init_with_metering_from_source(
@@ -351,28 +357,28 @@ pub fn main() {
                         runner.amount.micro_gtu,
                         init_ctx,
                         &name,
-                        parameter,
+                        &parameter,
                         runner.energy,
                     )
-                    .expect("Invocation failed.");
+                    .context("Invocation failed.")?;
                     match res {
                         InitResult::Success {
                             logs,
                             state,
                             remaining_energy,
                         } => {
-                            println!("Init call succeeded. The following logs were produced.");
-                            print_result(state, logs);
-                            println!("Remaining energy is {}", remaining_energy)
+                            eprintln!("Init call succeeded. The following logs were produced:");
+                            print_result(state, logs)?;
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         InitResult::Reject {
                             remaining_energy,
                         } => {
-                            println!("Init call rejected.");
-                            println!("Remaining energy is {}", remaining_energy)
+                            eprintln!("Init call rejected.");
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         InitResult::OutOfEnergy => {
-                            println!("Init call terminated with out of energy.")
+                            eprintln!("Init call terminated with out of energy.")
                         }
                     };
                 }
@@ -385,10 +391,10 @@ pub fn main() {
                     ref context,
                     ..
                 } => {
-                    let mut receive_ctx: concordium_contracts_common::ReceiveContext = {
-                        let ctx_file = File::open(context).expect("Could not open context file.");
-                        serde_json::from_reader(std::io::BufReader::new(ctx_file))
-                            .expect("Could not parse receive context")
+                    let mut receive_ctx: ReceiveContext<Vec<OwnedPolicy>> = {
+                        let ctx_file = fs::read(context).expect("Could not open context file.");
+                        serde_json::from_slice::<ReceiveContext<Vec<OwnedPolicy>>>(&ctx_file)
+                            .context("Could not parse receive context")?
                     };
                     if let Some(balance) = balance {
                         receive_ctx.self_balance =
@@ -397,36 +403,38 @@ pub fn main() {
 
                     // initial state of the smart contract, read from either a binary or json file.
                     let init_state = match (state_bin_path, state_json_path) {
-                        (None, None) => panic!(
+                        (None, None) => bail!(
                             "The current state is required for simulating an update to a contract \
                              instance. Use either --state-bin or --state-json."
                         ),
-                        (Some(_), Some(_)) => panic!(
+                        (Some(_), Some(_)) => bail!(
                             "Only one state is allowed, choose either --state-bin or --state-json."
                         ),
                         (Some(file_path), None) => {
                             let mut file =
-                                File::open(&file_path).expect("Could not read state file.");
-                            let metadata = file.metadata().expect("Could not read file metadata.");
+                                File::open(&file_path).context("Could not read state file.")?;
+                            let metadata =
+                                file.metadata().context("Could not read file metadata.")?;
                             let mut init_state = Vec::with_capacity(metadata.len() as usize);
                             file.read_to_end(&mut init_state)
-                                .expect("Reading the state file failed.");
+                                .context("Reading the state file failed.")?;
                             init_state
                         }
                         (None, Some(file_path)) => {
                             let schema_state = contract_schema_state_opt
                                 .as_ref()
-                                .expect("A schema for the state must be present to use JSON.");
-                            let file = fs::read(&file_path).expect("Could read parameter file.");
-                            let state_json: serde_json::Value =
-                                serde_json::from_slice(&file).expect("Failed parsing json");
+                                .context("A schema for the state must be present to use JSON.")?;
+                            let file =
+                                fs::read(&file_path).context("Could not read state file.")?;
+                            let state_json: serde_json::Value = serde_json::from_slice(&file)
+                                .context("Could not parse state JSON.")?;
                             let mut state_bytes = Vec::new();
                             write_bytes_from_json_schema_type(
                                 &schema_state,
                                 &state_json,
                                 &mut state_bytes,
                             )
-                            .expect("Failed parsing bytes");
+                            .context("Could not generate state bytes using schema and JSON.")?;
                             state_bytes
                         }
                     };
@@ -438,10 +446,10 @@ pub fn main() {
                         receive_ctx,
                         &init_state,
                         &name,
-                        parameter,
+                        &parameter,
                         runner.energy,
                     )
-                    .expect("Calling receive failed.");
+                    .context("Calling receive failed.")?;
                     match res {
                         ReceiveResult::Success {
                             logs,
@@ -449,9 +457,11 @@ pub fn main() {
                             actions,
                             remaining_energy,
                         } => {
-                            println!("Receive method succeeded. The following logs were produced.");
-                            print_result(state, logs);
-                            println!("The following actions were produced.");
+                            eprintln!(
+                                "Receive method succeeded. The following logs were produced."
+                            );
+                            print_result(state, logs)?;
+                            eprintln!("The following actions were produced.");
                             for (i, action) in actions.iter().enumerate() {
                                 match action {
                                     Action::Send {
@@ -463,7 +473,7 @@ pub fn main() {
                                         // Contract validation ensures that names are valid
                                         // ascii sequences, so unwrap is OK.
                                         let name_str = std::str::from_utf8(name).unwrap();
-                                        println!(
+                                        eprintln!(
                                             "{}: send a message to contract at ({}, {}), calling \
                                              method {} with amount {} and parameter {:?}",
                                             i,
@@ -478,37 +488,37 @@ pub fn main() {
                                         to_addr,
                                         amount,
                                     } => {
-                                        println!(
+                                        eprintln!(
                                             "{}: simple transfer to account {} of amount {}",
                                             i,
-                                            serde_json::to_string(to_addr).expect(
+                                            serde_json::to_string(to_addr).context(
                                                 "Address not valid JSON, should not happen."
-                                            ),
+                                            )?,
                                             amount
                                         );
                                     }
                                     Action::And {
                                         l,
                                         r,
-                                    } => println!("{}: AND composition of {} and {}", i, l, r),
+                                    } => eprintln!("{}: AND composition of {} and {}", i, l, r),
                                     Action::Or {
                                         l,
                                         r,
-                                    } => println!("{}: OR composition of {} and {}", i, l, r),
-                                    Action::Accept => println!("{}: ACCEPT", i),
+                                    } => eprintln!("{}: OR composition of {} and {}", i, l, r),
+                                    Action::Accept => eprintln!("{}: ACCEPT", i),
                                 }
                             }
 
-                            println!("Remaining energy is {}.", remaining_energy)
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         ReceiveResult::Reject {
                             remaining_energy,
                         } => {
-                            println!("Receive call rejected.");
-                            println!("Remaining energy is {}.", remaining_energy)
+                            eprintln!("Receive call rejected.");
+                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         ReceiveResult::OutOfEnergy => {
-                            println!("Receive call terminated with: out of energy.")
+                            eprintln!("Receive call terminated with: out of energy.")
                         }
                     }
                 }
@@ -517,15 +527,9 @@ pub fn main() {
         Command::Test {
             args,
         } => {
-            let res = build_and_run_wasm_test(&args);
-            match res {
-                Ok(true) => {}
-                Ok(false) => std::process::exit(1),
-                Err(err) => {
-                    eprintln!("{}", err);
-                    std::process::exit(1)
-                }
-            }
+            let success =
+                build_and_run_wasm_test(&args).context("Could not build and run tests.")?;
+            ensure!(success, "Test failed");
         }
         Command::Build {
             schema_embed,
@@ -533,22 +537,21 @@ pub fn main() {
             out,
             cargo_args,
         } => {
-            let bold_style = ansi_term::Style::new().bold();
-
             let build_schema = schema_embed || schema_out.is_some();
-            let schema_to_embed = if build_schema {
-                match build_contract_schema(&cargo_args) {
-                    Ok(schema) => Some(schema),
-                    Err(err) => {
-                        eprintln!("   Failed building schema {}", err);
-                        exit(1)
-                    }
-                }
+            let schema_opt = if build_schema {
+                let schema =
+                    build_contract_schema(&cargo_args).context("Could not build module schema.")?;
+                Some(schema)
             } else {
                 None
             };
-            let res = build_contract(&schema_to_embed, out, &cargo_args);
-            if let Some(module_schema) = &schema_to_embed {
+            let byte_len = if schema_embed {
+                build_contract(&schema_opt, out, &cargo_args)
+            } else {
+                build_contract(&None, out, &cargo_args)
+            }
+            .context("Could not build smart contract.")?;
+            if let Some(module_schema) = &schema_opt {
                 eprintln!("\n   Module schema includes:");
                 for (contract_name, contract_schema) in module_schema.contracts.iter() {
                     print_contract_schema(&contract_name, &contract_schema);
@@ -562,25 +565,22 @@ pub fn main() {
 
                 if let Some(schema_out) = schema_out {
                     eprintln!("   Writing schema to {}.", schema_out.to_string_lossy());
-                    fs::write(schema_out, &module_schema_bytes).unwrap();
+                    fs::write(schema_out, &module_schema_bytes)
+                        .context("Could not write schema file.")?;
                 }
                 if schema_embed {
                     eprintln!("   Embedding schema into module.\n");
                 }
             }
-            match res {
-                Ok(byte_len) => {
-                    let size = format!("{}.{:03} kB", byte_len / 1000, byte_len % 1000);
-                    eprintln!(
-                        "    {} smart contract module {}",
-                        success_style.paint("Finished"),
-                        bold_style.paint(size)
-                    )
-                }
-                Err(err) => eprintln!("      {} {}", error_style.paint("Failed"), err),
-            }
+            let size = format!("{}.{:03} kB", byte_len / 1000, byte_len % 1000);
+            eprintln!(
+                "    {} smart contract module {}",
+                success_style.paint("Finished"),
+                bold_style.paint(size)
+            )
         }
-    }
+    };
+    Ok(())
 }
 
 fn print_contract_schema(
@@ -590,22 +590,22 @@ fn print_contract_schema(
     let max_length_receive_opt =
         contract_schema.receive.iter().map(|(n, _)| n.chars().count()).max();
     let colon_position = max_length_receive_opt.map(|m| m.max(5)).unwrap_or(5);
-    println!(
+    eprintln!(
         "\n     Contract schema: '{}' in total {} B.",
         contract_name,
         to_bytes(contract_schema).len()
     );
     if let Some(state_schema) = &contract_schema.state {
-        println!("       state   : {} B", to_bytes(state_schema).len());
+        eprintln!("       state   : {} B", to_bytes(state_schema).len());
     }
     if let Some(init_schema) = &contract_schema.init {
-        println!("       init    : {} B", to_bytes(init_schema).len())
+        eprintln!("       init    : {} B", to_bytes(init_schema).len())
     }
 
     if !contract_schema.receive.is_empty() {
-        println!("       receive");
+        eprintln!("       receive");
         for (method_name, param_type) in contract_schema.receive.iter() {
-            println!(
+            eprintln!(
                 "        - {:width$} : {} B",
                 format!("'{}'", method_name),
                 to_bytes(param_type).len(),
