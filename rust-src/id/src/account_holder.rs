@@ -67,7 +67,6 @@ pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         vk_acc,
         // policy
     };
-
     Some(pub_info_for_ip)
 }
 
