@@ -64,9 +64,7 @@ pub struct State {
 }
 
 #[init(contract = "rate-limited")]
-fn contract_init(
-    ctx: &impl HasInitContext<()>,
-) -> InitResult<State> {
+fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
     // If timed_withdraw_limit is zero then no GTU can be transferred from the

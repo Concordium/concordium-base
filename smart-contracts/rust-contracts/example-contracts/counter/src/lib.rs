@@ -11,7 +11,7 @@ struct State {
 
 #[init(contract = "counter", enable_logger, payable)]
 fn contract_init(
-    _ctx: & impl HasInitContext<()>,
+    _ctx: &impl HasInitContext<()>,
     amount: Amount,
     logger: &mut impl HasLogger,
 ) -> InitResult<State> {

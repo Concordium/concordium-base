@@ -191,7 +191,6 @@ pub mod tests {
     use super::*;
     use concordium_std::test_infrastructure::*;
 
-
     #[concordium_test]
     fn test_init_rejects_same_buyer_and_seller() {
         fail!("implement me");

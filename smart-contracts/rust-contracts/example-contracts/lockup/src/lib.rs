@@ -68,10 +68,7 @@ struct State {
 
 #[init(contract = "lockup", payable)]
 #[inline(always)]
-fn contract_init(
-    ctx: &impl HasInitContext<()>,
-    amount: Amount,
-) -> InitResult<State> {
+fn contract_init(ctx: &impl HasInitContext<()>, amount: Amount) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(!init_params.account_holders.is_empty()); // No account holders given, but we need at least one.
 

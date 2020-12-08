@@ -5,17 +5,15 @@ type State = u8;
 
 #[init(contract = "use_all")]
 #[inline(always)]
-fn contract_init(
-    ctx: &impl HasInitContext<()>,
-) -> InitResult<State> {
+fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
     Ok(ctx.metadata().slot_time().to_be_bytes()[0])
 }
 
 #[receive(contract = "use_all", name = "receive", low_level, enable_logger)]
 #[inline(always)]
-fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
-    ctx: &R,
-    logger: &mut L,
+fn contract_receive<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
+    logger: &mut impl HasLogger,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
     logger.log_bytes(&[1, 2, 3]); // Exercises log_event()
