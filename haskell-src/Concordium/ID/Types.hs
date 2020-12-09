@@ -813,6 +813,15 @@ instance ToJSON CredentialType where
   toJSON Initial = String "initial"
   toJSON Normal = String "normal"
 
+instance Serialize CredentialType where
+  put Initial = putWord8 0
+  put Normal = putWord8 1
+
+  get = getWord8 >>= \case
+    0 -> return Initial
+    1 -> return Normal
+    _ -> fail "Unsupported credential type."
+    
 instance Serialize AccountCredential where
   put (InitialAC icdi) = putWord8 0 <> put icdi
   put (NormalAC cdi coms) = putWord8 1 <> put cdi <> put coms
