@@ -1700,29 +1700,29 @@ impl SerdeSerialize for AccountData {
 
 impl InitialAccountDataTrait for InitialAccountData {
     fn get_threshold(&self) -> SignatureThreshold {
-        return self.threshold;
+        self.threshold
     }
 
     fn get_public_keys(&self) -> Vec<VerifyKey> {
-        return self
+        self
             .keys
             .values()
             .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
     }
 }
 
 impl InitialAccountDataWithSigning for InitialAccountData {
     fn sign_public_information_for_ip<C: Curve>(&self, pub_info_for_ip: &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
         let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
-        return self
+        self
             .keys
             .iter()
             .map(|(&idx, kp)| {
                 let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
                 (idx, expanded_sk.sign(&to_sign, &kp.public).into())
             })
-            .collect();
+            .collect()
     }
 }
 
