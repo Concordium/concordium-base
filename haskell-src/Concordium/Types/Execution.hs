@@ -627,6 +627,12 @@ instance S.Serialize Event
 newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
+data TransactionSummaryType = 
+  AccountTransactionType (Maybe TransactionType)
+  | CredentialDeploymentTransaction CredentialType
+  | UpdateTransaction UpdateType
+  deriving(Eq, Show)
+
 -- |Result of a valid transaction is a transaction summary.
 data TransactionSummary' a = TransactionSummary {
   tsSender :: !(Maybe AccountAddress),
@@ -635,7 +641,7 @@ data TransactionSummary' a = TransactionSummary {
   tsEnergyCost :: !Energy,
   -- FIXME: transaction type should be changed to differentiate parameter updates from credential deployments.
   -- Currently, these are both represented by 'Nothing'.
-  tsType :: !(Maybe TransactionType),
+  tsType :: !TransactionSummaryType,
   tsResult :: !a,
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
@@ -649,6 +655,17 @@ data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReaso
   deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
+instance S.Serialize TransactionSummaryType where
+  put (AccountTransactionType tt) = S.putWord8 0 <> S.put tt
+  put (CredentialDeploymentTransaction credType) = S.putWord8 1 <> S.put credType
+  put (UpdateTransaction ut) = S.putWord8 2 <> S.put ut
+
+  get = S.getWord8 >>= \case
+    0 -> AccountTransactionType <$> S.get
+    1 -> CredentialDeploymentTransaction <$> S.get
+    2 -> UpdateTransaction <$> S.get
+    _ -> fail "Unsupported credential type."
+
 instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
@@ -756,6 +773,7 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
                                     },
                                  AE.fieldLabelModifier = firstLower . drop 2} ''ValidResult)
 
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummaryType)
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
 $(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
