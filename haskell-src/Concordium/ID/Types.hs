@@ -18,7 +18,7 @@ import qualified Data.Text.Read as Text
 import qualified Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
-import Data.Aeson.Types(toJSONKeyText)
+import Data.Aeson.Types(toJSONKeyText, Pair)
 import Data.Maybe(fromMaybe)
 import qualified Data.Set as Set
 import Control.Monad
@@ -499,31 +499,27 @@ instance FromJSON SignatureThreshold where
 
 -- |Data about which account this credential belongs to.
 data CredentialAccount =
-  ExistingAccount !AccountAddress
   -- | Create a new account. The list of keys must be non-empty and no longer
   -- than 255 elements.
-  | NewAccount ![AccountVerificationKey] !SignatureThreshold
+  NewAccount ![AccountVerificationKey] !SignatureThreshold
   deriving(Eq, Show)
 
 instance ToJSON CredentialAccount where
-  toJSON (ExistingAccount x) = toJSON x
   toJSON (NewAccount keys threshold) = object [
     "keys" .= keys,
     "threshold" .= threshold
     ]
 
 instance FromJSON CredentialAccount where
-  parseJSON (Object obj) = do
+  parseJSON = withObject "Credential account" $ \obj -> do
     keys <- obj .: "keys"
     when (null keys) $ fail "The list of keys must be non-empty."
     let len = length keys
     unless (len <= 255) $ fail "The list of keys must be no longer than 255 elements."
     threshold <- obj .:? "threshold" .!= fromIntegral (length keys) -- default to all the keys as a threshold
     return $! NewAccount keys threshold
-  parseJSON v = ExistingAccount <$> parseJSON v
 
 instance Serialize CredentialAccount where
-  put (ExistingAccount x) = S.putWord8 0 <> S.put x
   put (NewAccount keys threshold) = S.putWord8 1 <> do
       S.putWord8 (fromIntegral (length keys))
       mapM_ S.put keys
@@ -531,14 +527,13 @@ instance Serialize CredentialAccount where
 
   get =
     S.getWord8 >>= \case
-      0 -> ExistingAccount <$> S.get
       1 -> do
         len <- S.getWord8
         unless (len >= 1) $ fail "The list of keys must be non-empty and at most 255 elements long."
         keys <- replicateM (fromIntegral len) S.get
         threshold <- S.get
         return $! NewAccount keys threshold
-      _ -> fail "Input must be either an existing account or a new account with a list of keys and threshold."
+      _ -> fail "Input must be either a new account with a list of keys and threshold."
 
 data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Either an address of an existing account, or the list of keys the newly
@@ -559,21 +554,22 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
 } deriving(Eq, Show)
 
 credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
-credentialAccountAddress cdv =
-  case cdvAccount cdv of
-    ExistingAccount addr -> addr
-    _ -> addressFromRegId (cdvRegId cdv)
+credentialAccountAddress cdv = addressFromRegId (cdvRegId cdv)
 
-instance ToJSON CredentialDeploymentValues where
-  toJSON CredentialDeploymentValues{..} =
-    object [
+credentialDeploymentValuesList :: CredentialDeploymentValues -> [Pair]
+credentialDeploymentValuesList CredentialDeploymentValues{..} =
+  [
     "account" .= cdvAccount,
     "regId" .= cdvRegId,
     "ipIdentity" .= cdvIpId,
     "revocationThreshold" .= cdvThreshold,
     "arData" .= cdvArData,
     "policy" .= cdvPolicy
-    ]
+  ]
+
+instance ToJSON CredentialDeploymentValues where
+  toJSON =
+    object . credentialDeploymentValuesList
 
 instance FromJSON CredentialDeploymentValues where
   parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
@@ -798,10 +794,10 @@ instance Serialize AccountCredentialWithProofs where
     _ -> fail "Unsupported credential type."
 
 
--- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed.
+-- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed and commitments kept.
 data AccountCredential =
   InitialAC InitialCredentialDeploymentValues
-  | NormalAC CredentialDeploymentValues
+  | NormalAC CredentialDeploymentValues CredentialDeploymentCommitments
   deriving(Eq, Show)
 
 data CredentialType = Initial | Normal
@@ -817,13 +813,22 @@ instance ToJSON CredentialType where
   toJSON Initial = String "initial"
   toJSON Normal = String "normal"
 
+instance Serialize CredentialType where
+  put Initial = putWord8 0
+  put Normal = putWord8 1
+
+  get = getWord8 >>= \case
+    0 -> return Initial
+    1 -> return Normal
+    _ -> fail "Unsupported credential type."
+
 instance Serialize AccountCredential where
   put (InitialAC icdi) = putWord8 0 <> put icdi
-  put (NormalAC cdi) = putWord8 1 <> put cdi
+  put (NormalAC cdi coms) = putWord8 1 <> put cdi <> put coms
 
   get = getWord8 >>= \case
     0 -> InitialAC <$> get
-    1 -> NormalAC <$> get
+    1 -> NormalAC <$> get <*> getCommitments
     _ -> fail "Unsupported credential type."
 
 instance FromJSON AccountCredentialWithProofs where
@@ -834,45 +839,150 @@ instance FromJSON AccountCredentialWithProofs where
       Normal -> NormalACWP <$> v .: "contents"
 
 instance FromJSON AccountCredential where
-  parseJSON = withObject "Account credential with proofs" $ \v -> do
+  parseJSON = withObject "Account credential" $ \v -> do
     ty <- v .: "type"
     case ty of
       Initial -> InitialAC <$> v .: "contents"
-      Normal -> NormalAC <$> v .: "contents"
+      Normal -> do
+        co <- v .: "contents"
+        cdv <- parseJSON co
+        coms <- withObject "Account credential" (.: "commitments") co
+        return $ NormalAC cdv coms
 
 instance ToJSON AccountCredential where
   toJSON (InitialAC icdv) = object ["type" .= Initial, "contents" .= icdv]
-  toJSON (NormalAC icdv) = object ["type" .= Normal, "contents" .= icdv]
+  toJSON (NormalAC cdv coms) = object ["type" .= Normal, "contents" .= object (credentialDeploymentValuesList cdv ++ ["commitments" .= coms])]
 
--- |Extract the validity information for the credential.
-validTo :: AccountCredential -> CredentialValidTo
-validTo (NormalAC cdv) = pValidTo . cdvPolicy $ cdv
-validTo (InitialAC icdv) = pValidTo . icdvPolicy $ icdv
+-- |Helper class to unify access to fields of CredentialDeploymentValues
+-- for both the values, as well as values with proofs.
+class CredentialValuesFields a where
+  -- |Extract the validity information for the credential.
+  validTo :: a -> CredentialValidTo
+  regId :: a -> CredentialRegistrationID
+  ipId :: a -> IdentityProviderIdentity
+  policy :: a -> Policy
 
-regId :: AccountCredential -> CredentialRegistrationID
-regId (NormalAC cdv) = cdvRegId cdv
-regId (InitialAC icdv) = icdvRegId icdv
+instance CredentialValuesFields AccountCredential where
+  validTo (NormalAC cdv _) = pValidTo . cdvPolicy $ cdv
+  validTo (InitialAC icdv) = pValidTo . icdvPolicy $ icdv
 
--- |Remove the proofs from the structure
-values :: AccountCredentialWithProofs -> AccountCredential
-values (InitialACWP icdi) = InitialAC (icdiValues icdi)
-values (NormalACWP cdi) = NormalAC (cdiValues cdi)
+  regId (NormalAC cdv _) = cdvRegId cdv
+  regId (InitialAC icdv) = icdvRegId icdv
 
-ipId :: AccountCredential -> IdentityProviderIdentity
-ipId (InitialAC icdv) = icdvIpId icdv
-ipId (NormalAC cdv) = cdvIpId cdv
+  ipId (InitialAC icdv) = icdvIpId icdv
+  ipId (NormalAC cdv _) = cdvIpId cdv
 
-policy :: AccountCredential -> Policy
-policy (InitialAC icdv) = icdvPolicy icdv
-policy (NormalAC cdv) = cdvPolicy cdv
+  policy (InitialAC icdv) = icdvPolicy icdv
+  policy (NormalAC cdv _) = cdvPolicy cdv
+
+instance CredentialValuesFields AccountCredentialWithProofs where
+  validTo (NormalACWP cdi) = pValidTo . cdvPolicy . cdiValues $ cdi
+  validTo (InitialACWP icdi) = pValidTo . icdvPolicy . icdiValues $ icdi
+
+  regId (NormalACWP cdi) = cdvRegId . cdiValues $ cdi
+  regId (InitialACWP icdi) = icdvRegId . icdiValues $ icdi
+
+  ipId (NormalACWP cdi) = cdvIpId . cdiValues $ cdi
+  ipId (InitialACWP icdi) = icdvIpId . icdiValues $ icdi
+
+  policy (NormalACWP cdi) = cdvPolicy . cdiValues $ cdi
+  policy (InitialACWP icdi) = icdvPolicy . icdiValues $ icdi
+
+-- |Extract only the values we care about from the account credential.
+-- Concretely this retains the "Values" part, as well as the commitments. This
+-- function can fail if the credential proofs are malformed. This cannot happen
+-- on a credential that has been validated, but it can happen before that.
+values :: AccountCredentialWithProofs -> Maybe AccountCredential
+values (InitialACWP icdi) = Just (InitialAC (icdiValues icdi))
+values (NormalACWP cdi) = NormalAC (cdiValues cdi) <$> proofCommitments (cdiProofs cdi)
 
 class HasCredentialType a where
   credentialType :: a -> CredentialType
 
 instance HasCredentialType AccountCredential where
   credentialType (InitialAC _) = Initial
-  credentialType (NormalAC _) = Normal
+  credentialType (NormalAC _ _) = Normal
 
 instance HasCredentialType AccountCredentialWithProofs where
   credentialType (InitialACWP _) = Initial
   credentialType (NormalACWP _) = Normal
+
+-- * Credential commitments helpers.
+
+-- |Commitment size is 48 bytes since that is the size of the serialization of
+-- G1 group of BLS12-381.
+commitmentSize :: Int
+commitmentSize = 48
+-- |Size of a commitment in the G1 group of the BLS curve.
+data CommitmentSize
+instance FBS.FixedLength CommitmentSize where
+    fixedLength _ = commitmentSize
+
+-- |A commitment in the G1 group of the BLS curve.
+newtype Commitment = Commitment (FBS.FixedByteString CommitmentSize)
+  deriving(Eq)
+  deriving (Show, ToJSON, FromJSON) via FBSHex CommitmentSize
+
+data CredentialDeploymentCommitments = CredentialDeploymentCommitments {
+  cmmPrf :: !Commitment,
+  cmmCredCounter :: !Commitment,
+  cmmMaxAccounts :: !Commitment,
+  cmmAttributes :: !(Map.Map AttributeTag Commitment),
+  cmmIdCredSecSharingCoeff :: ![Commitment]
+} deriving(Eq, Show)
+
+instance ToJSON CredentialDeploymentCommitments where
+  toJSON CredentialDeploymentCommitments{..} = object [
+    "cmmPrf" .= cmmPrf,
+    "cmmCredCounter" .= cmmCredCounter,
+    "cmmMaxAccounts" .= cmmMaxAccounts,
+    "cmmAttributes" .= cmmAttributes,
+    "cmmIdCredSecSharingCoeff" .= cmmIdCredSecSharingCoeff
+    ]
+
+instance FromJSON CredentialDeploymentCommitments where
+  parseJSON = withObject "CredentialDeploymentCommitments" $ \v -> do
+    cmmPrf <- v .: "cmmPrf"
+    cmmCredCounter <- v .: "cmmCredCounter"
+    cmmMaxAccounts <- v .: "cmmMaxAccounts"
+    cmmAttributes <- v .: "cmmAttributes"
+    cmmIdCredSecSharingCoeff <- v .: "cmmIdCredSecSharingCoeff"
+    return CredentialDeploymentCommitments{..}
+
+instance Serialize Commitment where
+    put (Commitment h) = putByteString $ FBS.toByteString h
+    get = Commitment . FBS.fromByteString <$> getByteString commitmentSize
+
+instance Serialize CredentialDeploymentCommitments where
+    put CredentialDeploymentCommitments{..} =
+      put cmmPrf <>
+      put cmmCredCounter <>
+      put cmmMaxAccounts <>
+      putWord16be (fromIntegral $ Map.size cmmAttributes) <>
+      mapM_ put (Map.toAscList cmmAttributes) <>
+      putWord64be (fromIntegral $ length cmmIdCredSecSharingCoeff) <>
+      mapM_ put cmmIdCredSecSharingCoeff
+    get = getCommitments
+
+-- |Parse commitments. This must correspond to the serialization
+-- of the datatype "CredentialDeploymentCommitments" in rust-src/id/src/types.rs
+getCommitments :: Get CredentialDeploymentCommitments
+getCommitments = do
+  cmmPrf <- get
+  cmmCredCounter <- get
+  cmmMaxAccounts <- get
+  cmmAttributesLen <- getWord16be
+  cmmAttributesList <- replicateM (fromIntegral cmmAttributesLen) get
+  let cmmAttributes = Map.fromList cmmAttributesList
+  cmmIdLen <- getWord64be
+  cmmIdCredSecSharingCoeff <- replicateM (fromIntegral cmmIdLen) get
+  return CredentialDeploymentCommitments{..}
+
+-- |Attempt to extract commitments from proofs. If the proofs belong
+-- to a credential that has been validated this function will return 'Just',
+-- otherwise it might return 'Nothing'.
+proofCommitments :: Proofs -> Maybe CredentialDeploymentCommitments
+proofCommitments (Proofs shortByteString) =
+  case runGet getCommitments $ BS.drop 96 $ BSS.fromShort shortByteString  of
+    Left _ -> Nothing
+    Right coms -> Just coms
