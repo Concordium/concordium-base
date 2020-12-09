@@ -12,6 +12,8 @@ use std::{
     str::FromStr,
 };
 
+pub mod keygen;
+
 pub type ExampleCurve = <Bls12 as Pairing>::G1;
 
 pub type ExampleAttribute = AttributeKind;
