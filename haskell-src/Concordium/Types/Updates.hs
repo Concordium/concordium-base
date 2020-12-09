@@ -368,8 +368,9 @@ newtype UpdateInstructionSignatures = UpdateInstructionSignatures {updateInstruc
     deriving newtype (Eq, Show)
 
 instance Serialize UpdateInstructionSignatures where
-    put (UpdateInstructionSignatures m) =
-        putSafeMapOf (putWord16be . fromIntegral) put put m
+    put (UpdateInstructionSignatures m) = do
+        putWord16be (fromIntegral (Map.size m))
+        putSafeSizedMapOf put put m
     get = do
         sz <- getWord16be
         when (sz == 0) $ fail "signatures must not be empty"

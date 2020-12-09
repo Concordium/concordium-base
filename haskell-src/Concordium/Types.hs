@@ -24,10 +24,13 @@ module Concordium.Types (
 
   -- * Mint and reward rates
   MintRate(..),
+  mintAmount,
   RewardFraction(..),
   makeRewardFraction,
   addRewardFraction,
   complementRewardFraction,
+  takeFraction,
+  fractionToRational,
 
   -- * Time units
   Duration(..),
@@ -101,6 +104,7 @@ module Concordium.Types (
   EpochLength,
   Epoch,
   genesisSlot,
+  CredentialsPerBlockLimit,
   -- ** Transactions
   EncodedPayload(..),
   PayloadSize(..),
@@ -333,6 +337,10 @@ instance FromJSON MintRate where
     }
   parseJSON _ = fail "Not a number"
 
+-- |Compute an amount minted at a given rate.
+mintAmount :: MintRate -> Amount -> Amount
+{-# INLINE mintAmount #-}
+mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
 
 -- |A fraction in [0,1], represented as parts per 100000.
 newtype RewardFraction = RewardFraction {fracPerHundredThousand :: Word32}
@@ -380,6 +388,13 @@ addRewardFraction (RewardFraction a) (RewardFraction b)
 -- |Compute @1 - f@.
 complementRewardFraction :: RewardFraction -> RewardFraction
 complementRewardFraction (RewardFraction a) = RewardFraction (hundredThousand - a)
+
+-- |Compute a fraction of an amount.
+takeFraction :: RewardFraction -> Amount -> Amount
+takeFraction f = fromInteger . (`div` 100000) . (toInteger (fracPerHundredThousand f) *) . toInteger
+
+fractionToRational :: RewardFraction -> Rational
+fractionToRational f = toInteger (fracPerHundredThousand f) % 100000
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -600,7 +615,7 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   --
   -- - remaining amounts that result when transfering to public balance
   -- - remaining amounts when transfering to another account
-  -- - encrypted amounts that are transfered from public balance
+  -- - encrypted amounts that are transferred from public balance
   --
   -- When a transfer is made all of these must always be used.
   _selfAmount :: !EncryptedAmount,
@@ -765,7 +780,7 @@ data ChainMetadata =
 -- |Encode chain metadata for passing over FFI. Uses little-endian encoding
 -- for integral values since that is what is expected on the other side of FFI.
 -- This is deliberately not made into a serialize instance so that it is not accidentally
--- misused, since it differs in endianess from most other network-related serialization.
+-- misused, since it differs in endianness from most other network-related serialization.
 encodeChainMeta :: ChainMetadata -> ByteString
 encodeChainMeta ChainMetadata{..} = S.runPut encoder
   where encoder =
@@ -810,7 +825,8 @@ type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
 
-
+-- |Limit on the number of credentials that may occur in a block.
+type CredentialsPerBlockLimit = Word16
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
