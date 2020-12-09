@@ -205,6 +205,23 @@ data UpdateType
     -- ^Update the microGTU per euro exchange rate
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
+instance AE.FromJSON UpdateType where
+  parseJSON = AE.withText "Update Type" $ \t ->
+    if t == "updateAuthorization" then return UpdateAuthorization
+    else if t == "updateProtocol" then return UpdateProtocol
+    else if t == "updateElectionDifficulty" then return UpdateElectionDifficulty
+    else if t == "updateEuroPerEnergy" then return UpdateEuroPerEnergy
+    else if t == "updateMicroGTUPerEuro" then return UpdateMicroGTUPerEuro
+    else fail "Unsupported credential type."
+
+instance AE.ToJSON UpdateType where
+  toJSON UpdateAuthorization = AE.String "updateAuthorization"
+  toJSON UpdateProtocol = AE.String "updateProtocol"
+  toJSON UpdateElectionDifficulty = AE.String "updateElectionDifficulty"
+  toJSON UpdateEuroPerEnergy = AE.String "updateEuroPerEnergy"
+  toJSON UpdateMicroGTUPerEuro = AE.String "updateMicroGTUPerEuro"
+
+
 instance Serialize UpdateType where
     put UpdateAuthorization = putWord8 0
     put UpdateProtocol = putWord8 1
