@@ -325,7 +325,7 @@ mod tests {
 
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
-        ctx.metadata.set_slot_time(10);
+        ctx.common.metadata.set_slot_time(10);
         ctx.set_self_balance(Amount::from_micro_gtu(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
