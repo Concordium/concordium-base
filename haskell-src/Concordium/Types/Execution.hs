@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -741,9 +742,9 @@ $(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''T
 
 -- |Generate the challenge for adding a baker.
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
-addBakerChallenge addr elec sign agg = S.runPut $ S.put addr <> S.put elec <> S.put sign <> S.put agg
+addBakerChallenge addr elec sign agg = "addBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
 
 -- |Generate the challenge for updating a baker's keys.
 -- This is currently identical to 'addBakerChallenge'.
 updateBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
-updateBakerKeyChallenge = addBakerChallenge
+updateBakerKeyChallenge addr elec sign agg = "updateBakerKeys" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
