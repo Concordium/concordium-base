@@ -3,9 +3,7 @@ use concordium_std::*;
 
 #[init(contract = "context_test")]
 // can only be initialized
-fn contract_init(
-    ctx: &impl HasInitContext,
-) -> InitResult<u8> {
+fn contract_init(ctx: &impl HasInitContext) -> InitResult<u8> {
     if ctx.policies().len() != 1 {
         return Ok(1);
     }
@@ -26,9 +24,7 @@ fn contract_init(
 
 #[init(contract = "context_test_2")]
 // can only be initialized
-fn contract_init_2(
-    ctx: &impl HasInitContext,
-) -> InitResult<u8> {
+fn contract_init_2(ctx: &impl HasInitContext) -> InitResult<u8> {
     if ctx.policies().len() != 1 {
         return Ok(1);
     }
@@ -59,9 +55,7 @@ fn contract_init_2(
 
 #[init(contract = "context_test_3")]
 // expect an account with 2 policies.
-fn contract_init_3(
-    ctx: &impl HasInitContext,
-) -> InitResult<u8> {
+fn contract_init_3(ctx: &impl HasInitContext) -> InitResult<u8> {
     if ctx.policies().len() != 2 {
         return Ok(1);
     }
