@@ -13,6 +13,7 @@ You will learn the basics of how to setup, write, build, test and deploy a
 smart contract using Rust.
 
 .. warning::
+
     The reader is assumed to have basic knowledge of what a blockchain and smart
     contract is, and some experience with the Rust programming language.
 
@@ -79,7 +80,9 @@ Luckily the library already contains implementations for most of the primitives
 and standard types in Rust, meaning ``u32`` already implements the trait, so no
 more work is necessary for the state.
 
-.. todo:: Link to more information.
+.. todo::
+
+    Link to more information.
 
 The ``init``-function
 =====================
@@ -89,6 +92,7 @@ instances of the contract are created, and is used to setup the initial state of
 the contract instance.
 
 .. note::
+
     If you have experience with Object-Oriented Programming, it might help to
     think of a smart contract as a *class*, the ``init``-function as a
     *constructor* and smart contract instances as *objects*.
@@ -100,10 +104,7 @@ the ``init``-function for our counter contract::
     #[init(contract = "counter")]
     fn counter_init(
         _ctx: &impl HasInitContext<()>,
-        amount: Amount,
-        _logger: &mut impl HasLogger,
     ) -> InitResult<State> {
-        ensure_eq!(amount.micro_gtu, 0);
         let state = 0;
         Ok(state)
     }
@@ -123,67 +124,41 @@ chain with "init\_" as prefix.
 
 Unsurprisingly we choose to call our contract "counter".
 
-Only one of the three parameters are used by our counter contract.
-Here is a brief description of what they are:
-
-- **ctx**: An object with a number of getter functions for accessing information
-  about the current context, such as who invoke this function, the argument
-  supplied and the current state of the chain.
-- **amount**: The amount of GTU included in the transaction which invoked this
-  function. If the contract is initialized then this is the amount of GTU it
-  will hold.
-- **logger**: An object with functions for outputting to the event log of the
-  smart contract.
+The function only takes one argument ``ctx``, which is an object with a number
+of getter functions for accessing information about the current context, such as
+who invoke this function, the argument supplied and the current state of the
+chain.
 
 The return type of our function is ``InitResult<State>`` which is an alias for
 ``Result<State, Reject>``.
 
-.. todo::
-    Explain the return type, when the Reject type design is final.
+The function body should set our counter state to 0, which is straight forward.
 
-The function body should set our counter state to 0, which is straight forward,
-but first: since we are *not* using GTU in our contract, it is a good practice
-to ensure that *no* amount of GTU is sent to an instance of this contract.
+.. Avoiding black holes
+.. ====================
+.. As we are not going to specify a way to extract GTU from this contract, the
+.. GTU send to an instance of the contract will be trapped.
+.. It is easy to create smart contracts, which acts as black holes
+.. preventing the GTU send to them from being accessible *ever* again.
 
-Avoiding black holes
-====================
-As we are not going to specify a way to extract GTU from this contract, the
-GTU send to an instance of the contract will be trapped.
-It is easy to create smart contracts, which acts as black holes
-preventing the GTU send to them from being accessible *ever* again.
+.. To prevent this, we let the contract instantiation fail if a non-zero amount is
+.. sent to it.
+.. We do this with the ``ensure_eq!`` macro, which is given two arguments to
+.. compare for equality, if *not* equal it will make the contract reject the
+.. instantiation
 
-To prevent this, we let the contract instantiation fail if a non-zero amount is
-sent to it.
-We do this with the ``ensure_eq!`` macro, which is given two arguments to
-compare for equality, if *not* equal it will make the contract reject the
-instantiation::
-
-    ensure_eq!(amount.micro_gtu, 0);
-
-There is also an optional third argument, which is the error message to return
-*when testing* the contract.
-This error message will not be used in the resulting smart contract, when
-deployed to the chain, since the protocol of the Concordium blockchain does not
-log the error messages of smart contracts rejecting, therefore adding error
-messages is only useful when testing.
-
-If you want to reject directly in your smart contract, you should use ``bail!``
-to terminate early. ``ensure_eq!`` and ``ensure!`` corresponds are using
-``bail!`` internally. We strongly recommend using these for when the intention
-is to signal a logic error, or malformed input. ``panic`` and equivalents should
-be reserved for unexpected error conditions. To reduce code size as much as
-possible we recommend using `concordium_std::trap` in place of ``panic`` to
-reduce code size. There is no advantage in the unwinding logic that ``panic``
-provides, since this is not observable when the contract executes on the chain.
+..     ensure_eq!(amount.micro_gtu, 0);
 
 Testing instantiation
 =====================
+
 We now have enough code to write our first test!
 
 Testing a smart contract can be done on various levels, which you can learn more
 about here, but we will only cover unit test in this tutorial.
 
 .. todo::
+
     Insert reference for contract testing
 
 Since a smart contract is written as a Rust library, we can test it as one would
@@ -204,10 +179,9 @@ This is our test module, which is a common pattern for writing unit tests in
 Rust, so we will not spend time on explaining any of the above code.
 
 For our first test, we wish to call the ``counter_init`` function as just a
-regular function, but we first need a way to construct the arguments.
+regular function, but we first need a way to construct the argument.
 Luckily ``concordium_std`` contains a submodule ``test_infrastructure`` with
-stubs for all of this, so let us first bring everything from the submodule into
-scope.
+stubs for this, so let us first bring everything from the submodule into scope.
 
 .. code-block:: rust
     :emphasize-lines: 4
@@ -223,7 +197,7 @@ scope.
         }
     }
 
-To construct the first argument for ``counter_init``, we use
+To construct the argument for ``counter_init``, we use
 ``InitContextTest::empty()``, which is a stub for the context::
 
     let ctx = InitContextTest::empty();
@@ -234,29 +208,27 @@ This will be fine for now, since our contract does not access the context during
 initialization.
 You will see how to create a non-empty context a bit later in this tutorial.
 
-The second argument is the amount included with the transfer at initialization.
-On chain this is represented in microGTU as a ``u64``, but in Rust it is wrapped
-in a more convenient type for added type-safety.::
+.. The second argument is the amount included with the transfer at initialization.
+.. On chain this is represented in microGTU as a ``u64``, but in Rust it is wrapped
+.. in a more convenient type for added type-safety.
 
-    let amount = Amount::from_micro_gtu(0);
+..     let amount = Amount::from_micro_gtu(0);
 
-For the third argument, we need to specify a *logger* and from
-``test_infrastructure`` we get the ``LogRecorder`` which collects all the
-contract event logs into a ``Vec`` that we later can inspect after running our
-function::
+.. For the third argument, we need to specify a *logger* and from
+.. ``test_infrastructure`` we get the ``LogRecorder`` which collects all the
+.. contract event logs into a ``Vec`` that we later can inspect after running our
+.. function
 
-    let mut logger = LogRecorder::init();
+..     let mut logger = LogRecorder::init();
 
-We will not use the logger for anything in this tutorial, but to learn more see
-here.
+.. We will not use the logger for anything in this tutorial, but to learn more see
+.. here.
 
-.. todo::
-    Link page about logging
 
-With all of the arguments constructed we can now call our function and get back
+With the argument constructed we can now call our function and get back
 a result::
 
-    let result = counter_init(&ctx, amount, &mut logger);
+    let result = counter_init(&ctx);
 
 Now we should inspect the result and ensure everything is as expected.
 First we match on the result to unwrap the state created if result is ok.
@@ -271,6 +243,7 @@ We use ``fail!`` to fail the test, this is a small wrapper around
 ``panic!`` which is designed for use with the ``wasm32`` target.
 
 .. note::
+
     ``fail!`` solves an issue with reporting errors, when tests are compiled to
     Wasm, and behaves just like ``panic!`` when compiled to native code.
 
@@ -290,11 +263,9 @@ Altogether the test should look something like this::
     fn test_init() {
         // Setup
         let ctx = InitContextTest::empty();
-        let amount = Amount::from_micro_gtu(0);
-        let mut logger = LogRecorder::init();
 
         // Call the init function
-        let result = counter_init(&ctx, amount, &mut logger);
+        let result = counter_init(&ctx);
 
         // Inspect the result
         let state = match result {
@@ -314,6 +285,7 @@ a terminal:
 It should run one test, and hopefully it succeeds.
 
 .. todo::
+
     Implement test for instantiation failing when amount > 0.
 
 ``receive``-functions
@@ -357,12 +329,9 @@ Again, have a look at the code, before we start explaining things::
     #[receive(contract = "counter", name = "increment")]
     fn contract_receive<A: HasActions>(
         ctx: &impl HasReceiveContext<()>,
-        amount: Amount,
-        _logger: &mut impl HasLogger,
         state: &mut State,
     ) -> ReceiveResult<A> {
         // Assertions
-        ensure_eq!(amount.micro_gtu, 0); // The amount must be 0.
         let sender = ctx.sender();
         let owner = ctx.owner();
         ensure!(sender.matches_account(&owner)); // Only the owner can increment.
@@ -396,12 +365,12 @@ The return type of the function is ``ReceiveResult<A>``, which is an alias for
 Here ``A`` implements ``HasActions``, which exposes functions for creating the
 different actions.
 
-Again we ensure that *no* amount of GTU was send to the balance of this
-contract::
+.. Again we ensure that *no* amount of GTU was send to the balance of this
+.. contract
 
-    ensure_eq!(amount.micro_gtu, 0); // The amount must be 0.
+..     ensure_eq!(amount.micro_gtu, 0); // The amount must be 0.
 
-Next we ensure only the owner can increment, by checking if the sender is the
+We ensure only the owner can increment, by checking if the sender is the
 owner account.
 The sender can be accessed from the context parameter as ``ctx.sender()``, this
 returns an address, which is either the address of an account or the address of
@@ -410,6 +379,7 @@ a smart contract instance::
     let sender = ctx.sender();
 
 .. note::
+
     The **Send** action allows contract instances to interact with each other.
 
 The owner can also be accessed through the context, this time as ``ctx.owner()``
@@ -425,6 +395,25 @@ invocation::
 
     ensure!(sender.matches_account(&owner)); // Only the owner can increment.
 
+There is also an optional third argument, which is the error to return
+*when testing* the contract.
+This error message will not be used in the resulting smart contract, when
+deployed to the chain, since the protocol of the Concordium blockchain does not
+log the error messages of smart contracts rejecting, therefore adding error
+messages is only useful when testing.
+
+.. note::
+
+    If you want to reject directly in your smart contract, you should use
+    ``bail!`` to terminate early. ``ensure_eq!`` and ``ensure!`` corresponds are
+    using ``bail!`` internally. We strongly recommend using these for when the
+    intention is to signal a logic error, or malformed input. ``panic!`` and
+    equivalents should be reserved for unexpected error conditions. To reduce
+    code size as much as possible we recommend using ``concordium_std::trap`` in
+    place of ``panic!`` to reduce code size. There is no advantage in the
+    unwinding logic that ``panic!`` provides, since this is not observable when
+    the contract executes on the chain.
+
 Now that we have ensured the context is right for incrementing the counter, we
 just need to update the state::
 
@@ -439,11 +428,7 @@ Since increment does not create any actions on chain, we just result in
 Testing increment
 =================
 
-.. We extend the test submodule with a new unit test
-
-
-
-::
+.. code-block:: rust
 
     #[test]
     fn test_increment() {
