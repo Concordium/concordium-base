@@ -149,7 +149,7 @@ Example:
 Chain meta data
 ===============
 
-Both the init- and receive-context contains a ``metadata`` section containing
+Both the init- and receive-context contain a ``metadata`` section containing
 information of the current status of the blockchain, according to the node
 running the smart contract.
 
