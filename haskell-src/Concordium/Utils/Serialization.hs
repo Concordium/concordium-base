@@ -201,3 +201,22 @@ putShortByteStringWord16 :: Putter ShortByteString
 putShortByteStringWord16 bs =
   let len = fromIntegral (BSS.length bs)
   in putWord16be len <> putShortByteString bs
+
+-- |Serialize a Maybe value
+-- Just v is serialized with a word8 tag 1 followed by the serialization of the value
+-- Nothing is seralized with a word8 tag 0.
+putMaybe :: Putter a -> Putter (Maybe a)
+putMaybe p (Just v) = do
+  putWord8 1
+  p v
+putMaybe _ Nothing = putWord8 0
+
+-- |Deserialize a Maybe value
+-- Expects a leading 0 or 1 word8, 1 signaling Just and 0 signaling Nothing.
+-- NB: This method is stricter than the Serialize instance method in that it only allows
+-- tags 0 and 1, whereas the Serialize.get method allows any non-zero tag for Just.
+getMaybe :: Get a -> Get (Maybe a)
+getMaybe g = getWord8 >>=
+    \case 0 -> return Nothing
+          1 -> Just <$> g
+          n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
