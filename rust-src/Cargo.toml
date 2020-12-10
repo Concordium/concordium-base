@@ -17,5 +17,6 @@ members=[
    "random_oracle",
    "wallet",
    "bulletproofs",
-   "encrypted_transfers"
+   "encrypted_transfers",
+   "keygen_bls"
 ]
