@@ -1648,13 +1648,24 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
     }
 }
 
-/// This trait is used to create a preIdentityObject
-pub trait InitialAccountDataTrait {
+/// A helper trait to access the public parts of the InitialAccountData
+/// structure. We use this to allow implementations that does not give or have
+/// access to the secret keys.
+/// NB: the threshold should be atmost the number of keypairs.
+pub trait PublicInitialAccountData {
+    /// Get the number of keys required to sign a message from the account.
     fn get_threshold(&self) -> SignatureThreshold;
+    /// Get the public keys of the account
     fn get_public_keys(&self) -> Vec<VerifyKey>;
 }
 
-pub trait InitialAccountDataWithSigning: InitialAccountDataTrait {
+/// A helper trait to allow signing PublicInformationForIP in an implementation
+/// that does not give access to the secret keys.
+pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
+    /// Sign a PublicInformationForIP structure with the secret keys that
+    /// matches the public keys, which the structure provides.
+    /// NB: the Function should, for each secret key,
+    /// sign the sha256 hash of the structure's serialization.
     fn sign_public_information_for_ip<C: Curve>(
         &self,
         info: &PublicInformationForIP<C>,
@@ -1701,7 +1712,7 @@ impl SerdeSerialize for AccountData {
     }
 }
 
-impl InitialAccountDataTrait for InitialAccountData {
+impl PublicInitialAccountData for InitialAccountData {
     fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
     fn get_public_keys(&self) -> Vec<VerifyKey> {
