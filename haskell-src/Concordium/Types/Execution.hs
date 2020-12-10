@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -35,6 +36,7 @@ import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.EncryptedTransfers
+import Concordium.Utils.Serialization
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -252,12 +254,12 @@ putPayload AddAccountKeys{..} = do
     P.putWord8 14
     P.putWord8 (fromIntegral (length aakKeys))
     forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
-    putMaybe aakThreshold
+    putMaybe S.put aakThreshold
 putPayload RemoveAccountKeys{..} = do
     P.putWord8 15
     P.putWord8 (fromIntegral (length rakIndices))
     forM_ (Set.toAscList rakIndices) S.put
-    putMaybe rakThreshold
+    putMaybe S.put rakThreshold
 putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..} =
     S.putWord8 16 <>
     S.put eatTo <>
@@ -337,12 +339,12 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
             14 -> do
               len <- S.getWord8
               aakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-              aakThreshold <- getMaybe
+              aakThreshold <- getMaybe S.get
               return AddAccountKeys{..}
             15 -> do
               len <- S.getWord8
               rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
-              rakThreshold <- getMaybe
+              rakThreshold <- getMaybe S.get
               return RemoveAccountKeys{..}
             16 -> do
               eatTo <- S.get
@@ -372,25 +374,6 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               twsSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
               return TransferWithSchedule{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
-
--- |Serialize a Maybe value
--- Just v is serialized with a word8 tag 1 followed by the serialization of the value
--- Nothing is seralized with a word8 tag 0.
-putMaybe :: S.Serialize a => P.Putter (Maybe a)
-putMaybe (Just v) = do
-  P.putWord8 1
-  S.put v
-putMaybe Nothing = S.putWord8 0
-
--- |Deserialize a Maybe value
--- Expects a leading 0 or 1 word8, 1 signaling Just and 0 signaling Nothing.
--- NB: This method is stricter than the Serialize instance method in that it only allows
--- tags 0 and 1, whereas the Serialize.get method allows any non-zero tag for Just.
-getMaybe :: S.Serialize a => S.Get (Maybe a)
-getMaybe = G.getWord8 >>=
-    \case 0 -> return Nothing
-          1 -> Just <$> S.get
-          n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
 -- Fails if the elements are not ordered or a duplicate is encountered.
@@ -731,9 +714,9 @@ $(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''T
 
 -- |Generate the challenge for adding a baker.
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
-addBakerChallenge addr elec sign agg = S.runPut $ S.put addr <> S.put elec <> S.put sign <> S.put agg
+addBakerChallenge addr elec sign agg = "addBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
 
 -- |Generate the challenge for updating a baker's keys.
 -- This is currently identical to 'addBakerChallenge'.
 updateBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
-updateBakerKeyChallenge = addBakerChallenge
+updateBakerKeyChallenge addr elec sign agg = "updateBakerKeys" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
