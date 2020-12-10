@@ -266,7 +266,7 @@ These GTU would then be forever *lost*, and there would be no way to recover
 them.
 
 Therefore it is good practice for smart contracts that are not dealing with GTU,
-to ensure the send amount of GTU is zero and reject any invocations which are
+to ensure the sent amount of GTU is zero and reject any invocations which are
 not.
 
 Move heavy calculations off-chain
