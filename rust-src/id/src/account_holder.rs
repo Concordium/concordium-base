@@ -46,17 +46,18 @@ pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // RegId as well as Prf key commitments must be computed
     // with the same generators as in the commitment key.
-    let reg_id =  context
+    let reg_id = context
         .global_context
         .on_chain_commitment_key
         .hide(
             &Value::<C>::new(reg_id_exponent),
             &PedersenRandomness::zero(),
-        ).0;
+        )
+        .0;
 
     let vk_acc = InitialCredentialAccount {
         account: NewAccount {
-            keys: initial_account.get_public_keys(),
+            keys:      initial_account.get_public_keys(),
             threshold: initial_account.get_threshold(),
         },
     };
@@ -89,7 +90,10 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Step 3: We should sign IDcred_PUB ,policy_ACC ,RegID_ACC ,vk_ACC ,pk_ACC
     let pub_info_for_ip = build_pub_info_for_ip(
-        context, &aci.cred_holder_info.id_cred.id_cred_sec, prf_key, initial_account
+        context,
+        &aci.cred_holder_info.id_cred.id_cred_sec,
+        prf_key,
+        initial_account,
     )?;
 
     let id_cred_pub = pub_info_for_ip.id_cred_pub;

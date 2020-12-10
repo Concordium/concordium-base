@@ -1655,7 +1655,10 @@ pub trait InitialAccountDataTrait {
 }
 
 pub trait InitialAccountDataWithSigning: InitialAccountDataTrait {
-    fn sign_public_information_for_ip<C: Curve>(&self, info:  &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
+    fn sign_public_information_for_ip<C: Curve>(
+        &self,
+        info: &PublicInformationForIP<C>,
+    ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
 /// Account data needed by the account holder to generate proofs to deploy the
@@ -1699,13 +1702,10 @@ impl SerdeSerialize for AccountData {
 }
 
 impl InitialAccountDataTrait for InitialAccountData {
-    fn get_threshold(&self) -> SignatureThreshold {
-        self.threshold
-    }
+    fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
     fn get_public_keys(&self) -> Vec<VerifyKey> {
-        self
-            .keys
+        self.keys
             .values()
             .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
             .collect::<Vec<_>>()
@@ -1713,10 +1713,12 @@ impl InitialAccountDataTrait for InitialAccountData {
 }
 
 impl InitialAccountDataWithSigning for InitialAccountData {
-    fn sign_public_information_for_ip<C: Curve>(&self, pub_info_for_ip: &PublicInformationForIP<C>) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
+    fn sign_public_information_for_ip<C: Curve>(
+        &self,
+        pub_info_for_ip: &PublicInformationForIP<C>,
+    ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
         let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
-        self
-            .keys
+        self.keys
             .iter()
             .map(|(&idx, kp)| {
                 let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
