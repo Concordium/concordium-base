@@ -44,7 +44,11 @@ data GenerateUpdateKeys
         gukProtocol :: AuthDetails,
         gukElectionDifficulty :: AuthDetails,
         gukEuroEnergy :: AuthDetails,
-        gukGTUEuro :: AuthDetails
+        gukGTUEuro :: AuthDetails,
+        gukFoundationAccount :: AuthDetails,
+        gukMintDistribution :: AuthDetails,
+        gukTransactionFeeDistribution :: AuthDetails,
+        gukGASRewards :: AuthDetails
     } deriving (Show)
 
 readKeyList :: ReadM [Word16]
@@ -63,6 +67,10 @@ parameters = GenerateUpdateKeys
     <*> option readAuthDetails (metavar "ACSTR" <> long "election" <> help "Election difficulty update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "euro-energy" <> help "Euro:energy rate update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "gtu-euro" <> help "GTU:Euro rate update access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "foundation-account" <> help "Foundation account update access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "mint-distribution" <> help "Mint distribution update access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "fee-distribution" <> help "Transaction fee distribution update access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "gas-rewards" <> help "GAS rewards update access structure")
 
 main :: IO ()
 main = customExecParser p opts >>= generateKeys
@@ -88,6 +96,10 @@ generateKeys GenerateUpdateKeys{..} = do
         asParamElectionDifficulty <- makeAS gukElectionDifficulty "Election difficulty update access structure"
         asParamEuroPerEnergy <- makeAS gukEuroEnergy "Euro-energy rate update access structure"
         asParamMicroGTUPerEuro <- makeAS gukGTUEuro "GTU-Euro rate update access structure"
+        asParamFoundationAccount <- makeAS gukFoundationAccount "Foundation account update access structure"
+        asParamMintDistribution <- makeAS gukMintDistribution "Mint distribution update access structure"
+        asParamTransactionFeeDistribution <- makeAS gukTransactionFeeDistribution "Transaction fee distribution update access structure"
+        asParamGASRewards <- makeAS gukGASRewards "GAS rewards update access structure"
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k | k <- [0..gukKeyCount-1]]
         let auths = Authorizations{..}
