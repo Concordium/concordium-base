@@ -5,8 +5,6 @@ use concordium_std::*;
 // can only be initialized
 fn contract_init(
     ctx: &impl HasInitContext,
-    _amount: Amount,
-    _logger: &mut impl HasLogger,
 ) -> InitResult<u8> {
     if ctx.policies().len() != 1 {
         return Ok(1);
@@ -30,8 +28,6 @@ fn contract_init(
 // can only be initialized
 fn contract_init_2(
     ctx: &impl HasInitContext,
-    _amount: Amount,
-    _logger: &mut impl HasLogger,
 ) -> InitResult<u8> {
     if ctx.policies().len() != 1 {
         return Ok(1);
@@ -65,8 +61,6 @@ fn contract_init_2(
 // expect an account with 2 policies.
 fn contract_init_3(
     ctx: &impl HasInitContext,
-    _amount: Amount,
-    _logger: &mut impl HasLogger,
 ) -> InitResult<u8> {
     if ctx.policies().len() != 2 {
         return Ok(1);
@@ -152,9 +146,8 @@ mod tests {
         };
 
         ctx.push_policy(policy);
-        let mut logger = LogRecorder::init();
 
-        let out = contract_init_2(&ctx, Amount::from_micro_gtu(0), &mut logger);
+        let out = contract_init_2(&ctx);
 
         let state = out.expect_report("Contract initialization failed.");
         claim_eq!(state, 0);
