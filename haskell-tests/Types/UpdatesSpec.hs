@@ -22,6 +22,8 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types.Updates
 import Concordium.Types
 
+import Types.PayloadSerializationSpec (genAddress)
+
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = do
     (w :: Word64) <- arbitrary
@@ -43,6 +45,10 @@ genAuthorizations = do
     asParamElectionDifficulty <- genAccessStructure
     asParamEuroPerEnergy <- genAccessStructure
     asParamMicroGTUPerEuro <- genAccessStructure
+    asParamFoundationAccount <- genAccessStructure
+    asParamMintDistribution <- genAccessStructure
+    asParamTransactionFeeDistribution <- genAccessStructure
+    asParamGASRewards <- genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -53,11 +59,39 @@ genProtocolUpdate = do
         puSpecificationAuxiliaryData <- BS.pack <$> arbitrary
         return ProtocolUpdate{..}
 
+genMintRate :: Gen MintRate
+genMintRate = MintRate <$> arbitrary <*> arbitrary
+
 genExchangeRate :: Gen ExchangeRate
 genExchangeRate = do
         num <- choose (1, maxBound)
         den <- choose (1, maxBound)
         return $ ExchangeRate (num % den)
+
+genMintDistribution :: Gen MintDistribution
+genMintDistribution = do
+        _mdMintPerSlot <- genMintRate
+        bf <- choose (0,100000)
+        ff <- choose (0,100000-bf)
+        let _mdBakingReward = RewardFraction bf
+            _mdFinalizationReward = RewardFraction ff
+        return MintDistribution{..}
+
+genTransactionFeeDistribution :: Gen TransactionFeeDistribution
+genTransactionFeeDistribution = do
+        bf <- choose (0,100000)
+        gf <- choose (0,100000-bf)
+        let _tfdBaker = RewardFraction bf
+            _tfdGASAccount = RewardFraction gf
+        return TransactionFeeDistribution{..}
+
+genGASRewards :: Gen GASRewards
+genGASRewards = do
+        _gasBaker <- RewardFraction <$> choose (0,100000)
+        _gasFinalizationProof <- RewardFraction <$> choose (0,100000)
+        _gasAccountCreation <- RewardFraction <$> choose (0,100000)
+        _gasChainUpdate <- RewardFraction <$> choose (0,100000)
+        return GASRewards{..}
 
 genUpdatePayload :: Gen UpdatePayload
 genUpdatePayload = oneof [
@@ -65,7 +99,11 @@ genUpdatePayload = oneof [
         ProtocolUpdatePayload <$> genProtocolUpdate,
         ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
         EuroPerEnergyUpdatePayload <$> genExchangeRate,
-        MicroGTUPerEuroUpdatePayload <$> genExchangeRate]
+        MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+        FoundationAccountUpdatePayload <$> genAddress,
+        MintDistributionUpdatePayload <$> genMintDistribution,
+        TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+        GASRewardsUpdatePayload <$> genGASRewards]
 
 genRawUpdateInstruction :: Gen RawUpdateInstruction
 genRawUpdateInstruction = do
@@ -93,9 +131,12 @@ genAuthorizationsAndKeys thr = do
         asProtocol <- genAccessStructure
         asParamElectionDifficulty <- genAccessStructure
         asParamEuroPerEnergy <- genAccessStructure
-        asParamMicroGTUPerEuro <- genAccessStructure        
+        asParamMicroGTUPerEuro <- genAccessStructure
+        asParamFoundationAccount <- genAccessStructure
+        asParamMintDistribution <- genAccessStructure
+        asParamTransactionFeeDistribution <- genAccessStructure
+        asParamGASRewards <- genAccessStructure
         return (Authorizations{..}, kps)
-
 
 {-
 genUpdateInstruction :: Gen UpdateInstruction
@@ -137,6 +178,10 @@ testUpdateInstruction keyGen isValid = forAll (genAuthorizationsAndKeys 3) $ \(a
                     ElectionDifficultyUpdatePayload{} -> asParamElectionDifficulty auths
                     EuroPerEnergyUpdatePayload{} -> asParamEuroPerEnergy auths
                     MicroGTUPerEuroUpdatePayload{} -> asParamMicroGTUPerEuro auths
+                    FoundationAccountUpdatePayload{} -> asParamFoundationAccount auths
+                    MintDistributionUpdatePayload{} -> asParamMintDistribution auths
+                    TransactionFeeDistributionUpdatePayload{} -> asParamTransactionFeeDistribution auths
+                    GASRewardsUpdatePayload{} -> asParamGASRewards auths
             useKeys <- keyGen keys accessPublicKeys (fromIntegral accessThreshold)
             let ui = makeUpdateInstruction rui useKeys
             return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate auths ui)
