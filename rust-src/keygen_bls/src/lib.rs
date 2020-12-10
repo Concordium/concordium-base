@@ -1,10 +1,8 @@
 use curve_arithmetic::Curve;
-
-use sha2::{Digest, Sha256};
-
 use ff::{Field, PrimeField};
 use hkdf::Hkdf;
 use pairing::bls12_381::{Fr, FrRepr, G1};
+use sha2::{Digest, Sha256};
 
 /// This function is an implementation of the procedure described in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3
 /// It computes a random scalar in Fr given a seed (the argument `ikm`).
