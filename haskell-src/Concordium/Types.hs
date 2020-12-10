@@ -47,6 +47,7 @@ module Concordium.Types (
   transactionTimeToTimestamp,
   transactionExpired,
   isTimestampBefore,
+  transactionTimeToSlot,
 
   -- * Accounts
   SchemeId,
@@ -61,7 +62,7 @@ module Concordium.Types (
   Nonce(..),
   minNonce,
   AccountVerificationKey,
-  AccountIndex,
+  AccountIndex(..),
 
   -- * Smart contracts
   ModuleRef(..),
@@ -196,11 +197,7 @@ instance (Show a) => Show (Hashed a) where
 
 -- * Types related to bakers.
 newtype BakerId = BakerId AccountIndex
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
-
-instance S.Serialize BakerId where
-    get = BakerId <$> G.getWord64be
-    put (BakerId i) = P.putWord64be i
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
 type LeadershipElectionNonce = Hash.Hash
 type BakerSignVerifyKey = Sig.VerifyKey
@@ -337,6 +334,11 @@ instance FromJSON MintRate where
     }
   parseJSON _ = fail "Not a number"
 
+instance HashableTo Hash.Hash MintRate where
+  getHash = Hash.hash . S.encode
+
+instance Monad m => MHashableTo m Hash.Hash MintRate
+
 -- |Compute an amount minted at a given rate.
 mintAmount :: MintRate -> Amount -> Amount
 {-# INLINE mintAmount #-}
@@ -461,7 +463,17 @@ instance S.Serialize ContractAddress where
 -- when it is created.  For the most part, this is only
 -- used internally.  However, it is indirectly exposed through
 -- 'BakerId'.
-type AccountIndex = Word64
+newtype AccountIndex = AccountIndex Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
+
+instance S.Serialize AccountIndex where
+    get = AccountIndex <$> G.getWord64be
+    put (AccountIndex i) = P.putWord64be i
+
+instance HashableTo Hash.Hash AccountIndex where
+    getHash = Hash.hash . S.encode
+
+instance Monad m => MHashableTo m Hash.Hash AccountIndex
 
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
@@ -827,6 +839,21 @@ type BlockNonce = VRF.Proof
 
 -- |Limit on the number of credentials that may occur in a block.
 type CredentialsPerBlockLimit = Word16
+
+-- |Compute the first slot at or above the given time.
+transactionTimeToSlot ::
+  Timestamp
+  -- ^Genesis time
+  -> Duration
+  -- ^Slot duration
+  -> TransactionTime
+  -- ^Time to convert
+  -> Slot
+transactionTimeToSlot genesis slotDur t
+  | tt <= genesis = 0
+  | otherwise = fromIntegral $ (tsMillis (tt - genesis - 1) `div` durationMillis slotDur) + 1
+  where
+    tt = transactionTimeToTimestamp t
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
