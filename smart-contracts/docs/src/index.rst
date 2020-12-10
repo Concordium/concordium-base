@@ -18,6 +18,7 @@ The documentation is split into four categories
    - **References**: Precise descriptions of the machinery.
 
 .. todo::
+
    A list of information, still missing from the documentation
 
    **Guides**
@@ -60,7 +61,7 @@ The documentation is split into four categories
 
 .. toctree::
    :maxdepth: 1
-   :caption: On chain guides
+   :caption: On-chain guides
 
    guides/deploy-module
    guides/initialize-contract
@@ -78,7 +79,8 @@ The documentation is split into four categories
    references/local-settings
    Rust contract examples (repo) <https://github.com/Concordium/example-smart-contracts>
    Concordium user documentation <https://developers.concordium.com/testnet/docs>
+   concordium-std <https://docs.rs/concordium-std/latest/concordium_std/>
 
 .. todo::
+
    Update user documentation link
-   Add link to crate docs for concordium-std under references when crate is published

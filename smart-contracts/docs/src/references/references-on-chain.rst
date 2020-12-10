@@ -24,7 +24,7 @@ Example of a module reference:
    If you hash a module, e.g., using `sha256sum`_, you will not get the same
    hash as is used on-chain.
    This is because on-chain modules are prepended with four additional bytes
-   that describe which API-version of the Concordium tools they were built it.
+   that describe which API-version of the Concordium tools they were built with.
 
 Contract instances
 ==================

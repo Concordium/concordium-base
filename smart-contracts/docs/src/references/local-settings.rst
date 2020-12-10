@@ -33,10 +33,6 @@ The general structure of the folder is similar to the following:
        ├── contractNames.map
        └── moduleNames.map
 
-
-Keys and Secrets
-================
-
 .. todo::
 
    Should explanations of keypairs, encSecretKey, and thresholds also be added?

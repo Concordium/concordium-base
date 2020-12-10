@@ -15,41 +15,44 @@ target, together with ``cargo-concordium`` and the Rust source code for a smart
 contract module, you wish to compile.
 
 .. seealso::
-    For instructions on how to install the developer tools see
-    :ref:`setup-tools`.
+
+   For instructions on how to install the developer tools see
+   :ref:`setup-tools`.
 
 Compiling to Wasm
-====================================
+=================
 
-To help building small smart contract modules and to take advantage of features
+To help building smart contract modules and to take advantage of features
 such as :ref:`contract schemas <contract-schema>`, we recommend using the
 ``cargo-concordium`` tool for building Rust_ smart contracts.
 
-In order to build run:
+In order to build a smart contract, run:
 
-.. code-block:: sh
+.. code-block:: console
 
-    cargo concordium build
+   $cargo concordium build
 
 This uses Cargo_ for building, but runs further optimizations on the result.
 
 .. seealso::
 
-    For building the schema for a smart contract module, some further
-    preparation is required, see :ref:`build-schema` for more on this.
+   For building the schema for a smart contract module, some :ref:`further
+   preparation is required <build-schema>`.
 
-.. warning::
+.. note::
 
-    Although it is *not* recommended, it is possible to compile using Cargo_
-    directly by running::
+   It is also possible to compile using Cargo_ directly by running:
 
-        cargo build --target=wasm32-unknown-unknown [--release]
+   .. code-block:: console
 
-    But even with the ``--release`` set, the produced Wasm module includes debug
-    information and in some cases embed paths.
+      $cargo build --target=wasm32-unknown-unknown [--release]
 
-    .. todo::
-        Maybe elaborate or add some link to an explanation.
+   Note that even with ``--release`` set, the produced Wasm module includes
+   debug information and, in some cases, embedded local paths.
+
+   .. todo::
+
+      Maybe elaborate or add some link to an explanation.
 
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
