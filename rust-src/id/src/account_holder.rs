@@ -25,11 +25,16 @@ use rand::*;
 use random_oracle::RandomOracle;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
+/// Build the PublicInformationForIP used to generate an PreIdentityObject, out
+/// of the account holder information and the necessary contextual
+/// information (group generators, shared commitment keys, etc).
+/// NB: this function cannot be inlined in generate_pio, as it is used
+/// externally.
 pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IPContext<P, C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
-    initial_account: &impl InitialAccountDataTrait,
+    initial_account: &impl PublicInitialAccountData,
 ) -> Option<PublicInformationForIP<C>> {
     let id_cred_pub = context
         .global_context

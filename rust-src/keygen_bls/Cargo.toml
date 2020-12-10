@@ -1,7 +1,7 @@
 [package]
 name = "keygen_bls"
 version = "0.1.0"
-authors = ["Concordium AG <contact@concordium.com>"]
+authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
 
 [dependencies]
@@ -16,5 +16,4 @@ version = "0"
 
 [lib]
 name = "keygen_bls"
-path = "src/lib.rs"
-crate-type = ["rlib", "staticlib", "cdylib"]
+crate-type = ["rlib"]
