@@ -72,6 +72,7 @@ The documentation is split into four categories
    :caption: References
 
    references/schema-json
+   references/simulate-context
    references/host-fns
    references/references-on-chain
    references/local-settings
