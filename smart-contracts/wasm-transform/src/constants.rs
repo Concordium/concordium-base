@@ -41,8 +41,8 @@ pub const MAX_ALLOWED_STACK_HEIGHT: usize = 1024;
 pub const MAX_NUM_GLOBALS: usize = 1024;
 
 /// Maximum number of branches in the switch statement without the default
-/// branch.
-pub const MAX_SWITCH_SIZE: usize = 1 << 16;
+/// branch. This needs to fit into a u16.
+pub const MAX_SWITCH_SIZE: usize = 4096;
 
 /// Maximum number of exports from a module.
 pub const MAX_NUM_EXPORTS: usize = 100;
