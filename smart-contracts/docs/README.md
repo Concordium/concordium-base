@@ -69,3 +69,62 @@ but only by people with access to this repository.
 
 This is useful for sharing drafts of the documentation without having people
 setting up a build step.
+
+
+## Style guide
+
+### Headers
+Use *sentence-style capitalization*, i.e., only capitalize the first letter of a
+header.
+
+Be consistent in the use of characters for creating headers; use the following
+for each level of header:
+
+``` restructuredtext
+========
+Header 1
+========
+
+Header 2
+========
+
+Header 3
+--------
+
+Header 4
+^^^^^^^^
+
+Header 5
+~~~~~~~~
+```
+
+### Terminal commands
+
+Use `code-block:: console` to show content from a terminal and prepend commands
+with `$` without a space in between.
+
+A space is added between `$` and the command through CSS.
+This solution makes only the command itself copyable, thereby improving the user-experience.
+
+Example:
+
+``` restructuredtext
+.. code-block:: console
+
+   $echo Hello, world!
+   Hello, world!
+```
+
+### Indentation
+Use three spaces for indentation.
+This aligns the directive name (`note::`) with the content of the directive (`This line...`).
+
+Add an empty line between a directive and its content.
+
+Example that follows both rules:
+
+``` restructuredtext
+.. note::
+
+   This line has three spaces in front of it and it has an empty line above it.
+```

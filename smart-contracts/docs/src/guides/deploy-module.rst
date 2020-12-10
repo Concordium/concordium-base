@@ -14,6 +14,7 @@ Make sure to have the latest ``concordium-client`` installed and a smart
 contract module ready to be deployed.
 
 .. seealso::
+
    For instructions on how to install ``concordium-client`` see
    :ref:`setup-tools`.
 
@@ -22,6 +23,7 @@ you will also need to have ``concordium-client`` setup with an account with
 enough GTU to pay for the transaction.
 
 .. note::
+
    The cost of the transaction is dependent on the size of the smart contract
    module. ``concordium-client`` shows the cost and asks for confirmation
    before it executes any transaction.
@@ -63,6 +65,7 @@ The name is only stored locally by ``concordium-client``, and is not
 visible on-chain.
 
 .. seealso::
+
    For an explanation of how and where the names and other local settings are
    stored, see :ref:`local-settings`.
 

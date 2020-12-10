@@ -57,6 +57,9 @@ with the address shown.
 
 .. seealso::
 
+   To get a deeper understanding of contract initialization, see
+   :ref:`contract-instances-init-on-chain`.
+
    For more information about module references and instance addresses,
    see :ref:`references-on-chain`.
 
@@ -98,6 +101,7 @@ If successful, the output should be similar to the following:
    Contract successfully initialized with address: {"index":0,"subindex":0}
 
 Otherwise, an error describing the problem is displayed.
+Common errors are described in the next section.
 
 Common Errors
 ^^^^^^^^^^^^^
@@ -183,6 +187,7 @@ The name is only stored locally by ``concordium-client``, and is not visible
 on-chain.
 
 .. seealso::
+
    For an explanation of how and where the names and other local settings are
    stored, see :ref:`local-settings`.
 
@@ -227,6 +232,6 @@ If successful, the output should be similar to the following:
    :ref:`references-on-chain`.
 
 .. _parameter_cursor():
-   https://docs.rs/concordium-std/0.2.0/concordium_std/trait.HasInitContext.html#tymethod.parameter_cursor
-.. _get(): https://docs.rs/concordium-std/0.2.0/concordium_std/trait.Get.html#tymethod.get
-.. _read(): https://docs.rs/concordium-std/0.2.0/concordium_std/trait.Read.html#method.read_u8
+   https://docs.rs/concordium-std/latest/concordium_std/trait.HasInitContext.html#tymethod.parameter_cursor
+.. _get(): https://docs.rs/concordium-std/latest/concordium_std/trait.Get.html#tymethod.get
+.. _read(): https://docs.rs/concordium-std/latest/concordium_std/trait.Read.html#method.read_u8

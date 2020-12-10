@@ -15,19 +15,21 @@ Make sure to have the latest ``concordium-client`` installed and a smart
 contract instance on-chain to interact with.
 
 .. seealso::
-    For instructions on how to install ``concordium-client`` see
-    :ref:`setup-tools`.
 
-    For how to deploy a smart contract module see :ref:`deploy-module` and for
-    how to create an instance see :ref:`initialize-contract`.
+   For instructions on how to install ``concordium-client`` see
+   :ref:`setup-tools`.
+
+   For how to deploy a smart contract module see :ref:`deploy-module` and for
+   how to create an instance see :ref:`initialize-contract`.
 
 Since interactions with a smart contract are transactions, you should also make
 sure to have ``concordium-client`` setup with an account with enough GTU to pay
 for the transactions.
 
 .. note::
-    The cost of this transaction depends on the size of the parameters send to
-    the ``receive``-function and the complexity of the function itself.
+
+   The cost of this transaction depends on the size of the parameters sent to
+   the ``receive``-function and the complexity of the function itself.
 
 Interaction
 ===========
@@ -38,13 +40,13 @@ run the following command:
 
 .. code-block:: console
 
-    concordium-client contract update 0 --func my_receive --energy 1000
+   $concordium-client contract update 0 --func my_receive --energy 1000
 
-If successful, the transaction will be shown as successful.
+If successful, the output should be similar to the following:
 
-.. todo::
+.. code-block:: console
 
-   Show output once concordium-client has been updated to show it.
+   Successfully updated contract instance {"index":0,"subindex":0} using the function 'my_receive'.
 
 Passing parameters in JSON format
 ---------------------------------
@@ -68,18 +70,19 @@ format, run the following command:
             --energy 1000 \
             --parameter-json my_parameter.json
 
-If successful, the transaction will be shown as successful.
+If successful, the output should be similar to the following:
+
+.. code-block:: console
+
+   Successfully updated contract instance {"index":0,"subindex":0} using the function 'my_parameter_receive'.
+
+Otherwise, an error describing the problem is displayed.
+Common errors are described in the next section.
 
 .. seealso::
 
    For more information about contract instance addresses, see
    :ref:`references-on-chain`.
-
-.. todo::
-
-   Show output once concordium-client has been updated to show it.
-
-Otherwise, an error describing the problem is displayed.
 
 Common Errors
 ^^^^^^^^^^^^^
@@ -136,12 +139,11 @@ format, run the following command:
             --energy 1000 \
             --parameter-bin my_parameter.bin
 
+If successful, the output should be similar to the following:
 
-If successful, the transaction will be shown as successful.
+.. code-block:: console
 
-.. todo::
-
-   Show output once concordium-client has been updated to show it.
+   Successfully updated contract instance {"index":0,"subindex":0} using the function 'my_parameter_receive'.
 
 .. seealso::
 
@@ -149,6 +151,6 @@ If successful, the transaction will be shown as successful.
    :ref:`working-with-parameters`.
 
 .. _parameter_cursor():
-   https://docs.rs/concordium-std/0.2.0/concordium_std/trait.HasInitContext.html#tymethod.parameter_cursor
-.. _get(): https://docs.rs/concordium-std/0.2.0/concordium_std/trait.Get.html#tymethod.get
-.. _read(): https://docs.rs/concordium-std/0.2.0/concordium_std/trait.Read.html#method.read_u8
+   https://docs.rs/concordium-std/latest/concordium_std/trait.HasInitContext.html#tymethod.parameter_cursor
+.. _get(): https://docs.rs/concordium-std/latest/concordium_std/trait.Get.html#tymethod.get
+.. _read(): https://docs.rs/concordium-std/latest/concordium_std/trait.Read.html#method.read_u8

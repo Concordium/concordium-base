@@ -15,11 +15,11 @@ Make sure to have the latest ``concordium-client`` installed and a smart
 contract instance on-chain to inspect.
 
 .. seealso::
-    For instructions on how to install ``concordium-client`` see
-    :ref:`setup-tools`.
+   For instructions on how to install ``concordium-client`` see
+   :ref:`setup-tools`.
 
-    For how to deploy a smart contract module see :ref:`deploy-module` and for
-    how to create an instance :ref:`initialize-contract`
+   For how to deploy a smart contract module see :ref:`deploy-module` and for
+   how to create an instance :ref:`initialize-contract`
 
 Inspection
 ==========
@@ -29,7 +29,7 @@ address index ``0``, run the following command:
 
 .. code-block:: console
 
-   $concordium-client show 0
+   $concordium-client contract show 0
 
 The output should be similar to the following:
 
