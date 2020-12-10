@@ -149,9 +149,9 @@ Example:
 Chain meta data
 ===============
 
-Both the init- and receive-context contain a ``metadata`` section containing
-information of the current status of the blockchain, according to the node
-running the smart contract.
+Both the init- and receive-context contains a ``metadata`` section containing
+information of the blockchain at the block the smart contract is executed in.
+Below we refer to this block as the *current block*.
 
 Example:
 
@@ -168,7 +168,7 @@ Example:
 ``slotNumber``
 --------------
 
-The current slot number for the current block as a JSON number.
+The slot number for the current block as a JSON number.
 
 ``slotTime``
 ------------
@@ -185,3 +185,7 @@ The block height of the current block as a JSON number.
 -------------------
 
 The block height of the last finalized block as a JSON number.
+
+.. todo::
+
+   Link definition of finalized blocks
