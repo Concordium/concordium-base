@@ -318,14 +318,14 @@ instance Serialize ModuleInterface where
     miExposedInit <- getSafeSetOf get
     miExposedReceive <- getSafeMapOf get (getSafeSetOf get)
     miModule <- get
-    miModuleSize <- get
+    miModuleSize <- getWord64be
     return ModuleInterface {..}
   put ModuleInterface{..} = do
     put miModuleRef
     putSafeSetOf putWord64be put miExposedInit
     putSafeMapOf putWord64be put (putSafeSetOf putWord64be put) miExposedReceive
     put miModule
-    put miModuleSize
+    putWord64be miModuleSize
 
 -- |State of a smart contract. In general we don't know anything other than
 -- it is a sequence of bytes.
@@ -345,6 +345,8 @@ newtype ByteSize = ByteSize { _byteSize :: Word64 }
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
 
 -- |It is assumed the type `a` can reliable represent 64-bit unsigned values.
+-- It is intended to be used to automatically get the desired output type, using
+-- something that is an instance of Num.
 contractStateSize :: forall a . Integral a => ContractState -> a -> Maybe a
 contractStateSize cs bs =
   if len <= bs then Just len
