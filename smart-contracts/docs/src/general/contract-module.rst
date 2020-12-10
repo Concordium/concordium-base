@@ -87,6 +87,8 @@ smart contract and a user must first create an *instance* of a contract.
 
     See :ref:`contract-instances` for more on this.
 
+.. _contract-on-chain:
+
 Smart contract on chain
 =======================
 
