@@ -189,7 +189,7 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 #[concordium_cfg_test]
 pub mod tests {
     use super::*;
-    use concordium_std::test_infrastructure::*;
+    // use concordium_std::test_infrastructure::*;
 
     #[concordium_test]
     fn test_init_rejects_same_buyer_and_seller() {
