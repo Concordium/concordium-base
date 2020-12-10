@@ -20,7 +20,7 @@ source = "git+https://github.com/Concordium/concordium-contracts-common.git?bran
 [[package]]
 name = "concordium-std"
 version = "0.3.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=main#7d28fc9c232b72fca148761481d02dc6414034b8"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=main#139a748149f822812880c0f4602eee5c150e2282"
 dependencies = [
  "concordium-contracts-common",
  "concordium-std-derive",
@@ -30,7 +30,7 @@ dependencies = [
 [[package]]
 name = "concordium-std-derive"
 version = "0.3.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=main#7d28fc9c232b72fca148761481d02dc6414034b8"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=main#139a748149f822812880c0f4602eee5c150e2282"
 dependencies = [
  "proc-macro2",
  "quote",

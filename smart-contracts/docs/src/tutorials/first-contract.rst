@@ -141,11 +141,10 @@ The function body should set our counter state to 0, which is straight forward.
 .. It is easy to create smart contracts, which acts as black holes
 .. preventing the GTU send to them from being accessible *ever* again.
 
-.. To prevent this, we let the contract instantiation fail if a non-zero amount is
-.. sent to it.
-.. We do this with the ``ensure_eq!`` macro, which is given two arguments to
-.. compare for equality, if *not* equal it will make the contract reject the
-.. instantiation
+.. To prevent this, we let the contract instantiation fail if a non-zero amount
+.. is sent to it. We do this with the ``ensure_eq!`` macro, which is given
+.. two arguments to compare for equality, if *not* equal it will make the
+.. contract reject the instantiation
 
 ..     ensure_eq!(amount.micro_gtu, 0);
 
@@ -208,21 +207,22 @@ This will be fine for now, since our contract does not access the context during
 initialization.
 You will see how to create a non-empty context a bit later in this tutorial.
 
-.. The second argument is the amount included with the transfer at initialization.
-.. On chain this is represented in microGTU as a ``u64``, but in Rust it is wrapped
-.. in a more convenient type for added type-safety.
+.. The second argument is the amount included with the transfer at
+.. initialization.
+.. On chain this is represented in microGTU as a ``u64``, but in Rust it is
+.. wrapped in a more convenient type for added type-safety.
 
 ..     let amount = Amount::from_micro_gtu(0);
 
 .. For the third argument, we need to specify a *logger* and from
 .. ``test_infrastructure`` we get the ``LogRecorder`` which collects all the
-.. contract event logs into a ``Vec`` that we later can inspect after running our
-.. function
+.. contract event logs into a ``Vec`` that we later can inspect after running
+.. our function
 
 ..     let mut logger = LogRecorder::init();
 
-.. We will not use the logger for anything in this tutorial, but to learn more see
-.. here.
+.. We will not use the logger for anything in this tutorial, but to learn more
+.. see here.
 
 
 With the argument constructed we can now call our function and get back
