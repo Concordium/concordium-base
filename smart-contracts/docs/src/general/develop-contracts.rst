@@ -260,7 +260,7 @@ Avoid creating black holes
 --------------------------
 
 A smart contract is not required to use the amount of GTU send to it, and by
-default a smart contract does not defined any behavior for emptying the balance
+default a smart contract does not define any behavior for emptying the balance
 of an instance, in case someone were to send some GTU.
 These GTU would then be forever *lost*, and there would be no way to recover
 them.
