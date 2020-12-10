@@ -13,7 +13,6 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Serialize as S
 import qualified Data.Text as Text
-import Data.Maybe
 import Data.Int
 import System.Random
 import Control.Monad
