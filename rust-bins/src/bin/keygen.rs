@@ -1,6 +1,5 @@
 use clap::AppSettings;
-use client_server_helpers::*;
-use client_server_helpers::keygen::keygen_bls;
+use client_server_helpers::{keygen::keygen_bls, *};
 use crypto_common::*;
 use curve_arithmetic::Curve;
 use elgamal::{PublicKey, SecretKey};
@@ -9,7 +8,7 @@ use std::convert::TryFrom;
 
 use hmac::{Hmac, Mac, NewMac};
 use pairing::bls12_381::Bls12;
-use sha2::{Sha512};
+use sha2::Sha512;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
