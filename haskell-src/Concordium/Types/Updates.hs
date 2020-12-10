@@ -212,7 +212,7 @@ instance AE.FromJSON UpdateType where
     else if t == "updateElectionDifficulty" then return UpdateElectionDifficulty
     else if t == "updateEuroPerEnergy" then return UpdateEuroPerEnergy
     else if t == "updateMicroGTUPerEuro" then return UpdateMicroGTUPerEuro
-    else fail "Unsupported credential type."
+    else fail "Unsupported update type."
 
 instance AE.ToJSON UpdateType where
   toJSON UpdateAuthorization = AE.String "updateAuthorization"

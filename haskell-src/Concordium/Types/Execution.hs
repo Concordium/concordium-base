@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -14,15 +15,18 @@ import Control.Monad.Reader
 
 import Data.Char
 import qualified Data.Aeson as AE
+import Data.Aeson((.=), (.:))
 import Data.Aeson.TH
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
+import Concordium.Utils.Serialization
 import qualified Data.Set as Set
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+
 import Data.Word
 import GHC.Generics
 
@@ -627,11 +631,27 @@ instance S.Serialize Event
 newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
+-- |The 'Maybe TransactionType' is to cover the case of a transaction payload that cannot be deserialized, in which case
+--  'AccountTransactionType Nothing' is used.
 data TransactionSummaryType = 
-  AccountTransactionType (Maybe TransactionType)
-  | CredentialDeploymentTransaction CredentialType
-  | UpdateTransaction UpdateType
+  AccountTransactionType !(Maybe TransactionType)
+  | CredentialDeploymentTransaction !CredentialType
+  | UpdateTransaction !UpdateType
   deriving(Eq, Show)
+
+instance AE.ToJSON TransactionSummaryType where
+  toJSON (AccountTransactionType mtt) = AE.object ["type" .= AE.String "accountTransactionType", "contents" .= mtt]
+  toJSON (CredentialDeploymentTransaction ct) = AE.object ["type" .= AE.String "credentialDeploymentTransaction", "contents" .= ct]
+  toJSON (UpdateTransaction ut) = AE.object ["type" .= AE.String "updateTransaction", "contents" .= ut]
+
+instance AE.FromJSON TransactionSummaryType where
+  parseJSON = AE.withObject "Transactions summary type" $ \v -> do
+    ty <- v .: "type"
+    case ty of
+      AE.String "accountTransactionType" -> AccountTransactionType <$> v .: "contents"
+      AE.String "credentialDeploymentTransaction" -> CredentialDeploymentTransaction <$> v .: "contents"
+      AE.String "updateTransaction" -> UpdateTransaction <$> v .: "contents"
+      _ -> fail "Cannot parse JSON TransactionSummaryType"
 
 -- |Result of a valid transaction is a transaction summary.
 data TransactionSummary' a = TransactionSummary {
@@ -656,15 +676,15 @@ data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReaso
 
 instance S.Serialize ValidResult
 instance S.Serialize TransactionSummaryType where
-  put (AccountTransactionType tt) = S.putWord8 0 <> S.put tt
+  put (AccountTransactionType tt) = S.putWord8 0 <> putMaybe S.put tt
   put (CredentialDeploymentTransaction credType) = S.putWord8 1 <> S.put credType
   put (UpdateTransaction ut) = S.putWord8 2 <> S.put ut
 
   get = S.getWord8 >>= \case
-    0 -> AccountTransactionType <$> S.get
+    0 -> AccountTransactionType <$> getMaybe S.get
     1 -> CredentialDeploymentTransaction <$> S.get
     2 -> UpdateTransaction <$> S.get
-    _ -> fail "Unsupported credential type."
+    _ -> fail "Unsupported transaction summary type."
 
 instance S.Serialize TransactionSummary
 
@@ -773,7 +793,7 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
                                     },
                                  AE.fieldLabelModifier = firstLower . drop 2} ''ValidResult)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummaryType)
+-- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummaryType)
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
 $(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
