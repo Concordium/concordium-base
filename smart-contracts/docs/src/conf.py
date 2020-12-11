@@ -214,3 +214,12 @@ epub_title = project
 
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
+
+# -- Options for linkchecking -------------------------------------------------
+
+linkcheck_request_headers = {
+    "https://crates.io/": {
+        "Accept": "text/html",
+        "Accept-Encoding": "utf-8",
+    }
+}

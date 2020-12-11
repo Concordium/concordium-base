@@ -6,9 +6,9 @@
 
 .. _introduction:
 
-====================================
+===============================
 Introduction to smart contracts
-====================================
+===============================
 
 A smart contract is a user-supplied piece of code submitted to the Concordium
 blockchain, used to define behavior that is not directly part of the core
@@ -25,8 +25,8 @@ system, combining on and off-chain functionality. An example of off-chain
 functionality could be a server that invokes the smart contract based on
 data from the real-world, such as prices of stocks, or weather information.
 
-What are smart contract for?
-============================
+What are smart contracts for?
+=============================
 
 The hope is to reduce the needed amount of trust in third-parties, in some cases
 removing the need for trusted third-party, in other cases reducing their
@@ -55,8 +55,8 @@ obligation, or some way for the highest bidder to file a complaint. Smart
 contracts cannot resolve these real-world issues automatically, and the best
 solution is likely going to depend on the specifics of the auction.
 
-What are smart contract *not* for?
-==================================
+What are smart contracts *not* for?
+===================================
 
 Smart contracts are a very exciting technology and people are still finding new
 ways to take advantage of them.
