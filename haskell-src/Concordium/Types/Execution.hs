@@ -103,93 +103,57 @@ data Payload =
       -- |Amount to transfer.
       tAmount :: !Amount
       }
-  -- |Add a new baker with fresh id.
+  -- |Add a new baker for the sender account.
   | AddBaker {
-      -- NOTE: The baker id should probably be generated automatically.
-      -- we do not wish to recycle baker ids. If we allowed that then
-      -- potentially when bakers are removed dishonest bakers might try to
-      -- claim their ids and thus abuse the system.
       -- |Public key to verify the baker has won the election.
       abElectionVerifyKey :: !BakerElectionVerifyKey,
       -- |Public key to verify block signatures signed by the baker.
       abSignatureVerifyKey :: !BakerSignVerifyKey,
       -- |Public key to verify aggregate signatures in which the baker participates
       abAggregationVerifyKey :: !BakerAggregationVerifyKey,
-      -- |Address of the account the baker wants to be rewarded to.
-      abAccount :: !AccountAddress,
       -- |Proof that the baker owns the private key corresponding to the
       -- signature verification key.
       abProofSig :: !Dlog25519Proof,
       -- |Proof that the baker owns the private key corresponding to the
       -- election verification key.
       abProofElection :: !Dlog25519Proof,
-      -- |Proof that the baker owns the privte key corresponding to the reward
-      -- account public key. This is needed at least for beta where we want to
-      -- control who can become a baker and thus cannot allow users to send
-      -- create their own bakers.
-      -- TODO: We could also alternatively just require a signature from one of the
-      -- beta accounts on the public data.
-      abProofAccount :: !AccountOwnershipProof,
       -- |Proof that the baker owns the private key corresponding to the aggregation
       -- key.
-      abProofAggregation :: !BakerAggregationProof
-      -- FIXME: in the future also logic the baker is allowed to become a baker:
-      -- THIS NEEDS SPEC
+      abProofAggregation :: !BakerAggregationProof,
+      -- |Initial stake. This amount must be available on the account,
+      -- and will be locked.
+      abBakingStake :: !Amount,
+      -- |Whether earnings from being a baker should be automatically added
+      -- to the stake.
+      abRestakeEarnings :: !Bool
       }
-  -- |Remove an existing baker from the baker pool.
-  | RemoveBaker {
-      -- |Id of the baker to remove.
-      rbId :: !BakerId
-      -- TODO:
-      -- Proof that we are allowed to remove the baker. One
-      -- -- mechanism would be that the baker would remove itself only
-      -- -- (the transaction must come from the baker's account) but
-      -- -- possibly we want other mechanisms.
-      -- rbProof :: !Proof
+  -- |Remove the sender account from the baking pool.
+  | RemoveBaker
+  -- |Update the amount of stake that is locked for the baker.
+  | UpdateBakerStake {
+      ubsStake :: !Amount
       }
-  -- |Update the account the baker receives their baking reward to.
-  | UpdateBakerAccount {
-      -- |Id of the baker to update.
-      ubaId :: !BakerId,
-      -- |Address of the new account. The account must exist.
-      ubaAddress :: !AccountAddress,
-      -- |Proof that the baker owns the new account.
-      ubaProof :: !AccountOwnershipProof
+  -- |Update whether the baker's earnings are automatically restaked.
+  | UpdateBakerRestakeEarnings {
+      ubreRestakeEarnings :: !Bool
       }
-  -- |Update the signature (verification) key of the baker.
-  | UpdateBakerSignKey {
-      -- |Id of the baker to update.
-      ubsId :: !BakerId,
-      -- |New signature verification key.
-      ubsKey :: !BakerSignVerifyKey,
-      -- |Proof that the baker knows the private key of this verification key.
-      ubsProof :: !Dlog25519Proof
-      }
-  -- |Change which baker an account's stake is delegated to.
-  -- If the ID is not valid, the delegation is not updated.
-  | DelegateStake {
-      -- |ID of the baker to delegate stake to.
-      dsID :: !BakerId
-      }
-  -- |Undelegate stake.
-  | UndelegateStake
-  -- | Update the aggregation verification key of the baker
-  | UpdateBakerAggregationVerifyKey {
-      -- |Id of the baker to update
-      ubavkId :: !BakerId,
-      -- |New aggregation verification key
-      ubavkKey :: !BakerAggregationVerifyKey,
-      -- |Proof of knowledge of the signing key corresponding to the new verification key
-      ubavkProof :: !BakerAggregationProof
-      }
-  -- | Update the election key of the baker
-  | UpdateBakerElectionKey {
-      -- |Id of the baker to update
-      ubekId :: !BakerId,
-      -- |New election key
-      ubekKey :: !BakerElectionVerifyKey,
-      -- |Proof of knowledge of the secret key corresponding to the new election key
-      ubekProof :: !Dlog25519Proof
+  -- |Update the baker's keys
+  | UpdateBakerKeys {
+      -- |Public key to verify the baker has won the election.
+      ubkElectionVerifyKey :: !BakerElectionVerifyKey,
+      -- |Public key to verify block signatures signed by the baker.
+      ubkSignatureVerifyKey :: !BakerSignVerifyKey,
+      -- |Public key to verify aggregate signatures in which the baker participates
+      ubkAggregationVerifyKey :: !BakerAggregationVerifyKey,
+      -- |Proof that the baker owns the private key corresponding to the
+      -- signature verification key.
+      ubkProofSig :: !Dlog25519Proof,
+      -- |Proof that the baker owns the private key corresponding to the
+      -- election verification key.
+      ubkProofElection :: !Dlog25519Proof,
+      -- |Proof that the baker owns the private key corresponding to the aggregation
+      -- key.
+      ubkProofAggregation :: !BakerAggregationProof
       }
   -- | Updates existing keys used for signing transactions for the sender's account
   | UpdateAccountKeys {
@@ -264,39 +228,27 @@ putPayload AddBaker{..} =
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
     S.put abAggregationVerifyKey <>
-    S.put abAccount <>
     S.put abProofSig <>
     S.put abProofElection <>
-    S.put abProofAccount <>
-    S.put abProofAggregation
-putPayload RemoveBaker{..} =
-    P.putWord8 5 <>
-    S.put rbId
-putPayload UpdateBakerAccount{..} =
+    S.put abProofAggregation <>
+    S.put abBakingStake <>
+    S.put abRestakeEarnings
+putPayload RemoveBaker =
+    P.putWord8 5
+putPayload UpdateBakerStake{..} =
     P.putWord8 6 <>
-    S.put ubaId <>
-    S.put ubaAddress <>
-    S.put ubaProof
-putPayload UpdateBakerSignKey{..} =
+    S.put ubsStake
+putPayload UpdateBakerRestakeEarnings{..} =
     P.putWord8 7 <>
-    S.put ubsId <>
-    S.put ubsKey <>
-    S.put ubsProof
-putPayload DelegateStake{..} =
+    S.put ubreRestakeEarnings
+putPayload UpdateBakerKeys{..} =
     P.putWord8 8 <>
-    S.put dsID
-putPayload UndelegateStake =
-    P.putWord8 9
-putPayload UpdateBakerAggregationVerifyKey{..} =
-    P.putWord8 11 <>
-    S.put ubavkId <>
-    S.put ubavkKey <>
-    S.put ubavkProof
-putPayload UpdateBakerElectionKey{..} =
-    P.putWord8 12 <>
-    S.put ubekId <>
-    S.put ubekKey <>
-    S.put ubekProof
+    S.put ubkElectionVerifyKey <>
+    S.put ubkSignatureVerifyKey <>
+    S.put ubkAggregationVerifyKey <>
+    S.put ubkProofSig <>
+    S.put ubkProofElection <>
+    S.put ubkProofAggregation
 putPayload UpdateAccountKeys{..} = do
     P.putWord8 13
     P.putWord8 (fromIntegral (length uakKeys))
@@ -361,37 +313,28 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
               abAggregationVerifyKey <- S.get
-              abAccount <- S.get
               abProofSig <- S.get
               abProofElection <- S.get
-              abProofAccount <- S.get
               abProofAggregation <- S.get
+              abBakingStake <- S.get
+              abRestakeEarnings <- S.get
               return AddBaker{..}
             5 -> do
-              rbId <- S.get
-              return RemoveBaker{..}
-            6 -> do
-              ubaId <- S.get
-              ubaAddress <- S.get
-              ubaProof <- S.get
-              return UpdateBakerAccount{..}
-            7 -> do
-              ubsId <- S.get
-              ubsKey <- S.get
-              ubsProof <- S.get
-              return UpdateBakerSignKey{..}
-            8 -> DelegateStake <$> S.get
-            9 -> return UndelegateStake
-            11 -> do
-              ubavkId <- S.get
-              ubavkKey <- S.get
-              ubavkProof <- S.get
-              return UpdateBakerAggregationVerifyKey{..}
-            12 -> do
-              ubekId <- S.get
-              ubekKey <- S.get
-              ubekProof <- S.get
-              return UpdateBakerElectionKey{..}
+              return RemoveBaker
+            6 -> S.label "UpdateBakerStake" $ do
+              ubsStake <- S.get
+              return UpdateBakerStake{..}
+            7 -> S.label "RestakeEarnings" $ do
+              ubreRestakeEarnings <- S.get
+              return UpdateBakerRestakeEarnings{..}
+            8 -> do
+              ubkElectionVerifyKey <- S.get
+              ubkSignatureVerifyKey <- S.get
+              ubkAggregationVerifyKey <- S.get
+              ubkProofSig <- S.get
+              ubkProofElection <- S.get
+              ubkProofAggregation <- S.get
+              return UpdateBakerKeys{..}
             13 -> do
               len <- S.getWord8
               uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
@@ -528,46 +471,70 @@ data Event =
                -- |Account to which it was deployed.
                ecdAccount :: !AccountAddress
                }
-           | BakerAdded !BakerId
-           | BakerRemoved !BakerId
-           | BakerAccountUpdated {
-               -- |The baker.
-               ebauBaker :: !BakerId,
-               -- |New account address
-               ebauNewAccount :: !AccountAddress
-               }
-           | BakerKeyUpdated {
-               -- |The baker.
-               ebkuBaker :: !BakerId,
-               -- |New key.
-               ebkuNewKey :: !BakerSignVerifyKey
-               }
-           | BakerElectionKeyUpdated {
-               -- |The baker.
-               ebekuBaker :: !BakerId,
-               -- |New key.
-               ebekuNewKey :: !BakerElectionVerifyKey
-               }
-           | BakerAggregationKeyUpdated {
-               -- |The baker.
-               ebakuBaker :: !BakerId,
-               -- |The updated key
-               ebakuNewKey :: !BakerAggregationVerifyKey
-               }
-           | StakeDelegated {
-               -- |Account which is delegating.
-               esdAccount :: !AccountAddress,
-               -- |To which baker.
-               esdBaker :: !BakerId
-               }
-           | StakeUndelegated {
-               -- |Account which undelegated the stake.
-               esuAccount :: !AccountAddress,
-               -- |The baker to which the account delegated before, if any.
-               -- It is OK for an account to try to undelegate stake even if they
-               -- are not delegating to anyone at the time.
-               esuBaker :: !(Maybe BakerId)
-               }
+           -- |A baker was added.
+           | BakerAdded {
+              -- |Baker's id
+              ebaBakerId :: !BakerId,
+              -- |Baker account
+              ebaAccount :: !AccountAddress,
+              -- |Signing public key
+              ebaSignKey :: !BakerSignVerifyKey,
+              -- |VRF public key
+              ebaElectionKey :: !BakerElectionVerifyKey,
+              -- |Aggregation public key
+              ebaAggregationKey :: !BakerAggregationVerifyKey,
+              -- |Baker stake
+              ebaStake :: !Amount,
+              -- |Whether baker earnings are automatically staked
+              ebaRestakeEarnings :: !Bool
+           }
+           -- |A baker was removed.
+           | BakerRemoved {
+              -- |Baker's id
+              ebrBakerId :: !BakerId,
+              -- |Baker account
+              ebrAccount :: !AccountAddress
+           }
+           -- |A baker's stake was increased.
+           | BakerStakeIncreased {
+              -- |Baker's id
+              ebsiBakerId :: !BakerId,
+              -- |Baker account
+              ebsiAccount :: !AccountAddress,
+              -- |New stake
+              ebsiNewStake :: !Amount
+           }
+           -- |A baker's stake was decreased.
+           | BakerStakeDecreased {
+              -- |Baker's id
+              ebsiBakerId :: !BakerId,
+              -- |Baker account
+              ebsiAccount :: !AccountAddress,
+              -- |New stake
+              ebsiNewStake :: !Amount
+           }
+           -- |A baker's restake earnings flag was set.
+           | BakerSetRestakeEarnings {
+              -- |Baker's id
+              ebsreBakerId :: !BakerId,
+              -- |Baker account
+              ebsreAccount :: !AccountAddress,
+              -- |Whether earnings will be restaked
+              ebsreRestakeEarnings :: !Bool
+           }
+           -- |A baker's keys were updated.
+           | BakerKeysUpdated {
+              -- |Baker's id
+              ebkuBakerId :: !BakerId,
+              -- |Baker account
+              ebkuAccount :: !AccountAddress,
+              -- |Signing public key
+              ebkuSignKey :: !BakerSignVerifyKey,
+              -- |VRF public key
+              ebkuElectionKey :: !BakerElectionVerifyKey,
+              -- |Aggregation public key
+              ebkuAggregationKey :: !BakerAggregationVerifyKey
+           }            
            -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
            | AccountKeysUpdated
            | AccountKeysAdded
@@ -711,18 +678,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | Rejected -- ^Rejected due to contract logic.
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
-                  | RemovingNonExistentBaker !BakerId
-                  | InvalidBakerRemoveSource !AccountAddress
-                  | UpdatingNonExistentBaker !BakerId
+                  | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
+                  | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
+                  | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
+                  | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
                   | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
-                  | DuplicateSignKey !BakerSignVerifyKey -- ^A baker with the given signing key already exists.
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
-                  -- |A transaction should be sent from the baker's current account, but is not.
-                  | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
-                                          nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
-                                        }
-                  -- |A transaction should be sent from a special account, but is not.
-                  | NotFromSpecialAccount
                   -- |Encountered index to which no account key belongs when removing or updating keys
                   | NonExistentAccountKey
                   -- |Attempted to add an account key to a key index already in use
@@ -797,3 +758,12 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
 $(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
+
+-- |Generate the challenge for adding a baker.
+addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
+addBakerChallenge addr elec sign agg = "addBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
+
+-- |Generate the challenge for updating a baker's keys.
+-- This is currently identical to 'addBakerChallenge'.
+updateBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
+updateBakerKeyChallenge addr elec sign agg = "updateBakerKeys" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
