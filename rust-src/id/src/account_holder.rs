@@ -518,11 +518,11 @@ pub fn commitment_to_share_and_rand<C: Curve>(
 /// provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 pub fn create_credential<
-        'a,
+    'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
-    >(
+>(
     context: IPContext<'a, P, C>,
     id_object: &IdentityObject<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
@@ -538,12 +538,12 @@ where
         id_object_use_data,
         cred_counter,
         policy,
-        acc_data
+        acc_data,
     )?;
     let unsigned_proofs = unsigned_credential_info.proofs;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: acc_data.sign_challenge(&unsigned_proofs.unsigned_challenge)
+        sigs: acc_data.sign_challenge(&unsigned_proofs.unsigned_challenge),
     };
 
     let cdp = CredDeploymentProofs {
@@ -564,7 +564,6 @@ where
 
     Ok(info)
 }
-
 
 pub fn create_unsigned_credential<
     'a,
@@ -677,10 +676,9 @@ where
     let cred_account = match acc_data.get_existing() {
         // we are deploying on a new account
         // take all the keys that
-        Either::Left(threshold) => CredentialAccount::NewAccount(
-            acc_data.get_public_keys(),
-            threshold,
-        ),
+        Either::Left(threshold) => {
+            CredentialAccount::NewAccount(acc_data.get_public_keys(), threshold)
+        }
         Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
     };
 

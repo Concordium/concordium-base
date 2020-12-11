@@ -41,6 +41,19 @@ checkCDICompatibility filename referenceFile = do
       referenceOutput <- BS.readFile referenceFile
       -- we do unpack for better error reporting, easier to compare lists of word8s
       assertEqual "Incompatible binary serializations." (BS.unpack referenceOutput) (BS.unpack (S.encode input))
+      
+-- Check that proofCommitments actually extracts the commitments. It checks this by reading a `CredentialDeploymentInformation`
+-- from json, extracting the commitments, serializing them and comparing them with the provided binary (the `referenceFile`). 
+checkCDICommitmentsCompatibility :: FilePath -> FilePath -> Expectation
+checkCDICommitmentsCompatibility filename referenceFile = do
+  eitherDecodeFileStrict filename >>= \case
+    Left err -> assertFailure err
+    Right (input :: Versioned CredentialDeploymentInformation) -> do
+      referenceOutput <- BS.readFile referenceFile
+      -- we do unpack for better error reporting, easier to compare lists of word8s
+      case proofCommitments $ cdiProofs $ vValue input of
+        Nothing -> assertFailure "Could not parse commitments from the credential."
+        Just cmms -> assertEqual "Incompatible binary serializations." (BS.unpack referenceOutput) $ BS.unpack $ S.encode $ cmms
 
 -- Check that serializations in Haskell and rust, json and binary are compatible.
 checkInitialCDICompatibility :: FilePath -> FilePath -> Expectation
@@ -57,4 +70,5 @@ tests = describe "Concordium.ID" $ do
   specify "account address JSON" $ withMaxSuccess 100000 testJSON
   specify "account address from bytes" $ withMaxSuccess 100000 testFromBytes
   specify "JSON/binary CDI serialization check" $ checkCDICompatibility "testdata/cdi.json" "testdata/cdi.bin"
+  specify "JSON/binary CDI Commitments check" $ checkCDICommitmentsCompatibility "testdata/cdi.json" "testdata/cdi-coms.bin"
   specify "JSON/binary Initial CDI serialization check" $ checkInitialCDICompatibility "testdata/icdi.json" "testdata/icdi.bin"
