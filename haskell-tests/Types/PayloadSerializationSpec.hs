@@ -124,7 +124,7 @@ genPayload = oneof [genDeployModule,
           n <- choose (0,1000)
           Parameter . BSS.pack <$> vector n
 
-        genDeployModule = DeployModule <$> (WasmModule 0 <$> genByteString)
+        genDeployModule = DeployModule <$> (WasmModule 0 . ModuleSource <$> genByteString)
 
         genInit = do
           icAmount <- Amount <$> arbitrary
