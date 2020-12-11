@@ -324,7 +324,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             num_args,
             outer_function.num_params(),
         );
-        for (p, actual) in outer_function.locals().iter().zip(args.iter()) {
+        for (p, actual) in outer_function.params().iter().zip(args.iter()) {
             // the first num_params locals are arguments
             let actual_ty = ValueType::from(*actual);
             ensure!(
@@ -347,7 +347,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 Value::I64(long) => stack.push(StackValue::from(long)),
             }
         }
-        for l in outer_function.locals()[args.len()..].iter() {
+        for l in outer_function.locals() {
             match l {
                 ValueType::I32 => stack.push(StackValue::from(0i32)),
                 ValueType::I64 => stack.push(StackValue::from(0i64)),
@@ -495,7 +495,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         };
                         locals_base = current_frame.height;
                         function_frames.push(current_frame);
-                        for ty in f.locals()[f.num_params() as usize..].iter() {
+                        for ty in f.locals() {
                             match ty {
                                 ValueType::I32 => stack.push(StackValue {
                                     short: 0,
@@ -547,7 +547,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             };
                             locals_base = current_frame.height;
                             function_frames.push(current_frame);
-                            for ty in f.locals()[f.num_params() as usize..].iter() {
+                            for ty in f.locals() {
                                 match ty {
                                     ValueType::I32 => stack.push(StackValue {
                                         short: 0,

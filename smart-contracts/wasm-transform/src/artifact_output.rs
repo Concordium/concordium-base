@@ -5,6 +5,13 @@ use crate::{
 };
 use std::io::Write;
 
+impl Output for ArtifactLocal {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        self.multiplicity.output(out)?;
+        self.ty.output(out)
+    }
+}
+
 impl Output for ArtifactData {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         self.offset.output(out)?;
@@ -47,10 +54,11 @@ impl Output for ArtifactMemory {
 
 impl<C: RunnableCode> Output for C {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
-        self.num_params().output(out)?;
         self.type_idx().output(out)?;
         self.return_type().output(out)?;
-        self.locals().output(out)?;
+        self.params().output(out)?;
+        self.num_locals().output(out)?;
+        self.locals().locals.output(out)?;
         self.code().output(out)
     }
 }

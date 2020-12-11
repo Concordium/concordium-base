@@ -133,6 +133,15 @@ impl<'a, A: Parseable<'a>> GetParseable<A> for &'a [u8] {
     }
 }
 
+/// Implementation for u16 according to the Wasm specification.
+impl<'a> Parseable<'a> for u16 {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        // 3 is ceil(16 / 7)
+        let res = leb128::read::unsigned(&mut cursor.take(3))?;
+        Ok(u16::try_from(res)?)
+    }
+}
+
 /// Implementation for u32 according to the Wasm specification.
 impl<'a> Parseable<'a> for u32 {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
