@@ -543,12 +543,11 @@ impl str::FromStr for Duration {
         use ParseDurationError::*;
         let mut duration = 0;
         for measure in s.split_whitespace() {
-            let r : Vec<&str> = measure.splitn(1, |c: char| !c.is_ascii_digit()).collect();
-            if r.len() != 2 {
-                return Err(MissingUnit)
-            }
-            let n: u64 = r[0].parse().map_err(|_| FailedParsingNumber)?;
-            let unit: u64 = match r[1] {
+            let split_index = measure.find(|c: char| !c.is_ascii_digit()).ok_or(MissingUnit)?;
+            let (n, unit) = measure.split_at(split_index);
+
+            let n: u64 = n.parse().map_err(|_| FailedParsingNumber)?;
+            let unit: u64 = match unit {
                 "ms" => 1,
                 "s" => 1000,
                 "m" => 1000 * 60,
@@ -941,5 +940,17 @@ mod serde_impl {
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
             v.parse::<AccountAddress>().map_err(|_| de::Error::custom("Wrong Base58 version."))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_duration_from_string_simple() {
+        let duration = Duration::from_str("12d 1h 39s 3m 2h").unwrap();
+        assert_eq!(duration.millis(), 1000*60*60*24*12 + 1000*60*60*1 + 1000*39+ 1000*60*3 + 1000*60*60*2)
     }
 }
