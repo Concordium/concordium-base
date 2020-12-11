@@ -21,7 +21,7 @@ Example of context
             "slotNumber": 1,
             "blockHeight": 1,
             "finalizedHeight": 1,
-            "slotTime": 0
+            "slotTime": "2021-01-01T00:00:01Z"
         },
         "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
     }
@@ -59,7 +59,7 @@ Example of context:
             "slotNumber": 1,
             "blockHeight": 1,
             "finalizedHeight": 1,
-            "slotTime": 0
+            "slotTime": "2021-01-01T00:00:01Z"
         },
         "invoker": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
         "selfAddress": {"index": 0, "subindex": 0},
@@ -161,7 +161,7 @@ Example:
          "slotNumber": 123456789,
          "blockHeight": 123456789,
          "finalizedHeight": 123456789,
-         "slotTime": 123456789
+         "slotTime": "2021-01-01T00:00:01Z"
    }
 
 
@@ -173,7 +173,8 @@ The slot number for the current block as a JSON number.
 ``slotTime``
 ------------
 
-The slot time at the beginning of the current block as a JSON number.
+The slot time at the beginning of the current block as a JSON string in the
+format of RFC3339_ with precision up to milliseconds.
 
 ``blockHeight``
 ---------------
@@ -189,3 +190,5 @@ The block height of the last finalized block as a JSON number.
 .. todo::
 
    Link definition of finalized blocks
+
+.. _RFC3339: https://tools.ietf.org/html/rfc3339

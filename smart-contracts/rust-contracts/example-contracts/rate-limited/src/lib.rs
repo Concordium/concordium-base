@@ -59,7 +59,7 @@ pub struct State {
     recent_transfers: Vec<Transfer>,
 }
 
-#[init(contract = "rate-limited")]
+#[init(contract = "rate-limited", parameter = "InitParams")]
 fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
@@ -85,7 +85,7 @@ fn contract_receive_deposit<A: HasActions>(
     Ok(A::accept())
 }
 
-#[receive(contract = "rate-limited", name = "receive", payable)]
+#[receive(contract = "rate-limited", name = "receive", payable, parameter = "TransferRequest")]
 /// Allows the owner of the contract to transfer GTU from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<A: HasActions>(
