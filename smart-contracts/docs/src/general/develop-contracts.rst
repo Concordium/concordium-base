@@ -69,36 +69,28 @@ A simple counter example would look like:
 
    #[init(contract = "counter")]
    fn counter_init(
-       _ctx: &impl HasInitContext<()>,
-       amount: Amount,
-       _logger: &mut impl HasLogger,
+       _ctx: &impl HasInitContext,
    ) -> InitResult<State> {
-       ensure_eq!(amount.micro_gtu, 0); // Amount must be 0
        let state = 0;
        Ok(state)
    }
 
    #[receive(contract = "counter", name = "increment")]
    fn contract_receive<A: HasActions>(
-       ctx: &impl HasReceiveContext<()>,
-       amount: Amount,
-       _logger: &mut impl HasLogger,
+       ctx: &impl HasReceiveContext,
        state: &mut State,
    ) -> ReceiveResult<A> {
-       ensure_eq!(amount.micro_gtu, 0); // Amount must be 0
        ensure!(ctx.sender().matches_account(&ctx.owner()); // Only the owner can increment
        *state += 1;
        Ok(A::accept())
    }
 
-There are a number of things to notice:
+There are a number of things to notice
 
-- The type of the methods.
-  The init methods must have the type as shown above, the only freedom the user
-  has is in choosing what the state type is.
-  The same applies to the receive method, with the additional requirement that
-  the type of the ``state`` variable must match the type returned by the
-  ``init`` method.
+- The type of the methods. The init methods must have the type as shown above,
+  the only freedom the user has is in choosing what the state type is. The same
+  applies to the receive method, with the additional requirement that the type
+  of the ``state`` variable must match the type returned by the ``init`` method.
 
 - The annotation ``#[init(contract = "counter")]`` marks the method it is
   applied to as the ``init`` method of the contract named ``counter``.
@@ -180,7 +172,7 @@ As an example, see the following contract in which the parameter
 ``ReceiveParameter`` is deserialized on the highlighted line:
 
 .. code-block:: rust
-   :emphasize-lines: 27
+   :emphasize-lines: 23
 
    use concordium_std::*;
 
@@ -192,20 +184,16 @@ As an example, see the following contract in which the parameter
        value: u32,
    }
 
-   fn init<I: HasInitContext<()>, L: HasLogger>(
-       _ctx: &I,
-       _amount: Amount,
-       _logger: &mut L,
+   fn init(
+       _ctx: &impl HasInitContext,
    ) -> InitResult<State> {
        let initial_state = 0;
        Ok(initial_state)
    }
 
    #[receive(contract = "parameter_example", name = "receive")]
-   fn receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-       ctx: &R,
-       _amount: Amount,
-       _logger: &mut L,
+   fn receive<A: HasActions>(
+       ctx: &impl HasReceiveContext,
        state: &mut State,
    ) -> ReceiveResult<A> {
        let parameter: ReceiveParameter = ctx.parameter_cursor().get()?;
@@ -222,18 +210,16 @@ To get more control, and in this case, more efficiency, we can deserialize the
 parameter using the `Read`_ trait:
 
 .. code-block:: rust
-   :emphasize-lines: 9, 12
+   :emphasize-lines: 7, 10
 
    #[receive(contract = "parameter_example", name = "receive_optimized")]
-   fn receive_optimized<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-       ctx: &R,
-       _amount: Amount,
-       __logger: &mut L,
+   fn receive_optimized<A: HasActions>(
+       ctx: &impl HasReceiveContext,
        state: &mut State,
    ) -> ReceiveResult<A> {
-      let mut cursor = ctx.parameter_cursor();
-      let should_add: bool = cursor.read_u8()? != 0;
-        if should_add {
+       let mut cursor = ctx.parameter_cursor();
+       let should_add: bool = cursor.read_u8()? != 0;
+       if should_add {
            // Only decode the value if it is needed.
            let value: u32 = cursor.read_u32()?;
            *state += value;
@@ -287,9 +273,15 @@ Don't panic
 Avoid creating black holes
 --------------------------
 
-.. todo::
+A smart contract is not required to use the amount of GTU send to it, and by
+default a smart contract does not define any behavior for emptying the balance
+of an instance, in case someone were to send some GTU.
+These GTU would then be forever *lost*, and there would be no way to recover
+them.
 
-   Contracts where funds cannot be recovered.
+Therefore it is good practice for smart contracts that are not dealing with GTU,
+to ensure the sent amount of GTU is zero and reject any invocations which are
+not.
 
 Move heavy calculations off-chain
 ---------------------------------

@@ -64,11 +64,7 @@ pub struct State {
 }
 
 #[init(contract = "rate-limited")]
-fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: &I,
-    _amount: Amount,
-    _logger: &mut L,
-) -> InitResult<State> {
+fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
     // If timed_withdraw_limit is zero then no GTU can be transferred from the
@@ -83,24 +79,22 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(contract = "rate-limited", name = "receive_deposit")]
+#[receive(contract = "rate-limited", name = "receive_deposit", payable)]
 /// Allows anyone to deposit GTU into the contract.
-fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    _ctx: &R,
+fn contract_receive_deposit<A: HasActions>(
+    _ctx: &impl HasReceiveContext<()>,
     _amount: Amount,
-    _logger: &mut L,
     _state: &mut State,
 ) -> ReceiveResult<A> {
     Ok(A::accept())
 }
 
-#[receive(contract = "rate-limited", name = "receive")]
+#[receive(contract = "rate-limited", name = "receive", payable)]
 /// Allows the owner of the contract to transfer GTU from the contract to an
 /// arbitrary account
-fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
+fn contract_receive_transfer<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     _amount: Amount,
-    _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can transfer.
@@ -165,7 +159,7 @@ mod tests {
 
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
-        ctx.metadata.set_slot_time(10);
+        ctx.set_metadata_slot_time(10);
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
         ctx.set_self_balance(Amount::from_micro_gtu(10));
@@ -200,7 +194,6 @@ mod tests {
             time_limit:           9,
         };
 
-        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
@@ -208,7 +201,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<ActionsTree> =
-            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
+            contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
         let actions = match res {
@@ -250,7 +243,7 @@ mod tests {
         let parameter_bytes = to_bytes(&parameter);
 
         let mut ctx = ReceiveContextTest::empty();
-        ctx.metadata.set_slot_time(10);
+        ctx.set_metadata_slot_time(10);
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
         ctx.set_self_balance(Amount::from_micro_gtu(10));
@@ -286,7 +279,6 @@ mod tests {
             time_limit:           10,
         };
 
-        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
@@ -294,7 +286,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<ActionsTree> =
-            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
+            contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
         claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
@@ -333,7 +325,7 @@ mod tests {
 
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
-        ctx.metadata.set_slot_time(10);
+        ctx.set_metadata_slot_time(10);
         ctx.set_self_balance(Amount::from_micro_gtu(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
@@ -368,7 +360,6 @@ mod tests {
             time_limit:           1000,
         };
 
-        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
@@ -376,7 +367,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<ActionsTree> =
-            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
+            contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
         claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");

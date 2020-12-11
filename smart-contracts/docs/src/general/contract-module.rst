@@ -94,8 +94,10 @@ smart contract and a user must first create an *instance* of a contract.
 
 .. _smart-contracts-on-chain:
 
-Smart contracts on-chain
-========================
+.. _contract-on-chain:
+
+Smart contract on chain
+=======================
 
 A smart contract on-chain is a collection of functions exported from a deployed
 module. The concrete mechanism used for this is the `Web Assembly`_ export

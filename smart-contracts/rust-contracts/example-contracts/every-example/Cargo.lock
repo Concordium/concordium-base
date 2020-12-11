@@ -34,31 +34,46 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "147af34afa97ff3506248960dcdfa264bd8a4294c8a07b95edc498405790608d"
 
 [[package]]
+name = "concordium-contracts-common"
+version = "0.2.0"
+source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#29e479ddcbca84a85289958b25e14c2ddc3cf417"
+
+[[package]]
 name = "concordium-std"
-version = "0.1.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=main#cb11b2361c99aadd03452eb8b398c5099f067ccd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e41416316ecfc3d5dc659cd8dc6a0f787823fe0d7085abeaa2aa53587fb3e65c"
 dependencies = [
- "concordium-contracts-common",
- "concordium-std-derive",
+ "concordium-contracts-common 0.1.0",
+ "concordium-std-derive 0.2.0",
  "wee_alloc",
 ]
 
 [[package]]
 name = "concordium-std"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b6755f149571bf78876db9ac3cd759185cbd8f9809d40d96dea814730253bfc"
+version = "0.3.0"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=main#7d28fc9c232b72fca148761481d02dc6414034b8"
 dependencies = [
- "concordium-contracts-common",
- "concordium-std-derive",
+ "concordium-contracts-common 0.2.0",
+ "concordium-std-derive 0.3.0",
  "wee_alloc",
 ]
 
 [[package]]
 name = "concordium-std-derive"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adf54b23e23177ed0ecd3ec8f9b5c20ec77b26e67ac2a75574b78deb85bcc940"
+checksum = "9eb1f56a6454d045805b32770dd8b17b2707ddb456fc46228a7a392aca76a11a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "concordium-std-derive"
+version = "0.3.0"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=main#7d28fc9c232b72fca148761481d02dc6414034b8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -70,7 +85,7 @@ name = "counter"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
 ]
 
 [[package]]
@@ -93,7 +108,7 @@ name = "erc20"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
 ]
 
 [[package]]
@@ -101,7 +116,7 @@ name = "escrow"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
 ]
 
 [[package]]
@@ -123,7 +138,7 @@ name = "fib"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
 ]
 
 [[package]]
@@ -144,16 +159,16 @@ checksum = "644f9158b2f133fd50f5fb3242878846d9eb792e445c893805ff0e3824006e35"
 
 [[package]]
 name = "libc"
-version = "0.2.80"
+version = "0.2.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d58d1b70b004888f764dfbf6a26a3b0342a1632d33968e4a179d8011c760614"
+checksum = "1482821306169ec4d07f6aca392a4681f66c75c9918aa49641a2595db64053cb"
 
 [[package]]
 name = "lockup"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
 ]
 
 [[package]]
@@ -191,7 +206,7 @@ name = "rate-limited"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
 ]
 
 [[package]]
@@ -212,16 +227,16 @@ name = "simple-game"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (git+https://github.com/Concordium/concordium-std.git?branch=main)",
+ "concordium-std 0.3.0",
  "hex",
  "sha2",
 ]
 
 [[package]]
 name = "syn"
-version = "1.0.51"
+version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b4f34193997d92804d359ed09953e25d5138df6bcc055a71bf68ee89fdf9223"
+checksum = "9a2af957a63d6bd42255c359c93d9bfdb97076bd3b820897ce55ffbfbf107f44"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -231,10 +246,10 @@ dependencies = [
 [[package]]
 name = "two-step-transfer"
 version = "0.1.0"
-source = "git+https://github.com/Concordium/example-smart-contracts?branch=main#18bc5d92840781040d6f25381b18e7c2862d75f7"
+source = "git+https://github.com/Concordium/example-smart-contracts?branch=main#d1afbee5cb74eae6e825d2b09cbe161a366130e4"
 dependencies = [
  "byteorder",
- "concordium-std 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "concordium-std 0.2.0",
 ]
 
 [[package]]

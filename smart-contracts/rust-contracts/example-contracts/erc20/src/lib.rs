@@ -63,15 +63,12 @@ enum Event {
 
 // Contract
 
-#[init(contract = "erc20")]
+#[init(contract = "erc20", enable_logger)]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
-    amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
-    ensure_eq!(amount.micro_gtu, 0); // The amount must be 0
-
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
     // Let the creator have all the tokens
@@ -94,8 +91,6 @@ enum ReceiveError {
     ParseParams,
     /// Only accounts can interact with this contract
     OnlyAccounts,
-    /// The amount must be 0
-    NoAmount,
     /// The account owner is not allowing you to send this much
     MoreThanAllowed,
     InsufficientFunds,
@@ -105,16 +100,13 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(contract = "erc20", name = "receive")]
+#[receive(contract = "erc20", name = "receive", enable_logger)]
 #[inline(always)]
-fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
-    receive_amount: Amount,
-    logger: &mut L,
+fn contract_receive<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
+    logger: &mut impl HasLogger,
     state: &mut State,
 ) -> Result<A, ReceiveError> {
-    ensure_eq!(receive_amount.micro_gtu, 0, ReceiveError::NoAmount);
-
     let msg: Request = ctx.parameter_cursor().get()?;
 
     let sender_address = match ctx.sender() {
@@ -181,9 +173,8 @@ pub mod tests {
         // set up the logger so we can intercept and analyze them at the end.
         let mut logger = LogRecorder::init();
 
-        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let out = contract_init(&ctx, amount, &mut logger);
+        let out = contract_init(&ctx, &mut logger);
 
         // Tests
         match out {
@@ -242,10 +233,9 @@ pub mod tests {
             allowed,
         };
         let mut logger = LogRecorder::init();
-        let amount = Amount::from_micro_gtu(0);
 
         // Execution
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -306,9 +296,8 @@ pub mod tests {
             allowed,
         };
 
-        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -370,10 +359,9 @@ pub mod tests {
         };
 
         let mut logger = LogRecorder::init();
-        let amount = Amount::from_micro_gtu(0);
 
         // Execution
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -427,9 +415,8 @@ pub mod tests {
         };
         let mut logger = LogRecorder::init();
 
-        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, &mut logger, &mut state);
 
         // Test
         match res {
@@ -482,9 +469,8 @@ pub mod tests {
         };
         let mut logger = LogRecorder::init();
 
-        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, &mut logger, &mut state);
 
         // Test
         match res {
@@ -532,9 +518,8 @@ pub mod tests {
             allowed,
         };
 
-        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, &mut logger, &mut state);
 
         // Test
         match res {

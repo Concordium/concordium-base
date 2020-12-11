@@ -69,12 +69,12 @@ struct InitParameter(u64, Prefix);
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the
 /// prefix.
-#[init(contract = "simple_game", low_level, parameter = "InitParameter")]
+#[init(contract = "simple_game", low_level, parameter = "InitParameter", payable, enable_logger)]
 #[inline(always)]
-fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: &I,
+fn contract_init(
+    ctx: &impl HasInitContext<()>,
     amount: Amount,
-    logger: &mut L,
+    logger: &mut impl HasLogger,
     state: &mut ContractState,
 ) -> InitResult<()> {
     let initializer = ctx.init_origin();
@@ -115,13 +115,15 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     contract = "simple_game",
     name = "receive_contribute",
     low_level,
-    parameter = "Contribution"
+    parameter = "Contribution",
+    payable,
+    enable_logger
 )]
 #[inline(always)]
-fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
+fn contribute<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     amount: Amount,
-    logger: &mut L,
+    logger: &mut impl HasLogger,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
     // Current number of contributions.
@@ -218,12 +220,11 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
 /// This entry point finalizes the contract instance and sends out rewards to
 /// all the contributors.
-#[receive(contract = "simple_game", name = "receive_finalize", low_level)]
+#[receive(contract = "simple_game", name = "receive_finalize", low_level, enable_logger)]
 #[inline(always)]
-fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
-    amount: Amount,
-    logger: &mut L,
+fn finalize<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
+    logger: &mut impl HasLogger,
     state_cursor: &mut ContractState,
 ) -> ReceiveResult<A> {
     // We deserialize the whole state here for now.
@@ -232,7 +233,6 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     // memory we use, as well as the cost of this. We would not have to sort.
     let state: State = state_cursor.get()?;
     let ct = ctx.metadata().slot_time();
-    ensure!(amount.micro_gtu == 0); // Ending the game should not transfer any tokens.
     ensure!(ct >= state.expiry); // Cannot finalize before expiry time.
     ensure!(!state.contributions.is_empty()); // Already finalized.
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can finalize.
@@ -296,13 +296,10 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 /// invoked the top-level transaction this invocation is a part of.
 #[receive(contract = "simple_game", name = "receive_help_yourself", low_level)]
 #[inline(always)]
-fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
-    amount: Amount,
-    _logger: &mut L,
+fn help_yourself<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
-    ensure!(amount.micro_gtu == 0); // Helping yourself should not add tokens.
     ensure!(state.size() == 0); // Helping yourself only allowed after normal contributions are sent.
     Ok(A::simple_transfer(&ctx.invoker(), ctx.self_balance()))
 }

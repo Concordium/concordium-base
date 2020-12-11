@@ -66,13 +66,9 @@ struct State {
 
 // Contract implementation
 
-#[init(contract = "lockup")]
+#[init(contract = "lockup", payable)]
 #[inline(always)]
-fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: &I,
-    amount: Amount,
-    _logger: &mut L,
-) -> InitResult<State> {
+fn contract_init(ctx: &impl HasInitContext<()>, amount: Amount) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(!init_params.account_holders.is_empty()); // No account holders given, but we need at least one.
 
@@ -92,13 +88,10 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
 #[receive(contract = "lockup", name = "receive")]
 #[inline(always)]
-fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
-    amount: Amount,
-    _logger: &mut L,
+fn contract_receive<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    ensure!(amount.micro_gtu == 0); // Depositing into a running lockup account is not allowed.
     let sender = match ctx.sender() {
         Address::Account(acc) => acc,
         Address::Contract(_) => {
