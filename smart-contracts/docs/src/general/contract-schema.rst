@@ -98,6 +98,8 @@ the Rust programming language:
        Amount,
        AccountAddress,
        ContractAddress,
+       Timestamp,
+       Duration,
        Pair(Type, Type),
        List(SizeLength, Type),
        Set(SizeLength, Type),
