@@ -1079,6 +1079,87 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     }
 }
 
+
+#[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
+pub struct UnsignedCredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// (Blinded) Signature derived from the signature on the pre-identity
+    /// object by the IP
+    pub sig: BlindedSignature<P>,
+    /// list of  commitments to the attributes .
+    pub commitments: CredentialDeploymentCommitments<C>,
+    /// Challenge used for all of the proofs.
+    pub challenge: Challenge,
+    /// Witnesses to the proof that the computed commitment to the share
+    /// contains the same value as the encryption
+    /// the commitment to the share is not sent but computed from
+    /// the commitments to the sharing coefficients
+    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
+    /// Witnesses for proof of knowledge of signature of Identity Provider on
+    /// the list
+    /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
+    /// AR[1], ..., AR[m])```
+    pub proof_ip_sig: com_eq_sig::Witness<P, C>,
+    /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
+    /// from the prf key signed by the identity provider.
+    pub proof_reg_id: com_mult::Witness<C>,
+    /// Challenge from random oracle TODO: write out
+    pub unsigned_challenge: Challenge,
+    /// Proof that cred_counter is less than or equal to max_accounts
+    pub cred_counter_less_than_max_accounts: RangeProof<C>,
+}
+
+/// TODO: Check if we cant avoid this duplication
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for UnsignedCredDeploymentProofs<P, C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let mut tmp_out = Vec::new();
+        tmp_out.put(&self.sig);
+        tmp_out.put(&self.commitments);
+        tmp_out.put(&self.challenge);
+        tmp_out.put(&(self.proof_id_cred_pub.len() as u32));
+        serial_map_no_length(&self.proof_id_cred_pub, &mut tmp_out);
+        tmp_out.put(&self.proof_ip_sig);
+        tmp_out.put(&self.proof_reg_id);
+        tmp_out.put(&self.unsigned_challenge);
+        tmp_out.put(&self.cred_counter_less_than_max_accounts);
+        let len: u32 = tmp_out.len() as u32; // safe
+        out.put(&len);
+        out.write_all(&tmp_out).expect("Writing to buffer is safe.");
+    }
+}
+
+/// TODO: Check if we cant avoid this duplication
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for UnsignedCredDeploymentProofs<P, C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let len: u32 = source.get()?;
+        // Make sure to respect the length.
+        let mut limited = source.take(u64::from(len));
+        let sig = limited.get()?;
+        let commitments = limited.get()?;
+        let challenge = limited.get()?;
+        let proof_id_cred_pub_len: u32 = limited.get()?;
+        let proof_id_cred_pub =
+            deserial_map_no_length(&mut limited, proof_id_cred_pub_len as usize)?;
+        let proof_ip_sig = limited.get()?;
+        let proof_reg_id = limited.get()?;
+        let unsigned_challenge = limited.get()?;
+        let cred_counter_less_than_max_accounts = limited.get()?;
+        if limited.limit() == 0 {
+            Ok(UnsignedCredDeploymentProofs {
+                sig,
+                commitments,
+                challenge,
+                proof_id_cred_pub,
+                proof_ip_sig,
+                proof_reg_id,
+                unsigned_challenge,
+                cred_counter_less_than_max_accounts,
+            })
+        } else {
+            bail!("Length information is inaccurate. Credential proofs not valid.")
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
@@ -1501,6 +1582,24 @@ pub struct CredentialDeploymentInfo<
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                 Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct UnsignedCredentialDeploymentInfo<
+        P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+    > {
+    #[serde(flatten)]
+    pub values: CredentialDeploymentValues<C, AttributeType>,
+    #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
+    pub proofs: UnsignedCredDeploymentProofs<P, C>,
+}
+
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 // #[serde(bound(
 //     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
 //                  Attribute<C::Scalar> + SerdeSerialize",
@@ -1672,6 +1771,28 @@ pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
+/// A helper trait to access the public parts of the AccountData
+/// structure. We use this to allow implementations that does not give or have
+/// access to the secret keys.
+/// NB: the threshold should be atmost the number of keypairs.
+pub trait PublicAccountData {
+    /// Get the public keys of the account
+    fn get_public_keys(&self) -> Vec<VerifyKey>;
+    /// if its an existing account, get the address, otherwise
+    /// get the signature threshold of the account.
+    fn get_existing(&self) -> Either<SignatureThreshold, AccountAddress>;
+}
+
+/// A helper trait to allow signing PublicInformationForIP in an implementation
+/// that does not give access to the secret keys.
+pub trait AccountDataWithSigning: PublicAccountData {
+    /// Sign a challenge with the secret keys of the account.
+    fn sign_challenge(
+        &self,
+        challenge: &Challenge,
+    ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
+}
+
 /// Account data needed by the account holder to generate proofs to deploy the
 /// credential object. This contains all the keys on the account at the moment
 /// of credential deployment.
@@ -1712,6 +1833,39 @@ impl SerdeSerialize for AccountData {
     }
 }
 
+impl<'de> SerdeDeserialize<'de> for AccountData {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        des.deserialize_map(AccountDataVisitor)
+    }
+}
+
+impl PublicAccountData for AccountData {
+    fn get_existing(&self) ->  Either<SignatureThreshold, AccountAddress> { self.existing }
+
+    fn get_public_keys(&self) -> Vec<VerifyKey> {
+        self.keys
+            .values()
+            .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
+            .collect::<Vec<_>>()
+    }
+}
+
+impl AccountDataWithSigning for AccountData {
+    fn sign_challenge(
+        &self,
+        challenge: &Challenge,
+    ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
+        self.keys
+            .iter()
+            .map(|(&idx, kp)| {
+                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
+                (idx, expanded_sk.sign(challenge.as_ref(), &kp.public).into())
+            })
+            .collect()
+    }
+}
+
+
 impl PublicInitialAccountData for InitialAccountData {
     fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
@@ -1736,12 +1890,6 @@ impl InitialAccountDataWithSigning for InitialAccountData {
                 (idx, expanded_sk.sign(&to_sign, &kp.public).into())
             })
             .collect()
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for AccountData {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        des.deserialize_map(AccountDataVisitor)
     }
 }
 

@@ -12,7 +12,6 @@ use bulletproofs::{
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as ed25519;
 use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
@@ -519,6 +518,55 @@ pub fn commitment_to_share_and_rand<C: Curve>(
 /// provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 pub fn create_credential<
+        'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+    >(
+    context: IPContext<'a, P, C>,
+    id_object: &IdentityObject<P, C, AttributeType>,
+    id_object_use_data: &IdObjectUseData<P, C>,
+    cred_counter: u8,
+    policy: Policy<C, AttributeType>,
+    acc_data: &impl AccountDataWithSigning,
+) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
+where
+    AttributeType: Clone, {
+    let unsigned_credential_info = create_unsigned_credential(
+        context,
+        id_object,
+        id_object_use_data,
+        cred_counter,
+        policy,
+        acc_data
+    )?;
+    let unsigned_proofs = unsigned_credential_info.proofs;
+
+    let proof_acc_sk = AccountOwnershipProof {
+        sigs: acc_data.sign_challenge(&unsigned_proofs.unsigned_challenge)
+    };
+
+    let cdp = CredDeploymentProofs {
+        sig: unsigned_proofs.sig,
+        commitments: unsigned_proofs.commitments,
+        challenge: unsigned_proofs.challenge,
+        proof_id_cred_pub: unsigned_proofs.proof_id_cred_pub,
+        proof_reg_id: unsigned_proofs.proof_reg_id,
+        proof_ip_sig: unsigned_proofs.proof_ip_sig,
+        proof_acc_sk,
+        cred_counter_less_than_max_accounts: unsigned_proofs.cred_counter_less_than_max_accounts,
+    };
+
+    let info = CredentialDeploymentInfo {
+        values: unsigned_credential_info.values,
+        proofs: cdp,
+    };
+
+    Ok(info)
+}
+
+
+pub fn create_unsigned_credential<
     'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -529,8 +577,8 @@ pub fn create_credential<
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
-    acc_data: &AccountData,
-) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
+    acc_data: &impl PublicAccountData,
+) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -626,15 +674,11 @@ where
         &mut csprng,
     )?;
 
-    let cred_account = match acc_data.existing {
+    let cred_account = match acc_data.get_existing() {
         // we are deploying on a new account
         // take all the keys that
         Either::Left(threshold) => CredentialAccount::NewAccount(
-            acc_data
-                .keys
-                .values()
-                .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-                .collect::<Vec<_>>(),
+            acc_data.get_public_keys(),
             threshold,
         ),
         Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
@@ -756,20 +800,9 @@ where
     //
     // The domain seperator in combination with appending all the data of the
     // credential deployment should make it non-reusable.
-    let to_sign = ro.get_challenge();
+    let unsigned_challenge = ro.get_challenge();
 
-    let proof_acc_sk = AccountOwnershipProof {
-        sigs: acc_data
-            .keys
-            .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
-            })
-            .collect(),
-    };
-
-    let cdp = CredDeploymentProofs {
+    let ucdp = UnsignedCredDeploymentProofs {
         sig: blinded_sig,
         commitments,
         challenge: proof.challenge,
@@ -779,13 +812,13 @@ where
             .collect(),
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
-        proof_acc_sk,
+        unsigned_challenge,
         cred_counter_less_than_max_accounts,
     };
 
-    let info = CredentialDeploymentInfo {
+    let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
-        proofs: cdp,
+        proofs: ucdp,
     };
     Ok(info)
 }
