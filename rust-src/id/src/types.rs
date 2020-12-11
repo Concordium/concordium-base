@@ -1079,7 +1079,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     }
 }
 
-
 #[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
 pub struct UnsignedCredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
@@ -1128,7 +1127,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for UnsignedCredDeplo
 }
 
 /// TODO: Check if we cant avoid this duplication
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for UnsignedCredDeploymentProofs<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial
+    for UnsignedCredDeploymentProofs<P, C>
+{
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let len: u32 = source.get()?;
         // Make sure to respect the length.
@@ -1589,10 +1590,10 @@ pub struct CredentialDeploymentInfo<
                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct UnsignedCredentialDeploymentInfo<
-        P: Pairing,
+    P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
-    > {
+> {
     #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
     #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
@@ -1748,13 +1749,13 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
 }
 
 /// A helper trait to access the public parts of the InitialAccountData
-/// structure. We use this to allow implementations that does not give or have
+/// structure. We use this to allow implementations that do not give or have
 /// access to the secret keys.
-/// NB: the threshold should be atmost the number of keypairs.
+/// NB: the threshold should be at most the number of keypairs.
 pub trait PublicInitialAccountData {
     /// Get the number of keys required to sign a message from the account.
     fn get_threshold(&self) -> SignatureThreshold;
-    /// Get the public keys of the account
+    /// Get the public keys of the account.
     fn get_public_keys(&self) -> Vec<VerifyKey>;
 }
 
@@ -1763,7 +1764,7 @@ pub trait PublicInitialAccountData {
 pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
     /// Sign a PublicInformationForIP structure with the secret keys that
     /// matches the public keys, which the structure provides.
-    /// NB: the Function should, for each secret key,
+    /// NB: the function should, for each secret key,
     /// sign the sha256 hash of the structure's serialization.
     fn sign_public_information_for_ip<C: Curve>(
         &self,
@@ -1840,7 +1841,7 @@ impl<'de> SerdeDeserialize<'de> for AccountData {
 }
 
 impl PublicAccountData for AccountData {
-    fn get_existing(&self) ->  Either<SignatureThreshold, AccountAddress> { self.existing }
+    fn get_existing(&self) -> Either<SignatureThreshold, AccountAddress> { self.existing }
 
     fn get_public_keys(&self) -> Vec<VerifyKey> {
         self.keys
@@ -1864,7 +1865,6 @@ impl AccountDataWithSigning for AccountData {
             .collect()
     }
 }
-
 
 impl PublicInitialAccountData for InitialAccountData {
     fn get_threshold(&self) -> SignatureThreshold { self.threshold }

@@ -20,7 +20,7 @@ RUN --mount=type=ssh git clone --depth 1 --branch ${GENESIS_REF} git@gitlab.com:
 
 # Collect build artifacts in fresh image.
 FROM ubuntu:20.04
-RUN apt-get update && apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y libssl-dev ca-certificates
 COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
 COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
 COPY --from=builder /genesis-data/global.json /global.json
