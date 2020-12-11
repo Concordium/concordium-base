@@ -57,19 +57,19 @@ If the contract functions are written using ``#[init(..)]`` or
 
    use concordium_std::*;
 
-   #[init(contract = "my_contract")]
+   #[init(contract = "my_contract", payable, enable_logger)]
    fn contract_init(
-       ctx: &impl HasInitContext<()>,
-       amount: Amount,
-       logger: &mut impl HasLogger,
+      ctx: &impl HasInitContext<()>,
+      amount: Amount,
+      logger: &mut impl HasLogger,
    ) -> InitResult<State> { ... }
 
-   #[receive(contract = "my_contract", name = "my_receive")]
+   #[receive(contract = "my_contract", name = "my_receive", payable, enable_logger)]
    fn contract_receive<A: HasActions>(
-       ctx: &impl HasReceiveContext<()>,
-       amount: Amount,
-       logger: &mut impl HasLogger,
-       state: &mut State,
+      ctx: &impl HasReceiveContext<()>,
+      amount: Amount,
+      logger: &mut impl HasLogger,
+      state: &mut State,
    ) -> ReceiveResult<A> { ... }
 
 Testing stubs for the function arguments can be found in a submodule of

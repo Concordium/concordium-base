@@ -58,8 +58,6 @@ struct State {
 enum InitError {
     /// Failed parsing the parameter
     ParseParams,
-    /// This escrow contract must be initialized with a 0 amount.
-    NoAmount,
     /// Buyer and seller must have different accounts.
     SameBuyerSeller,
 }
@@ -72,12 +70,7 @@ impl From<ParseError> for InitError {
 
 #[init(contract = "escrow")]
 #[inline(always)]
-fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: &I,
-    amount: Amount,
-    _logger: &mut L,
-) -> Result<State, InitError> {
-    ensure!(amount.micro_gtu == 0, InitError::NoAmount);
+fn contract_init(ctx: &impl HasInitContext<()>) -> Result<State, InitError> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(init_params.buyer != init_params.seller, InitError::SameBuyerSeller);
     let state = State {
@@ -110,12 +103,11 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(contract = "escrow", name = "receive")]
+#[receive(contract = "escrow", name = "receive", payable)]
 #[inline(always)]
-fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
+fn contract_receive<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     amount: Amount,
-    _logger: &mut L,
     state: &mut State,
 ) -> Result<A, ReceiveError> {
     let msg: Message = ctx.parameter_cursor().get()?;
@@ -197,50 +189,19 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 #[concordium_cfg_test]
 pub mod tests {
     use super::*;
-    use concordium_std::test_infrastructure::*;
+    // use concordium_std::test_infrastructure::*;
 
     #[concordium_test]
-    #[no_mangle]
-    fn test_init_rejects_non_zero_amounts() {
-        let buyer = AccountAddress([0; ACCOUNT_ADDRESS_SIZE]);
-
-        let parameter = InitParams {
-            required_deposit: Amount::from_micro_gtu(20),
-            arbiter_fee: Amount::from_micro_gtu(30),
-            buyer,
-            seller: AccountAddress([1; ACCOUNT_ADDRESS_SIZE]),
-            arbiter: AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
-        };
-
-        let mut ctx = InitContextTest::empty();
-        let parameter_bytes = to_bytes(&parameter);
-        ctx.set_parameter(&parameter_bytes);
-
-        let amount = Amount::from_micro_gtu(200);
-        let mut logger = LogRecorder::init();
-        let result = contract_init(&ctx, amount, &mut logger);
-        match result {
-            Err(err) => {
-                claim_eq!(err, InitError::NoAmount, "Init failed to reject a non-zero amount")
-            }
-            Ok(_) => fail!("Contract succeeded when it was suppose to fail."),
-        }
-    }
-
-    #[concordium_test]
-    #[no_mangle]
     fn test_init_rejects_same_buyer_and_seller() {
         fail!("implement me");
     }
 
     #[concordium_test]
-    #[no_mangle]
     fn test_init_builds_corresponding_state_from_init_params() {
         fail!("implement me");
     }
 
     #[concordium_test]
-    #[no_mangle]
     fn test_receive_happy_path() {
         fail!("implement me");
     }

@@ -9,11 +9,11 @@ struct State {
     current_count: u32,
 }
 
-#[init(contract = "counter")]
-fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    _ctx: &I,
+#[init(contract = "counter", enable_logger, payable)]
+fn contract_init(
+    _ctx: &impl HasInitContext<()>,
     amount: Amount,
-    logger: &mut L,
+    logger: &mut impl HasLogger,
 ) -> InitResult<State> {
     let step: u8 = (amount.micro_gtu % 256) as u8;
     logger.log(&(0u8, step));
@@ -34,11 +34,11 @@ enum ReceiveError {
     OnlyOwner,
 }
 
-#[receive(contract = "counter", name = "receive")]
-fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: &R,
+#[receive(contract = "counter", name = "receive", payable, enable_logger)]
+fn contract_receive<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     amount: Amount,
-    logger: &mut L,
+    logger: &mut impl HasLogger,
     state: &mut State,
 ) -> Result<A, ReceiveError> {
     ensure!(amount.micro_gtu > 10, ReceiveError::SmallAmount);
@@ -54,17 +54,12 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///
 /// While in this particular case this is likely irrelevant, it serves to
 /// demonstrates the pattern.
-#[receive(contract = "counter", name = "receive_optimized", low_level)]
-fn contract_receive_optimized<
-    R: HasReceiveContext<()>,
-    L: HasLogger,
-    S: HasContractState<()>,
-    A: HasActions,
->(
-    ctx: &R,
+#[receive(contract = "counter", name = "receive_optimized", low_level, payable, enable_logger)]
+fn contract_receive_optimized<A: HasActions>(
+    ctx: &impl HasReceiveContext<()>,
     amount: Amount,
-    logger: &mut L,
-    state_cursor: &mut S,
+    logger: &mut impl HasLogger,
+    state_cursor: &mut impl HasContractState<()>,
 ) -> ReceiveResult<A> {
     ensure!(amount.micro_gtu > 10); // Amount too small, not increasing.
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can increment.
