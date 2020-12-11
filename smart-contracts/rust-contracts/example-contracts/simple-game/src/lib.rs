@@ -53,7 +53,7 @@ struct State {
     /// the same person contributes multiple times.
     num_contributions: u32,
     /// Expiry after which point contributors can be rewarded.
-    expiry: u64,
+    expiry: Timestamp,
     /// The prefix the initializer chose. It is part of the input to every hash
     /// that is computed.
     prefix: Prefix,
@@ -64,7 +64,7 @@ struct State {
 }
 
 #[derive(Serialize, SchemaType)]
-struct InitParameter(u64, Prefix);
+struct InitParameter(Timestamp, Prefix);
 
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the

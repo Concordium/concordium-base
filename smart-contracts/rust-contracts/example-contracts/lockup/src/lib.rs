@@ -23,9 +23,7 @@ enum Message {
     CancelFutureVesting,
 }
 
-type SlotTime = u64;
-
-type VestingEvent = (SlotTime, Amount);
+type VestingEvent = (Timestamp, Amount);
 
 #[derive(Serialize)]
 struct InitParams {
@@ -134,7 +132,7 @@ fn contract_receive<A: HasActions>(
 }
 
 // Updates the available balance with any funds which have now vested
-fn make_vested_funds_available(time_now: u64, state: &mut State) {
+fn make_vested_funds_available(time_now: Timestamp, state: &mut State) {
     let (newly_vested, not_vested_yet): (Vec<VestingEvent>, Vec<VestingEvent>) =
         state.remaining_vesting_schedule.iter().partition(|(when, _how_much)| when < &time_now);
     let newly_vested_amount: Amount = newly_vested.iter().map(|(_, how_much)| *how_much).sum();
