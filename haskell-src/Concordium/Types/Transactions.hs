@@ -10,7 +10,8 @@ module Concordium.Types.Transactions where
 import Concordium.Common.Version
 import Control.Monad
 import Data.Aeson.TH
-import Data.Aeson(FromJSON, ToJSON)
+import Data.Aeson(FromJSON(..), ToJSON(..))
+import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import qualified Data.Map.Strict as Map
@@ -465,20 +466,133 @@ instance TransactionData Transaction where
 --------------------------
 -- TODO: Move to Execution???
 
+-- |A mapping from account addresses to amounts.
+--
+-- This is used in 'SpecialTransactionOutcome' to represent baking
+-- and finalization rewards that pay multiple accounts.
+-- Defining this as an explicit newtype is chiefly for convenience
+-- in defining the serialization formats.
+newtype AccountAmounts = AccountAmounts {accountAmounts :: Map.Map AccountAddress Amount}
+  deriving newtype (Eq,Ord,Show)
+
+instance S.Serialize AccountAmounts where
+  put = putSafeMapOf S.put S.put . accountAmounts
+  get = AccountAmounts <$> getSafeMapOf S.get S.get
+
+instance ToJSON AccountAmounts where
+  toJSON (AccountAmounts m) = AE.Array $ Vec.fromList $ mkObj <$> Map.toList m
+    where
+      mkObj (addr, amt) = AE.object ["address" AE..= addr, "amount" AE..= amt]
+
+instance FromJSON AccountAmounts where
+  parseJSON = AE.withArray "AccountAmounts" $ \v -> do
+    v' <- forM v $ AE.withObject "AccountAmount" $ \o -> (,) <$> o AE..: "address" <*> o AE..: "amount"
+    return $ AccountAmounts $ Map.fromList $ Vec.toList v'
+
 -- |Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome =
-  BakingReward {
-    stoBakerId :: !BakerId,
-    stoBakerAccount :: !AccountAddress,
-    stoRewardAmount :: !Amount
-    }
+  -- |Payment to each baker of a previous epoch,
+  -- in proportion to the number of blocks they
+  -- contributed.
+  BakingRewards {
+    -- |The amount awarded to each baker.
+    stoBakerRewards :: !AccountAmounts,
+    -- |The remaining balance of the baker reward account.
+    stoRemainder :: !Amount
+  }
+  -- |Minting of new GTU.
+  | Mint {
+    -- |The amount allocated to the banking reward account.
+    stoMintBakingReward :: !Amount,
+    -- |The amount allocated to the finalization reward account.
+    stoMintFinalizationReward :: !Amount,
+    -- |The amount allocated as the platform development charge.
+    stoMintPlatformDevelopmentCharge :: !Amount,
+    -- |The account to which the platform development charge is paid.
+    stoFoundationAccount :: !AccountAddress
+  }
+  -- |Payment to each finalizer on inclusion of a finalization
+  -- record in a block.
+  | FinalizationRewards {
+    -- |The amount awarded to each finalizer.
+    stoFinalizationRewards :: !AccountAmounts,
+    -- |The remaining balance of the finalization reward account.
+    stoRemainder :: !Amount
+  }
+  -- |Disbursement of fees from a block between the GAS account,
+  -- the baker, and the foundation. It should always be that:
+  --
+  -- > stoTransactionFees + stOldGASAccount = stoNewGASAccount + stoBakerReward + stoFoundationCharge
+  | BlockReward {
+    -- |The total fees paid for transactions in the block.
+    stoTransactionFees :: !Amount,
+    -- |The old balance of the GAS account.
+    stoOldGASAccount :: !Amount,
+    -- |The new balance of the GAS account.
+    stoNewGASAccount :: !Amount,
+    -- |The amount awarded to the baker.
+    stoBakerReward :: !Amount,
+    -- |The amount awarded to the foundation.
+    stoFoundationCharge :: !Amount,
+    -- |The baker of the block, who receives the award.
+    stoBaker :: !AccountAddress,
+    -- |The foundation account.
+    stoFoundationAccount :: !AccountAddress
+  }
   deriving(Show, Eq)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
 
 instance S.Serialize SpecialTransactionOutcome where
-    put (BakingReward bid addr amt) = S.put bid <> S.put addr <> S.put amt
-    get = BakingReward <$> S.get <*> S.get <*> S.get
+    put BakingRewards{..} = do
+      S.putWord8 0
+      S.put stoBakerRewards
+      S.put stoRemainder
+    put Mint{..} = do
+      S.putWord8 1
+      S.put stoMintBakingReward
+      S.put stoMintFinalizationReward
+      S.put stoMintPlatformDevelopmentCharge
+      S.put stoFoundationAccount
+    put FinalizationRewards{..} = do
+      S.putWord8 2
+      S.put stoFinalizationRewards
+      S.put stoRemainder
+    put BlockReward{..} = do
+      S.putWord8 3
+      S.put stoTransactionFees
+      S.put stoOldGASAccount
+      S.put stoNewGASAccount
+      S.put stoBakerReward
+      S.put stoFoundationCharge
+      S.put stoBaker
+      S.put stoFoundationAccount
+
+    get = S.getWord8 >>= \case
+      0 -> do
+        stoBakerRewards <- S.get
+        stoRemainder <- S.get
+        return BakingRewards{..}
+      1 -> do
+        stoMintBakingReward <- S.get
+        stoMintFinalizationReward <- S.get
+        stoMintPlatformDevelopmentCharge <- S.get
+        stoFoundationAccount <- S.get
+        return Mint{..}
+      2 -> do
+        stoFinalizationRewards <- S.get
+        stoRemainder <- S.get
+        return FinalizationRewards{..}
+      3 -> do
+        stoTransactionFees <- S.get
+        stoOldGASAccount <- S.get
+        stoNewGASAccount <- S.get
+        stoBakerReward <- S.get
+        stoFoundationCharge <- S.get
+        stoBaker <- S.get
+        stoFoundationAccount <- S.get
+        return BlockReward{..}
+      _ -> fail "Invalid SpecialTransactionOutcome type"
 
 -- |Outcomes of transactions. The vector of outcomes must have the same size as the
 -- number of transactions in the block, and ordered in the same way.
