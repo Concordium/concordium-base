@@ -564,11 +564,11 @@ impl str::FromStr for Duration {
 impl fmt::Display for Duration {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let days = self.days();
-        let hours = Duration::from_millis(self.millis() % 1000 * 60 * 60 * 24).hours();
-        let minutes = Duration::from_millis(self.millis() % 1000 * 60 * 60).minutes();
-        let seconds = Duration::from_millis(self.millis() % 1000 * 60).seconds();
+        let hours = Duration::from_millis(self.millis() % (1000 * 60 * 60 * 24)).hours();
+        let minutes = Duration::from_millis(self.millis() % (1000 * 60 * 60)).minutes();
+        let seconds = Duration::from_millis(self.millis() % (1000 * 60)).seconds();
         let milliseconds = Duration::from_millis(self.millis() % 1000).millis();
-        write!(formatter, "{} {} {} {} {}", days, hours, minutes, seconds, milliseconds)
+        write!(formatter, "{}d {}h {}m {}s {}ms", days, hours, minutes, seconds, milliseconds)
     }
 }
 
