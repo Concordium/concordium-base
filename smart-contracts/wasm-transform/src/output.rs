@@ -25,8 +25,14 @@ impl Output for Byte {
     }
 }
 
+impl Output for u16 {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        leb128::write::unsigned(out, u64::from(*self))?;
+        Ok(())
+    }
+}
+
 impl Output for u32 {
-    /// Write a u32 in LEB128 and return then number of bytes used.
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         leb128::write::unsigned(out, u64::from(*self))?;
         Ok(())
@@ -34,7 +40,6 @@ impl Output for u32 {
 }
 
 impl Output for u64 {
-    /// Write a u32 in LEB128 and return then number of bytes used.
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         leb128::write::unsigned(out, *self)?;
         Ok(())
@@ -42,7 +47,6 @@ impl Output for u64 {
 }
 
 impl Output for i32 {
-    /// Write a u32 in LEB128 and return then number of bytes used.
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         leb128::write::signed(out, i64::from(*self))?;
         Ok(())
@@ -50,7 +54,6 @@ impl Output for i32 {
 }
 
 impl Output for i64 {
-    /// Write a u32 in LEB128 and return then number of bytes used.
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
         leb128::write::signed(out, *self)?;
         Ok(())

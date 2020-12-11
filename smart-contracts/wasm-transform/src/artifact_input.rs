@@ -2,14 +2,25 @@
 
 use crate::{
     artifact::{
-        Artifact, ArtifactData, ArtifactMemory, ArtifactNamedImport, CompiledFunctionBytes,
-        InstantiatedGlobals, InstantiatedTable,
+        Artifact, ArtifactData, ArtifactLocal, ArtifactMemory, ArtifactNamedImport,
+        CompiledFunctionBytes, InstantiatedGlobals, InstantiatedTable,
     },
     parse::*,
     types::{BlockType, FuncIndex, FunctionType, GlobalInit, Name, TypeIndex, ValueType},
 };
 use anyhow::bail;
 use std::{collections::BTreeMap, io::Cursor};
+
+impl<'a> Parseable<'a> for ArtifactLocal {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let multiplicity = cursor.next()?;
+        let ty = cursor.next()?;
+        Ok(ArtifactLocal {
+            multiplicity,
+            ty,
+        })
+    }
+}
 
 impl<'a> Parseable<'a> for ArtifactNamedImport {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
@@ -47,15 +58,17 @@ impl<'a> Parseable<'a> for InstantiatedGlobals {
 
 impl<'a> Parseable<'a> for CompiledFunctionBytes<'a> {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let num_params = u32::parse(cursor)?;
         let type_idx = TypeIndex::parse(cursor)?;
         let return_type = BlockType::parse(cursor)?;
-        let locals: &'a [ValueType] = cursor.next()?;
+        let params: &'a [ValueType] = cursor.next()?;
+        let num_locals: u32 = cursor.next()?;
+        let locals: Vec<ArtifactLocal> = cursor.next()?;
         let code = cursor.next()?;
         Ok(CompiledFunctionBytes {
-            num_params,
             type_idx,
             return_type,
+            params,
+            num_locals,
             locals,
             code,
         })

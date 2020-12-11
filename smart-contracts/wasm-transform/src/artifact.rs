@@ -8,10 +8,14 @@
 use crate::{
     constants::MAX_NUM_PAGES,
     types::*,
-    validate::{validate, Handler, HasValidationContext, ValidationState},
+    validate::{validate, Handler, HasValidationContext, LocalsRange, ValidationState},
 };
 use anyhow::{anyhow, bail, ensure};
-use std::{collections::BTreeMap, convert::TryInto, io::Write};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+    io::Write,
+};
 
 #[derive(Copy, Clone)]
 /// Either a short or long integer.
@@ -126,15 +130,49 @@ pub struct ArtifactMemory {
     pub init:      Vec<ArtifactData>,
 }
 
+/// A local variable declaration in a function.
+/// Because we know there are not going to be more than 2^16-1 locals we can
+/// store multiplicity more efficiently.
+#[derive(Debug, Clone, Copy)]
+pub struct ArtifactLocal {
+    pub(crate) multiplicity: u16,
+    pub(crate) ty:           ValueType,
+}
+
+impl From<ValueType> for ArtifactLocal {
+    fn from(ty: ValueType) -> Self {
+        Self {
+            ty,
+            multiplicity: 1,
+        }
+    }
+}
+
+impl TryFrom<Local> for ArtifactLocal {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Local) -> Result<Self, Self::Error> {
+        let multiplicity = value.multiplicity.try_into()?;
+        Ok(Self {
+            ty: value.ty,
+            multiplicity,
+        })
+    }
+}
+
 #[derive(Debug)]
 /// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
-    num_params: u32,
     type_idx: TypeIndex,
     return_type: BlockType,
-    /// Vector of types of locals. This includes function parameters at the
-    /// beginning.
-    locals: Vec<ValueType>,
+    /// Parameters of the function.
+    params: Vec<ValueType>,
+    /// Number of locals, cached, but should match what is in the
+    /// locals vector below.
+    num_locals: u32,
+    /// Vector of types of locals. This __does not__ include function
+    /// parameters.
+    locals: Vec<ArtifactLocal>,
     code: Instructions,
 }
 
@@ -143,12 +181,15 @@ pub struct CompiledFunction {
 /// that does not own the body and locals. This is used to make deserialization
 /// of artifacts cheaper.
 pub struct CompiledFunctionBytes<'a> {
-    pub(crate) num_params: u32,
     pub(crate) type_idx: TypeIndex,
     pub(crate) return_type: BlockType,
-    /// Vector of types of locals. This includes function parameters at the
-    /// beginning.
-    pub(crate) locals: &'a [ValueType],
+    pub(crate) params: &'a [ValueType],
+    /// Vector of types of locals. This __does not__ include
+    /// parameters.
+    /// FIXME: It would be ideal to have this as a zero-copy structure,
+    /// but it likely does not matter, and it would be more error-prone.
+    pub(crate) num_locals: u32,
+    pub(crate) locals: Vec<ArtifactLocal>,
     pub(crate) code: &'a [u8],
 }
 
@@ -195,6 +236,53 @@ impl TryFromImport for ArtifactNamedImport {
     fn ty(&self) -> &FunctionType { &self.ty }
 }
 
+pub struct LocalsIterator<'a> {
+    /// Number of locals. Note that this is distinct from
+    /// the length of the locals list, since that has each item
+    /// with multiplicity.
+    remaining_items: u32,
+    pub(crate) locals: &'a [ArtifactLocal],
+    /// Current position in the locals list.
+    current_item: usize,
+    /// Current multiplicity of the current_item.
+    current_multiplicity: u16,
+}
+
+impl<'a> LocalsIterator<'a> {
+    pub fn new(num_locals: u32, locals: &'a [ArtifactLocal]) -> Self {
+        Self {
+            remaining_items: num_locals,
+            locals,
+            current_item: 0,
+            current_multiplicity: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for LocalsIterator<'a> {
+    type Item = ValueType;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let al = self.locals.get(self.current_item)?;
+        if self.current_multiplicity < al.multiplicity {
+            self.current_multiplicity += 1;
+            Some(al.ty)
+        } else {
+            self.current_item += 1;
+            self.current_multiplicity = 0;
+            self.next()
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining_items as usize, Some(self.remaining_items as usize))
+    }
+}
+
+impl<'a> ExactSizeIterator for LocalsIterator<'a> {
+    fn len(&self) -> usize { self.remaining_items as usize }
+}
+
 /// A trait encapsulating the properties that are needed to run a function.
 pub trait RunnableCode {
     fn num_params(&self) -> u32;
@@ -202,13 +290,15 @@ pub trait RunnableCode {
     fn return_type(&self) -> BlockType;
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
-    fn locals(&self) -> &[ValueType];
+    fn params(&self) -> &[ValueType];
+    fn num_locals(&self) -> u32;
+    fn locals(&self) -> LocalsIterator<'_>;
     fn code(&self) -> &[u8];
 }
 
 impl RunnableCode for CompiledFunction {
     #[inline(always)]
-    fn num_params(&self) -> u32 { self.num_params }
+    fn num_params(&self) -> u32 { self.params.len() as u32 }
 
     #[inline(always)]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
@@ -217,7 +307,13 @@ impl RunnableCode for CompiledFunction {
     fn return_type(&self) -> BlockType { self.return_type }
 
     #[inline(always)]
-    fn locals(&self) -> &[ValueType] { &self.locals }
+    fn params(&self) -> &[ValueType] { &self.params }
+
+    #[inline(always)]
+    fn num_locals(&self) -> u32 { self.num_locals }
+
+    #[inline(always)]
+    fn locals(&self) -> LocalsIterator { LocalsIterator::new(self.num_locals, &self.locals) }
 
     #[inline(always)]
     fn code(&self) -> &[u8] { &self.code.bytes }
@@ -225,7 +321,7 @@ impl RunnableCode for CompiledFunction {
 
 impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     #[inline(always)]
-    fn num_params(&self) -> u32 { self.num_params }
+    fn num_params(&self) -> u32 { self.params.len() as u32 }
 
     #[inline(always)]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
@@ -234,7 +330,13 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     fn return_type(&self) -> BlockType { self.return_type }
 
     #[inline(always)]
-    fn locals(&self) -> &[ValueType] { self.locals }
+    fn params(&self) -> &[ValueType] { &self.params }
+
+    #[inline(always)]
+    fn num_locals(&self) -> u32 { self.num_locals }
+
+    #[inline(always)]
+    fn locals(&self) -> LocalsIterator { LocalsIterator::new(self.num_locals, &self.locals) }
 
     #[inline(always)]
     fn code(&self) -> &[u8] { self.code }
@@ -959,13 +1061,25 @@ impl Handler<&OpCode> for BackPatch {
 
 struct ModuleContext<'a> {
     module: &'a Module,
-    locals: &'a [ValueType],
+    locals: &'a [LocalsRange],
     code:   &'a Code,
 }
 
 impl<'a> HasValidationContext for ModuleContext<'a> {
     fn get_local(&self, idx: u32) -> CompileResult<ValueType> {
-        self.locals.get(idx as usize).copied().ok_or_else(|| anyhow!("Local does not exist."))
+        let res = self.locals.binary_search_by(|locals| {
+            if locals.end <= idx {
+                std::cmp::Ordering::Less
+            } else if idx < locals.start {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        match res {
+            Ok(idx) => Ok(self.locals[idx].ty),
+            Err(_) => bail!("Local index out of range."),
+        }
     }
 
     fn get_global(&self, idx: crate::types::GlobalIndex) -> CompileResult<(ValueType, bool)> {
@@ -1019,14 +1133,32 @@ impl Module {
         let mut code_out = Vec::with_capacity(self.code.impls.len());
 
         for code in self.code.impls.iter() {
-            let mut locals = code.ty.parameters.iter().copied().collect::<Vec<_>>();
-            for local in code.locals.iter() {
-                locals.extend((0..local.multiplicity).map(|_| local.ty));
+            let mut ranges = Vec::with_capacity(code.ty.parameters.len() + code.locals.len());
+            let mut locals = Vec::with_capacity(code.ty.parameters.len() + code.locals.len());
+            let mut start = 0;
+            for &param in code.ty.parameters.iter() {
+                let end = start + 1;
+                ranges.push(LocalsRange {
+                    start,
+                    end,
+                    ty: param,
+                });
+                start = end;
+            }
+            for &local in code.locals.iter() {
+                locals.push(ArtifactLocal::try_from(local)?);
+                let end = start + local.multiplicity;
+                ranges.push(LocalsRange {
+                    start,
+                    end,
+                    ty: local.ty,
+                });
+                start = end;
             }
 
             let context = ModuleContext {
                 module: &self,
-                locals: &locals,
+                locals: &ranges,
                 code,
             };
 
@@ -1036,10 +1168,13 @@ impl Module {
             // interpreter since there is no implicit return.
             exec_code.push(InternalOpcode::Return);
 
+            let num_params: u32 = code.ty.parameters.len().try_into()?;
+
             let result = CompiledFunction {
                 type_idx: code.ty_idx,
+                params: code.ty.parameters.clone(),
+                num_locals: start - num_params,
                 locals,
-                num_params: code.ty.parameters.len().try_into()?,
                 return_type: BlockType::from(code.ty.result),
                 code: exec_code,
             };
