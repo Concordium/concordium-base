@@ -237,9 +237,7 @@ impl TryFromImport for ArtifactNamedImport {
 }
 
 pub struct LocalsIterator<'a> {
-    /// Number of locals. Note that this is distinct from
-    /// the length of the locals list, since that has each item
-    /// with multiplicity.
+    /// Number of locals that are still going to be yielded from the iterator.
     remaining_items: u32,
     pub(crate) locals: &'a [ArtifactLocal],
     /// Current position in the locals list.
@@ -263,6 +261,7 @@ impl<'a> Iterator for LocalsIterator<'a> {
     type Item = ValueType;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.remaining_items.checked_sub(1)?;
         let al = self.locals.get(self.current_item)?;
         if self.current_multiplicity < al.multiplicity {
             self.current_multiplicity += 1;
