@@ -130,13 +130,37 @@ impl Deserial for bool {
 
 impl Serial for Amount {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_u64((*self).micro_gtu)
+        out.write_u64(self.micro_gtu)
     }
 }
 
 impl Deserial for Amount {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         source.read_u64().map(Amount::from_micro_gtu)
+    }
+}
+
+impl Serial for Timestamp {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.timestamp_millis().serial(out)
+    }
+}
+
+impl Deserial for Timestamp {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        u64::deserial(source).map(Timestamp::from_timestamp_millis)
+    }
+}
+
+impl Serial for Duration {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.millis().serial(out)
+    }
+}
+
+impl Deserial for Duration {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        u64::deserial(source).map(Duration::from_millis)
     }
 }
 

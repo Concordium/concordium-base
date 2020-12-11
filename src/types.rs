@@ -302,6 +302,277 @@ impl ops::RemAssign<u64> for Amount {
     fn rem_assign(&mut self, other: u64) { *self = *self % other; }
 }
 
+/// Timestamp represented as milliseconds since unix epoch.
+///
+/// Timestamps from before January 1st 1970 at 00:00 are not supported.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Timestamp {
+    /// Milliseconds since unix epoch.
+    pub(crate) milliseconds: u64,
+}
+
+impl Timestamp {
+    /// Construct timestamp from milliseconds since unix epoch.
+    #[inline(always)]
+    pub fn from_timestamp_millis(milliseconds: u64) -> Self {
+        Self {
+            milliseconds
+        }
+    }
+
+    /// Get milliseconds since unix epoch.
+    #[inline(always)]
+    pub fn timestamp_millis(&self) -> u64 {
+        self.milliseconds
+    }
+
+    /// Add duration to timestamp. Returns `None` instead of overflowing.
+    #[inline(always)]
+    pub fn checked_add(self, duration: Duration) -> Option<Self> {
+        self.milliseconds.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
+    }
+
+    /// Subtract duration to timestamp. Returns `None` instead of overflowing.
+    #[inline(always)]
+    pub fn checked_sub(self, duration: Duration) -> Option<Self> {
+        self.milliseconds.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
+    }
+
+    /// Compute the duration between the self and another timestamp
+    #[inline(always)]
+    pub fn duration_between(self, other: Timestamp) -> Duration {
+        let millis = if self > other {
+            self.milliseconds - other.milliseconds
+        } else {
+            other.milliseconds - self.milliseconds
+        };
+        Duration::from_millis(millis)
+    }
+
+    /// Compute duration since a given timestamp. Returns `None` if given time
+    /// is in the future compared to self.
+    #[inline(always)]
+    pub fn duration_since(self, before: Timestamp) -> Option<Duration> {
+        self.milliseconds.checked_sub(before.milliseconds).map(Duration::from_millis)
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ParseTimestampError {
+    ParseError(chrono::format::ParseError),
+    BeforeUnixEpoch
+}
+
+#[cfg(feature = "derive-serde")]
+impl fmt::Display for ParseTimestampError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ParseTimestampError::*;
+        match self {
+            ParseError(err) => err.fmt(f),
+            BeforeUnixEpoch => write!(f, "Timestamp is before January 1st 1970 00:00."),
+        }
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+impl str::FromStr for Timestamp {
+    type Err = ParseTimestampError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use convert::TryInto;
+        let datetime = chrono::DateTime::parse_from_rfc3339(s).map_err(|e| ParseTimestampError::ParseError(e))?;
+        let millis = datetime.timestamp_millis().try_into().map_err(|_| ParseTimestampError::BeforeUnixEpoch)?;
+        Ok(Timestamp::from_timestamp_millis(millis))
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+impl fmt::Display for Timestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use chrono::offset::TimeZone;
+        let time = self.timestamp_millis() as i64;
+        let date = chrono::Utc.timestamp_millis(time);
+        write!(f, "{}", date.to_rfc3339())
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+impl SerdeSerialize for Timestamp {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+impl<'de> SerdeDeserialize<'de> for Timestamp {
+    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(des)?;
+        let t = str::FromStr::from_str(&s).map_err(serde::de::Error::custom)?;
+        Ok(t)
+    }
+}
+
+/// Duration of time in milliseconds.
+///
+/// Negative durations are not allowed.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Duration {
+    pub(crate) milliseconds: u64,
+}
+
+impl Duration {
+    /// Construct duration from milliseconds.
+    #[inline(always)]
+    pub fn from_millis(milliseconds: u64) -> Self {
+        Self {
+            milliseconds
+        }
+    }
+
+    /// Construct duration from seconds.
+    #[inline(always)]
+    pub fn from_seconds(seconds: u64) -> Self {
+        Self::from_millis(seconds * 1000)
+    }
+
+    /// Construct duration from minutes.
+    #[inline(always)]
+    pub fn from_minutes(minutes: u64) -> Self {
+        Self::from_millis(minutes * 1000 * 60)
+    }
+
+    /// Construct duration from hours.
+    #[inline(always)]
+    pub fn from_hours(hours: u64) -> Self {
+        Self::from_millis(hours * 1000 * 60 * 60)
+    }
+
+    /// Construct duration from days.
+    #[inline(always)]
+    pub fn from_days(days: u64) -> Self {
+        Self::from_millis(days * 1000 * 60 * 60 * 24)
+    }
+
+    /// Get number of milliseconds in the duration.
+    #[inline(always)]
+    pub fn millis(&self) -> u64 {
+        self.milliseconds
+    }
+
+    /// Get number of seconds in the duration.
+    #[inline(always)]
+    pub fn seconds(&self) -> u64 {
+        self.milliseconds / 1000
+    }
+
+    /// Get number of minutes in the duration.
+    #[inline(always)]
+    pub fn minutes(&self) -> u64 {
+        self.milliseconds / (1000 * 60)
+    }
+
+    /// Get number of hours in the duration.
+    #[inline(always)]
+    pub fn hours(&self) -> u64 {
+        self.milliseconds / (1000 * 60 * 60)
+    }
+
+    /// Get number of days in the duration.
+    #[inline(always)]
+    pub fn days(&self) -> u64 {
+        self.milliseconds / (1000 * 60 * 60 * 24)
+    }
+
+    /// Add duration. Returns `None` instead of overflowing.
+    #[inline(always)]
+    pub fn checked_add(self, other: Duration) -> Option<Self> {
+        self.milliseconds.checked_add(other.milliseconds).map(Self::from_millis)
+    }
+
+    /// Subtract duration. Returns `None` instead of overflowing.
+    #[inline(always)]
+    pub fn checked_sub(self, other: Duration) -> Option<Self> {
+        self.milliseconds.checked_sub(other.milliseconds).map(Self::from_millis)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseDurationError {
+    MissingUnit,
+    FailedParsingNumber,
+    InvalidUnit(String)
+}
+
+
+impl fmt::Display for ParseDurationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ParseDurationError::*;
+        match self {
+            MissingUnit => write!(f, "Missing unit on duration measure."),
+            FailedParsingNumber => write!(f, "Failed parsing number"),
+            InvalidUnit(s) => write!(f, "Unknown unit \"{}\".", s),
+        }
+    }
+}
+
+/// Parse a string containing a list of duration measures separated by
+/// whitespaces. A measure is a number followed by the unit (no whitespace
+/// between is allowed). Every measure is accumulated into a duration. The
+/// string is allowed to contain any number of measures with the same unit in no
+/// particular order.
+///
+/// The supported units are:
+/// - `ms` for milliseconds
+/// - `s` for seconds
+/// - `m` for minutes
+/// - `h` for hours
+/// - `d` for days
+///
+/// # Example
+/// The duration of 10 days, 1 hour, 2minutes and 7 seconds is:
+/// ```ignore
+/// "10d 1h 2m 3s 4s"
+/// ```
+impl str::FromStr for Duration {
+    type Err = ParseDurationError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use ParseDurationError::*;
+        let mut duration = 0;
+        for measure in s.split_whitespace() {
+            let r : Vec<&str> = measure.splitn(1, |c: char| !c.is_ascii_digit()).collect();
+            if r.len() != 2 {
+                return Err(MissingUnit)
+            }
+            let n: u64 = r[0].parse().map_err(|_| FailedParsingNumber)?;
+            let unit: u64 = match r[1] {
+                "ms" => 1,
+                "s" => 1000,
+                "m" => 1000 * 60,
+                "h" => 1000 * 60 * 60,
+                "d" => 1000 * 60 * 60 * 24,
+                other => return Err(InvalidUnit(String::from(other)))
+            };
+            duration += n * unit;
+        }
+        Ok(Duration::from_millis(duration))
+    }
+}
+
+impl fmt::Display for Duration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let d = self.days();
+        let h = Duration::from_millis(self.millis() % 1000 * 60 * 60 * 24).hours();
+        let m = Duration::from_millis(self.millis() % 1000 * 60 * 60).minutes();
+        let s = Duration::from_millis(self.millis() % 1000 * 60).seconds();
+        let ms = Duration::from_millis(self.millis() % 1000).millis();
+        write!(f, "{} {} {} {} {}", d, h, m, s, ms)
+    }
+}
+
 /// Address of an account, as raw bytes.
 #[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug)]
 pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
@@ -367,9 +638,6 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
-/// Time since unix epoch in milliseconds.
-pub type TimestampMillis = u64;
-
 /// Tag of an attribute. See the module [attributes](./attributes/index.html)
 /// for the currently supported attributes.
 #[repr(transparent)]
@@ -397,11 +665,10 @@ pub type IdentityProvider = u32;
 #[derive(Debug, Clone)]
 pub struct Policy<Attributes> {
     pub identity_provider: IdentityProvider,
-    /// Beginning of the month in milliseconds since unix epoch.
-    pub created_at: TimestampMillis,
-    /// Beginning of the month where the credential is no longer valid, in
-    /// milliseconds since unix epoch.
-    pub valid_to: TimestampMillis,
+    /// Beginning of the month.
+    pub created_at: Timestamp,
+    /// Beginning of the month where the credential is no longer valid.
+    pub valid_to: Timestamp,
     /// List of attributes, ordered by the tag.
     pub items: Attributes,
 }
@@ -454,7 +721,7 @@ mod policy_json {
                 }
                 let dt = chrono::naive::NaiveDate::from_ymd(i32::from(year), u32::from(month), 1)
                     .and_hms(0, 0, 0);
-                let timestamp: TimestampMillis =
+                let timestamp: u64 =
                     dt.timestamp_millis().try_into().map_err(|_| {
                         serde::de::Error::custom("Times before 1970 are not supported.")
                     })?;
@@ -511,8 +778,8 @@ mod policy_json {
             let valid_to = vt.ok_or_else(|| serde::de::Error::custom("Missing field 'validTo'"))?;
             Ok(Policy {
                 identity_provider,
-                created_at,
-                valid_to,
+                created_at: Timestamp::from_timestamp_millis(created_at),
+                valid_to: Timestamp::from_timestamp_millis(valid_to),
                 items,
             })
         }
