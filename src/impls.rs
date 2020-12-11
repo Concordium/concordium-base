@@ -129,9 +129,7 @@ impl Deserial for bool {
 }
 
 impl Serial for Amount {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_u64(self.micro_gtu)
-    }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(self.micro_gtu) }
 }
 
 impl Deserial for Amount {
@@ -153,9 +151,7 @@ impl Deserial for Timestamp {
 }
 
 impl Serial for Duration {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.millis().serial(out)
-    }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.millis().serial(out) }
 }
 
 impl Deserial for Duration {
