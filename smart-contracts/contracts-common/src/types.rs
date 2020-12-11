@@ -317,15 +317,13 @@ impl Timestamp {
     #[inline(always)]
     pub fn from_timestamp_millis(milliseconds: u64) -> Self {
         Self {
-            milliseconds
+            milliseconds,
         }
     }
 
     /// Get milliseconds since unix epoch.
     #[inline(always)]
-    pub fn timestamp_millis(&self) -> u64 {
-        self.milliseconds
-    }
+    pub fn timestamp_millis(&self) -> u64 { self.milliseconds }
 
     /// Add duration to timestamp. Returns `None` instead of overflowing.
     #[inline(always)]
@@ -362,7 +360,7 @@ impl Timestamp {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseTimestampError {
     ParseError(chrono::format::ParseError),
-    BeforeUnixEpoch
+    BeforeUnixEpoch,
 }
 
 #[cfg(feature = "derive-serde")]
@@ -382,8 +380,12 @@ impl str::FromStr for Timestamp {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use convert::TryInto;
-        let datetime = chrono::DateTime::parse_from_rfc3339(s).map_err(ParseTimestampError::ParseError)?;
-        let millis = datetime.timestamp_millis().try_into().map_err(|_| ParseTimestampError::BeforeUnixEpoch)?;
+        let datetime =
+            chrono::DateTime::parse_from_rfc3339(s).map_err(ParseTimestampError::ParseError)?;
+        let millis = datetime
+            .timestamp_millis()
+            .try_into()
+            .map_err(|_| ParseTimestampError::BeforeUnixEpoch)?;
         Ok(Timestamp::from_timestamp_millis(millis))
     }
 }
@@ -428,63 +430,45 @@ impl Duration {
     #[inline(always)]
     pub fn from_millis(milliseconds: u64) -> Self {
         Self {
-            milliseconds
+            milliseconds,
         }
     }
 
     /// Construct duration from seconds.
     #[inline(always)]
-    pub fn from_seconds(seconds: u64) -> Self {
-        Self::from_millis(seconds * 1000)
-    }
+    pub fn from_seconds(seconds: u64) -> Self { Self::from_millis(seconds * 1000) }
 
     /// Construct duration from minutes.
     #[inline(always)]
-    pub fn from_minutes(minutes: u64) -> Self {
-        Self::from_millis(minutes * 1000 * 60)
-    }
+    pub fn from_minutes(minutes: u64) -> Self { Self::from_millis(minutes * 1000 * 60) }
 
     /// Construct duration from hours.
     #[inline(always)]
-    pub fn from_hours(hours: u64) -> Self {
-        Self::from_millis(hours * 1000 * 60 * 60)
-    }
+    pub fn from_hours(hours: u64) -> Self { Self::from_millis(hours * 1000 * 60 * 60) }
 
     /// Construct duration from days.
     #[inline(always)]
-    pub fn from_days(days: u64) -> Self {
-        Self::from_millis(days * 1000 * 60 * 60 * 24)
-    }
+    pub fn from_days(days: u64) -> Self { Self::from_millis(days * 1000 * 60 * 60 * 24) }
 
     /// Get number of milliseconds in the duration.
     #[inline(always)]
-    pub fn millis(&self) -> u64 {
-        self.milliseconds
-    }
+    pub fn millis(&self) -> u64 { self.milliseconds }
 
     /// Get number of seconds in the duration.
     #[inline(always)]
-    pub fn seconds(&self) -> u64 {
-        self.milliseconds / 1000
-    }
+    pub fn seconds(&self) -> u64 { self.milliseconds / 1000 }
 
     /// Get number of minutes in the duration.
     #[inline(always)]
-    pub fn minutes(&self) -> u64 {
-        self.milliseconds / (1000 * 60)
-    }
+    pub fn minutes(&self) -> u64 { self.milliseconds / (1000 * 60) }
 
     /// Get number of hours in the duration.
     #[inline(always)]
-    pub fn hours(&self) -> u64 {
-        self.milliseconds / (1000 * 60 * 60)
-    }
+    pub fn hours(&self) -> u64 { self.milliseconds / (1000 * 60 * 60) }
 
     /// Get number of days in the duration.
     #[inline(always)]
-    pub fn days(&self) -> u64 {
-        self.milliseconds / (1000 * 60 * 60 * 24)
-    }
+    pub fn days(&self) -> u64 { self.milliseconds / (1000 * 60 * 60 * 24) }
 
     /// Add duration. Returns `None` instead of overflowing.
     #[inline(always)]
@@ -503,9 +487,8 @@ impl Duration {
 pub enum ParseDurationError {
     MissingUnit,
     FailedParsingNumber,
-    InvalidUnit(String)
+    InvalidUnit(String),
 }
-
 
 impl fmt::Display for ParseDurationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -553,7 +536,7 @@ impl str::FromStr for Duration {
                 "m" => 1000 * 60,
                 "h" => 1000 * 60 * 60,
                 "d" => 1000 * 60 * 60 * 24,
-                other => return Err(InvalidUnit(String::from(other)))
+                other => return Err(InvalidUnit(String::from(other))),
             };
             duration += n * unit;
         }
@@ -720,10 +703,9 @@ mod policy_json {
                 }
                 let dt = chrono::naive::NaiveDate::from_ymd(i32::from(year), u32::from(month), 1)
                     .and_hms(0, 0, 0);
-                let timestamp: u64 =
-                    dt.timestamp_millis().try_into().map_err(|_| {
-                        serde::de::Error::custom("Times before 1970 are not supported.")
-                    })?;
+                let timestamp: u64 = dt.timestamp_millis().try_into().map_err(|_| {
+                    serde::de::Error::custom("Times before 1970 are not supported.")
+                })?;
                 Ok(timestamp)
             };
 
@@ -951,6 +933,13 @@ mod test {
     #[test]
     fn test_duration_from_string_simple() {
         let duration = Duration::from_str("12d 1h 39s 3m 2h").unwrap();
-        assert_eq!(duration.millis(), 1000*60*60*24*12 + 1000*60*60*1 + 1000*39+ 1000*60*3 + 1000*60*60*2)
+        assert_eq!(
+            duration.millis(),
+            1000 * 60 * 60 * 24 * 12 // 12d
+                + 1000 * 60 * 60     // 1h
+                + 1000 * 39          // 39s
+                + 1000 * 60 * 3      // 3m
+                + 1000 * 60 * 60 * 2 // 2h
+        )
     }
 }
