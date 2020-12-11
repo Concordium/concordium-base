@@ -382,7 +382,7 @@ impl str::FromStr for Timestamp {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use convert::TryInto;
-        let datetime = chrono::DateTime::parse_from_rfc3339(s).map_err(|e| ParseTimestampError::ParseError(e))?;
+        let datetime = chrono::DateTime::parse_from_rfc3339(s).map_err(ParseTimestampError::ParseError)?;
         let millis = datetime.timestamp_millis().try_into().map_err(|_| ParseTimestampError::BeforeUnixEpoch)?;
         Ok(Timestamp::from_timestamp_millis(millis))
     }
@@ -563,13 +563,13 @@ impl str::FromStr for Duration {
 }
 
 impl fmt::Display for Duration {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let d = self.days();
-        let h = Duration::from_millis(self.millis() % 1000 * 60 * 60 * 24).hours();
-        let m = Duration::from_millis(self.millis() % 1000 * 60 * 60).minutes();
-        let s = Duration::from_millis(self.millis() % 1000 * 60).seconds();
-        let ms = Duration::from_millis(self.millis() % 1000).millis();
-        write!(f, "{} {} {} {} {}", d, h, m, s, ms)
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let days = self.days();
+        let hours = Duration::from_millis(self.millis() % 1000 * 60 * 60 * 24).hours();
+        let minutes = Duration::from_millis(self.millis() % 1000 * 60 * 60).minutes();
+        let seconds = Duration::from_millis(self.millis() % 1000 * 60).seconds();
+        let milliseconds = Duration::from_millis(self.millis() % 1000).millis();
+        write!(formatter, "{} {} {} {} {}", days, hours, minutes, seconds, milliseconds)
     }
 }
 
@@ -617,7 +617,7 @@ pub type BlockHeight = u64;
 pub type FinalizedHeight = u64;
 
 /// Time at the beginning of the current slot, in miliseconds.
-pub type SlotTime = u64;
+pub type SlotTime = Timestamp;
 
 /// Chain metadata accessible to both receive and init methods.
 #[cfg_attr(
