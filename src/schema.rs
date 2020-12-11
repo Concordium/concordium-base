@@ -436,37 +436,39 @@ impl Deserial for Type {
             10 => Ok(Type::Amount),
             11 => Ok(Type::AccountAddress),
             12 => Ok(Type::ContractAddress),
-            13 => {
+            13 => Ok(Type::Timestamp),
+            14 => Ok(Type::Duration),
+            15 => {
                 let left = Type::deserial(source)?;
                 let right = Type::deserial(source)?;
                 Ok(Type::Pair(Box::new(left), Box::new(right)))
             }
-            14 => {
+            16 => {
                 let len_size = SizeLength::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::List(len_size, Box::new(ty)))
             }
-            15 => {
+            17 => {
                 let len_size = SizeLength::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::Set(len_size, Box::new(ty)))
             }
-            16 => {
+            18 => {
                 let len_size = SizeLength::deserial(source)?;
                 let key = Type::deserial(source)?;
                 let value = Type::deserial(source)?;
                 Ok(Type::Map(len_size, Box::new(key), Box::new(value)))
             }
-            17 => {
+            19 => {
                 let len = u32::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::Array(len, Box::new(ty)))
             }
-            18 => {
+            20 => {
                 let fields = source.get()?;
                 Ok(Type::Struct(fields))
             }
-            19 => {
+            21 => {
                 let variants = source.get()?;
                 Ok(Type::Enum(variants))
             }
