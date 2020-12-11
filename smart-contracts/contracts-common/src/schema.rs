@@ -96,6 +96,8 @@ pub enum Type {
     Amount,
     AccountAddress,
     ContractAddress,
+    Timestamp,
+    Duration,
     Pair(Box<Type>, Box<Type>),
     List(SizeLength, Box<Type>),
     Set(SizeLength, Box<Type>),
@@ -157,6 +159,12 @@ impl SchemaType for AccountAddress {
 }
 impl SchemaType for ContractAddress {
     fn get_type() -> Type { Type::ContractAddress }
+}
+impl SchemaType for Timestamp {
+    fn get_type() -> Type { Type::Timestamp }
+}
+impl SchemaType for Duration {
+    fn get_type() -> Type { Type::Duration }
 }
 impl<T: SchemaType> SchemaType for Option<T> {
     fn get_type() -> Type {
@@ -366,38 +374,44 @@ impl Serial for Type {
             Type::ContractAddress => {
                 out.write_u8(12)?;
             }
-            Type::Pair(left, right) => {
+            Type::Timestamp => {
                 out.write_u8(13)?;
+            }
+            Type::Duration => {
+                out.write_u8(14)?;
+            }
+            Type::Pair(left, right) => {
+                out.write_u8(15)?;
                 left.serial(out)?;
                 right.serial(out)?;
             }
             Type::List(len_size, ty) => {
-                out.write_u8(14)?;
+                out.write_u8(16)?;
                 len_size.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Set(len_size, ty) => {
-                out.write_u8(15)?;
+                out.write_u8(17)?;
                 len_size.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Map(len_size, key, value) => {
-                out.write_u8(16)?;
+                out.write_u8(18)?;
                 len_size.serial(out)?;
                 key.serial(out)?;
                 value.serial(out)?;
             }
             Type::Array(len, ty) => {
-                out.write_u8(17)?;
+                out.write_u8(19)?;
                 len.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Struct(fields) => {
-                out.write_u8(18)?;
+                out.write_u8(20)?;
                 fields.serial(out)?;
             }
             Type::Enum(fields) => {
-                out.write_u8(19)?;
+                out.write_u8(21)?;
                 fields.serial(out)?;
             }
         }
@@ -582,6 +596,14 @@ mod impls {
                 Type::ContractAddress => {
                     let address = ContractAddress::deserial(source)?;
                     Ok(Value::String(address.to_string()))
+                }
+                Type::Timestamp => {
+                    let timestamp = Timestamp::deserial(source)?;
+                    Ok(Value::String(timestamp.to_string()))
+                }
+                Type::Duration => {
+                    let duration = Duration::deserial(source)?;
+                    Ok(Value::String(duration.to_string()))
                 }
                 Type::Pair(left_type, right_type) => {
                     let left = left_type.to_json(source)?;
