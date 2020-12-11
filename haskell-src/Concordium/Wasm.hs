@@ -322,8 +322,8 @@ instance Serialize ModuleInterface where
     return ModuleInterface {..}
   put ModuleInterface{..} = do
     put miModuleRef
-    putSafeSetOf putWord64be put miExposedInit
-    putSafeMapOf putWord64be put (putSafeSetOf putWord64be put) miExposedReceive
+    putSafeSetOf put miExposedInit
+    putSafeMapOf put (putSafeSetOf put) miExposedReceive
     put miModule
     putWord64be miModuleSize
 

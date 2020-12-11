@@ -635,7 +635,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
-                  | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
                   -- |Encountered index to which no account key belongs when removing or updating keys
                   | NonExistentAccountKey
