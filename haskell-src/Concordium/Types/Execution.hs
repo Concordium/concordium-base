@@ -403,17 +403,6 @@ payloadBodyBytes (EncodedPayload ss) =
   then BS.empty
   else BS.tail (BSS.fromShort ss)
 
--- |Additional special events that affect the block state.
-data BlockEvents =
-  -- |Block reward
-  BlockReward !Amount !BakerId
-  -- |Delegation reward
-  | DelegationReward !Amount !BakerId
-  -- |Foundation tax transfer
-  | FoundationTax !Amount
-  -- |Reward to a finalizer.
-  | FinalizationReward !Amount !BakerId
-
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
@@ -702,6 +691,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | AccountCredentialInvalid -- ^Account credential verification failed, the proofs were invalid or malformed.
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
                  | InvalidUpdateTime -- ^The update timeout is later than the effective time
+                 | ExceedsMaxCredentialDeployments -- ^The block contains more than the limit of credential deployments
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind

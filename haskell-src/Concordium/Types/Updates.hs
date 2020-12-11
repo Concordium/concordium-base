@@ -38,7 +38,8 @@ module Concordium.Types.Updates where
 
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
-import Data.Aeson ((.:))
+import Data.Aeson.Types (FromJSON(..), ToJSON(..), (.:), withObject, object)
+import Data.Maybe
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
@@ -52,6 +53,7 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as Vec
 import Data.Word
 import Control.Monad
+import Lens.Micro.Platform
 
 import Concordium.Crypto.SignatureScheme
 import qualified Concordium.Crypto.SHA256 as SHA256
@@ -60,6 +62,160 @@ import Concordium.Utils
 import Concordium.Utils.Serialization
 import Concordium.Types
 import Concordium.Types.HashableTo
+
+----------------
+-- * Parameters
+----------------
+
+-- |The minting rate and the distribution of newly-minted GTU
+-- among bakers, finalizers, and the foundation account.
+-- It must be the case that
+-- @m_dBakingReward + _mdFinalizationReward <= 1@.
+--  The remaining amount is the platform development charge.
+data MintDistribution = MintDistribution {
+    -- |Mint rate per slot
+    _mdMintPerSlot :: !MintRate,
+    -- |BakingRewMintFrac: the fraction allocated to baker rewards
+    _mdBakingReward :: !RewardFraction,
+    -- |FinRewMintFrac: the fraction allocated to finalization rewards
+    _mdFinalizationReward :: !RewardFraction
+} deriving (Eq, Show)
+makeClassy ''MintDistribution
+
+instance ToJSON MintDistribution where
+  toJSON MintDistribution{..} = object [
+      "mintPerSlot" AE..= _mdMintPerSlot,
+      "bakingReward" AE..= _mdBakingReward,
+      "finalizationReward" AE..= _mdFinalizationReward
+    ]
+instance FromJSON MintDistribution where
+  parseJSON = withObject "MintDistribution" $ \v -> do
+    _mdMintPerSlot <- v .: "mintPerSlot"
+    _mdBakingReward <- v .: "bakingReward"
+    _mdFinalizationReward <- v .: "finalizationReward"
+    unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
+    return MintDistribution{..}
+
+instance Serialize MintDistribution where
+  put MintDistribution{..} = put _mdMintPerSlot >> put _mdBakingReward >> put _mdFinalizationReward
+  get = do
+    _mdMintPerSlot <- get
+    _mdBakingReward <- get
+    _mdFinalizationReward <- get
+    unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
+    return MintDistribution{..}
+
+instance HashableTo SHA256.Hash MintDistribution where
+  getHash = SHA256.hash . encode
+
+instance Monad m => MHashableTo m SHA256.Hash MintDistribution
+
+-- |The distribution of block transaction fees among the block
+-- baker, the GAS account, and the foundation account.  It
+-- must be the case that @_tfdBaker + _tfdGASAccount <= 1@.
+-- The remaining amount is the TransChargeFrac (paid to the
+-- foundation account).
+data TransactionFeeDistribution = TransactionFeeDistribution {
+    -- |BakerTransFrac: the fraction allocated to the baker
+    _tfdBaker :: !RewardFraction,
+    -- |The fraction allocated to the GAS account
+    _tfdGASAccount :: !RewardFraction
+} deriving (Eq, Show)
+makeClassy ''TransactionFeeDistribution
+
+instance ToJSON TransactionFeeDistribution where
+  toJSON TransactionFeeDistribution{..} = object [
+      "baker" AE..= _tfdBaker,
+      "gasAccount" AE..= _tfdGASAccount
+    ]
+instance FromJSON TransactionFeeDistribution where
+  parseJSON = withObject "TransactionFeeDistribution" $ \v -> do
+    _tfdBaker <- v .: "baker"
+    _tfdGASAccount <- v .: "gasAccount"
+    unless (isJust (_tfdBaker `addRewardFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
+    return TransactionFeeDistribution{..}
+
+instance Serialize TransactionFeeDistribution where
+  put TransactionFeeDistribution{..} = put _tfdBaker >> put _tfdGASAccount
+  get = do
+    _tfdBaker <- get
+    _tfdGASAccount <- get
+    unless (isJust (_tfdBaker `addRewardFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
+    return TransactionFeeDistribution{..}
+
+instance HashableTo SHA256.Hash TransactionFeeDistribution where
+  getHash = SHA256.hash . encode
+
+instance Monad m => MHashableTo m SHA256.Hash TransactionFeeDistribution
+
+data GASRewards = GASRewards {
+  -- |BakerPrevTransFrac: fraction paid to baker
+  _gasBaker :: !RewardFraction,
+  -- |FeeAddFinalisationProof: fraction paid for including a
+  -- finalization proof in a block.
+  _gasFinalizationProof :: !RewardFraction,
+  -- |FeeAccountCreation: fraction paid for including each
+  -- account creation transaction in a block.
+  _gasAccountCreation :: !RewardFraction,
+  -- |FeeUpdate: fraction paid for including an update
+  -- transaction in a block.
+  _gasChainUpdate :: !RewardFraction
+} deriving (Eq, Show)
+makeClassy ''GASRewards
+
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
+
+instance Serialize GASRewards where
+  put GASRewards{..} = do
+    put _gasBaker
+    put _gasFinalizationProof
+    put _gasAccountCreation
+    put _gasChainUpdate
+  get = do
+    _gasBaker <- get
+    _gasFinalizationProof <- get
+    _gasAccountCreation <- get
+    _gasChainUpdate <- get
+    return GASRewards{..}
+
+instance HashableTo SHA256.Hash GASRewards where
+  getHash = SHA256.hash . encode
+
+instance Monad m => MHashableTo m SHA256.Hash GASRewards
+
+-- |Parameters affecting rewards.
+-- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
+data RewardParameters = RewardParameters {
+    -- |Distribution of newly-minted GTUs.
+    _rpMintDistribution :: !MintDistribution,
+    -- |Distribution of transaction fees.
+    _rpTransactionFeeDistribution :: !TransactionFeeDistribution,
+    -- |Rewards paid from the GAS account.
+    _rpGASRewards :: !GASRewards
+} deriving (Eq, Show)
+makeClassy ''RewardParameters
+
+instance HasMintDistribution RewardParameters where
+  mintDistribution = rpMintDistribution
+
+instance HasTransactionFeeDistribution RewardParameters where
+  transactionFeeDistribution = rpTransactionFeeDistribution
+
+instance HasGASRewards RewardParameters where
+  gASRewards = rpGASRewards
+
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 3} ''RewardParameters)
+
+instance Serialize RewardParameters where
+  put RewardParameters{..} = do
+    put _rpMintDistribution
+    put _rpTransactionFeeDistribution
+    put _rpGASRewards
+  get = do
+    _rpMintDistribution <- get
+    _rpTransactionFeeDistribution <- get
+    _rpGASRewards <- get
+    return RewardParameters{..}
 
 --------------------
 -- * Authorizations
@@ -112,7 +268,15 @@ data Authorizations = Authorizations {
         -- |Parameter keys: Euro:NRG
         asParamEuroPerEnergy :: !AccessStructure,
         -- |Parameter keys: microGTU:Euro
-        asParamMicroGTUPerEuro :: !AccessStructure
+        asParamMicroGTUPerEuro :: !AccessStructure,
+        -- |Parameter keys: foundation account
+        asParamFoundationAccount :: !AccessStructure,
+        -- |Parameter keys: mint distribution
+        asParamMintDistribution :: !AccessStructure,
+        -- |Parameter keys: transaction fee distribution
+        asParamTransactionFeeDistribution :: !AccessStructure,
+        -- |Parameter keys: GAS rewards
+        asParamGASRewards :: !AccessStructure
     }
     deriving (Eq, Show)
 
@@ -126,6 +290,10 @@ instance Serialize Authorizations where
         put asParamElectionDifficulty
         put asParamEuroPerEnergy
         put asParamMicroGTUPerEuro
+        put asParamFoundationAccount
+        put asParamMintDistribution
+        put asParamTransactionFeeDistribution
+        put asParamGASRewards
     get = label "deserialization update authorizations" $ do
         keyCount <- getWord16be
         asKeys <- Vec.replicateM (fromIntegral keyCount) get
@@ -142,6 +310,10 @@ instance Serialize Authorizations where
         asParamElectionDifficulty <- getChecked
         asParamEuroPerEnergy <- getChecked
         asParamMicroGTUPerEuro <- getChecked
+        asParamFoundationAccount <- getChecked
+        asParamMintDistribution <- getChecked
+        asParamTransactionFeeDistribution <- getChecked
+        asParamGASRewards <- getChecked
         return Authorizations{..}
 
 instance HashableTo SHA256.Hash Authorizations where
@@ -169,6 +341,10 @@ instance AE.FromJSON Authorizations where
         asParamElectionDifficulty <- parseAS "electionDifficulty"
         asParamEuroPerEnergy <- parseAS "euroPerEnergy"
         asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
+        asParamFoundationAccount <- parseAS "foundationAccount"
+        asParamMintDistribution <- parseAS "mintDistribution"
+        asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
+        asParamGASRewards <- parseAS "paramGASRewards"
         return Authorizations{..}
 
 instance AE.ToJSON Authorizations where
@@ -179,7 +355,11 @@ instance AE.ToJSON Authorizations where
                 "protocol" AE..= t asProtocol,
                 "electionDifficulty" AE..= t asParamElectionDifficulty,
                 "euroPerEnergy" AE..= t asParamEuroPerEnergy,
-                "microGTUPerEuro" AE..= t asParamMicroGTUPerEuro
+                "microGTUPerEuro" AE..= t asParamMicroGTUPerEuro,
+                "foundationAccount" AE..= t asParamFoundationAccount,
+                "mintDistribution" AE..= t asParamMintDistribution,
+                "transactionFeeDistribution" AE..= t asParamTransactionFeeDistribution,
+                "paramGASRewards" AE..= t asParamGASRewards
             ]
         where
             t AccessStructure{..} = AE.object [
@@ -203,6 +383,14 @@ data UpdateType
     -- ^Update the euro per energy exchange rate
     | UpdateMicroGTUPerEuro
     -- ^Update the microGTU per euro exchange rate
+    | UpdateFoundationAccount
+    -- ^Update the address of the foundation account
+    | UpdateMintDistribution
+    -- ^Update the distribution of newly minted GTU
+    | UpdateTransactionFeeDistribution
+    -- ^Update the distribution of transaction fees
+    | UpdateGASRewards
+    -- ^Update the GAS rewards
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 instance Serialize UpdateType where
@@ -211,12 +399,20 @@ instance Serialize UpdateType where
     put UpdateElectionDifficulty = putWord8 2
     put UpdateEuroPerEnergy = putWord8 3
     put UpdateMicroGTUPerEuro = putWord8 4
+    put UpdateFoundationAccount = putWord8 5
+    put UpdateMintDistribution = putWord8 6
+    put UpdateTransactionFeeDistribution = putWord8 7
+    put UpdateGASRewards = putWord8 8
     get = getWord8 >>= \case
         0 -> return UpdateAuthorization
         1 -> return UpdateProtocol
         2 -> return UpdateElectionDifficulty
         3 -> return UpdateEuroPerEnergy
         4 -> return UpdateMicroGTUPerEuro
+        5 -> return UpdateFoundationAccount
+        6 -> return UpdateMintDistribution
+        7 -> return UpdateTransactionFeeDistribution
+        8 -> return UpdateGASRewards
         n -> fail $ "invalid update type: " ++ show n
 
 -- |Payload of a protocol update.
@@ -324,6 +520,14 @@ data UpdatePayload
     -- ^Update the euro-per-energy parameter
     | MicroGTUPerEuroUpdatePayload !ExchangeRate
     -- ^Update the microGTU-per-euro parameter
+    | FoundationAccountUpdatePayload !AccountAddress
+    -- ^Update the address of the foundation account
+    | MintDistributionUpdatePayload !MintDistribution
+    -- ^Update the distribution of newly minted GTU
+    | TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
+    -- ^Update the distribution of transaction fees
+    | GASRewardsUpdatePayload !GASRewards
+    -- ^Update the GAS rewards
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
@@ -332,12 +536,20 @@ instance Serialize UpdatePayload where
     put (ElectionDifficultyUpdatePayload u) = put UpdateElectionDifficulty >> put u
     put (EuroPerEnergyUpdatePayload u) = put UpdateEuroPerEnergy >> put u
     put (MicroGTUPerEuroUpdatePayload u) = put UpdateMicroGTUPerEuro >> put u
+    put (FoundationAccountUpdatePayload u) = put UpdateFoundationAccount >> put u
+    put (MintDistributionUpdatePayload u) = put UpdateMintDistribution >> put u
+    put (TransactionFeeDistributionUpdatePayload u) = put UpdateTransactionFeeDistribution >> put u
+    put (GASRewardsUpdatePayload u) = put UpdateGASRewards >> put u
     get = get >>= \case
             UpdateAuthorization -> AuthorizationUpdatePayload <$> get
             UpdateProtocol -> ProtocolUpdatePayload <$> get
             UpdateElectionDifficulty -> ElectionDifficultyUpdatePayload <$> get
             UpdateEuroPerEnergy -> EuroPerEnergyUpdatePayload <$> get
             UpdateMicroGTUPerEuro -> MicroGTUPerEuroUpdatePayload <$> get
+            UpdateFoundationAccount -> FoundationAccountUpdatePayload <$> get
+            UpdateMintDistribution -> MintDistributionUpdatePayload <$> get
+            UpdateTransactionFeeDistribution -> TransactionFeeDistributionUpdatePayload <$> get
+            UpdateGASRewards -> GASRewardsUpdatePayload <$> get
 
 $(deriveJSON defaultOptions{
     constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
@@ -352,6 +564,10 @@ updateType ProtocolUpdatePayload{} = UpdateProtocol
 updateType ElectionDifficultyUpdatePayload{} = UpdateElectionDifficulty
 updateType EuroPerEnergyUpdatePayload{} = UpdateEuroPerEnergy
 updateType MicroGTUPerEuroUpdatePayload{} = UpdateMicroGTUPerEuro
+updateType FoundationAccountUpdatePayload{} = UpdateFoundationAccount
+updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
+updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
+updateType GASRewardsUpdatePayload{} = UpdateGASRewards
 
 -- |Determine if signatures from the given set of keys would be
 -- sufficient to authorize the given update.
@@ -361,6 +577,10 @@ checkUpdateAuthorizationKeys Authorizations{..} (ProtocolUpdatePayload _) ks = c
 checkUpdateAuthorizationKeys Authorizations{..} (ElectionDifficultyUpdatePayload _) ks = checkKeySet asParamElectionDifficulty ks
 checkUpdateAuthorizationKeys Authorizations{..} (EuroPerEnergyUpdatePayload _) ks = checkKeySet asParamEuroPerEnergy ks
 checkUpdateAuthorizationKeys Authorizations{..} (MicroGTUPerEuroUpdatePayload _) ks = checkKeySet asParamMicroGTUPerEuro ks
+checkUpdateAuthorizationKeys Authorizations{..} (FoundationAccountUpdatePayload _) ks = checkKeySet asParamFoundationAccount ks
+checkUpdateAuthorizationKeys Authorizations{..} (MintDistributionUpdatePayload _) ks = checkKeySet asParamMintDistribution ks
+checkUpdateAuthorizationKeys Authorizations{..} (TransactionFeeDistributionUpdatePayload _) ks = checkKeySet asParamTransactionFeeDistribution ks
+checkUpdateAuthorizationKeys Authorizations{..} (GASRewardsUpdatePayload _) ks = checkKeySet asParamGASRewards ks
 
 -- |Signatures on an update instruction.
 -- The serialization of 'UpdateInstructionSignatures' is uniquely determined.
@@ -368,8 +588,9 @@ newtype UpdateInstructionSignatures = UpdateInstructionSignatures {updateInstruc
     deriving newtype (Eq, Show)
 
 instance Serialize UpdateInstructionSignatures where
-    put (UpdateInstructionSignatures m) =
-        putSafeMapOf (putWord16be . fromIntegral) put put m
+    put (UpdateInstructionSignatures m) = do
+        putWord16be (fromIntegral (Map.size m))
+        putSafeSizedMapOf put put m
     get = do
         sz <- getWord16be
         when (sz == 0) $ fail "signatures must not be empty"

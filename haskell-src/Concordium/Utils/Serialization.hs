@@ -12,7 +12,6 @@ import Data.Serialize
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Data.Word
 
 -- * Length
 
@@ -59,17 +58,15 @@ getUtf8 = do
 
 -- |Put a 'Set.Set' by first putting the size, then putting the elements in ascending order.
 putSafeSetOf
-    :: Putter Word64
-    -- ^How to put the size
-    -> Putter a
+    :: Putter a
     -- ^How to put a value
     -> Putter (Set.Set a)
-putSafeSetOf pSize pVal s = pSize (fromIntegral (Set.size s)) >> mapM_ pVal (Set.toAscList s)
+putSafeSetOf pVal s = putLength (Set.size s) >> mapM_ pVal (Set.toAscList s)
 
 -- |Get a 'Set.Set', but enforce that the elements are ordered and distinct.
 getSafeSetOf :: (Ord a) => Get a -> Get (Set.Set a)
 getSafeSetOf g = do
-        sz <- getWord64be
+        sz <- getLength
         getSafeSizedSetOf sz g
 
 -- |Get a 'Set.Set' of specified size, but enforce that the elements are ordered and distinct.
@@ -89,19 +86,28 @@ getSafeSizedSetOf sz0 getter
                 else
                     fail "elements not in ascending order"
 
--- |Put a 'Map.Map' by first putting the size and then putting the key-value pairs in
+-- |Put a 'Map.Map' by putting the key-value pairs in
 -- ascending order of keys.
-putSafeMapOf
-    :: Putter Word64
-    -- ^How to put the size
-    -> Putter k
+putSafeSizedMapOf
+    :: Putter k
     -- ^How to put a key
     -> Putter v
     -- ^How to put a value
     -> Putter (Map.Map k v)
-putSafeMapOf putSize putKey putVal m = do
-    putSize (fromIntegral (Map.size m))
+putSafeSizedMapOf putKey putVal m =
     forM_ (Map.toAscList m) $ \(k, v) -> putKey k >> putVal v
+
+-- |Put a 'Map.Map' by first putting the size and then putting the key-value pairs in
+-- ascending order of keys.
+putSafeMapOf
+    :: Putter k
+    -- ^How to put a key
+    -> Putter v
+    -- ^How to put a value
+    -> Putter (Map.Map k v)
+putSafeMapOf putKey putVal m = do
+    putLength (Map.size m)
+    putSafeSizedMapOf putKey putVal m
 
 -- |Get a 'Map.Map' of specified size, enforcing that the keys are ordered and distinct.
 getSafeSizedMapOf :: (Ord k, Integral s) => s -> Get k -> Get v -> Get (Map.Map k v)
@@ -125,7 +131,7 @@ getSafeSizedMapOf sz0 getKey getVal
 -- |Get a 'Map.Map', enforcing that the keys are ordered and distinct.
 getSafeMapOf :: (Ord k) => Get k -> Get v -> Get (Map.Map k v)
 getSafeMapOf getKey getVal = do
-        sz <- getWord64be
+        sz <- getLength
         getSafeSizedMapOf sz getKey getVal
 
 -- * Utility
