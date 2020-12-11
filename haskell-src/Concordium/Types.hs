@@ -304,20 +304,38 @@ computeCost rate energy = ceiling (rate * fromIntegral energy)
 
 -- |A base-10 floating point number representation.
 -- The value is @mrMantissa * 10^(-mrExponent)@.
--- Note: equality is currently structural, and not semantic.
+--
+-- At least 6 significant figures were required by the specification,
+-- and 'Word32' provides 9.  Exponent values greater than about
+-- 29 will not be necessary, since such a rate will be effectively
+-- 0 (when we compute the amount that is minted based on a 64-bit
+-- value as the current number of GTUs.)
 data MintRate = MintRate {
   mrMantissa :: !Word32,
   mrExponent :: !Word8
-} deriving (Eq)
+}
+
+instance Eq MintRate where
+  mr1 == mr2 = mrMantissa m1' == mrMantissa m2' && mrExponent m1' == mrExponent m2'
+    where
+      n mr@MintRate{..}
+        | mrMantissa == 0 = MintRate 0 0
+        | let (d,m) = mrMantissa `divMod` 10
+        , m == 0
+        , mrExponent > 0
+            = n (MintRate d (mrExponent - 1))
+        | otherwise = mr
+      m1' = n mr1
+      m2' = n mr2
 
 instance Show MintRate where
   show MintRate{..} = show mrMantissa ++ "e-" ++ show mrExponent
 
 instance S.Serialize MintRate where
-  put MintRate{..} = S.put mrMantissa >> S.put mrExponent
+  put MintRate{..} = S.putWord32be mrMantissa >> S.putWord8 mrExponent
   get = do
-    mrMantissa <- S.get
-    mrExponent <- S.get
+    mrMantissa <- S.getWord32be
+    mrExponent <- S.getWord8
     return MintRate{..}
 
 instance ToJSON MintRate where
@@ -340,11 +358,14 @@ instance HashableTo Hash.Hash MintRate where
 instance Monad m => MHashableTo m Hash.Hash MintRate
 
 -- |Compute an amount minted at a given rate.
+-- The amount is rounded down to the nearest microGTU.
 mintAmount :: MintRate -> Amount -> Amount
 {-# INLINE mintAmount #-}
 mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
 
 -- |A fraction in [0,1], represented as parts per 100000.
+-- This resolution (thousandths of a percent) was agreed in tokenomics discussions
+-- to be sufficient.
 newtype RewardFraction = RewardFraction {fracPerHundredThousand :: Word32}
   deriving newtype (Eq,Ord)
 
@@ -355,9 +376,9 @@ instance Show RewardFraction where
   show (RewardFraction f) = show (fromIntegral f / 100000 :: Double)
 
 instance S.Serialize RewardFraction where
-  put (RewardFraction f) = S.put f
+  put (RewardFraction f) = S.putWord32be f
   get = do
-    f <- S.get
+    f <- S.getWord32be
     unless (f <= hundredThousand) $ fail "Reward fraction out of bounds"
     return (RewardFraction f)
 
@@ -392,6 +413,7 @@ complementRewardFraction :: RewardFraction -> RewardFraction
 complementRewardFraction (RewardFraction a) = RewardFraction (hundredThousand - a)
 
 -- |Compute a fraction of an amount.
+-- The amount is rounded down to the nearest microGTU.
 takeFraction :: RewardFraction -> Amount -> Amount
 takeFraction f = fromInteger . (`div` 100000) . (toInteger (fracPerHundredThousand f) *) . toInteger
 

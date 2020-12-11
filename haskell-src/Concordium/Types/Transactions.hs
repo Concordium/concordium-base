@@ -467,6 +467,11 @@ instance TransactionData Transaction where
 -- TODO: Move to Execution???
 
 -- |A mapping from account addresses to amounts.
+--
+-- This is used in 'SpecialTransactionOutcome' to represent baking
+-- and finalization rewards that pay multiple accounts.
+-- Defining this as an explicit newtype is chiefly for convenience
+-- in defining the serialization formats.
 newtype AccountAmounts = AccountAmounts {accountAmounts :: Map.Map AccountAddress Amount}
   deriving newtype (Eq,Ord,Show)
 

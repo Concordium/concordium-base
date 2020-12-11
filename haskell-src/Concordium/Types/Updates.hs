@@ -163,7 +163,7 @@ data GASRewards = GASRewards {
 } deriving (Eq, Show)
 makeClassy ''GASRewards
 
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 3} ''GASRewards)
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
 
 instance Serialize GASRewards where
   put GASRewards{..} = do
