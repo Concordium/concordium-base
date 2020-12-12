@@ -25,29 +25,11 @@ type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
 #[derive(StructOpt)]
 #[structopt(
-    version = "0.31830988618",
+    version = "0.4",
     author = "Concordium",
-    about = "Generate bakers with accounts for inclusion in genesis or just beta accounts."
+    about = "Generate accounts for inclusion in genesis."
 )]
 enum GenesisTool {
-    #[structopt(name = "create-bakers", about = "Create new bakers.")]
-    CreateBakers {
-        #[structopt(long = "num", help = "Number of bakers to generate.")]
-        num: usize,
-        #[structopt(
-            long = "num-finalizers",
-            help = "The amount of finalizers to generate. Defaults to all bakers."
-        )]
-        num_finalizers: Option<usize>,
-        #[structopt(
-            long = "balance",
-            help = "Balance on each of the baker accounts, in GTU.",
-            default_value = "3500000"
-        )]
-        balance: Amount,
-        #[structopt(flatten)]
-        common: CommonOptions,
-    },
     #[structopt(name = "create-accounts", about = "Create new accounts.")]
     CreateAccounts {
         #[structopt(long = "num", help = "Number of accounts to generate.")]
@@ -65,6 +47,17 @@ enum GenesisTool {
             default_value = "1000000"
         )]
         balance: Amount,
+        #[structopt(
+            long = "stake",
+            help = "Initial stake of the bakers, in GTU. If this is set then all accounts will be \
+                    bakers."
+        )]
+        stake: Option<Amount>,
+        #[structopt(
+            long = "restake",
+            help = "Restake earnings automatically. This only has effect if 'stake' is set."
+        )]
+        restake: bool,
         #[structopt(flatten)]
         common: CommonOptions,
     },
@@ -113,7 +106,6 @@ fn main() -> std::io::Result<()> {
     };
 
     let common = match gt {
-        GenesisTool::CreateBakers { ref common, .. } => common,
         GenesisTool::CreateAccounts { ref common, .. } => common,
     };
 
@@ -293,102 +285,92 @@ fn main() -> std::io::Result<()> {
     };
 
     match gt {
-        GenesisTool::CreateBakers {
-            num,
-            num_finalizers,
-            balance,
-            ..
-        } => {
-            let num_bakers = num;
-            let num_finalizers = num_finalizers.unwrap_or(num_bakers);
-
-            let mut bakers = Vec::with_capacity(num_bakers);
-            for baker in 0..num_bakers {
-                let (account_data_json, credential_json, account_keys, address_json) =
-                    generate_account(&mut csprng);
-                if let Err(err) = write_json_to_file(
-                    mk_out_path(format!("baker-{}-account.json", baker)),
-                    &account_data_json,
-                ) {
-                    eprintln!(
-                        "Could not output account data for baker {}, because {}.",
-                        baker, err
-                    );
-                }
-
-                // vrf keypair
-                let vrf_key = vrf::Keypair::generate(&mut csprng);
-                // signature keypair
-                let sign_key = ed25519::Keypair::generate(&mut csprng);
-
-                let agg_sign_key = agg::SecretKey::<IpPairing>::generate(&mut csprng);
-                let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
-
-                // Output baker vrf and election keys in a json file.
-                let baker_data_json = json!({
-                    "electionPrivateKey": base16_encode_string(&vrf_key.secret),
-                    "electionVerifyKey": base16_encode_string(&vrf_key.public),
-                    "signatureSignKey": base16_encode_string(&sign_key.secret),
-                    "signatureVerifyKey": base16_encode_string(&sign_key.public),
-                    "aggregationSignKey": base16_encode_string(&agg_sign_key),
-                    "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
-                });
-
-                if let Err(err) = write_json_to_file(
-                    mk_out_path(format!("baker-{}-credentials.json", baker)),
-                    &baker_data_json,
-                ) {
-                    eprintln!(
-                        "Could not output baker credential for baker {}, because {}.",
-                        baker, err
-                    );
-                }
-
-                // Finally store a json value storing public data for this baker.
-                let public_baker_data = json!({
-                    "electionVerifyKey": base16_encode_string(&vrf_key.public),
-                    "signatureVerifyKey": base16_encode_string(&sign_key.public),
-                    "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
-                    "finalizer": baker < num_finalizers,
-                    "account": json!({
-                        "address": address_json,
-                        "accountKeys": account_keys,
-                        "balance": balance,
-                        "credential": credential_json
-                    })
-                });
-                bakers.push(public_baker_data);
-            }
-
-            // finally output all of the bakers in one file. This is used to generate
-            // genesis.
-            if let Err(err) =
-                write_json_to_file(mk_out_path("bakers.json".to_owned()), &json!(bakers))
-            {
-                eprintln!("Could not output bakers.json file because {}.", err)
-            }
-        }
         GenesisTool::CreateAccounts {
             num,
             ref template,
             balance,
+            stake,
+            restake,
             ..
         } => {
             let num_accounts = num;
             let prefix = template;
 
+            let mut bakers = Vec::new();
+
+            if let Some(stake) = stake {
+                if stake > balance {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Stake can not be more than the initial balance of the account.",
+                    ));
+                }
+            }
+
             let mut accounts = Vec::with_capacity(num_accounts);
             for acc_num in 0..num_accounts {
                 let (account_data_json, credential_json, account_keys, address_json) =
                     generate_account(&mut csprng);
-                let public_account_data = json!({
-                    "schemeId": "Ed25519",
-                    "accountKeys": account_keys,
-                    "address": address_json,
-                    "balance": balance,
-                    "credential": credential_json
-                });
-                accounts.push(public_account_data);
+
+                if let Some(stake) = stake {
+                    // vrf keypair
+                    let vrf_key = vrf::Keypair::generate(&mut csprng);
+                    // signature keypair
+                    let sign_key = ed25519::Keypair::generate(&mut csprng);
+
+                    let agg_sign_key = agg::SecretKey::<IpPairing>::generate(&mut csprng);
+                    let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
+
+                    // Output baker vrf and election keys in a json file.
+                    let baker_data_json = json!({
+                        "bakerId": acc_num,
+                        "electionPrivateKey": base16_encode_string(&vrf_key.secret),
+                        "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                        "signatureSignKey": base16_encode_string(&sign_key.secret),
+                        "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                        "aggregationSignKey": base16_encode_string(&agg_sign_key),
+                        "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
+                    });
+
+                    let public_baker_data = json!({
+                        "bakerId": acc_num,
+                        "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                        "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                        "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
+                        "stake": stake,
+                        "restakeEarnings": restake,
+                    });
+
+                    let public_account_data = json!({
+                        "schemeId": "Ed25519",
+                        "accountKeys": account_keys,
+                        "address": address_json,
+                        "balance": balance,
+                        "credential": credential_json,
+                        "baker": public_baker_data
+                    });
+
+                    if let Err(err) = write_json_to_file(
+                        mk_out_path(format!("baker-{}-credentials.json", acc_num)),
+                        &baker_data_json,
+                    ) {
+                        eprintln!(
+                            "Could not output baker credential for baker {}, because {}.",
+                            acc_num, err
+                        );
+                    }
+                    accounts.push(public_account_data);
+                    bakers.push(public_baker_data);
+                } else {
+                    let public_account_data = json!({
+                        "schemeId": "Ed25519",
+                        "accountKeys": account_keys,
+                        "address": address_json,
+                        "balance": balance,
+                        "credential": credential_json,
+                    });
+                    accounts.push(public_account_data);
+                }
 
                 if let Err(err) = write_json_to_file(
                     mk_out_path(format!("{}-{}.json", prefix, acc_num)),
@@ -406,6 +388,15 @@ fn main() -> std::io::Result<()> {
                 write_json_to_file(mk_out_path(format!("{}s.json", prefix)), &json!(accounts))
             {
                 eprintln!("Could not output beta-accounts.json file because {}.", err)
+            };
+            if stake.is_some() {
+                // finally output all of the bakers in one file. This is used to generate
+                // genesis.
+                if let Err(err) =
+                    write_json_to_file(mk_out_path("bakers.json".to_owned()), &json!(bakers))
+                {
+                    eprintln!("Could not output bakers.json file because {}.", err)
+                }
             }
         }
     }
