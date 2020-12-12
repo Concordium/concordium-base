@@ -39,7 +39,6 @@ import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.EncryptedTransfers
-import Concordium.Utils.Serialization
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
