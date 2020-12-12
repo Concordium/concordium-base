@@ -393,22 +393,13 @@ data UpdateType
     -- ^Update the GAS rewards
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
-instance AE.FromJSON UpdateType where
-  parseJSON = AE.withText "Update Type" $ \t ->
-    if t == "updateAuthorization" then return UpdateAuthorization
-    else if t == "updateProtocol" then return UpdateProtocol
-    else if t == "updateElectionDifficulty" then return UpdateElectionDifficulty
-    else if t == "updateEuroPerEnergy" then return UpdateEuroPerEnergy
-    else if t == "updateMicroGTUPerEuro" then return UpdateMicroGTUPerEuro
-    else fail "Unsupported update type."
-
-instance AE.ToJSON UpdateType where
-  toJSON UpdateAuthorization = AE.String "updateAuthorization"
-  toJSON UpdateProtocol = AE.String "updateProtocol"
-  toJSON UpdateElectionDifficulty = AE.String "updateElectionDifficulty"
-  toJSON UpdateEuroPerEnergy = AE.String "updateEuroPerEnergy"
-  toJSON UpdateMicroGTUPerEuro = AE.String "updateMicroGTUPerEuro"
-
+-- The JSON instance will encode all values as strings, lower-casing the first
+-- character, so, e.g., `toJSON UpdateProtocol = String "updateProtocol"`.
+$(deriveJSON defaultOptions{
+    constructorTagModifier = firstLower,
+    allNullaryToStringTag = True
+    }
+    ''UpdateType)
 
 instance Serialize UpdateType where
     put UpdateAuthorization = putWord8 0
