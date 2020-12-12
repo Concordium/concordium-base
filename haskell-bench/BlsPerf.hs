@@ -21,7 +21,7 @@ setupProofOfKnowledgeSK n = do
   secKey <- Bls.generateSecretKey
   let pubKey = Bls.derivePublicKey secKey
   let challenge = BS.replicate n '0'
-  let proof = Bls.proveKnowledgeOfSK challenge secKey
+  proof <- Bls.proveKnowledgeOfSK challenge secKey
   return (challenge, pubKey, proof)
 
 checkProofOfKnowledgeSK :: Int -> Benchmark
@@ -39,7 +39,7 @@ setupProofOfKnowledgeSKSer n = do
   secKey <- Bls.generateSecretKey
   let pubKey = Bls.derivePublicKey secKey
   let challenge = BS.replicate n '0'
-  let proof = Bls.proveKnowledgeOfSK challenge secKey
+  proof <- Bls.proveKnowledgeOfSK challenge secKey
   return (challenge, encode pubKey, encode proof)
 
 checkProofOfKnowledgeSKSer :: Int -> Benchmark
