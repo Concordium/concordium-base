@@ -15,15 +15,18 @@ import Control.Monad.Reader
 
 import Data.Char
 import qualified Data.Aeson as AE
+import Data.Aeson((.=), (.:))
 import Data.Aeson.TH
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
+import Concordium.Utils.Serialization
 import qualified Data.Set as Set
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+
 import Data.Word
 import GHC.Generics
 
@@ -36,7 +39,6 @@ import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.EncryptedTransfers
-import Concordium.Utils.Serialization
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -584,6 +586,29 @@ instance S.Serialize Event
 newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
+-- |The 'Maybe TransactionType' is to cover the case of a transaction payload
+-- that cannot be deserialized. A transaction is still included in a block, but
+-- it does not have a type.
+data TransactionSummaryType = 
+  TSTAccountTransaction !(Maybe TransactionType)
+  | TSTCredentialDeploymentTransaction !CredentialType
+  | TSTUpdateTransaction !UpdateType
+  deriving(Eq, Show)
+
+instance AE.ToJSON TransactionSummaryType where
+  toJSON (TSTAccountTransaction mtt) = AE.object ["type" .= AE.String "accountTransaction", "contents" .= mtt]
+  toJSON (TSTCredentialDeploymentTransaction ct) = AE.object ["type" .= AE.String "credentialDeploymentTransaction", "contents" .= ct]
+  toJSON (TSTUpdateTransaction ut) = AE.object ["type" .= AE.String "updateTransaction", "contents" .= ut]
+
+instance AE.FromJSON TransactionSummaryType where
+  parseJSON = AE.withObject "Transactions summary type" $ \v -> do
+    ty <- v .: "type"
+    case ty of
+      AE.String "accountTransaction" -> TSTAccountTransaction <$> v .: "contents"
+      AE.String "credentialDeploymentTransaction" -> TSTCredentialDeploymentTransaction <$> v .: "contents"
+      AE.String "updateTransaction" -> TSTUpdateTransaction <$> v .: "contents"
+      _ -> fail "Cannot parse JSON TransactionSummaryType"
+
 -- |Result of a valid transaction is a transaction summary.
 data TransactionSummary' a = TransactionSummary {
   tsSender :: !(Maybe AccountAddress),
@@ -592,7 +617,7 @@ data TransactionSummary' a = TransactionSummary {
   tsEnergyCost :: !Energy,
   -- FIXME: transaction type should be changed to differentiate parameter updates from credential deployments.
   -- Currently, these are both represented by 'Nothing'.
-  tsType :: !(Maybe TransactionType),
+  tsType :: !TransactionSummaryType,
   tsResult :: !a,
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
@@ -606,6 +631,17 @@ data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReaso
   deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
+instance S.Serialize TransactionSummaryType where
+  put (TSTAccountTransaction tt) = S.putWord8 0 <> putMaybe S.put tt
+  put (TSTCredentialDeploymentTransaction credType) = S.putWord8 1 <> S.put credType
+  put (TSTUpdateTransaction ut) = S.putWord8 2 <> S.put ut
+
+  get = S.getWord8 >>= \case
+    0 -> TSTAccountTransaction <$> getMaybe S.get
+    1 -> TSTCredentialDeploymentTransaction <$> S.get
+    2 -> TSTUpdateTransaction <$> S.get
+    _ -> fail "Unsupported transaction summary type."
+
 instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
