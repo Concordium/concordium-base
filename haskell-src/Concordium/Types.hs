@@ -22,6 +22,16 @@ module Concordium.Types (
   computeEnergyRate,
   computeCost,
 
+  -- * Mint and reward rates
+  MintRate(..),
+  mintAmount,
+  RewardFraction(..),
+  makeRewardFraction,
+  addRewardFraction,
+  complementRewardFraction,
+  takeFraction,
+  fractionToRational,
+
   -- * Time units
   Duration(..),
   durationToNominalDiffTime,
@@ -37,6 +47,7 @@ module Concordium.Types (
   transactionTimeToTimestamp,
   transactionExpired,
   isTimestampBefore,
+  transactionTimeToSlot,
 
   -- * Accounts
   SchemeId,
@@ -51,6 +62,7 @@ module Concordium.Types (
   Nonce(..),
   minNonce,
   AccountVerificationKey,
+  AccountIndex(..),
 
   -- * Smart contracts
   ModuleRef(..),
@@ -93,6 +105,7 @@ module Concordium.Types (
   EpochLength,
   Epoch,
   genesisSlot,
+  CredentialsPerBlockLimit,
   -- ** Transactions
   EncodedPayload(..),
   PayloadSize(..),
@@ -122,6 +135,7 @@ module Concordium.Types (
 
 import GHC.Generics
 import Data.Data (Typeable, Data)
+import Data.Scientific
 
 import Concordium.Common.Amount
 import qualified Concordium.Crypto.BlockSignature as Sig
@@ -182,12 +196,8 @@ instance (Show a) => Show (Hashed a) where
     show = show . _hashed
 
 -- * Types related to bakers.
-newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
-
-instance S.Serialize BakerId where
-    get = BakerId <$> G.getWord64be
-    put (BakerId i) = P.putWord64be i
+newtype BakerId = BakerId AccountIndex
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
 type LeadershipElectionNonce = Hash.Hash
 type BakerSignVerifyKey = Sig.VerifyKey
@@ -290,6 +300,126 @@ computeCost
   -> Amount
 computeCost rate energy = ceiling (rate * fromIntegral energy)
 
+-- * Minting and rewards
+
+-- |A base-10 floating point number representation.
+-- The value is @mrMantissa * 10^(-mrExponent)@.
+--
+-- At least 6 significant figures were required by the specification,
+-- and 'Word32' provides 9.  Exponent values greater than about
+-- 29 will not be necessary, since such a rate will be effectively
+-- 0 (when we compute the amount that is minted based on a 64-bit
+-- value as the current number of GTUs.)
+data MintRate = MintRate {
+  mrMantissa :: !Word32,
+  mrExponent :: !Word8
+}
+
+instance Eq MintRate where
+  mr1 == mr2 = mrMantissa m1' == mrMantissa m2' && mrExponent m1' == mrExponent m2'
+    where
+      n mr@MintRate{..}
+        | mrMantissa == 0 = MintRate 0 0
+        | let (d,m) = mrMantissa `divMod` 10
+        , m == 0
+        , mrExponent > 0
+            = n (MintRate d (mrExponent - 1))
+        | otherwise = mr
+      m1' = n mr1
+      m2' = n mr2
+
+instance Show MintRate where
+  show MintRate{..} = show mrMantissa ++ "e-" ++ show mrExponent
+
+instance S.Serialize MintRate where
+  put MintRate{..} = S.putWord32be mrMantissa >> S.putWord8 mrExponent
+  get = do
+    mrMantissa <- S.getWord32be
+    mrExponent <- S.getWord8
+    return MintRate{..}
+
+instance ToJSON MintRate where
+  toJSON MintRate{..} = Number (scientific (toInteger mrMantissa) (- fromIntegral mrExponent))
+
+instance FromJSON MintRate where
+  parseJSON (Number s0) = do
+    let s = normalize s0
+    unless (coefficient s >= 0 && coefficient s <= toInteger (maxBound :: Word32)) $ fail "Coefficient out of bounds"
+    unless (base10Exponent s <= 0 && base10Exponent s >= - (fromIntegral (maxBound :: Word8))) $ fail "Exponent out of bounds"
+    return MintRate {
+      mrMantissa = fromInteger (coefficient s),
+      mrExponent = fromIntegral (- (base10Exponent s))
+    }
+  parseJSON _ = fail "Not a number"
+
+instance HashableTo Hash.Hash MintRate where
+  getHash = Hash.hash . S.encode
+
+instance Monad m => MHashableTo m Hash.Hash MintRate
+
+-- |Compute an amount minted at a given rate.
+-- The amount is rounded down to the nearest microGTU.
+mintAmount :: MintRate -> Amount -> Amount
+{-# INLINE mintAmount #-}
+mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
+
+-- |A fraction in [0,1], represented as parts per 100000.
+-- This resolution (thousandths of a percent) was agreed in tokenomics discussions
+-- to be sufficient.
+newtype RewardFraction = RewardFraction {fracPerHundredThousand :: Word32}
+  deriving newtype (Eq,Ord)
+
+hundredThousand :: Word32
+hundredThousand = 100000
+
+instance Show RewardFraction where
+  show (RewardFraction f) = show (fromIntegral f / 100000 :: Double)
+
+instance S.Serialize RewardFraction where
+  put (RewardFraction f) = S.putWord32be f
+  get = do
+    f <- S.getWord32be
+    unless (f <= hundredThousand) $ fail "Reward fraction out of bounds"
+    return (RewardFraction f)
+
+instance ToJSON RewardFraction where
+  toJSON (RewardFraction f) = Number (scientific (fromIntegral f) (-5))
+
+instance FromJSON RewardFraction where
+  parseJSON (Number s0) = do
+    let s = normalize s0
+    let ex = base10Exponent s
+    unless (ex <= 0 && ex >= -5) $ fail "Precision out of bounds"
+    let v = coefficient s * 10 ^ (5 + ex)
+    unless (v >= 0 && v <= fromIntegral hundredThousand) $ fail "Fraction out of bounds"
+    return (RewardFraction (fromIntegral v))
+  parseJSON _ = fail "Expected number"
+
+-- |Make a 'RewardFraction'.
+makeRewardFraction
+  :: Word32
+  -- ^Hundred thousandths
+  -> RewardFraction
+makeRewardFraction v = assert (v <= hundredThousand) (RewardFraction v)
+
+-- |Add two reward fractions.
+addRewardFraction :: RewardFraction -> RewardFraction -> Maybe RewardFraction
+addRewardFraction (RewardFraction a) (RewardFraction b)
+  | a + b <= hundredThousand = Just (RewardFraction (a + b))
+  | otherwise = Nothing
+
+-- |Compute @1 - f@.
+complementRewardFraction :: RewardFraction -> RewardFraction
+complementRewardFraction (RewardFraction a) = RewardFraction (hundredThousand - a)
+
+-- |Compute a fraction of an amount.
+-- The amount is rounded down to the nearest microGTU.
+takeFraction :: RewardFraction -> Amount -> Amount
+takeFraction f = fromInteger . (`div` 100000) . (toInteger (fracPerHundredThousand f) *) . toInteger
+
+fractionToRational :: RewardFraction -> Rational
+fractionToRational f = toInteger (fracPerHundredThousand f) % 100000
+
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
 type VoterVRFPublicKey = VRF.PublicKey
@@ -349,6 +479,23 @@ instance Show ContractAddress where
 instance S.Serialize ContractAddress where
   get = ContractAddress <$> S.get <*> S.get
   put (ContractAddress i v) = S.put i <> S.put v
+
+-- |The index of an account. Starting with 0,
+-- each account is allocated a sequential @AccountIndex@
+-- when it is created.  For the most part, this is only
+-- used internally.  However, it is indirectly exposed through
+-- 'BakerId'.
+newtype AccountIndex = AccountIndex Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
+
+instance S.Serialize AccountIndex where
+    get = AccountIndex <$> G.getWord64be
+    put (AccountIndex i) = P.putWord64be i
+
+instance HashableTo Hash.Hash AccountIndex where
+    getHash = Hash.hash . S.encode
+
+instance Monad m => MHashableTo m Hash.Hash AccountIndex
 
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
@@ -502,7 +649,7 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   --
   -- - remaining amounts that result when transfering to public balance
   -- - remaining amounts when transfering to another account
-  -- - encrypted amounts that are transfered from public balance
+  -- - encrypted amounts that are transferred from public balance
   --
   -- When a transfer is made all of these must always be used.
   _selfAmount :: !EncryptedAmount,
@@ -667,7 +814,7 @@ data ChainMetadata =
 -- |Encode chain metadata for passing over FFI. Uses little-endian encoding
 -- for integral values since that is what is expected on the other side of FFI.
 -- This is deliberately not made into a serialize instance so that it is not accidentally
--- misused, since it differs in endianess from most other network-related serialization.
+-- misused, since it differs in endianness from most other network-related serialization.
 encodeChainMeta :: ChainMetadata -> ByteString
 encodeChainMeta ChainMetadata{..} = S.runPut encoder
   where encoder =
@@ -712,7 +859,23 @@ type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
 
+-- |Limit on the number of credentials that may occur in a block.
+type CredentialsPerBlockLimit = Word16
 
+-- |Compute the first slot at or above the given time.
+transactionTimeToSlot ::
+  Timestamp
+  -- ^Genesis time
+  -> Duration
+  -- ^Slot duration
+  -> TransactionTime
+  -- ^Time to convert
+  -> Slot
+transactionTimeToSlot genesis slotDur t
+  | tt <= genesis = 0
+  | otherwise = fromIntegral $ (tsMillis (tt - genesis - 1) `div` durationMillis slotDur) + 1
+  where
+    tt = transactionTimeToTimestamp t
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
