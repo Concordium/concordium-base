@@ -16,6 +16,7 @@ import qualified Data.Text as Text
 import Data.Int
 import System.Random
 import Control.Monad
+import System.IO.Unsafe
 
 import qualified Concordium.Crypto.BlockSignature as BlockSig
 import qualified Concordium.Crypto.BlsSignature as Bls
@@ -74,7 +75,10 @@ genAggregationVerifyKeyAndProof :: Gen (BakerAggregationVerifyKey, BakerAggregat
 genAggregationVerifyKeyAndProof = do
   c <- arbitrary
   sk <- secretBlsKeyGen
-  return (Bls.derivePublicKey sk, Bls.proveKnowledgeOfSK (BS.pack c) sk)
+  -- FIXME: The use of unsafePeformIO here is wrong, but I'm in a hurry.
+  -- The randomness is used to get the zero-knowledge property
+  -- We need to expose a deterministic "prove" function from rust that takes a seed.
+  return (Bls.derivePublicKey sk, unsafePerformIO $ Bls.proveKnowledgeOfSK (BS.pack c) sk)
 
 genAddress :: Gen AccountAddress
 genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector accountAddressSize)

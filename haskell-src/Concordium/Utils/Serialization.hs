@@ -220,3 +220,16 @@ getMaybe g = getWord8 >>=
     \case 0 -> return Nothing
           1 -> Just <$> g
           n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
+
+-- |Serialize False as a single 0 byte, True as a 1 byte.
+putBool :: Putter Bool
+putBool False = putWord8 0
+putBool True = putWord8 1
+
+-- |Read a byte, trying to interpret it as a bool strictly.
+-- 0 is False, 1 is True, everything else is invalid
+getBool :: Get Bool
+getBool = getWord8 >>= \case
+  0 -> return False
+  1 -> return True
+  n -> fail $ "Unrecognized boolean value: " ++ show n

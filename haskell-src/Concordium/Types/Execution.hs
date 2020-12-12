@@ -231,7 +231,7 @@ putPayload AddBaker{..} =
     S.put abProofElection <>
     S.put abProofAggregation <>
     S.put abBakingStake <>
-    S.put abRestakeEarnings
+    putBool abRestakeEarnings
 putPayload RemoveBaker =
     P.putWord8 5
 putPayload UpdateBakerStake{..} =
@@ -239,7 +239,7 @@ putPayload UpdateBakerStake{..} =
     S.put ubsStake
 putPayload UpdateBakerRestakeEarnings{..} =
     P.putWord8 7 <>
-    S.put ubreRestakeEarnings
+    putBool ubreRestakeEarnings
 putPayload UpdateBakerKeys{..} =
     P.putWord8 8 <>
     S.put ubkElectionVerifyKey <>
@@ -316,7 +316,7 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               abProofElection <- S.get
               abProofAggregation <- S.get
               abBakingStake <- S.get
-              abRestakeEarnings <- S.get
+              abRestakeEarnings <- getBool
               return AddBaker{..}
             5 -> do
               return RemoveBaker
@@ -324,7 +324,7 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ubsStake <- S.get
               return UpdateBakerStake{..}
             7 -> S.label "RestakeEarnings" $ do
-              ubreRestakeEarnings <- S.get
+              ubreRestakeEarnings <- getBool
               return UpdateBakerRestakeEarnings{..}
             8 -> do
               ubkElectionVerifyKey <- S.get
