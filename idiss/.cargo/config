@@ -1,7 +1,0 @@
-# Default build target is wasm
-[build]
-target = "wasm32-unknown-unknown"
-
-[profile.release]
-opt-level = 3
-lto = true
