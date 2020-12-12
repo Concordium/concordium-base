@@ -586,26 +586,27 @@ instance S.Serialize Event
 newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
--- |The 'Maybe TransactionType' is to cover the case of a transaction payload that cannot be deserialized, in which case
---  'AccountTransactionType Nothing' is used.
+-- |The 'Maybe TransactionType' is to cover the case of a transaction payload
+-- that cannot be deserialized. A transaction is still included in a block, but
+-- it does not have a type.
 data TransactionSummaryType = 
-  AccountTransactionType !(Maybe TransactionType)
-  | CredentialDeploymentTransaction !CredentialType
-  | UpdateTransaction !UpdateType
+  TSTAccountTransaction !(Maybe TransactionType)
+  | TSTCredentialDeploymentTransaction !CredentialType
+  | TSTUpdateTransaction !UpdateType
   deriving(Eq, Show)
 
 instance AE.ToJSON TransactionSummaryType where
-  toJSON (AccountTransactionType mtt) = AE.object ["type" .= AE.String "accountTransactionType", "contents" .= mtt]
-  toJSON (CredentialDeploymentTransaction ct) = AE.object ["type" .= AE.String "credentialDeploymentTransaction", "contents" .= ct]
-  toJSON (UpdateTransaction ut) = AE.object ["type" .= AE.String "updateTransaction", "contents" .= ut]
+  toJSON (TSTAccountTransaction mtt) = AE.object ["type" .= AE.String "accountTransaction", "contents" .= mtt]
+  toJSON (TSTCredentialDeploymentTransaction ct) = AE.object ["type" .= AE.String "credentialDeploymentTransaction", "contents" .= ct]
+  toJSON (TSTUpdateTransaction ut) = AE.object ["type" .= AE.String "updateTransaction", "contents" .= ut]
 
 instance AE.FromJSON TransactionSummaryType where
   parseJSON = AE.withObject "Transactions summary type" $ \v -> do
     ty <- v .: "type"
     case ty of
-      AE.String "accountTransactionType" -> AccountTransactionType <$> v .: "contents"
-      AE.String "credentialDeploymentTransaction" -> CredentialDeploymentTransaction <$> v .: "contents"
-      AE.String "updateTransaction" -> UpdateTransaction <$> v .: "contents"
+      AE.String "accountTransaction" -> TSTAccountTransaction <$> v .: "contents"
+      AE.String "credentialDeploymentTransaction" -> TSTCredentialDeploymentTransaction <$> v .: "contents"
+      AE.String "updateTransaction" -> TSTUpdateTransaction <$> v .: "contents"
       _ -> fail "Cannot parse JSON TransactionSummaryType"
 
 -- |Result of a valid transaction is a transaction summary.
@@ -631,14 +632,14 @@ data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReaso
 
 instance S.Serialize ValidResult
 instance S.Serialize TransactionSummaryType where
-  put (AccountTransactionType tt) = S.putWord8 0 <> putMaybe S.put tt
-  put (CredentialDeploymentTransaction credType) = S.putWord8 1 <> S.put credType
-  put (UpdateTransaction ut) = S.putWord8 2 <> S.put ut
+  put (TSTAccountTransaction tt) = S.putWord8 0 <> putMaybe S.put tt
+  put (TSTCredentialDeploymentTransaction credType) = S.putWord8 1 <> S.put credType
+  put (TSTUpdateTransaction ut) = S.putWord8 2 <> S.put ut
 
   get = S.getWord8 >>= \case
-    0 -> AccountTransactionType <$> getMaybe S.get
-    1 -> CredentialDeploymentTransaction <$> S.get
-    2 -> UpdateTransaction <$> S.get
+    0 -> TSTAccountTransaction <$> getMaybe S.get
+    1 -> TSTCredentialDeploymentTransaction <$> S.get
+    2 -> TSTUpdateTransaction <$> S.get
     _ -> fail "Unsupported transaction summary type."
 
 instance S.Serialize TransactionSummary
@@ -742,7 +743,6 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
                                     },
                                  AE.fieldLabelModifier = firstLower . drop 2} ''ValidResult)
 
--- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummaryType)
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
 $(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
