@@ -406,17 +406,6 @@ payloadBodyBytes (EncodedPayload ss) =
   then BS.empty
   else BS.tail (BSS.fromShort ss)
 
--- |Additional special events that affect the block state.
-data BlockEvents =
-  -- |Block reward
-  BlockReward !Amount !BakerId
-  -- |Delegation reward
-  | DelegationReward !Amount !BakerId
-  -- |Foundation tax transfer
-  | FoundationTax !Amount
-  -- |Reward to a finalizer.
-  | FinalizationReward !Amount !BakerId
-
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
@@ -682,7 +671,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
-                  | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
                   -- |Encountered index to which no account key belongs when removing or updating keys
                   | NonExistentAccountKey
@@ -738,6 +726,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | AccountCredentialInvalid -- ^Account credential verification failed, the proofs were invalid or malformed.
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
                  | InvalidUpdateTime -- ^The update timeout is later than the effective time
+                 | ExceedsMaxCredentialDeployments -- ^The block contains more than the limit of credential deployments
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
