@@ -393,6 +393,14 @@ data UpdateType
     -- ^Update the GAS rewards
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
+-- The JSON instance will encode all values as strings, lower-casing the first
+-- character, so, e.g., `toJSON UpdateProtocol = String "updateProtocol"`.
+$(deriveJSON defaultOptions{
+    constructorTagModifier = firstLower,
+    allNullaryToStringTag = True
+    }
+    ''UpdateType)
+
 instance Serialize UpdateType where
     put UpdateAuthorization = putWord8 0
     put UpdateProtocol = putWord8 1
