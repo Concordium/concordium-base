@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
 use core::{convert, fmt, iter, ops, str};
 #[cfg(feature = "std")]
@@ -331,16 +331,19 @@ impl Timestamp {
         self.milliseconds.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
-    /// Subtract duration to timestamp. Returns `None` instead of overflowing.
+    /// Subtract duration to timestamp. Returns `None` instead of overflowing if
+    /// the resulting timestamp would be before the Unix epoch.
     #[inline(always)]
     pub fn checked_sub(self, duration: Duration) -> Option<Self> {
         self.milliseconds.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
-    /// Compute the duration between the self and another timestamp
+    /// Compute the duration between the self and another timestamp.
+    /// The duration is always positive, and is the difference between
+    /// the the more recent timestamp and the one further in the past.
     #[inline(always)]
     pub fn duration_between(self, other: Timestamp) -> Duration {
-        let millis = if self > other {
+        let millis = if self >= other {
             self.milliseconds - other.milliseconds
         } else {
             other.milliseconds - self.milliseconds
@@ -375,6 +378,7 @@ impl fmt::Display for ParseTimestampError {
 }
 
 #[cfg(feature = "derive-serde")]
+/// The FromStr parses the time according to RFC3339.
 impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
 
@@ -391,6 +395,8 @@ impl str::FromStr for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
+/// The display implementation displays the timestamp according to RFC3339
+/// format in the UTC time zone.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use chrono::offset::TimeZone;
@@ -401,6 +407,8 @@ impl fmt::Display for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
+/// The JSON serialization serialized the string obtained by using the Display
+/// implementation of the Timestamp.
 impl SerdeSerialize for Timestamp {
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_str(&self.to_string())
@@ -408,6 +416,7 @@ impl SerdeSerialize for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
+/// Deserialize from a string via the RFC3339 format.
 impl<'de> SerdeDeserialize<'de> for Timestamp {
     fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         let s = String::deserialize(des)?;
