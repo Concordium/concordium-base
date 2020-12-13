@@ -84,13 +84,10 @@ Common errors are described in the next section.
    For more information about contract instance addresses, see
    :ref:`references-on-chain`.
 
-Common Errors
-^^^^^^^^^^^^^
+.. note::
 
-* Parameter of incorrect type:
-
-  * If the parameter provided in JSON format does not conform to the type
-    specified in the schema, an error message will be displayed. For example:
+   If the parameter provided in JSON format does not conform to the type
+   specified in the schema, an error message will be displayed. For example:
 
     .. code-block:: console
 
@@ -101,17 +98,6 @@ Common Errors
            "first_field": "hello",
            "second_field": 42
        }.
-
-* Insufficient energy allowed:
-
-  * If the update requires more energy than the maximum specified with
-    the ``--energy`` parameter, the transaction will fail with the following
-    message:
-
-    .. code-block:: console
-
-       Error: Transaction failed before it got committed. Most likely because it
-       was invalid.
 
 .. note::
 
