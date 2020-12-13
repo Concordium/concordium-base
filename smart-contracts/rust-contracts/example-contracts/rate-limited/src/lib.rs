@@ -21,10 +21,6 @@ use concordium_std::*;
  *    current_time minus y, are pruned from state.recent_transfers.
  */
 
-// Type Aliases
-
-type TimeMilliseconds = u64;
-
 // Transfer Requests
 
 #[derive(Clone, Serialize, SchemaType)]
@@ -38,7 +34,7 @@ struct TransferRequest {
 #[derive(Clone, Serialize, SchemaType)]
 struct Transfer {
     /// The time, fx slot_time, of when the request was initiated
-    time_of_transfer: TimeMilliseconds,
+    time_of_transfer: Timestamp,
     /// The associated request
     transfer_request: TransferRequest,
 }
@@ -48,8 +44,8 @@ struct Transfer {
 struct InitParams {
     /// The amount of GTU allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
-    /// The time in which recently accepted recent_transfers are checked
-    time_limit: TimeMilliseconds,
+    /// The duration in which recently accepted recent_transfers are checked
+    time_limit: Duration,
 }
 
 #[contract_state(contract = "rate-limited")]
@@ -63,7 +59,7 @@ pub struct State {
     recent_transfers: Vec<Transfer>,
 }
 
-#[init(contract = "rate-limited")]
+#[init(contract = "rate-limited", parameter = "InitParams")]
 fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
@@ -89,7 +85,7 @@ fn contract_receive_deposit<A: HasActions>(
     Ok(A::accept())
 }
 
-#[receive(contract = "rate-limited", name = "receive", payable)]
+#[receive(contract = "rate-limited", name = "receive", payable, parameter = "TransferRequest")]
 /// Allows the owner of the contract to transfer GTU from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<A: HasActions>(
@@ -99,11 +95,12 @@ fn contract_receive_transfer<A: HasActions>(
 ) -> ReceiveResult<A> {
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can transfer.
 
-    let current_time: TimeMilliseconds = ctx.metadata().slot_time();
+    let current_time = ctx.metadata().slot_time();
 
     // Beginning of the time window in which to check transfer history
-    let time_window_start: TimeMilliseconds =
-        current_time.saturating_sub(state.init_params.time_limit);
+    let time_window_start = current_time
+        .checked_sub(state.init_params.time_limit)
+        .unwrap_or_else(|| Timestamp::from_timestamp_millis(0));
 
     let transfer_request: TransferRequest = ctx.parameter_cursor().get()?;
     let transfer = Transfer {
@@ -159,7 +156,7 @@ mod tests {
 
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
-        ctx.set_metadata_slot_time(10);
+        ctx.set_metadata_slot_time(Timestamp::from_timestamp_millis(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
         ctx.set_self_balance(Amount::from_micro_gtu(10));
@@ -167,21 +164,21 @@ mod tests {
         // Setup state
         let recent_transfers = vec![
             Transfer {
-                time_of_transfer: 0,
+                time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(6),
                     target_account: account1,
                 },
             },
             Transfer {
-                time_of_transfer: 1,
+                time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(2),
                     target_account: account2,
                 },
             },
             Transfer {
-                time_of_transfer: 2,
+                time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(3),
                     target_account: account1,
@@ -191,7 +188,7 @@ mod tests {
 
         let init_params = InitParams {
             timed_withdraw_limit: Amount::from_micro_gtu(10),
-            time_limit:           9,
+            time_limit:           Duration::from_millis(9),
         };
 
         let mut state = State {
@@ -243,7 +240,7 @@ mod tests {
         let parameter_bytes = to_bytes(&parameter);
 
         let mut ctx = ReceiveContextTest::empty();
-        ctx.set_metadata_slot_time(10);
+        ctx.set_metadata_slot_time(Timestamp::from_timestamp_millis(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
         ctx.set_self_balance(Amount::from_micro_gtu(10));
@@ -252,21 +249,21 @@ mod tests {
         // Setup state
         let recent_transfers = vec![
             Transfer {
-                time_of_transfer: 0,
+                time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(6),
                     target_account: account1,
                 },
             },
             Transfer {
-                time_of_transfer: 1,
+                time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(2),
                     target_account: account2,
                 },
             },
             Transfer {
-                time_of_transfer: 2,
+                time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(3),
                     target_account: account2,
@@ -276,7 +273,7 @@ mod tests {
 
         let init_params = InitParams {
             timed_withdraw_limit: Amount::from_micro_gtu(10),
-            time_limit:           10,
+            time_limit:           Duration::from_millis(10),
         };
 
         let mut state = State {
@@ -325,7 +322,7 @@ mod tests {
 
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
-        ctx.set_metadata_slot_time(10);
+        ctx.set_metadata_slot_time(Timestamp::from_timestamp_millis(10));
         ctx.set_self_balance(Amount::from_micro_gtu(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
@@ -333,21 +330,21 @@ mod tests {
         // Setup state
         let recent_transfers = vec![
             Transfer {
-                time_of_transfer: 0,
+                time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(1),
                     target_account: account1,
                 },
             },
             Transfer {
-                time_of_transfer: 1,
+                time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(1),
                     target_account: account2,
                 },
             },
             Transfer {
-                time_of_transfer: 2,
+                time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
                     amount:         Amount::from_micro_gtu(1),
                     target_account: account2,
@@ -357,7 +354,7 @@ mod tests {
 
         let init_params = InitParams {
             timed_withdraw_limit: Amount::from_micro_gtu(10),
-            time_limit:           1000,
+            time_limit:           Duration::from_millis(1000),
         };
 
         let mut state = State {

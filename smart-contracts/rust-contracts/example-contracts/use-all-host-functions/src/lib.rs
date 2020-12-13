@@ -6,7 +6,7 @@ type State = u8;
 #[init(contract = "use_all")]
 #[inline(always)]
 fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
-    Ok(ctx.metadata().slot_time().to_be_bytes()[0])
+    Ok(ctx.metadata().slot_time().timestamp_millis().to_be_bytes()[0])
 }
 
 #[receive(contract = "use_all", name = "receive", low_level, enable_logger)]

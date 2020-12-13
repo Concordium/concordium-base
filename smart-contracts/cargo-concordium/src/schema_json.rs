@@ -139,6 +139,22 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON Object with 'index' field required")
             }
         }
+        Type::Timestamp => {
+            if let Value::String(string) = json {
+                let timestamp: Timestamp = string.parse().map_err(anyhow::Error::msg)?;
+                serial!(timestamp, out)
+            } else {
+                bail!("JSON String required for timestamp")
+            }
+        }
+        Type::Duration => {
+            if let Value::String(string) = json {
+                let duration: Duration = string.parse().map_err(anyhow::Error::msg)?;
+                serial!(duration, out)
+            } else {
+                bail!("JSON String required for duration")
+            }
+        }
         Type::Pair(left_type, right_type) => {
             if let Value::Array(values) = json {
                 ensure!(values.len() == 2, "Only pairs of two are supported");

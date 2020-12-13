@@ -378,7 +378,7 @@ fn call_common<C: HasCommon>(
             stack.push_value(host.metadata().slot_number);
         }
         CommonFunc::GetSlotTime => {
-            stack.push_value(host.metadata().slot_time);
+            stack.push_value(host.metadata().slot_time.timestamp_millis());
         }
         CommonFunc::GetBlockHeight => {
             stack.push_value(host.metadata().block_height);

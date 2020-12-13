@@ -31,6 +31,8 @@ JSON for schema type
        Amount,
        AccountAddress,
        ContractAddress,
+       Timestamp,
+       Duration,
        Pair(Type, Type),
        List(SizeLength, Type),
        Set(SizeLength, Type),
@@ -78,6 +80,38 @@ optionally ``subindex`` field, both JSON numbers. Example:
 
    { "index": 10, "subindex": 10 }
 
+``Timestamp``
+------------------
+
+Supplied as a JSON string using the RFC3339_ format with the precision of
+milliseconds. Example:
+
+.. code-block:: json
+
+   "2020-12-11T11:38:37Z"
+
+.. _RFC3339: https://tools.ietf.org/html/rfc3339
+
+``Duration``
+------------------
+
+Supplied as a JSON string as a list of time measures separated by whitespace.
+A measure is a number followed by the unit and no whitespace between is allowed.
+Every measure is accumulated into the total duration. The string is allowed to
+contain any number of measures with the same unit in no particular order.
+
+The supported units are:
+ - ``ms`` for milliseconds
+ - ``s`` for seconds
+ - ``m`` for minutes
+ - ``h`` for hours
+ - ``d`` for days
+
+Example of 10 days, 2 hours and 42 seconds:
+
+.. code-block:: json
+
+   "10d 1h 42s 1h"
 
 ``Pair``
 --------

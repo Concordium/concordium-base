@@ -144,7 +144,7 @@ with input files
         "slotNumber": 1,
         "blockHeight": 1,
         "finalizedHeight": 1,
-        "slotTime": 123000
+        "slotTime": "2021-01-01T00:00:01Z"
     },
     "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
 }
@@ -170,7 +170,7 @@ where an example receive context is
         "slotNumber": 1,
         "blockHeight": 1,
         "finalizedHeight": 1,
-        "slotTime": 12312312312312312312
+        "slotTime": "2021-01-01T00:00:01Z"
     },
     "invoker": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
     "selfAddress": {"index": 0, "subindex": 0},

@@ -41,7 +41,7 @@ impl<Policies> InitContext<Policies> {
     pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
 
     /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
+    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
 }
 
 impl<Policies> ReceiveContext<Policies> {
@@ -51,7 +51,7 @@ impl<Policies> ReceiveContext<Policies> {
     pub fn invoker(&self) -> &AccountAddress { &self.invoker }
 
     /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
+    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
 
     /// Who is the owner of this contract.
     pub fn owner(&self) -> &AccountAddress { &self.owner }
