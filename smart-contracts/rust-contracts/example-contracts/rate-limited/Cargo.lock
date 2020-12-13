@@ -15,12 +15,12 @@ checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 [[package]]
 name = "concordium-contracts-common"
 version = "0.2.0"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#29e479ddcbca84a85289958b25e14c2ddc3cf417"
+source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#b672a2ac33717ccf49d30d8b7657529194cc47ba"
 
 [[package]]
 name = "concordium-std"
 version = "0.3.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=main#139a748149f822812880c0f4602eee5c150e2282"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=main#5ca19a830fa1923162a47c6c87c4514cca6d2b9d"
 dependencies = [
  "concordium-contracts-common",
  "concordium-std-derive",
@@ -30,7 +30,7 @@ dependencies = [
 [[package]]
 name = "concordium-std-derive"
 version = "0.3.0"
-source = "git+https://github.com/Concordium/concordium-std.git?branch=main#139a748149f822812880c0f4602eee5c150e2282"
+source = "git+https://github.com/Concordium/concordium-std.git?branch=main#5ca19a830fa1923162a47c6c87c4514cca6d2b9d"
 dependencies = [
  "proc-macro2",
  "quote",

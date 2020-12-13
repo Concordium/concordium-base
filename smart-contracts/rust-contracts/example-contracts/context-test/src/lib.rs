@@ -88,7 +88,9 @@ fn contract_init_3(ctx: &impl HasInitContext) -> InitResult<u8> {
         if policy.identity_provider() != 25 {
             return Ok(10);
         }
-        if policy.created_at() + 10 != policy.valid_to() {
+        if policy.created_at().checked_add(Duration::from_millis(10)).unwrap_abort()
+            != policy.valid_to()
+        {
             return Ok(11);
         }
         let mut buf = [0u8; 31];
@@ -131,8 +133,8 @@ mod tests {
         let mut ctx = InitContextTest::empty();
         let policy = OwnedPolicy {
             identity_provider: 17,
-            created_at:        1,
-            valid_to:          1,
+            created_at:        Timestamp::from_timestamp_millis(1),
+            valid_to:          Timestamp::from_timestamp_millis(1),
             items:             vec![(
                 attributes::COUNTRY_OF_RESIDENCE,
                 (1..=31).collect::<Vec<_>>(),

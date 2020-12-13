@@ -144,7 +144,7 @@ dependencies = [
 [[package]]
 name = "concordium-contracts-common"
 version = "0.2.0"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#74cfdaf793ad31c7e09402324e1ad8cb38f00120"
+source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#b672a2ac33717ccf49d30d8b7657529194cc47ba"
 dependencies = [
  "base58check",
  "chrono",
@@ -154,9 +154,9 @@ dependencies = [
 
 [[package]]
 name = "const_fn"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c478836e029dcef17fb47c89023448c64f781a046e0300e257ad8225ae59afab"
+checksum = "cd51eab21ab4fd6a3bf889e2d0958c0a6e3a61ad04260325e919e652a2a62826"
 
 [[package]]
 name = "criterion"
