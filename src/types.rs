@@ -740,8 +740,8 @@ mod policy_json {
                         }
                     }
                     s => {
-                        match AttributeTag::try_from(s) {
-                            Ok(tag) => match v {
+                        if let Ok(tag) = AttributeTag::try_from(s) {
+                            match v {
                                 serde_json::Value::String(value_string)
                                     if value_string.as_bytes().len() <= 31 =>
                                 {
@@ -753,11 +753,8 @@ mod policy_json {
                                          characters in utf8 encoding.",
                                     ))
                                 }
-                            },
-                            Err(_) => {
-                                // ignore this value otherwise.
                             }
-                        }
+                        } // ignore this value otherwise.
                     }
                 }
             }
