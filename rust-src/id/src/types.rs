@@ -1101,8 +1101,6 @@ pub struct UnsignedCredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarF
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.
     pub proof_reg_id: com_mult::Witness<C>,
-    /// Challenge from random oracle TODO: write out
-    pub unsigned_challenge: Challenge,
     /// Proof that cred_counter is less than or equal to max_accounts
     pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
@@ -1118,7 +1116,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for UnsignedCredDeplo
         serial_map_no_length(&self.proof_id_cred_pub, &mut tmp_out);
         tmp_out.put(&self.proof_ip_sig);
         tmp_out.put(&self.proof_reg_id);
-        tmp_out.put(&self.unsigned_challenge);
         tmp_out.put(&self.cred_counter_less_than_max_accounts);
         let len: u32 = tmp_out.len() as u32; // safe
         out.put(&len);
@@ -1142,7 +1139,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial
             deserial_map_no_length(&mut limited, proof_id_cred_pub_len as usize)?;
         let proof_ip_sig = limited.get()?;
         let proof_reg_id = limited.get()?;
-        let unsigned_challenge = limited.get()?;
         let cred_counter_less_than_max_accounts = limited.get()?;
         if limited.limit() == 0 {
             Ok(UnsignedCredDeploymentProofs {
@@ -1152,7 +1148,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial
                 proof_id_cred_pub,
                 proof_ip_sig,
                 proof_reg_id,
-                unsigned_challenge,
                 cred_counter_less_than_max_accounts,
             })
         } else {
@@ -1598,6 +1593,13 @@ pub struct UnsignedCredentialDeploymentInfo<
     pub values: CredentialDeploymentValues<C, AttributeType>,
     #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
     pub proofs: UnsignedCredDeploymentProofs<P, C>,
+    /// Challenge from random oracle TODO: write out
+    #[serde(
+        rename = "unsigned_challenge",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub unsigned_challenge: Challenge,
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
