@@ -543,7 +543,7 @@ where
     let unsigned_proofs = unsigned_credential_info.proofs;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: acc_data.sign_challenge(&unsigned_proofs.unsigned_challenge),
+        sigs: acc_data.sign_challenge(&unsigned_credential_info.unsigned_challenge),
     };
 
     let cdp = CredDeploymentProofs {
@@ -810,13 +810,13 @@ where
             .collect(),
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
-        unsigned_challenge,
         cred_counter_less_than_max_accounts,
     };
 
     let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
         proofs: ucdp,
+        unsigned_challenge
     };
     Ok(info)
 }
