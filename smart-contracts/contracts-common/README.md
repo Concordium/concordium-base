@@ -1,17 +1,14 @@
-This library provides the common core API that can be used to write smart
-contracts for the Concordium blockchain. The functionality in this library is
-the common core between what contracts on the chain have access to, and what the
-host has access to. Most users will wish to use
-[concordium-std](https://github.com/Concordium/concordium-std) instead.
+This library provides the core API that can be used to write smart contracts
+for the Concordium blockchain in the Rust programming language. It aims to
+provide safe wrappers around the core primitives exposed by the chain and
+accessible to smart contracts.
 
-By default the library will be linked with the
-[std](https://doc.rust-lang.org/std/) crate, the rust standard library,
-however to minimize code size this library supports toggling compilation
-with the `#![no_std]` attribute via the feature `std` which is enabled by
-default. Compilation without the `std` feature requires a nightly version of
-rust.
+The functionality in this library is re-exported via the [concordium-std](https://crates.io/crates/concordium-std)
+crate, which is intended as the entry-point for development of smart
+contracts in Rust. `concordium-std` adds a number of helper macros and
+traits on top of the basic functionality available here.
 
-# Work in progress.
+## Links
 
-This library is under heavy development at the moment, so expect breaking
-changes.
+- [Crates.io](https://crates.io/crates/concordium-contracts-common)
+- [Documentation](https://docs.rs/concordium-contracts-common/latest/concordium_contracts_common/)
