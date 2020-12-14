@@ -321,18 +321,20 @@ impl Timestamp {
         }
     }
 
-    /// Get milliseconds since unix epoch.
+    /// Milliseconds since the UNIX epoch.
     #[inline(always)]
     pub fn timestamp_millis(&self) -> u64 { self.milliseconds }
 
-    /// Add duration to timestamp. Returns `None` instead of overflowing.
+    /// Add duration to the timestamp. Returns `None` if the resulting timestamp
+    /// is not representable, i.e., too far in the future.
     #[inline(always)]
     pub fn checked_add(self, duration: Duration) -> Option<Self> {
         self.milliseconds.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
-    /// Subtract duration to timestamp. Returns `None` instead of overflowing if
-    /// the resulting timestamp would be before the Unix epoch.
+    /// Subtract duration from the timestamp. Returns `None` instead of
+    /// overflowing if the resulting timestamp would be before the Unix
+    /// epoch.
     #[inline(always)]
     pub fn checked_sub(self, duration: Duration) -> Option<Self> {
         self.milliseconds.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
@@ -596,10 +598,14 @@ pub enum Address {
     Contract(ContractAddress),
 }
 
-/// Sequential slot number
+/// Genesis block has slot number 0, and otherwise it is always the case that a
+/// parent of a block has a slot number strictly less than the block itself.
+/// However in contrast to `BlockHeight`, slot numbers are not strictly
+/// sequential, there will be gaps.
 pub type SlotNumber = u64;
 
-/// Height of the block.
+/// Height of the block. Height of the genesis block is 0, and otherwise it is
+/// always the case that a block has height one more than its parent.
 pub type BlockHeight = u64;
 
 /// Finalized height. In the context of chain metadata this is the height of the
@@ -607,7 +613,7 @@ pub type BlockHeight = u64;
 /// under consideration.
 pub type FinalizedHeight = u64;
 
-/// Time at the beginning of the current slot, in miliseconds.
+/// Time at the beginning of the current slot, in miliseconds since unix epoch.
 pub type SlotTime = Timestamp;
 
 /// Chain metadata accessible to both receive and init methods.
@@ -636,6 +642,7 @@ pub struct Cursor<T> {
 pub struct AttributeTag(pub u8);
 
 /// A borrowed attribute value. The slice will have at most 31 bytes.
+/// The meaning of the bytes is dependent on the type of the attribute.
 pub type AttributeValue<'a> = &'a [u8];
 
 /// An owned counterpart of `AttributeValue`, more convenient for testing.
@@ -653,14 +660,30 @@ pub type OwnedPolicy = Policy<Vec<(AttributeTag, OwnedAttributeValue)>>;
 pub type IdentityProvider = u32;
 
 /// Policy on the credential of the account.
+///
+/// This is one of the key features of the Concordium blockchain. Each account
+/// on the chain is backed by an identity. The policy is verified and signed by
+/// the identity provider before an account can be created on the chain.
+///
+/// The type is parameterized by the choice of `Attributes`. These are either
+/// borrowed or owned, in the form of an iterator over key-value pairs or a
+/// vector of such. This flexibility is needed so that attributes can be
+/// accessed efficiently, as well as constructed conveniently for testing.
 #[derive(Debug, Clone)]
 pub struct Policy<Attributes> {
+    /// Identity of the identity provider who signed the identity object that
+    /// this policy is derived from.
     pub identity_provider: IdentityProvider,
-    /// Beginning of the month.
+    /// Timestamp at the beginning of the month when the identity object backing
+    /// this policy was created. This timestamp has very coarse granularity
+    /// in order for the identity provider to not be able to link identities
+    /// they have created with accounts that users created on the chain.
+    /// as a timestamp (which has millisecond granularity) in order to make it
+    /// easier to compare with, e.g., `slot_time`.
     pub created_at: Timestamp,
-    /// Beginning of the month where the credential is no longer valid.
+    /// Beginning of the month where the identity is __no longer valid__.
     pub valid_to: Timestamp,
-    /// List of attributes, ordered by the tag.
+    /// List of attributes, in ascending order of the tag.
     pub items: Attributes,
 }
 

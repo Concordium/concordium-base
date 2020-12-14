@@ -206,10 +206,13 @@ impl<A: Deserial + Serial> Serialize for A {}
 /// serialize pair. The key idea is that the type to deserialize is inferred
 /// from the context, enabling one to write, for example,
 ///
-/// ```ignore
-///   let x = source.get()?;
-///   let y = source.get()?;
-///   ...
+/// ```rust
+/// # fn deserial<R: concordium_contracts_common::Read>(source: &mut R) -> concordium_contracts_common::ParseResult<(u8, u8)> {
+/// #  use crate::concordium_contracts_common::Get;
+///    let x = source.get()?;
+///    let y = source.get()?;
+/// #   Ok((x,y))
+/// # }
 /// ```
 /// where `source` is any type that implements `Read`.
 pub trait Get<T> {

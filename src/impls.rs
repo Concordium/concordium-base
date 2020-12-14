@@ -308,7 +308,10 @@ impl Deserial for ChainMetadata {
     }
 }
 
-/// Write a vector without including length information.
+/// Write a slice of elements, without including length information.
+/// This is intended to be used either when the length is statically known,
+/// or when the length is serialized independently as part of a bigger
+/// structure.
 pub fn serial_vector_no_length<W: Write, T: Serial>(xs: &[T], out: &mut W) -> Result<(), W::Err> {
     for x in xs {
         x.serial(out)?;
@@ -341,7 +344,7 @@ pub fn serial_map_no_length<'a, W: Write, K: Serial + 'a, V: Serial + 'a>(
     Ok(())
 }
 
-/// Read a Map as an list of key-value pairs given some length.
+/// Read a [BTreeMap](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html) as a list of key-value pairs given some length.
 /// NB: This ensures there are no duplicates, hence the specialized type.
 /// Moreover this will only succeed if keys are listed in order.
 pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
@@ -370,7 +373,7 @@ pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
     Ok(out)
 }
 
-/// Read a Map as an list of key-value pairs given some length.
+/// Read a [BTreeMap](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html) as a list of key-value pairs given some length.
 /// Slightly faster version of `deserial_map_no_length` as it is skipping the
 /// order checking
 pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord, V: Deserial>(
@@ -388,7 +391,7 @@ pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord, V: Dese
     Ok(out)
 }
 
-/// Write a Set as an list of keys ordered, without the length information.
+/// Write a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an ascending list of keys, without the length information.
 pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
     map: &BTreeSet<K>,
     out: &mut W,
@@ -399,7 +402,7 @@ pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
     Ok(())
 }
 
-/// Read a Set as an list of keys, given some length.
+/// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an list of keys, given some length.
 /// NB: This ensures there are no duplicates, hence the specialized type.
 /// Moreover this will only succeed if keys are listed in order.
 pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
@@ -420,9 +423,10 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
     Ok(out)
 }
 
-/// Read a Set as an list of key-value pairs given some length.
+/// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an list of key-value pairs given some length.
 /// Slightly faster version of `deserial_set_no_length` as it is skipping the
-/// order checking.
+/// order checking. The only check that is made to the set is that there are no
+/// duplicates.
 pub fn deserial_set_no_length_no_order_check<R: Read, K: Deserial + Ord>(
     source: &mut R,
     len: usize,
@@ -438,7 +442,7 @@ pub fn deserial_set_no_length_no_order_check<R: Read, K: Deserial + Ord>(
 }
 
 /// Serialized by writing an `u32` representing the number of elements, followed
-/// by the elements serialize according to their type `T`.
+/// by the elements serialized according to their type `T`.
 impl<T: Serial> Serial for Vec<T> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
@@ -448,7 +452,7 @@ impl<T: Serial> Serial for Vec<T> {
 }
 
 /// Deserialized by reading an `u32` representing the number of elements, then
-/// deserialising that many elements of type `T`.
+/// deserializing that many elements of type `T`.
 impl<T: Deserial> Deserial for Vec<T> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
@@ -458,7 +462,7 @@ impl<T: Deserial> Deserial for Vec<T> {
 
 /// The serialization of maps encodes their size as a u32. This should be
 /// sufficient for all realistic use cases in smart contracts.
-/// They are serialized in canonical order (increasing).
+/// They are serialized in ascending order.
 impl<K: Serial + Ord, V: Serial> Serial for BTreeMap<K, V> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
@@ -698,6 +702,9 @@ impl Write for Cursor<&mut Vec<u8>> {
 
 /// Serialize the given value to a freshly allocated vector of bytes using
 /// the provided `Serial` instance.
+///
+/// This should only be used as a helper function at the top-level, and not in
+/// implementations of `Serial`.
 pub fn to_bytes<S: Serial>(x: &S) -> Vec<u8> {
     let mut out = Vec::new();
     let mut cursor = Cursor::new(&mut out);

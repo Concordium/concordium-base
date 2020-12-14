@@ -32,7 +32,6 @@ jobs:
           command: fmt
           args: --all -- --check
 
-
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
@@ -71,3 +70,23 @@ jobs:
         with:
           command: clippy
           args: --target=${{ matrix.target }} --all-features -- -D warnings
+
+  test:
+    name: x86_64 tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.45.2
+          override: true
+
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features
