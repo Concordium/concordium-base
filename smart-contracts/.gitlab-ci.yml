@@ -9,9 +9,11 @@ stages:
   variables:
     RUSTFLAGS: -Dwarnings
     GIT_SUBMODULE_STRATEGY: recursive
+    CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   before_script:
     - rustc --version && cargo --version
     - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
+    - git config --global url."https://github.com/".insteadOf "git@github.com:"
     - rustup target add wasm32-unknown-unknown
 
 "cargo-concordium cargo:test":
