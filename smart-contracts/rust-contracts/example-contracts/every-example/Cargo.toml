@@ -11,7 +11,7 @@ escrow = {path = "../escrow"}
 rate-limited = {path = "../rate-limited"}
 fib = {path = "../fib"}
 lockup = {path = "../lockup"}
-two-step-transfer = {git = "https://github.com/Concordium/example-smart-contracts", branch = "main"}
+two-step-transfer = {git = "https://github.com/Concordium/concordium-rust-smart-contracts", branch = "main"}
 simple-game = {path = "../simple-game"}
 
 [lib]
