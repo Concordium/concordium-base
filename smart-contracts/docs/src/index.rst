@@ -46,7 +46,7 @@ The documentation is split into four categories
    :caption: Tutorials
 
    tutorials/first-contract
-   tutorials/piggy-bank
+   tutorials/piggy-bank/index
 
 .. toctree::
    :maxdepth: 1
