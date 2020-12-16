@@ -1,5 +1,11 @@
 .. _Rust: https://www.rust-lang.org/
 
+
+.. image:: piggy-bank.svg
+   :width: 33%
+   :align: center
+   :alt: A Concordium piggy bank
+
 .. _piggy-bank:
 
 =============================
