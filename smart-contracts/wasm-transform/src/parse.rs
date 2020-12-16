@@ -622,9 +622,10 @@ impl<'a> Parseable<'a> for ExportSection {
 
 impl<'a> Parseable<'a> for StartSection {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let idxs: Vec<FuncIndex> = cursor.next()?;
-        ensure!(idxs.is_empty(), "Start functions are not supported.");
-        Ok(StartSection {})
+        // We deliberately try to parse the index before failing
+        // in order that the error message is more precise.
+        let _idxs: FuncIndex = cursor.next()?;
+        bail!("Start functions are not supported.");
     }
 }
 

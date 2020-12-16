@@ -71,6 +71,8 @@ impl ControlStack {
 /// label of this block, or normally exiting the block, as well as some metadata
 /// with reference to the ControlStack
 pub(crate) struct ControlFrame {
+    /// Whether the current control frame is started by an if.
+    pub(crate) is_if: bool,
     /// Label type of the block, this is the type that is used when
     /// jumping to the label of the block.
     pub(crate) label_type: BlockType,
@@ -197,8 +199,9 @@ impl ValidationState {
     ///
     /// For blocks the label type and end type are the same, for loops the label
     /// type is empty, and the end type is potentially not.
-    fn push_ctrl(&mut self, label_type: BlockType, end_type: BlockType) {
+    fn push_ctrl(&mut self, is_if: bool, label_type: BlockType, end_type: BlockType) {
         let frame = ControlFrame {
+            is_if,
             label_type,
             end_type,
             height: self.opds.stack.len(),
@@ -207,21 +210,22 @@ impl ValidationState {
         self.ctrls.stack.push(frame)
     }
 
-    /// Pop the current control frame and return its result type.
-    fn pop_ctrl(&mut self) -> ValidateResult<BlockType> {
+    /// Pop the current control frame and return its result type, together
+    /// with a flag signalling whether the frame was started with an `if`.
+    fn pop_ctrl(&mut self) -> ValidateResult<(BlockType, bool)> {
         // We first check for the last element, and use it without removing it.
         // This is so that pop_expect_opd, which pops elements from the stack, can see
         // whether we are in the unreachable state for the stack or not.
-        match self.ctrls.stack.last().map(|frame| (frame.end_type, frame.height)) {
+        match self.ctrls.stack.last().map(|frame| (frame.end_type, frame.height, frame.is_if)) {
             None => bail!("Control stack exhausted."),
-            Some((end_type, height)) => {
+            Some((end_type, height, opcode)) => {
                 if let BlockType::ValueType(ty) = end_type {
                     self.pop_expect_opd(Known(ty))?;
                 }
                 ensure!(self.opds.stack.len() == height, "Operand stack not exhausted.");
                 // Finally pop after we've made sure the stack is properly cleared.
                 self.ctrls.stack.pop();
-                Ok(end_type)
+                Ok((end_type, opcode))
             }
         }
     }
@@ -443,12 +447,18 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
         ctrls:                ControlStack::default(),
         max_reachable_height: 0,
     };
-    state.push_ctrl(context.return_type(), context.return_type());
+    state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
         match next_opcode.borrow() {
             OpCode::End => {
-                let res = state.pop_ctrl()?;
+                let (res, is_if) = state.pop_ctrl()?;
+                if is_if {
+                    ensure!(
+                        res == BlockType::EmptyType,
+                        "If without an else must have empty return type"
+                    )
+                }
                 state.push_opds(res);
             }
             OpCode::Nop => {
@@ -458,20 +468,21 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.mark_unreachable()?;
             }
             OpCode::Block(ty) => {
-                state.push_ctrl(*ty, *ty);
+                state.push_ctrl(false, *ty, *ty);
             }
             OpCode::Loop(ty) => {
-                state.push_ctrl(BlockType::EmptyType, *ty);
+                state.push_ctrl(false, BlockType::EmptyType, *ty);
             }
             OpCode::If {
                 ty,
             } => {
                 state.pop_expect_opd(Known(ValueType::I32))?;
-                state.push_ctrl(*ty, *ty);
+                state.push_ctrl(true, *ty, *ty);
             }
             OpCode::Else => {
-                let res = state.pop_ctrl()?;
-                state.push_ctrl(res, res);
+                let (res, is_if) = state.pop_ctrl()?;
+                ensure!(is_if, "Else can only come after an if");
+                state.push_ctrl(false, res, res);
             }
             OpCode::Br(label) => {
                 if let Some(label_type) = state.ctrls.get_label(*label) {
@@ -575,97 +586,116 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.pop_expect_opd(Known(ty))?;
             }
             OpCode::I32Load(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I64Load(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I64)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I32Load8S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I32Load8U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I32Load16S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I32Load16U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I64Load8S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load8U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 ensure!(memarg.align == 0, "Alignment out of range");
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load16S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load16U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load32S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load32U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I32Store(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I64)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I32Store8(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I32Store16(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store8(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store16(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store32(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
