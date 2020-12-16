@@ -14,7 +14,10 @@ use crate::{
         ALLOWED_LOCALS, MAX_ALLOWED_STACK_HEIGHT, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE,
         MAX_NUM_EXPORTS, MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
     },
-    parse::{parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton},
+    parse::{
+        parse_custom, parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult,
+        Skeleton,
+    },
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
@@ -805,6 +808,13 @@ pub fn validate_module<'a>(
     imp: &impl ValidateImportExport,
     skeleton: &Skeleton<'a>,
 ) -> ValidateResult<Module> {
+    // This is a technicality, but we need to parse the custom sections to ensure
+    // that they are valid. Validity consists only of checking that the name part
+    // is properly encoded.
+    for cs in skeleton.custom.iter() {
+        parse_custom(cs)?;
+    }
+
     // The type section is valid as long as it's well-formed.
     let ty: TypeSection = parse_sec_with_default(&skeleton.ty)?;
     // Imports are valid as long as they parse, and all the indices exist.
