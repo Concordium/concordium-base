@@ -514,5 +514,16 @@ The final definition of our "smash" ``receive``-function is then:
    such as race conditions, but the semantics of smart contracts require the
    execution to be atomically, in order to reach consensus.
 
-We now have all the parts for our piggy bank smart contract, which we now can
-test, build and deploy.
+We now have all the parts for our piggy bank smart contract, before we move on
+to testing it, we check that it builds by running:
+
+.. code-block:: console
+
+   $cargo concordium build
+
+Which should succeed if everything is setup correctly, otherwise compare your
+code with the one found here.
+
+.. todo::
+
+   Link the final code again.
