@@ -19,20 +19,29 @@ the project directory run the following in a terminal:
    $cargo init --lib
 
 This will setup a default Rust library project by creating a few files and
-folders.
+directories.
 Your directory should now contain a ``Cargo.toml`` file and a ``src``
 directory and some hidden files.
+
+To be able to build Wasm we need to tell cargo the right ``crate-type``.
+This is done by adding the following in the file ``Cargo.toml``::
+
+   [lib]
+   crate-type = ["cdylib", "rlib"]
+
+Adding the smart contract standard library
+==========================================
 
 Next step is to add ``concordium-std`` as a dependency.
 It is a library for Rust containing procedural macros and functions for
 writing small and efficient smart contracts.
 
 The library is added by opening ``Cargo.toml`` and adding the line
-``concordium-std = "0.2"`` (or whichever version is currently recommended), in
+``concordium-std = "0.3"`` (or whichever version is currently recommended), in
 the ``[dependencies]`` section::
 
    [dependencies]
-   concordium-std = "0.2"
+   concordium-std = "0.3"
 
 The crate documentation can be found on docs.rs_.
 
