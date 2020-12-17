@@ -23,6 +23,25 @@ use crate::{
 use anyhow::{anyhow, bail, ensure};
 use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
+#[derive(Debug)]
+pub enum ValidationError {
+    TooManyLocals {
+        actual: u32,
+        max:    u32,
+    },
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationError::TooManyLocals {
+                actual,
+                max,
+            } => write!(f, "The number of locals ({}) is more than allowed ({}).", actual, max),
+        }
+    }
+}
+
 /// Result type of validation.
 pub type ValidateResult<A> = anyhow::Result<A>;
 
@@ -289,12 +308,10 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
         start = end;
     }
     let num_locals = start;
-    ensure!(
-        num_locals <= ALLOWED_LOCALS,
-        "The number of locals ({}) is more than allowed ({}).",
-        num_locals,
-        ALLOWED_LOCALS
-    );
+    ensure!(num_locals <= ALLOWED_LOCALS, ValidationError::TooManyLocals {
+        actual: num_locals,
+        max:    ALLOWED_LOCALS,
+    });
     Ok((out, num_locals))
 }
 
