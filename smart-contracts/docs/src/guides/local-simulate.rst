@@ -54,7 +54,12 @@ An example of this context could be:
            "finalizedHeight": 1,
            "slotTime": "2021-01-01T00:00:01Z"
        },
-       "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+       "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
+       "senderPolicies": [{
+           "identityProvider": 1,
+           "createdAt": "202012",
+           "validTo": "202109"
+       }],
    }
 
 .. seealso::
@@ -101,6 +106,11 @@ An example of this context could be:
            "type": "account",
            "address": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
        },
+       "senderPolicies": [{
+           "identityProvider": 1,
+           "createdAt": "202012",
+           "validTo": "202109"
+       }],
        "owner": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
    }
 
