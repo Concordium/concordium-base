@@ -81,23 +81,22 @@ impl From<GlobalInit> for StackValue {
     }
 }
 
-#[derive(Debug)]
-/// A fully instantiated table. This is possible
-/// because in the Wasm specification we have the only way to write
-/// functions to the table is via the elements section of the module.
-/// Since we ensure the table is small enough we can afford to initialize
-/// it at compile time.
+#[derive(Debug, Clone)]
+/// A fully instantiated table. This is possible because in the Wasm
+/// specification we have, the only way to write functions to the table is via
+/// the elements section of the module. Since we ensure the table is small
+/// enough we can afford to initialize it at compile time.
 pub struct InstantiatedTable {
     pub functions: Vec<Option<FuncIndex>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Fully instantiated globals with initial values.
 pub struct InstantiatedGlobals {
     pub inits: Vec<GlobalInit>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// The data segment of the artifact. This is a slightly processed
 /// data segment of the module. In contrast to the table we cannot use
 /// the same trick of initializing it here. In practice data segments
@@ -120,7 +119,7 @@ impl From<Data> for ArtifactData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Memory of the artifact, with initial size, as well as maximum size set.
 /// If the maximum size is not part of the original module we set it to the
 /// [constants::MAX_NUM_PAGES](../constants/constant.MAX_NUM_PAGES.html)
@@ -160,7 +159,7 @@ impl TryFrom<Local> for ArtifactLocal {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
     type_idx: TypeIndex,
@@ -202,10 +201,17 @@ pub trait TryFromImport: Sized {
 
 /// An example of a processed import with minimal processing. Useful for testing
 /// an experimenting, but not for efficient execution.
+#[derive(Debug, Clone)]
 pub struct ArtifactNamedImport {
     pub(crate) mod_name:  Name,
     pub(crate) item_name: Name,
     pub(crate) ty:        FunctionType,
+}
+
+impl std::fmt::Display for ArtifactNamedImport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.mod_name, self.item_name)
+    }
 }
 
 impl ArtifactNamedImport {
@@ -343,7 +349,7 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
 
 /// A parsed Wasm module. This no longer has custom sections since they are not
 /// needed for further processing.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Artifact<ImportFunc, CompiledCode> {
     /// Imports by (module name, item name).
     pub imports: Vec<ImportFunc>,
@@ -489,7 +495,7 @@ pub enum InternalOpcode {
 /// Result of compilation. Either Ok(_) or an error indicating the reason.
 pub type CompileResult<A> = anyhow::Result<A>;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 /// A sequence of internal opcodes, followed by any immediate arguments.
 pub struct Instructions {
     pub(crate) bytes: Vec<u8>,
@@ -593,32 +599,34 @@ impl BackPatch {
         &mut self,
         label_idx: LabelIndex,
         state: &ValidationState,
+        old_stack_height: usize, // stack height before the jump
         instruction: Option<(InternalOpcode, InternalOpcode)>,
     ) -> CompileResult<()> {
-        let target = self.backpatch.get_mut(label_idx)?;
         let target_frame = state
             .ctrls
             .get(label_idx)
             .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
         let target_height = target_frame.height;
-        let current_height = state.opds.stack.len();
         ensure!(
-            current_height >= target_height,
-            "Current height must be at least as much as the target."
+            old_stack_height >= target_height,
+            "Current height must be at least as much as the target, {} >= {}",
+            old_stack_height,
+            target_height
         );
         let diff = if let BlockType::EmptyType = target_frame.label_type {
             if let Some((l, _)) = instruction {
                 self.out.push(l);
             }
-            (current_height - target_height).try_into()?
+            (old_stack_height - target_height).try_into()?
         } else {
             if let Some((_, r)) = instruction {
                 self.out.push(r);
             }
-            (current_height - target_height).try_into()?
+            (old_stack_height - target_height).try_into()?
         };
         // output the difference in stack heights.
         self.out.push_u32(diff);
+        let target = self.backpatch.get_mut(label_idx)?;
         match target {
             JumpTarget::Known {
                 pos,
@@ -641,7 +649,12 @@ impl BackPatch {
 impl Handler<&OpCode> for BackPatch {
     type Outcome = Instructions;
 
-    fn handle_opcode(&mut self, state: &ValidationState, opcode: &OpCode) -> CompileResult<()> {
+    fn handle_opcode(
+        &mut self,
+        state: &ValidationState,
+        stack_height: usize,
+        opcode: &OpCode,
+    ) -> CompileResult<()> {
         use InternalOpcode::*;
         match opcode {
             OpCode::End => {
@@ -675,7 +688,7 @@ impl Handler<&OpCode> for BackPatch {
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.push_jump(0, state, Some((Br, BrCarry)))?;
+                self.push_jump(0, state, stack_height, Some((Br, BrCarry)))?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
@@ -698,10 +711,10 @@ impl Handler<&OpCode> for BackPatch {
                 }
             }
             OpCode::Br(label_idx) => {
-                self.push_jump(*label_idx, state, Some((Br, BrCarry)))?;
+                self.push_jump(*label_idx, state, stack_height, Some((Br, BrCarry)))?;
             }
             OpCode::BrIf(label_idx) => {
-                self.push_jump(*label_idx, state, Some((BrIf, BrIfCarry)))?;
+                self.push_jump(*label_idx, state, stack_height, Some((BrIf, BrIfCarry)))?;
             }
             OpCode::BrTable {
                 labels,
@@ -720,11 +733,11 @@ impl Handler<&OpCode> for BackPatch {
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                self.push_jump(*default, state, None)?;
+                self.push_jump(*default, state, stack_height, None)?;
                 // The label types are the same for the default as well all the other
                 // labels.
                 for label_idx in labels {
-                    self.push_jump(*label_idx, state, None)?;
+                    self.push_jump(*label_idx, state, stack_height, None)?;
                 }
             }
             OpCode::Return => {

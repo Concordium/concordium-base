@@ -35,7 +35,7 @@ struct FunctionState<'a> {
     return_type: BlockType,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// A Wasm typed value. The values are not inherently signed or unsigned,
 /// but we choose signed integers as the representation type.
 ///
@@ -71,6 +71,21 @@ pub struct RuntimeStack {
     /// The first free position. Pushing an element will
     /// insert it at this position.
     pos: usize,
+}
+
+#[derive(Debug)]
+pub enum RuntimeError {
+    DirectlyCallImport,
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeError::DirectlyCallImport => {
+                write!(f, "Calling an imported function directly is not supported.")
+            }
+        }
+    }
 }
 
 impl RuntimeStack {
@@ -312,10 +327,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))?;
         // FIXME: The next restriction could easily be lifted, but it is not a problem
         // for now.
-        ensure!(
-            start as usize >= self.imports.len(),
-            "Calling an imported function directly is not supported."
-        );
+        ensure!(start as usize >= self.imports.len(), RuntimeError::DirectlyCallImport);
         let outer_function = &self.code[start as usize - self.imports.len()]; // safe because the artifact should be well-formed.
         let num_args = args.len().try_into()?;
         ensure!(
@@ -406,56 +418,63 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = target as usize;
                 }
                 InternalOpcode::BrCarry => {
+                    let cur_size = stack.size();
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
-                    stack.set_pos(stack.size() - diff as usize);
+                    stack.set_pos(cur_size - diff as usize);
                     stack.push(top);
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
+                    let cur_size = stack.size();
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } != 0 {
-                        stack.set_pos(stack.size() - diff as usize);
+                        stack.set_pos(cur_size - diff as usize);
                         pc = target as usize;
                     } // else do nothing
                 }
                 InternalOpcode::BrIfCarry => {
+                    let cur_size = stack.size();
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } != 0 {
                         let top = stack.pop();
-                        stack.set_pos(stack.size() - diff as usize);
+                        stack.set_pos(cur_size - diff as usize);
                         stack.push(top);
                         pc = target as usize;
                     } // else do nothing
                 }
                 InternalOpcode::BrTable => {
+                    let cur_size = stack.size();
                     let top = stack.pop();
                     let num_labels = get_u16(instructions, &mut pc);
                     let top: u32 = unsafe { top.short } as u32;
                     if top < u32::from(num_labels) {
-                        pc += (top as usize + 1) * 8;
+                        pc += (top as usize + 1) * 8; // the +1 is for the
+                                                      // default branch.
                     } // else use default branch
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    stack.set_pos(stack.size() - diff as usize);
+                    stack.set_pos(cur_size - diff as usize);
                     pc = target as usize;
                 }
                 InternalOpcode::BrTableCarry => {
+                    let cur_size = stack.size();
                     let top = stack.pop();
                     let num_labels = get_u16(instructions, &mut pc);
                     let top: u32 = unsafe { top.short } as u32;
                     if top < u32::from(num_labels) {
-                        pc += (top as usize + 1) * 8;
+                        pc += (top as usize + 1) * 8; // the +1 is for the
+                                                      // default branch.
                     } // else use default branch
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
-                    stack.set_pos(stack.size() - diff as usize);
+                    stack.set_pos(cur_size - diff as usize);
                     stack.push(top);
                     pc = target as usize;
                 }

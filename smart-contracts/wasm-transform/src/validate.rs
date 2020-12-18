@@ -425,8 +425,14 @@ pub trait Handler<O> {
 
     /// Handle the opcode. This function is called __after__ the `validate`
     /// function itself processes the opcode. Hence the validation state is
-    /// already updated.
-    fn handle_opcode(&mut self, state: &ValidationState, opcode: O) -> anyhow::Result<()>;
+    /// already updated. However the function does get access to the stack
+    /// height __before__ the opcode is processed.
+    fn handle_opcode(
+        &mut self,
+        state: &ValidationState,
+        stack_heigh: usize,
+        opcode: O,
+    ) -> anyhow::Result<()>;
 
     /// Finish processing the code. This function is called after the code body
     /// has been successfully validated.
@@ -437,7 +443,12 @@ impl Handler<OpCode> for Vec<OpCode> {
     type Outcome = (Self, usize);
 
     #[inline(always)]
-    fn handle_opcode(&mut self, _state: &ValidationState, opcode: OpCode) -> anyhow::Result<()> {
+    fn handle_opcode(
+        &mut self,
+        _state: &ValidationState,
+        _stack_height: usize,
+        opcode: OpCode,
+    ) -> anyhow::Result<()> {
         self.push(opcode);
         Ok(())
     }
@@ -467,6 +478,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
     state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
+        let old_stack_height = state.opds.stack.len();
         match next_opcode.borrow() {
             OpCode::End => {
                 let (res, is_if) = state.pop_ctrl()?;
@@ -823,7 +835,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        handler.handle_opcode(&state, next_opcode)?;
+        handler.handle_opcode(&state, old_stack_height, next_opcode)?;
     }
     if state.done() {
         handler.finish(&state)
