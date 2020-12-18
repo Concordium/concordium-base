@@ -84,9 +84,9 @@ Piggy bank contract
 ===================
 
 The contract we are going to build in this tutorial is going to act as a classic
-piggy bank. Everyone should be able to insert money into it, but only the owner
-can smash it and retrieve the money inside. Once the piggy bank has been
-smashed it should prevent insertion of money.
+piggy bank. Everyone should be able to insert GTU into it, but only the owner
+can smash it and retrieve the GTU inside. Once the piggy bank has been
+smashed, it should prevent insertion of GTU.
 
 .. todo::
 
@@ -94,14 +94,15 @@ smashed it should prevent insertion of money.
 
 The piggy bank smart contract is going to contain a function for setting up a
 new piggy bank and two functions for updating a piggy bank; one is for everyone
-to use for inserting GTU, the other is for the owner to smash the piggy bank.
+to use for inserting GTU, the other is for the owner to smash the piggy bank and
+prevent further interaction.
 
 Specifying the state
 ====================
 
 The piggy bank must contain some state. The blockchain keeps track of the
-balance of each smart contract instance meaning the only state, we will need to
-track is whether it have been smashed or not.
+balance of each smart contract instance, meaning we will need to
+track the state of whether it has been smashed or not.
 
 In Rust we represent this state as an enum, with a variant for the piggy bank
 being intact and one for it being smashed:
@@ -113,8 +114,8 @@ being intact and one for it being smashed:
        Smashed,
    }
 
-On the blockchain, the state of a smart contract is represented by an array of
-bytes, and it is important that our contract state is serializable to bytes.
+Since the state of our smart contract is going to be stored on the blockchain,
+we need to specify how the contract state should be serialized.
 When using the |concordium-std|_ library, this all boils down to our type
 for the contract state having to implement the |Serialize|_ trait exposed by
 |concordium-std|_.
@@ -131,8 +132,9 @@ and standard types in Rust_, and a `procedural macro for deriving`_
        Smashed,
    }
 
-We might as well derive ``Eq`` already, which is not necessary, but will come in
-handy later:
+In this tutorial we will also need to check state for equality, so we might as
+well derive the trait implementation for ``PartialEq`` and ``Eq`` already, which
+is not necessary, but will allow us to use ``==`` and will come in handy later:
 
 .. code-block:: rust
 
@@ -153,6 +155,9 @@ instances of the contract are created, and is used to setup the initial state of
 the contract instance.
 
 .. note::
+
+   A Rust_ developer could compare ``init``-functions with the convention of
+   having a ``new`` function for types, and the smart contract as the type.
 
    If you have experience with Object-Oriented Programming, it might help to
    think of a smart contract as a *class*, the ``init``-function as a
@@ -180,9 +185,9 @@ function, serializing the state to bytes and supplies a nicer interface for
 accessing context information.
 
 It requires a name for the smart contract, which we in this case choose to be
-``"PiggyBank"``. The name is used as part of the exported function, and is how
-we identify this smart contract, from any other smart contract in our smart
-contract module.
+``"PiggyBank"``. The name [#valid-name]_ is used as part of the exported
+function, and is how we identify this smart contract, from any other smart
+contract in our smart contract module.
 
 .. code-block:: rust
 
@@ -211,11 +216,14 @@ A more complex smart contract would take a parameter, and check during
 initialization that everything is set up as expected, but more about this
 later.
 
+.. [#valid-name] The contract name is only allowed to consist of ASCII alphanumeric or
+   punctuation characters, and is not allowed to contain the ``.`` symbol.
+
 Define interaction with piggy banks
 ===================================
 
 We have now defined how instances of our smart contract are created and the
-smart contract is in principle a valid contract at this point.
+smart contract is in principle a valid contract.
 However, we would also like to define how to interact with instances of our
 contract.
 Specifically how to insert GTU and how to smash a piggy bank.
@@ -227,6 +235,9 @@ write to the state of the instance, read the state of the blockchain and
 return a description of actions to be executed on-chain.
 
 .. note::
+
+   For a Rust_ developer, ``receive``-functions compares to type methods, with
+   a mutable reference to self.
 
    A continuation of the analogy to Object Oriented Programming:
    ``receive``-functions corresponds to object methods.
@@ -247,7 +258,7 @@ a mutable reference to the current state of the instance:
        ctx: &impl HasReceiveContext,
        state: &mut MyContractState,
    ) -> ReceiveResult<A> {
-      ...
+      todo!("Implement")
    }
 
 The macro requires the name of the contract given using the ``contract``
@@ -258,7 +269,7 @@ contract name have to be unique for a smart contract module.
 
 The return type of the function is ``ReceiveResult<A>``, which is an alias for
 ``Result<A, Reject>``.
-Here ``A`` implements |HasActions|, which exposes functions for creating the
+Here ``A`` implements |HasActions|, which exposes functions for creating
 different actions.
 
 .. rubric:: Actions
@@ -271,7 +282,7 @@ A smart contract can produce 3 types of actions:
 - **Send**: Trigger ``receive``-function of a smart contract instance, with
   a parameter and an amount of GTU.
 
-Also there are two ways to sequence these actions:
+Additionally there are two ways to sequence these actions:
 
 - **And**: Runs the first action, if it succeeds runs the second action,
   otherwise results in rejection.
@@ -280,8 +291,8 @@ Also there are two ways to sequence these actions:
 
 In this contract we will only need to use **Accept** and **Simple Transfer**.
 
-Inserting money
----------------
+Inserting GTU
+-------------
 
 The first interaction we will specify for our piggy bank is how to insert GTU.
 We start with defining a ``receive``-function as:
@@ -293,15 +304,16 @@ We start with defining a ``receive``-function as:
        _ctx: &impl HasReceiveContext,
        state: &mut PiggyBankState,
    ) -> ReceiveResult<A> {
-
+       todo!("Implement")
    }
 
 Here we make sure the contract name matches the one we use for the |init|_ macro
 and we name this ``receive``-function ``"insert"``.
+The function will not need to use the context ``_ctx``, so by convention, we
+make sure to prefix the argument with ``_``.
 
-In the function body we have to make sure the piggy bank is still intact. The
-smart contract should reject any calls trying to call insert if the piggy bank
-was smashed:
+In the function body we have to make sure the piggy bank is still intact, the
+smart contract should reject any messages if the piggy bank is smashed:
 
 .. code-block:: rust
 
@@ -331,7 +343,7 @@ we have left to do is accept the incoming amount of GTU.
 The GTU balance is maintained by the blockchain, so there is no need for us to
 maintain this in our contract, it just needs to produce the accept action, which
 is possible using the generic ``A`` by running ``A::accept()``, which you will
-hear more about in a moment.
+read more about in a moment.
 
 .. code-block:: rust
 
@@ -350,18 +362,18 @@ So far we have the following definition of how to insert in a piggy bank:
        Ok(A::accept())
    }
 
-Our definition is almost of how to insert GTU is almost done, but one important
-detail is missing.
+Our definition of how to insert GTU is almost done, but one important detail is
+missing.
 If we were to send some amount of GTU to the current definition, it would reject
 before even running our code. This is a safety feature of |concordium-std|,
 which assumes by default that function defined using |init| and |receive| are
 not to accept any non-zero amount of GTU.
 
-The reason for this behavior; is to reduce the risk of creating a smart
+The reason for this behavior is to reduce the risk of creating a smart
 contract accepting GTU without functionality for retrieving the GTU of the
 smart contract. A smart contract without a way to extract GTU, should be sure
-not to accept any non-zero amount of GTU, since these GTU would be lost
-forever.
+not to accept any non-zero amount of GTU, since these GTU would be *inaccessible
+forever*.
 
 Our piggy bank is gonna have a way to retrieve GTU, so we can disable this by
 adding the ``payable`` attribute to the |receive| macro, which will allow the
@@ -408,7 +420,7 @@ Again we use the |receive|_ macro, and start with:
        ctx: &impl HasReceiveContext,
        state: &mut PiggyBankState,
    ) -> ReceiveResult<A> {
-
+       todo!("Implement")
    }
 
 We ensure the contract name matches the one of our smart contract, and we choose
@@ -480,8 +492,8 @@ the current balance of the smart contract instance, which is called
 
    let balance = ctx.self_balance();
 
-And since we have already have the owner address, we just need to result in the
-the simple transfer action:
+We already have a variable with the address of the contract owner, so we can
+construct and return the action for a simple transfer:
 
 .. code-block:: rust
 
