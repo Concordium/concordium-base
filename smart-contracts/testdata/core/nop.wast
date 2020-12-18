@@ -379,7 +379,7 @@
 
 (assert_return (invoke "as-memory.grow-first" (i32.const 0)) (i32.const 1))
 (assert_return (invoke "as-memory.grow-last" (i32.const 2)) (i32.const 1))
-(assert_return (invoke "as-memory.grow-everywhere" (i32.const 12)) (i32.const 3))
+(assert_return (invoke "as-memory.grow-everywhere" (i32.const 12)) (i32.const 1))
 
 (assert_return (invoke "as-call_indirect-first") (i32.const 1))
 (assert_return (invoke "as-call_indirect-mid1") (i32.const 1))

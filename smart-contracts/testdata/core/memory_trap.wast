@@ -19,7 +19,7 @@
 )
 
 (assert_return (invoke "store" (i32.const -4) (i32.const 42)))
-(assert_return (invoke "load" (i32.const -4)) (i32.const 42))
+(assert_return (invoke "load" (i32.const -4)) (i32.const 0))
 (assert_trap (invoke "store" (i32.const -3) (i32.const 13)) "out of bounds memory access")
 (assert_trap (invoke "load" (i32.const -3)) "out of bounds memory access")
 (assert_trap (invoke "store" (i32.const -2) (i32.const 13)) "out of bounds memory access")

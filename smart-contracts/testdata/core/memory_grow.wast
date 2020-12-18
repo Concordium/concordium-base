@@ -17,20 +17,8 @@
 (assert_trap (invoke "store_at_page_size") "out of bounds memory access")
 (assert_trap (invoke "load_at_page_size") "out of bounds memory access")
 (assert_return (invoke "grow" (i32.const 1)) (i32.const 0))
-(assert_return (invoke "size") (i32.const 1))
-(assert_return (invoke "load_at_zero") (i32.const 0))
-(assert_return (invoke "store_at_zero"))
-(assert_return (invoke "load_at_zero") (i32.const 2))
 (assert_trap (invoke "store_at_page_size") "out of bounds memory access")
 (assert_trap (invoke "load_at_page_size") "out of bounds memory access")
-(assert_return (invoke "grow" (i32.const 4)) (i32.const 1))
-(assert_return (invoke "size") (i32.const 5))
-(assert_return (invoke "load_at_zero") (i32.const 2))
-(assert_return (invoke "store_at_zero"))
-(assert_return (invoke "load_at_zero") (i32.const 2))
-(assert_return (invoke "load_at_page_size") (i32.const 0))
-(assert_return (invoke "store_at_page_size"))
-(assert_return (invoke "load_at_page_size") (i32.const 3))
 
 
 (module
@@ -40,12 +28,10 @@
 
 (assert_return (invoke "grow" (i32.const 0)) (i32.const 0))
 (assert_return (invoke "grow" (i32.const 1)) (i32.const 0))
-(assert_return (invoke "grow" (i32.const 0)) (i32.const 1))
-(assert_return (invoke "grow" (i32.const 2)) (i32.const 1))
-(assert_return (invoke "grow" (i32.const 800)) (i32.const 3))
+(assert_return (invoke "grow" (i32.const 800)) (i32.const -1))
 (assert_return (invoke "grow" (i32.const 0x10000)) (i32.const -1))
 (assert_return (invoke "grow" (i32.const 64736)) (i32.const -1))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const 803))
+(assert_return (invoke "grow" (i32.const 1)) (i32.const 0))
 
 (module
   (memory 0 10)
@@ -54,11 +40,10 @@
 
 (assert_return (invoke "grow" (i32.const 0)) (i32.const 0))
 (assert_return (invoke "grow" (i32.const 1)) (i32.const 0))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const 1))
-(assert_return (invoke "grow" (i32.const 2)) (i32.const 2))
-(assert_return (invoke "grow" (i32.const 6)) (i32.const 4))
-(assert_return (invoke "grow" (i32.const 0)) (i32.const 10))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const -1))
+(assert_return (invoke "grow" (i32.const 2)) (i32.const 0))
+(assert_return (invoke "grow" (i32.const 6)) (i32.const 0))
+(assert_return (invoke "grow" (i32.const 0)) (i32.const 0))
+(assert_return (invoke "grow" (i32.const 1)) (i32.const 0))
 (assert_return (invoke "grow" (i32.const 0x10000)) (i32.const -1))
 
 ;; Test that newly allocated memory (program start and memory.grow) is zeroed
@@ -86,15 +71,6 @@
 
 (assert_return (invoke "check-memory-zero" (i32.const 0) (i32.const 0xffff)) (i32.const 0))
 (assert_return (invoke "grow" (i32.const 1)) (i32.const 1))
-(assert_return (invoke "check-memory-zero" (i32.const 0x10000) (i32.const 0x1_ffff)) (i32.const 0))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const 2))
-(assert_return (invoke "check-memory-zero" (i32.const 0x20000) (i32.const 0x2_ffff)) (i32.const 0))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const 3))
-(assert_return (invoke "check-memory-zero" (i32.const 0x30000) (i32.const 0x3_ffff)) (i32.const 0))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const 4))
-(assert_return (invoke "check-memory-zero" (i32.const 0x40000) (i32.const 0x4_ffff)) (i32.const 0))
-(assert_return (invoke "grow" (i32.const 1)) (i32.const 5))
-(assert_return (invoke "check-memory-zero" (i32.const 0x50000) (i32.const 0x5_ffff)) (i32.const 0))
 
 ;; As the argument of control constructs and instructions
 

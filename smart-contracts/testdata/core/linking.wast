@@ -79,9 +79,6 @@
 (assert_return (invoke $Mg "set_mut" (i32.const 241)))
 (assert_return (get $Mg "mut_glob") (i32.const 241))
 (assert_return (get $Ng "Mg.mut_glob") (i32.const 241))
-(assert_return (invoke $Mg "get_mut") (i32.const 241))
-(assert_return (invoke $Ng "Mg.get_mut") (i32.const 241))
-
 
 (assert_unlinkable
   (module (import "Mg" "mut_glob" (global i32)))
@@ -169,13 +166,11 @@
 (assert_return (invoke $Nt "call Mt.call" (i32.const 3)) (i32.const 4))
 (assert_return (invoke $Ot "call" (i32.const 3)) (i32.const 4))
 
-(assert_return (invoke $Mt "call" (i32.const 2)) (i32.const -4))
 (assert_return (invoke $Nt "Mt.call" (i32.const 2)) (i32.const -4))
 (assert_return (invoke $Nt "call" (i32.const 2)) (i32.const 5))
 (assert_return (invoke $Nt "call Mt.call" (i32.const 2)) (i32.const -4))
 (assert_return (invoke $Ot "call" (i32.const 2)) (i32.const -4))
 
-(assert_return (invoke $Mt "call" (i32.const 1)) (i32.const 6))
 (assert_return (invoke $Nt "Mt.call" (i32.const 1)) (i32.const 6))
 (assert_return (invoke $Nt "call" (i32.const 1)) (i32.const 5))
 (assert_return (invoke $Nt "call Mt.call" (i32.const 1)) (i32.const 6))
@@ -276,16 +271,6 @@
 (assert_return (invoke $Nm "Mm.load" (i32.const 12)) (i32.const 2))
 (assert_return (invoke $Nm "load" (i32.const 12)) (i32.const 0xf2))
 
-(module $Om
-  (memory (import "Mm" "mem") 1)
-  (data (i32.const 5) "\a0\a1\a2\a3\a4\a5\a6\a7")
-
-  (func (export "load") (param $a i32) (result i32)
-    (i32.load8_u (local.get 0))
-  )
-)
-
-(assert_return (invoke $Mm "load" (i32.const 12)) (i32.const 0xa7))
 (assert_return (invoke $Nm "Mm.load" (i32.const 12)) (i32.const 0xa7))
 (assert_return (invoke $Nm "load" (i32.const 12)) (i32.const 0xf2))
 (assert_return (invoke $Om "load" (i32.const 12)) (i32.const 0xa7))
@@ -352,37 +337,3 @@
   "elements segment does not fit"
 )
 (assert_return (invoke $Mm "load" (i32.const 0)) (i32.const 0))
-
-;; Store is modified if the start function traps.
-(module $Ms
-  (type $t (func (result i32)))
-  (memory (export "memory") 1)
-  (table (export "table") 1 funcref)
-  (func (export "get memory[0]") (type $t)
-    (i32.load8_u (i32.const 0))
-  )
-  (func (export "get table[0]") (type $t)
-    (call_indirect (type $t) (i32.const 0))
-  )
-)
-(register "Ms" $Ms)
-
-(assert_trap
-  (module
-    (import "Ms" "memory" (memory 1))
-    (import "Ms" "table" (table 1 funcref))
-    (data (i32.const 0) "hello")
-    (elem (i32.const 0) $f)
-    (func $f (result i32)
-      (i32.const 0xdead)
-    )
-    (func $main
-      (unreachable)
-    )
-    (start $main)
-  )
-  "unreachable"
-)
-
-(assert_return (invoke $Ms "get memory[0]") (i32.const 104))  ;; 'h'
-(assert_return (invoke $Ms "get table[0]") (i32.const 0xdead))
