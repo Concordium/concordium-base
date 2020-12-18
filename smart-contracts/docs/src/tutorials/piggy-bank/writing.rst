@@ -85,8 +85,8 @@ Piggy bank contract
 
 The contract we are going to build in this tutorial is going to act as a classic
 piggy bank. Everyone should be able to insert money into it, but only the owner
-can smash it and retrieve the money inside. Once the piggy bank have been
-smashed, it should prevent insertion of money.
+can smash it and retrieve the money inside. Once the piggy bank has been
+smashed it should prevent insertion of money.
 
 .. todo::
 
@@ -283,7 +283,7 @@ In this contract we will only need to use **Accept** and **Simple Transfer**.
 Inserting money
 ---------------
 
-The first interaction we will specify for our piggy bank, is how to insert GTU.
+The first interaction we will specify for our piggy bank is how to insert GTU.
 We start with defining a ``receive``-function as:
 
 .. code-block:: rust
@@ -299,7 +299,7 @@ We start with defining a ``receive``-function as:
 Here we make sure the contract name matches the one we use for the |init|_ macro
 and we name this ``receive``-function ``"insert"``.
 
-In the function body, we have to make sure the piggy bank is still intact, the
+In the function body we have to make sure the piggy bank is still intact. The
 smart contract should reject any calls trying to call insert if the piggy bank
 was smashed:
 
@@ -427,7 +427,7 @@ This returns the account address of the contract instance owner, i.e. the
 account which created the smart contract instance by invoking the
 ``init``-function.
 
-Similarly the context have a getter function for the one who send the current
+Similarly the context has a getter function for the one who send the current
 message, which triggered this ``receive``-function:
 
 .. code-block:: rust
@@ -472,7 +472,7 @@ account and the amount to include in the transfer.
 In our case the receiver is the owner of the piggy bank and the amount is the
 entire balance of the piggy bank.
 
-The context have a getter function for reading
+The context has a getter function for reading
 the current balance of the smart contract instance, which is called
 |self_balance|_:
 
@@ -510,9 +510,9 @@ The final definition of our "smash" ``receive``-function is then:
 .. note::
 
    Since a blockchain is a decentralized system, one might think we have to
-   worry about the usual problems, when dealing with mutable state. Problems
+   worry about the usual problems when dealing with mutable state. Problems
    such as race conditions, but the semantics of smart contracts require the
-   execution to be atomically, in order to reach consensus.
+   execution to be atomic, in order to reach consensus.
 
 We now have all the parts for our piggy bank smart contract, before we move on
 to testing it, we check that it builds by running:

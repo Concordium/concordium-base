@@ -82,7 +82,7 @@ The guide :ref:`setup-tools` will show you how to do this.
 Also, make sure to have a text editor setup for writing Rust.
 
 Since we are going to extend the smart contract code written in the previous
-part, either follow the previous part or copy the resulting code from here.
+part, either follow the previous part or copy the resulting code from there.
 
 .. todo::
 
