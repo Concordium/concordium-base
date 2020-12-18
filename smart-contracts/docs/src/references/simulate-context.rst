@@ -220,7 +220,7 @@ The block height of the last finalized block as a JSON number.
 Policy
 ======
 
-Both the init- and receive-context contains a list of policies of the sender.
+Both the init- and receive-context contain a list of policies of the sender.
 Such a policy is represented as a JSON Object.
 
 Example:
