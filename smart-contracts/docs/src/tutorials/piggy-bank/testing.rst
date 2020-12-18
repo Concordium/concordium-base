@@ -33,6 +33,18 @@
 .. |set_sender| replace:: ``set_sender``
 .. _set_self_balance: https://docs.rs/concordium-std/latest/concordium_std/test_infrastructure/type.ReceiveContextTest.html#method.set_self_balance
 .. |set_self_balance| replace:: ``set_self_balance``
+.. _concordium_cfg_test: https://docs.rs/concordium-std/latest/concordium_std/test_infrastructure/attr.concordium_cfg_test.html
+.. |concordium_cfg_test| replace:: ``#[concordium_cfg_test]``
+.. _concordium_test: https://docs.rs/concordium-std/latest/concordium_std/attr.concordium_test.html
+.. |concordium_test| replace:: ``#[concordium_test]``
+.. _fail: https://docs.rs/concordium-std/latest/concordium_std/concordium_std/macro.fail.html
+.. |fail| replace:: ``fail!``
+.. _expect_report: https://docs.rs/concordium-std/latest/concordium_std/trait.ExpectReport.html#tymethod.expect_report
+.. |expect_report| replace:: ``expect_report``
+.. _claim: https://docs.rs/concordium-std/latest/concordium_std/macro.claim.html
+.. |claim| replace:: ``claim!``
+.. _claim_eq: https://docs.rs/concordium-std/latest/concordium_std/macro.claim_eq.html
+.. |claim_eq| replace:: ``claim_eq!``
 
 .. _piggy-bank-testing:
 
@@ -251,8 +263,8 @@ produce the action for accepting the GTU.
 
    let actions = match actions_result.expect("Inserting GTU results in error.");
 
-   assert_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
    assert_eq!(actions, ActionsTree::accept(), "No action should be produced.");
+   assert_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
 
 The second test becomes:
 
@@ -268,8 +280,8 @@ The second test becomes:
 
        let actions = match actions_result.expect("Inserting GTU results in error.");
 
-       assert_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
        assert_eq!(actions, ActionsTree::accept(), "No action should be produced.");
+       assert_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
    }
 
 Again we should verify everything compiles and the tests succeeds using ``cargo
@@ -358,3 +370,123 @@ it would not introduce any new concepts, and these are left to the reader.
 
 Compile and running tests in Wasm
 =================================
+
+When running ``cargo test`` our contract module and tests are compiled targeting
+your native platform, but on the Concordium blockchain a smart contract module
+is in Wasm.
+Therefore it is preferable to compile the tests targeting Wasm and run the tests
+using a Wasm interpreter instead.
+Lucky for us, the ``cargo-concordium`` tool contains such an interpreter, and
+it is the same interpreter shipped with the official nodes on the Concordium
+blockchain.
+
+Before we can run our tests in Wasm, we have to replace ``#[cfg(test)]`` at the
+top of our test module with |concordium_cfg_test|_ and all the ``#[test]``
+macros with |concordium_test|_.
+
+.. code-block:: rust
+   :emphasize-lines: 3, 8, 13, 18
+
+   // PiggyBank contract code up here
+
+   #[concordium_cfg_test]
+   mod tests {
+       use super::*;
+       use test_infrastructure::*;
+
+       #[concordium_test]
+       fn test_init() {
+           // ...
+       }
+
+       #[concordium_test]
+       fn test_insert_intact() {
+           // ...
+       }
+
+       #[concordium_test]
+       fn test_smash_intact() {
+           // ...
+       }
+   }
+
+We will also need to modify our tests a bit. Usually a test in Rust_ is failed
+by panicking with an error message, but when compiling to Wasm this error
+message is lost.
+Instead we need generate code reporting the error back to the host, who is
+running the Wasm, and to do so, |concordium-std| provides replacements:
+
+- A call to ``panic!`` should be replace with |fail|_.
+- The ``expect`` method should be replaced with |expect_report|_.
+- ``assert`` and ``assert_eq`` should be replace with |claim|_ and |claim_eq|_
+  respectively.
+
+All of these macros are wrappers, which behaves the same as their counterpart
+except when we build our smart contract for testing in Wasm using
+``cargo-concordium``. This means we can still run tests for targeting native
+using ``cargo test``.
+
+.. code-block:: rust
+   :emphasize-lines: 14, 16, 31, 33, 34, 51, 52, 53
+
+   // PiggyBank contract code up here
+
+   #[concordium_cfg_test]
+   mod tests {
+      use super::*;
+      use test_infrastructure::*;
+
+      #[concordium_test]
+      fn test_init() {
+         let ctx = InitContextTest::empty();
+
+         let state_result = piggy_init(&ctx);
+
+         let state = state_result.expect_report("Contract initialization failed.");
+
+         claim_eq!(
+               state,
+               PiggyBankState::Intact,
+               "Piggy bank state should be intact after initialization."
+         );
+      }
+
+      #[concordium_test]
+      fn test_insert_intact() {
+         let ctx = ReceiveContextTest::empty();
+         let amount = Amount::from_micro_gtu(100);
+         let mut state = PiggyBankState::Intact;
+
+         let actions_result: ReceiveResult<ActionsTree> = piggy_insert(&ctx, amount, &mut state);
+
+         let actions = actions_result.expect_report("Inserting GTU results in error.");
+
+         claim_eq!(actions, ActionsTree::accept(), "No action should be produced.");
+         claim_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
+      }
+
+      #[concordium_test]
+      fn test_smash_intact() {
+         let mut ctx = ReceiveContextTest::empty();
+         let owner = AccountAddress([0u8; 32]);
+         ctx.set_owner(owner);
+         let sender = Address::Account(owner);
+         ctx.set_sender(sender);
+         let balance = Amount::from_micro_gtu(100);
+         ctx.set_self_balance(balance);
+
+         let mut state = PiggyBankState::Intact;
+
+         let actions_result: ReceiveResult<ActionsTree> = piggy_smash(&ctx, &mut state);
+
+         let actions = actions_result.expect_report("Inserting GTU results in error.");
+         claim_eq!(actions, ActionsTree::simple_transfer(&owner, balance));
+         claim_eq!(state, PiggyBankState::Smashed);
+      }
+   }
+
+Compiling and running the tests in Wasm can be done using:
+
+.. code-block:: console
+
+   $cargo concordium test
