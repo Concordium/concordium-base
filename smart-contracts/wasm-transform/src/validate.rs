@@ -14,11 +14,33 @@ use crate::{
         ALLOWED_LOCALS, MAX_ALLOWED_STACK_HEIGHT, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE,
         MAX_NUM_EXPORTS, MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
     },
-    parse::{parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton},
+    parse::{
+        parse_custom, parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult,
+        Skeleton,
+    },
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
 use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
+
+#[derive(Debug)]
+pub enum ValidationError {
+    TooManyLocals {
+        actual: u32,
+        max:    u32,
+    },
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationError::TooManyLocals {
+                actual,
+                max,
+            } => write!(f, "The number of locals ({}) is more than allowed ({}).", actual, max),
+        }
+    }
+}
 
 /// Result type of validation.
 pub type ValidateResult<A> = anyhow::Result<A>;
@@ -68,6 +90,8 @@ impl ControlStack {
 /// label of this block, or normally exiting the block, as well as some metadata
 /// with reference to the ControlStack
 pub(crate) struct ControlFrame {
+    /// Whether the current control frame is started by an if.
+    pub(crate) is_if: bool,
     /// Label type of the block, this is the type that is used when
     /// jumping to the label of the block.
     pub(crate) label_type: BlockType,
@@ -194,8 +218,9 @@ impl ValidationState {
     ///
     /// For blocks the label type and end type are the same, for loops the label
     /// type is empty, and the end type is potentially not.
-    fn push_ctrl(&mut self, label_type: BlockType, end_type: BlockType) {
+    fn push_ctrl(&mut self, is_if: bool, label_type: BlockType, end_type: BlockType) {
         let frame = ControlFrame {
+            is_if,
             label_type,
             end_type,
             height: self.opds.stack.len(),
@@ -204,21 +229,22 @@ impl ValidationState {
         self.ctrls.stack.push(frame)
     }
 
-    /// Pop the current control frame and return its result type.
-    fn pop_ctrl(&mut self) -> ValidateResult<BlockType> {
+    /// Pop the current control frame and return its result type, together
+    /// with a flag signalling whether the frame was started with an `if`.
+    fn pop_ctrl(&mut self) -> ValidateResult<(BlockType, bool)> {
         // We first check for the last element, and use it without removing it.
         // This is so that pop_expect_opd, which pops elements from the stack, can see
         // whether we are in the unreachable state for the stack or not.
-        match self.ctrls.stack.last().map(|frame| (frame.end_type, frame.height)) {
+        match self.ctrls.stack.last().map(|frame| (frame.end_type, frame.height, frame.is_if)) {
             None => bail!("Control stack exhausted."),
-            Some((end_type, height)) => {
+            Some((end_type, height, opcode)) => {
                 if let BlockType::ValueType(ty) = end_type {
                     self.pop_expect_opd(Known(ty))?;
                 }
                 ensure!(self.opds.stack.len() == height, "Operand stack not exhausted.");
                 // Finally pop after we've made sure the stack is properly cleared.
                 self.ctrls.stack.pop();
-                Ok(end_type)
+                Ok((end_type, opcode))
             }
         }
     }
@@ -282,12 +308,10 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
         start = end;
     }
     let num_locals = start;
-    ensure!(
-        num_locals <= ALLOWED_LOCALS,
-        "The number of locals ({}) is more than allowed ({}).",
-        num_locals,
-        ALLOWED_LOCALS
-    );
+    ensure!(num_locals <= ALLOWED_LOCALS, ValidationError::TooManyLocals {
+        actual: num_locals,
+        max:    ALLOWED_LOCALS,
+    });
     Ok((out, num_locals))
 }
 
@@ -401,8 +425,14 @@ pub trait Handler<O> {
 
     /// Handle the opcode. This function is called __after__ the `validate`
     /// function itself processes the opcode. Hence the validation state is
-    /// already updated.
-    fn handle_opcode(&mut self, state: &ValidationState, opcode: O) -> anyhow::Result<()>;
+    /// already updated. However the function does get access to the stack
+    /// height __before__ the opcode is processed.
+    fn handle_opcode(
+        &mut self,
+        state: &ValidationState,
+        stack_heigh: usize,
+        opcode: O,
+    ) -> anyhow::Result<()>;
 
     /// Finish processing the code. This function is called after the code body
     /// has been successfully validated.
@@ -413,7 +443,12 @@ impl Handler<OpCode> for Vec<OpCode> {
     type Outcome = (Self, usize);
 
     #[inline(always)]
-    fn handle_opcode(&mut self, _state: &ValidationState, opcode: OpCode) -> anyhow::Result<()> {
+    fn handle_opcode(
+        &mut self,
+        _state: &ValidationState,
+        _stack_height: usize,
+        opcode: OpCode,
+    ) -> anyhow::Result<()> {
         self.push(opcode);
         Ok(())
     }
@@ -440,12 +475,19 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
         ctrls:                ControlStack::default(),
         max_reachable_height: 0,
     };
-    state.push_ctrl(context.return_type(), context.return_type());
+    state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
+        let old_stack_height = state.opds.stack.len();
         match next_opcode.borrow() {
             OpCode::End => {
-                let res = state.pop_ctrl()?;
+                let (res, is_if) = state.pop_ctrl()?;
+                if is_if {
+                    ensure!(
+                        res == BlockType::EmptyType,
+                        "If without an else must have empty return type"
+                    )
+                }
                 state.push_opds(res);
             }
             OpCode::Nop => {
@@ -455,20 +497,21 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.mark_unreachable()?;
             }
             OpCode::Block(ty) => {
-                state.push_ctrl(*ty, *ty);
+                state.push_ctrl(false, *ty, *ty);
             }
             OpCode::Loop(ty) => {
-                state.push_ctrl(BlockType::EmptyType, *ty);
+                state.push_ctrl(false, BlockType::EmptyType, *ty);
             }
             OpCode::If {
                 ty,
             } => {
                 state.pop_expect_opd(Known(ValueType::I32))?;
-                state.push_ctrl(*ty, *ty);
+                state.push_ctrl(true, *ty, *ty);
             }
             OpCode::Else => {
-                let res = state.pop_ctrl()?;
-                state.push_ctrl(res, res);
+                let (res, is_if) = state.pop_ctrl()?;
+                ensure!(is_if, "Else can only come after an if");
+                state.push_ctrl(false, res, res);
             }
             OpCode::Br(label) => {
                 if let Some(label_type) = state.ctrls.get_label(*label) {
@@ -572,97 +615,116 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.pop_expect_opd(Known(ty))?;
             }
             OpCode::I32Load(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I64Load(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I64)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I32Load8S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I32Load8U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I32Load16S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I32Load16U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I32));
             }
             OpCode::I64Load8S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load8U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 ensure!(memarg.align == 0, "Alignment out of range");
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load16S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load16U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load32S(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I64Load32U(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
             OpCode::I32Store(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I64)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I32Store8(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I32Store16(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store8(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I8)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store16(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I16)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
             }
             OpCode::I64Store32(memarg) => {
+                ensure!(context.memory_exists(), "Memory should exist.");
                 ensure_alignment(memarg.align, Type::I32)?;
                 state.pop_expect_opd(Known(ValueType::I64))?;
                 state.pop_expect_opd(Known(ValueType::I32))?;
@@ -773,7 +835,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        handler.handle_opcode(&state, next_opcode)?;
+        handler.handle_opcode(&state, old_stack_height, next_opcode)?;
     }
     if state.done() {
         handler.finish(&state)
@@ -805,6 +867,13 @@ pub fn validate_module<'a>(
     imp: &impl ValidateImportExport,
     skeleton: &Skeleton<'a>,
 ) -> ValidateResult<Module> {
+    // This is a technicality, but we need to parse the custom sections to ensure
+    // that they are valid. Validity consists only of checking that the name part
+    // is properly encoded.
+    for cs in skeleton.custom.iter() {
+        parse_custom(cs)?;
+    }
+
     // The type section is valid as long as it's well-formed.
     let ty: TypeSection = parse_sec_with_default(&skeleton.ty)?;
     // Imports are valid as long as they parse, and all the indices exist.

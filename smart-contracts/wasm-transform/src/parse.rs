@@ -251,9 +251,11 @@ impl<'a> Parseable<'a> for &'a [ValueType] {
         ensure!(end <= cursor.get_ref().len(), "Malformed byte array");
         cursor.seek(SeekFrom::Current(i64::from(len)))?;
         let bytes = &cursor.get_ref()[pos..end];
-        for byte in bytes {
-            if let Err(e) = ValueType::try_from(*byte) {
-                bail!("Unknown value type array: {}", e)
+        for &byte in bytes {
+            if ValueType::try_from(byte).is_err() {
+                bail!(ParseError::UnsupportedValueType {
+                    byte
+                })
             }
         }
         Ok(unsafe { &*(bytes as *const [u8] as *const [ValueType]) })
@@ -358,7 +360,7 @@ impl<'a> Parseable<'a> for Name {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let name_bytes = cursor.next()?;
         let name = std::str::from_utf8(name_bytes)?.to_string();
-        ensure!(name.is_ascii(), "Only ASCII names are allowed.");
+        ensure!(name.is_ascii(), ParseError::OnlyASCIINames);
         Ok(Name {
             name,
         })
@@ -389,7 +391,14 @@ impl<'a> Parseable<'a> for Byte {
 /// types, so we disallow them already at the parsing stage.
 impl<'a> Parseable<'a> for ValueType {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        ValueType::try_from(Byte::parse(cursor)?)
+        let byte = Byte::parse(cursor)?;
+        if let Ok(x) = ValueType::try_from(byte) {
+            Ok(x)
+        } else {
+            bail!(ParseError::UnsupportedValueType {
+                byte
+            })
+        }
     }
 }
 
@@ -434,7 +443,7 @@ impl<'a> Parseable<'a> for FunctionType {
         expect_byte(cursor, 0x60)?;
         let parameters = cursor.next()?;
         let result_vec = Vec::<ValueType>::parse(cursor)?;
-        ensure!(result_vec.len() <= 1, "Only single return value is supported.");
+        ensure!(result_vec.len() <= 1, ParseError::OnlySingleReturn);
         let result = result_vec.first().copied();
         Ok(FunctionType {
             parameters,
@@ -495,7 +504,9 @@ impl<'a> Parseable<'a> for ImportDescription {
                     type_idx,
                 })
             }
-            tag => bail!("Unsupported import type {:#04x}. Only functions can be imported.", tag),
+            tag => bail!(ParseError::UnsupportedImportType {
+                tag
+            }),
         }
     }
 }
@@ -622,9 +633,10 @@ impl<'a> Parseable<'a> for ExportSection {
 
 impl<'a> Parseable<'a> for StartSection {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let idxs: Vec<FuncIndex> = cursor.next()?;
-        ensure!(idxs.is_empty(), "Start functions are not supported.");
-        Ok(StartSection {})
+        // We deliberately try to parse the index before failing
+        // in order that the error message is more precise.
+        let _idxs: FuncIndex = cursor.next()?;
+        bail!(ParseError::StartFunctionsNotSupported);
     }
 }
 
@@ -752,33 +764,42 @@ pub fn parse_sec_with_default<'a, A: Parseable<'a> + Default>(
     }
 }
 
-// /// Try to parse all the non-custom sections of a Skeleton into a Module.
-// pub fn parse_module<'a>(skeleton: &Skeleton<'a>) -> ParseResult<Module> {
-//     let ty = parse_sec_with_default(&skeleton.ty)?;
-//     let import = parse_sec_with_default(&skeleton.import)?;
-//     let func = parse_sec_with_default(&skeleton.func)?;
-//     let table = parse_sec_with_default(&skeleton.table)?;
-//     let memory = parse_sec_with_default(&skeleton.memory)?;
-//     let global = parse_sec_with_default(&skeleton.global)?;
-//     let export = parse_sec_with_default(&skeleton.export)?;
-//     let start = parse_sec_with_default(&skeleton.start)?;
-//     let element = parse_sec_with_default(&skeleton.element)?;
-//     let code = parse_sec_with_default(&skeleton.code)?;
-//     let data = parse_sec_with_default(&skeleton.data)?;
-//     Ok(Module {
-//         ty,
-//         import,
-//         func,
-//         table,
-//         memory,
-//         global,
-//         export,
-//         start,
-//         element,
-//         code,
-//         data,
-//     })
-// }
+#[derive(Debug)]
+pub enum ParseError {
+    UnsupportedInstruction {
+        opcode: Byte,
+    },
+    UnsupportedValueType {
+        byte: Byte,
+    },
+    UnsupportedImportType {
+        tag: Byte,
+    },
+    OnlySingleReturn,
+    OnlyASCIINames,
+    StartFunctionsNotSupported,
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::UnsupportedInstruction {
+                opcode,
+            } => write!(f, "Unsupported instruction {:#04x}", opcode),
+            ParseError::UnsupportedValueType {
+                byte,
+            } => write!(f, "Unknown value type byte {:#04x}", byte),
+            ParseError::UnsupportedImportType {
+                tag,
+            } => write!(f, "Unsupported import type {:#04x}. Only functions can be imported.", tag),
+            ParseError::OnlySingleReturn => write!(f, "Only single return value is supported."),
+            ParseError::OnlyASCIINames => write!(f, "Only ASCII names are allowed."),
+            ParseError::StartFunctionsNotSupported => {
+                write!(f, "Start functions are not supported.")
+            }
+        }
+    }
+}
 
 /// Decode the next opcode directly from the cursor.
 pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
@@ -1012,7 +1033,9 @@ pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
 
         0xAC => Ok(OpCode::I64ExtendI32S),
         0xAD => Ok(OpCode::I64ExtendI32U),
-        byte => bail!("Unsupported instruction {:#04x}", byte),
+        byte => bail!(ParseError::UnsupportedInstruction {
+            opcode: byte,
+        }),
     }
 }
 

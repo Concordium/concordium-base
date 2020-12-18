@@ -249,6 +249,14 @@ stages:
     - echo "Running clippy"
     - cargo clippy --color=always --tests -- -Dclippy::all
 
+"wasm-core-spec cargo:test":
+  extends: .generic
+  stage: test
+  script:
+    - cd wasm-test/
+    - cargo build
+    - ./target/debug/wasm-test --dir ../testdata/core/
+
 .docs:
   image: sphinxdoc/sphinx
   before_script:
