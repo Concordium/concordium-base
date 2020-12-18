@@ -150,6 +150,7 @@ The function body should set our counter state to 0, which is straight forward.
 ..     ensure_eq!(amount.micro_gtu, 0);
 
 Testing instantiation
+=====================
 
 A smart contract can be tested at several levels, which is described in detail
 <here>.
@@ -447,7 +448,7 @@ Testing increment
        let mut state = 0;
 
        // Call the receive function
-       let result : ReceiveResult<ActionsTree> = counter_increment(&ctx, amount, &mut logger, &mut state);
+       let result : ReceiveResult<ActionsTree> = counter_increment(&ctx, &mut state);
 
        // Inspect the result
        let actions = match result {

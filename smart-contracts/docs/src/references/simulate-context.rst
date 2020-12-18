@@ -1,3 +1,6 @@
+.. _RFC3339: https://tools.ietf.org/html/rfc3339
+
+
 .. _simulate-context:
 
 ===================
@@ -23,7 +26,12 @@ Example of context
             "finalizedHeight": 1,
             "slotTime": "2021-01-01T00:00:01Z"
         },
-        "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+        "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
+        "senderPolicies": [{
+            "identityProvider": 1,
+            "createdAt": "202012",
+            "validTo": "202109"
+        }]
     }
 
 ``metadata``
@@ -44,6 +52,11 @@ Example:
 
    "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
 
+``senderPolicies``
+------------------
+
+JSON array of the policies of the sender, see :ref:`context-sender-policy` for a
+reference a policy.
 
 Receive context
 ===============
@@ -68,6 +81,11 @@ Example of context:
             "type": "account",
             "address": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
         },
+        "senderPolicies": [{
+            "identityProvider": 1,
+            "createdAt": "202012",
+            "validTo": "202109"
+        }],
         "owner": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
     }
 
@@ -107,6 +125,12 @@ Example of contract address:
 .. code-block:: json
 
    { "type": "contract", "address": { "index": 0, "subindex": 0 } }
+
+``senderPolicies``
+------------------
+
+JSON array of the policies of the sender, see :ref:`context-sender-policy` for a
+reference a policy.
 
 ``owner``
 ---------
@@ -191,4 +215,37 @@ The block height of the last finalized block as a JSON number.
 
    Link definition of finalized blocks
 
-.. _RFC3339: https://tools.ietf.org/html/rfc3339
+.. _context-sender-policy:
+
+Policy
+======
+
+Both the init- and receive-context contains a list of policies of the sender.
+Such a policy is represented as a JSON Object.
+
+Example:
+
+.. code-block:: json
+
+   {
+       "identityProvider": 1,
+       "createdAt": "202012",
+       "validTo": "202109"
+   }
+
+``identityProvider``
+--------------------
+
+The id of the identity provider as a JSON number.
+
+``createdAt``
+-------------
+
+The year and month of the date this policy was created at, given as a JSON
+string in the format *YYYYMM*.
+
+``validTo``
+-------------
+
+The year and month of the date this policy is valid to, given as a JSON string
+in the format *YYYYMM*.
