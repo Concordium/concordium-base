@@ -19,7 +19,7 @@
 .. |ReceiveContextTest| replace:: ``ReceiveContextTest``
 .. _HasInitContext: https://docs.rs/concordium-std/latest/concordium_std/trait.HasInitContext.html
 .. |HasInitContext| replace:: ``HasInitContext``
-.. _HasActions: https://docs.rs/concordium-std/latest/concordium_std/trait.HasAction.html
+.. _HasActions: https://docs.rs/concordium-std/latest/concordium_std/trait.HasActions.html
 .. |HasActions| replace:: ``HasActions``
 .. _ActionsTree: https://docs.rs/concordium-std/latest/concordium_std/test_infrastructure/enum.ActionsTree.html
 .. |ActionsTree| replace:: ``ActionsTree``
@@ -33,11 +33,11 @@
 .. |set_sender| replace:: ``set_sender``
 .. _set_self_balance: https://docs.rs/concordium-std/latest/concordium_std/test_infrastructure/type.ReceiveContextTest.html#method.set_self_balance
 .. |set_self_balance| replace:: ``set_self_balance``
-.. _concordium_cfg_test: https://docs.rs/concordium-std/latest/concordium_std/test_infrastructure/attr.concordium_cfg_test.html
+.. _concordium_cfg_test: https://docs.rs/concordium-std/latest/concordium_std/attr.concordium_cfg_test.html
 .. |concordium_cfg_test| replace:: ``#[concordium_cfg_test]``
 .. _concordium_test: https://docs.rs/concordium-std/latest/concordium_std/attr.concordium_test.html
 .. |concordium_test| replace:: ``#[concordium_test]``
-.. _fail: https://docs.rs/concordium-std/latest/concordium_std/concordium_std/macro.fail.html
+.. _fail: https://docs.rs/concordium-std/latest/concordium_std/macro.fail.html
 .. |fail| replace:: ``fail!``
 .. _expect_report: https://docs.rs/concordium-std/latest/concordium_std/trait.ExpectReport.html#tymethod.expect_report
 .. |expect_report| replace:: ``expect_report``
@@ -45,6 +45,8 @@
 .. |claim| replace:: ``claim!``
 .. _claim_eq: https://docs.rs/concordium-std/latest/concordium_std/macro.claim_eq.html
 .. |claim_eq| replace:: ``claim_eq!``
+.. _ensure: https://docs.rs/concordium-std/latest/concordium_std/macro.ensure.html
+.. |ensure| replace:: ``ensure!``
 
 .. _piggy-bank-testing:
 
@@ -141,7 +143,7 @@ state.
 
    #[test]
    fn test_init() {
-
+      todo!("Implement")
    }
 
 As mentioned above, we test the initialization by calling the function
@@ -185,8 +187,8 @@ Next we assert the state is correctly set to ``Intact``:
       "Piggy bank state should be intact after initialization."
    );
 
-Putting it all together we end up with the following test for initializing a piggy
-bank:
+Putting it all together we end up with the following test for initializing a
+piggy bank:
 
 .. code-block:: rust
 
@@ -246,8 +248,8 @@ we add the result type ``ReceiveResult<ActionsTree>``:
 
    let actions_result: ReceiveResult<ActionsTree> = piggy_insert(&ctx, amount, &mut state);
 
-For testing we can represent the actions as a simple tree structure |ActionsTree|_, making it
-easy to inspect.
+For testing we can represent the actions as a simple tree structure
+|ActionsTree|_, making it easy to inspect.
 
 .. note::
 
@@ -365,8 +367,154 @@ in the previous tests:
 
 Ensure everything compiles and the tests succeeds using ``cargo test``.
 
-A few more tests can be written for the smashing function of our piggy bank, but
-it would not introduce any new concepts, and these are left to the reader.
+Testing cause of rejection
+==========================
+
+We want to test that our piggy bank rejects in certain contexts, for example
+when someone besides the owner of the smart contract tries to smash it.
+
+It would:
+
+- Make a context where the sender and owner are two different accounts.
+- Set the state to be intact.
+- Call ``piggy_smash``.
+- Check that the result is an error.
+
+The test could look like this:
+
+.. code-block:: rust
+
+   #[test]
+   fn test_smash_intact_not_owner() {
+       let mut ctx = ReceiveContextTest::empty();
+       let owner = AccountAddress([0u8; 32]);
+       ctx.set_owner(owner);
+       let sender = Address::Account(AccountAddress([1u8; 32]));
+       ctx.set_sender(sender);
+       let balance = Amount::from_micro_gtu(100);
+       ctx.set_self_balance(balance);
+
+       let mut state = PiggyBankState::Intact;
+
+       let actions_result: ReceiveResult<ActionsTree> = piggy_smash(&ctx, &mut state);
+
+       assert!(actions_result.is_err(), "Contract is expected to fail.")
+   }
+
+One thing to notice is that the test is not ensuring *why* the contract
+rejected, our piggy bank might reject for a wrong reason, and this would be a
+bug.
+This is probably fine for a simple smart contract like our piggy bank, but for a
+smart contract with more complex logic and many reasons for rejecting, it would
+be better if we tested this as well.
+
+To solve this we introduce a ``SmashError`` enum , to represent the different
+reasons for rejection:
+
+.. code-block:: rust
+
+   #[derive(Debug, PartialEq, Eq)]
+   enum SmashError {
+       NotOwner,
+       AlreadySmashed,
+   }
+
+To use this error type; the function ``piggy_smash`` should return ``Result<A,
+SmashError>`` instead of ``ReceiveResult<A>``:
+
+.. code-block:: rust
+   :emphasize-lines: 5
+
+   #[receive(contract = "PiggyBank", name = "smash")]
+   fn piggy_smash<A: HasActions>(
+       ctx: &impl HasReceiveContext,
+       state: &mut PiggyBankState,
+   ) -> Result<A, SmashError> {
+      // ...
+   }
+
+and we also have to supply the |ensure| macros with a second argument, which is
+the error to produce:
+
+.. code-block:: rust
+   :emphasize-lines: 9, 10
+
+   #[receive(contract = "PiggyBank", name = "smash")]
+   fn piggy_smash<A: HasActions>(
+       ctx: &impl HasReceiveContext,
+       state: &mut PiggyBankState,
+   ) -> Result<A, SmashError> {
+       let owner = ctx.owner();
+       let sender = ctx.sender();
+
+       ensure!(sender.matches_account(&owner), SmashError::NotOwner);
+       ensure!(*state == PiggyBankState::Intact, SmashError::AlreadySmashed);
+
+       *state = PiggyBankState::Smashed;
+
+       let balance = ctx.self_balance();
+       Ok(A::simple_transfer(&owner, balance))
+   }
+
+Since the return type have changed for the ``piggy_smash`` function, we have to
+change the type in the tests as well:
+
+.. code-block:: rust
+   :emphasize-lines: 5, 14
+
+   #[test]
+   fn test_smash_intact() {
+       // ...
+
+       let actions_result: Result<ActionsTree, SmashError> = piggy_smash(&ctx, &mut state);
+
+       // ...
+   }
+
+   #[test]
+   fn test_smash_intact_not_owner() {
+       // ...
+
+       let actions_result: Result<ActionsTree, SmashError> = piggy_smash(&ctx, &mut state);
+
+       // ...
+   }
+
+We can now check which error was produced in the test:
+
+.. code-block:: rust
+   :emphasize-lines: 15-19
+
+   #[test]
+   fn test_smash_intact_not_owner() {
+       let mut ctx = ReceiveContextTest::empty();
+       let owner = AccountAddress([0u8; 32]);
+       ctx.set_owner(owner);
+       let sender = Address::Account(AccountAddress([1u8; 32]));
+       ctx.set_sender(sender);
+       let balance = Amount::from_micro_gtu(100);
+       ctx.set_self_balance(balance);
+
+       let mut state = PiggyBankState::Intact;
+
+       let actions_result: ReceiveResult<ActionsTree> = piggy_smash(&ctx, &mut state);
+
+       let err = match actions_result {
+           Ok(_) => panic!("Contract is expected to fail."),
+           Err(err) => err
+       };
+       assert_eq!(err, SmashError::NotOwner, "Expected to fail with error NotOwner")
+   }
+
+We leave it up to the reader to test, whether smashing a piggy bank, that have
+already been smashed results in the correct error.
+
+.. warning::
+
+   On-chain, there is no way to tell for which reason a smart contract rejects,
+   since the blockchain would not have any use of this information.
+   Thus, introducing a custom error type is solely for the purpose of writing
+   better tests.
 
 Compile and running tests in Wasm
 =================================
@@ -385,7 +533,7 @@ top of our test module with |concordium_cfg_test|_ and all the ``#[test]``
 macros with |concordium_test|_.
 
 .. code-block:: rust
-   :emphasize-lines: 3, 8, 13, 18
+   :emphasize-lines: 3, 8, 13, 18, 23
 
    // PiggyBank contract code up here
 
@@ -408,6 +556,11 @@ macros with |concordium_test|_.
        fn test_smash_intact() {
            // ...
        }
+
+       #[concordium_test]
+       fn test_smash_intact_not_owner() {
+           // ...
+       }
    }
 
 We will also need to modify our tests a bit. Usually a test in Rust_ is failed
@@ -427,7 +580,7 @@ except when we build our smart contract for testing in Wasm using
 using ``cargo test``.
 
 .. code-block:: rust
-   :emphasize-lines: 14, 16, 31, 33, 34, 51, 52, 53
+   :emphasize-lines: 14, 16, 31, 33, 34, 51, 52, 53, 71, 74
 
    // PiggyBank contract code up here
 
@@ -438,50 +591,71 @@ using ``cargo test``.
 
       #[concordium_test]
       fn test_init() {
-         let ctx = InitContextTest::empty();
+          let ctx = InitContextTest::empty();
 
-         let state_result = piggy_init(&ctx);
+          let state_result = piggy_init(&ctx);
 
-         let state = state_result.expect_report("Contract initialization failed.");
+          let state = state_result.expect_report("Contract initialization failed.");
 
-         claim_eq!(
-               state,
-               PiggyBankState::Intact,
-               "Piggy bank state should be intact after initialization."
-         );
+          claim_eq!(
+                state,
+                PiggyBankState::Intact,
+                "Piggy bank state should be intact after initialization."
+          );
       }
 
       #[concordium_test]
       fn test_insert_intact() {
-         let ctx = ReceiveContextTest::empty();
-         let amount = Amount::from_micro_gtu(100);
-         let mut state = PiggyBankState::Intact;
+          let ctx = ReceiveContextTest::empty();
+          let amount = Amount::from_micro_gtu(100);
+          let mut state = PiggyBankState::Intact;
 
-         let actions_result: ReceiveResult<ActionsTree> = piggy_insert(&ctx, amount, &mut state);
+          let actions_result: ReceiveResult<ActionsTree> = piggy_insert(&ctx, amount, &mut state);
 
-         let actions = actions_result.expect_report("Inserting GTU results in error.");
+          let actions = actions_result.expect_report("Inserting GTU results in error.");
 
-         claim_eq!(actions, ActionsTree::accept(), "No action should be produced.");
-         claim_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
+          claim_eq!(actions, ActionsTree::accept(), "No action should be produced.");
+          claim_eq!(state, PiggyBankState::Intact, "Piggy bank state should still be intact.");
       }
 
       #[concordium_test]
       fn test_smash_intact() {
-         let mut ctx = ReceiveContextTest::empty();
-         let owner = AccountAddress([0u8; 32]);
-         ctx.set_owner(owner);
-         let sender = Address::Account(owner);
-         ctx.set_sender(sender);
-         let balance = Amount::from_micro_gtu(100);
-         ctx.set_self_balance(balance);
+          let mut ctx = ReceiveContextTest::empty();
+          let owner = AccountAddress([0u8; 32]);
+          ctx.set_owner(owner);
+          let sender = Address::Account(owner);
+          ctx.set_sender(sender);
+          let balance = Amount::from_micro_gtu(100);
+          ctx.set_self_balance(balance);
 
-         let mut state = PiggyBankState::Intact;
+          let mut state = PiggyBankState::Intact;
 
-         let actions_result: ReceiveResult<ActionsTree> = piggy_smash(&ctx, &mut state);
+          let actions_result: Result<ActionsTree, SmashError> = piggy_smash(&ctx, &mut state);
 
-         let actions = actions_result.expect_report("Inserting GTU results in error.");
-         claim_eq!(actions, ActionsTree::simple_transfer(&owner, balance));
-         claim_eq!(state, PiggyBankState::Smashed);
+          let actions = actions_result.expect_report("Inserting GTU results in error.");
+          claim_eq!(actions, ActionsTree::simple_transfer(&owner, balance));
+          claim_eq!(state, PiggyBankState::Smashed);
+      }
+
+      #[concordium_test]
+      fn test_smash_intact_not_owner() {
+          let mut ctx = ReceiveContextTest::empty();
+          let owner = AccountAddress([0u8; 32]);
+          ctx.set_owner(owner);
+          let sender = Address::Account(AccountAddress([1u8; 32]));
+          ctx.set_sender(sender);
+          let balance = Amount::from_micro_gtu(100);
+          ctx.set_self_balance(balance);
+
+          let mut state = PiggyBankState::Intact;
+
+          let actions_result: Result<ActionsTree, SmashError> = piggy_smash(&ctx, &mut state);
+
+          let err = match actions_result {
+              Ok(_) => fail!("Contract is expected to fail."),
+              Err(err) => err
+          };
+          claim_eq!(err, SmashError::NotOwner, "Expected to fail with error NotOwner")
       }
    }
 
