@@ -427,19 +427,18 @@ fn main() -> anyhow::Result<()> {
                                     eprint!("  - Assert return ... ");
                                     if let WastExecute::Invoke(invoke) = exec {
                                         let expected = mk_results(&results);
-                                        if results.len() <= 1 && expected.is_ok() {
-                                            if let Some(Some(artifact)) = modules.get_mut(
-                                                &invoke.module.map(|x| x.name().to_string()),
-                                            ) {
-                                                if let Ok(values) = mk_values(&invoke.args) {
-                                                    match invoke_update(
-                                                        artifact,
-                                                        invoke.name,
-                                                        &values,
-                                                    ) {
-                                                        Ok(v) => {
-                                                            let expected = expected.unwrap();
-                                                            fail_test!(
+                                        match expected {
+                                            Ok(expected) if results.len() <= 1 => {
+                                                if let Some(Some(artifact)) = modules.get_mut(
+                                                    &invoke.module.map(|x| x.name().to_string()),
+                                                ) {
+                                                    if let Ok(values) = mk_values(&invoke.args) {
+                                                        match invoke_update(
+                                                            artifact,
+                                                            invoke.name,
+                                                            &values,
+                                                        ) {
+                                                            Ok(v) => fail_test!(
                                                                 v != expected =>
                                                                 span,
                                                                 file_name,
@@ -448,59 +447,58 @@ fn main() -> anyhow::Result<()> {
                                                                     "Calling {}: {:?} != {:?}",
                                                                     invoke.name, v, expected
                                                                 )
-                                                            )
-                                                        }
-                                                        Err(e) => {
-                                                            if let Some(x) =
-                                                                e.downcast_ref::<RuntimeError>()
-                                                            {
-                                                                match x {
+                                                            ),
+                                                            Err(e) => {
+                                                                if let Some(x) =
+                                                                    e.downcast_ref::<RuntimeError>()
+                                                                {
+                                                                    match x {
                                                                 RuntimeError::DirectlyCallImport => {
                                                                     // OK, this is our own restriction.
                                                                 }
                                                             }
-                                                            } else if e
-                                                                .downcast_ref::<HostCallError>()
-                                                                .is_some()
-                                                            {
-                                                                // OK, this is
-                                                                // our
-                                                                // restriction
-                                                            } else {
-                                                                fail_test!(
-                                                                    span,
-                                                                    file_name,
-                                                                    input,
-                                                                    format!(
-                                                                        "Calling {}: {}",
-                                                                        invoke.name,
-                                                                        e.to_string()
+                                                                } else if e
+                                                                    .downcast_ref::<HostCallError>()
+                                                                    .is_some()
+                                                                {
+                                                                    // OK, this is
+                                                                    // our
+                                                                    // restriction
+                                                                } else {
+                                                                    fail_test!(
+                                                                        span,
+                                                                        file_name,
+                                                                        input,
+                                                                        format!(
+                                                                            "Calling {}: {}",
+                                                                            invoke.name,
+                                                                            e.to_string()
+                                                                        )
                                                                     )
-                                                                )
+                                                                }
                                                             }
                                                         }
+                                                        print_ok();
+                                                    } else {
+                                                        print_omitted_msg(
+                                                            span,
+                                                            &input,
+                                                            "Unsupported input types.",
+                                                        );
                                                     }
-                                                    print_ok();
                                                 } else {
                                                     print_omitted_msg(
                                                         span,
                                                         &input,
-                                                        "Unsupported input types.",
+                                                        "Unsupported module.",
                                                     );
                                                 }
-                                            } else {
-                                                print_omitted_msg(
-                                                    span,
-                                                    &input,
-                                                    "Unsupported module.",
-                                                );
                                             }
-                                        } else {
-                                            print_omitted_msg(
+                                            _ => print_omitted_msg(
                                                 span,
                                                 &input,
                                                 "Unsupported types or multiple return values.",
-                                            )
+                                            ),
                                         }
                                     } else {
                                         print_omitted_msg(
