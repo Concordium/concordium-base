@@ -12,13 +12,23 @@
 The piggy bank smart contract
 =============================
 
+.. todo::
+
+   Link the repo with the code
+
 In this tutorial, we are going to build a simple smart contract modelling a
 piggy bank.
-The goal is to give a run-through every part of the contract development
-process.
+It should allow any account to insert GTU, and only the owner to smash it,
+taking all of the GTU inside.
 
-You will learn the basics of how to write, test, deploy and interact with a
-smart contracts using the Rust_ programming language.
+In the first part, you will learn how to write the very basic piggy bank smart
+contract using the Rust_ programming language.
+
+The second part is about how to test our piggy bank smart contract with unit
+tests.
+
+In the third part we optimize this smart contract by reducing the Wasm module
+size and using more low level approaches.
 
 .. warning::
 
@@ -32,5 +42,4 @@ smart contracts using the Rust_ programming language.
 
    writing
    testing
-   deploy-interact
    optimize

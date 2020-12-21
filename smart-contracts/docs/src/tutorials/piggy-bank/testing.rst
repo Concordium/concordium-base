@@ -41,6 +41,8 @@
 .. |fail| replace:: ``fail!``
 .. _expect_report: https://docs.rs/concordium-std/latest/concordium_std/trait.ExpectReport.html#tymethod.expect_report
 .. |expect_report| replace:: ``expect_report``
+.. _expect_err_report: https://docs.rs/concordium-std/latest/concordium_std/trait.ExpectErrReport.html#tymethod.expect_err_report
+.. |expect_err_report| replace:: ``expect_err_report``
 .. _claim: https://docs.rs/concordium-std/latest/concordium_std/macro.claim.html
 .. |claim| replace:: ``claim!``
 .. _claim_eq: https://docs.rs/concordium-std/latest/concordium_std/macro.claim_eq.html
@@ -373,7 +375,7 @@ Testing cause of rejection
 We want to test that our piggy bank rejects in certain contexts, for example
 when someone besides the owner of the smart contract tries to smash it.
 
-It would:
+The test should:
 
 - Make a context where the sender and owner are two different accounts.
 - Set the state to be intact.
@@ -483,7 +485,7 @@ change the type in the tests as well:
 We can now check which error was produced in the test:
 
 .. code-block:: rust
-   :emphasize-lines: 15-19
+   :emphasize-lines: 15-16
 
    #[test]
    fn test_smash_intact_not_owner() {
@@ -499,10 +501,7 @@ We can now check which error was produced in the test:
 
        let actions_result: ReceiveResult<ActionsTree> = piggy_smash(&ctx, &mut state);
 
-       let err = match actions_result {
-           Ok(_) => panic!("Contract is expected to fail."),
-           Err(err) => err
-       };
+       let err = actions_result.expect_err("Contract is expected to fail.");
        assert_eq!(err, SmashError::NotOwner, "Expected to fail with error NotOwner")
    }
 
@@ -516,8 +515,8 @@ already been smashed results in the correct error.
    Thus, introducing a custom error type is solely for the purpose of writing
    better tests.
 
-Compile and running tests in Wasm
-=================================
+Compiling and running tests in Wasm
+===================================
 
 When running ``cargo test`` our contract module and tests are compiled targeting
 your native platform, but on the Concordium blockchain a smart contract module
@@ -570,7 +569,8 @@ Instead we need generate code reporting the error back to the host, who is
 running the Wasm, and to do so, |concordium-std| provides replacements:
 
 - A call to ``panic!`` should be replace with |fail|_.
-- The ``expect`` method should be replaced with |expect_report|_.
+- The ``expect`` and ``expect_err`` method should be replaced with
+  |expect_report|_ and |expect_err_report|_.
 - ``assert`` and ``assert_eq`` should be replace with |claim|_ and |claim_eq|_
   respectively.
 
@@ -580,7 +580,7 @@ except when we build our smart contract for testing in Wasm using
 using ``cargo test``.
 
 .. code-block:: rust
-   :emphasize-lines: 14, 16, 31, 33, 34, 51, 52, 53, 71, 74
+   :emphasize-lines: 14, 16, 31, 33, 34, 51, 52, 53, 70, 71
 
    // PiggyBank contract code up here
 
@@ -651,10 +651,7 @@ using ``cargo test``.
 
           let actions_result: Result<ActionsTree, SmashError> = piggy_smash(&ctx, &mut state);
 
-          let err = match actions_result {
-              Ok(_) => fail!("Contract is expected to fail."),
-              Err(err) => err
-          };
+          let err = actions_result.expect_err_report{"Contract is expected to fail.");
           claim_eq!(err, SmashError::NotOwner, "Expected to fail with error NotOwner")
       }
    }
@@ -664,3 +661,90 @@ Compiling and running the tests in Wasm can be done using:
 .. code-block:: console
 
    $cargo concordium test
+
+This will make a special test build of our smart contract module exporting all
+of our tests as functions and it will then run each of these functions catching
+the reported errors.
+
+Simulating the piggy bank
+=========================
+
+So far the tests we have written are in Rust_ and have to be compiled alongside
+the smart contract module in a test build, which is fine for unit testing, but
+this test build is not the actual module that we intend to deploy on the
+Concordium blockchain.
+
+We should also test the smart contract wasm module meant for deployment, and we
+can use the simulate feature of ``cargo-concordium``. It takes a smart contract
+wasm module and uses the Wasm interpreter to run a smart contract function in a
+given context.
+
+For more on how to do this: check out the guide :ref:`local-simulate`.
+
+
+
+.. First we need to build our piggy bank smart contract module using:
+
+.. .. code-block:: console
+
+..    $cargo concordium build --out piggy-module.wasm
+
+.. We add ``--out piggy-module.wasm`` to output the smart contract Wasm module in
+.. our current directory, making it more convenient to reference.
+
+.. Simulate piggy bank initialization
+.. ==================================
+
+.. To simulate the initializing of a piggy bank instance, we use ``cargo concordium
+.. run init`` given our smart contract module. We will also need to tell the
+.. command which smart contract in the module to initialize and describe the
+.. current context in a JSON file.
+
+.. Although our piggy bank smart contract does not depend on the context for
+.. initializing, the simulation tool still requires us to specify the context.
+.. Create a file ``init-context.json`` with the following content:
+
+.. .. code-block:: json
+
+..    {
+..        "metadata": {
+..            "slotNumber": 1,
+..            "blockHeight": 1,
+..            "finalizedHeight": 1,
+..            "slotTime": "2021-01-01T00:00:01Z"
+..        },
+..        "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
+..        "senderPolicies": []
+..    }
+
+.. Most of these fields are not gonna be relevant for the piggy bank smart contract
+.. and we refer the reader to :ref:`simulate-context` for a reference of what the
+.. different fields mean.
+
+.. We simulate the initialization of a piggy bank smart contract instance using the
+.. following command:
+
+.. .. code-block:: console
+
+..    $cargo concordium run init --module piggy-module.wasm \
+..                                --contract "PiggyBank" \
+..                                --context init-context.json
+
+.. The output should tell us the init call succeeded, and display the initial state
+.. of our piggy bank to be a list of bytes, only containing the value 0.
+
+.. This 0 represents the first variant in our ``PiggyBankState``, which is
+.. ``Intact``, since this is how the derived serialization would write it. The
+.. state ``Smashed`` is represented by the byte of value 1.
+
+.. .. note::
+
+..    As a smart contract developer it is important to understand how the contract
+..    state is serialized. However, it is possible to have tools like
+..    ``cargo-concordium`` represent the contract state using a more structured
+..    representation using :ref:`schemas<contract-schema>`, but this is out of the
+..    scope of this tutorial.
+
+.. Simulate smashing a piggy bank
+.. ==============================
+
