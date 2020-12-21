@@ -27,9 +27,6 @@ contract using the Rust_ programming language.
 The second part is about how to test our piggy bank smart contract with unit
 tests.
 
-In the third part we optimize this smart contract by reducing the Wasm module
-size and using more low level approaches.
-
 .. warning::
 
    The reader is assumed to have basic knowledge of what a blockchain and smart
@@ -42,4 +39,3 @@ size and using more low level approaches.
 
    writing
    testing
-   optimize
