@@ -16,6 +16,8 @@ use wast::{parser, AssertExpression, Expression, Span, Wast, WastExecute};
 struct TestCommand {
     #[structopt(name = "dir", long = "dir", help = "Directory with .wast files")]
     dir: PathBuf,
+    #[structopt(name = "out", long = "out", help = "Directory where to output .wasm modules")]
+    out_dir: Option<PathBuf>,
 }
 
 struct TrapHost;
@@ -214,6 +216,17 @@ fn main() -> anyhow::Result<()> {
         eprintln!("{}", warning_style.paint(format!("{}:{}:{} (Omitted)", line + 1, col, msg)));
     };
 
+    let mut out_counter = 0;
+
+    let mut maybe_output = |bytes: &[u8]| {
+        if let Some(dir) = cmd.out_dir.as_ref() {
+            let mut out_path = dir.clone();
+            out_path.push(format!("{}.wasm", out_counter));
+            std::fs::write(out_path, bytes).expect("Could not write the module.");
+            out_counter += 1;
+        }
+    };
+
     for entry in fs::read_dir(&cmd.dir)?.filter_map(Result::ok) {
         let meta = entry.metadata()?;
         if meta.is_file() {
@@ -231,6 +244,7 @@ fn main() -> anyhow::Result<()> {
                                 wast::WastDirective::Module(mut m) => {
                                     eprint!("  - Validating module ... ");
                                     let encoded = m.encode()?;
+                                    maybe_output(&encoded);
                                     match validate(&encoded) {
                                         Ok(module) => {
                                             match module.compile::<ArtifactNamedImport>() {
@@ -315,6 +329,7 @@ fn main() -> anyhow::Result<()> {
                                     match module {
                                         wast::QuoteModule::Module(mut m) => {
                                             let bytes = m.encode()?;
+                                            maybe_output(&bytes);
                                             fail_test!(
                                                 validate(&bytes).is_ok() =>
                                                 span,
@@ -343,6 +358,7 @@ fn main() -> anyhow::Result<()> {
                                     message,
                                 } => {
                                     let bytes = module.encode()?;
+                                    maybe_output(&bytes);
                                     fail_test!(
                                         validate(&bytes).is_ok() =>
                                         span,
