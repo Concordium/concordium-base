@@ -5,13 +5,10 @@
 
 use crate::{impls::*, traits::*, types::*};
 #[cfg(not(feature = "std"))]
-use alloc::collections;
+use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
-use core::{mem::MaybeUninit, slice};
+use alloc::{collections::*, string::String, vec::Vec};
 /// Contract schema related types
-use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::collections::*;
 #[cfg(feature = "derive-serde")]
@@ -168,10 +165,10 @@ impl SchemaType for Duration {
 }
 impl<T: SchemaType> SchemaType for Option<T> {
     fn get_type() -> Type {
-        Type::Enum(vec![
-            ("None".to_string(), Fields::None),
-            ("Some".to_string(), Fields::Unnamed(vec![T::get_type()])),
-        ])
+        Type::Enum(Vec::from([
+            (String::from("None"), Fields::None),
+            (String::from("Some"), Fields::Unnamed(Vec::from([T::get_type()]))),
+        ]))
     }
 }
 impl<L: SchemaType, R: SchemaType> SchemaType for (L, R) {
