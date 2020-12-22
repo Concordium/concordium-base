@@ -1,5 +1,6 @@
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
+.. _rust-analyzer: https://github.com/rust-analyzer/rust-analyzer
 
 .. _compile-module:
 
@@ -56,13 +57,13 @@ This uses Cargo_ for building, but runs further optimizations on the result.
 Removing host information from build
 ====================================
 
-The compiled Wasm module contains information from the host machine building the
-binary; information such as the absolute path of ``.cargo``.
+The compiled Wasm module can contain information from the host machine building
+the binary; information such as the absolute path of the ``.cargo`` directory.
 
 For most people this is not sensitive information, but it is important to be
-aware of.
+aware of it.
 
-The paths can be inspected by running:
+On Linux the paths can be inspected by running:
 
 .. code-block:: console
 
@@ -71,19 +72,22 @@ The paths can be inspected by running:
 .. rubric:: The solution
 
 The ideal solution would be to remove this path entirely, but that is
-unfortunately not a trivial task for the general case.
+unfortunately not a trivial task in general.
 
-The current fix is to use the ``--remap-path-prefix`` flag for the rust compiler
-to change the path being embedded.
-It can be passed using the ``RUSTFLAGS`` environment variable:
+It is possible to work around the issue by using the ``--remap-path-prefix``
+flag when compiling the contract.
+On Unix-like systems the flag can be passed directly to the ``cargo concordium``
+invocation using the ``RUSTFLAGS`` environment variable:
 
 .. code-block:: console
 
    $RUSTFLAGS="--remap-path-prefix=$HOME=" cargo concordium build
 
-Which will replace the users home path with the empty string.
+Which will replace the users home path with the empty string. Other paths could
+be mapped in a similar way. In general using ``--remap-path-prefix=from=to``
+will map ``from`` to ``to`` at the beginning of any embedded path.
 
-The flags can also be set permanently in the ``.cargo/config`` file in your
+The flag can also be set permanently in the ``.cargo/config`` file in your
 crate, under the build section:
 
 .. code-block:: toml
@@ -93,7 +97,14 @@ crate, under the build section:
 
 where `<user>` should be replaced with the user building the wasm module.
 
+Caveats
+-------
+
+The above will likely not fix the issue if the ``rust-src`` component is
+installed for the Rust toolchain. This component is needed by some Rust tools
+such as the rust-analyzer_.
+
 .. seealso::
 
-   If the above did not fix it, it might be because of an issue when
-   ``rust-src`` is used: https://github.com/rust-lang/rust/issues/73167
+   An issue reporting the problem with ``--remap-path-prefix`` and ``rust-src``
+   https://github.com/rust-lang/rust/issues/73167
