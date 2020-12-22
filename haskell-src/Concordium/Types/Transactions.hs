@@ -10,6 +10,7 @@ module Concordium.Types.Transactions where
 import Concordium.Common.Version
 import Control.Monad
 import Data.Aeson.TH
+import qualified Data.Sequence as Seq
 import Data.Aeson(FromJSON(..), ToJSON(..))
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
@@ -598,7 +599,7 @@ instance S.Serialize SpecialTransactionOutcome where
 -- number of transactions in the block, and ordered in the same way.
 data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
-    _outcomeSpecial :: ![SpecialTransactionOutcome]
+    _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
     } 
 
 makeLenses ''TransactionOutcomes
@@ -619,12 +620,12 @@ instance HashableTo TransactionOutcomesHash TransactionOutcomes where
     getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.encode transactionoutcomes
 
 emptyTransactionOutcomes :: TransactionOutcomes
-emptyTransactionOutcomes = TransactionOutcomes Vec.empty []
+emptyTransactionOutcomes = TransactionOutcomes Vec.empty Seq.empty
 
 transactionOutcomesFromList :: [TransactionSummary] -> TransactionOutcomes
 transactionOutcomesFromList l =
   let outcomeValues = Vec.fromList l
-      _outcomeSpecial = []
+      _outcomeSpecial = Seq.empty
   in TransactionOutcomes{..}
 
 type instance Index TransactionOutcomes = TransactionIndex
