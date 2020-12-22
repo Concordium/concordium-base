@@ -85,7 +85,6 @@ extern crate alloc;
 
 #[macro_use]
 mod impls;
-#[cfg(feature = "std")]
 pub mod schema;
 mod traits;
 mod types;
