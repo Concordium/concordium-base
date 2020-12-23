@@ -28,7 +28,7 @@ pub fn build_contract(
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
-    Command::new("cargo")
+    let result = Command::new("cargo")
         .arg("build")
         .args(&["--target", "wasm32-unknown-unknown"])
         .args(&["--release"])
@@ -38,6 +38,10 @@ pub fn build_contract(
         .stderr(Stdio::inherit())
         .output()
         .context("Could not use cargo build.")?;
+
+    if !result.status.success() {
+        anyhow::bail!("Compilation failed.")
+    }
 
     let filename = format!(
         "target/concordium/wasm32-unknown-unknown/release/{}.wasm",
@@ -86,7 +90,7 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
-    Command::new("cargo")
+    let result = Command::new("cargo")
         .arg("build")
         .args(&["--target", "wasm32-unknown-unknown"])
         .arg("--release")
@@ -96,7 +100,11 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
-        .context("Failed building contract schemas.")?;
+        .context("Could not run cargo build.")?;
+
+    if !result.status.success() {
+        anyhow::bail!("Compilation failed.");
+    }
 
     let filename = format!(
         "target/concordium/wasm32-unknown-unknown/release/{}.wasm",
