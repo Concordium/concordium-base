@@ -2147,6 +2147,23 @@ pub enum AccountCredential<
     },
 }
 
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Serial
+    for AccountCredential<P, C, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            AccountCredential::Initial { icdi } => {
+                out.write_u8(0).expect("Writing to buffer should succeed.");
+                icdi.serial(out)
+            }
+            AccountCredential::Normal { cdi } => {
+                out.write_u8(1).expect("Writing to buffer should succeed.");
+                cdi.serial(out)
+            }
+        }
+    }
+}
+
 /// A type encapsulating both types of credential values, analogous to
 /// AccountCredential.
 /// Serialization must match the one in Haskell.
