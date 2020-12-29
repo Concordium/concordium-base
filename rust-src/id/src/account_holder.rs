@@ -816,7 +816,7 @@ where
     let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
         proofs: ucdp,
-        unsigned_challenge
+        unsigned_challenge,
     };
     Ok(info)
 }
