@@ -278,8 +278,8 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
       withKeyArray ps (pk:pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
 
 -- |Create a proof of knowledge of your secret key
-proveKnowledgeOfSK :: ByteString -> SecretKey -> Proof
-proveKnowledgeOfSK context sk = Proof <$> unsafeDupablePerformIO $ do
+proveKnowledgeOfSK :: ByteString -> SecretKey -> IO Proof
+proveKnowledgeOfSK context sk = Proof <$> do
   -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
   proofPtr <- BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withSecretKey sk $ \sk' ->

@@ -6,6 +6,7 @@ import Concordium.Crypto.BlsSignature
 import Concordium.Crypto.DummyData
 import qualified Data.ByteString as BS
 import Test.QuickCheck
+import Test.QuickCheck.Monadic
 import Test.Hspec
 import Data.Serialize
 import qualified Data.Aeson as AE
@@ -47,25 +48,26 @@ testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
     in not (verify (BS.pack m1) pk sig2) && not (verify (BS.pack m2) pk sig1)
 
 testProofSoundness :: Property
-testProofSoundness = forAllKP $ \(sk, pk) c ->
-  let b = BS.pack c in
-  checkProofOfKnowledgeSK b (proveKnowledgeOfSK b sk) pk
+testProofSoundness = forAllKP $ \(sk, pk) c -> monadicIO $ do
+  let b = BS.pack c
+  proof <- run (proveKnowledgeOfSK b sk)
+  return $ checkProofOfKnowledgeSK b proof pk
 
 testProofNoContextCollision :: Property
 testProofNoContextCollision = forAllKP $ \(sk, pk) c1 c2 ->
   let b1 = BS.pack c1
       b2 = BS.pack c2 in
-  b1 /= b2 ==>
-    let proof = proveKnowledgeOfSK b1 sk in
-    not $ checkProofOfKnowledgeSK b2 proof pk
+  b1 /= b2 ==> monadicIO $ do
+    proof <- run (proveKnowledgeOfSK b1 sk)
+    return (not $ checkProofOfKnowledgeSK b2 proof pk)
 
 testProofWrongKey :: Property
 testProofWrongKey = forAllSK $ \sk1 ->
   forAllKP $ \(sk2, pk2) c ->
-    sk1 /= sk2 ==>
+    sk1 /= sk2 ==> monadicIO $ do
       let b = BS.pack c
-          proof = proveKnowledgeOfSK b sk1
-      in not $ checkProofOfKnowledgeSK b proof pk2
+      proof <- run (proveKnowledgeOfSK b sk1)
+      return . not $ checkProofOfKnowledgeSK b proof pk2
 
 testSerializeSecretKey :: Property
 testSerializeSecretKey = forAllSK $ \sk ->
@@ -81,9 +83,9 @@ testSerializeSignature = forAllSK $ \sk d ->
   Right sig === runGet get (runPut $ put sig)
 
 testSerializeProof :: Property
-testSerializeProof = forAllSK $ \sk d ->
-  let proof = proveKnowledgeOfSK (BS.pack d) sk in
-    Right proof === runGet get (runPut $ put proof)
+testSerializeProof = forAllSK $ \sk d -> monadicIO $ do
+  proof <- run (proveKnowledgeOfSK (BS.pack d) sk)
+  return $ Right proof === runGet get (runPut $ put proof)
 
 testSerializePublicKeyJSON :: Property
 testSerializePublicKeyJSON = forAllSK $ \sk ->
@@ -99,9 +101,9 @@ testSerializeSignatureJSON = forAllSK $ \sk d ->
   Just sig === AE.decode (AE.encode sig)
 
 testSerializeProofJSON :: Property
-testSerializeProofJSON = forAllSK $ \sk d ->
-  let proof = proveKnowledgeOfSK (BS.pack d) sk in
-  Just proof === AE.decode (AE.encode proof)
+testSerializeProofJSON = forAllSK $ \sk d -> monadicIO $ do
+  proof <- run (proveKnowledgeOfSK (BS.pack d) sk)
+  return $ Just proof === AE.decode (AE.encode proof)
 
 tests :: Spec
 tests = describe "Concordium.Crypto.BlsSignature" $ do
