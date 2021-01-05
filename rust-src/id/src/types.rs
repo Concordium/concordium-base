@@ -1577,6 +1577,9 @@ pub struct CredentialDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
+/// This is the CredentialDeploymentInfo structure, that instead of containing
+/// CredDeploymentProofs, it contains UnsignedCredDeploymentProofs, and
+/// the missing unsigned_challenge.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
@@ -1591,9 +1594,12 @@ pub struct UnsignedCredentialDeploymentInfo<
 > {
     #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
-    #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
+    #[serde(rename = "proofs")]
     pub proofs: UnsignedCredDeploymentProofs<P, C>,
-    /// Challenge from random oracle TODO: write out
+    /// Challenge from random oracle. This should be signed by the secret keys
+    /// that belongs to the account in the values. When signed, it can be used to
+    /// transform the UnsignedCredDeploymentProofs to
+    /// CredDeploymentProofs.
     #[serde(
         rename = "unsigned_challenge",
         serialize_with = "base16_encode",
