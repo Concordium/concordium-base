@@ -1079,29 +1079,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     }
 }
 
+/// This structure should be identitical to CredDeploymentProofs, except that
+/// the AccountOwnershipProof (proof_acc_sk) field is missing.
 #[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
 pub struct UnsignedCredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// (Blinded) Signature derived from the signature on the pre-identity
-    /// object by the IP
     pub sig: BlindedSignature<P>,
-    /// list of  commitments to the attributes .
     pub commitments: CredentialDeploymentCommitments<C>,
-    /// Challenge used for all of the proofs.
     pub challenge: Challenge,
-    /// Witnesses to the proof that the computed commitment to the share
-    /// contains the same value as the encryption
-    /// the commitment to the share is not sent but computed from
-    /// the commitments to the sharing coefficients
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
-    /// Witnesses for proof of knowledge of signature of Identity Provider on
-    /// the list
-    /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
-    /// AR[1], ..., AR[m])```
     pub proof_ip_sig: com_eq_sig::Witness<P, C>,
-    /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
-    /// from the prf key signed by the identity provider.
     pub proof_reg_id: com_mult::Witness<C>,
-    /// Proof that cred_counter is less than or equal to max_accounts
     pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
 
@@ -1597,8 +1584,8 @@ pub struct UnsignedCredentialDeploymentInfo<
     #[serde(rename = "proofs")]
     pub proofs: UnsignedCredDeploymentProofs<P, C>,
     /// Challenge from random oracle. This should be signed by the secret keys
-    /// that belongs to the account in the values. When signed, it can be used to
-    /// transform the UnsignedCredDeploymentProofs to
+    /// that belongs to the account in the values. When signed, it can be used
+    /// to transform the UnsignedCredDeploymentProofs to
     /// CredDeploymentProofs.
     #[serde(
         rename = "unsigned_challenge",

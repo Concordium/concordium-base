@@ -565,6 +565,12 @@ where
     Ok(info)
 }
 
+/// Generates an unsigned credential deployment info.
+/// The information is meant to be valid in the context of a given identity
+/// provider, and global parameter.
+/// The 'cred_counter' is used to generate a new credential ID.
+/// It should be the case that using the output, one can construct an actual
+/// credential deployment info, by signing the unsigned challenge.
 pub fn create_unsigned_credential<
     'a,
     P: Pairing,
