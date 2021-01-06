@@ -285,24 +285,13 @@ impl Deserial for Address {
 }
 
 impl Serial for ChainMetadata {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.slot_number.serial(out)?;
-        self.block_height.serial(out)?;
-        self.finalized_height.serial(out)?;
-        self.slot_time.serial(out)
-    }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.slot_time.serial(out) }
 }
 
 impl Deserial for ChainMetadata {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let slot_number = source.get()?;
-        let block_height = source.get()?;
-        let finalized_height = source.get()?;
         let slot_time = source.get()?;
         Ok(Self {
-            slot_number,
-            block_height,
-            finalized_height,
             slot_time,
         })
     }
