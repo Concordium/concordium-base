@@ -419,11 +419,11 @@ data Event =
                ecAddress :: !ContractAddress,
                -- |Initial amount transferred to the contract.
                ecAmount :: !Amount,
+               -- |Name of the contract init function being called
+               ecInitName :: Wasm.InitName,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
-               ecEvents :: [Wasm.ContractEvent],
-               -- |Name of the contract init function being called
-               ecInitName :: Wasm.InitName
+               ecEvents :: [Wasm.ContractEvent]
                -- TODO: We could include initial state hash here.
                -- Including the whole state is likely not a good idea.
                }
@@ -437,11 +437,11 @@ data Event =
                euAmount :: !Amount,
                -- |The message which was sent to the contract.
                euMessage :: !Wasm.Parameter,
+               -- |Name of the contract receive function being called
+               euReceiveName :: Wasm.ReceiveName,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
-               euEvents :: [Wasm.ContractEvent],
-               -- |Name of the contract receive function being called
-               euReceiveName :: Wasm.ReceiveName
+               euEvents :: [Wasm.ContractEvent]
                -- TODO: We could include input/output state hashes here
                -- Including the whole state pre/post run is likely not a good idea.
                }
