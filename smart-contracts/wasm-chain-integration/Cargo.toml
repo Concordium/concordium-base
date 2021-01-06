@@ -23,7 +23,7 @@ version = "0"
 [dependencies.concordium-contracts-common]
 version = "0.2"
 git = "https://github.com/Concordium/concordium-contracts-common.git"
-branch = "main"
+branch = "streamline-context"
 # path = "../../../concordium-contracts-common/"
 features = ["derive-serde"]
 

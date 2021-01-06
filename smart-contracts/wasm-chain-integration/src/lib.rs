@@ -374,17 +374,8 @@ fn call_common<C: HasCommon>(
         CommonFunc::StateSize => {
             stack.push_value(host.state().len());
         }
-        CommonFunc::GetSlotNumber => {
-            stack.push_value(host.metadata().slot_number);
-        }
         CommonFunc::GetSlotTime => {
             stack.push_value(host.metadata().slot_time.timestamp_millis());
-        }
-        CommonFunc::GetBlockHeight => {
-            stack.push_value(host.metadata().block_height);
-        }
-        CommonFunc::GetFinalizedHeight => {
-            stack.push_value(host.metadata().finalized_height);
         }
     }
     Ok(())
