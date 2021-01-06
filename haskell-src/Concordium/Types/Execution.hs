@@ -419,6 +419,8 @@ data Event =
                ecAddress :: !ContractAddress,
                -- |Initial amount transferred to the contract.
                ecAmount :: !Amount,
+               -- |Name of the contract init function being called
+               ecInitName :: Wasm.InitName,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
                ecEvents :: [Wasm.ContractEvent]
@@ -435,6 +437,8 @@ data Event =
                euAmount :: !Amount,
                -- |The message which was sent to the contract.
                euMessage :: !Wasm.Parameter,
+               -- |Name of the contract receive function being called
+               euReceiveName :: Wasm.ReceiveName,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
                euEvents :: [Wasm.ContractEvent]
