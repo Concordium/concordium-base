@@ -229,8 +229,6 @@ fn main() -> std::io::Result<()> {
 
         let id_object_use_data = IdObjectUseData { aci, randomness };
 
-        let acc_num = 53;
-
         let icdi = create_initial_cdi(
             &ip_data.public_ip_info,
             id_object.pre_identity_object.pub_info_for_ip,
@@ -259,7 +257,7 @@ fn main() -> std::io::Result<()> {
         let enc_key = id_object_use_data
             .aci
             .prf_key
-            .prf_exponent(acc_num)
+            .prf_exponent(id::constants::INITIAL_CREDENTIAL_INDEX)
             .unwrap();
         let secret_key = elgamal::SecretKey {
             generator: *global_ctx.elgamal_generator(),
