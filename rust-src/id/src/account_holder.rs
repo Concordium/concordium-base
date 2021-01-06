@@ -540,21 +540,14 @@ where
         policy,
         acc_data,
     )?;
-    let unsigned_proofs = unsigned_credential_info.proofs;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: acc_data.sign_challenge(&unsigned_credential_info.unsigned_challenge),
+        sigs: acc_data.sign_challenge(&unsigned_credential_info.account_ownership_challenge),
     };
 
     let cdp = CredDeploymentProofs {
-        sig: unsigned_proofs.sig,
-        commitments: unsigned_proofs.commitments,
-        challenge: unsigned_proofs.challenge,
-        proof_id_cred_pub: unsigned_proofs.proof_id_cred_pub,
-        proof_reg_id: unsigned_proofs.proof_reg_id,
-        proof_ip_sig: unsigned_proofs.proof_ip_sig,
+        id_proofs: unsigned_credential_info.proofs,
         proof_acc_sk,
-        cred_counter_less_than_max_accounts: unsigned_proofs.cred_counter_less_than_max_accounts,
     };
 
     let info = CredentialDeploymentInfo {
@@ -683,7 +676,7 @@ where
         // we are deploying on a new account
         // take all the keys that
         Either::Left(threshold) => {
-            CredentialAccount::NewAccount(acc_data.get_public_keys(), threshold)
+            CredentialAccount::NewAccount(acc_data.get_public_keys().to_vec(), threshold)
         }
         Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
     };
@@ -806,7 +799,7 @@ where
     // credential deployment should make it non-reusable.
     let unsigned_challenge = ro.get_challenge();
 
-    let ucdp = UnsignedCredDeploymentProofs {
+    let id_proofs = IdOwnershipProofs {
         sig: blinded_sig,
         commitments,
         challenge: proof.challenge,
@@ -821,8 +814,8 @@ where
 
     let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
-        proofs: ucdp,
-        unsigned_challenge,
+        proofs: id_proofs,
+        account_ownership_challenge: unsigned_challenge,
     };
     Ok(info)
 }

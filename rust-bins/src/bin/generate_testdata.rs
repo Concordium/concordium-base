@@ -287,7 +287,7 @@ fn main() {
         let cdi_coms_file = File::create("cdi-coms.bin");
         if let Err(err) = cdi_coms_file
             .unwrap()
-            .write_all(&to_bytes(&cdi_1.proofs.commitments))
+            .write_all(&to_bytes(&cdi_1.proofs.id_proofs.commitments))
         {
             eprintln!(
                 "Could not output binary file cdi-coms.bin, because {}.",

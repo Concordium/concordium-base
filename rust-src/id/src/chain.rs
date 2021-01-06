@@ -62,7 +62,14 @@ pub fn verify_cdi<
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
     let rt_usize: usize = cdi.values.threshold.into();
-    if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
+    if rt_usize
+        != cdi
+            .proofs
+            .id_proofs
+            .commitments
+            .cmm_id_cred_sec_sharing_coeff
+            .len()
+    {
         return Err(CDIVerificationError::AR);
     }
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
@@ -73,7 +80,7 @@ pub fn verify_cdi<
     ro.append_message(b"cred_values", &cdi.values);
     ro.append_message(b"global_context", &global_context);
 
-    let commitments = &cdi.proofs.commitments;
+    let commitments = &cdi.proofs.id_proofs.commitments;
 
     // We now need to construct a uniform verifier
     // since we cannot check proofs independently.
@@ -87,7 +94,7 @@ pub fn verify_cdi<
         cmm_key: on_chain_commitment_key,
     };
     // FIXME: Figure out a pattern to get rid of these clone's.
-    let witness_reg_id = cdi.proofs.proof_reg_id.clone();
+    let witness_reg_id = cdi.proofs.id_proofs.proof_reg_id.clone();
 
     let cdv = &cdi.values;
     let proofs = &cdi.proofs;
@@ -103,7 +110,7 @@ pub fn verify_cdi<
         &cdi.values.policy,
         &commitments,
         &ip_verify_key,
-        &cdi.proofs.sig,
+        &cdi.proofs.id_proofs.sig,
     );
     let verifier_sig = if let Some(v) = verifier_sig {
         v
@@ -111,14 +118,14 @@ pub fn verify_cdi<
         return Err(CDIVerificationError::Signature);
     };
 
-    let witness_sig = cdi.proofs.proof_ip_sig.clone();
+    let witness_sig = cdi.proofs.id_proofs.proof_ip_sig.clone();
 
     let (id_cred_pub_verifier, id_cred_pub_witnesses) = id_cred_pub_verifier(
         &on_chain_commitment_key,
         known_ars,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
-        &cdi.proofs.proof_id_cred_pub,
+        &cdi.proofs.id_proofs.proof_id_cred_pub,
     )?;
 
     let verifier = AndAdapter {
@@ -134,7 +141,7 @@ pub fn verify_cdi<
         w2: id_cred_pub_witnesses,
     };
     let proof = SigmaProof {
-        challenge: cdi.proofs.challenge,
+        challenge: cdi.proofs.id_proofs.challenge,
         witness,
     };
 
@@ -145,9 +152,9 @@ pub fn verify_cdi<
     if !verify_less_than_or_equal(
         &mut ro,
         8,
-        &cdi.proofs.commitments.cmm_cred_counter,
-        &cdi.proofs.commitments.cmm_max_accounts,
-        &cdi.proofs.cred_counter_less_than_max_accounts,
+        &cdi.proofs.id_proofs.commitments.cmm_cred_counter,
+        &cdi.proofs.id_proofs.commitments.cmm_max_accounts,
+        &cdi.proofs.id_proofs.cred_counter_less_than_max_accounts,
         &gens,
         &on_chain_commitment_key,
     ) {
