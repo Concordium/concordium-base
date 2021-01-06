@@ -51,8 +51,8 @@ linuxBuild False env verbosity = do
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
   let copyLib lib = do
-        rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
-        rawSystemExit verbosity "cp" ["rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
+        rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
+        rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
         notice verbosity $ "Copied " ++ lib ++ "."
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true")  : env)
   notice verbosity "Copying libraries to ./lib"

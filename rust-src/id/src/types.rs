@@ -37,9 +37,11 @@ use std::{
     str::FromStr,
 }; // only for account addresses
 
-/// NB: This includes digits of PI (starting with 14...) as ASCII characters
+/// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
-pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.txt");
+/// Note that this file currently consists of 999 digits, followed by the
+/// LF character (0x0a).
+pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.dat");
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
