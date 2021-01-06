@@ -7,3 +7,6 @@ pub type IpPairing = pairing::bls12_381::Bls12;
 /// Field used by the identity provider and anonymity revoker.
 /// This isthe base field of both the ArCurve and the IpPairing.
 pub type BaseField = <pairing::bls12_381::Bls12 as Pairing>::ScalarField;
+
+/// Index used to create the RegId of the initial credential.
+pub const INITIAL_CREDENTIAL_INDEX: u8 = 0;

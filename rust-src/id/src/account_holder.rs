@@ -44,7 +44,7 @@ pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // From create_credential:
     // let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let reg_id_exponent = match prf_key.prf_exponent(0) {
+    let reg_id_exponent = match prf_key.prf_exponent(crate::constants::INITIAL_CREDENTIAL_INDEX) {
         Ok(exp) => exp,
         Err(_) => return None,
     };
