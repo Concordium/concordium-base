@@ -623,10 +623,7 @@ pub type SlotTime = Timestamp;
     serde(rename_all = "camelCase")
 )]
 pub struct ChainMetadata {
-    pub slot_number:      SlotNumber,
-    pub block_height:     BlockHeight,
-    pub finalized_height: FinalizedHeight,
-    pub slot_time:        SlotTime,
+    pub slot_time: SlotTime,
 }
 
 /// Add offset tracking inside a data structure.
