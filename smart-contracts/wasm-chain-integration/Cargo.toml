@@ -21,7 +21,7 @@ path = "../wasm-transform"
 version = "0"
 
 [dependencies.concordium-contracts-common]
-version = "0.2"
+version = "0.3"
 git = "https://github.com/Concordium/concordium-contracts-common.git"
 branch = "streamline-context"
 # path = "../../../concordium-contracts-common/"
