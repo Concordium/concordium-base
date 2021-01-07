@@ -796,19 +796,10 @@ instance S.Serialize BlockHeight where
 
 
 -- |Blockchain metadata as needed by contract execution.
-data ChainMetadata =
-  ChainMetadata { slotNumber :: Slot
-                -- |Height of the current block (the block which the transaction is going to be a part of).
-                , blockHeight :: BlockHeight
-                -- |Height of the last finalized block. NB: Each block has a
-                -- pointer to the last finalized block, and this field is the
-                -- height of that block. This information is stable with respect
-                -- to time. In the future a block between that block and the
-                -- current block might become finalized, so the distance
-                -- blockHeight - finalizedHeight is an upper bound only.
-                , finalizedHeight :: BlockHeight
+newtype ChainMetadata =
+  ChainMetadata {
                 -- |Time at the beginning of the slot.
-                , slotTime :: Timestamp
+                slotTime :: Timestamp
                 }
 
 -- |Encode chain metadata for passing over FFI. Uses little-endian encoding
@@ -817,11 +808,7 @@ data ChainMetadata =
 -- misused, since it differs in endianness from most other network-related serialization.
 encodeChainMeta :: ChainMetadata -> ByteString
 encodeChainMeta ChainMetadata{..} = S.runPut encoder
-  where encoder =
-          P.putWord64le (fromIntegral slotNumber) <>
-          P.putWord64le (fromIntegral blockHeight) <>
-          P.putWord64le (fromIntegral finalizedHeight) <>
-          P.putWord64le (tsMillis slotTime)
+  where encoder = P.putWord64le (tsMillis slotTime)
 
 -- |The hash of a transaction which is then signed.
 -- (Naturally, this does not include the transaction signature.)
