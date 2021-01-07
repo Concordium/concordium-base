@@ -60,7 +60,10 @@ genProtocolUpdate = do
         return ProtocolUpdate{..}
 
 genMintRate :: Gen MintRate
-genMintRate = MintRate <$> arbitrary <*> arbitrary
+genMintRate = do
+  mrExponent <- arbitrary
+  mrMantissa <- choose (0, fromIntegral (min (toInteger (maxBound :: Word32)) (10^mrExponent)))
+  return MintRate{..}
 
 genExchangeRate :: Gen ExchangeRate
 genExchangeRate = do
