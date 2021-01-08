@@ -34,7 +34,7 @@ The return value is either
 - status code 4\*\* in which case the given transaction submissionId is malformed, e.g., not a valid hash.
 - status code 5\*\* in which case an internal server error occurred, the query should be retried after some time.
 - status code 2\*\* in which case the return value is a JSON object with fields
-  * status (mandatory) with a value of one of "finalized", "committed", "absent", "pending". Finalized and absent are final states. Finalized means the account creation is finalized, absent means that the transaction was invalid and was rejected. Pending is before the transaction is in any blocks, and committed means that it is in one or more blocks, but not yet finalized.
+  * status (mandatory) with a value of one of "finalized", "committed", "absent", "received". Finalized and absent are final states. Finalized means the account creation is finalized, absent means that the transaction was invalid and was rejected. Received is before the transaction is in any blocks, and committed means that it is in one or more blocks, but not yet finalized.
   * blockHashes (optional) is a JSON object that is only present if the transaction is committed or finalized. This provides no additional information that is relevant for the identity provider at the moment.
 
 The identity provider is responsible for ensuring that the initial account creation transaction is successfully finalized and it should not return the identity object before this is completed.
