@@ -63,8 +63,10 @@ module Concordium.Wasm (
   -- contain several contracts.
   InitName(..),
   isValidInitName,
+  initContractName,
   ReceiveName(..),
   isValidReceiveName,
+  contractAndFunctionName,
   Parameter(..),
 
   -- *** Module interface
@@ -266,6 +268,15 @@ isValidReceiveName proposal =
   let hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
       hasDot = Text.any (== '.') proposal
   in hasValidCharacters && hasDot
+
+-- |Extract the contract name from the init function name.
+initContractName :: InitName -> Text
+initContractName = Text.drop (Text.length "init_") . initName
+
+-- |Extract the contract and function names from the receive name.
+contractAndFunctionName :: ReceiveName -> (Text, Text)
+contractAndFunctionName (ReceiveName n) = (cname, Text.drop 1 fname)
+    where (cname, fname) = Text.span (/= '.') n
 
 instance AE.FromJSON ReceiveName where
   parseJSON = AE.withText "ReceiveName" $ \receiveName -> do
