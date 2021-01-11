@@ -243,7 +243,7 @@ pub fn test_pipeline() {
         "VALUES Deserialization must be successful."
     );
 
-    let cdi_commitments = serialize_deserialize(&cdi.proofs.commitments);
+    let cdi_commitments = serialize_deserialize(&cdi.proofs.id_proofs.commitments);
     assert!(
         cdi_commitments.is_ok(),
         "commitments Deserialization must be successful."
@@ -262,8 +262,8 @@ pub fn test_pipeline() {
     // For now we just check that the last item in the proofs deserialized
     // correctly.
     assert_eq!(
-        des.unwrap().proofs.proof_reg_id,
-        cdi.proofs.proof_reg_id,
+        des.unwrap().proofs.id_proofs.proof_reg_id,
+        cdi.proofs.id_proofs.proof_reg_id,
         "It should deserialize back to what we started with."
     );
 
