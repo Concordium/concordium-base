@@ -12,7 +12,6 @@ use bulletproofs::{
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as ed25519;
 use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
@@ -529,8 +528,55 @@ pub fn create_credential<
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
-    acc_data: &AccountData,
+    acc_data: &impl AccountDataWithSigning,
 ) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
+where
+    AttributeType: Clone, {
+    let unsigned_credential_info = create_unsigned_credential(
+        context,
+        id_object,
+        id_object_use_data,
+        cred_counter,
+        policy,
+        acc_data,
+    )?;
+
+    let proof_acc_sk = AccountOwnershipProof {
+        sigs: acc_data.sign_challenge(&unsigned_credential_info.account_ownership_challenge),
+    };
+
+    let cdp = CredDeploymentProofs {
+        id_proofs: unsigned_credential_info.proofs,
+        proof_acc_sk,
+    };
+
+    let info = CredentialDeploymentInfo {
+        values: unsigned_credential_info.values,
+        proofs: cdp,
+    };
+
+    Ok(info)
+}
+
+/// Generates an unsigned credential deployment info.
+/// The information is meant to be valid in the context of a given identity
+/// provider, and global parameter.
+/// The 'cred_counter' is used to generate a new credential ID.
+/// It should be the case that using the output, one can construct an actual
+/// credential deployment info, by signing the unsigned challenge.
+pub fn create_unsigned_credential<
+    'a,
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    context: IPContext<'a, P, C>,
+    id_object: &IdentityObject<P, C, AttributeType>,
+    id_object_use_data: &IdObjectUseData<P, C>,
+    cred_counter: u8,
+    policy: Policy<C, AttributeType>,
+    acc_data: &impl PublicAccountData,
+) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -626,17 +672,12 @@ where
         &mut csprng,
     )?;
 
-    let cred_account = match acc_data.existing {
+    let cred_account = match acc_data.get_existing() {
         // we are deploying on a new account
         // take all the keys that
-        Either::Left(threshold) => CredentialAccount::NewAccount(
-            acc_data
-                .keys
-                .values()
-                .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-                .collect::<Vec<_>>(),
-            threshold,
-        ),
+        Either::Left(threshold) => {
+            CredentialAccount::NewAccount(acc_data.get_public_keys().to_vec(), threshold)
+        }
         Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
     };
 
@@ -756,20 +797,9 @@ where
     //
     // The domain seperator in combination with appending all the data of the
     // credential deployment should make it non-reusable.
-    let to_sign = ro.get_challenge();
+    let unsigned_challenge = ro.get_challenge();
 
-    let proof_acc_sk = AccountOwnershipProof {
-        sigs: acc_data
-            .keys
-            .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
-            })
-            .collect(),
-    };
-
-    let cdp = CredDeploymentProofs {
+    let id_proofs = IdOwnershipProofs {
         sig: blinded_sig,
         commitments,
         challenge: proof.challenge,
@@ -779,13 +809,13 @@ where
             .collect(),
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
-        proof_acc_sk,
         cred_counter_less_than_max_accounts,
     };
 
-    let info = CredentialDeploymentInfo {
+    let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
-        proofs: cdp,
+        proofs: id_proofs,
+        account_ownership_challenge: unsigned_challenge,
     };
     Ok(info)
 }
