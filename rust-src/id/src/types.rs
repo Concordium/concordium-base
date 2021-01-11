@@ -1006,8 +1006,12 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 // This is an unfortunate situation, but we need to manually write a
-// serialization instance for the proofs so that we can insert the length of the
-// whole proof upfront. This is needed for easier interoperability with Haskell.
+// serialization instance for the proofs, so that we can insert the length of
+// the whole proof upfront. This is needed for easier interoperability with
+// Haskell. NB: The IdOwnershipProofs structure was introduced at a point
+// where the serialization was locked, so we could not change the serialization,
+// and because of the order of the serialization, we could not isolate the
+// IdOwnershipProofs' serialization without making breaking changes.
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentProofs<P, C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let mut tmp_out = Vec::new();
