@@ -463,12 +463,9 @@ async fn followup(
                                                 "An account creation transaction has gone \
                                                  missing. This indicates a configuration error."
                                             ),
-                                            SubmissionStatus::Received => {} /* do nothing, wait
-                                                                               * for the next
-                                                                               * call */
-                                            SubmissionStatus::Committed => {} /* do nothing, wait
-                                                                               * for the next
-                                                                               * call */
+                                            // do nothing, wait for the next call
+                                            SubmissionStatus::Received => {}
+                                            SubmissionStatus::Committed => {}
                                         }
                                     }
                                     Err(e) => error!(
@@ -517,7 +514,8 @@ async fn get_identity_token(
         server_config.submit_credential_url.clone(),
         query_url_base,
         id_cred_pub.clone(),
-    ).await;
+    )
+    .await;
 
     // If the initial account creation transaction is still not finalized, then we
     // return a pending object to the caller to indicate that the identity is
