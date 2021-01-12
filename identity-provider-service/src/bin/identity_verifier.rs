@@ -36,7 +36,7 @@ struct Config {
         long = "identity-provider-public",
         help = "File with the versioned public identity provider information as JSON.",
         default_value = "identity_provider.pub.json",
-        env = "IDENTITY_PROVIDER"
+        env = "IDENTITY_PROVIDER_PUBLIC"
     )]
     identity_provider_pub_file: PathBuf,
 }
