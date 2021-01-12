@@ -1,8 +1,13 @@
 use std::{collections::BTreeMap, fs};
 
-use log::info;
+use crypto_common::Versioned;
+use ed25519_dalek::{ed25519::signature::Signature, Verifier};
+use id::{constants::IpPairing, types::IpInfo};
+use log::{error, info};
 use reqwest::header::LOCATION;
 use rust_embed::RustEmbed;
+use serde_json::from_str;
+use std::{path::PathBuf, sync::Arc};
 use structopt::StructOpt;
 use url::Url;
 use warp::{
@@ -27,6 +32,13 @@ struct Config {
         env = "IDENTITY_PROVIDER_URL"
     )]
     id_provider_url: Url,
+    #[structopt(
+        long = "identity-provider-public",
+        help = "File with the versioned public identity provider information as JSON.",
+        default_value = "identity_provider.pub.json",
+        env = "IDENTITY_PROVIDER"
+    )]
+    identity_provider_pub_file: PathBuf,
 }
 
 #[derive(RustEmbed)]
@@ -50,6 +62,10 @@ async fn main() {
         .unwrap()
         .to_string();
 
+    let ip_data_contents = fs::read_to_string(&opt.identity_provider_pub_file).unwrap();
+    let versioned_ip_data: Versioned<IpInfo<IpPairing>> = from_str(&ip_data_contents).unwrap();
+    let ip_data_arc = Arc::new(versioned_ip_data.value);
+
     let database_root = std::path::Path::new("database").to_path_buf();
     fs::create_dir_all(database_root.join("attributes"))
         .expect("Unable to create attributes database directory.");
@@ -60,20 +76,25 @@ async fn main() {
     // WARNING: This is not secure and is only for demonstration purposes. The
     // id_cred_pub value is a fairly sensitive value that should not be passed
     // around insecurely.
-    let identity_verifier =
-        warp::get()
-            .and(warp::path!("api" / "verify" / String))
-            .map(move |id_cred_pub: String| {
-                info!(
-                    "Received request to present attribute form for {}",
-                    id_cred_pub
-                );
-                let id_cred_pub_attribute_form =
-                    str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
-                Response::builder()
-                    .header(CONTENT_TYPE, "text/html")
-                    .body(id_cred_pub_attribute_form)
-            });
+    let identity_verifier = warp::get()
+        .and(warp::path!("api" / "verify" / String / String))
+        .map(move |id_cred_pub: String, signed_id_cred_pub: String| {
+            info!(
+                "Received request to present attribute form for {}",
+                id_cred_pub
+            );
+
+            let mut id_cred_pub_attribute_form =
+                str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
+            id_cred_pub_attribute_form = str::replace(
+                id_cred_pub_attribute_form.as_str(),
+                "$id_cred_pub_signature$",
+                &signed_id_cred_pub,
+            );
+            Response::builder()
+                .header(CONTENT_TYPE, "text/html")
+                .body(id_cred_pub_attribute_form)
+        });
 
     // The path for submitting an attribute list. The attribute list is serialized
     // as JSON and saved to the file database. If successful, then forward the
@@ -89,7 +110,54 @@ async fn main() {
                         "Saving verified attributes and forwarding user back to identity provider."
                     );
                     let id_cred_pub = input.get("id_cred_pub").unwrap().clone();
+                    let id_cred_pub_bytes = hex::decode(&id_cred_pub).unwrap();
                     input.remove("id_cred_pub");
+
+                    let id_cred_pub_signature = input.get("id_cred_pub_signature").unwrap().clone();
+                    input.remove("id_cred_pub_signature");
+
+                    // Verify that the signature comes from the identity provider, otherwise reject
+                    // the request. This prevents the submission of attributes for an
+                    // id_cred_pub that has not been processed by the identity provider.
+                    let signature_as_bytes = match hex::decode(id_cred_pub_signature) {
+                        Ok(hex_value) => hex_value,
+                        Err(error) => {
+                            error!("Received invalid signature hex string: {}", error);
+                            return Response::builder().status(StatusCode::BAD_REQUEST).body(
+                                "Invalid format of the received signature (invalid hex string)"
+                                    .to_string(),
+                            );
+                        }
+                    };
+                    let signature = match ed25519_dalek::Signature::from_bytes(&signature_as_bytes)
+                    {
+                        Ok(signature) => signature,
+                        Err(error) => {
+                            error!("Received invalid signature: {}", error);
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("Invalid format of the received signature.".to_string());
+                        }
+                    };
+
+                    match ip_data_arc
+                        .clone()
+                        .ip_cdi_verify_key
+                        .verify(&id_cred_pub_bytes, &signature)
+                    {
+                        Ok(_) => info!("Signature validated."),
+                        Err(error) => {
+                            error!("Received invalid signature: {}", error.to_string());
+                            return Response::builder().status(StatusCode::BAD_REQUEST).body(
+                                "The received request (id_cred_pub) was not correctly signed by \
+                                 the identity provider."
+                                    .to_string(),
+                            );
+                        }
+                    }
+
+                    // The signature was valid, so save the received attributes to the file
+                    // database.
 
                     let file = match std::fs::File::create(
                         root_clone.join("attributes").join(&id_cred_pub),
@@ -146,9 +214,9 @@ async fn main() {
     );
 
     warp::serve(
-        identity_verifier
+        read_attributes
             .or(submit_verification_attributes)
-            .or(read_attributes),
+            .or(identity_verifier),
     )
     .run(([0, 0, 0, 0], opt.port))
     .await;

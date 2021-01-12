@@ -1,5 +1,6 @@
 use anyhow::{bail, ensure};
 use crypto_common::{base16_encode_string, SerdeDeserialize, SerdeSerialize, Versioned, VERSION_0};
+use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signer};
 use id::{
     constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
@@ -646,15 +647,29 @@ async fn save_validated_request(
             .id_cred_pub,
     );
 
+    // Sign the id_cred_pub so that the identity verifier can verify that the given
+    // id_cred_pub matches a valid identity creation request.
+    let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
+    let secret_key =
+        SecretKey::from_bytes(&server_config.ip_data.ip_cdi_secret_key.to_bytes()).unwrap();
+    let keypair = Keypair {
+        secret: secret_key,
+        public: public_key,
+    };
+    let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
+    let signature_on_id_cred_pub = keypair.sign(message.as_slice()).to_bytes();
+    let hex_signature_on_id_cred_pub = hex::encode(signature_on_id_cred_pub.to_vec().as_slice());
+
     ok_or_500!(
         db.write_request_record(&base_16_encoded_id_cred_pub, &identity_object_request),
         "Could not write the valid request to database."
     );
 
     let attribute_form_url = format!(
-        "{}/{}",
+        "{}/{}/{}",
         server_config.id_verification_url.to_string(),
-        base_16_encoded_id_cred_pub
+        base_16_encoded_id_cred_pub,
+        hex_signature_on_id_cred_pub
     );
     Ok(warp::reply::with_status(
         warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),
