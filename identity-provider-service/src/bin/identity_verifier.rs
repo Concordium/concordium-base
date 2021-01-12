@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs};
 
-use crypto_common::Versioned;
-use ed25519_dalek::{ed25519::signature::Signature, Verifier};
+use crypto_common::{base16_decode_string, Versioned};
+use ed25519_dalek::Verifier;
 use id::{constants::IpPairing, types::IpInfo};
 use log::{error, info};
 use reqwest::header::LOCATION;
@@ -119,26 +119,16 @@ async fn main() {
                     // Verify that the signature comes from the identity provider, otherwise reject
                     // the request. This prevents the submission of attributes for an
                     // id_cred_pub that has not been processed by the identity provider.
-                    let signature_as_bytes = match hex::decode(id_cred_pub_signature) {
-                        Ok(hex_value) => hex_value,
-                        Err(error) => {
-                            error!("Received invalid signature hex string: {}", error);
-                            return Response::builder().status(StatusCode::BAD_REQUEST).body(
-                                "Invalid format of the received signature (invalid hex string)"
-                                    .to_string(),
-                            );
-                        }
-                    };
-                    let signature = match ed25519_dalek::Signature::from_bytes(&signature_as_bytes)
-                    {
-                        Ok(signature) => signature,
-                        Err(error) => {
-                            error!("Received invalid signature: {}", error);
-                            return Response::builder()
-                                .status(StatusCode::BAD_REQUEST)
-                                .body("Invalid format of the received signature.".to_string());
-                        }
-                    };
+                    let signature: ed25519_dalek::Signature =
+                        match base16_decode_string(&id_cred_pub_signature) {
+                            Ok(signature) => signature,
+                            Err(error) => {
+                                error!("Received invalid signature: {}", error);
+                                return Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body("Invalid format of the received signature.".to_string());
+                            }
+                        };
 
                     match ip_data_arc
                         .clone()
