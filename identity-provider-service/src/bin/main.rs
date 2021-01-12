@@ -492,7 +492,7 @@ async fn followup(
             }
         }
     } else {
-        return
+        return;
     }
 }
 
