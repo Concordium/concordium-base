@@ -674,8 +674,8 @@ async fn save_validated_request(
         public: public_key,
     };
     let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
-    let signature_on_id_cred_pub = keypair.sign(message.as_slice()).to_bytes();
-    let hex_signature_on_id_cred_pub = hex::encode(signature_on_id_cred_pub.to_vec().as_slice());
+    let signature_on_id_cred_pub = keypair.sign(message.as_slice());
+    let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(
         db.write_request_record(&base_16_encoded_id_cred_pub, &identity_object_request),
@@ -686,7 +686,7 @@ async fn save_validated_request(
         "{}/{}/{}",
         server_config.id_verification_url.to_string(),
         base_16_encoded_id_cred_pub,
-        hex_signature_on_id_cred_pub
+        serialized_signature
     );
     Ok(warp::reply::with_status(
         warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),
