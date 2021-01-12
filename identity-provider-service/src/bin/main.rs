@@ -491,8 +491,6 @@ async fn followup(
                 }
             }
         }
-    } else {
-        return;
     }
 }
 
