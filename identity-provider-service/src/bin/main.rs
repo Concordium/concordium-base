@@ -492,7 +492,7 @@ async fn followup(
             }
         }
     } else {
-        error!("Attempting to check status for an entry that does not exist.");
+        return
     }
 }
 
