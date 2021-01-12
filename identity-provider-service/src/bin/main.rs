@@ -1,6 +1,6 @@
 use anyhow::{bail, ensure};
 use crypto_common::{base16_encode_string, SerdeDeserialize, SerdeSerialize, Versioned, VERSION_0};
-use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signer};
+use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
     constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
@@ -667,14 +667,10 @@ async fn save_validated_request(
     // Sign the id_cred_pub so that the identity verifier can verify that the given
     // id_cred_pub matches a valid identity creation request.
     let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
-    let secret_key =
-        SecretKey::from_bytes(&server_config.ip_data.ip_cdi_secret_key.to_bytes()).unwrap();
-    let keypair = Keypair {
-        secret: secret_key,
-        public: public_key,
-    };
+    let expanded_secret_key: ExpandedSecretKey =
+        ExpandedSecretKey::from(&server_config.ip_data.ip_cdi_secret_key);
     let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
-    let signature_on_id_cred_pub = keypair.sign(message.as_slice());
+    let signature_on_id_cred_pub = expanded_secret_key.sign(message.as_slice(), &public_key);
     let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(
