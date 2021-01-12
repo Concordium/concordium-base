@@ -13,12 +13,18 @@ verifier. Both of them can be built by doing `cargo build --release` inside the
 
 This has the following parameters
 
-- `--port` which is port the server will liston on. The parameter can also be passed via the environment variable 
+- `--port` which is the port the server will listen on. The parameter can also be passed via the environment variable 
   `IDENTITY_VERIFIER_PORT`
 - `id-provider-url` which is the base URL where the identity provider service is running, i.e. without any additional
   path values. The parameter can also be passed via the environment variable `IDENTITY_PROVIDER_URL`. The server will
   forward clients to this URL, but won't make direct calls to the server by itself.
-  
+- `identity-provider-public` which should be a filename of the file with the public identity provider
+  data. It should match the file provided to the identity-provider-service, i.e. contain the public part
+  matching what is running on that service. The parameter can also be passed via the environment variable
+  `IDENTITY_PROVIDER_PUBLIC`.
+
+  This should point to `ip_private_keys/identity_provider-1.pub.json` in genesis-data.
+
 # identity-provider-service
 
 This has the following parameters
