@@ -1,5 +1,6 @@
 use anyhow::{bail, ensure};
 use crypto_common::{base16_encode_string, SerdeDeserialize, SerdeSerialize, Versioned, VERSION_0};
+use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
     constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
@@ -17,7 +18,6 @@ use std::{
     fs,
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 use structopt::StructOpt;
 use url::Url;
@@ -417,94 +417,136 @@ struct GetParameters {
     redirect_uri: String,
 }
 
-/// Query the status of the transaction until it is finalized, or absent.
-/// TODO: This currently does not terminate polling until either it is finalized
-/// or absent. In a production server we'd likely want to give up at some point
-/// and only poll on queries for the identity.
+/// Query the status of the transaction and update the status in the database if
+/// finalized, or if unable to submit the transaction successfully.
 async fn followup(
     client: Client,
-    db: Arc<DB>,
+    db: DB,
     submission_url: url::Url,
     mut query_url_base: url::Url,
     key: String,
 ) {
-    loop {
-        let v = {
-            let hm = db.pending.lock().unwrap();
-            hm.get(&key).cloned()
-        }; // release lock
-        if let Some(v) = v {
-            match &v.status {
-                PendingStatus::CouldNotSubmit => {
-                    match submit_account_creation(&client, submission_url.clone(), &v.value).await {
-                        Ok(new_status) => {
-                            let mut hm = db.pending.lock().unwrap();
-                            if let Some(point) = hm.get_mut(&key) {
-                                point.status = new_status;
-                            } else {
-                                break;
-                            }
-                        }
-                        Err(_) => {
-                            db.delete_all(&key);
-                            warn!("Account creation transaction rejected.");
-                            break;
+    let v = {
+        let hm = db.pending.lock().unwrap();
+        hm.get(&key).cloned()
+    }; // release lock
+    if let Some(v) = v {
+        match &v.status {
+            PendingStatus::CouldNotSubmit => {
+                match submit_account_creation(&client, submission_url.clone(), &v.value).await {
+                    Ok(new_status) => {
+                        let mut hm = db.pending.lock().unwrap();
+                        if let Some(point) = hm.get_mut(&key) {
+                            point.status = new_status;
                         }
                     }
-                }
-                PendingStatus::Submitted { submission_id, .. } => {
-                    query_url_base.set_path(&format!("v0/submissionStatus/{}", submission_id));
-                    match client.get(query_url_base.clone()).send().await {
-                        Ok(response) => {
-                            match response.status() {
-                                StatusCode::OK => {
-                                    match response.json::<SubmissionStatusResponse>().await {
-                                        Ok(ss) => {
-                                            match ss.status {
-                                                SubmissionStatus::Finalized => {
-                                                    db.mark_finalized(&key);
-                                                    info!(
-                                                        "Account creation transaction finalized."
-                                                    );
-                                                    break;
-                                                }
-                                                SubmissionStatus::Absent => error!(
-                                                    "An account creation transaction has gone \
-                                                     missing. This indicates a configuration \
-                                                     error."
-                                                ),
-                                                SubmissionStatus::Received => {} /* do nothing, wait for the next iteration */
-                                                SubmissionStatus::Committed => {} /* do nothing, wait for the next iteration */
-                                            }
-                                        }
-                                        Err(e) => error!(
-                                            "Received unexpected response when querying \
-                                             submission status: {}.",
-                                            e
-                                        ),
-                                    }
-                                }
-                                other => error!(
-                                    "Received unexpected response when querying submission \
-                                     status: {}.",
-                                    other
-                                ),
-                            }
-                        }
-                        Err(e) => {
-                            error!(
-                                "Could not query submission status for {} due to: {}.",
-                                key, e
-                            );
-                            // and do nothing
-                        }
+                    Err(_) => {
+                        db.delete_all(&key);
+                        warn!("Account creation transaction rejected.");
                     }
                 }
             }
-            // Wait for 5 seconds.
-            std::thread::sleep(Duration::new(5, 0));
-        } else {
-            break;
+            PendingStatus::Submitted { submission_id, .. } => {
+                query_url_base.set_path(&format!("v0/submissionStatus/{}", submission_id));
+                match client.get(query_url_base.clone()).send().await {
+                    Ok(response) => {
+                        match response.status() {
+                            StatusCode::OK => {
+                                match response.json::<SubmissionStatusResponse>().await {
+                                    Ok(ss) => {
+                                        match ss.status {
+                                            SubmissionStatus::Finalized => {
+                                                db.mark_finalized(&key);
+                                                info!("Account creation transaction finalized.");
+                                            }
+                                            SubmissionStatus::Absent => error!(
+                                                "An account creation transaction has gone \
+                                                 missing. This indicates a configuration error."
+                                            ),
+                                            // do nothing, wait for the next call
+                                            SubmissionStatus::Received => {}
+                                            SubmissionStatus::Committed => {}
+                                        }
+                                    }
+                                    Err(e) => error!(
+                                        "Received unexpected response when querying submission \
+                                         status: {}.",
+                                        e
+                                    ),
+                                }
+                            }
+                            other => error!(
+                                "Received unexpected response when querying submission status: {}.",
+                                other
+                            ),
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Could not query submission status for {} due to: {}.",
+                            key, e
+                        );
+                        // and do nothing
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Checks the status of an initial account creation. A pending token is
+/// returned if the account transaction has not finalized yet. If the
+/// transaction is finalized then the identity object is returned.
+async fn get_identity_token(
+    server_config: Arc<ServerConfig>,
+    retrieval_db: DB,
+    client: Client,
+    id_cred_pub: String,
+) -> Result<impl Reply, Rejection> {
+    // Check status of initial account creation transaction and update the file
+    // database accordingly.
+    let query_url_base = server_config.submit_credential_url.clone();
+    followup(
+        client,
+        retrieval_db.clone(),
+        server_config.submit_credential_url.clone(),
+        query_url_base,
+        id_cred_pub.clone(),
+    )
+    .await;
+
+    // If the initial account creation transaction is still not finalized, then we
+    // return a pending object to the caller to indicate that the identity is
+    // not ready yet.
+    if retrieval_db.is_pending(&id_cred_pub) {
+        info!("Identity object is pending.");
+        let identity_token_container = IdentityTokenContainer {
+            status: IdentityStatus::Pending,
+            detail: "Pending initial account creation.".to_string(),
+            token:  serde_json::Value::Null,
+        };
+        Ok(warp::reply::json(&identity_token_container))
+    } else {
+        match retrieval_db.read_identity_object(&id_cred_pub) {
+            Ok(identity_object) => {
+                info!("Identity object found");
+
+                let identity_token_container = IdentityTokenContainer {
+                    status: IdentityStatus::Done,
+                    token:  identity_object,
+                    detail: "".to_string(),
+                };
+                Ok(warp::reply::json(&identity_token_container))
+            }
+            Err(_e) => {
+                info!("Identity object does not exist or the request is malformed.");
+                let error_identity_token_container = IdentityTokenContainer {
+                    status: IdentityStatus::Error,
+                    detail: "Identity object does not exist".to_string(),
+                    token:  serde_json::Value::Null,
+                };
+                Ok(warp::reply::json(&error_identity_token_container))
+            }
         }
     }
 }
@@ -526,6 +568,7 @@ async fn main() -> anyhow::Result<()> {
     // as well as to submit the initial account creation.
     // We reuse it between requests since it is expensive to create.
     let client = Client::new();
+    let followup_client = client.clone();
 
     // Create the 'database' directories for storing IdentityObjects and
     // AnonymityRevocationRecords.
@@ -536,43 +579,18 @@ async fn main() -> anyhow::Result<()> {
     info!("Configurations have been loaded successfully.");
 
     let retrieval_db = db.clone();
+    let server_config_retrieve = Arc::clone(&server_config);
 
     // The endpoint for querying the identity object.
     let retrieve_identity = warp::get()
         .and(warp::path!("api" / "identity" / String))
-        .map(move |id_cred_pub: String| {
-            info!("Queried for receiving identity: {}", id_cred_pub);
-            if retrieval_db.is_pending(&id_cred_pub) {
-                info!("Identity object is pending.");
-                let identity_token_container = IdentityTokenContainer {
-                    status: IdentityStatus::Pending,
-                    detail: "Pending initial account creation.".to_string(),
-                    token:  serde_json::Value::Null,
-                };
-                warp::reply::json(&identity_token_container)
-            } else {
-                match retrieval_db.read_identity_object(&id_cred_pub) {
-                    Ok(identity_object) => {
-                        info!("Identity object found");
-
-                        let identity_token_container = IdentityTokenContainer {
-                            status: IdentityStatus::Done,
-                            token:  identity_object,
-                            detail: "".to_string(),
-                        };
-                        warp::reply::json(&identity_token_container)
-                    }
-                    Err(_e) => {
-                        info!("Identity object does not exist or the request is malformed.");
-                        let error_identity_token_container = IdentityTokenContainer {
-                            status: IdentityStatus::Error,
-                            detail: "Identity object does not exist".to_string(),
-                            token:  serde_json::Value::Null,
-                        };
-                        warp::reply::json(&error_identity_token_container)
-                    }
-                }
-            }
+        .and_then(move |id_cred_pub: String| {
+            get_identity_token(
+                server_config_retrieve.clone(),
+                retrieval_db.clone(),
+                followup_client.clone(),
+                id_cred_pub,
+            )
         });
 
     let server_config_validate = Arc::clone(&server_config);
@@ -646,15 +664,25 @@ async fn save_validated_request(
             .id_cred_pub,
     );
 
+    // Sign the id_cred_pub so that the identity verifier can verify that the given
+    // id_cred_pub matches a valid identity creation request.
+    let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
+    let expanded_secret_key: ExpandedSecretKey =
+        ExpandedSecretKey::from(&server_config.ip_data.ip_cdi_secret_key);
+    let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
+    let signature_on_id_cred_pub = expanded_secret_key.sign(message.as_slice(), &public_key);
+    let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
+
     ok_or_500!(
         db.write_request_record(&base_16_encoded_id_cred_pub, &identity_object_request),
         "Could not write the valid request to database."
     );
 
     let attribute_form_url = format!(
-        "{}/{}",
+        "{}/{}/{}",
         server_config.id_verification_url.to_string(),
-        base_16_encoded_id_cred_pub
+        base_16_encoded_id_cred_pub,
+        serialized_signature
     );
     Ok(warp::reply::with_status(
         warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),
@@ -954,14 +982,6 @@ async fn create_signed_identity_object(
                 db.write_pending(&base16_encoded_id_cred_pub, status, submission_value),
                 "Could not write submission status."
             );
-            let query_url_base = server_config.submit_credential_url.clone();
-            tokio::spawn(followup(
-                client,
-                db,
-                server_config.submit_credential_url.clone(),
-                query_url_base,
-                base16_encoded_id_cred_pub.clone(),
-            ))
         }
         Err(_) => return Err(warp::reject::custom(IdRequestRejection::ReuseOfRegId)),
     };

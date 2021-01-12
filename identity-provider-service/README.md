@@ -42,7 +42,7 @@ challenging the information.
 The identity verifier can be run by using:
 
 ```console
-cargo run --release --bin identity-verifier -- --id-provider-url url-for-identity-provider-service
+cargo run --release --bin identity-verifier -- --id-provider-url url-for-identity-provider-service --identity-provider-public data/identity_provider.pub.json
 ```
 
 or directly running the binary `identity_verifier` in `./target/release/`.
@@ -87,11 +87,14 @@ for Android. The flow is as follows:
 1. Receive a request from a wallet on `http://[hostname]:8100/api/identity
 1. Deserialize `IdentityObjectRequest` and validate its contents by using the supplied library function 
 `id::identity_provider::validate_request`. The validated request is saved in the database.
-1. Forward the wallet to the identity verification attribute HTML form.
-1. The user fills out the attribute form and submits it to the identity verifier, which then saves the attributes
-to a file database. At this step the identity verifier should validate the attributes of the user, but for the POC
-the attributes are simply accepted at face value. Afterwards the user is forwarded back to the identity provider service
-that will perform the next step.
+1. Forward the wallet to the identity verification attribute HTML form. When forwarding a signature on the `id_cred_pub`
+   is also provided to the identity verifier, so that the identity verifier can verify if the incoming submission
+   should be handled or not.
+1. The user fills out the attribute form and submits it to the identity verifier, which then verifies the signature
+   from the identity provider service using its public-key, and then saves the attributes to a file database. If the 
+   signature is invalid the submission is rejected. At this step the identity verifier should validate the attributes of 
+   the user, but for the POC the attributes are simply accepted at face value. Afterwards the user is forwarded back 
+   to the identity provider service that will perform the next step.
 1. Read the validated request from the database that matches the current flow. The attribute list for the given user
 is retrieved from the identity verifier. The request and attribute list are signed by using the supplied library function
 `id::identity_provider::sign_identity_object`.
