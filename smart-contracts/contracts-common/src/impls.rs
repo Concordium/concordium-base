@@ -3,9 +3,9 @@ use crate::{traits::*, types::*};
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections::*, string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
-use core::{mem::MaybeUninit, slice};
+use core::{marker, mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
-use std::{collections::*, mem::MaybeUninit, slice};
+use std::{collections::*, marker, mem::MaybeUninit, slice};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
@@ -186,6 +186,16 @@ impl<T: Deserial> Deserial for Box<T> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let t = T::deserial(source)?;
         Ok(Box::new(t))
+    }
+}
+
+impl<C: ?Sized> Serial for marker::PhantomData<C> {
+    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
+}
+
+impl<C: ?Sized> Deserial for marker::PhantomData<C> {
+    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> {
+        Ok(marker::PhantomData::default())
     }
 }
 
