@@ -146,6 +146,11 @@ struct GenerateGlobal {
         default_value = "genesis_string"
     )]
     genesis_string: String,
+    #[structopt(
+        long = "seed",
+        help = "Seed file to use when generating group generators."
+    )]
+    seed_file: Option<PathBuf>,
 }
 
 #[derive(StructOpt)]
@@ -1160,7 +1165,20 @@ fn handle_generate_ips(gip: GenerateIps) {
 
 /// Generate the global context.
 fn handle_generate_global(gl: GenerateGlobal) {
-    let gc = GlobalContext::<ExampleCurve>::generate(gl.genesis_string);
+    let gc = match gl.seed_file {
+        None => GlobalContext::<id::constants::ArCurve>::generate(gl.genesis_string),
+        Some(f) => match std::fs::read(f) {
+            Ok(data) => GlobalContext::<id::constants::ArCurve>::generate_from_seed(
+                gl.genesis_string,
+                NUM_BULLETPROOF_GENERATORS,
+                &data,
+            ),
+            Err(e) => {
+                eprintln!("Could not read seed file {}", e);
+                return;
+            }
+        },
+    };
     let vgc = Versioned::new(VERSION_0, gc);
     if let Err(err) = write_json_to_file(&gl.output_file, &vgc) {
         eprintln!("Could not write global parameters because {}.", err);
