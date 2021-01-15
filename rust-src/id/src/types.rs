@@ -1670,13 +1670,14 @@ impl<C: Curve> GlobalContext<C> {
     }
 
     /// Generate a new global context with the given number of
-    /// bulletproof generators.
+    /// bulletproof generators, and a given seed string for generating group
+    /// generators.
     ///
     /// This is intended mostly for testing, on-chain there will be a fixed
-    /// amount.
-    pub fn generate_size(genesis_string: String, n: usize) -> Self {
+    /// amount, and a fixed seed.
+    pub fn generate_from_seed(genesis_string: String, n: usize, seed: &[u8]) -> Self {
         // initialize the first generator from pi digits.
-        let g = C::hash_to_group(&PI_DIGITS[0..1000]);
+        let g = C::hash_to_group(seed);
 
         // generate next generator by hashing the previous one
         let h = C::hash_to_group(&to_bytes(&g));
@@ -1698,6 +1699,16 @@ impl<C: Curve> GlobalContext<C> {
             bulletproof_generators: Generators { G_H: generators },
             genesis_string,
         }
+    }
+
+    /// Generate a new global context with the given number of
+    /// bulletproof generators.
+    ///
+    /// This is intended mostly for testing, on-chain there will be a fixed
+    /// amount.
+    pub fn generate_size(genesis_string: String, n: usize) -> Self {
+        // initialize the first generator from pi digits.
+        Self::generate_from_seed(genesis_string, n, &PI_DIGITS[0..1000])
     }
 
     /// The generator for encryption in the exponent is the second component of
