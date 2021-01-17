@@ -1,4 +1,4 @@
-name:                globalstate-types
+name:                concordium-base
 version:             0.1.0.0
 license:             BSD3
 author:              "Author name here"
@@ -7,7 +7,12 @@ copyright:           "2018 Author name here"
 
 extra-source-files:
 - README.md
-- CHANGELOG.md
+
+custom-setup:
+  dependencies:
+    - base  >= 4.7
+    - Cabal >= 2.2
+    - directory >= 1.3
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -47,7 +52,6 @@ dependencies:
 - microlens-platform >=0.3
 - microlens >=0.3
 - time >= 1.8
-- concordium-crypto
 - aeson >= 1.4.2
 - ghc-prim >= 0.5.3
 - vector >= 0.12
@@ -59,9 +63,14 @@ dependencies:
 - text >= 1.2
 - QuickCheck >= 2.12
 - scientific >= 0.3.2
+- deepseq >= 1.4
+- primitive >= 0.7
+# binary is used by aeson and we need for a couple of instances. cereal should
+# be used for everything else.
+- binary >= 0.8
 
 library:
-  source-dirs: src
+  source-dirs: haskell-src
   ghc-options:
     - -Wall
     - -Wcompat
@@ -69,6 +78,16 @@ library:
     - -Werror=missing-methods
     - -Wredundant-constraints
     - -fno-ignore-asserts
+
+  extra-libraries:
+    - ecvrf
+    - sha_2
+    - eddsa_ed25519
+    - ffi_helpers
+    - id
+    - aggregate_sig
+    - encrypted_transfers
+
 
 executables:
   generate-update-keys:
@@ -82,20 +101,20 @@ executables:
       - -Wredundant-constraints
       - -fno-ignore-asserts
     dependencies:
-      - globalstate-types
-      - concordium-crypto
+      - concordium-base
       - aeson-pretty >= 0.8
       - filepath >= 1.4
       - optparse-applicative >= 0.15
 
 tests:
-  types-test:
+  test:
     main:                Spec.hs
-    source-dirs:         test
+    source-dirs:         haskell-tests
     ghc-options:
     - -threaded
     - -with-rtsopts=-N
     - -Wall
+    - -Wno-deprecations
 
     when:
       - condition: flag(static)
@@ -106,10 +125,56 @@ tests:
         ghc-options: -dynamic
 
     dependencies:
-    - globalstate-types
-    - concordium-crypto
+    - concordium-base
     - hspec >= 2.6
     - QuickCheck >= 2.12
     - hspec-expectations >= 0.8
     - containers
     - random
+    - HUnit >= 1.6
+
+benchmarks:
+  ed25519-perf:
+    main: haskell-bench/Ed25519Perf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  ed25519dlog-perf:
+    main: haskell-bench/Ed25519DlogPerf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  bls-perf:
+    main: haskell-bench/BlsPerf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  sha256-perf:
+    main: haskell-bench/SHA256Perf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  verify-credential-perf:
+    main: haskell-bench/VerifyCredentialPerf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
