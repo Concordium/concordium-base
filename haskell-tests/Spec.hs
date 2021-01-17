@@ -13,6 +13,12 @@ import qualified ConcordiumTests.Data.Base58Encoding
 import qualified ConcordiumTests.ID.Types
 import qualified ConcordiumTests.Crypto.Ed25519DlogProofs
 import qualified ConcordiumTests.Crypto.EncryptedTransfers
+import qualified Types.PayloadSerializationSpec
+import qualified Types.TransactionSerializationSpec
+import qualified Types.AmountSpec
+import qualified Types.UpdatesSpec
+import qualified Types.AccountEncryptedAmountSpec
+import qualified Types.RewardTypes
 
 main :: IO  ()
 main = hspec $ parallel $ do
@@ -30,3 +36,9 @@ main = hspec $ parallel $ do
     -- NB: The following tests are far from complete. They do not test what
     -- happens when data is corrupt in various ways (number of commmited values
     -- is incorrect, or similar)
+    Types.PayloadSerializationSpec.tests
+    Types.TransactionSerializationSpec.tests
+    Types.AmountSpec.tests
+    Types.UpdatesSpec.tests
+    Types.AccountEncryptedAmountSpec.tests
+    Types.RewardTypes.tests
