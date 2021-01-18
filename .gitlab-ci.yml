@@ -74,4 +74,4 @@ stages:
   stage: test
   cache: {}
   script:
-    - cargo test --manifest-path rust-src/Cargo.toml --features=vendored-ssl --all --verbose --release --color=always
+    - cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release --color=always
