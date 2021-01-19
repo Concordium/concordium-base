@@ -1,5 +1,4 @@
 #[cfg(target_os = "android")]
 mod android;
-
-#[cfg(target_os = "ios")]
+#[cfg(not(target_os = "android"))]
 mod ios;
