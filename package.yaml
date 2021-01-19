@@ -87,6 +87,12 @@ library:
     - id
     - aggregate_sig
     - encrypted_transfers
+  
+  when:
+    - condition: os(windows)
+      extra-libraries:
+        - ws2_32
+        - userenv
 
 
 executables:
