@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0be91dfd96193d8cfcbb83af5812e2d7dedbb1d641a325655f3ba5030d5c82d6
+-- hash: 6d4ea98706689ecdf49e88cf141c60e3c299dbfb03db8babe287666e308d4058
 
 name:           concordium-base
 version:        0.1.0.0
@@ -105,6 +105,10 @@ library
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  if os(windows)
+    extra-libraries:
+        ws2_32
+        userenv
   default-language: Haskell2010
 
 executable generate-update-keys
