@@ -1,5 +1,3 @@
-#![cfg(target_os = "ios")]
-
 use libc::c_char;
 use wallet::{
     check_account_address_ext, combine_encrypted_amounts_ext, create_credential_ext,
