@@ -1,26 +1,125 @@
-# crypto
+# concordium-base
 
-Cryptographic infrastructure 
+This repository contains core Rust and Haskell libraries used by various
+components of the Concordium blockchain, as well as some tools used for testing
+and development.
 
-# How to Build Only Rust Part
+## Haskell modules
 
-move to rust-src dir, run
+### [haskell-src](./haskell-src)
 
-cargo build --release
+Contains the Haskell package `concordium-base` which contains
+- foreign imports of rust libraries that are needed in the rest of the project
+- basic type definitions, e.g., account address, block hash, with serializations
+  and basic functionality. These are used consistently throughout the rest of
+  the project.
 
-This will build the following rust libraries
+### [haskell-tests](./haskell-tests/)
 
--VRF : libecvrf
+Unit tests of the `concordium-base` Haskell library.
 
--SHA-2: libsha_2
+### [haskell-bench](./haskell-bench/)
 
--Ed Signature: libeddsa_ed25519
+Benchmarks of some functions that are of interest. This is ad-hoc and functions
+are added there by need.
 
-# How to Build for Haskell
+### [generate-update-keys](./generate-update-keys)
 
-stack build
+Is a utility for generating authorization keys for different kinds of updates.
+It is used for generating such keys for internal testing. The key generation it
+supports is not very secure.
 
-This should build both rust and haskell code. 
+### [testdata](./testdata/)
 
-For runtime linking (Depending on your OS) 
-you may need to add rust-src/target/release/ to your library path.
+Contains auxiliary data files used by Haskell tests.
+
+### Rust modules
+
+### [rust-src](./rust-src)
+
+Contains
+- definitions of some core datatypes, such as account addresses, hashes,
+  as well as serialization and basic functionality.
+- implementations of all custom cryptographic protocols used by Concordium,
+  e.g., custom sigma proofs, implementation of bulletproofs, and top-level
+  functionality for anonymity revokers, identity providers, and the account
+  holders.
+
+### [idiss](./idiss)
+
+This is the wrapper around the functionality in the [id](./rust-src/id) library
+that exports the functionality needed by the identity provider in the format
+that they need it. The library is currently tailored to be used from NodeJS.
+
+`idiss` is an acronym, standing for "identity issuer".
+
+### [identity-provider-service](./identity-provider-service)
+
+Is a prototype implementation of a pure Rust identity provider we use for
+testing.
+
+### [mobile_wallet](./mobile_wallet)
+
+This contains thin wrappers around the [wallet](./rust-src/wallet/) library that
+exposes the necessary functions in a format suitable for use from Android and
+iOS platforms, respectively.
+
+### [rust-bins]
+
+Contains various utilities that are used for testing and prototyping. From key generation to
+generation to tools for analyzing the chain.
+
+# Build requirements.
+
+In order to build the components in this repository you need
+- The [cargo](https://doc.rust-lang.org/cargo/) tool for building the Rust
+components. The currently supported version is 1.45.2. Others may work, but we
+do not regularly test with them. The easiest way to install it is via the
+[rustup](https://rustup.rs/) tool.
+- The [Haskell Stack](https://docs.haskellstack.org/en/stable/README/) tool for
+building the Haskell components.
+
+Some Rust components may require additional dependencies, see
+[mobile_wallet/README.md](./mobile_wallet/README.md) and
+[idiss/README.md](./idiss/README.md) for details.
+
+
+# Contributing
+
+## Haskell workflow
+
+We typically use [stack](https://docs.haskellstack.org/en/stable/README/) to
+build, run, and test the code. In order to build the haskell libraries the rust
+dependencies must be pre-build, which is done automatically by the cabal setup
+script.
+
+We do not use any code formatting or linting tool on the CI. Running hlint might
+uncover common issues, and with regards to formatting, the general rule is that
+lines should not be too long, and follow the naming scheme and code style that
+already exists.
+
+## Rust workflow
+
+We use **stable version** of rust, 1.45.2, to compile the code.
+
+The CI is configured to check two things
+- the [clippy](https://github.com/rust-lang/rust-clippy) tool is run to check
+  for common mistakes and issues. We try to have no clippy warnings. Sometimes
+  what clippy thinks is not reasonable is necessary, in which case you should
+  explicitly disable the warning on that site (a function or module), such as
+  `#[allow(clippy::too_many_arguments)]`, but that is a method of last resort.
+  Try to resolve the issue in a different way first.
+
+- the [rust fmt](https://github.com/rust-lang/rustfmt) tool is run to check the
+  formatting. Unfortunately the stable version of the tool is quite outdated, so
+  we use a nightly version, which is updated a few times a year. Thus in order
+  for the CI to pass you will need to install the relevant nightly version (for
+  which see the [.gitlab-ci.yml](.gitlab-ci.yml) file, the `"lint:fmt"`
+  section).
+
+## Overall workflow
+
+The typical workflow should be the following.
+- make changes, commit and push on a separate branch
+- make a merge request to merge your branch into master. Assign somebody else
+  with knowledge of the code to review the changes before they are merged.
