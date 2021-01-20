@@ -3,7 +3,7 @@ const fs = require('fs');
 
 const validator = require('./libidiss.node')
 
-const global = fs.readFileSync('../rust-bins/wallet-notes/global.json', 'utf8')
+const global = fs.readFileSync('../rust-bins/wallet-notes/files/global.json', 'utf8')
 const request = fs.readFileSync('../rust-bins/wallet-notes/id-request.json', 'utf8')
 const ars_infos = fs.readFileSync('./files/anonymity_revokers.json', 'utf8')
 const ip_info = fs.readFileSync('./files/ip_info.json', 'utf8')
