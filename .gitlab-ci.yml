@@ -1,13 +1,8 @@
 image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-haskell:0.17
 
 stages:
-  - print-env
-  - rust-lint
-  - rust-build-benches
-  - rust-test
-  - rust-build-release
-  - haskell-build
-  - haskell-test
+  - lint
+  - test
 
 .generic:
   variables:
@@ -48,19 +43,19 @@ stages:
 #
 # Explanations for each of the rules are given in the first job.
 
-##################################### INIT #####################################
+##################################### LINT #####################################
 
-"init":
-  stage: print-env
-  # Run if something else is going to be run
+"lint:fmt":
+  extends: .generic
+  stage: lint
+  image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
+  cache: {}
+  artifacts: {}
   rules:
     # Always run pipeline in master branch
     - if: '$CI_COMMIT_BRANCH == "master"'
-      changes: &files-init
-        - "**/Cargo.toml"
+      changes: &files-fmt
         - "**/*.rs"
-        - "**/*.yaml"
-        - "**/*.hs"
     # Run pipeline if on a merge request which is not a draft
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" &&
            $CI_MERGE_REQUEST_TITLE !~ /^WIP:/ &&
@@ -68,7 +63,7 @@ stages:
            $CI_MERGE_REQUEST_TITLE !~ /^Draft:/ &&
            $CI_MERGE_REQUEST_TITLE !~ /^draft:/ &&
            $CI_MERGE_REQUEST_TITLE !~ /^Wip:/'
-      changes: *files-init
+      changes: *files-fmt
     # To avoid duplicated pipelines, when we are pushing to a branch it will not
     # create pipelines, but instead we need to put this into an MR, which would
     # either trigger the rule above of below this one.
@@ -76,42 +71,6 @@ stages:
       when: never
     # Otherwise, create the pipeline to be run manually if wanted
     # and if an error happens, as this is a testing branch, keep running
-    - when: manual
-      changes: *files-init
-      allow_failure: true
-  variables:
-    GIT_SUBMODULE_STRATEGY: recursive
-    LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/rust-src/target/release:$LD_LIBRARY_PATH"
-    RUSTFLAGS: -Dwarnings
-  script:
-    - rustc --version && cargo --version
-    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
-    - stack ghc -- --version && stack --version
-    - echo $CI_COMMIT_BRANCH
-    - echo $CI_PIPELINE_SOURCE
-    - echo $CI_MERGE_REQUEST_TITLE
-
-##################################### LINT #####################################
-
-"lint:fmt":
-  extends: .generic
-  stage: rust-lint
-  image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
-  cache: {}
-  artifacts: {}
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "master"'
-      changes: &files-fmt
-        - "**/*.rs"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" &&
-           $CI_MERGE_REQUEST_TITLE !~ /^WIP:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^wip:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^Draft:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^draft:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^Wip:/'
-      changes: *files-fmt
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      when: never
     - changes: *files-fmt
       when: manual
       allow_failure: true
@@ -125,7 +84,7 @@ stages:
 
 "lint:clippy":
   extends: .generic
-  stage: rust-lint
+  stage: lint
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       changes: &files-clippy
@@ -152,11 +111,11 @@ stages:
     - cargo clippy --manifest-path mobile_wallet/Cargo.toml --color=always
     - cargo clippy --manifest-path identity-provider-service/Cargo.toml --color=always --all --features=vendored-ssl
 
-################################# RUST-BENCHES #################################
+#################################### TEST #####################################
 
 "cargo:build-bench":
   extends: .generic
-  stage: rust-build-benches
+  stage: test
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       changes: &files-cargo-bench
@@ -179,11 +138,9 @@ stages:
   script:
     - cargo bench --manifest-path rust-src/Cargo.toml --color=always --no-run
 
-################################## RUST-TEST ###################################
-
 "cargo:test":
   extends: .generic
-  stage: rust-test
+  stage: test
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       changes: &files-cargo-test
@@ -208,7 +165,7 @@ stages:
 
 "cargo:test-id-service":
   extends: .generic
-  stage: rust-test
+  stage: test
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       changes: &files-cargo-test-id-service
@@ -233,7 +190,7 @@ stages:
 
 "cargo:test-idiss":
   extends: .generic
-  stage: rust-test
+  stage: test
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       changes: &files-cargo-test-idiss
@@ -262,51 +219,9 @@ stages:
     - cd idiss
     - node example.js
 
-"cargo:test-wallet":
+"stack:build-and-test":
   extends: .generic
-  stage: rust-test
-  rules:
-    # Currently this step is not working so
-    # we override it to never and not run it unless on demand.
-    # The later rules can be applied when this works again.
-    - when: never
-    - if: '$CI_COMMIT_BRANCH == "master"'
-      changes: &files-cargo-test-wallet
-        - "**/Cargo.toml"
-        - "**/*.rs"
-        - "rust-bins/wallet-notes/files/*.json"
-        - "rust-bins/wallet-notes/example.c"
-      when: on_success
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" &&
-           $CI_MERGE_REQUEST_TITLE !~ /^WIP:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^wip:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^Draft:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^draft:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^Wip:/'
-      changes: *files-cargo-test-wallet
-      when: on_success
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      when: never
-    - when: manual
-      changes: *files-cargo-test-wallet
-      allow_failure: true
-  script:
-    - set -e
-    - cd rust-bins/wallet-notes
-    - gcc example.c -lwallet -o example
-    - for f in $(find . -type f -name "*-input.json"); do \
-       cp $f ./; \
-       this_file=$(echo $f | cut -d/ -f3); \
-       LD_LIBRARY_PATH=`pwd` ./example $this_file > out.txt; \
-       diff out.txt files/$(echo $this_file | cut -d- -f1)-output.json; \
-       rm $this_file out.txt; \
-       done
-
-############################### HASKELL-BENCHES ################################
-
-"stack:build":
-  extends: .generic
-  stage: haskell-build
+  stage: test
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       changes: &files-stack-build
@@ -329,31 +244,8 @@ stages:
       changes: *files-stack-build
       allow_failure: true
   script:
-    - stack --test --bench --stack-yaml stack.yaml bench --no-run-tests --no-run-benchmarks
+    # Setup.hs will build rust-src in release mode and without tests
+    # so it is incompatible with cargo:test or lint:clippy. Cargo should
+    # be fast enough so that this is acceptable
+    - stack --test --bench --stack-yaml stack.yaml bench --no-run-benchmarks
 
-################################# HASKELL-TEST #################################
-
-"stack:test":
-  extends: .generic
-  stage: haskell-test
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "master"'
-      changes: &files-stack-test
-        - "**/Cargo.toml"
-        - "**/*.rs"
-        - "**/*.yaml"
-        - "**/*.hs"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" &&
-           $CI_MERGE_REQUEST_TITLE !~ /^WIP:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^wip:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^Draft:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^draft:/ &&
-           $CI_MERGE_REQUEST_TITLE !~ /^Wip:/'
-      changes: *files-stack-test
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      when: never
-    - when: manual
-      changes: *files-stack-test
-      allow_failure: true
-  script:
-    - stack --stack-yaml stack.yaml test
