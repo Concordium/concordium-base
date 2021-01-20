@@ -24,3 +24,4 @@ pkg
 /wasm-transform/Cargo.lock
 docs/build
 docs/src/_build
+/lib/
