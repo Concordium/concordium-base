@@ -64,7 +64,7 @@ This contains thin wrappers around the [wallet](./rust-src/wallet/) library that
 exposes the necessary functions in a format suitable for use from Android and
 iOS platforms, respectively.
 
-### [rust-bins]
+### [rust-bins](./rust-bins/)
 
 Contains various utilities that are used for testing and prototyping. From key generation to
 generation to tools for analyzing the chain.
