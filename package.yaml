@@ -24,14 +24,14 @@ custom-setup:
 description:         See README
 
 default-extensions:
-- RecordWildCards
-- LambdaCase
-- TupleSections
-- MultiParamTypeClasses
 - FlexibleContexts
 - FlexibleInstances
 - FunctionalDependencies
 - GeneralizedNewtypeDeriving
+- LambdaCase
+- MultiParamTypeClasses
+- RecordWildCards
+- TupleSections
 
 flags:
   static:
@@ -40,34 +40,34 @@ flags:
     default: False
 
 dependencies:
-- base >= 4.7 && < 5
-- bytestring >= 0.10
-- base16-bytestring >= 0.1.1.6
-- unordered-containers >= 0.2
-- containers >= 0.6
-- hashable >= 1.2
-- mtl >= 2.2
-- transformers >= 0.5
-- cereal >= 0.5
-- microlens-platform >=0.3
-- microlens >=0.3
-- time >= 1.8
 - aeson >= 1.4.2
-- ghc-prim >= 0.5.3
-- vector >= 0.12
-- pqueue >= 1.4.1
-- prettyprinter >= 1.2
-- random >= 1.1
-- template-haskell >= 2.14
-- persistent >= 2.10
-- text >= 1.2
-- QuickCheck >= 2.12
-- scientific >= 0.3.2
-- deepseq >= 1.4
-- primitive >= 0.7
+- base >= 4.7 && < 5
+- base16-bytestring >= 0.1.1.6
 # binary is used by aeson and we need for a couple of instances. cereal should
 # be used for everything else.
 - binary >= 0.8
+- bytestring >= 0.10
+- cereal >= 0.5
+- containers >= 0.6
+- deepseq >= 1.4
+- ghc-prim >= 0.5.3
+- hashable >= 1.2
+- microlens >=0.3
+- microlens-platform >=0.3
+- mtl >= 2.2
+- persistent >= 2.10
+- pqueue >= 1.4.1
+- prettyprinter >= 1.2
+- primitive >= 0.7
+- QuickCheck >= 2.12
+- random >= 1.1
+- scientific >= 0.3.2
+- template-haskell >= 2.14
+- text >= 1.2
+- time >= 1.8
+- transformers >= 0.5
+- unordered-containers >= 0.2
+- vector >= 0.12
 
 library:
   source-dirs: haskell-src
@@ -80,13 +80,19 @@ library:
     - -fno-ignore-asserts
 
   extra-libraries:
+    - aggregate_sig
     - ecvrf
-    - sha_2
     - eddsa_ed25519
+    - encrypted_transfers
     - ffi_helpers
     - id
-    - aggregate_sig
-    - encrypted_transfers
+    - sha_2
+  
+  when:
+    - condition: os(windows)
+      extra-libraries:
+        - userenv
+        - ws2_32
 
 
 executables:
@@ -101,8 +107,8 @@ executables:
       - -Wredundant-constraints
       - -fno-ignore-asserts
     dependencies:
-      - concordium-base
       - aeson-pretty >= 0.8
+      - concordium-base
       - filepath >= 1.4
       - optparse-applicative >= 0.15
 
@@ -126,12 +132,12 @@ tests:
 
     dependencies:
     - concordium-base
-    - hspec >= 2.6
-    - QuickCheck >= 2.12
-    - hspec-expectations >= 0.8
     - containers
-    - random
+    - hspec >= 2.6
+    - hspec-expectations >= 0.8
     - HUnit >= 1.6
+    - QuickCheck >= 2.12
+    - random
 
 benchmarks:
   ed25519-perf:
