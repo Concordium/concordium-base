@@ -126,6 +126,7 @@ import Data.Time
 import Data.Word
 import Foreign.C (CStringLen)
 
+import Concordium.Common.Time
 import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Types
