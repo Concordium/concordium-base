@@ -1,8 +1,9 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, DerivingVia #-}
 -- |Utility functions for serialization.
 module Concordium.Utils.Serialization where
 
 import Control.Monad
+import Control.Arrow
 import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)
 import qualified Data.ByteString.Short as BSS
@@ -12,6 +13,9 @@ import Data.Serialize
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Data.Proxy
+import Database.Persist
+import Database.Persist.Postgresql
 
 -- * Length
 
@@ -233,3 +237,16 @@ getBool = getWord8 >>= \case
   0 -> return False
   1 -> return True
   n -> fail $ "Unrecognized boolean value: " ++ show n
+
+
+-- |Wraps a type for persistent storage via a serialization to a 'ByteString'.
+newtype ByteStringSerialized a = ByteStringSerialized { unBSS :: a }
+    deriving (Serialize, Eq, Ord, Show) via a
+
+instance Serialize a => PersistField (ByteStringSerialized a) where
+  toPersistValue = toPersistValue . encode
+  fromPersistValue =
+    fromPersistValue >=> left (T.pack) . decode
+
+instance Serialize a => PersistFieldSql (ByteStringSerialized a) where
+  sqlType _ = sqlType (Proxy :: Proxy ByteString)

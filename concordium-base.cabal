@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e19a5961833dbbee1fb2fd65d182ff5547b2061c786b8ba4693ba375d5ea8683
+-- hash: a372f3087e21b98d92b40c9b9c4c24201e1cd13d74b5c732b91b64e1da549b32
 
 name:           concordium-base
 version:        0.1.0.0
@@ -31,6 +31,7 @@ flag static
 library
   exposed-modules:
       Concordium.Common.Amount
+      Concordium.Common.Time
       Concordium.Common.Version
       Concordium.Crypto.BlockSignature
       Concordium.Crypto.BlsSignature
@@ -51,11 +52,14 @@ library
       Concordium.ID.Parameters
       Concordium.ID.Types
       Concordium.Logger
+      Concordium.SQL.AccountTransactionIndex
       Concordium.Types
+      Concordium.Types.Block
       Concordium.Types.DummyData
       Concordium.Types.Execution
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
+      Concordium.Types.SmartContracts
       Concordium.Types.Transactions
       Concordium.Types.Updates
       Concordium.Utils
@@ -94,6 +98,8 @@ library
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -139,6 +145,8 @@ executable generate-update-keys
     , mtl >=2.2
     , optparse-applicative >=0.15
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -199,6 +207,8 @@ test-suite test
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -240,6 +250,8 @@ benchmark bls-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -279,6 +291,8 @@ benchmark ed25519-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -318,6 +332,8 @@ benchmark ed25519dlog-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -357,6 +373,8 @@ benchmark sha256-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -396,6 +414,8 @@ benchmark verify-credential-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7

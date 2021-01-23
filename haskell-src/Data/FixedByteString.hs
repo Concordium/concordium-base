@@ -72,7 +72,7 @@ pack = FixedByteString . byteArrayFromListN limit . pad
         pad xs = take limit $ xs ++ repeat 0
 
 -- |Convert a 'FixedByteString' to a list of bytes.
-unpack :: forall a. (FixedLength a) => FixedByteString a -> [Word8]
+unpack :: forall a . FixedByteString a -> [Word8]
 unpack (FixedByteString fbs) = foldrByteArray (:) [] fbs
 
 -- |Create a 'FixedByteString' from a list of bytes in reverse order.
@@ -124,7 +124,7 @@ encodeInteger z0 = unsafeCreate (initBytes z0 (fixedLength (undefined :: a) - 1)
             | otherwise = return ()
 
 -- |Convert a 'FixedByteString' to an unsigned 'Integer' with big endian encoding.
-decodeIntegerUnsigned :: forall a. (FixedLength a) => FixedByteString a -> Integer
+decodeIntegerUnsigned :: forall a. FixedByteString a -> Integer
 decodeIntegerUnsigned fbs = foldl (\acc v -> acc `shiftL` 8 .|. toInteger (v :: Word8)) 0 (unpack fbs)
 
 -- |Convert a 'FixedByteString' to a signed 'Integer' with big endian encoding.
@@ -234,12 +234,12 @@ instance (FixedLength a) => Bits (FixedByteString a) where
 
 -- |Convert to a short 'BS.ByteString'.  The 'ByteString' will share the underlying
 -- pointer of the 'FixedByteString'.
-toShortByteString :: forall a. (FixedLength a) => FixedByteString a -> BSS.ShortByteString
+toShortByteString :: forall a. FixedByteString a -> BSS.ShortByteString
 toShortByteString (FixedByteString (ByteArray ptr)) = BSS.SBS ptr
 {-# INLINE toShortByteString #-}
 
 {-# INLINE toByteString #-}
-toByteString :: forall a. (FixedLength a) => FixedByteString a -> BS.ByteString
+toByteString :: forall a. FixedByteString a -> BS.ByteString
 toByteString = BSS.fromShort . toShortByteString
 
 -- |Copy a 'BSS.ByteString' into a 'FixedByteString'.  If the 'ByteString' is too short,
@@ -303,5 +303,5 @@ unsafeReadWord64 (FixedByteString fbs) = indexByteArray fbs 0
 -- |Read the first 8 bytes as a Word64 in __big__ endian.  If there are fewer
 -- than 8 bytes, these will be used as the low-order bytes (i.e. we pad with 0s on
 -- the left).
-readWord64be :: (FixedLength s) => FixedByteString s -> Word64
+readWord64be :: FixedByteString s -> Word64
 readWord64be = foldl (\acc v -> acc `shiftL` 8 .|. fromIntegral (v :: Word8)) 0 . take 8 . unpack
