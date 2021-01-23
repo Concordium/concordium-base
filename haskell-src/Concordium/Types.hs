@@ -1,12 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -Wall #-}
 -- |Basic blockchain types.
 module Concordium.Types (
   -- * Cost units
@@ -33,13 +31,21 @@ module Concordium.Types (
   fractionToRational,
 
   -- * Time units
+  Duration(..),
+  durationToNominalDiffTime,
   getTransactionTime,
+  Timestamp(..),
+  timestampToUTCTime,
+  utcTimeToTimestamp,
+  timestampToSeconds,
+  addDuration,
   TransactionTime(..),
   TransactionExpiryTime,
   utcTimeToTransactionTime,
   transactionTimeToTimestamp,
   transactionExpired,
   transactionTimeToSlot,
+  isTimestampBefore,
 
   -- * Accounts
   SchemeId,

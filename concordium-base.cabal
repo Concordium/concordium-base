@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a372f3087e21b98d92b40c9b9c4c24201e1cd13d74b5c732b91b64e1da549b32
+-- hash: 51b44dce55af3bcf84c05bc422bed744260063503ab983edd493460b8b8a979c
 
 name:           concordium-base
 version:        0.1.0.0
@@ -53,6 +53,7 @@ library
       Concordium.ID.Types
       Concordium.Logger
       Concordium.SQL.AccountTransactionIndex
+      Concordium.SQL.Helpers
       Concordium.Types
       Concordium.Types.Block
       Concordium.Types.DummyData
