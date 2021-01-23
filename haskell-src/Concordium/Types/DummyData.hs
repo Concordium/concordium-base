@@ -8,6 +8,7 @@ import qualified Concordium.Crypto.SignatureScheme as Sig
 import Concordium.Crypto.DummyData
 
 import Concordium.Types
+import Concordium.Common.Time
 import Concordium.Types.Transactions
 import Concordium.Types.Execution
 import Concordium.ID.Types

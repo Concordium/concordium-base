@@ -33,6 +33,7 @@ import GHC.Generics
 import qualified Concordium.Wasm as Wasm
 import Concordium.Types
 import Concordium.Utils
+import Concordium.Common.Time
 import Concordium.Types.Execution.TH
 import Concordium.Types.Updates
 import Concordium.ID.Types

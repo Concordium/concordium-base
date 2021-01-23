@@ -33,20 +33,12 @@ module Concordium.Types (
   fractionToRational,
 
   -- * Time units
-  Duration(..),
-  durationToNominalDiffTime,
   getTransactionTime,
-  Timestamp(..),
-  timestampToUTCTime,
-  utcTimeToTimestamp,
-  timestampToSeconds,
-  addDuration,
   TransactionTime(..),
   TransactionExpiryTime,
   utcTimeToTransactionTime,
   transactionTimeToTimestamp,
   transactionExpired,
-  isTimestampBefore,
   transactionTimeToSlot,
 
   -- * Accounts
@@ -133,17 +125,19 @@ module Concordium.Types (
   unhashed,
   makeHashed) where
 
-import GHC.Generics
 import Data.Data (Typeable, Data)
 import Data.Scientific
 
 import Concordium.Common.Amount
+import Concordium.Common.Time
 import qualified Concordium.Crypto.BlockSignature as Sig
 import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.ID.Types
+import Concordium.Types.Block
+import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 
@@ -168,8 +162,6 @@ import Data.Time.Clock.POSIX
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
-import Database.Persist.Class
-import Database.Persist.Sql
 
 import Lens.Micro.Platform
 
@@ -433,53 +425,6 @@ newtype VoterPower = VoterPower AmountUnit
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
-newtype ContractIndex = ContractIndex { _contractIndex :: Word64 }
-    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral, PersistField)
-    deriving (Typeable, Data)
-
-instance PersistFieldSql ContractIndex where
-    sqlType _ = SqlInt64
-
-instance S.Serialize ContractIndex where
-    get = ContractIndex <$> G.getWord64be
-    put (ContractIndex i) = P.putWord64be i
-
-newtype ContractSubindex = ContractSubindex { _contractSubindex :: Word64 }
-    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral, PersistField)
-    deriving (Typeable, Data)
-
-instance PersistFieldSql ContractSubindex where
-    sqlType _ = SqlInt64
-
-instance S.Serialize ContractSubindex where
-    get = ContractSubindex <$> G.getWord64be
-    put (ContractSubindex i) = P.putWord64be i
-
-data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
-                                       , contractSubindex :: !ContractSubindex}
-    deriving(Eq, Ord, Generic, Typeable, Data)
-
-instance FromJSON ContractAddress where
-  parseJSON = withObject "ContractAddress" $ \v -> do
-    i <- v .: "index"
-    j <- v .: "subindex"
-    return $ ContractAddress (fromIntegral (i :: Word64)) (fromIntegral (j :: Word64))
-
-instance ToJSON ContractAddress where
-  toJSON (ContractAddress i j) =
-    object ["index" AE..= (fromIntegral i :: Word64), "subindex" AE..= (fromIntegral j :: Word64)]
-  toEncoding (ContractAddress i j) =
-    pairs ("index" AE..= (fromIntegral i :: Word64) <> "subindex" AE..= (fromIntegral j :: Word64))
-
-instance Hashable ContractAddress
-
-instance Show ContractAddress where
-  show (ContractAddress i v) = "<" ++ show i ++ ", " ++ show v ++ ">"
-
-instance S.Serialize ContractAddress where
-  get = ContractAddress <$> S.get <*> S.get
-  put (ContractAddress i v) = S.put i <> S.put v
-
 -- |The index of an account. Starting with 0,
 -- each account is allocated a sequential @AccountIndex@
 -- when it is created.  For the most part, this is only
@@ -530,10 +475,6 @@ instance Show Address where
   show (AddressAccount a) = show a
   show (AddressContract a) = show a
 
--- | Time in milliseconds since the epoch
-newtype Timestamp = Timestamp { tsMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField, ToJSON, Integral) via Word64
-
 -- | Time in seconds since the unix epoch
 newtype TransactionTime = TransactionTime { ttsSeconds :: Word64 }
     deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON, Real, Enum, Integral) via Word64
@@ -549,32 +490,6 @@ getTransactionTime = utcTimeToTransactionTime <$> getCurrentTime
 utcTimeToTransactionTime :: UTCTime -> TransactionTime
 utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 
-instance PersistFieldSql Timestamp where
-    sqlType _ = SqlInt64
-
--- | Time duration in milliseconds
-newtype Duration = Duration { durationMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON) via Word64
-
--- | Convert a 'Timestamp' to a 'UTCTime'
-timestampToUTCTime :: Timestamp -> UTCTime
-timestampToUTCTime ts = posixSecondsToUTCTime $ fromIntegral (tsMillis ts) / 1000
-
--- | Covert a 'UTCTime' to a 'Timestamp'.
--- This rounds down to the nearest millisecond.
-utcTimeToTimestamp :: UTCTime -> Timestamp
-utcTimeToTimestamp = Timestamp . truncate . (*1000) . utcTimeToPOSIXSeconds
-
--- | Convert a 'Timestamp' to seconds since the epoch, rounding down
-timestampToSeconds :: Timestamp -> Word64
-timestampToSeconds ts = tsMillis ts `div` 1000
-
-durationToNominalDiffTime :: Duration -> NominalDiffTime
-durationToNominalDiffTime dur = fromIntegral (durationMillis dur) / 1000
-
-addDuration :: Timestamp -> Duration -> Timestamp
-addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
-
 -- | Expiry time of a transaction in seconds since the epoch
 type TransactionExpiryTime = TransactionTime
 
@@ -586,22 +501,6 @@ transactionTimeToTimestamp (TransactionTime x) = Timestamp (1000 * x)
 -- |Check if a transaction expiry time precedes a given timestamp.
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired (TransactionTime x) (Timestamp t) = 1000*x < t
-
--- |Check if whether the given timestamp is no greater than the end of the day
--- of the given year and month.
-isTimestampBefore :: Timestamp -> YearMonth -> Bool
-isTimestampBefore ts ym =
-    utcTs < utcYearMonthExpiryTs
-  where
-    utcTs = timestampToUTCTime ts
-    utcYearMonthExpiryTs = UTCTime expiryDay 0
-      where
-        year = toInteger (ymYear ym)
-        month = fromIntegral (ymMonth ym)
-        expiryYear = if month == 12 then year + 1 else year
-        expiryMonth = if month == 12 then 1 else month + 1 -- (month % 12) + 1
-        expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
-
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
@@ -769,31 +668,6 @@ getEncodedPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fro
 payloadSize :: EncodedPayload -> PayloadSize
 payloadSize = fromIntegral . BSS.length . _spayload
 
--- *Types that are morally part of the consensus, but need to be exposed in
--- other parts of the system as well, e.g., in smart contracts.
-
-newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize) via Word64
-
--- |The slot number of the genesis block (0).
-genesisSlot :: Slot
-genesisSlot = 0
-
-type EpochLength = Slot
-
--- |Index of an epoch.
-type Epoch = Word64
-
-newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
-  deriving (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
-
-instance PersistFieldSql BlockHeight where
-  sqlType _ = SqlInt64
-
-
-instance S.Serialize BlockHeight where
-  put = S.putWord64be . theBlockHeight
-  get = BlockHeight <$> S.getWord64be
-
 
 -- |Blockchain metadata as needed by contract execution.
 newtype ChainMetadata =
@@ -827,27 +701,28 @@ newtype TransactionHashV0 = TransactionHashV0 {v0TransactionHash :: Hash.Hash}
 
 type TransactionHash = TransactionHashV0
 
--- * Types related to blocks
+-- These definitions __should__ be in Types.Block but due to some bugs related
+-- to template haskell that is not possible. If we do move this, then
+-- Types.Block must depend on some foreign functions (via the VRF/Sig modules)
+-- which causes the AccountTransactionIndex template haskell derivation of
+-- database schemas to fail.
+
 newtype BlockHashV0 = BlockHashV0 {v0BlockHash :: Hash.Hash}
-  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
+  deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutcomesHash :: Hash.Hash}
-  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
+  deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
-  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
-
-
+  deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 type BlockHash = BlockHashV0
 type StateHash = StateHashV0
 type TransactionOutcomesHash = TransactionOutcomesHashV0
+
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
-
--- |Limit on the number of credentials that may occur in a block.
-type CredentialsPerBlockLimit = Word16
 
 -- |Compute the first slot at or above the given time.
 transactionTimeToSlot ::

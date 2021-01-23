@@ -9,6 +9,7 @@ import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.FFIDataTypes
 import Data.Time.Clock
 
+import Concordium.Common.Time
 import Concordium.Types
 import Concordium.ID.Types
 import Concordium.ID.DummyData
