@@ -116,7 +116,7 @@ newPrivKey :: IO SignKey
 newPrivKey = SignKey <$> (newForeignPtr freeSignKey =<< genPrivateKey)
 
 deriveVerifyKey :: SignKey -> VerifyKey
-deriveVerifyKey sk = VerifyKey . unsafeDupablePerformIO $ withSignKey sk $ \signKeyPtr -> newForeignPtr freeVerifyKey =<< derivePublicFFI signKeyPtr
+deriveVerifyKey sk = VerifyKey . unsafePerformIO $ withSignKey sk $ \signKeyPtr -> newForeignPtr freeVerifyKey =<< derivePublicFFI signKeyPtr
 
 newKeyPair :: IO (SignKey, VerifyKey)
 newKeyPair = do
@@ -125,7 +125,7 @@ newKeyPair = do
   return (signKey, verifyKey)
 
 sign :: SignKey -> VerifyKey -> ByteString -> BSS.ShortByteString
-sign signKey verifyKey m = unsafeDupablePerformIO $
+sign signKey verifyKey m = unsafePerformIO $
   withSignKey signKey $ \signKeyPtr ->
     withVerifyKey verifyKey $ \verifyKeyPtr ->
       BS.unsafeUseAsCStringLen m $ \(m', mlen) -> do
@@ -137,7 +137,7 @@ sign signKey verifyKey m = unsafeDupablePerformIO $
 verify :: VerifyKey -> ByteString -> BSS.ShortByteString -> Bool
 verify vf m sig = (BSS.length sig == signatureSize) && (suc > 0)
    where
-       suc = unsafeDupablePerformIO $!
+       suc = unsafePerformIO $!
                BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
                -- this use of unsafe is fine because the rust verify function
                -- checks the length before dereferencing the data pointer

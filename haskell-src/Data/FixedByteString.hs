@@ -61,7 +61,7 @@ createWith f = do
     where len = fixedLength (undefined :: a)
 
 unsafeCreate :: FixedLength a => (Ptr Word8 -> IO ()) -> FixedByteString a
-unsafeCreate = unsafeDupablePerformIO . create
+unsafeCreate = unsafePerformIO . create
 
 -- |Create a 'FixedByteString' from a list of bytes.  If the list is too short,
 -- the remaining bytes are filled with @0@.  If it is too long, only the first

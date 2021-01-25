@@ -84,7 +84,7 @@ instance Hashable Hash where
     hash (Hash b) = Data.Hashable.hash (FBS.unsafeReadWord64 b)
 
 hash :: ByteString -> Hash
-hash b = Hash $ unsafeDupablePerformIO $
+hash b = Hash $ unsafePerformIO $
                    do maybe_ctx <- createSha256Ctx
                       case maybe_ctx of
                         Nothing -> error "Failed to initialize hash"
@@ -93,7 +93,7 @@ hash b = Hash $ unsafeDupablePerformIO $
                           hash_final ctx
 
 hashShort :: ShortByteString -> Hash
-hashShort b = Hash $ unsafeDupablePerformIO $
+hashShort b = Hash $ unsafePerformIO $
               do maybe_ctx <- createSha256Ctx
                  case maybe_ctx of
                    Nothing -> error "Failed to initialize hash"
@@ -119,7 +119,7 @@ hash_final :: Ptr SHA256Ctx -> IO (FixedByteString DigestSize)
 hash_final ptr = FBS.create $ \hsh -> rs_sha256_final hsh ptr
 
 hashLazy :: L.ByteString -> Hash
-hashLazy b = Hash $ unsafeDupablePerformIO $
+hashLazy b = Hash $ unsafePerformIO $
                    do maybe_ctx <- createSha256Ctx
                       case maybe_ctx of
                         Nothing -> error "Failed to initialize hash"

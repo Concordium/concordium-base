@@ -46,7 +46,7 @@ import Data.Aeson
 import Foreign.Ptr
 import Data.ByteString.Short
 import Data.Foldable(foldl')
-import System.IO.Unsafe(unsafeDupablePerformIO)
+import System.IO.Unsafe
 import Foreign.Marshal(alloca)
 import Foreign(peek, Storable, newForeignPtr, withForeignPtr, ForeignPtr)
 import Foreign.C.Types(CChar)
@@ -107,7 +107,7 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
 -- |Aggregate two encrypted amounts together. This operation is strict and
 -- associative.
 aggregateAmounts :: EncryptedAmount -> EncryptedAmount -> EncryptedAmount
-aggregateAmounts left right = unsafeDupablePerformIO $ do
+aggregateAmounts left right = unsafePerformIO $ do
   withElgamalCipher (encryptionHigh left) $ \leftHighPtr ->
     withElgamalCipher (encryptionLow left) $ \leftLowPtr ->
       withElgamalCipher (encryptionHigh right) $ \rightHighPtr ->
@@ -161,7 +161,7 @@ withAggregatedDecryptedAmount :: AggregatedDecryptedAmount -> (Ptr AggregatedDec
 withAggregatedDecryptedAmount (AggregatedDecryptedAmount ptr) = withForeignPtr ptr
 
 makeAggregatedDecryptedAmount :: EncryptedAmount -> Amount -> EncryptedAmountAggIndex -> AggregatedDecryptedAmount
-makeAggregatedDecryptedAmount encAmount (Amount amount) idx = unsafeDupablePerformIO $
+makeAggregatedDecryptedAmount encAmount (Amount amount) idx = unsafePerformIO $
   withElgamalCipher (encryptionHigh encAmount) $ \enc_hi ->
     withElgamalCipher (encryptionLow encAmount) $ \enc_lo ->
     AggregatedDecryptedAmount <$> (newForeignPtr free_aggregated_decrypted_amount =<< make_aggregated_decrypted_amount enc_hi enc_lo amount idx)
@@ -180,7 +180,7 @@ foreign import ccall unsafe "encrypt_amount_with_zero_randomness"
 
 -- | Encrypt the given amount with zero randomness. To be used in transfer to secret
 encryptAmountZeroRandomness :: GlobalContext -> Amount -> EncryptedAmount
-encryptAmountZeroRandomness gc (Amount amount) = unsafeDupablePerformIO $
+encryptAmountZeroRandomness gc (Amount amount) = unsafePerformIO $
   withGlobalContext gc $ \gcPtr ->
   alloca $ \outHighPtr ->
   alloca $ \outLowPtr -> do
@@ -328,7 +328,7 @@ verifyEncryptedTransferProof ::
   -- |Proof of validity of the transfer.
   EncryptedAmountTransferData ->
   Bool
-verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
+verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
     withElgamalPublicKey receiverPK' $ \receiverPKPtr ->
       withElgamalPublicKey senderPK' $ \senderPKPtr ->
@@ -476,7 +476,7 @@ verifySecretToPublicTransferProof ::
   -- |Proof of validity of the transfer.
   SecToPubAmountTransferData ->
   Bool
-verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafeDupablePerformIO $ do
+verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
     withElgamalPublicKey senderPK' $ \senderPKPtr ->
       withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
@@ -525,7 +525,7 @@ foreign import ccall safe "decrypt_amount"
 -- although a bigger table might be better if many decryptions are going to be
 -- performed.
 computeTable :: GlobalContext -> Word64 -> Table
-computeTable gc m = Table . unsafeDupablePerformIO $ do
+computeTable gc m = Table . unsafePerformIO $ do
     r <- withGlobalContext gc (flip computeTablePtr m)
     newForeignPtr freeTable r
 
@@ -534,7 +534,7 @@ computeTable gc m = Table . unsafeDupablePerformIO $ do
 -- global context and table. If this is not the case this function is almost
 -- certainly going to appear to loop.
 decryptAmount :: Table -> ElgamalSecretKey -> EncryptedAmount -> Amount
-decryptAmount table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
+decryptAmount table sec EncryptedAmount{..} = Amount . unsafePerformIO $
     withTable table $ \tablePtr ->
       withElgamalSecretKey sec $ \secPtr ->
         withElgamalCipher encryptionHigh $ \highPtr ->

@@ -41,7 +41,7 @@ import Foreign.C.Types
 import Data.Word
 import Data.ByteString as BS
 import Data.Serialize
-import System.IO.Unsafe (unsafeDupablePerformIO)
+import System.IO.Unsafe (unsafePerformIO)
 import Control.DeepSeq
 import qualified Data.Aeson as AE
 
@@ -263,12 +263,12 @@ instance AE.FromJSON ElgamalSecretKey where
 
 {-# WARNING generateGroupElementFromSeed "Not cryptographically secure, do not use in production." #-}
 generateGroupElementFromSeed :: GlobalContext -> Word64 -> GroupElement
-generateGroupElementFromSeed gc seed = GroupElement . unsafeDupablePerformIO $
+generateGroupElementFromSeed gc seed = GroupElement . unsafePerformIO $
   withGlobalContext gc $ \gcPtr -> 
     newForeignPtr freeGroupElement =<< generateGroupElementFromSeedPtr gcPtr seed
 
 deriveElgamalPublicKey :: GlobalContext -> GroupElement -> ElgamalPublicKey
-deriveElgamalPublicKey gc ge = unsafeDupablePerformIO $
+deriveElgamalPublicKey gc ge = unsafePerformIO $
     withGlobalContext gc $ \gcPtr ->
       withGroupElement ge $ \gePtr -> do
         ptr <- deriveElgamalPublicKeyPtr gcPtr gePtr
@@ -276,7 +276,7 @@ deriveElgamalPublicKey gc ge = unsafeDupablePerformIO $
 
 {-# WARNING generateElgamalSecretKeyFromSeed "Not cryptographically secure, do not use in production." #-}
 generateElgamalSecretKeyFromSeed :: GlobalContext -> Word64 -> ElgamalSecretKey
-generateElgamalSecretKeyFromSeed gc seed = unsafeDupablePerformIO $
+generateElgamalSecretKeyFromSeed gc seed = unsafePerformIO $
     withGlobalContext gc $ \gcPtr -> do
       ptr <- generateElgamalSecretKeyFromSeedPtr gcPtr seed
       ElgamalSecretKey <$> newForeignPtr freeElgamalSecretKey ptr
@@ -315,7 +315,7 @@ generateElgamalCipher = do
 
 -- |Encryption of 0 in the exponent, with randomness 0.
 zeroElgamalCipher :: ElgamalCipher
-zeroElgamalCipher = unsafeDupablePerformIO $ do
+zeroElgamalCipher = unsafePerformIO $ do
   ptr <- zeroElgamalCipherPtr
   unsafeMakeCipher ptr
 
