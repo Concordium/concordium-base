@@ -63,11 +63,11 @@ foreign import ccall unsafe "bls_proof_eq" equalsProof :: Ptr Proof -> Ptr Proof
 foreign import ccall unsafe "bls_proof_cmp" cmpProof :: Ptr Proof -> Ptr Proof -> IO Int32
 
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
-foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
-foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
-foreign import ccall unsafe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
-foreign import ccall unsafe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
+foreign import ccall safe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
+foreign import ccall safe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
 
 withSecretKey :: SecretKey -> (Ptr SecretKey -> IO b) -> IO b
 withSecretKey (SecretKey fp) = withForeignPtr fp

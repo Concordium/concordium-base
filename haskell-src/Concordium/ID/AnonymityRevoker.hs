@@ -25,10 +25,10 @@ import qualified Data.Aeson.Encoding as AE
 newtype ArInfo = ArInfo (ForeignPtr ArInfo)
 
 foreign import ccall unsafe "&ar_info_free" freeArInfo :: FunPtr (Ptr ArInfo -> IO ())
-foreign import ccall unsafe "ar_info_to_bytes" arInfoToBytes :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ar_info_from_bytes" arInfoFromBytes :: Ptr Word8 -> CSize -> IO (Ptr ArInfo)
-foreign import ccall unsafe "ar_info_to_json" arInfoToJSONFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ar_info_from_json" arInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr ArInfo)
+foreign import ccall safe "ar_info_to_bytes" arInfoToBytes :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "ar_info_from_bytes" arInfoFromBytes :: Ptr Word8 -> CSize -> IO (Ptr ArInfo)
+foreign import ccall safe "ar_info_to_json" arInfoToJSONFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "ar_info_from_json" arInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr ArInfo)
 foreign import ccall unsafe "ar_info_ar_identity" arIdentityFFI :: Ptr ArInfo -> IO ArIdentity
 
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
