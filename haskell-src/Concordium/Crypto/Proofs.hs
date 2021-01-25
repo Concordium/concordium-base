@@ -59,14 +59,14 @@ randomProof gen = (key, gen')
             bytes = pack (take dlogProofSize $ randoms gen0)
             key = Dlog25519Proof bytes
 
-foreign import ccall unsafe "eddsa_verify_dlog_ed25519" verifyDlogFFI
+foreign import ccall safe "eddsa_verify_dlog_ed25519" verifyDlogFFI
                :: Ptr Word8
                -> CSize
                -> Ptr Word8
                -> Ptr Word8
                -> IO Int32
 
-foreign import ccall unsafe "eddsa_prove_dlog_ed25519" proveDlogFFI
+foreign import ccall safe "eddsa_prove_dlog_ed25519" proveDlogFFI
                :: Ptr Word8 -- challenge bytes
                -> CSize
                -> Ptr Word8 -- public key bytes

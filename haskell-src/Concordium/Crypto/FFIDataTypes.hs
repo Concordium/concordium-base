@@ -70,13 +70,13 @@ instance NFData ElgamalCipher where
     rnf = (`seq` ())
 
 foreign import ccall unsafe "&pedersen_key_free" freePedersenKey :: FunPtr (Ptr PedersenKey -> IO ())
-foreign import ccall unsafe "pedersen_key_to_bytes" toBytesPedersenKey :: Ptr PedersenKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "pedersen_key_from_bytes" fromBytesPedersenKey :: Ptr Word8 -> CSize -> IO (Ptr PedersenKey)
+foreign import ccall safe "pedersen_key_to_bytes" toBytesPedersenKey :: Ptr PedersenKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "pedersen_key_from_bytes" fromBytesPedersenKey :: Ptr Word8 -> CSize -> IO (Ptr PedersenKey)
 foreign import ccall unsafe "pedersen_key_gen" generatePedersenKeyPtr :: CSize -> IO (Ptr PedersenKey)
 
 foreign import ccall unsafe "&ps_sig_key_free" freePsSigKey :: FunPtr (Ptr PsSigKey -> IO ())
-foreign import ccall unsafe "ps_sig_key_to_bytes" toBytesPsSigKey :: Ptr PsSigKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ps_sig_key_from_bytes" fromBytesPsSigKey :: Ptr Word8 -> CSize -> IO (Ptr PsSigKey)
+foreign import ccall safe "ps_sig_key_to_bytes" toBytesPsSigKey :: Ptr PsSigKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "ps_sig_key_from_bytes" fromBytesPsSigKey :: Ptr Word8 -> CSize -> IO (Ptr PsSigKey)
 foreign import ccall unsafe "ps_sig_key_gen" generatePsSigKeyPtr :: CSize -> IO (Ptr PsSigKey)
 
 foreign import ccall unsafe "&group_element_free" freeGroupElement :: FunPtr (Ptr GroupElement -> IO ())

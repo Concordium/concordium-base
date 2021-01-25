@@ -20,7 +20,7 @@ import Data.Serialize(encode)
 
 type CredentialDeploymentInformationBytes = ByteString
 
-foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
+foreign import ccall safe "verify_cdi_ffi" verifyCDIFFI
                :: Ptr GlobalContext
                -> Ptr IpInfo
                -> Ptr (Ptr ArInfo)
@@ -33,7 +33,7 @@ foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
 -- FIXME: We pass in keys as byte arrays which is quite bad since
 -- keys are not bytes, but rather we know that they are well-formed already.
 
-foreign import ccall unsafe "verify_initial_cdi_ffi" verifyInitialCDIFFI
+foreign import ccall safe "verify_initial_cdi_ffi" verifyInitialCDIFFI
     :: Ptr IpInfo
     -> Ptr Word8 -- Serialized account creation information
     -> CSize -- length of serialized account creation information

@@ -193,7 +193,7 @@ encryptAmountZeroRandomness gc (Amount amount) = unsafeDupablePerformIO $
 --------------------------- Encrypted transfer data ----------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transfer_data ::
+foreign import ccall safe "make_encrypted_transfer_data" make_encrypted_transfer_data ::
   Ptr GlobalContext -- ^ Pointer to the global context
   -> Ptr ElgamalPublicKey  -- ^ Public key of the receiver
   -> Ptr ElgamalSecretKey -- ^ Secret key of the sender
@@ -300,7 +300,7 @@ makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desired
       else return Nothing
 
 -- * Verify an encrypted transfer proof.
-foreign import ccall unsafe "verify_encrypted_transfer"
+foreign import ccall safe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
      -> Ptr ElgamalPublicKey -- ^ Public key of the receiver.
@@ -357,7 +357,7 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
 --------------------------- Sec to pub transfer data ---------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "make_sec_to_pub_data"
+foreign import ccall safe "make_sec_to_pub_data"
   make_sec_to_pub_transfer_data ::
        Ptr GlobalContext -- ^ Pointer to the global context
      -> Ptr ElgamalSecretKey -- ^ Secret key of the sender
@@ -452,7 +452,7 @@ makeSecToPubAmountTransferData gc sk aggAmount (Amount amount) =
           stpatdProof = proof
           }
 
-foreign import ccall unsafe "verify_sec_to_pub_transfer"
+foreign import ccall safe "verify_sec_to_pub_transfer"
   verify_sec_to_pub_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
      -> Ptr ElgamalPublicKey -- ^ Public key of the sender.
@@ -506,13 +506,13 @@ withTable :: Table -> (Ptr Table -> IO b) -> IO b
 withTable (Table fp) = withForeignPtr fp
 
 -- Precompute the baby step giant step table
-foreign import ccall unsafe "compute_table"
+foreign import ccall safe "compute_table"
   computeTablePtr :: Ptr GlobalContext -> Word64 -> IO (Ptr Table)
 
 foreign import ccall unsafe "&free_table"
   freeTable :: FunPtr (Ptr Table -> IO ())
 
-foreign import ccall unsafe "decrypt_amount"
+foreign import ccall safe "decrypt_amount"
   decryptAmountPtr ::
    Ptr Table
    -> Ptr ElgamalSecretKey
@@ -544,7 +544,7 @@ decryptAmount table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
 -------------------------- Helper mostly for testing ---------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "encrypt_amount"
+foreign import ccall safe "encrypt_amount"
   encrypt_amount ::
     Ptr GlobalContext -- ^ Global context
     -> Ptr ElgamalPublicKey -- ^ Public key with which to encrypt.

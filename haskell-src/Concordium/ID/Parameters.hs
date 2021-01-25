@@ -24,10 +24,10 @@ newtype GlobalContext = GlobalContext (ForeignPtr GlobalContext)
 
 foreign import ccall unsafe "&global_context_free" freeGlobalContext :: FunPtr (Ptr GlobalContext -> IO ())
 foreign import ccall unsafe "dummy_generate_global_context" dummyGenerateGlobalContextPtr :: IO (Ptr GlobalContext)
-foreign import ccall unsafe "global_context_to_bytes" globalContextToBytes :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "global_context_from_bytes" globalContextFromBytes :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
-foreign import ccall unsafe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
+foreign import ccall safe "global_context_to_bytes" globalContextToBytes :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "global_context_from_bytes" globalContextFromBytes :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
+foreign import ccall safe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 
 withGlobalContext :: GlobalContext -> (Ptr GlobalContext -> IO b) -> IO b
 withGlobalContext (GlobalContext fp) = withForeignPtr fp
