@@ -63,11 +63,11 @@ foreign import ccall unsafe "bls_proof_eq" equalsProof :: Ptr Proof -> Ptr Proof
 foreign import ccall unsafe "bls_proof_cmp" cmpProof :: Ptr Proof -> Ptr Proof -> IO Int32
 
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
-foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
-foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
-foreign import ccall unsafe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
-foreign import ccall unsafe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
+foreign import ccall safe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
+foreign import ccall safe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
 
 withSecretKey :: SecretKey -> (Ptr SecretKey -> IO b) -> IO b
 withSecretKey (SecretKey fp) = withForeignPtr fp
@@ -232,17 +232,17 @@ generateSecretKey = do
 
 -- |Derive a public key from a given secret key.
 derivePublicKey :: SecretKey -> PublicKey
-derivePublicKey sk = PublicKey <$> unsafeDupablePerformIO $ do
+derivePublicKey sk = PublicKey <$> unsafePerformIO $ do
   pkptr <- withSecretKey sk derivePublicKeyPtr
   newForeignPtr freePublicKey pkptr
 
 emptySignature :: Signature
-emptySignature = Signature <$> unsafeDupablePerformIO $ do
+emptySignature = Signature <$> unsafePerformIO $ do
   sigptr <- emptyBlsSig
   newForeignPtr freeSignature sigptr
 
 sign :: ByteString -> SecretKey -> Signature
-sign m sk = Signature <$> unsafeDupablePerformIO $ do
+sign m sk = Signature <$> unsafePerformIO $ do
   -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   sigptr <- BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withSecretKey sk $ signBls (castPtr m') (fromIntegral mlen)
@@ -250,7 +250,7 @@ sign m sk = Signature <$> unsafeDupablePerformIO $ do
 
 -- |Verify a single signature.
 verify :: ByteString -> PublicKey -> Signature -> Bool
-verify m pk sig = unsafeDupablePerformIO $ do
+verify m pk sig = unsafePerformIO $ do
   -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withPublicKey pk $ \pk' ->
@@ -258,7 +258,7 @@ verify m pk sig = unsafeDupablePerformIO $ do
 
 -- |Aggregate two signatures together.
 aggregate :: Signature -> Signature -> Signature
-aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
+aggregate sig1 sig2 = Signature <$> unsafePerformIO $ do
   sigptr <- withSignature sig1 $ \sig1' ->
     withSignature sig2 $ \sig2' ->
     aggregateBls sig1' sig2'
@@ -267,7 +267,7 @@ aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
 -- |Verify a signature on bytestring under the list of public keys
 -- The order of the public key list is irrelevant to the result
 verifyAggregate :: ByteString -> [PublicKey] -> Signature -> Bool
-verifyAggregate m pks sig = unsafeDupablePerformIO $ do
+verifyAggregate m pks sig = unsafePerformIO $ do
   -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withSignature sig $ \sig' ->
@@ -288,7 +288,7 @@ proveKnowledgeOfSK context sk = Proof <$> do
 
 -- |Check a proof of knowledge for a publickey
 checkProofOfKnowledgeSK :: ByteString -> Proof -> PublicKey -> Bool
-checkProofOfKnowledgeSK context proof pk = unsafeDupablePerformIO $ do
+checkProofOfKnowledgeSK context proof pk = unsafePerformIO $ do
   -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withPublicKey pk $ \pk' ->

@@ -64,7 +64,7 @@ secretBlsKeyGen = resize (2^(30 :: Int)) $ fst . randomBlsSecretKey . mkStdGen <
 -- | Provides deterministic key generation for testing purposes.
 {-# WARNING generateBlsSecretKeyFromSeed "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 generateBlsSecretKeyFromSeed :: CSize -> Bls.SecretKey
-generateBlsSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
+generateBlsSecretKeyFromSeed seed = unsafePerformIO $ do
   ptr <- generateSecretKeyPtrFromSeed seed
   Bls.SecretKey <$> newForeignPtr freeSecretKey ptr
 

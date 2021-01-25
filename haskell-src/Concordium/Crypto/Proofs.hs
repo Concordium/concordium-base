@@ -59,14 +59,14 @@ randomProof gen = (key, gen')
             bytes = pack (take dlogProofSize $ randoms gen0)
             key = Dlog25519Proof bytes
 
-foreign import ccall unsafe "eddsa_verify_dlog_ed25519" verifyDlogFFI
+foreign import ccall safe "eddsa_verify_dlog_ed25519" verifyDlogFFI
                :: Ptr Word8
                -> CSize
                -> Ptr Word8
                -> Ptr Word8
                -> IO Int32
 
-foreign import ccall unsafe "eddsa_prove_dlog_ed25519" proveDlogFFI
+foreign import ccall safe "eddsa_prove_dlog_ed25519" proveDlogFFI
                :: Ptr Word8 -- challenge bytes
                -> CSize
                -> Ptr Word8 -- public key bytes
@@ -78,7 +78,7 @@ checkDlog25519Proof :: BS.ByteString -- ^The challenge prefix to use
                        -> BS.ByteString -- ^Public key serialized in bytes (needs to be 32 bytes in length).
                        -> Dlog25519Proof -- ^Purported proof.
                        -> Bool
-checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafeDupablePerformIO $
+checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafePerformIO $
   BS.unsafeUseAsCStringLen challenge $ \(c_ptr, c_len) ->
     BS.unsafeUseAsCStringLen publicKey $ \(pk_ptr, pk_len) ->
      if pk_len /= 32 then return False
