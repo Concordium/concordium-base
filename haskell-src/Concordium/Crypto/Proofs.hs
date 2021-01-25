@@ -78,7 +78,7 @@ checkDlog25519Proof :: BS.ByteString -- ^The challenge prefix to use
                        -> BS.ByteString -- ^Public key serialized in bytes (needs to be 32 bytes in length).
                        -> Dlog25519Proof -- ^Purported proof.
                        -> Bool
-checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafeDupablePerformIO $
+checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafePerformIO $
   BS.unsafeUseAsCStringLen challenge $ \(c_ptr, c_len) ->
     BS.unsafeUseAsCStringLen publicKey $ \(pk_ptr, pk_len) ->
      if pk_len /= 32 then return False

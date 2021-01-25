@@ -269,7 +269,7 @@ newPrivKey =
        SecretKey <$> newForeignPtr freeSecretKey ptr
 
 pubKey :: SecretKey -> PublicKey
-pubKey sk = unsafeDupablePerformIO $!
+pubKey sk = unsafePerformIO $!
     withSecretKey sk $
       \skPtr -> do
         pkPtr <- rs_public_key skPtr
@@ -277,7 +277,7 @@ pubKey sk = unsafeDupablePerformIO $!
 
 -- |Generate a VRF proof.
 prove :: KeyPair -> ByteString -> Proof
-prove (KeyPair sk pk) b = unsafeDupablePerformIO $!
+prove (KeyPair sk pk) b = unsafePerformIO $!
   withPublicKey pk $ \pkPtr ->
     withSecretKey sk $ \skPtr ->
       -- this use of unsafe is fine because the called function checks
