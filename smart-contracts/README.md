@@ -23,7 +23,7 @@ This repository contains several packages to support smart contracts on and off-
 
 Currently it consists of the following parts
 - [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
-- [wasmer-interp](./wasmer-interp) which is a wrapper around the [wasmer](https://github.com/wasmerio/wasmer) interpreter providing the functionality needed by the scheduler to execute smart contracts.
+- [wasmer-transform](./wasmer-transform), an interpreter providing the functionality needed by the scheduler to execute smart contracts.
 - [cargo-concordium](./cargo-concordium) which is a small tool for developing smart contracts. It uses the API exposed in wasmer-interp to execute smart contracts directly and can initialize and update smart contracts, in a desired state. See the `--help` option of the tool for details on how to invoke it.
 It can also be used to build contracts embedded with schemas (see section about [contract schemas](#contract-schema)).
 - [concordium-contracts-common](./concordium-contracts-common) which contains common functionality used by smart contracts as well as the host environment to provide data for smart contracts. It defines common datatypes that need to cross boundaries, and common serialization formats.
