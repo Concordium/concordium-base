@@ -21,7 +21,7 @@ FROM ubuntu:20.04
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates
 COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
 COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
-COPY --from=builder /build/identity-provider-service/data/identity_provider.pub.json /identity_provider.pub.json
+COPY --from=builder /genesis-data/ip_private_keys/identity_provider-1.pub.json /identity_provider.pub.json
 COPY --from=builder /genesis-data/global.json /global.json
 COPY --from=builder /genesis-data/anonymity_revokers.json /anonymity_revokers.json
 COPY --from=builder /genesis-data/ip_private_keys/identity_provider-1.json /identity_provider.json
