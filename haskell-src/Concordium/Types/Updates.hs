@@ -18,6 +18,10 @@
 --   - election difficulty
 --   - Energy to Euro exchange rate
 --   - GTU to Euro exchange rate
+--   - address of the foundation account
+--   - parameters for distribution of newly minted tokens
+--   - parameters controlling the transaction fee distribution
+--   - parameters controlling the GAS account
 --
 -- Each parameter has an independent update queue.
 -- Sequence numbers for each different parameter are thus independent.

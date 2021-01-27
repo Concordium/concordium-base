@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 
 # Build binaries in builder image.
-FROM 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base:0.15 as builder
+FROM 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/development:0.17 as builder
 COPY . /build
 RUN (cd /build/identity-provider-service && cargo build --release)
 

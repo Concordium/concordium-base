@@ -41,7 +41,7 @@ import Foreign.C.Types
 import Data.Word
 import Data.ByteString as BS
 import Data.Serialize
-import System.IO.Unsafe (unsafeDupablePerformIO)
+import System.IO.Unsafe (unsafePerformIO)
 import Control.DeepSeq
 import qualified Data.Aeson as AE
 
@@ -70,13 +70,13 @@ instance NFData ElgamalCipher where
     rnf = (`seq` ())
 
 foreign import ccall unsafe "&pedersen_key_free" freePedersenKey :: FunPtr (Ptr PedersenKey -> IO ())
-foreign import ccall unsafe "pedersen_key_to_bytes" toBytesPedersenKey :: Ptr PedersenKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "pedersen_key_from_bytes" fromBytesPedersenKey :: Ptr Word8 -> CSize -> IO (Ptr PedersenKey)
+foreign import ccall safe "pedersen_key_to_bytes" toBytesPedersenKey :: Ptr PedersenKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "pedersen_key_from_bytes" fromBytesPedersenKey :: Ptr Word8 -> CSize -> IO (Ptr PedersenKey)
 foreign import ccall unsafe "pedersen_key_gen" generatePedersenKeyPtr :: CSize -> IO (Ptr PedersenKey)
 
 foreign import ccall unsafe "&ps_sig_key_free" freePsSigKey :: FunPtr (Ptr PsSigKey -> IO ())
-foreign import ccall unsafe "ps_sig_key_to_bytes" toBytesPsSigKey :: Ptr PsSigKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ps_sig_key_from_bytes" fromBytesPsSigKey :: Ptr Word8 -> CSize -> IO (Ptr PsSigKey)
+foreign import ccall safe "ps_sig_key_to_bytes" toBytesPsSigKey :: Ptr PsSigKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "ps_sig_key_from_bytes" fromBytesPsSigKey :: Ptr Word8 -> CSize -> IO (Ptr PsSigKey)
 foreign import ccall unsafe "ps_sig_key_gen" generatePsSigKeyPtr :: CSize -> IO (Ptr PsSigKey)
 
 foreign import ccall unsafe "&group_element_free" freeGroupElement :: FunPtr (Ptr GroupElement -> IO ())
@@ -263,12 +263,12 @@ instance AE.FromJSON ElgamalSecretKey where
 
 {-# WARNING generateGroupElementFromSeed "Not cryptographically secure, do not use in production." #-}
 generateGroupElementFromSeed :: GlobalContext -> Word64 -> GroupElement
-generateGroupElementFromSeed gc seed = GroupElement . unsafeDupablePerformIO $
+generateGroupElementFromSeed gc seed = GroupElement . unsafePerformIO $
   withGlobalContext gc $ \gcPtr -> 
     newForeignPtr freeGroupElement =<< generateGroupElementFromSeedPtr gcPtr seed
 
 deriveElgamalPublicKey :: GlobalContext -> GroupElement -> ElgamalPublicKey
-deriveElgamalPublicKey gc ge = unsafeDupablePerformIO $
+deriveElgamalPublicKey gc ge = unsafePerformIO $
     withGlobalContext gc $ \gcPtr ->
       withGroupElement ge $ \gePtr -> do
         ptr <- deriveElgamalPublicKeyPtr gcPtr gePtr
@@ -276,7 +276,7 @@ deriveElgamalPublicKey gc ge = unsafeDupablePerformIO $
 
 {-# WARNING generateElgamalSecretKeyFromSeed "Not cryptographically secure, do not use in production." #-}
 generateElgamalSecretKeyFromSeed :: GlobalContext -> Word64 -> ElgamalSecretKey
-generateElgamalSecretKeyFromSeed gc seed = unsafeDupablePerformIO $
+generateElgamalSecretKeyFromSeed gc seed = unsafePerformIO $
     withGlobalContext gc $ \gcPtr -> do
       ptr <- generateElgamalSecretKeyFromSeedPtr gcPtr seed
       ElgamalSecretKey <$> newForeignPtr freeElgamalSecretKey ptr
@@ -315,7 +315,7 @@ generateElgamalCipher = do
 
 -- |Encryption of 0 in the exponent, with randomness 0.
 zeroElgamalCipher :: ElgamalCipher
-zeroElgamalCipher = unsafeDupablePerformIO $ do
+zeroElgamalCipher = unsafePerformIO $ do
   ptr <- zeroElgamalCipherPtr
   unsafeMakeCipher ptr
 
