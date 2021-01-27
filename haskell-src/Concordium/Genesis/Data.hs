@@ -50,7 +50,7 @@ getGenesisDataV2 = do
             | gbBakerId ab /= i ->
                 fail "BakerId does not match account index"
         _ -> return ()
-    genesisFinalizationParameters <- get
+    genesisFinalizationParameters <- getFinalizationParametersGD2
     genesisCryptographicParameters <- get
     genesisIdentityProviders <- get
     genesisAnonymityRevokers <- get
@@ -67,7 +67,7 @@ putGenesisDataV2 GenesisDataV2{..} = do
     put genesisSlotDuration
     put genesisSeedState
     putListOf (putGenesisAccountGD2 genesisCryptographicParameters) genesisAccounts
-    put genesisFinalizationParameters
+    putFinalizationParametersGD2 genesisFinalizationParameters
     put genesisCryptographicParameters
     put genesisIdentityProviders
     put genesisAnonymityRevokers
