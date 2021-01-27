@@ -8,6 +8,7 @@ module Concordium.Genesis.Data(
 
 import Control.Monad
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NE
 import Data.Serialize
 import GHC.Generics (Generic)
 import Lens.Micro.Platform
@@ -15,12 +16,14 @@ import Lens.Micro.Platform
 import Concordium.Common.Version
 import Concordium.Genesis.Account
 import Concordium.Genesis.Parameters
+import qualified Concordium.ID.Types as ID
 import Concordium.Types
 import Concordium.Types.AnonymityRevokers
 import Concordium.Types.IdentityProviders
 import Concordium.Types.Parameters
 import qualified Concordium.Types.SeedState as SeedState
 import Concordium.Types.Updates
+import Concordium.Utils.Serialization
 
 data GenesisDataV2 = GenesisDataV2
     { genesisTime :: !Timestamp,
@@ -42,16 +45,23 @@ getGenesisDataV2 = do
     genesisTime <- get
     genesisSlotDuration <- get
     genesisSeedState <- get
-    accountsAndEncryptionKeys <- getListOf getGenesisAccountGD2
+    nAccounts <- getLength
+    accountsAndEncryptionKeys <- replicateM nAccounts getGenesisAccountGD2
     let genesisAccounts = fst <$> accountsAndEncryptionKeys
+    genesisFinalizationParameters <- get
+    genesisCryptographicParameters <- get
     -- Verify that each baker account records the correct baker id
-    forM_ (zip [0 ..] genesisAccounts) $ \(i, acct) -> case gaBaker acct of
+    -- and that the serialized encryption key is correct
+    forM_ (zip [0 ..] accountsAndEncryptionKeys) $ \(i, (acct, ek)) -> case gaBaker acct of
         Just ab
             | gbBakerId ab /= i ->
                 fail "BakerId does not match account index"
+        _
+            | let acctRegId = ID.regId (NE.head (gaCredentials acct))
+            , let acctEK = ID.makeEncryptionKey genesisCryptographicParameters acctRegId
+            , ek /= acctEK ->
+                fail "Incorrect account encryption key"
         _ -> return ()
-    genesisFinalizationParameters <- get
-    genesisCryptographicParameters <- get
     genesisIdentityProviders <- get
     genesisAnonymityRevokers <- get
     genesisMaxBlockEnergy <- get
@@ -66,7 +76,8 @@ putGenesisDataV2 GenesisDataV2{..} = do
     put genesisTime
     put genesisSlotDuration
     put genesisSeedState
-    putListOf (putGenesisAccountGD2 genesisCryptographicParameters) genesisAccounts
+    putLength (length genesisAccounts)
+    mapM_ (putGenesisAccountGD2 genesisCryptographicParameters) genesisAccounts
     put genesisFinalizationParameters
     put genesisCryptographicParameters
     put genesisIdentityProviders
