@@ -46,7 +46,7 @@ import Data.Aeson
 import Foreign.Ptr
 import Data.ByteString.Short
 import Data.Foldable(foldl')
-import System.IO.Unsafe(unsafeDupablePerformIO)
+import System.IO.Unsafe
 import Foreign.Marshal(alloca)
 import Foreign(peek, Storable, newForeignPtr, withForeignPtr, ForeignPtr)
 import Foreign.C.Types(CChar)
@@ -107,7 +107,7 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
 -- |Aggregate two encrypted amounts together. This operation is strict and
 -- associative.
 aggregateAmounts :: EncryptedAmount -> EncryptedAmount -> EncryptedAmount
-aggregateAmounts left right = unsafeDupablePerformIO $ do
+aggregateAmounts left right = unsafePerformIO $ do
   withElgamalCipher (encryptionHigh left) $ \leftHighPtr ->
     withElgamalCipher (encryptionLow left) $ \leftLowPtr ->
       withElgamalCipher (encryptionHigh right) $ \rightHighPtr ->
@@ -161,7 +161,7 @@ withAggregatedDecryptedAmount :: AggregatedDecryptedAmount -> (Ptr AggregatedDec
 withAggregatedDecryptedAmount (AggregatedDecryptedAmount ptr) = withForeignPtr ptr
 
 makeAggregatedDecryptedAmount :: EncryptedAmount -> Amount -> EncryptedAmountAggIndex -> AggregatedDecryptedAmount
-makeAggregatedDecryptedAmount encAmount (Amount amount) idx = unsafeDupablePerformIO $
+makeAggregatedDecryptedAmount encAmount (Amount amount) idx = unsafePerformIO $
   withElgamalCipher (encryptionHigh encAmount) $ \enc_hi ->
     withElgamalCipher (encryptionLow encAmount) $ \enc_lo ->
     AggregatedDecryptedAmount <$> (newForeignPtr free_aggregated_decrypted_amount =<< make_aggregated_decrypted_amount enc_hi enc_lo amount idx)
@@ -180,7 +180,7 @@ foreign import ccall unsafe "encrypt_amount_with_zero_randomness"
 
 -- | Encrypt the given amount with zero randomness. To be used in transfer to secret
 encryptAmountZeroRandomness :: GlobalContext -> Amount -> EncryptedAmount
-encryptAmountZeroRandomness gc (Amount amount) = unsafeDupablePerformIO $
+encryptAmountZeroRandomness gc (Amount amount) = unsafePerformIO $
   withGlobalContext gc $ \gcPtr ->
   alloca $ \outHighPtr ->
   alloca $ \outLowPtr -> do
@@ -193,7 +193,7 @@ encryptAmountZeroRandomness gc (Amount amount) = unsafeDupablePerformIO $
 --------------------------- Encrypted transfer data ----------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transfer_data ::
+foreign import ccall safe "make_encrypted_transfer_data" make_encrypted_transfer_data ::
   Ptr GlobalContext -- ^ Pointer to the global context
   -> Ptr ElgamalPublicKey  -- ^ Public key of the receiver
   -> Ptr ElgamalSecretKey -- ^ Secret key of the sender
@@ -300,7 +300,7 @@ makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desired
       else return Nothing
 
 -- * Verify an encrypted transfer proof.
-foreign import ccall unsafe "verify_encrypted_transfer"
+foreign import ccall safe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
      -> Ptr ElgamalPublicKey -- ^ Public key of the receiver.
@@ -328,7 +328,7 @@ verifyEncryptedTransferProof ::
   -- |Proof of validity of the transfer.
   EncryptedAmountTransferData ->
   Bool
-verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
+verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
     withElgamalPublicKey receiverPK' $ \receiverPKPtr ->
       withElgamalPublicKey senderPK' $ \senderPKPtr ->
@@ -357,7 +357,7 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
 --------------------------- Sec to pub transfer data ---------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "make_sec_to_pub_data"
+foreign import ccall safe "make_sec_to_pub_data"
   make_sec_to_pub_transfer_data ::
        Ptr GlobalContext -- ^ Pointer to the global context
      -> Ptr ElgamalSecretKey -- ^ Secret key of the sender
@@ -452,7 +452,7 @@ makeSecToPubAmountTransferData gc sk aggAmount (Amount amount) =
           stpatdProof = proof
           }
 
-foreign import ccall unsafe "verify_sec_to_pub_transfer"
+foreign import ccall safe "verify_sec_to_pub_transfer"
   verify_sec_to_pub_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
      -> Ptr ElgamalPublicKey -- ^ Public key of the sender.
@@ -476,7 +476,7 @@ verifySecretToPublicTransferProof ::
   -- |Proof of validity of the transfer.
   SecToPubAmountTransferData ->
   Bool
-verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafeDupablePerformIO $ do
+verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
     withElgamalPublicKey senderPK' $ \senderPKPtr ->
       withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
@@ -506,13 +506,13 @@ withTable :: Table -> (Ptr Table -> IO b) -> IO b
 withTable (Table fp) = withForeignPtr fp
 
 -- Precompute the baby step giant step table
-foreign import ccall unsafe "compute_table"
+foreign import ccall safe "compute_table"
   computeTablePtr :: Ptr GlobalContext -> Word64 -> IO (Ptr Table)
 
 foreign import ccall unsafe "&free_table"
   freeTable :: FunPtr (Ptr Table -> IO ())
 
-foreign import ccall unsafe "decrypt_amount"
+foreign import ccall safe "decrypt_amount"
   decryptAmountPtr ::
    Ptr Table
    -> Ptr ElgamalSecretKey
@@ -525,7 +525,7 @@ foreign import ccall unsafe "decrypt_amount"
 -- although a bigger table might be better if many decryptions are going to be
 -- performed.
 computeTable :: GlobalContext -> Word64 -> Table
-computeTable gc m = Table . unsafeDupablePerformIO $ do
+computeTable gc m = Table . unsafePerformIO $ do
     r <- withGlobalContext gc (flip computeTablePtr m)
     newForeignPtr freeTable r
 
@@ -534,7 +534,7 @@ computeTable gc m = Table . unsafeDupablePerformIO $ do
 -- global context and table. If this is not the case this function is almost
 -- certainly going to appear to loop.
 decryptAmount :: Table -> ElgamalSecretKey -> EncryptedAmount -> Amount
-decryptAmount table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
+decryptAmount table sec EncryptedAmount{..} = Amount . unsafePerformIO $
     withTable table $ \tablePtr ->
       withElgamalSecretKey sec $ \secPtr ->
         withElgamalCipher encryptionHigh $ \highPtr ->
@@ -544,7 +544,7 @@ decryptAmount table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
 -------------------------- Helper mostly for testing ---------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "encrypt_amount"
+foreign import ccall safe "encrypt_amount"
   encrypt_amount ::
     Ptr GlobalContext -- ^ Global context
     -> Ptr ElgamalPublicKey -- ^ Public key with which to encrypt.

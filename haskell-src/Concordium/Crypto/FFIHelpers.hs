@@ -18,7 +18,7 @@ foreign import ccall unsafe "free_array_len"
    rs_free_array_len :: Ptr Word8 -> Word64 -> IO ()
 
 toBytesHelper ::  (Ptr a -> Ptr CSize -> IO (Ptr Word8)) -> ForeignPtr a -> ByteString
-toBytesHelper f m = unsafeDupablePerformIO $
+toBytesHelper f m = unsafePerformIO $
   withForeignPtr m $
       \m_ptr ->
         alloca $ \len_ptr -> do
@@ -29,7 +29,7 @@ toBytesHelper f m = unsafeDupablePerformIO $
 -- |NB: The passed function must handle the case of CSize == 0 gracefully without dereferencing the pointer.
 -- since the pointer can be a null-pointer or otherwise a dangling pointer.
 fromBytesHelper :: FinalizerPtr a -> (Ptr Word8 -> CSize -> IO (Ptr a)) -> ByteString -> Maybe (ForeignPtr a)
-fromBytesHelper finalizer f bs = unsafeDupablePerformIO $ do
+fromBytesHelper finalizer f bs = unsafePerformIO $ do
   ptr <- unsafeUseAsCStringLen bs $ \(ptr, len) -> f (castPtr ptr :: Ptr Word8) (fromIntegral len :: CSize)
   if ptr == nullPtr then
     return Nothing
@@ -42,7 +42,7 @@ toJSONHelper = toBytesHelper
 -- since the pointer can be a null-pointer or otherwise a dangling pointer.
 -- The passed in bytearray should be a utf8 encoding of a text string.
 fromJSONHelper :: FinalizerPtr a -> (Ptr Word8 -> CSize -> IO (Ptr a)) -> ByteString -> Maybe (ForeignPtr a)
-fromJSONHelper finalizer f bs = unsafeDupablePerformIO $ do
+fromJSONHelper finalizer f bs = unsafePerformIO $ do
   ptr <- unsafeUseAsCStringLen bs $ \(ptr, len) -> f (castPtr ptr :: Ptr Word8) (fromIntegral len :: CSize)
   if ptr == nullPtr then
     return Nothing

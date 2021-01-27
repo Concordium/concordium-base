@@ -24,10 +24,10 @@ import qualified Data.Aeson.Encoding as AE
 newtype IpInfo = IpInfo (ForeignPtr IpInfo)
 
 foreign import ccall unsafe "&ip_info_free" freeIpInfo :: FunPtr (Ptr IpInfo -> IO ())
-foreign import ccall unsafe "ip_info_to_bytes" ipInfoToBytes :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ip_info_from_bytes" ipInfoFromBytes :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
-foreign import ccall unsafe "ip_info_to_json" ipInfoToJSONFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ip_info_from_json" ipInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
+foreign import ccall safe "ip_info_to_bytes" ipInfoToBytes :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "ip_info_from_bytes" ipInfoFromBytes :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
+foreign import ccall safe "ip_info_to_json" ipInfoToJSONFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall safe "ip_info_from_json" ipInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
 foreign import ccall unsafe "ip_info_ip_identity" ipIdentityFFI :: Ptr IpInfo -> IO IdentityProviderIdentity
 
 withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b

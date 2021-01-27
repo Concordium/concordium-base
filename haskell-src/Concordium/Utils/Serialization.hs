@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, DerivingVia #-}
 -- |Utility functions for serialization.
 module Concordium.Utils.Serialization where
 

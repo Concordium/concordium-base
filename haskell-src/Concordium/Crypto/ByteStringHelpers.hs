@@ -45,10 +45,10 @@ withAllocatedShortByteString n f =
   sbs <- BSS.createFromPtr ptr n
   return (r, sbs)
 
-fbsHex :: FBS.FixedLength a => FBS.FixedByteString a -> String
+fbsHex :: forall a . FBS.FixedLength a => FBS.FixedByteString a -> String
 fbsHex = byteStringToHex . FBS.toByteString
 
-fbsPut :: FBS.FixedLength a => FBS.FixedByteString a -> Put
+fbsPut :: forall a . FBS.FixedLength a => FBS.FixedByteString a -> Put
 fbsPut = putShortByteString . FBS.toShortByteString
 
 fbsGet :: forall a . FBS.FixedLength a => Get (FBS.FixedByteString a)
