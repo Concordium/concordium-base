@@ -23,11 +23,17 @@ Unit tests of the `concordium-base` Haskell library.
 Benchmarks of some functions that are of interest. This is ad-hoc and functions
 are added there by need.
 
-### [generate-update-keys](./generate-update-keys)
+### [generate-update-keys](./haskell-bins/generate-update-keys)
 
 Is a utility for generating authorization keys for different kinds of updates.
 It is used for generating such keys for internal testing. The key generation it
 supports is not very secure.
+
+## [genesis](./haskell-bins/genesis/)
+
+Is a tool that takes all the parameters, accounts, and other data that goes into
+a genesis block, and combines them into a single file that is needed to start
+the node.
 
 ### [testdata](./testdata/)
 
