@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 51b44dce55af3bcf84c05bc422bed744260063503ab983edd493460b8b8a979c
+-- hash: 052ee5bd822fbdd99e3cd8e7a8a9f55a04371a951a69574ffb62d4381edcfc92
 
 name:           concordium-base
 version:        0.1.0.0
@@ -45,6 +45,9 @@ library
       Concordium.Crypto.SHA256
       Concordium.Crypto.SignatureScheme
       Concordium.Crypto.VRF
+      Concordium.Genesis.Account
+      Concordium.Genesis.Data
+      Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker
       Concordium.ID.DummyData
@@ -55,11 +58,15 @@ library
       Concordium.SQL.AccountTransactionIndex
       Concordium.SQL.Helpers
       Concordium.Types
+      Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
       Concordium.Types.DummyData
       Concordium.Types.Execution
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
+      Concordium.Types.IdentityProviders
+      Concordium.Types.Parameters
+      Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions
       Concordium.Types.Updates
@@ -123,7 +130,7 @@ executable generate-update-keys
   other-modules:
       Paths_concordium_base
   hs-source-dirs:
-      generate-update-keys
+      haskell-bins/generate-update-keys
   default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
   ghc-options: -Wall -Wcompat -Werror=missing-fields -Werror=missing-methods -Wredundant-constraints -fno-ignore-asserts
   build-depends:
@@ -145,6 +152,48 @@ executable generate-update-keys
     , microlens-platform >=0.3
     , mtl >=2.2
     , optparse-applicative >=0.15
+    , persistent >=2.10
+    , persistent-postgresql >=2.10
+    , persistent-template >=2.8
+    , pqueue >=1.4.1
+    , prettyprinter >=1.2
+    , primitive >=0.7
+    , random >=1.1
+    , scientific >=0.3.2
+    , template-haskell >=2.14
+    , text >=1.2
+    , time >=1.8
+    , transformers >=0.5
+    , unordered-containers >=0.2
+    , vector >=0.12
+  default-language: Haskell2010
+
+executable genesis
+  main-is: Genesis.hs
+  other-modules:
+      Paths_concordium_base
+  hs-source-dirs:
+      haskell-bins/genesis
+  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  ghc-options: -Wall -Wcompat -fno-ignore-asserts
+  build-depends:
+      QuickCheck >=2.12
+    , aeson >=1.4.2
+    , base >=4.7 && <5
+    , base16-bytestring >=0.1.1.6
+    , binary >=0.8
+    , bytestring >=0.10
+    , cereal >=0.5
+    , cmdargs >=0.10
+    , concordium-base
+    , containers >=0.6
+    , deepseq >=1.4
+    , filepath >=1.4
+    , ghc-prim >=0.5.3
+    , hashable >=1.2
+    , microlens >=0.3
+    , microlens-platform >=0.3
+    , mtl >=2.2
     , persistent >=2.10
     , persistent-postgresql >=2.10
     , persistent-template >=2.8
