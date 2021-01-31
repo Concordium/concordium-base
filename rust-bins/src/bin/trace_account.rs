@@ -20,6 +20,46 @@ use structopt::StructOpt;
 
 type EncryptedAmount = encrypted_transfers::types::EncryptedAmount<id::constants::ArCurve>;
 
+#[derive(Debug)]
+pub enum AmountDelta {
+    PositiveAmount(Amount),
+    NegativeAmount(Amount),
+}
+
+impl std::fmt::Display for AmountDelta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AmountDelta::PositiveAmount(a) => write!(f, "+{}", a),
+            AmountDelta::NegativeAmount(a) => write!(f, "-{}", a),
+        }
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for AmountDelta {
+    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        use std::convert::TryInto;
+        let s = String::deserialize(des)?;
+        let n = s
+            .parse::<i128>()
+            .map_err(|e| D::Error::custom(format!("Could not parse amount delta: {}", e)))?;
+        if n >= 0 {
+            let microgtu: u64 = n
+                .try_into()
+                .map_err(|_| D::Error::custom("Amount delta out of range."))?;
+            Ok(AmountDelta::PositiveAmount(Amount::from(microgtu)))
+        } else {
+            let m = n
+                .checked_abs()
+                .ok_or_else(|| D::Error::custom("Amount delta out of range."))?;
+            let microgtu: u64 = m
+                .try_into()
+                .map_err(|_| D::Error::custom("Amount delta out of range."))?;
+            Ok(AmountDelta::NegativeAmount(Amount::from(microgtu)))
+        }
+    }
+}
+
 /// Should match what's output by the anonymity_revocation tool.
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +89,8 @@ enum OriginType {
     Own, // named Own instead of Self because Self is a keyword
     #[serde(rename = "account")]
     Account,
+    #[serde(rename = "reward")]
+    Reward,
 }
 
 /// Origin of the transaction, either "self" or "account", in the latter case
@@ -70,9 +112,11 @@ struct TransactionResponse {
     block_time:       f64,
     transaction_hash: Option<TransactionHash>,
     details:          Details,
+    subtotal:         Option<AmountDelta>,
+    total:            Option<AmountDelta>,
 }
 /// Outcome of a transaction.
-#[derive(SerdeDeserialize, Eq, PartialEq)]
+#[derive(SerdeDeserialize, Eq, PartialEq, Debug)]
 enum Outcome {
     #[serde(rename = "success")]
     Success,
@@ -84,7 +128,7 @@ enum Outcome {
 /// specific, and are thus handled by the enumeration `AdditionalDetails`.
 #[derive(SerdeDeserialize)]
 struct Details {
-    outcome: Outcome,
+    outcome: Option<Outcome>,
     #[serde(flatten)]
     additional_details: AdditionalDetails,
 }
@@ -95,14 +139,28 @@ struct Details {
 #[serde(tag = "type")]
 #[allow(clippy::large_enum_variant)]
 enum AdditionalDetails {
+    #[serde(rename = "initContract")]
+    InitContract,
+    #[serde(rename = "update")]
+    Update,
     #[serde(rename = "transfer")]
     SimpleTransfer(SimpleTransfer),
     #[serde(rename = "encryptedAmountTransfer")]
-    EncryptedTransfer(EncryptedTransfer),
+    EncryptedAmountTransfer(EncryptedTransfer),
     #[serde(rename = "transferToEncrypted")]
     TransferToEncrypted(TransferToEncrypted),
     #[serde(rename = "transferToPublic")]
     TransferToPublic(TransferToPublic),
+    #[serde(rename = "transferWithSchedule")]
+    TransferWithSchedule(TransferWithSchedule),
+    #[serde(rename = "blockReward")]
+    BlockReward,
+    #[serde(rename = "finalizationReward")]
+    FinalizationReward,
+    #[serde(rename = "bakingReward")]
+    BakingReward,
+    #[serde(rename = "platformDevelopmentCharge")]
+    Mint,
     #[serde(other)]
     Uninteresting,
 }
@@ -123,6 +181,13 @@ pub struct EncryptedTransfer {
     encrypted_amount:          EncryptedAmount,
     input_encrypted_amount:    EncryptedAmount,
     new_self_encrypted_amount: EncryptedAmount,
+}
+
+#[derive(SerdeDeserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferWithSchedule {
+    transfer_destination: AccountAddress,
+    transfer_amount:      Amount,
 }
 
 #[derive(SerdeDeserialize, Debug)]
@@ -347,10 +412,41 @@ fn trace_single_account(
         match rq {
             Ok(response) => {
                 for tx in response.transactions.iter() {
-                    if tx.details.outcome == Outcome::Reject {
+                    if tx
+                        .details
+                        .outcome
+                        .as_ref()
+                        .map_or(false, |x| x == &Outcome::Reject)
+                    {
                         continue;
                     }
                     match &tx.details.additional_details {
+                        AdditionalDetails::InitContract => {
+                            writeln!(
+                                writer,
+                                "[{}] {}: initialized a contract resulting in a change of balance \
+                                 of {} GTUs\n    Block hash: {}\n    Transaction hash: {}",
+                                pretty_time(tx.block_time),
+                                i,
+                                tx.subtotal.as_ref().unwrap(),
+                                tx.block_hash,
+                                tx.transaction_hash.as_ref().unwrap()
+                            )
+                            .expect("Could not write.");
+                        }
+                        AdditionalDetails::Update => {
+                            writeln!(
+                                writer,
+                                "[{}] {}: updated a contract resulting in a change of balance of \
+                                 {} GTUs\n    Block hash: {}\n    Transaction hash: {}",
+                                pretty_time(tx.block_time),
+                                i,
+                                tx.subtotal.as_ref().unwrap(),
+                                tx.block_hash,
+                                tx.transaction_hash.as_ref().unwrap()
+                            )
+                            .expect("Could not write.");
+                        }
                         AdditionalDetails::SimpleTransfer(st) => {
                             if tx.origin.origin_type == OriginType::Own {
                                 writeln!(
@@ -380,7 +476,8 @@ fn trace_single_account(
                                 .expect("Could not write.");
                             }
                         }
-                        AdditionalDetails::EncryptedTransfer(et) => {
+
+                        AdditionalDetails::EncryptedAmountTransfer(et) => {
                             if tx.origin.origin_type == OriginType::Own {
                                 if let Some(sk) = &sk {
                                     let before = encrypted_transfers::decrypt_amount(
@@ -484,6 +581,67 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
+                        }
+                        AdditionalDetails::TransferWithSchedule(tws) => {
+                            if tx.origin.origin_type == OriginType::Own {
+                                writeln!(
+                                    writer,
+                                    "[{}] {}: Outgoing scheduled transfer of {} GTU to account \
+                                     {}\n    Block hash: {}\n    Transaction hash: {}",
+                                    pretty_time(tx.block_time),
+                                    i,
+                                    tws.transfer_amount,
+                                    tws.transfer_destination,
+                                    tx.block_hash,
+                                    tx.transaction_hash.as_ref().unwrap()
+                                )
+                                .expect("Could not write.");
+                            } else if let AmountDelta::PositiveAmount(am) =
+                                tx.total.as_ref().unwrap()
+                            {
+                                writeln!(
+                                    writer,
+                                    "[{}] {}: Incoming scheduled transfer of {} GTU from account \
+                                     {}\n    Block hash: {}\n    Transaction hash: {}",
+                                    pretty_time(tx.block_time),
+                                    i,
+                                    am,
+                                    tx.origin.address.as_ref().unwrap(),
+                                    tx.block_hash,
+                                    tx.transaction_hash.as_ref().unwrap()
+                                )
+                                .expect("Could not write.");
+                            } else {
+                                panic!(
+                                    "Malformed transaction details. Incoming scheduled transfer \
+                                     with negative balance"
+                                );
+                            }
+                        }
+                        AdditionalDetails::BlockReward
+                        | AdditionalDetails::FinalizationReward
+                        | AdditionalDetails::BakingReward
+                        | AdditionalDetails::Mint => {
+                            if let AmountDelta::PositiveAmount(am) = tx.total.as_ref().unwrap() {
+                                writeln!(
+                                    writer,
+                                    "[{}] {}: Received a {} reward of {} GTU\n    Block hash: {}",
+                                    pretty_time(tx.block_time),
+                                    i,
+                                    match &tx.details.additional_details {
+                                        AdditionalDetails::BlockReward => "block",
+                                        AdditionalDetails::FinalizationReward => "finalization",
+                                        AdditionalDetails::BakingReward => "baking",
+                                        AdditionalDetails::Mint => "minting",
+                                        _ => unreachable!(),
+                                    },
+                                    am,
+                                    tx.block_hash
+                                )
+                                .expect("Could not write.");
+                            } else {
+                                panic!("Malformed transaction details. Negative reward");
+                            }
                         }
                         AdditionalDetails::Uninteresting => {
                             // do nothing for other transaction types.
