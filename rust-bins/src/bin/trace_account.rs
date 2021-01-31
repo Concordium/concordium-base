@@ -35,38 +35,28 @@ impl std::fmt::Display for AmountDelta {
     }
 }
 
-#[derive(SerdeDeserialize, Debug)]
-pub enum AmountDeltaParseError {
-    NotANumber,
-    ExpectedMinus,
-}
-
-impl std::fmt::Display for AmountDeltaParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use AmountDeltaParseError::*;
-        match self {
-            NotANumber => write!(f, "Expected number."),
-            ExpectedMinus => write!(f, "Expected a minus sign."),
-        }
-    }
-}
-
 impl<'de> SerdeDeserialize<'de> for AmountDelta {
     fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        use std::convert::TryInto;
         let s = String::deserialize(des)?;
-        s.parse::<u64>()
-            .map(|x: u64| AmountDelta::PositiveAmount(Amount::from(x)))
-            .or_else(|_| {
-                if &s[0..1] == "-" {
-                    s[1..]
-                        .parse::<u64>()
-                        .map(|x: u64| AmountDelta::NegativeAmount(Amount::from(x)))
-                        .map_err(|_| AmountDeltaParseError::NotANumber)
-                } else {
-                    Err(AmountDeltaParseError::ExpectedMinus)
-                }
-            })
-            .map_err(|e| serde::de::Error::custom(format!("{}", e)))
+        let n = s
+            .parse::<i128>()
+            .map_err(|e| D::Error::custom(format!("Could not parse amount delta: {}", e)))?;
+        if n >= 0 {
+            let microgtu: u64 = n
+                .try_into()
+                .map_err(|_| D::Error::custom("Amount delta out of range."))?;
+            Ok(AmountDelta::PositiveAmount(Amount::from(microgtu)))
+        } else {
+            let m = n
+                .checked_abs()
+                .ok_or_else(|| D::Error::custom("Amount delta out of range."))?;
+            let microgtu: u64 = m
+                .try_into()
+                .map_err(|_| D::Error::custom("Amount delta out of range."))?;
+            Ok(AmountDelta::NegativeAmount(Amount::from(microgtu)))
+        }
     }
 }
 
@@ -426,8 +416,7 @@ fn trace_single_account(
                         .details
                         .outcome
                         .as_ref()
-                        .map(|x| x == &Outcome::Reject)
-                        .unwrap_or(false)
+                        .map_or(false, |x| x == &Outcome::Reject)
                     {
                         continue;
                     }
