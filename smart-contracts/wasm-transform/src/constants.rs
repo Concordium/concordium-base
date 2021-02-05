@@ -25,7 +25,7 @@ pub const PAGE_SIZE: u32 = 65536;
 /// Maximum number of pages for the initial memory size.
 /// Corresponds to 2MB.
 /// This constant must be such that
-/// [MAX_INIT_MEMORY_SIZE](./constant.MAX_INIT_MEORY_SIZE.html) *
+/// [MAX_INIT_MEMORY_SIZE](./constant.MAX_INIT_MEMORY_SIZE.html) *
 /// [PAGE_SIZE](./constant.PAGE_SIZE.html) does not overflow a u32;
 pub const MAX_INIT_MEMORY_SIZE: u32 = 32;
 
