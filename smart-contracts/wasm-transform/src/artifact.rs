@@ -1216,8 +1216,12 @@ impl Module {
         };
         let memory = {
             if let Some(mt) = self.memory.memory_type {
-                ensure!(mt.limits.min <= MAX_INIT_MEMORY_SIZE,
-                 "Initial memory allocation of {} pages exceeds maximum of {}.", mt.limits.min, MAX_INIT_MEMORY_SIZE);
+                ensure!(
+                    mt.limits.min <= MAX_INIT_MEMORY_SIZE,
+                    "Initial memory allocation of {} pages exceeds maximum of {}.",
+                    mt.limits.min,
+                    MAX_INIT_MEMORY_SIZE
+                );
                 Some(ArtifactMemory {
                     init_size: mt.limits.min,
                     max_size:  mt
