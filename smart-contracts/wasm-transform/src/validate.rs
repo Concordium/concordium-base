@@ -1088,6 +1088,13 @@ pub fn validate_module<'a>(
             "Number of initial elements is more than the initial memory size."
         );
         if let Some(memory_type) = memory.memory_type.as_ref() {
+            ensure!(
+                memory_type.limits.min <= MAX_INIT_MEMORY_SIZE,
+                "Initial memory allocation of {} pages exceeds maximum of {}.",
+                memory_type.limits.min,
+                MAX_INIT_MEMORY_SIZE
+            );
+
             let offset: u32 = data.offset.try_into()?;
             // since we provide no way to grow the table the initial minimum size
             // is the size of the table, as specified in the allocation section of the
