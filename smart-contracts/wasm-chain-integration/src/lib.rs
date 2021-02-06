@@ -480,7 +480,7 @@ impl<'a> ReceiveHost<'a> {
             }
             ReceiveOnlyFunc::GetReceiveInvoker => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start + 32 <= memory.len(), "Illegal memory access for receive owner.");
+                ensure!(start + 32 <= memory.len(), "Illegal memory access for receive invoker.");
                 (&mut memory[start..start + 32]).write_all(self.receive_ctx.invoker.as_ref())?;
             }
             ReceiveOnlyFunc::GetReceiveSelfAddress => {
@@ -496,7 +496,7 @@ impl<'a> ReceiveHost<'a> {
             }
             ReceiveOnlyFunc::GetReceiveSender => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start < memory.len(), "Illegal memory access for receive owner.");
+                ensure!(start < memory.len(), "Illegal memory access for receive sender.");
                 let bytes = to_bytes(self.receive_ctx.sender());
                 (&mut memory[start..]).write_all(&bytes)?;
             }

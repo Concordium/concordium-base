@@ -11,8 +11,8 @@
 
 use crate::{
     constants::{
-        ALLOWED_LOCALS, MAX_ALLOWED_STACK_HEIGHT, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE,
-        MAX_NUM_EXPORTS, MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
+        ALLOWED_LOCALS, MAX_ALLOWED_STACK_HEIGHT, MAX_INIT_TABLE_SIZE, MAX_NUM_EXPORTS,
+        MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
     },
     parse::{
         parse_custom, parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult,
@@ -1076,41 +1076,34 @@ pub fn validate_module<'a>(
     // to in the table are defined.
     let data: DataSection = parse_sec_with_default(&skeleton.data)?;
     // Make sure that if there are any data segments then a memory exists.
-    // By parsing we already ensure that all the references are to a single memory.
-    ensure!(
-        data.sections.is_empty() || memory.memory_type.is_some(),
-        "There are some data sections, but no declared memory."
-    );
-    for data in data.sections.iter() {
-        let inits_len: u32 = data.init.len().try_into()?;
-        ensure!(
-            inits_len <= MAX_INIT_MEMORY_SIZE * PAGE_SIZE,
-            "Number of initial elements is more than the initial memory size."
-        );
-        if let Some(memory_type) = memory.memory_type.as_ref() {
+    // By parsing we already ensure that all the references are to a single memory
+    // and that the initial memory is limited by MAX_INIT_MEMORY_SIZE.
+    if let Some(memory_type) = memory.memory_type.as_ref() {
+        for data in data.sections.iter() {
+            let inits_len: u32 = data.init.len().try_into()?;
             ensure!(
-                memory_type.limits.min <= MAX_INIT_MEMORY_SIZE,
-                "Initial memory allocation of {} pages exceeds maximum of {}.",
-                memory_type.limits.min,
-                MAX_INIT_MEMORY_SIZE
+                // this cannot overflow because we've already ensured limits.min <
+                // MAX_INIT_MEMORY_SIZE
+                inits_len <= memory_type.limits.min * PAGE_SIZE,
+                "Number of initial elements is more than the initial memory size."
             );
-
             let offset: u32 = data.offset.try_into()?;
-            // since we provide no way to grow the table the initial minimum size
-            // is the size of the table, as specified in the allocation section of the
-            // Wasm semantics.
             let end = offset
                 .checked_add(inits_len)
                 .ok_or_else(|| anyhow!("The end of the memory exceeds u32 max bound."))?;
             ensure!(
-                // by validation we have that memory_type.limits.min <= 2^16, so this cannot
-                // overflow but we're still being safe
-                memory_type.limits.min.checked_mul(PAGE_SIZE).map(|l| end <= l).unwrap_or(false),
-                "Initialization expression for the table exceeds table size {} > {}.",
+                // by validation we have that memory_type.limits.min <= MAX_INIT_MEMORY_SIZE <
+                // 2^16, so this cannot overflow but we're still being safe
+                memory_type.limits.min.checked_mul(PAGE_SIZE).map_or(false, |l| end <= l),
+                "Initialization expression for the data segment exceeds initial memory size {} > \
+                 {}.",
                 end,
                 memory_type.limits.min
             );
         }
+    } else {
+        // There is no memory, so there should be no data section.
+        ensure!(data.sections.is_empty(), "There are data sections, but no declared memory.");
     }
     Ok(Module {
         ty,
