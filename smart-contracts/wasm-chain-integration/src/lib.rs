@@ -412,7 +412,7 @@ impl<'a> machine::Host<ProcessedImports> for InitHost<'a> {
             ImportFunc::Common(cf) => call_common(self, cf, memory, stack)?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start <= memory.len(), "Illegal memory access for init origin.");
+                ensure!(start + 32 <= memory.len(), "Illegal memory access for init origin.");
                 (&mut memory[start..start + 32]).write_all(self.init_ctx.init_origin.as_ref())?;
             }
             ImportFunc::ReceiveOnly(_) => {
