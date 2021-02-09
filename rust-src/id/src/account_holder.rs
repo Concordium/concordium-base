@@ -12,7 +12,6 @@ use bulletproofs::{
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
 use ff::Field;
@@ -59,12 +58,7 @@ pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         )
         .0;
 
-    let vk_acc = InitialCredentialAccount {
-        account: NewAccount {
-            keys:      initial_account.get_public_keys(),
-            threshold: initial_account.get_threshold(),
-        },
-    };
+    let vk_acc = initial_account.get_cred_key_info();
 
     let pub_info_for_ip = PublicInformationForIP {
         id_cred_pub,
@@ -610,10 +604,6 @@ where
             &PedersenRandomness::zero(),
         )
         .0;
-    let reg_id = match reg_id {
-        Some(id) => id,
-        _ => cred_id,
-    };
 
     // Check that all the chosen identity providers (in the pre-identity object) are
     // available in the given context, and remove the ones that are not.
@@ -1104,8 +1094,6 @@ mod tests {
     use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use crypto_common::serde_impls::KeyPairDef;
     use curve_arithmetic::Curve;
-    use ed25519_dalek as ed25519;
-    use either::Left;
     use pedersen_scheme::key::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;

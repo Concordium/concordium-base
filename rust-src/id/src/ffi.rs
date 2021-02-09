@@ -161,7 +161,7 @@ extern "C" fn verify_cdi_ffi(
         return -10;
     }
 
-    let acc_keys = if acc_keys_ptr.is_null() {
+    let _acc_keys = if acc_keys_ptr.is_null() {
         None
     } else {
         let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
@@ -287,8 +287,6 @@ mod test {
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use crypto_common::serde_impls::KeyPairDef;
     use dodis_yampolskiy_prf::secret as prf;
-    use ed25519_dalek as ed25519;
-    use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 

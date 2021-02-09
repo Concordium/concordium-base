@@ -75,10 +75,6 @@ pub fn verify_cdi<
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
-    let reg_id = match reg_id {
-        Some(id) => id,
-        _ => cdi.values.cred_id,
-    };
     // Compute the challenge prefix by hashing the values.
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cdi.values);
@@ -165,58 +161,17 @@ pub fn verify_cdi<
     ) {
         return Err(CDIVerificationError::Proof);
     }
-
-    // message signed in proofs.proofs_acc_sk.sigs
-    // let signed = ro.get_challenge();
-    // let cdi_clone = cdi.clone();
-    // let signed_info = UnsignedCredentialDeploymentInfoNew {
-    //     values: cdi.clone().values,
-    //     proofs: proofs.id_proofs,
-    //     // account_ownership_challenge: unsigned_challenge, // TO BE REMOVED
-    //     reg_id: reg_id
-    // };
     let mut hasher = Sha256::new();
     hasher.update(&to_bytes(&cdv));
     hasher.update(&to_bytes(&proofs.id_proofs));
     hasher.update(&to_bytes(&reg_id));
     let signed = hasher.finalize();
-    // let signed = Sha256::digest(&to_bytes(&signed_info));
-
-    // match cdv.cred_account {
-    //     CredentialAccount::ExistingAccount(_addr) => {
-    //         // in this case we must have been given the account keys.
-    //         if let Some(acc_keys) = acc_keys {
-    // if proofs.proof_acc_sk.num_proofs() < acc_keys.threshold {
-    //     return Err(CDIVerificationError::AccountOwnership);
-    // }
-    // we at least have enough proofs now, if they are all valid and have valid
-    // indices
-
-    // for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
-    //     if let Some(key) = acc_keys.get(idx) {
-    //         let VerifyKey::Ed25519VerifyKey(ref key) = key;
-    //         match key.verify(signed.as_ref(), &proof) {
-    //             Ok(_) => (),
-    //             _ => return Err(CDIVerificationError::AccountOwnership),
-    //         }
-    //     } else {
-    //         return Err(CDIVerificationError::AccountOwnership);
-    //     }
-    // }
-    //     } else {
-    //         // in case of an existing account we must have been given account
-    // keys         return Err(CDIVerificationError::AccountOwnership);
-    //     }
-    // }
-    // CredentialAccount::NewAccount(ref keys, threshold) => {
-    //     // message signed in proofs.proofs_acc_sk.sigs
 
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that
     // we have as many signatures as verification keys.
-    let keys = cdv.cred_key_info.keys.values().cloned().collect::<Vec<_>>();
     if !utils::verify_accunt_ownership_proof(
-        &keys,
+        &cdv.cred_key_info.keys,
         cdv.cred_key_info.threshold,
         &proofs.proof_acc_sk,
         signed.as_ref(),
@@ -452,8 +407,6 @@ mod tests {
 
     use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
     use crypto_common::serde_impls::KeyPairDef;
-    use ed25519_dalek as ed25519;
-    use either::Left;
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;

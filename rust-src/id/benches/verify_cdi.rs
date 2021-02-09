@@ -3,7 +3,6 @@ use crypto_common::{serde_impls::KeyPairDef, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,

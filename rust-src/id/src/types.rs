@@ -1306,14 +1306,6 @@ pub struct NewAccount {
     pub threshold: SignatureThreshold,
 }
 
-/// What account should this credential be deployed to, or the keys of the new
-/// account.
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-#[serde(transparent)]
-pub struct InitialCredentialAccount {
-    pub account: NewAccount,
-}
-
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
@@ -1322,7 +1314,7 @@ pub struct InitialCredentialAccount {
 ))]
 pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Credential keys (i.e. account holder keys).
-    #[serde(rename = "account")]
+    #[serde(rename = "credentialPublicKeys")]
     pub cred_key_info: CredentialPublicKeys,
     /// Credential registration id of the credential.
     #[serde(
@@ -1358,8 +1350,8 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
 ))]
 pub struct InitialCredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Account this credential belongs to.
-    #[serde(rename = "account")]
-    pub cred_account: InitialCredentialAccount,
+    #[serde(rename = "credentialPublicKeys")]
+    pub cred_account: CredentialPublicKeys,
     /// Credential registration id of the credential.
     #[serde(
         rename = "regId",
@@ -1450,16 +1442,7 @@ pub struct UnsignedCredentialDeploymentInfo<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id: C, /* Challenge from random oracle. This should be signed by the secret keys
-                    * that belongs to the account in the values. When signed, it can be used
-                    * to transform the UnsignedCredDeploymentProofs to
-                    * CredDeploymentProofs.
-                    * #[serde(
-                    *     rename = "accountOwnershipChallenge",
-                    *     serialize_with = "base16_encode",
-                    *     deserialize_with = "base16_decode"
-                    * )]
-                    * pub account_ownership_challenge: Challenge, // TO BE REMOVED */
+    pub reg_id: Option<C>,
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -1504,7 +1487,7 @@ pub struct PublicInformationForIP<C: Curve> {
     )]
     pub reg_id: C,
     #[serde(rename = "publicKeys")]
-    pub vk_acc: InitialCredentialAccount,
+    pub vk_acc: CredentialPublicKeys,
 }
 
 /// Context needed to generate pre-identity object as well as to check it.
@@ -1626,10 +1609,18 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
 /// access to the secret keys.
 /// NB: the threshold should be at most the number of keypairs.
 pub trait PublicInitialAccountData {
-    /// Get the number of keys required to sign a message from the account.
+    /// Get the public keys of the credential
+    fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey>;
+    /// Get the signature threshold of the account.
     fn get_threshold(&self) -> SignatureThreshold;
-    /// Get the public keys of the account.
-    fn get_public_keys(&self) -> Vec<VerifyKey>;
+
+    /// Get the CredentialPublicKeys struct directly
+    fn get_cred_key_info(&self) -> CredentialPublicKeys {
+        CredentialPublicKeys {
+            keys:      self.get_public_keys(),
+            threshold: self.get_threshold(),
+        }
+    }
 }
 
 /// A helper trait to allow signing PublicInformationForIP in an implementation
@@ -1645,17 +1636,17 @@ pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
-/// A helper trait to access the public parts of the AccountData
+/// A helper trait to access the public parts of the CredentialData
 /// structure. We use this to allow implementations that does not give or have
 /// access to the secret keys.
 /// NB: the threshold should be at most the number of keypairs.
 pub trait PublicCredentialData {
-    /// Get the public keys of the account
+    /// Get the public keys of the credential
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey>;
-    /// if its an existing account, get the address, otherwise
-    /// get the signature threshold of the account.
+    /// Get the signature threshold of the account.
     fn get_threshold(&self) -> SignatureThreshold;
 
+    /// Get the CredentialPublicKeys struct directly
     fn get_cred_key_info(&self) -> CredentialPublicKeys {
         CredentialPublicKeys {
             keys:      self.get_public_keys(),
@@ -1729,11 +1720,11 @@ pub struct InitialAccountData {
 impl PublicInitialAccountData for InitialAccountData {
     fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
-    fn get_public_keys(&self) -> Vec<VerifyKey> {
+    fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
-            .values()
-            .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-            .collect::<Vec<_>>()
+            .iter()
+            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .collect()
     }
 }
 

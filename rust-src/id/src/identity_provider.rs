@@ -53,8 +53,8 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Verify signature:
     let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
     let proof_acc_sk = &pre_id_obj.poks.proof_acc_sk;
-    let keys = &pub_info_for_ip.vk_acc.account.keys;
-    let threshold = pub_info_for_ip.vk_acc.account.threshold;
+    let keys = &pub_info_for_ip.vk_acc.keys;
+    let threshold = pub_info_for_ip.vk_acc.threshold;
 
     // message signed
     let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));

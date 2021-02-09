@@ -227,7 +227,7 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
             Either::Left(ref left) => {
                 out.put(&0u8);
                 out.put(left);
-            }
+            },
             Either::Right(ref right) => {
                 out.put(&1u8);
                 out.put(right);
@@ -244,4 +244,33 @@ impl<T: Serial> Serial for Rc<T> {
 
 impl<T: Deserial> Deserial for Rc<T> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> { Ok(Rc::new(source.get()?)) }
+}
+
+// Implementations for the Option type:
+
+impl<T: Deserial> Deserial for Option<T> {
+    fn deserial<X: ReadBytesExt>(source: &mut X) -> Fallible<Self> {
+        let l: u8 = source.get()?;
+        if l == 0 {
+            Ok(None)
+        } else if l == 1 {
+            Ok(Some(source.get()?))
+        } else {
+            bail!("Unknown variant {}", l)
+        }
+    }
+}
+
+impl<T: Serial> Serial for Option<T> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            None => {
+                out.put(&0u8);
+            },
+            Some(ref x) => {
+                out.put(&1u8);
+                out.put(x);
+            }
+        }
+    }
 }
