@@ -214,15 +214,15 @@ pub fn test_pipeline() {
         },
         _phantom: Default::default(),
     };
-    let acc_data = AccountData {
-        keys:     {
+    let acc_data = CredentialData {
+        keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
             keys
         },
-        existing: Left(SignatureThreshold(2)),
+        threshold: SignatureThreshold(2),
     };
     let cdi = create_credential(
         context,
@@ -231,9 +231,10 @@ pub fn test_pipeline() {
         0,
         policy.clone(),
         &acc_data,
+        None,
     )
     .expect("Should generate the credential successfully.");
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, None);
     assert_eq!(cdi_check, Ok(()));
 
     // Verify serialization
@@ -290,8 +291,16 @@ pub fn test_pipeline() {
     // generate a new cdi from a modified pre-identity object in which we swapped
     // two anonymity revokers. Verification of this credential should fail the
     // signature at the very least.
-    let mut cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
-        .expect("Should generate the credential successfully.");
+    let mut cdi = create_credential(
+        context,
+        &id_object,
+        &id_use_data,
+        0,
+        policy,
+        &acc_data,
+        None,
+    )
+    .expect("Should generate the credential successfully.");
     // Swap two ar_data values for two anonymity revokers.
     let x_2 = cdi
         .values
@@ -314,7 +323,7 @@ pub fn test_pipeline() {
         .get_mut(&ArIdentity::new(3))
         .expect("AR 2 exists") = x_2;
     // Verification should now fail.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, None);
     assert_ne!(cdi_check, Ok(()));
 }
 

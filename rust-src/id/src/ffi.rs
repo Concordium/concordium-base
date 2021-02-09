@@ -165,7 +165,7 @@ extern "C" fn verify_cdi_ffi(
         None
     } else {
         let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
-        if let Ok(acc_keys) = AccountKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
+        if let Ok(acc_keys) = CredentialPublicKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
             Some(acc_keys)
         } else {
             return -11;
@@ -196,8 +196,8 @@ extern "C" fn verify_cdi_ffi(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
                 &ars_infos,
-                acc_keys.as_ref(),
                 &cdi,
+                None,
             ) {
                 Ok(()) => 1, // verification succeeded
                 Err(CDIVerificationError::RegId) => -1,
@@ -399,13 +399,13 @@ mod test {
         };
 
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-        let acc_data = AccountData {
+        let acc_data = CredentialData {
             keys,
-            existing: Left(SignatureThreshold(2)),
+            threshold: SignatureThreshold(2),
         };
 
         let id_use_data = IdObjectUseData { aci, randomness };
@@ -416,8 +416,16 @@ mod test {
             signature: ip_sig,
         };
 
-        let cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
-            .expect("Should generate the credential successfully.");
+        let cdi = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy,
+            &acc_data,
+            None,
+        )
+        .expect("Should generate the credential successfully.");
 
         let wrong_cdi = create_credential(
             context,
@@ -426,6 +434,7 @@ mod test {
             0,
             wrong_policy,
             &acc_data,
+            None,
         )
         .expect("Should generate the credential successfully.");
 
