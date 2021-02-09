@@ -16,8 +16,6 @@ use wasm_bindgen_test::*;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-browser-test"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-use either::Left;
-
 type ExamplePairing = Bls12;
 
 type ExampleCurve = G1;

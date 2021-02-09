@@ -7,7 +7,7 @@ use rand::*;
 
 use ed25519_dalek::Verifier;
 use failure::Fallible;
-use std::collections::BTreeSet;
+use std::collections::{btree_map::BTreeMap, BTreeSet};
 
 /// Given a list of commitments g^{a_i}h^{r_i}
 /// and a point x (the share number), compute
@@ -216,7 +216,7 @@ pub fn encode_public_credential_values<F: PrimeField>(
 ///    verified
 ///  - msg - the message
 pub fn verify_accunt_ownership_proof(
-    keys: &[VerifyKey],
+    keys: &BTreeMap<KeyIndex, VerifyKey>,
     threshold: SignatureThreshold,
     proof_acc_sk: &AccountOwnershipProof,
     msg: &[u8],
@@ -227,6 +227,7 @@ pub fn verify_accunt_ownership_proof(
     // - all keys are distinct
     // - at least one key is provided
     // - there are the same number of proofs and keys
+    let keys = keys.values().cloned().collect::<Vec<_>>();
     if proof_acc_sk.num_proofs() < threshold
         || keys.len() > 255
         || keys.is_empty()
