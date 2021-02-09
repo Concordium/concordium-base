@@ -190,8 +190,6 @@ main = cmdArgsRun mode >>=
               putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
               putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
               putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-              putStrLn $ "  - ignore first wait: " ++ show finalizationIgnoreFirstWait
-              putStrLn $ "  - old style skip: " ++ show finalizationOldStyleSkip
               putStrLn $ "  - skip shrink factor: " ++ show finalizationSkipShrinkFactor
               putStrLn $ "  - skip grow factor: " ++ show finalizationSkipGrowFactor
               putStrLn $ "  - delay shrink factor: " ++ show finalizationDelayShrinkFactor
