@@ -1,12 +1,14 @@
 use crate::{secret_sharing::Threshold, types::*};
-use curve_arithmetic::{Curve, Value};
+use curve_arithmetic::{Curve, Pairing, Value};
 use elgamal::*;
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
 use rand::*;
 
+use crypto_common::to_bytes;
 use ed25519_dalek::Verifier;
 use failure::Fallible;
+use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, BTreeSet};
 
 /// Given a list of commitments g^{a_i}h^{r_i}
@@ -215,7 +217,7 @@ pub fn encode_public_credential_values<F: PrimeField>(
 ///  - proof_acc_sk - the AccountOwnershipProof containing the signature to be
 ///    verified
 ///  - msg - the message
-pub fn verify_accunt_ownership_proof(
+pub fn verify_account_ownership_proof(
     keys: &BTreeMap<KeyIndex, VerifyKey>,
     threshold: SignatureThreshold,
     proof_acc_sk: &AccountOwnershipProof,
@@ -227,7 +229,6 @@ pub fn verify_accunt_ownership_proof(
     // - all keys are distinct
     // - at least one key is provided
     // - there are the same number of proofs and keys
-    let keys = keys.values().cloned().collect::<Vec<_>>();
     if proof_acc_sk.num_proofs() < threshold
         || keys.len() > 255
         || keys.is_empty()
@@ -238,8 +239,7 @@ pub fn verify_accunt_ownership_proof(
     // set of processed keys already
     let mut processed = BTreeSet::new();
     // the new keys get indices 0, 1, ..
-    for (idx, key) in (0u8..).zip(keys.iter()) {
-        let idx = KeyIndex(idx);
+    for (idx, key) in keys.iter() {
         // insert returns true if key was __not__ present
         if !processed.insert(key) {
             return false;
@@ -254,6 +254,23 @@ pub fn verify_accunt_ownership_proof(
         }
     }
     true
+}
+
+pub fn credential_hash_to_sign<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    values: &CredentialDeploymentValues<C, AttributeType>,
+    proofs: &IdOwnershipProofs<P, C>,
+    reg_id: &Option<C>,
+) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(&to_bytes(&values));
+    hasher.update(&to_bytes(&proofs));
+    hasher.update(&to_bytes(&reg_id));
+    let to_sign = &hasher.finalize();
+    to_sign.to_vec()
 }
 
 #[cfg(test)]

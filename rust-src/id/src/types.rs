@@ -1437,6 +1437,10 @@ pub struct UnsignedCredentialDeploymentInfo<
     #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
     pub proofs: IdOwnershipProofs<P, C>,
+    /// This is the RegId for the account that the credential is being deployed
+    /// to. In case of a new account, the RegId and CredId are the same, in
+    /// which case reg_id will be None, since the CredId is inside the
+    /// CredentialDeploymentValues anyway.
     #[serde(
         rename = "regId",
         serialize_with = "base16_encode",
@@ -1692,12 +1696,11 @@ impl CredentialDataWithSigning for CredentialData {
         &self,
         unsigned_cred_info: &UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
-        let mut hasher = Sha256::new();
-        hasher.update(&to_bytes(&unsigned_cred_info.values));
-        hasher.update(&to_bytes(&unsigned_cred_info.proofs));
-        hasher.update(&to_bytes(&unsigned_cred_info.reg_id));
-        let to_sign = hasher.finalize();
-        // let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
+        let to_sign = crate::utils::credential_hash_to_sign(
+            &unsigned_cred_info.values,
+            &unsigned_cred_info.proofs,
+            &unsigned_cred_info.reg_id,
+        );
         self.keys
             .iter()
             .map(|(&idx, kp)| {
