@@ -508,7 +508,13 @@ mod tests {
             Some(existing_reg_id),
         )
         .expect("Should generate the credential successfully.");
-        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, Some(existing_reg_id));
+        let cdi_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &cdi,
+            Some(existing_reg_id),
+        );
         assert_eq!(cdi_check, Ok(()));
     }
 
