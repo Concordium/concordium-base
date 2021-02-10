@@ -495,6 +495,34 @@ fn test_block_br_if() {
 }
 
 #[test]
+fn test_typed_block_br_if() {
+    test_body(
+        FunctionType::empty(),
+        vec![Block(BlockValue(I32)), I32Const(1), I32Const(1), BrIf(0), End],
+        flatten![
+            energy!(ENTRY + CONST * 2 + BR_IF),
+            stack!(S),
+            [Block(BlockValue(I32))],
+            flatten![
+                [I32Const(1),
+                 I32Const(1),
+                 If { ty: BlockValue(I32) },
+                ],
+                energy!(branch(1)),
+                [I32Const(1),
+                 Else,
+                 I32Const(0),
+                 End,
+                 BrIf(0),
+                ]
+            ],
+            [End],
+            stack!(-S)
+        ],
+    )
+}
+
+#[test]
 fn test_loop_br_if() {
     test_body(FunctionType::empty(), vec![Loop(EmptyType), I32Const(9), BrIf(0), End], flatten![
         energy!(ENTRY),

@@ -500,7 +500,6 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 }
                 BrIf(idx) => {
                     self.account_energy_push_pending();
-                    let label_arity = self.lookup_label(*idx)?;
                     // If the `br_if` instruction is enclosed in a block that returns nothing,
                     // we can replace the `br_if` instruction with an `if` block that includes
                     // metering instructions and a `br`. Example:
@@ -549,6 +548,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::EmptyType,
                             });
+                            let label_arity = self.lookup_label(*idx)?;
                             self.account_energy(cost::branch(label_arity));
                             // In the replacement instruction, the label moves out by one index and
                             // therefore the index has to be incremented.
@@ -563,7 +563,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::ValueType(ValueType::I32),
                             });
-                            self.account_energy(cost::branch(label_arity));
+                            self.account_energy(cost::branch(1));
                             self.add_to_new(&I32Const(1));
                             self.add_to_new(&Else);
                             self.add_to_new(&I32Const(0));
