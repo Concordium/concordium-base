@@ -149,8 +149,6 @@ extern "C" fn verify_cdi_ffi(
     ip_info_ptr: *const IpInfo<Bls12>,
     ars_infos_ptr: *const *mut ArInfo<G1>,
     ars_infos_len: size_t,
-    acc_keys_ptr: *const u8,
-    acc_keys_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
 ) -> i32 {
@@ -160,17 +158,6 @@ extern "C" fn verify_cdi_ffi(
     if ip_info_ptr.is_null() {
         return -10;
     }
-
-    let _acc_keys = if acc_keys_ptr.is_null() {
-        None
-    } else {
-        let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
-        if let Ok(acc_keys) = CredentialPublicKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
-            Some(acc_keys)
-        } else {
-            return -11;
-        }
-    };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
     match CredentialDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(
@@ -451,8 +438,6 @@ mod test {
             ip_info_ptr,
             ars_infos_ptr.as_ptr(),
             ars_infos_ptr.len() as size_t,
-            std::ptr::null(),
-            0,
             cdi_bytes.as_ptr(),
             cdi_bytes_len,
         );
@@ -464,8 +449,6 @@ mod test {
             ip_info_ptr,
             ars_infos_ptr.as_ptr(),
             ars_infos_ptr.len() as size_t,
-            std::ptr::null(),
-            0,
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
         );

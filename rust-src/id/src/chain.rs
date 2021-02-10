@@ -161,16 +161,11 @@ pub fn verify_cdi<
     ) {
         return Err(CDIVerificationError::Proof);
     }
-    let mut hasher = Sha256::new();
-    hasher.update(&to_bytes(&cdv));
-    hasher.update(&to_bytes(&proofs.id_proofs));
-    hasher.update(&to_bytes(&reg_id));
-    let signed = hasher.finalize();
-
+    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, &reg_id);
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that
     // we have as many signatures as verification keys.
-    if !utils::verify_accunt_ownership_proof(
+    if !utils::verify_account_ownership_proof(
         &cdv.cred_key_info.keys,
         cdv.cred_key_info.threshold,
         &proofs.proof_acc_sk,
@@ -178,8 +173,6 @@ pub fn verify_cdi<
     ) {
         return Err(CDIVerificationError::AccountOwnership);
     }
-    // }
-    // };
 
     let check_policy = verify_policy(&on_chain_commitment_key, &commitments, &cdi.values.policy);
 

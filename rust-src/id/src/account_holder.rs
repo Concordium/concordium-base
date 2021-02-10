@@ -669,15 +669,6 @@ where
         &mut csprng,
     )?;
 
-    // let cred_account = match acc_data.get_existing() {
-    //     // we are deploying on a new account
-    //     // take all the keys that
-    //     Either::Left(threshold) => {
-    //         CredentialAccount::Account(acc_data.get_public_keys().to_vec(),
-    // threshold)     }
-    //     Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
-    // };
-
     // We have all the values now.
     let cred_values = CredentialDeploymentValues {
         cred_id,

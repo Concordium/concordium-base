@@ -60,8 +60,14 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
 
     let reason = Reason::IncorrectProof; // TODO: introduce different reason
-
-    if !utils::verify_accunt_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
+                                         // Notice that here we provide all the verification keys, and the
+                                         // function `verify_accunt_ownership_proof` assumes that
+                                         // we have as many signatures as verification keys.
+                                         // ensure!(
+                                         //     proof_acc_sk.num_proofs() == SignatureThreshold(keys.len() as u8),
+                                         //     "The number of signatures should equal the number of verification keys, since for the account owner ship proof, all keys are used to sign."
+                                         // );
+    if !utils::verify_account_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
         return Err(reason);
     }
 
