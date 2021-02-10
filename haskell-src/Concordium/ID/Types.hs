@@ -47,6 +47,9 @@ instance FBS.FixedLength AccountAddressSize where
 newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
     deriving(Eq, Ord, Generic, Data, Typeable)
 
+instance ToJSONKey AccountAddress
+instance FromJSONKey AccountAddress
+
 {-# WARNING randomAccountAddress "DO NOT USE IN PRODUCTION." #-}
 randomAccountAddress :: RandomGen g => g -> (AccountAddress, g)
 randomAccountAddress g =
