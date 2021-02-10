@@ -504,17 +504,11 @@ fn test_typed_block_br_if() {
             stack!(S),
             [Block(BlockValue(I32))],
             flatten![
-                [I32Const(1),
-                 I32Const(1),
-                 If { ty: BlockValue(I32) },
-                ],
+                [I32Const(1), I32Const(1), If {
+                    ty: BlockValue(I32),
+                },],
                 energy!(branch(1)),
-                [I32Const(1),
-                 Else,
-                 I32Const(0),
-                 End,
-                 BrIf(0),
-                ]
+                [I32Const(1), Else, I32Const(0), End, BrIf(0),]
             ],
             [End],
             stack!(-S)

@@ -554,8 +554,9 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             // therefore the index has to be incremented.
                             self.add_to_new(&Br(idx + 1));
                             self.add_to_new(&End);
-                            // We do not need to update the labels vector for this
-                            // non-recursive replacement. Therefore,
+                            // We do not need to update the labels vector for
+                            // this non-recursive
+                            // replacement. Therefore,
                             // the original label index is still
                             // valid here.
                         }
@@ -570,9 +571,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&End);
                             self.add_to_new(&BrIf(*idx));
                         }
-                        None => {
-                            bail!("Enclosing block of br_if instruction must have a type.")
-                        }
+                        None => bail!("Enclosing block of br_if instruction must have a type."),
                     }
                 }
                 BrTable {
