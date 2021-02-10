@@ -478,12 +478,37 @@ mod tests {
             &id_object,
             &id_use_data,
             0,
-            policy,
+            policy.clone(),
             &cred_data,
             None,
         )
         .expect("Should generate the credential successfully.");
         let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, None);
+        assert_eq!(cdi_check, Ok(()));
+
+        // Testing with an existing RegId (i.e. an existing account)
+        let existing_reg_id = cdi.values.cred_id;
+        let cred_data = CredentialData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let cdi = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            1,
+            policy,
+            &cred_data,
+            Some(existing_reg_id),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, Some(existing_reg_id));
         assert_eq!(cdi_check, Ok(()));
     }
 
