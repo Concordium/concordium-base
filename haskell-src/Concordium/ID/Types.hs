@@ -51,9 +51,9 @@ instance ToJSONKey AccountAddress where
   toJSONKey = toJSONKeyText (Text.decodeUtf8 . addressToBytes)
 
 instance FromJSONKey AccountAddress where
-  fromJSONKey = FromJSONKeyText ((\case
-                                     Left e -> error e
-                                     Right v -> v) . addressFromBytes . Text.encodeUtf8)
+  fromJSONKey = FromJSONKeyTextParser ((\case
+                                           Left e -> fail e
+                                           Right v -> return v) . addressFromBytes . Text.encodeUtf8)
 
 {-# WARNING randomAccountAddress "DO NOT USE IN PRODUCTION." #-}
 randomAccountAddress :: RandomGen g => g -> (AccountAddress, g)
