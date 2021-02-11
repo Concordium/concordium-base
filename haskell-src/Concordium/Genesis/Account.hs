@@ -92,7 +92,10 @@ data GenesisAccount = GenesisAccount
       gaVerifyKeys :: !ID.AccountKeys,
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
-      -- |The account credentials
+      -- |The account credentials, most recent first.
+      -- If multiple credentials are present, then the last in the
+      -- list should be the initial credential, from which encryption
+      -- keys are derived.
       gaCredentials :: !(NonEmpty ID.AccountCredential),
       -- |The (optional) baker information
       gaBaker :: !(Maybe GenesisBaker)
