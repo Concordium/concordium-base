@@ -500,9 +500,10 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 }
                 BrIf(idx) => {
                     self.account_energy_push_pending();
-                    // If the `br_if` instruction is enclosed in a block that returns nothing,
-                    // we can replace the `br_if` instruction with an `if` block that includes
-                    // metering instructions and a `br`. Example:
+                    let label_arity = self.lookup_label(*idx)?;
+                    // If the target of the `br_if` instruction is the end of a block that returns
+                    // nothing, we can replace the `br_if` instruction with an
+                    // `if` block that includes metering instructions and a `br`. Example:
                     //
                     // block $b
                     //   ...
@@ -519,12 +520,13 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                     //   end
                     // end
                     //
-                    // However, if the enclosing block $b1 returns a value, then this transformation
+                    // However, if the target block $b1 returns a value, then this transformation
                     // would result in a type error because the typechecking of the contents of the
-                    // if block happens without access to the surrounding typing context.
+                    // if block happens without access to typing information of the stack variables
+                    // that precede the block.
                     // As a result, the type checker cannot ensure that the contents of the if block
-                    // produce the same type as the surrounding block.
-                    // Therefore, in case that the surrounding block returns a type, we transform
+                    // produce the same type as the target block.
+                    // Therefore, in case that the target block returns a type, we transform
                     // the above code as follows:
                     //
                     // block $b1
@@ -543,12 +545,12 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                     // through `i32.const 1` in the "then" branch and `i32.const 0` in the "else"
                     // branch. We thus avoid additional nesting of the `br_if` instruction
                     // while preserving the semantics of the program.
-                    match self.labels.last() {
-                        Some(BlockType::EmptyType) => {
+                    match label_arity {
+                        0 => {
+                            // Target block returns nothing
                             self.add_to_new(&If {
                                 ty: BlockType::EmptyType,
                             });
-                            let label_arity = self.lookup_label(*idx)?;
                             self.account_energy(cost::branch(label_arity));
                             // In the replacement instruction, the label moves out by one index and
                             // therefore the index has to be incremented.
@@ -560,18 +562,23 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             // the original label index is still
                             // valid here.
                         }
-                        Some(BlockType::ValueType(_)) => {
+                        1 => {
+                            // Target block returns a value
                             self.add_to_new(&If {
                                 ty: BlockType::ValueType(ValueType::I32),
                             });
-                            self.account_energy(cost::branch(1));
+                            self.account_energy(cost::branch(label_arity));
                             self.add_to_new(&I32Const(1));
                             self.add_to_new(&Else);
                             self.add_to_new(&I32Const(0));
                             self.add_to_new(&End);
                             self.add_to_new(&BrIf(*idx));
                         }
-                        None => bail!("Enclosing block of br_if instruction must have a type."),
+                        n => bail!(
+                            "Block must have either no or one return value. {} return values are \
+                             not supported.",
+                            n
+                        ),
                     }
                 }
                 BrTable {

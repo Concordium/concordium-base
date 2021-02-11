@@ -524,13 +524,26 @@ fn test_typed_block_br_if() {
 fn test_typed_outer_block_br_if() {
     test_body(
         FunctionType::empty(),
-        vec![Block(EmptyType), I32Const(1), I32Const(2), BrIf(1), Drop, End, I32Const(3)],
+        vec![
+            Block(BlockValue(I32)),
+            Block(EmptyType),
+            I32Const(1),
+            I32Const(2),
+            BrIf(1),
+            Drop,
+            End,
+            I32Const(3),
+            End,
+        ],
         flatten![
-            energy!(ENTRY + CONST * 3 + BR_IF + DROP),
+            energy!(ENTRY + CONST * 2 + BR_IF),
             stack!(S),
-            [Block(EmptyType), I32Const(1), I32Const(2)],
+            [Block(BlockValue(I32)), Block(EmptyType), I32Const(1), I32Const(2)],
             br_if_substitute(1),
-            [Drop, End, I32Const(3)],
+            energy!(DROP),
+            [Drop, End],
+            energy!(CONST),
+            [I32Const(3), End],
             stack!(-S)
         ],
     )
