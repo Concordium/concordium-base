@@ -573,11 +573,8 @@ fn test_block_br_if_2() {
         flatten![
             energy!(ENTRY + 2 * CONST + BR_IF),
             stack!(S),
-            [Block(BlockValue(I64)), I64Const(5), I32Const(9), If {
-                ty: EmptyType,
-            }],
-            energy!(branch(1)),
-            [Br(1), End],
+            [Block(BlockValue(I64)), I64Const(5), I32Const(9)],
+            br_if_substitute(0),
             energy!(CONST),
             [I64Const(5), End],
             stack!(-S)
