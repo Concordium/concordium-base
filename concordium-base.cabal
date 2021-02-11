@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 052ee5bd822fbdd99e3cd8e7a8a9f55a04371a951a69574ffb62d4381edcfc92
+-- hash: 3e131ae02113e1d58a6df15fac130a4ce6a5956e4e4a66fd2f91a75b15ab70ae
 
 name:           concordium-base
 version:        0.1.0.0
@@ -72,6 +72,7 @@ library
       Concordium.Types.Updates
       Concordium.Utils
       Concordium.Utils.Serialization
+      Concordium.Utils.Serialization.Put
       Concordium.Wasm
       Data.Base58Encoding
       Data.Base58Encoding.TH
