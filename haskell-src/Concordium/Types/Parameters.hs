@@ -226,8 +226,12 @@ instance FromJSON FinalizationParameters where
         finalizationMinimumSkip <- BlockHeight <$> v .: "minimumSkip"
         finalizationCommitteeMaxSize <- v .: "committeeMaxSize"
         finalizationWaitingTime <- v .: "waitingTime"
-        finalizationIgnoreFirstWait <- v .:? "ignoreFirstWait" .!= False
+        finalizationIgnoreFirstWait <- v .:? "ignoreFirstWait" .!= True
+        unless finalizationIgnoreFirstWait $
+            fail "ignoreFirstWait must be true (or not specified)"
         finalizationOldStyleSkip <- v .:? "oldStyleSkip" .!= False
+        when finalizationOldStyleSkip $
+            fail "oldStyleSkip must be false (or not specified)"
         finalizationSkipShrinkFactor <- v .: "skipShrinkFactor"
         unless (finalizationSkipShrinkFactor > 0 && finalizationSkipShrinkFactor < 1) $
             fail "skipShrinkFactor must be strictly between 0 and 1"
