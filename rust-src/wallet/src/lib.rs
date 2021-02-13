@@ -6,7 +6,6 @@ use crypto_common::{types::Amount, *};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
-use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use failure::Fallible;
 use id::{
@@ -27,6 +26,7 @@ use std::{
     io::Cursor,
 };
 
+use crypto_common::serde_impls::KeyPairDef;
 type ExampleCurve = G1;
 
 /// Context for a transaction to send.
@@ -379,21 +379,24 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
+    
+    let reg_id: Option<ExampleCurve> = None;
+
     // if account data is present then use it, otherwise generate new.
-    let acc_data = {
-        if let Some(acc_data) = v.get("accountData") {
-            match from_value(acc_data.clone()) {
-                Ok(acc_data) => acc_data,
+    let cred_data = {
+        if let Some(cred_data) = v.get("credentialData") {
+            match from_value(cred_data.clone()) {
+                Ok(cred_data) => cred_data,
                 Err(e) => bail!("Cannot decode accountData {}", e),
             }
         } else {
             let mut keys = std::collections::BTreeMap::new();
             let mut csprng = thread_rng();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
 
-            AccountData {
+            CredentialData {
                 keys,
-                existing: Left(SignatureThreshold(1)),
+                threshold: SignatureThreshold(1),
             }
         }
     };
@@ -424,12 +427,13 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         &id_use_data,
         acc_num,
         policy,
-        &acc_data,
+        &cred_data,
+        reg_id
     )?;
 
-    let address = match acc_data.existing {
-        Left(_) => AccountAddress::new(&cdi.values.reg_id),
-        Right(addr) => addr,
+    let address = match reg_id {
+        None => AccountAddress::new(&cdi.values.cred_id),
+        Some(reg_id) => AccountAddress::new(&reg_id),
     };
 
     // unwrap is safe here since we've generated the credential already, and that
@@ -442,7 +446,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let response = json!({
         "credential": Versioned::new(VERSION_0, AccountCredential::Normal{cdi}),
-        "accountData": acc_data,
+        "credentialData": cred_data,
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountAddress": address,

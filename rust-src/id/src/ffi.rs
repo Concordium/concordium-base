@@ -151,6 +151,7 @@ extern "C" fn verify_cdi_ffi(
     ars_infos_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
+    regid_ptr: *const G1,
 ) -> i32 {
     if gc_ptr.is_null() {
         return -9;
@@ -158,6 +159,12 @@ extern "C" fn verify_cdi_ffi(
     if ip_info_ptr.is_null() {
         return -10;
     }
+    
+    let reg_id : Option<G1> = if regid_ptr.is_null() {
+        None
+    } else {
+        Some(*from_ptr!(regid_ptr))
+    };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
     match CredentialDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(
@@ -184,7 +191,7 @@ extern "C" fn verify_cdi_ffi(
                 from_ptr!(ip_info_ptr),
                 &ars_infos,
                 &cdi,
-                None,
+                reg_id,
             ) {
                 Ok(()) => 1, // verification succeeded
                 Err(CDIVerificationError::RegId) => -1,
