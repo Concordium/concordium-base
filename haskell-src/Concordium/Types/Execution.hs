@@ -193,6 +193,11 @@ data Payload =
       twsTo :: !AccountAddress,
       twsSchedule :: ![(Timestamp, Amount)]
       }
+  | NewCredential {
+      newCredInfos :: ![CredentialDeploymentInformation],
+      removeCredIds :: ![CredentialRegistrationID],
+      newThreshold :: !Threshold
+  }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")

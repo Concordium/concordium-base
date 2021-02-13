@@ -48,20 +48,24 @@ transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
 -- The maximum length of the list is 255, and the minimum length is 1.
-newtype TransactionSignature = TransactionSignature { tsSignature :: Map.Map KeyIndex Signature }
+newtype TransactionSignatureOld = TransactionSignatureOld { tsSignature :: Map.Map KeyIndex Signature }
   deriving (Eq, Show)
   deriving (ToJSON, FromJSON) via (Map.Map KeyIndex Signature)
+
+newtype TransactionSignature = TransactionSignature { tsSignatures :: Map.Map KeyIndex (Map.Map KeyIndex Signature) }
+  deriving (Eq, Show)
+  deriving (ToJSON, FromJSON) via (Map.Map KeyIndex (Map.Map KeyIndex Signature))
+
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
-getTransactionNumSigs = length . tsSignature
-
+getTransactionNumSigs = length . tsSignatures
 
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
-    S.putWord8 (fromIntegral (length tsSignature))
-    forM_ (Map.toAscList tsSignature) $ \(idx, sig) -> S.put idx <> S.put sig
+    S.putWord8 (fromIntegral (length tsSignatures))
+    forM_ (Map.toAscList tsSignatures) $ \(idx, sig) -> S.put idx <> S.put sig
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
@@ -79,8 +83,8 @@ instance S.Serialize TransactionSignature where
 signatureSize :: TransactionSignature -> Int
 signatureSize TransactionSignature{..} =
     1 -- length
-    + length tsSignature -- key indices
-    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignature) -- signatures
+    + length tsSignatures -- key indices
+    -- + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignatures) -- signatures
 
 -- | Data common to all transaction types.
 --
@@ -392,38 +396,77 @@ putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransactionSingle :: KeyPair -> TransactionHeader -> EncodedPayload -> AccountTransaction
-signTransactionSingle kp = signTransaction [(0, kp)]
+signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 
 -- |Sign a transaction with the given header and body, using the given keypairs.
 -- The function does not sanity checking that the keys are valid, or that the
 -- indices are distint.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-signTransaction :: [(KeyIndex, KeyPair)] -> TransactionHeader -> EncodedPayload -> AccountTransaction
+signTransaction :: [(KeyIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransaction keys atrHeader atrPayload =
-  let 
+  let
       atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
       -- only sign the hash of the transaction
       bodyHash = transactionSignHashToByteString atrSignHash
-      tsSignature = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
+      credSignature cKeys = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) cKeys
+      tsSignatures = Map.fromList $ map (\(idx, cKeys) -> (idx, credSignature cKeys)) keys
       atrSignature = TransactionSignature{..}
   in AccountTransaction{..}
+
+-- Introducing here a type containing all the information needed for verifying a transaction,
+-- i.e. the account threshold, all the credential thresholds, and all the credential public keys.
+data AccountInformation = AccountInformation {
+  credentials :: !(Map.Map KeyIndex CredentialPublicKeys),
+  aiThreshold :: !SignatureThreshold
+} -- deriving(Eq, Show, Ord)
+
+{-# INLINE getCredentialKeys #-}
+getCredentialKeys :: KeyIndex -> AccountInformation -> Maybe CredentialPublicKeys
+getCredentialKeys idx ai = Map.lookup idx (credentials ai)
+
+
+-- verifyTransactionOld :: TransactionData msg => CredentialPublicKeys -> msg -> Bool
+-- verifyTransaction keys tx =
+--   let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
+--       TransactionSignature sigs = transactionSignature tx
+--       keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys)) True (Map.toList sigs)
+--       numSigs = length sigs
+--       threshold = credThreshold keys
+--   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
+
+
+verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
+verifyCredentialSignatures bodyHash sigs keys = 
+  let numSigs = length sigs 
+      check = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys)) True (Map.toList sigs)
+  in numSigs <= 255 && (fromIntegral numSigs >= credThreshold keys) && check
 
 -- |Verify that the given transaction was signed by the required number of keys.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
-verifyTransaction keys tx =
+verifyTransactionNew :: TransactionData msg => AccountInformation -> msg -> Bool
+verifyTransactionNew ai tx =
   let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
-      TransactionSignature sigs = transactionSignature tx
-      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True (Map.toList sigs)
-      numSigs = length sigs
-      threshold = akThreshold keys
+      TransactionSignature maps = transactionSignature tx
+      keysCheck = foldl' (\b (idx, sigmap) -> b && maybe False (verifyCredentialSignatures bodyHash sigmap) (getCredentialKeys idx ai)) True (Map.toList maps)
+      numSigs = length maps
+      threshold = aiThreshold ai
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
 
 -----------------------------------
 -- * 'TransactionData' abstraction
 -----------------------------------
+
+-- class TransactionData' t where
+--     transactionHeader' :: t -> TransactionHeader
+--     transactionSender' :: t -> AccountAddress
+--     transactionNonce' :: t -> Nonce
+--     transactionGasAmount' :: t -> Energy
+--     transactionPayload' :: t -> EncodedPayload
+--     transactionSignature' :: t -> TransactionSignatureNew
+--     transactionSignHash' :: t -> TransactionSignHash
+--     transactionHash' :: t -> TransactionHash
 
 -- |The 'TransactionData' class abstracts away from the particular data
 -- structure. It makes it possible to unify operations on 'Transaction' as well
@@ -600,7 +643,7 @@ instance S.Serialize SpecialTransactionOutcome where
 data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
-    } 
+    }
 
 makeLenses ''TransactionOutcomes
 

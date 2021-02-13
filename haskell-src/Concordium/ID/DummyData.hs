@@ -39,8 +39,8 @@ globalContext = dummyGlobalContext
 dummyCredential :: GlobalContext -> AccountAddress -> SigScheme.VerifyKey -> CredentialValidTo -> CredentialCreatedAt -> AccountCredential
 dummyCredential gc addr key pValidTo pCreatedAt = NormalAC (CredentialDeploymentValues
     {
-      cdvAccount = NewAccount [key] 1,
-      cdvRegId = dummyRegId gc addr,
+      cdvPublicKeys = makeCredentialPublicKeys [key] 1,
+      cdvCredId = dummyRegId gc addr,
       cdvIpId = IP_ID 0,
       cdvThreshold = Threshold 2,
       cdvArData = OrdMap.empty,

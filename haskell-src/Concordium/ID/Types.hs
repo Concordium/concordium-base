@@ -111,20 +111,20 @@ newtype KeyIndex = KeyIndex Word8
     deriving (Eq, Ord, Enum, Num, Real, Integral)
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
-data AccountKeys = AccountKeys {
-  akKeys :: !(Map.Map KeyIndex VerifyKey),
-  akThreshold :: !SignatureThreshold
+data CredentialPublicKeys = CredentialPublicKeys {
+  credKeys :: !(Map.Map KeyIndex VerifyKey),
+  credThreshold :: !SignatureThreshold
   } deriving(Eq, Show, Ord)
 
-makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
-makeAccountKeys keys akThreshold =
-  AccountKeys{
-    akKeys = Map.fromAscList (zip [0..] keys), -- NB: fromAscList does not check preconditions
+makeCredentialPublicKeys :: [VerifyKey] -> SignatureThreshold -> CredentialPublicKeys
+makeCredentialPublicKeys keys credThreshold =
+  CredentialPublicKeys{
+    credKeys = Map.fromAscList (zip [0..] keys), -- NB: fromAscList does not check preconditions
     ..
     }
 
-makeSingletonAC :: VerifyKey -> AccountKeys
-makeSingletonAC key = makeAccountKeys [key] 1
+makeSingletonAC :: VerifyKey -> CredentialPublicKeys
+makeSingletonAC key = makeCredentialPublicKeys [key] 1
 
 -- Build a map from an ascending list.
 safeFromAscList :: (MonadFail m, Ord k) => [(k,v)] -> m (Map.Map k v)
@@ -135,30 +135,36 @@ safeFromAscList = go Map.empty Nothing
               | k' < k = go (Map.insert k v mp) (Just k) rest
               | otherwise = fail "Keys not in ascending order, or duplicate keys."
 
-instance S.Serialize AccountKeys where
-  put AccountKeys{..} = do
-    S.putWord8 (fromIntegral (length akKeys))
-    forM_ (Map.toAscList akKeys) $ \(idx, key) -> S.put idx <> S.put key
-    S.put akThreshold
+instance S.Serialize CredentialPublicKeys where
+  put CredentialPublicKeys{..} = do
+    S.putWord8 (fromIntegral (length credKeys))
+    forM_ (Map.toAscList credKeys) $ \(idx, key) -> S.put idx <> S.put key
+    S.put credThreshold
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Number of keys out of bounds."
-    akKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-    akThreshold <- S.get
-    return AccountKeys{..}
+    credKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    credThreshold <- S.get
+    return CredentialPublicKeys{..}
 
-instance FromJSON AccountKeys where
-  parseJSON = withObject "AccountKeys" $ \v -> do
-    akThreshold <- v .: "threshold"
-    akKeys <- v .: "keys"
-    return AccountKeys{..}
+instance FromJSON CredentialPublicKeys where
+  parseJSON = withObject "CredentialPublicKeys" $ \v -> do
+    credThreshold <- v .: "threshold"
+    credKeys <- v .: "keys"
+    return CredentialPublicKeys{..}
 
-{-# INLINE getAccountKey #-}
-getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
-getAccountKey idx keys = Map.lookup idx (akKeys keys)
+instance ToJSON CredentialPublicKeys where
+  toJSON CredentialPublicKeys{..} = object [
+    "keys" .= credKeys,
+    "threshold" .= credThreshold
+    ]
 
-getKeyIndices :: AccountKeys -> Set.Set KeyIndex
-getKeyIndices keys = Map.keysSet $ akKeys keys
+{-# INLINE getCredentialPublicKey #-}
+getCredentialPublicKey :: KeyIndex -> CredentialPublicKeys -> Maybe VerifyKey
+getCredentialPublicKey idx keys = Map.lookup idx (credKeys keys)
+
+getKeyIndices :: CredentialPublicKeys -> Set.Set KeyIndex
+getKeyIndices keys = Map.keysSet $ credKeys keys
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
@@ -496,9 +502,9 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Either an address of an existing account, or the list of keys the newly
   -- created account should have, together with a threshold for how many are needed
   -- Its address is derived from the registration id of this credential.
-  cdvAccount :: !CredentialAccount,
+  cdvPublicKeys :: !CredentialPublicKeys,
   -- |Registration id of __this__ credential.
-  cdvRegId     :: !CredentialRegistrationID,
+  cdvCredId     :: !CredentialRegistrationID,
   -- |Identity of the identity provider who signed the identity object from
   -- which this credential is derived.
   cdvIpId      :: !IdentityProviderIdentity,
@@ -511,13 +517,13 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
 } deriving(Eq, Show)
 
 credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
-credentialAccountAddress cdv = addressFromRegId (cdvRegId cdv)
+credentialAccountAddress cdv = addressFromRegId (cdvCredId cdv)
 
 credentialDeploymentValuesList :: CredentialDeploymentValues -> [Pair]
 credentialDeploymentValuesList CredentialDeploymentValues{..} =
   [
-    "account" .= cdvAccount,
-    "regId" .= cdvRegId,
+    "credentialPublicKeys" .= cdvPublicKeys,
+    "credId" .= cdvCredId,
     "ipIdentity" .= cdvIpId,
     "revocationThreshold" .= cdvThreshold,
     "arData" .= cdvArData,
@@ -530,8 +536,8 @@ instance ToJSON CredentialDeploymentValues where
 
 instance FromJSON CredentialDeploymentValues where
   parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
-    cdvAccount <- v .: "account"
-    cdvRegId <- v .: "regId"
+    cdvPublicKeys <- v .: "credentialPublicKeys"
+    cdvCredId <- v .: "credId"
     cdvIpId <- v .: "ipIdentity"
     cdvThreshold <- v.: "revocationThreshold"
     cdvArData <- v .: "arData"
@@ -556,8 +562,8 @@ putPolicy Policy{..} =
 
 instance Serialize CredentialDeploymentValues where
   get = do
-    cdvAccount <- get
-    cdvRegId <- get
+    cdvPublicKeys <- get
+    cdvCredId <- get
     cdvIpId <- get
     cdvThreshold <- get
     l <- S.getWord16be
@@ -566,8 +572,8 @@ instance Serialize CredentialDeploymentValues where
     return CredentialDeploymentValues{..}
 
   put CredentialDeploymentValues{..} =
-    put cdvAccount <>
-    put cdvRegId <>
+    put cdvPublicKeys <>
+    put cdvCredId <>
     put cdvIpId <>
     put cdvThreshold <>
     S.putWord16be (fromIntegral (length cdvArData)) <>
@@ -648,7 +654,7 @@ data InitialCredentialDeploymentValues = InitialCredentialDeploymentValues {
   -- |List of keys the new account should have, together with a threshold
   -- for how many are needed. Its address is derived from the registration
   -- id of this credential.
-  icdvAccount :: !InitialCredentialAccount,
+  icdvAccount :: !CredentialPublicKeys,
   -- |Registration id of __this__ credential.
   icdvRegId :: !CredentialRegistrationID,
   -- |Identity of the identity provider who signed this account creation
@@ -665,7 +671,7 @@ initialCredentialAccountAddress icdv = addressFromRegId (icdvRegId icdv)
 instance ToJSON InitialCredentialDeploymentValues where
   toJSON InitialCredentialDeploymentValues{..} =
     object [
-    "account" .= icdvAccount,
+    "credentialPublicKeys" .= icdvAccount,
     "regId" .= icdvRegId,
     "ipIdentity" .= icdvIpId,
     "policy" .= icdvPolicy
@@ -673,7 +679,7 @@ instance ToJSON InitialCredentialDeploymentValues where
 
 instance FromJSON InitialCredentialDeploymentValues where
   parseJSON = withObject "InitialCredentialDeploymentValues" $ \v -> do
-    icdvAccount <- v .: "account"
+    icdvAccount <- v .: "credentialPublicKeys"
     icdvRegId <- v .: "regId"
     icdvIpId <- v .: "ipIdentity"
     icdvPolicy <- v .: "policy"
@@ -815,7 +821,7 @@ instance ToJSON AccountCredential where
 class CredentialValuesFields a where
   -- |Extract the validity information for the credential.
   validTo :: a -> CredentialValidTo
-  regId :: a -> CredentialRegistrationID
+  credId :: a -> CredentialRegistrationID
   ipId :: a -> IdentityProviderIdentity
   policy :: a -> Policy
 
@@ -823,8 +829,8 @@ instance CredentialValuesFields AccountCredential where
   validTo (NormalAC cdv _) = pValidTo . cdvPolicy $ cdv
   validTo (InitialAC icdv) = pValidTo . icdvPolicy $ icdv
 
-  regId (NormalAC cdv _) = cdvRegId cdv
-  regId (InitialAC icdv) = icdvRegId icdv
+  credId (NormalAC cdv _) = cdvCredId cdv
+  credId (InitialAC icdv) = icdvRegId icdv
 
   ipId (InitialAC icdv) = icdvIpId icdv
   ipId (NormalAC cdv _) = cdvIpId cdv
@@ -836,8 +842,8 @@ instance CredentialValuesFields AccountCredentialWithProofs where
   validTo (NormalACWP cdi) = pValidTo . cdvPolicy . cdiValues $ cdi
   validTo (InitialACWP icdi) = pValidTo . icdvPolicy . icdiValues $ icdi
 
-  regId (NormalACWP cdi) = cdvRegId . cdiValues $ cdi
-  regId (InitialACWP icdi) = icdvRegId . icdiValues $ icdi
+  credId (NormalACWP cdi) = cdvCredId . cdiValues $ cdi
+  credId (InitialACWP icdi) = icdvRegId . icdiValues $ icdi
 
   ipId (NormalACWP cdi) = cdvIpId . cdiValues $ cdi
   ipId (InitialACWP icdi) = icdvIpId . icdiValues $ icdi

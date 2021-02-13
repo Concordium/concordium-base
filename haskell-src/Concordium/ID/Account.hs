@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential, verifyInitialAccountCreation) where
 
+import Concordium.Crypto.FFIDataTypes
 import GHC.Word
 import System.IO.Unsafe
 import Foreign.Ptr
@@ -16,7 +17,6 @@ import Concordium.ID.Types
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
 import Concordium.ID.AnonymityRevoker
-import Data.Serialize(encode)
 
 type CredentialDeploymentInformationBytes = ByteString
 
@@ -25,10 +25,9 @@ foreign import ccall safe "verify_cdi_ffi" verifyCDIFFI
                -> Ptr IpInfo
                -> Ptr (Ptr ArInfo)
                -> CSize -- ^Length of the ArInfo list.
-               -> Ptr Word8 -- ^Serialized account keys.
-               -> CSize -- ^Length of the serialized account keys.
                -> Ptr Word8 -- ^Serialized credential.
                -> CSize  -- ^Length of the serialized credential.
+               -> Ptr GroupElement
                -> IO Int32
 -- FIXME: We pass in keys as byte arrays which is quite bad since
 -- keys are not bytes, but rather we know that they are well-formed already.
@@ -43,11 +42,14 @@ withArInfoArray :: [Ptr ArInfo] -> [ArInfo] -> (Int -> Ptr (Ptr ArInfo) -> IO a)
 withArInfoArray arPtrs [] k = withArrayLen arPtrs k
 withArInfoArray arPtrs (ar:ars) k = withArInfo ar $ \arPtr -> withArInfoArray (arPtr:arPtrs) ars k
 
+withRegId :: CredentialRegistrationID -> (Ptr GroupElement -> IO a) -> IO a
+withRegId (RegIdCred rid) = withGroupElement rid
+
 -- |Verify a credential in the context of the given cryptographic parameters and
 -- identity provider information. If the account keys are given this checks that
 -- the proofs contained in the credential correspond to them.
-verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> Maybe AccountKeys -> CredentialDeploymentInformationBytes -> Bool
-verifyCredential gc ipInfo arInfos Nothing cdiBytes = unsafePerformIO $ do
+verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> CredentialDeploymentInformationBytes -> Maybe CredentialRegistrationID -> Bool
+verifyCredential gc ipInfo arInfos cdiBytes Nothing = unsafePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
             withIpInfo ipInfo $ \ipInfoPtr ->
               withArInfoArray [] arInfos $ \len arPtr ->
@@ -55,13 +57,13 @@ verifyCredential gc ipInfo arInfos Nothing cdiBytes = unsafePerformIO $ do
                 -- this use of unsafe is fine since at this point we know the CDI
                 -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
                 -- non-null
-                verifyCDIFFI gcPtr ipInfoPtr arPtr (fromIntegral len) nullPtr 0 (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+                verifyCDIFFI gcPtr ipInfoPtr arPtr (fromIntegral len) (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen) nullPtr
     return (res == 1)
-verifyCredential gc ipInfo arInfos (Just keys) cdiBytes = unsafePerformIO $ do
-    res <- withGlobalContext gc $ \gcPtr ->
+verifyCredential gc ipInfo arInfos cdiBytes (Just regId) = unsafePerformIO $ do
+    res <- withRegId regId $ \regIdPtr ->
+           withGlobalContext gc $ \gcPtr ->
            withIpInfo ipInfo $ \ipInfoPtr ->
              withArInfoArray [] arInfos $ \len arPtr ->
-               unsafeUseAsCStringLen keyBytes $ \(keyBytesPtr, keyBytesLen) ->
                unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) ->
                -- this use of unsafe is fine since at this point we know the CDI
                -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
@@ -70,12 +72,10 @@ verifyCredential gc ipInfo arInfos (Just keys) cdiBytes = unsafePerformIO $ do
                             ipInfoPtr
                             arPtr
                             (fromIntegral len)
-                            (castPtr keyBytesPtr)
-                            (fromIntegral keyBytesLen)
                             (castPtr cdiBytesPtr)
                             (fromIntegral cdiBytesLen)
+                            regIdPtr
     return (res == 1)
-    where keyBytes = encode keys
 
 type InitialCredentialBytes = ByteString
 
