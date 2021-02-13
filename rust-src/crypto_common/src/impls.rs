@@ -227,7 +227,7 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
             Either::Left(ref left) => {
                 out.put(&0u8);
                 out.put(left);
-            },
+            }
             Either::Right(ref right) => {
                 out.put(&1u8);
                 out.put(right);
@@ -266,7 +266,7 @@ impl<T: Serial> Serial for Option<T> {
         match self {
             None => {
                 out.put(&0u8);
-            },
+            }
             Some(ref x) => {
                 out.put(&1u8);
                 out.put(x);

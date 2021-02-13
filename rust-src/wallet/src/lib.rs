@@ -379,7 +379,6 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
-    
     let reg_id: Option<ExampleCurve> = None;
 
     // if account data is present then use it, otherwise generate new.
@@ -428,7 +427,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         acc_num,
         policy,
         &cred_data,
-        reg_id
+        reg_id,
     )?;
 
     let address = match reg_id {
