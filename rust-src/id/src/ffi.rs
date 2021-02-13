@@ -159,8 +159,8 @@ extern "C" fn verify_cdi_ffi(
     if ip_info_ptr.is_null() {
         return -10;
     }
-    
-    let reg_id : Option<G1> = if regid_ptr.is_null() {
+
+    let reg_id: Option<G1> = if regid_ptr.is_null() {
         None
     } else {
         Some(*from_ptr!(regid_ptr))
@@ -447,6 +447,7 @@ mod test {
             ars_infos_ptr.len() as size_t,
             cdi_bytes.as_ptr(),
             cdi_bytes_len,
+            std::ptr::null(),
         );
         assert_eq!(cdi_check, 1);
         let wrong_cdi_bytes = to_bytes(&wrong_cdi);
@@ -458,6 +459,7 @@ mod test {
             ars_infos_ptr.len() as size_t,
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
+            std::ptr::null(),
         );
         assert_ne!(wrong_cdi_check, 1);
     }
