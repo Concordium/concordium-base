@@ -223,14 +223,11 @@ impl State {
 
     pub fn load_state(&self, offset: u32, mut bytes: &mut [u8]) -> ExecResult<u32> {
         let offset = offset as usize;
-        if offset >= self.state.len() {
-            Ok(0)
-        } else {
-            // Write on slices overwrites the buffer and returns how many bytes were
-            // written.
-            let amt = bytes.write(&self.state[offset..])?;
-            Ok(amt as u32)
-        }
+        ensure!(offset <= self.state.len());
+        // Write on slices overwrites the buffer and returns how many bytes were
+        // written.
+        let amt = bytes.write(&self.state[offset..])?;
+        Ok(amt as u32)
     }
 
     pub fn resize_state(&mut self, new_size: u32) -> u32 {
