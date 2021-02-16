@@ -194,9 +194,9 @@ data Payload =
       twsSchedule :: ![(Timestamp, Amount)]
       }
   | NewCredential {
-      newCredInfos :: ![CredentialDeploymentInformation],
-      removeCredIds :: ![CredentialRegistrationID],
-      newThreshold :: !Threshold
+      ncNewCredInfos :: ![CredentialDeploymentInformation],
+      ncRemoveCredIds :: ![CredentialRegistrationID],
+      ncNewThreshold :: !SignatureThreshold
   }
   deriving(Eq, Show)
 
