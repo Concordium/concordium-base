@@ -57,7 +57,7 @@ getGenesisDataV2 = do
             | gbBakerId ab /= i ->
                 fail "BakerId does not match account index"
         _
-            | let acctRegId = ID.regId (NE.head (gaCredentials acct))
+            | let acctRegId = ID.credId (NE.head (gaCredentials acct))
             , let acctEK = ID.makeEncryptionKey genesisCryptographicParameters acctRegId
             , ek /= acctEK ->
                 fail "Incorrect account encryption key"

@@ -124,6 +124,8 @@ data CredentialPublicKeys = CredentialPublicKeys {
   credThreshold :: !SignatureThreshold
   } deriving(Eq, Show, Ord)
 
+type AccountKeys = CredentialPublicKeys
+
 makeCredentialPublicKeys :: [VerifyKey] -> SignatureThreshold -> CredentialPublicKeys
 makeCredentialPublicKeys keys credThreshold =
   CredentialPublicKeys{
@@ -470,6 +472,26 @@ instance FromJSON SignatureThreshold where
     x <- parseJSON v
     unless (x <= (255::Word) || x >= 1) $ fail "Signature threshold out of bounds."
     return $! SignatureThreshold (fromIntegral x)
+
+instance Serialize AccountThreshold where
+  get = do
+    w <- getWord8
+    when (w == 0) $ fail "0 is not a valid signature threshold."
+    return (AccountThreshold w)
+  put (AccountThreshold w) = putWord8 w
+
+instance Read AccountThreshold where
+  -- filter out the 0 values
+  readsPrec parsePrec input = [(AccountThreshold w, rest) | (w, rest) <- readsPrec parsePrec input, w /= 0]
+
+instance ToJSON AccountThreshold where
+  toJSON (AccountThreshold x) = toJSON x
+
+instance FromJSON AccountThreshold where
+  parseJSON v = do
+    x <- parseJSON v
+    unless (x <= (255::Word) || x >= 1) $ fail "Signature threshold out of bounds."
+    return $! AccountThreshold (fromIntegral x)
 
 -- |Data about which account this credential belongs to.
 data CredentialAccount =
