@@ -100,7 +100,7 @@ library:
 executables:
   generate-update-keys:
     main: Main.hs
-    source-dirs: generate-update-keys
+    source-dirs: haskell-bins/generate-update-keys
     ghc-options:
       - -Wall
       - -Wcompat
@@ -113,6 +113,19 @@ executables:
       - concordium-base
       - filepath >= 1.4
       - optparse-applicative >= 0.15
+  
+  genesis:
+    main: Genesis.hs
+    source-dirs: haskell-bins/genesis
+    ghc-options:
+    - -Wall
+    - -Wcompat
+    - -fno-ignore-asserts
+    dependencies:
+    - concordium-base
+    - cmdargs >= 0.10
+    - filepath >= 1.4
+
 
 tests:
   test:
