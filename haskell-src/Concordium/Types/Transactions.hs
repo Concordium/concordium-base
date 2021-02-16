@@ -48,10 +48,6 @@ transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
 -- The maximum length of the list is 255, and the minimum length is 1.
-newtype TransactionSignatureOld = TransactionSignatureOld { tsSignature :: Map.Map KeyIndex Signature }
-  deriving (Eq, Show)
-  deriving (ToJSON, FromJSON) via (Map.Map KeyIndex Signature)
-
 newtype TransactionSignature = TransactionSignature { tsSignatures :: Map.Map KeyIndex (Map.Map KeyIndex Signature) }
   deriving (Eq, Show)
   deriving (ToJSON, FromJSON) via (Map.Map KeyIndex (Map.Map KeyIndex Signature))
@@ -425,17 +421,6 @@ data AccountInformation = AccountInformation {
 getCredentialKeys :: KeyIndex -> AccountInformation -> Maybe CredentialPublicKeys
 getCredentialKeys idx ai = Map.lookup idx (credentials ai)
 
-
--- verifyTransactionOld :: TransactionData msg => CredentialPublicKeys -> msg -> Bool
--- verifyTransaction keys tx =
---   let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
---       TransactionSignature sigs = transactionSignature tx
---       keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys)) True (Map.toList sigs)
---       numSigs = length sigs
---       threshold = credThreshold keys
---   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
-
-
 verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
 verifyCredentialSignatures bodyHash sigs keys = 
   let numSigs = length sigs 
@@ -457,16 +442,6 @@ verifyTransactionNew ai tx =
 -----------------------------------
 -- * 'TransactionData' abstraction
 -----------------------------------
-
--- class TransactionData' t where
---     transactionHeader' :: t -> TransactionHeader
---     transactionSender' :: t -> AccountAddress
---     transactionNonce' :: t -> Nonce
---     transactionGasAmount' :: t -> Energy
---     transactionPayload' :: t -> EncodedPayload
---     transactionSignature' :: t -> TransactionSignatureNew
---     transactionSignHash' :: t -> TransactionSignHash
---     transactionHash' :: t -> TransactionHash
 
 -- |The 'TransactionData' class abstracts away from the particular data
 -- structure. It makes it possible to unify operations on 'Transaction' as well

@@ -440,6 +440,9 @@ type AccountVerificationKey = VerifyKey
 newtype SignatureThreshold = SignatureThreshold Word8
     deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
 
+newtype AccountThreshold = AccountThreshold Word8
+    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
+
 instance Serialize SignatureThreshold where
   get = do
     w <- getWord8
