@@ -196,7 +196,7 @@ data Payload =
   | NewCredential {
       ncNewCredInfos :: ![CredentialDeploymentInformation],
       ncRemoveCredIds :: ![CredentialRegistrationID],
-      ncNewThreshold :: !SignatureThreshold
+      ncNewThreshold :: !AccountThreshold
   }
   deriving(Eq, Show)
 
@@ -587,6 +587,11 @@ data Event =
                etwsTo :: !AccountAddress,
                etwsAmount :: ![(Timestamp, Amount)]
                }
+           | CredentialsAdded {
+                  caNewCredIds :: ![CredentialRegistrationID],
+                  caRemovedCredIds :: ![CredentialRegistrationID],
+                  caNewThreshold :: !AccountThreshold
+              }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event

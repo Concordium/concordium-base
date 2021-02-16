@@ -90,6 +90,8 @@ data GenesisAccount = GenesisAccount
       gaAddress :: !AccountAddress,
       -- |The account keys
       gaVerifyKeys :: !ID.AccountKeys,
+      -- |The account threshold
+      gaThreshold :: !ID.AccountThreshold,
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
       -- |The account credentials
@@ -109,6 +111,7 @@ instance FromJSON GenesisAccount where
     parseJSON = withObject "GenesisAccount" $ \obj -> do
         gaAddress <- obj .: "address"
         gaVerifyKeys <- obj .: "accountKeys"
+        gaThreshold <- obj .: "accountThreshold"
         gaBalance <- obj .: "balance"
         gaCredentials <- obj .:? "credentials" >>= \case
             Nothing -> do
@@ -139,7 +142,7 @@ putGenesisAccountGD2 :: GlobalContext -> Putter GenesisAccount
 putGenesisAccountGD2 cryptoParams GenesisAccount{..} = do
     -- Put the persisting account data
     put gaAddress
-    let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.regId (NE.head gaCredentials))
+    let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.credId (NE.head gaCredentials))
     put encryptionKey
     put gaVerifyKeys
     putLength (length gaCredentials)
@@ -167,6 +170,7 @@ getGenesisAccountGD2 = label "GenesisAccount" $ do
     gaAddress <- get
     encryptionKey <- get
     gaVerifyKeys <- get
+    gaThreshold <- get
     nCredentials <- getLength
     when (nCredentials < 1) $ fail "A genesis account must have at least one credential"
     gaCredentials <- (:|) <$> get <*> replicateM (nCredentials - 1) get
