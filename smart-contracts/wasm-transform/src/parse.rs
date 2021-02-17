@@ -472,6 +472,12 @@ impl<'a> Parseable<'a> for TableType {
 impl<'a> Parseable<'a> for MemoryType {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let limits = Limits::parse(cursor)?;
+        ensure!(
+            limits.min <= MAX_INIT_MEMORY_SIZE,
+            "Initial memory allocation of {} pages exceeds maximum of {}.",
+            limits.min,
+            MAX_INIT_MEMORY_SIZE
+        );
         match limits.max {
             Some(x) => ensure!(x <= 1 << 16, "Memory limits must be in range 2^16."),
             None => ensure!(limits.min <= 1 << 16, "Memory limits must be in range 2^16."),

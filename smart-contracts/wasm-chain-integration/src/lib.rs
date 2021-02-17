@@ -223,14 +223,11 @@ impl State {
 
     pub fn load_state(&self, offset: u32, mut bytes: &mut [u8]) -> ExecResult<u32> {
         let offset = offset as usize;
-        if offset >= self.state.len() {
-            Ok(0)
-        } else {
-            // Write on slices overwrites the buffer and returns how many bytes were
-            // written.
-            let amt = bytes.write(&self.state[offset..])?;
-            Ok(amt as u32)
-        }
+        ensure!(offset <= self.state.len());
+        // Write on slices overwrites the buffer and returns how many bytes were
+        // written.
+        let amt = bytes.write(&self.state[offset..])?;
+        Ok(amt as u32)
     }
 
     pub fn resize_state(&mut self, new_size: u32) -> u32 {
@@ -412,7 +409,7 @@ impl<'a> machine::Host<ProcessedImports> for InitHost<'a> {
             ImportFunc::Common(cf) => call_common(self, cf, memory, stack)?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start <= memory.len(), "Illegal memory access for init origin.");
+                ensure!(start + 32 <= memory.len(), "Illegal memory access for init origin.");
                 (&mut memory[start..start + 32]).write_all(self.init_ctx.init_origin.as_ref())?;
             }
             ImportFunc::ReceiveOnly(_) => {
@@ -480,7 +477,7 @@ impl<'a> ReceiveHost<'a> {
             }
             ReceiveOnlyFunc::GetReceiveInvoker => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start <= memory.len(), "Illegal memory access for receive owner.");
+                ensure!(start + 32 <= memory.len(), "Illegal memory access for receive invoker.");
                 (&mut memory[start..start + 32]).write_all(self.receive_ctx.invoker.as_ref())?;
             }
             ReceiveOnlyFunc::GetReceiveSelfAddress => {
@@ -496,13 +493,13 @@ impl<'a> ReceiveHost<'a> {
             }
             ReceiveOnlyFunc::GetReceiveSender => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start <= memory.len(), "Illegal memory access for receive owner.");
+                ensure!(start < memory.len(), "Illegal memory access for receive sender.");
                 let bytes = to_bytes(self.receive_ctx.sender());
                 (&mut memory[start..]).write_all(&bytes)?;
             }
             ReceiveOnlyFunc::GetReceiveOwner => {
                 let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start <= memory.len(), "Illegal memory access for receive owner.");
+                ensure!(start + 32 <= memory.len(), "Illegal memory access for receive owner.");
                 (&mut memory[start..start + 32]).write_all(self.receive_ctx.owner.as_ref())?;
             }
         }

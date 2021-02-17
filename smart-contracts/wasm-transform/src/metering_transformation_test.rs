@@ -494,6 +494,61 @@ fn test_block_br_if() {
     )
 }
 
+fn br_if_substitute(label: LabelIndex) -> Vec<OpCode> {
+    flatten![
+        [If {
+            ty: BlockValue(I32),
+        }],
+        energy!(branch(1)),
+        [I32Const(1), Else, I32Const(0), End, BrIf(label),]
+    ]
+}
+
+#[test]
+fn test_typed_block_br_if() {
+    test_body(
+        FunctionType::empty(),
+        vec![Block(BlockValue(I32)), I32Const(1), I32Const(1), BrIf(0), End],
+        flatten![
+            energy!(ENTRY + CONST * 2 + BR_IF),
+            stack!(S),
+            [Block(BlockValue(I32)), I32Const(1), I32Const(1)],
+            br_if_substitute(0),
+            [End],
+            stack!(-S)
+        ],
+    )
+}
+
+#[test]
+fn test_typed_outer_block_br_if() {
+    test_body(
+        FunctionType::empty(),
+        vec![
+            Block(BlockValue(I32)),
+            Block(EmptyType),
+            I32Const(1),
+            I32Const(2),
+            BrIf(1),
+            Drop,
+            End,
+            I32Const(3),
+            End,
+        ],
+        flatten![
+            energy!(ENTRY + CONST * 2 + BR_IF),
+            stack!(S),
+            [Block(BlockValue(I32)), Block(EmptyType), I32Const(1), I32Const(2)],
+            br_if_substitute(1),
+            energy!(DROP),
+            [Drop, End],
+            energy!(CONST),
+            [I32Const(3), End],
+            stack!(-S)
+        ],
+    )
+}
+
 #[test]
 fn test_loop_br_if() {
     test_body(FunctionType::empty(), vec![Loop(EmptyType), I32Const(9), BrIf(0), End], flatten![
@@ -518,11 +573,8 @@ fn test_block_br_if_2() {
         flatten![
             energy!(ENTRY + 2 * CONST + BR_IF),
             stack!(S),
-            [Block(BlockValue(I64)), I64Const(5), I32Const(9), If {
-                ty: EmptyType,
-            }],
-            energy!(branch(1)),
-            [Br(1), End],
+            [Block(BlockValue(I64)), I64Const(5), I32Const(9)],
+            br_if_substitute(0),
             energy!(CONST),
             [I64Const(5), End],
             stack!(-S)
