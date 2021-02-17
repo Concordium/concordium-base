@@ -1,19 +1,22 @@
 pipeline {
-    agent none
+    agent { label 'jenkins-worker' }
     environment {
-        BASE_OUTFILE = 's3://static-libraries.concordium.com/dist-macos/cargo-concordium'
+        VERSION = sh(
+            returnStdout: true, 
+            script: '''\
+                # Extract version number if not set as parameter
+                [ -z "$VERSION" ] && VERSION=$(awk '/version = / { print substr($3, 2, length($3)-2); exit }' cargo-concordium/Cargo.toml)
+                echo -n "$VERSION"
+            '''.stripIndent()
+        )
+        OUTFILE = "s3://client-distribution.concordium.com/macos/cargo-concordium_${VERSION}"
     }
     stages {
         stage('precheck') {
-            agent { label 'jenkins-worker' }
             steps {
                 sh '''\
-                    # Extract version number from package.yaml, if not set as parameter
-                    [ -z "$VERSION" ] && VERSION=$(awk '/version = / { print substr($3, 2, length($3)-2); exit }' cargo-concordium/Cargo.toml)
-                    OUTFILE="${BASE_OUTFILE}_${VERSION}"
-
                     # Fail if file already exists
-                    totalFoundObjects=$(aws s3 ls ${OUTFILE} --summarize | grep "Total Objects: " | sed 's/[^0-9]*//g')
+                    totalFoundObjects=$(aws s3 ls ${OUTFILE} --summarize | grep "Total Objects: " | sed "s/[^0-9]*//g")
                     if [ "$totalFoundObjects" -ne "0" ]; then
                         echo "${OUTFILE} already exists"
                         false
@@ -42,14 +45,10 @@ pipeline {
             }
         }
         stage('Publish') {
-            agent { label 'jenkins-worker' }
             steps {
                 unstash 'release'
                 sh '''\
                     # Push to s3
-                    # Extract version number from package.yaml, if not set as parameter
-                    [ -z "$VERSION" ] && VERSION=$(awk '/version = / { print substr($3, 2, length($3)-2); exit }' cargo-concordium/Cargo.toml)
-                    OUTFILE="${BASE_OUTFILE}_${VERSION}"
                     aws s3 cp cargo-concordium/out/cargo-concordium ${OUTFILE} --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
                 '''.stripIndent()
             }
