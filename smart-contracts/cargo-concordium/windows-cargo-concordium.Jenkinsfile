@@ -1,5 +1,8 @@
 pipeline {
     agent { label 'windows' }
+    environment {
+        BASE_OUTFILE = 's3://client-distribution.concordium.com/windows/cargo-concordium'
+    }
     stages {
         stage('build') {
             steps {
@@ -7,10 +10,10 @@ pipeline {
                 sh '''\
                     # Extract version from Cargo.toml, if not set as parameter
                     [ -z "$VERSION" ] && VERSION=$(awk '/version = / { print substr($3, 2, length($3)-2); exit }' cargo-concordium/Cargo.toml)
-                    OUTFILE=s3://static-libraries.concordium.com/dist-windows/cargo-concordium_${VERSION}.exe
+                    OUTFILE=${BASE_OUTFILE}_${VERSION}.exe
 
                     # Fail if file already exists
-                    totalFoundObjects=$(aws s3 ls ${OUTFILE} --summarize | grep "Total Objects: " | sed 's/[^0-9]*//g')
+                    totalFoundObjects=$(aws s3 ls ${OUTFILE} --summarize | grep "Total Objects: " | sed "s/[^0-9]*//g")
                     if [ "$totalFoundObjects" -ne "0" ]; then
                         echo "${OUTFILE} already exists"
                         false
