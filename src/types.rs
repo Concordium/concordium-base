@@ -868,7 +868,7 @@ pub mod attributes {
 ///     ...
 /// }
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct ParseError {}
 
 /// A type alias used to indicate that the value is a result
