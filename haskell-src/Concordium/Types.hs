@@ -2,9 +2,11 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 -- |Basic blockchain types.
 module Concordium.Types (
   -- * Cost units
@@ -96,8 +98,15 @@ module Concordium.Types (
   TransactionOutcomesHash,
   StateHashV0(..),
   StateHash,
-  BlockHashV0(..),
-  BlockHash,
+  --GenericBlockHash,
+  -- BlockHashV0(..),
+  BlockHash(..),
+  {-
+  toGenericBlockHash,
+  fromGenericBlockHash,
+  putBlockHash,
+  getBlockHash,
+  -}
   BlockHeight(..),
   Slot(..),
   EpochLength,
@@ -129,7 +138,10 @@ module Concordium.Types (
   -- * Hashing
   Hashed(..),
   unhashed,
-  makeHashed) where
+  makeHashed,
+  
+  -- * Protocol version
+  module Concordium.Types.ProtocolVersion) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
@@ -146,6 +158,7 @@ import Concordium.Types.Block
 import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
+import Concordium.Types.ProtocolVersion
 
 import Control.Exception (assert)
 import Control.Monad
@@ -713,7 +726,18 @@ type TransactionHash = TransactionHashV0
 -- which causes the AccountTransactionIndex template haskell derivation of
 -- database schemas to fail.
 
-newtype BlockHashV0 = BlockHashV0 {v0BlockHash :: Hash.Hash}
+{-
+-- |A container type for block hashes which is independent of how the hash
+-- is computed. Even if the hashing scheme changes over time, it should be
+-- effectively impossible for two blocks on the same chain to have the same
+-- 'GenericBlockHash'.
+--
+-- (This type may need to change if the hash size changes or a different
+-- hash function is used.)
+type GenericBlockHash = Hash.Hash
+-}
+
+newtype BlockHash = BlockHash {blockHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutcomesHash :: Hash.Hash}
@@ -722,7 +746,34 @@ newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutc
 newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
-type BlockHash = BlockHashV0
+{-
+type family BlockHash (pv :: ProtocolVersion) where
+  BlockHash 'P0 = BlockHashV0
+
+toGenericBlockHash :: SProtocolVersion pv -> BlockHash pv -> GenericBlockHash
+toGenericBlockHash SP0 = v0BlockHash
+{-# INLINE toGenericBlockHash #-}
+
+fromGenericBlockHash :: SProtocolVersion pv -> GenericBlockHash -> BlockHash pv
+fromGenericBlockHash SP0 = BlockHashV0
+{-# INLINE fromGenericBlockHash #-}
+
+putBlockHash :: SProtocolVersion pv -> S.Putter (BlockHash pv)
+putBlockHash = \case SP0 -> S.put
+{-# INLINE putBlockHash #-}
+
+getBlockHash :: SProtocolVersion pv -> S.Get (BlockHash pv)
+getBlockHash = \case SP0 -> S.get
+{-# INLINE getBlockHash #-}
+
+
+type family StateHash (pv :: ProtocolVersion) where
+  StateHash 'P0 = StateHashV0
+
+type family TransactionOutcomesHash (pv :: ProtocolVersion) where
+  TransactionOutcomesHash 'P0 = TransactionOutcomesHashV0
+-}
+
 type StateHash = StateHashV0
 type TransactionOutcomesHash = TransactionOutcomesHashV0
 

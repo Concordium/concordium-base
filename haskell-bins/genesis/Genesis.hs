@@ -171,7 +171,7 @@ main = cmdArgsRun mode >>=
           source <- LBS.readFile gdSource
           case S.runGetLazy getExactVersionedGenesisData source of
             Left err -> putStrLn $ "Cannot parse genesis data:" ++ err
-            Right genData@GenesisDataV2{..} -> do
+            Right (GDP0 genData@GenesisDataV2{..}) -> do
               putStrLn "Genesis data."
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
