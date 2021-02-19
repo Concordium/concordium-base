@@ -193,10 +193,10 @@ data Payload =
       twsTo :: !AccountAddress,
       twsSchedule :: ![(Timestamp, Amount)]
       }
-  | NewCredential {
-      ncNewCredInfos :: ![CredentialDeploymentInformation],
-      ncRemoveCredIds :: ![CredentialRegistrationID],
-      ncNewThreshold :: !AccountThreshold
+  | UpdateCredentials {
+      ucNewCredInfos :: !(Map.Map KeyIndex CredentialDeploymentInformation),
+      ucRemoveCredIds :: ![CredentialRegistrationID],
+      ucNewThreshold :: !AccountThreshold
   }
   deriving(Eq, Show)
 
