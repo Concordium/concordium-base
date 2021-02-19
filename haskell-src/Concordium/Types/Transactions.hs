@@ -413,13 +413,35 @@ signTransaction keys atrHeader atrPayload =
 -- Introducing here a type containing all the information needed for verifying a transaction,
 -- i.e. the account threshold, all the credential thresholds, and all the credential public keys.
 data AccountInformation = AccountInformation {
-  credentials :: !(Map.Map KeyIndex CredentialPublicKeys),
-  aiThreshold :: !SignatureThreshold
-} -- deriving(Eq, Show, Ord)
+  aiCredentials :: !(Map.Map KeyIndex CredentialPublicKeys),
+  aiThreshold :: !AccountThreshold 
+} deriving(Eq, Show, Ord)
+
+getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
+getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
+getCredentialPublicKeys (NormalAC cdv _) = cdvPublicKeys cdv
+
+getAccountInformation :: AccountThreshold -> Map.Map KeyIndex AccountCredential -> AccountInformation
+getAccountInformation threshold credentials = AccountInformation {
+  aiCredentials = fmap getCredentialPublicKeys credentials,
+  aiThreshold = threshold
+}
+
+instance S.Serialize AccountInformation where
+  put AccountInformation{..} = do
+    S.putWord8 (fromIntegral (length aiCredentials))
+    forM_ (Map.toAscList aiCredentials) $ \(idx, key) -> S.put idx <> S.put key
+    S.put aiThreshold
+  get = do
+    len <- S.getWord8
+    when (len == 0) $ fail "Number of credentials out of bounds."
+    aiCredentials <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    aiThreshold <- S.get
+    return AccountInformation{..}
 
 {-# INLINE getCredentialKeys #-}
 getCredentialKeys :: KeyIndex -> AccountInformation -> Maybe CredentialPublicKeys
-getCredentialKeys idx ai = Map.lookup idx (credentials ai)
+getCredentialKeys idx ai = Map.lookup idx (aiCredentials ai)
 
 verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
 verifyCredentialSignatures bodyHash sigs keys = 
@@ -430,8 +452,8 @@ verifyCredentialSignatures bodyHash sigs keys =
 -- |Verify that the given transaction was signed by the required number of keys.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-verifyTransactionNew :: TransactionData msg => AccountInformation -> msg -> Bool
-verifyTransactionNew ai tx =
+verifyTransaction :: TransactionData msg => AccountInformation -> msg -> Bool
+verifyTransaction ai tx =
   let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
       TransactionSignature maps = transactionSignature tx
       keysCheck = foldl' (\b (idx, sigmap) -> b && maybe False (verifyCredentialSignatures bodyHash sigmap) (getCredentialKeys idx ai)) True (Map.toList maps)
