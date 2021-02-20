@@ -84,9 +84,10 @@
 extern crate alloc;
 
 #[macro_use]
+mod traits;
+#[macro_use]
 mod impls;
 pub mod schema;
-mod traits;
 mod types;
 pub use impls::*;
 pub use traits::*;
