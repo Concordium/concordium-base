@@ -708,6 +708,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | FirstScheduledReleaseExpired
                   -- | Account tried to transfer with schedule to itself, that's not allowed.
                   | ScheduledSelfTransfer !AccountAddress
+                  -- | At least one of the credentials was either malformed or its proof was incorrect.
+                  | InvalidCredentials
+                  -- | Some of the credential IDs already exist or are duplicated in the transaction.
+                  | DuplicateCredIDs ![IDTypes.CredentialRegistrationID]
+                  -- | A credential id that was to be removed is not part of the account.
+                  | NonExistentCredIDs ![IDTypes.CredentialRegistrationID]
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
