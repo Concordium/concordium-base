@@ -587,10 +587,14 @@ data Event =
                etwsTo :: !AccountAddress,
                etwsAmount :: ![(Timestamp, Amount)]
                }
-           | CredentialsAdded {
-                  caNewCredIds :: ![CredentialRegistrationID],
-                  caRemovedCredIds :: ![CredentialRegistrationID],
-                  caNewThreshold :: !AccountThreshold
+           | CredentialsUpdated {
+               cuAccount :: !AccountAddress,
+               -- |A list of newly added credentials. No order is guaranteed.
+               cuNewCredIds :: ![CredentialRegistrationID],
+               -- |A list of credentials that were removed from the account.
+               cuRemovedCredIds :: ![CredentialRegistrationID],
+               -- |A new account threshold.
+               cuNewThreshold :: !AccountThreshold
               }
   deriving (Show, Generic, Eq)
 
