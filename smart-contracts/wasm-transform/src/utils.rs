@@ -35,8 +35,8 @@ pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
 ///
 /// This function is designed to only be used on trusted sources and is not
 /// guaranteed to not use excessive resources if used on untrusted ones.
-pub fn parse_artifact<'a, I: Parseable<'a>>(
+pub fn parse_artifact<'a, I: Parseable<'a, ()>>(
     bytes: &'a [u8],
 ) -> anyhow::Result<Artifact<I, CompiledFunctionBytes<'a>>> {
-    (&mut std::io::Cursor::new(bytes)).next()
+    (&mut std::io::Cursor::new(bytes)).next(())
 }
