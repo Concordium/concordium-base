@@ -79,7 +79,7 @@ getGenesisDataV2 = do
     nAccounts <- getLength
     accountsAndEncryptionKeys <- replicateM nAccounts getGenesisAccountGD2
     let genesisAccounts = fst <$> accountsAndEncryptionKeys
-    genesisFinalizationParameters <- get
+    genesisFinalizationParameters <- getFinalizationParametersGD2
     genesisCryptographicParameters <- get
     -- Verify that each baker account records the correct baker id
     -- and that the serialized encryption key is correct
@@ -109,7 +109,7 @@ putGenesisDataV2 GenesisDataV2{..} = do
     put genesisSeedState
     putLength (length genesisAccounts)
     mapM_ (putGenesisAccountGD2 genesisCryptographicParameters) genesisAccounts
-    put genesisFinalizationParameters
+    putFinalizationParametersGD2 genesisFinalizationParameters
     put genesisCryptographicParameters
     put genesisIdentityProviders
     put genesisAnonymityRevokers

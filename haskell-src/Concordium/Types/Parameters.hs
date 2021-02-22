@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Concordium.Types.Parameters where
@@ -9,7 +8,6 @@ import Data.Aeson.Types
 import Data.Ratio
 import Data.Serialize
 import Data.Word
-import GHC.Generics (Generic)
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -164,16 +162,6 @@ data FinalizationParameters = FinalizationParameters
       finalizationCommitteeMaxSize :: FinalizationCommitteeSize
     , -- |Base delay time used in finalization.
       finalizationWaitingTime :: Duration
-    , -- |Whether to ignore the delay for the first round of WMVBA.
-      finalizationIgnoreFirstWait :: Bool
-    , -- |If @True@, the finalization gap is determined by multiplying
-      -- 'finalizationSkipShrinkFactor' by the height difference between
-      -- the new last finalized block and its last finalized block.
-      -- If @False@, the finalization gap is shrunk by 'finalizationSkipShrinkFactor'
-      -- if the height difference between the new last finalized block and its last
-      -- finalized block is equal to the old gap; otherwise, it grows by
-      -- 'finalizationSkipGrowFactor'.
-      finalizationOldStyleSkip :: Bool
     , -- |Factor used to shrink the finalization gap. Must be strictly between 0 and 1.
       finalizationSkipShrinkFactor :: Ratio Word64
     , -- |Factor used to grow the finalization gap. Must be strictly greater than 1.
@@ -188,17 +176,62 @@ data FinalizationParameters = FinalizationParameters
       -- as it is baked.)
       finalizationAllowZeroDelay :: Bool
     }
-    deriving (Eq, Generic, Show)
+    deriving (Eq, Show)
 
-instance Serialize FinalizationParameters
+-- |Serialize 'FinalizationParameters' in the format used for
+-- @GenesisDataV2@.
+putFinalizationParametersGD2 :: Putter FinalizationParameters
+putFinalizationParametersGD2 FinalizationParameters{..} = do
+    put finalizationMinimumSkip
+    put finalizationCommitteeMaxSize
+    put finalizationWaitingTime
+    put True -- finalizationIgnoreFirstWait
+    put False -- finalizationOldStyleSkip
+    put finalizationSkipShrinkFactor
+    put finalizationSkipGrowFactor
+    put finalizationDelayShrinkFactor
+    put finalizationDelayGrowFactor
+    put finalizationAllowZeroDelay
+
+-- |Deserialize 'FinalizationParameters' in the format used for
+-- @GenesisDataV2@.
+getFinalizationParametersGD2 :: Get FinalizationParameters
+getFinalizationParametersGD2 = label "FinalizationParameters" $ do
+    finalizationMinimumSkip <- get
+    finalizationCommitteeMaxSize <- get
+    finalizationWaitingTime <- get
+    finalizationIgnoreFirstWait <- get
+    unless finalizationIgnoreFirstWait $
+        fail "finalizationIgnoreFirstWait must be True"
+    finalizationOldStyleSkip <- get
+    when finalizationOldStyleSkip $
+        fail "finalizationOldStyleSkip must be False"
+    finalizationSkipShrinkFactor <- get
+    unless (finalizationSkipShrinkFactor > 0 && finalizationSkipShrinkFactor < 1) $
+        fail "skipShrinkFactor must be strictly between 0 and 1"
+    finalizationSkipGrowFactor <- get
+    unless (finalizationSkipGrowFactor > 1) $
+        fail "skipGrowFactor must be strictly greater than 1"
+    finalizationDelayShrinkFactor <- get
+    unless (finalizationDelayShrinkFactor > 0 && finalizationDelayShrinkFactor < 1) $
+        fail "delayShrinkFactor must be strictly between 0 and 1"
+    finalizationDelayGrowFactor <- get
+    unless (finalizationDelayGrowFactor > 1) $
+        fail "delayGrowFactor must be strictly greater than 1"
+    finalizationAllowZeroDelay <- get
+    return FinalizationParameters{..}
 
 instance FromJSON FinalizationParameters where
     parseJSON = withObject "FinalizationParameters" $ \v -> do
         finalizationMinimumSkip <- BlockHeight <$> v .: "minimumSkip"
         finalizationCommitteeMaxSize <- v .: "committeeMaxSize"
         finalizationWaitingTime <- v .: "waitingTime"
-        finalizationIgnoreFirstWait <- v .:? "ignoreFirstWait" .!= False
+        finalizationIgnoreFirstWait <- v .:? "ignoreFirstWait" .!= True
+        unless finalizationIgnoreFirstWait $
+            fail "ignoreFirstWait must be true (or not specified)"
         finalizationOldStyleSkip <- v .:? "oldStyleSkip" .!= False
+        when finalizationOldStyleSkip $
+            fail "oldStyleSkip must be false (or not specified)"
         finalizationSkipShrinkFactor <- v .: "skipShrinkFactor"
         unless (finalizationSkipShrinkFactor > 0 && finalizationSkipShrinkFactor < 1) $
             fail "skipShrinkFactor must be strictly between 0 and 1"
