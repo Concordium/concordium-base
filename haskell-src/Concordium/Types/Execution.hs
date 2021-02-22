@@ -718,6 +718,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | DuplicateCredIDs ![IDTypes.CredentialRegistrationID]
                   -- | A credential id that was to be removed is not part of the account.
                   | NonExistentCredIDs ![IDTypes.CredentialRegistrationID]
+                  -- | Attemp to remove the first credential 
+                  | RemoveFirstCredential
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason

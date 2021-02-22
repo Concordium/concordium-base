@@ -379,7 +379,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
-    let reg_id: Option<ExampleCurve> = None;
+    let address: Option<AccountAddress> = None;
 
     // if account data is present then use it, otherwise generate new.
     let cred_data = {
@@ -427,12 +427,12 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         acc_num,
         policy,
         &cred_data,
-        reg_id,
+        address,
     )?;
 
-    let address = match reg_id {
+    let address = match address {
         None => AccountAddress::new(&cdi.values.cred_id),
-        Some(reg_id) => AccountAddress::new(&reg_id),
+        Some(address) => address,
     };
 
     // unwrap is safe here since we've generated the credential already, and that

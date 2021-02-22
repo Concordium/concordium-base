@@ -263,7 +263,7 @@ pub fn credential_hash_to_sign<
 >(
     values: &CredentialDeploymentValues<C, AttributeType>,
     proofs: &IdOwnershipProofs<P, C>,
-    reg_id: &Option<C>,
+    reg_id: &Option<AccountAddress>,
 ) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(&to_bytes(&values));

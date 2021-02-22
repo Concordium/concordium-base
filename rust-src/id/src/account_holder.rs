@@ -523,7 +523,7 @@ pub fn create_credential<
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_data: &impl CredentialDataWithSigning,
-    reg_id: Option<C>, // cred_key_info: CredentialKeyInfo
+    reg_id: Option<AccountAddress>, // cred_key_info: CredentialKeyInfo
 ) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
@@ -572,7 +572,7 @@ pub fn create_unsigned_credential<
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
-    reg_id: Option<C>,
+    reg_id: Option<AccountAddress>,
 ) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {

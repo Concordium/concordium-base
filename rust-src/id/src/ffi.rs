@@ -151,7 +151,7 @@ extern "C" fn verify_cdi_ffi(
     ars_infos_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
-    regid_ptr: *const G1,
+    regid_ptr: *const AccountAddress,
 ) -> i32 {
     if gc_ptr.is_null() {
         return -9;
@@ -160,7 +160,7 @@ extern "C" fn verify_cdi_ffi(
         return -10;
     }
 
-    let reg_id: Option<G1> = if regid_ptr.is_null() {
+    let reg_id: Option<AccountAddress> = if regid_ptr.is_null() {
         None
     } else {
         Some(*from_ptr!(regid_ptr))

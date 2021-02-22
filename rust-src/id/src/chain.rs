@@ -56,7 +56,7 @@ pub fn verify_cdi<
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
-    reg_id: Option<C>,
+    reg_id: Option<AccountAddress>,
 ) -> Result<(), CDIVerificationError> {
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
@@ -487,7 +487,7 @@ mod tests {
         assert_eq!(cdi_check, Ok(()));
 
         // Testing with an existing RegId (i.e. an existing account)
-        let existing_reg_id = cdi.values.cred_id;
+        let existing_reg_id = AccountAddress::new(&cdi.values.cred_id);
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
