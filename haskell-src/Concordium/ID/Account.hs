@@ -17,6 +17,8 @@ import Concordium.ID.Types
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
 import Concordium.ID.AnonymityRevoker
+import Concordium.Crypto.ByteStringHelpers
+import qualified Data.FixedByteString as FBS
 
 type CredentialDeploymentInformationBytes = ByteString
 
@@ -27,7 +29,7 @@ foreign import ccall safe "verify_cdi_ffi" verifyCDIFFI
                -> CSize -- ^Length of the ArInfo list.
                -> Ptr Word8 -- ^Serialized credential.
                -> CSize  -- ^Length of the serialized credential.
-               -> Ptr GroupElement
+               -> Ptr Word8
                -> IO Int32
 -- FIXME: We pass in keys as byte arrays which is quite bad since
 -- keys are not bytes, but rather we know that they are well-formed already.
@@ -45,10 +47,14 @@ withArInfoArray arPtrs (ar:ars) k = withArInfo ar $ \arPtr -> withArInfoArray (a
 withRegId :: CredentialRegistrationID -> (Ptr GroupElement -> IO a) -> IO a
 withRegId (RegIdCred rid) = withGroupElement rid
 
+
+withAccountAddress :: AccountAddress -> (Ptr Word8 -> IO a) -> IO a
+withAccountAddress (AccountAddress fbs) = FBS.withPtrReadOnly fbs
+
 -- |Verify a credential in the context of the given cryptographic parameters and
 -- identity provider information. If the account keys are given this checks that
 -- the proofs contained in the credential correspond to them.
-verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> CredentialDeploymentInformationBytes -> Maybe CredentialRegistrationID -> Bool
+verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> CredentialDeploymentInformationBytes -> Maybe AccountAddress -> Bool
 verifyCredential gc ipInfo arInfos cdiBytes Nothing = unsafePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
             withIpInfo ipInfo $ \ipInfoPtr ->
@@ -59,8 +65,8 @@ verifyCredential gc ipInfo arInfos cdiBytes Nothing = unsafePerformIO $ do
                 -- non-null
                 verifyCDIFFI gcPtr ipInfoPtr arPtr (fromIntegral len) (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen) nullPtr
     return (res == 1)
-verifyCredential gc ipInfo arInfos cdiBytes (Just regId) = unsafePerformIO $ do
-    res <- withRegId regId $ \regIdPtr ->
+verifyCredential gc ipInfo arInfos cdiBytes (Just address) = unsafePerformIO $ do
+    res <- withAccountAddress address $ \accountAddressPtr ->
            withGlobalContext gc $ \gcPtr ->
            withIpInfo ipInfo $ \ipInfoPtr ->
              withArInfoArray [] arInfos $ \len arPtr ->
@@ -74,7 +80,7 @@ verifyCredential gc ipInfo arInfos cdiBytes (Just regId) = unsafePerformIO $ do
                             (fromIntegral len)
                             (castPtr cdiBytesPtr)
                             (fromIntegral cdiBytesLen)
-                            regIdPtr
+                            accountAddressPtr
     return (res == 1)
 
 type InitialCredentialBytes = ByteString

@@ -1446,7 +1446,7 @@ pub struct UnsignedCredentialDeploymentInfo<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id: Option<C>,
+    pub reg_id: Option<AccountAddress>,
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
