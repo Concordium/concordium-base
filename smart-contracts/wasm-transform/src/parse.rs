@@ -90,12 +90,15 @@ pub type ParseResult<A> = anyhow::Result<A>;
 /// A trait for parsing data. The lifetime is useful when we want to parse
 /// data without copying, which is useful to avoid copying all the unparsed
 /// sections.
-pub trait Parseable<'a, Ctx = ()>: Sized {
+pub trait Parseable<'a, Ctx>: Sized {
     /// Read a value from the cursor, or signal error.
     /// This function is responsible for advancing the cursor in-line with the
     /// data it has read.
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self>;
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self>;
 }
+
+/// An empty context used when we can parse data without an additional context.
+pub(crate) const EMPTY_CTX: () = ();
 
 /// A helper trait for more convenient use. The difference from the above is
 /// that typically the result type is determined by the context, which we take
@@ -105,37 +108,37 @@ pub trait Parseable<'a, Ctx = ()>: Sized {
 /// The reason for that is that this trait defines a new method on the type,
 /// giving us access to all of the convenience features of Rust that come with
 /// it.
-pub trait GetParseable<A> {
+pub trait GetParseable<A, Ctx> {
     /// Parse an item. Analogous to 'parse', but with the reversed roles for
     /// types of input and output. In the 'Parseable' trait the trait is defined
     /// for the type that is to be parsed and the source is fixed, whereas here
     /// the trait is parameterized by the type to be parsed, and the trait is
     /// implemented for the source type.
-    fn next(self) -> ParseResult<A>;
+    fn next(self, ctx: Ctx) -> ParseResult<A>;
 }
 
 /// A generic implementation for a cursor.
-impl<'a, 'b, A: Parseable<'a>> GetParseable<A> for &'b mut Cursor<&'a [u8]> {
+impl<'a, 'b, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'b mut Cursor<&'a [u8]> {
     #[inline(always)]
-    fn next(self) -> ParseResult<A> { A::parse(self) }
+    fn next(self, ctx: Ctx) -> ParseResult<A> { A::parse(ctx, self) }
 }
 
 /// Another generic implementation, but this time the input is not directly a
 /// readable type. Instead this instance additionally ensures that all of the
 /// input data is used by the parser.
-impl<'a, A: Parseable<'a>> GetParseable<A> for &'a [u8] {
+impl<'a, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'a [u8] {
     #[inline(always)]
-    fn next(self) -> ParseResult<A> {
+    fn next(self, ctx: Ctx) -> ParseResult<A> {
         let mut cursor = Cursor::new(self);
-        let res = A::parse(&mut cursor)?;
+        let res = A::parse(ctx, &mut cursor)?;
         ensure!(cursor.position() == self.len() as u64, "Not all of the contents was consumed.");
         Ok(res)
     }
 }
 
 /// Implementation for u16 according to the Wasm specification.
-impl<'a> Parseable<'a> for u16 {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for u16 {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         // 3 is ceil(16 / 7)
         let res = leb128::read::unsigned(&mut cursor.take(3))?;
         Ok(u16::try_from(res)?)
@@ -143,8 +146,8 @@ impl<'a> Parseable<'a> for u16 {
 }
 
 /// Implementation for u32 according to the Wasm specification.
-impl<'a> Parseable<'a> for u32 {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for u32 {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         // 5 is ceil(32 / 7)
         let res = leb128::read::unsigned(&mut cursor.take(5))?;
         Ok(u32::try_from(res)?)
@@ -152,8 +155,8 @@ impl<'a> Parseable<'a> for u32 {
 }
 
 /// Implementation for u64 according to the Wasm specification.
-impl<'a> Parseable<'a> for u64 {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for u64 {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         // 10 is ceil(64 / 7)
         let res = leb128::read::unsigned(&mut cursor.take(10))?;
         Ok(res)
@@ -161,8 +164,8 @@ impl<'a> Parseable<'a> for u64 {
 }
 
 /// Implementation for i32 according to the Wasm specification.
-impl<'a> Parseable<'a> for i32 {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for i32 {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         // 5 is ceil(32 / 7)
         let res = leb128::read::signed(&mut cursor.take(5))?;
         Ok(i32::try_from(res)?)
@@ -170,16 +173,16 @@ impl<'a> Parseable<'a> for i32 {
 }
 
 /// Implementation for i64 according to the Wasm specification.
-impl<'a> Parseable<'a> for i64 {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for i64 {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let res = leb128::read::signed(&mut cursor.take(10))?;
         Ok(res)
     }
 }
 
 /// Parsing of the section ID according to the linked Wasm specification.
-impl<'a> Parseable<'a> for SectionId {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for SectionId {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let mut buf = [0u8; 1];
         cursor.read_exact(&mut buf)?;
         use SectionId::*;
@@ -204,14 +207,14 @@ impl<'a> Parseable<'a> for SectionId {
 /// Parse a vector of elements according to the Wasm specification.
 /// Specifically this is parsed by reading the length as a u32 and then reading
 /// that many elements.
-impl<'a, A: Parseable<'a>> Parseable<'a> for Vec<A> {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let len = u32::parse(cursor)?;
+impl<'a, Ctx: Copy, A: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Vec<A> {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let len = u32::parse(ctx, cursor)?;
         let max_initial_capacity =
             MAX_PREALLOCATED_BYTES / std::cmp::max(1, std::mem::size_of::<A>());
         let mut out = Vec::with_capacity(std::cmp::min(len as usize, max_initial_capacity));
         for _ in 0..len {
-            out.push(cursor.next()?)
+            out.push(cursor.next(ctx)?)
         }
         Ok(out)
     }
@@ -219,9 +222,9 @@ impl<'a, A: Parseable<'a>> Parseable<'a> for Vec<A> {
 
 /// Same as the instance for Vec<u8>, with the difference that no data is copied
 /// and the result is a reference to the initial byte array.
-impl<'a> Parseable<'a> for &'a [u8] {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let len = u32::parse(cursor)?;
+impl<'a, Ctx> Parseable<'a, Ctx> for &'a [u8] {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let len = u32::parse(ctx, cursor)?;
         let pos = cursor.position() as usize;
         let end = pos + len as usize;
         ensure!(end <= cursor.get_ref().len(), "Malformed byte array");
@@ -231,11 +234,11 @@ impl<'a> Parseable<'a> for &'a [u8] {
 }
 
 /// Special case of a vector where we only expect 0 or 1 elements.
-impl<'a, A: Parseable<'a>> Parseable<'a> for Option<A> {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        match Byte::parse(cursor)? {
+impl<'a, Ctx: Copy, A: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Option<A> {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        match Byte::parse(ctx, cursor)? {
             0u8 => Ok(None),
-            1u8 => Ok(Some(cursor.next()?)),
+            1u8 => Ok(Some(cursor.next(ctx)?)),
             tag => bail!("Unsupported option tag: {:#04x}", tag),
         }
     }
@@ -243,9 +246,9 @@ impl<'a, A: Parseable<'a>> Parseable<'a> for Option<A> {
 
 /// Same as the instance for Vec<u8>, with the difference that no data is copied
 /// and the result is a reference to the initial byte array.
-impl<'a> Parseable<'a> for &'a [ValueType] {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let len = u32::parse(cursor)?;
+impl<'a, Ctx> Parseable<'a, Ctx> for &'a [ValueType] {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let len = u32::parse(ctx, cursor)?;
         let pos = cursor.position() as usize;
         let end = pos + len as usize;
         ensure!(end <= cursor.get_ref().len(), "Malformed byte array");
@@ -264,10 +267,10 @@ impl<'a> Parseable<'a> for &'a [ValueType] {
 
 /// Parse a section skeleton, which consists of parsing the section ID
 /// and recording the boundaries of it.
-impl<'a> Parseable<'a> for UnparsedSection<'a> {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let section_id = cursor.next()?;
-        let bytes = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for UnparsedSection<'a> {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let section_id = cursor.next(ctx)?;
+        let bytes = cursor.next(ctx)?;
         Ok(UnparsedSection {
             section_id,
             bytes,
@@ -312,7 +315,7 @@ pub fn parse_skeleton<'a>(input: &'a [u8]) -> ParseResult<Skeleton<'a>> {
     // since read_section advances the cursor by at least one byte this loop will
     // terminate
     while cursor.position() < input.len() as u64 {
-        let section = UnparsedSection::parse(cursor)?;
+        let section = UnparsedSection::parse(EMPTY_CTX, cursor)?;
         ensure!(
             section.section_id == SectionId::Custom || section.section_id > last_section,
             "Section out of place."
@@ -356,9 +359,9 @@ pub fn parse_skeleton<'a>(input: &'a [u8]) -> ParseResult<Skeleton<'a>> {
 /// Parse a name as specified by the Wasm specification, with our own
 /// restrictions. The restriction we impose is that the name consists solely of
 /// ASCII characters.
-impl<'a> Parseable<'a> for Name {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let name_bytes = cursor.next()?;
+impl<'a, Ctx> Parseable<'a, Ctx> for Name {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let name_bytes = cursor.next(ctx)?;
         let name = std::str::from_utf8(name_bytes)?.to_string();
         ensure!(name.is_ascii(), ParseError::OnlyASCIINames);
         Ok(Name {
@@ -370,7 +373,7 @@ impl<'a> Parseable<'a> for Name {
 /// Parse a custom section.
 pub fn parse_custom<'a>(sec: &UnparsedSection<'a>) -> ParseResult<CustomSection<'a>> {
     let mut cursor = Cursor::new(sec.bytes);
-    let name = cursor.next()?;
+    let name = cursor.next(EMPTY_CTX)?;
     let contents = &sec.bytes[cursor.position() as usize..];
     Ok(CustomSection {
         name,
@@ -379,8 +382,8 @@ pub fn parse_custom<'a>(sec: &UnparsedSection<'a>) -> ParseResult<CustomSection<
 }
 
 /// Parse a single byte.
-impl<'a> Parseable<'a> for Byte {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for Byte {
+    fn parse(_ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let mut buf = [0u8; 1];
         cursor.read_exact(&mut buf)?;
         Ok(buf[0])
@@ -389,9 +392,9 @@ impl<'a> Parseable<'a> for Byte {
 
 /// Parse a value type. The Wasm version we support does not have floating point
 /// types, so we disallow them already at the parsing stage.
-impl<'a> Parseable<'a> for ValueType {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let byte = Byte::parse(cursor)?;
+impl<'a, Ctx> Parseable<'a, Ctx> for ValueType {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let byte = Byte::parse(ctx, cursor)?;
         if let Ok(x) = ValueType::try_from(byte) {
             Ok(x)
         } else {
@@ -404,19 +407,19 @@ impl<'a> Parseable<'a> for ValueType {
 
 /// Parse a limit, and additionally ensure that, if given, the upper bound is
 /// no less than lower bound.
-impl<'a> Parseable<'a> for Limits {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        match Byte::parse(cursor)? {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Limits {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        match Byte::parse(ctx, cursor)? {
             0x00 => {
-                let min = cursor.next()?;
+                let min = cursor.next(ctx)?;
                 Ok(Limits {
                     min,
                     max: None,
                 })
             }
             0x01 => {
-                let min = cursor.next()?;
-                let mmax = cursor.next()?;
+                let min = cursor.next(ctx)?;
+                let mmax = cursor.next(ctx)?;
                 ensure!(min <= mmax, "Lower limit must be no greater than the upper limit.");
                 Ok(Limits {
                     min,
@@ -431,18 +434,18 @@ impl<'a> Parseable<'a> for Limits {
 /// Read a single byte and compare it to the given one, failing if they do not
 /// match.
 fn expect_byte<'a>(cursor: &mut Cursor<&'a [u8]>, byte: Byte) -> ParseResult<()> {
-    let b = Byte::parse(cursor)?;
+    let b = Byte::parse(EMPTY_CTX, cursor)?;
     ensure!(b == byte, "Unexpected byte {:#04x}. Expected {:#04x}", b, byte);
     Ok(())
 }
 
 /// Parse a function type. Since we do not support multiple return values we
 /// ensure at parse time that there are no more than one return values.
-impl<'a> Parseable<'a> for FunctionType {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionType {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         expect_byte(cursor, 0x60)?;
-        let parameters = cursor.next()?;
-        let result_vec = Vec::<ValueType>::parse(cursor)?;
+        let parameters = cursor.next(ctx)?;
+        let result_vec = Vec::<ValueType>::parse(ctx, cursor)?;
         ensure!(result_vec.len() <= 1, ParseError::OnlySingleReturn);
         let result = result_vec.first().copied();
         Ok(FunctionType {
@@ -456,10 +459,10 @@ impl<'a> Parseable<'a> for FunctionType {
 /// the funcref, so this only records the resulting table limits.
 /// This instance additionally ensures that the limits are valid, i.e., in range
 /// 2^32. Since the bounds are 32-bit integers, this is true by default.
-impl<'a> Parseable<'a> for TableType {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TableType {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         expect_byte(cursor, 0x70)?;
-        let limits = Limits::parse(cursor)?;
+        let limits = Limits::parse(ctx, cursor)?;
         ensure!(limits.min <= MAX_INIT_TABLE_SIZE, "Initial table size exceeds allowed limits.");
         Ok(TableType {
             limits,
@@ -469,9 +472,9 @@ impl<'a> Parseable<'a> for TableType {
 
 /// Memory types are just limits on the size of the memory.
 /// This also ensures that limits are within range 2^16.
-impl<'a> Parseable<'a> for MemoryType {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let limits = Limits::parse(cursor)?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for MemoryType {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let limits = Limits::parse(ctx, cursor)?;
         ensure!(
             limits.min <= MAX_INIT_MEMORY_SIZE,
             "Initial memory allocation of {} pages exceeds maximum of {}.",
@@ -488,24 +491,26 @@ impl<'a> Parseable<'a> for MemoryType {
     }
 }
 
-impl<'a, X: Parseable<'a>> Parseable<'a> for Rc<X> {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> { Ok(Rc::new(X::parse(cursor)?)) }
+impl<'a, Ctx, X: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Rc<X> {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        Ok(Rc::new(X::parse(ctx, cursor)?))
+    }
 }
 
-impl<'a> Parseable<'a> for TypeSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let types = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TypeSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let types = cursor.next(ctx)?;
         Ok(TypeSection {
             types,
         })
     }
 }
 
-impl<'a> Parseable<'a> for ImportDescription {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        match Byte::parse(cursor)? {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportDescription {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        match Byte::parse(ctx, cursor)? {
             0x00 => {
-                let type_idx = cursor.next()?;
+                let type_idx = cursor.next(ctx)?;
                 Ok(ImportDescription::Func {
                     type_idx,
                 })
@@ -517,11 +522,11 @@ impl<'a> Parseable<'a> for ImportDescription {
     }
 }
 
-impl<'a> Parseable<'a> for Import {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let mod_name = cursor.next()?;
-        let item_name = cursor.next()?;
-        let description = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Import {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let mod_name = cursor.next(ctx)?;
+        let item_name = cursor.next(ctx)?;
+        let description = cursor.next(ctx)?;
         Ok(Import {
             mod_name,
             item_name,
@@ -530,46 +535,84 @@ impl<'a> Parseable<'a> for Import {
     }
 }
 
-impl<'a> Parseable<'a> for ImportSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let imports = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let imports = cursor.next(ctx)?;
         Ok(ImportSection {
             imports,
         })
     }
 }
 
-impl<'a> Parseable<'a> for FunctionSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let types = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let types = cursor.next(ctx)?;
         Ok(FunctionSection {
             types,
         })
     }
 }
 
-/// Attempt to read a constant expression of given type.
-/// Since we do not allow imported globals, the only constant expressions are
-/// single constant instruction.
-fn read_constant_expr<'a>(cursor: &mut Cursor<&'a [u8]>, ty: ValueType) -> ParseResult<GlobalInit> {
-    let res = match ty {
-        ValueType::I32 => match decode_opcode(cursor)? {
-            OpCode::I32Const(n) => GlobalInit::I32(n),
-            _ => bail!("Unexpected instruction. Expected `I32Const`"),
+/// Attempt to read a constant expression of given type (see section 3.3.7.2).
+/// The `ty` argument specifies the expected type of the expression.
+/// For the version of the standard we use this is always a single value type,
+/// and thus any constant expression will be a single instruction.
+///
+/// Constant expressions appear in three places in the wasm specification we
+/// support.
+///
+/// - As initializers for globals. In that case the format of constant
+/// expressions is more restricted. They are not allowed to refer to globals
+/// defined in the current modules. This prevents circularity, although a more
+/// relaxed condition could be used. The function supports this mode of constant
+/// expressions by using `None` as the last argument.
+/// - As offset expressions in element and data segments. In these contexts the
+///   constant expressions are allowed to refer to `GlobalGet` instructions for
+///   `const` globals of the right type.
+fn read_constant_expr<'a>(
+    cursor: &mut Cursor<&'a [u8]>,
+    ty: ValueType,
+    globals_allowed: Option<&GlobalSection>,
+) -> ParseResult<GlobalInit> {
+    let instr = decode_opcode(cursor)?;
+    let res = match instr {
+        OpCode::I32Const(n) => {
+            ensure!(ty == ValueType::I32, "Constant instruction of type I64, but I32 expected.");
+            GlobalInit::I32(n)
+        }
+        OpCode::I64Const(n) => {
+            ensure!(ty == ValueType::I64, "Constant instruction of type I32, but I64 expected.");
+            GlobalInit::I64(n)
+        }
+        OpCode::GlobalGet(idx) => match globals_allowed {
+            None => bail!("GlobalGet not allowed in this constant expression."),
+            Some(globals) => {
+                let global = globals.get(idx).ok_or_else(|| {
+                    anyhow::anyhow!("Reference to non-existent global in constant expression.")
+                })?;
+                ensure!(
+                    global.init.ty() == ty,
+                    "Global in constant expression of incorrect type: {:?} != {:?}",
+                    global.init.ty(),
+                    ty
+                );
+                ensure!(
+                    !global.mutable,
+                    "Only references to constant globals can appear in constant expressions."
+                );
+                global.init
+            }
         },
-        ValueType::I64 => match decode_opcode(cursor)? {
-            OpCode::I64Const(n) => GlobalInit::I64(n),
-            _ => bail!("Unexpected instruction. Expected `I64Const`"),
-        },
+        _ => bail!("Not a constant instruction {:?}.", instr),
     };
     // end parsing the expression
     expect_byte(cursor, END)?;
     Ok(res)
 }
 
-impl<'a> Parseable<'a> for TableSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let table_type_vec: Vec<TableType> = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TableSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let table_type_vec: Vec<TableType> = cursor.next(ctx)?;
         ensure!(table_type_vec.len() <= 1, "Only table with index 0 is supported.");
         Ok(TableSection {
             table_type: table_type_vec.first().copied(),
@@ -577,9 +620,9 @@ impl<'a> Parseable<'a> for TableSection {
     }
 }
 
-impl<'a> Parseable<'a> for MemorySection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let memory_types_vec: Vec<MemoryType> = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for MemorySection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let memory_types_vec: Vec<MemoryType> = cursor.next(ctx)?;
         ensure!(memory_types_vec.len() <= 1, "Only memory with index 1 is supported.");
         Ok(MemorySection {
             memory_type: memory_types_vec.first().copied(),
@@ -587,27 +630,27 @@ impl<'a> Parseable<'a> for MemorySection {
     }
 }
 
-impl<'a> Parseable<'a> for ExportDescription {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        match Byte::parse(cursor)? {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ExportDescription {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        match Byte::parse(ctx, cursor)? {
             0x00 => {
-                let index = FuncIndex::parse(cursor)?;
+                let index = FuncIndex::parse(ctx, cursor)?;
                 Ok(ExportDescription::Func {
                     index,
                 })
             }
             0x01 => {
-                let index = TableIndex::parse(cursor)?;
+                let index = TableIndex::parse(ctx, cursor)?;
                 ensure!(index == 0, "Only table with index 0 is supported.");
                 Ok(ExportDescription::Table)
             }
             0x02 => {
-                let index = MemIndex::parse(cursor)?;
+                let index = MemIndex::parse(ctx, cursor)?;
                 ensure!(index == 0, "Only memory with index 0 is supported.");
                 Ok(ExportDescription::Memory)
             }
             0x03 => {
-                let index = GlobalIndex::parse(cursor)?;
+                let index = GlobalIndex::parse(ctx, cursor)?;
                 Ok(ExportDescription::Global {
                     index,
                 })
@@ -617,10 +660,10 @@ impl<'a> Parseable<'a> for ExportDescription {
     }
 }
 
-impl<'a> Parseable<'a> for Export {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let name = cursor.next()?;
-        let description = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Export {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let name = cursor.next(ctx)?;
+        let description = cursor.next(ctx)?;
         Ok(Export {
             name,
             description,
@@ -628,30 +671,30 @@ impl<'a> Parseable<'a> for Export {
     }
 }
 
-impl<'a> Parseable<'a> for ExportSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let exports = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ExportSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let exports = cursor.next(ctx)?;
         Ok(ExportSection {
             exports,
         })
     }
 }
 
-impl<'a> Parseable<'a> for StartSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a, Ctx> Parseable<'a, Ctx> for StartSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         // We deliberately try to parse the index before failing
         // in order that the error message is more precise.
-        let _idxs: FuncIndex = cursor.next()?;
+        let _idxs: FuncIndex = cursor.next(ctx)?;
         bail!(ParseError::StartFunctionsNotSupported);
     }
 }
 
-impl<'a> Parseable<'a> for Element {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let table_index = TableIndex::parse(cursor)?;
+impl<'a> Parseable<'a, &GlobalSection> for Element {
+    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let table_index = TableIndex::parse(ctx, cursor)?;
         ensure!(table_index == 0, "Only table index 0 is supported.");
-        let offset = read_constant_expr(cursor, ValueType::I32)?;
-        let inits = cursor.next()?;
+        let offset = read_constant_expr(cursor, ValueType::I32, Some(ctx))?;
+        let inits = cursor.next(ctx)?;
         if let GlobalInit::I32(offset) = offset {
             Ok(Element {
                 offset,
@@ -663,24 +706,25 @@ impl<'a> Parseable<'a> for Element {
     }
 }
 
-impl<'a> Parseable<'a> for ElementSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let elements = cursor.next()?;
+impl<'a> Parseable<'a, &GlobalSection> for ElementSection {
+    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let elements = cursor.next(ctx)?;
         Ok(ElementSection {
             elements,
         })
     }
 }
 
-impl<'a> Parseable<'a> for Global {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let ty = cursor.next()?;
-        let mutable = match Byte::parse(cursor)? {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Global {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let ty = cursor.next(ctx)?;
+        let mutable = match Byte::parse(ctx, cursor)? {
             0x00 => false,
             0x01 => true,
             flag => bail!("Unsupported mutability flag {:#04x}", flag),
         };
-        let init = read_constant_expr(cursor, ty)?;
+        // Globals initialization expressions cannot refer to other (in-module) globals.
+        let init = read_constant_expr(cursor, ty, None)?;
         Ok(Global {
             init,
             mutable,
@@ -688,9 +732,9 @@ impl<'a> Parseable<'a> for Global {
     }
 }
 
-impl<'a> Parseable<'a> for GlobalSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let globals = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for GlobalSection {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let globals = cursor.next(ctx)?;
         Ok(GlobalSection {
             globals,
         })
@@ -702,9 +746,9 @@ const END: Byte = 0x0B;
 
 /// The version of Wasm we support only has the empty block type, the I32, and
 /// I64 types. Type indices are not supported.
-impl<'a> Parseable<'a> for BlockType {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        match Byte::parse(cursor)? {
+impl<'a, Ctx> Parseable<'a, Ctx> for BlockType {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        match Byte::parse(ctx, cursor)? {
             0x40 => Ok(BlockType::EmptyType),
             0x7F => Ok(BlockType::ValueType(ValueType::I32)),
             0x7E => Ok(BlockType::ValueType(ValueType::I64)),
@@ -713,10 +757,10 @@ impl<'a> Parseable<'a> for BlockType {
     }
 }
 
-impl<'a> Parseable<'a> for MemArg {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let align = cursor.next()?;
-        let offset = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for MemArg {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let align = cursor.next(ctx)?;
+        let offset = cursor.next(ctx)?;
         Ok(MemArg {
             offset,
             align,
@@ -724,10 +768,10 @@ impl<'a> Parseable<'a> for MemArg {
     }
 }
 
-impl<'a> Parseable<'a> for Local {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let multiplicity = cursor.next()?;
-        let ty = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Local {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let multiplicity = cursor.next(ctx)?;
+        let ty = cursor.next(ctx)?;
         Ok(Local {
             multiplicity,
             ty,
@@ -735,12 +779,12 @@ impl<'a> Parseable<'a> for Local {
     }
 }
 
-impl<'a> Parseable<'a> for Data {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let index = u32::parse(cursor)?;
+impl<'a> Parseable<'a, &GlobalSection> for Data {
+    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let index = u32::parse(ctx, cursor)?;
         ensure!(index == 0, "Only memory index 0 is supported.");
-        let offset = read_constant_expr(cursor, ValueType::I32)?;
-        let init = cursor.next()?;
+        let offset = read_constant_expr(cursor, ValueType::I32, Some(ctx))?;
+        let init = cursor.next(ctx)?;
         if let GlobalInit::I32(offset) = offset {
             Ok(Data {
                 offset,
@@ -752,21 +796,22 @@ impl<'a> Parseable<'a> for Data {
     }
 }
 
-impl<'a> Parseable<'a> for DataSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let sections = cursor.next()?;
+impl<'a> Parseable<'a, &GlobalSection> for DataSection {
+    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let sections = cursor.next(ctx)?;
         Ok(DataSection {
             sections,
         })
     }
 }
 
-pub fn parse_sec_with_default<'a, A: Parseable<'a> + Default>(
+pub fn parse_sec_with_default<'a, Ctx, A: Parseable<'a, Ctx> + Default>(
+    ctx: Ctx,
     sec: &Option<UnparsedSection<'a>>,
 ) -> ParseResult<A> {
     match sec.as_ref() {
         None => Ok(Default::default()),
-        Some(sec) => sec.bytes.next(),
+        Some(sec) => sec.bytes.next(ctx),
     }
 }
 
@@ -809,36 +854,36 @@ impl std::fmt::Display for ParseError {
 
 /// Decode the next opcode directly from the cursor.
 pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
-    match Byte::parse(cursor)? {
+    match Byte::parse(EMPTY_CTX, cursor)? {
         END => Ok(OpCode::End),
         0x00 => Ok(OpCode::Unreachable),
         0x01 => Ok(OpCode::Nop),
         0x02 => {
-            let bt = cursor.next()?;
+            let bt = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::Block(bt))
         }
         0x03 => {
-            let bt = cursor.next()?;
+            let bt = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::Loop(bt))
         }
         0x04 => {
-            let ty = cursor.next()?;
+            let ty = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::If {
                 ty,
             })
         }
         0x05 => Ok(OpCode::Else),
         0x0C => {
-            let l = cursor.next()?;
+            let l = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::Br(l))
         }
         0x0D => {
-            let l = cursor.next()?;
+            let l = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::BrIf(l))
         }
         0x0E => {
-            let labels = cursor.next()?;
-            let default = cursor.next()?;
+            let labels = cursor.next(EMPTY_CTX)?;
+            let default = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::BrTable {
                 labels,
                 default,
@@ -846,11 +891,11 @@ pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
         }
         0x0F => Ok(OpCode::Return),
         0x10 => {
-            let idx = cursor.next()?;
+            let idx = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::Call(idx))
         }
         0x11 => {
-            let ty = cursor.next()?;
+            let ty = cursor.next(EMPTY_CTX)?;
             expect_byte(cursor, 0x00)?;
             Ok(OpCode::CallIndirect(ty))
         }
@@ -859,100 +904,100 @@ pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
         0x1B => Ok(OpCode::Select),
         // variable instructions
         0x20 => {
-            let idx = cursor.next()?;
+            let idx = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::LocalGet(idx))
         }
         0x21 => {
-            let idx = cursor.next()?;
+            let idx = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::LocalSet(idx))
         }
         0x22 => {
-            let idx = cursor.next()?;
+            let idx = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::LocalTee(idx))
         }
         0x23 => {
-            let idx = cursor.next()?;
+            let idx = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::GlobalGet(idx))
         }
         0x24 => {
-            let idx = cursor.next()?;
+            let idx = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::GlobalSet(idx))
         }
         // memory instructions
         0x28 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Load(memarg))
         }
         0x29 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load(memarg))
         }
         0x2C => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Load8S(memarg))
         }
         0x2D => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Load8U(memarg))
         }
         0x2E => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Load16S(memarg))
         }
         0x2F => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Load16U(memarg))
         }
         0x30 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load8S(memarg))
         }
         0x31 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load8U(memarg))
         }
         0x32 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load16S(memarg))
         }
         0x33 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load16U(memarg))
         }
         0x34 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load32S(memarg))
         }
         0x35 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Load32U(memarg))
         }
         0x36 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Store(memarg))
         }
         0x37 => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Store(memarg))
         }
         0x3A => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Store8(memarg))
         }
         0x3B => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Store16(memarg))
         }
         0x3C => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Store8(memarg))
         }
         0x3D => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Store16(memarg))
         }
         0x3E => {
-            let memarg = cursor.next()?;
+            let memarg = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Store32(memarg))
         }
         0x3F => {
@@ -965,11 +1010,11 @@ pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
         }
         // constants
         0x41 => {
-            let n = cursor.next()?;
+            let n = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I32Const(n))
         }
         0x42 => {
-            let n = cursor.next()?;
+            let n = cursor.next(EMPTY_CTX)?;
             Ok(OpCode::I64Const(n))
         }
         // numeric instructions
@@ -1084,11 +1129,11 @@ pub struct CodeSkeletonSection<'a> {
     pub impls: Vec<CodeSkeleton<'a>>,
 }
 
-impl<'a> Parseable<'a> for CodeSkeleton<'a> {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let size: u32 = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CodeSkeleton<'a> {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let size: u32 = cursor.next(ctx)?;
         let cur_pos = cursor.position();
-        let locals = cursor.next()?;
+        let locals = cursor.next(ctx)?;
         let end_pos = cursor.position();
         ensure!(
             u64::from(size) >= end_pos - cur_pos,
@@ -1108,9 +1153,9 @@ impl<'a> Parseable<'a> for CodeSkeleton<'a> {
     }
 }
 
-impl<'a> Parseable<'a> for CodeSkeletonSection<'a> {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let impls = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CodeSkeletonSection<'a> {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let impls = cursor.next(ctx)?;
         Ok(CodeSkeletonSection {
             impls,
         })
