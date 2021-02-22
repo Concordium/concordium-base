@@ -159,7 +159,7 @@ impl Amount {
     #[inline(always)]
     pub fn from_gtu(gtu: u64) -> Amount {
         Amount {
-            micro_gtu: gtu * 1000000,
+            micro_gtu: gtu * 1_000_000,
         }
     }
 
@@ -190,7 +190,7 @@ impl Amount {
     #[inline(always)]
     pub fn add_gtu(self, gtu: u64) -> Amount {
         Amount {
-            micro_gtu: self.micro_gtu + gtu * 1000000,
+            micro_gtu: self.micro_gtu + gtu * 1_000_000,
         }
     }
 
@@ -206,7 +206,7 @@ impl Amount {
     #[inline(always)]
     pub fn subtract_gtu(self, gtu: u64) -> Amount {
         Amount {
-            micro_gtu: self.micro_gtu - gtu * 1000000,
+            micro_gtu: self.micro_gtu - gtu * 1_000_000,
         }
     }
 
@@ -926,8 +926,8 @@ mod serde_impl {
 
     impl fmt::Display for Amount {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let q = self.micro_gtu / 1000000;
-            let r = self.micro_gtu % 1000000;
+            let q = self.micro_gtu / 1_000_000;
+            let r = self.micro_gtu % 1_000_000;
             if r == 0 {
                 write!(f, "{}.0", q)
             } else {
