@@ -113,18 +113,58 @@ addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- 
   where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode fbs)
 
 
--- |Index of the account key needed to determine what key the signature should
+-- |Index of the credential key needed to determine what key the signature should
 -- be checked with.
 newtype KeyIndex = KeyIndex Word8
     deriving (Eq, Ord, Enum, Num, Real, Integral)
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
+-- |The public credential keys belonging to a credential holder
 data CredentialPublicKeys = CredentialPublicKeys {
   credKeys :: !(Map.Map KeyIndex VerifyKey),
   credThreshold :: !SignatureThreshold
   } deriving(Eq, Show, Ord)
 
-type AccountKeys = CredentialPublicKeys
+
+-- |Indices of the credentials linked to an account
+newtype CredentialIndex = CredentialIndex Word8
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+    deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
+
+-- Introducing here a type containing all the information needed for verifying a transaction,
+-- i.e. the account threshold, all the credential thresholds, and all the credential public keys.
+data AccountInformation = AccountInformation {
+  aiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
+  aiThreshold :: !AccountThreshold 
+} deriving(Eq, Show, Ord)
+
+getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
+getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
+getCredentialPublicKeys (NormalAC cdv _) = cdvPublicKeys cdv
+
+getAccountInformation :: AccountThreshold -> Map.Map CredentialIndex AccountCredential -> AccountInformation
+getAccountInformation threshold credentials = AccountInformation {
+  aiCredentials = fmap getCredentialPublicKeys credentials,
+  aiThreshold = threshold
+}
+
+instance S.Serialize AccountInformation where
+  put AccountInformation{..} = do
+    S.putWord8 (fromIntegral (length aiCredentials))
+    forM_ (Map.toAscList aiCredentials) $ \(idx, key) -> S.put idx <> S.put key
+    S.put aiThreshold
+  get = do
+    len <- S.getWord8
+    when (len == 0) $ fail "Number of credentials out of bounds."
+    aiCredentials <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    aiThreshold <- S.get
+    return AccountInformation{..}
+
+{-# INLINE getCredentialKeys #-}
+getCredentialKeys :: CredentialIndex -> AccountInformation -> Maybe CredentialPublicKeys
+getCredentialKeys idx ai = Map.lookup idx (aiCredentials ai)
+
+-- type AccountKeys = CredentialPublicKeys
 
 makeCredentialPublicKeys :: [VerifyKey] -> SignatureThreshold -> CredentialPublicKeys
 makeCredentialPublicKeys keys credThreshold =
