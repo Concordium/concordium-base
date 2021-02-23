@@ -255,4 +255,4 @@ stages:
   script:
     - cd wasm-test/
     - cargo build
-    - ./target/debug/wasm-test --dir ../testdata/core/
+    - ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/
