@@ -193,6 +193,7 @@ data Payload =
       twsTo :: !AccountAddress,
       twsSchedule :: ![(Timestamp, Amount)]
       }
+  -- | Updating the account threshold and the credentials linked to an account by adding or removing credentials. The credential with index 0 can never be removed.
   | UpdateCredentials {
       ucNewCredInfos :: !(Map.Map KeyIndex CredentialDeploymentInformation),
       ucRemoveCredIds :: ![CredentialRegistrationID],

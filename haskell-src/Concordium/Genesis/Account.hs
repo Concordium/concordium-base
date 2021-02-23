@@ -146,7 +146,7 @@ putGenesisAccountGD2 cryptoParams GenesisAccount{..} = do
     put gaAddress
     let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.credId (gaCredentials Map.! 0))
     put encryptionKey
-    -- put gaVerifyKeys
+    put gaThreshold
     putLength (length gaCredentials)
     mapM_ put gaCredentials
     putLength 0 -- No smart contracts
@@ -171,7 +171,6 @@ getGenesisAccountGD2 = label "GenesisAccount" $ do
     -- Get the persisting account data
     gaAddress <- get
     encryptionKey <- get
-    -- gaVerifyKeys <- get
     gaThreshold <- get
     nCredentials <- getLength
     when (nCredentials < 1) $ fail "A genesis account must have at least one credential"

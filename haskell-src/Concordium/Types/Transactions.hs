@@ -45,42 +45,46 @@ transactionSignHashFromBytes = TransactionSignHashV0 . H.hash
 transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
 transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put atrHeader <> putEncodedPayload atrPayload
 
--- |A signature is an association list of index of the key, and the actual signature.
--- The index is relative to the account address, and the indices should be distinct.
+-- |A transaction signature is map from the index of the credential to another map from the key index to the actual signature.
+-- The credential index is relative to the account address, and the indices should be distinct.
+-- The key index is relative to the credential. 
 -- The maximum length of the list is 255, and the minimum length is 1.
-newtype TransactionSignature = TransactionSignature { tsSignatures :: Map.Map KeyIndex (Map.Map KeyIndex Signature) }
+newtype TransactionSignature = TransactionSignature { tsSignatures :: Map.Map CredentialIndex (Map.Map KeyIndex Signature) }
   deriving (Eq, Show)
-  deriving (ToJSON, FromJSON) via (Map.Map KeyIndex (Map.Map KeyIndex Signature))
+  deriving (ToJSON, FromJSON) via (Map.Map CredentialIndex (Map.Map KeyIndex Signature))
 
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
-getTransactionNumSigs = length . tsSignatures
+getTransactionNumSigs = foldl' (\l m -> l + length m) 0 . tsSignatures
 
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
     S.putWord8 (fromIntegral (length tsSignatures))
-    forM_ (Map.toAscList tsSignatures) $ \(idx, sig) -> S.put idx <> S.put sig
+    forM_ (Map.toAscList tsSignatures) $ \(credIndex, sigmap) -> S.put credIndex
+     <> S.putWord8 (fromIntegral (length sigmap)) <> forM_ (Map.toAscList sigmap) (\(idx, sig) -> S.put idx <> S.put sig)
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
-    let accumulateSigs accum mlast count
+    
+    let accumulateCredSigs accum mlast count
           | count == 0 = return accum
           | otherwise = do
               idx <- S.get
               forM_ mlast $ \lasti -> unless (idx > lasti) $ fail "Signatures are not in canonical order."
               sig <- S.get
-              accumulateSigs (Map.insert idx sig accum) (Just idx) (count - 1)
+              accumulateCredSigs (Map.insert idx sig accum) (Just idx) (count - 1)
+    let accumulateSigs accum mlast count
+          | count == 0 = return accum
+          | otherwise = do
+              idx <- S.get
+              forM_ mlast $ \lasti -> unless (idx > lasti) $ fail "Signatures are not in canonical order."
+              -- sig <- S.get
+              sigmaplen <- S.getWord8
+              sigmap <- accumulateCredSigs Map.empty Nothing sigmaplen
+              accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
     TransactionSignature <$> accumulateSigs Map.empty Nothing len
-
--- |Size of the signature in bytes.
--- Should be kept up to date with the serialize instance.
-signatureSize :: TransactionSignature -> Int
-signatureSize TransactionSignature{..} =
-    1 -- length
-    + length tsSignatures -- key indices
-    -- + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignatures) -- signatures
 
 -- | Data common to all transaction types.
 --
@@ -399,7 +403,7 @@ signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 -- indices are distint.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-signTransaction :: [(KeyIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
+signTransaction :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransaction keys atrHeader atrPayload =
   let
       atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
@@ -410,42 +414,9 @@ signTransaction keys atrHeader atrPayload =
       atrSignature = TransactionSignature{..}
   in AccountTransaction{..}
 
--- Introducing here a type containing all the information needed for verifying a transaction,
--- i.e. the account threshold, all the credential thresholds, and all the credential public keys.
-data AccountInformation = AccountInformation {
-  aiCredentials :: !(Map.Map KeyIndex CredentialPublicKeys),
-  aiThreshold :: !AccountThreshold 
-} deriving(Eq, Show, Ord)
-
-getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
-getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
-getCredentialPublicKeys (NormalAC cdv _) = cdvPublicKeys cdv
-
-getAccountInformation :: AccountThreshold -> Map.Map KeyIndex AccountCredential -> AccountInformation
-getAccountInformation threshold credentials = AccountInformation {
-  aiCredentials = fmap getCredentialPublicKeys credentials,
-  aiThreshold = threshold
-}
-
-instance S.Serialize AccountInformation where
-  put AccountInformation{..} = do
-    S.putWord8 (fromIntegral (length aiCredentials))
-    forM_ (Map.toAscList aiCredentials) $ \(idx, key) -> S.put idx <> S.put key
-    S.put aiThreshold
-  get = do
-    len <- S.getWord8
-    when (len == 0) $ fail "Number of credentials out of bounds."
-    aiCredentials <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-    aiThreshold <- S.get
-    return AccountInformation{..}
-
-{-# INLINE getCredentialKeys #-}
-getCredentialKeys :: KeyIndex -> AccountInformation -> Maybe CredentialPublicKeys
-getCredentialKeys idx ai = Map.lookup idx (aiCredentials ai)
-
 verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
-verifyCredentialSignatures bodyHash sigs keys = 
-  let numSigs = length sigs 
+verifyCredentialSignatures bodyHash sigs keys =
+  let numSigs = length sigs
       check = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys)) True (Map.toList sigs)
   in numSigs <= 255 && (fromIntegral numSigs >= credThreshold keys) && check
 
