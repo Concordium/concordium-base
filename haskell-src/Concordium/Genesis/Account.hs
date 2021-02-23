@@ -96,7 +96,7 @@ data GenesisAccount = GenesisAccount
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
       -- |The account credentials
-      gaCredentials :: !(Map.Map ID.KeyIndex ID.AccountCredential),
+      gaCredentials :: !(Map.Map ID.CredentialIndex ID.AccountCredential),
       -- |The (optional) baker information
       gaBaker :: !(Maybe GenesisBaker)
     }
