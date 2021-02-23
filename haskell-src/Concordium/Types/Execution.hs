@@ -195,7 +195,7 @@ data Payload =
       }
   -- | Updating the account threshold and the credentials linked to an account by adding or removing credentials. The credential with index 0 can never be removed.
   | UpdateCredentials {
-      ucNewCredInfos :: !(Map.Map KeyIndex CredentialDeploymentInformation),
+      ucNewCredInfos :: !(Map.Map CredentialIndex CredentialDeploymentInformation),
       ucRemoveCredIds :: ![CredentialRegistrationID],
       ucNewThreshold :: !AccountThreshold
   }
