@@ -857,6 +857,7 @@ class CredentialValuesFields a where
   credId :: a -> CredentialRegistrationID
   ipId :: a -> IdentityProviderIdentity
   policy :: a -> Policy
+  credPubKeys :: a -> CredentialPublicKeys
 
 instance CredentialValuesFields AccountCredential where
   validTo (NormalAC cdv _) = pValidTo . cdvPolicy $ cdv
@@ -871,6 +872,10 @@ instance CredentialValuesFields AccountCredential where
   policy (InitialAC icdv) = icdvPolicy icdv
   policy (NormalAC cdv _) = cdvPolicy cdv
 
+  credPubKeys (InitialAC icdv) = icdvAccount icdv
+  credPubKeys (NormalAC cdv _) = cdvPublicKeys cdv
+
+
 instance CredentialValuesFields AccountCredentialWithProofs where
   validTo (NormalACWP cdi) = pValidTo . cdvPolicy . cdiValues $ cdi
   validTo (InitialACWP icdi) = pValidTo . icdvPolicy . icdiValues $ icdi
@@ -883,6 +888,9 @@ instance CredentialValuesFields AccountCredentialWithProofs where
 
   policy (NormalACWP cdi) = cdvPolicy . cdiValues $ cdi
   policy (InitialACWP icdi) = icdvPolicy . icdiValues $ icdi
+
+  credPubKeys (InitialACWP icdi) = icdvAccount . icdiValues $ icdi
+  credPubKeys (NormalACWP cdi) = cdvPublicKeys . cdiValues $ cdi
 
 -- |Extract only the values we care about from the account credential.
 -- Concretely this retains the "Values" part, as well as the commitments. This
