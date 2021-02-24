@@ -154,24 +154,11 @@ data Payload =
       -- key.
       ubkProofAggregation :: !BakerAggregationProof
       }
-  -- | Updates existing keys used for signing transactions for the sender's account
-  | UpdateAccountKeys {
-      -- |Update the account keys with to the ones in this map.
-      uakKeys :: !(Map.Map KeyIndex AccountVerificationKey)
-    }
   -- | Adds additional keys to the sender's account, optionally updating the signature threshold too
-  | AddAccountKeys {
-      -- |Map of key indices and the associated key to add
-      aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
-      -- |Optional value for updating the threshold of the signature scheme
-      aakThreshold :: !(Maybe SignatureThreshold)
-    }
-  -- | Remove keys from the sender's account, optionally updating the signature threshold too
-  | RemoveAccountKeys {
-      -- |List of indices of keys to remove
-      rakIndices :: !(Set.Set KeyIndex),
-      -- |Optional value for updating the threshold of the signature scheme
-      rakThreshold :: !(Maybe SignatureThreshold)
+  | UpdateCredentialKeys {
+      -- | New set of credential keys to be replaced with the existing ones, including updating the threshold.
+      uckCredId :: CredentialRegistrationID,
+      uckKeys :: !CredentialPublicKeys
     }
   -- | Send an encrypted amount to an account.
   | EncryptedAmountTransfer {
@@ -254,20 +241,13 @@ putPayload UpdateBakerKeys{..} =
     S.put ubkProofSig <>
     S.put ubkProofElection <>
     S.put ubkProofAggregation
-putPayload UpdateAccountKeys{..} = do
+putPayload UpdateCredentialKeys{..} = do
     P.putWord8 13
-    P.putWord8 (fromIntegral (length uakKeys))
-    forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
-putPayload AddAccountKeys{..} = do
-    P.putWord8 14
-    P.putWord8 (fromIntegral (length aakKeys))
-    forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
-    putMaybe S.put aakThreshold
-putPayload RemoveAccountKeys{..} = do
-    P.putWord8 15
-    P.putWord8 (fromIntegral (length rakIndices))
-    forM_ (Set.toAscList rakIndices) S.put
-    putMaybe S.put rakThreshold
+    S.put uckCredId
+    S.put uckKeys
+    -- P.putWord8 (fromIntegral (length uakKeys))
+    -- forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
+    -- putMaybe S.put rakThreshold
 putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..} =
     S.putWord8 16 <>
     S.put eatTo <>
@@ -341,19 +321,11 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ubkProofAggregation <- S.get
               return UpdateBakerKeys{..}
             13 -> do
-              len <- S.getWord8
-              uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-              return UpdateAccountKeys{..}
-            14 -> do
-              len <- S.getWord8
-              aakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-              aakThreshold <- getMaybe S.get
-              return AddAccountKeys{..}
-            15 -> do
-              len <- S.getWord8
-              rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
-              rakThreshold <- getMaybe S.get
-              return RemoveAccountKeys{..}
+              -- len <- S.getWord8
+              uckCredId <- S.get
+              uckKeys <- S.get
+              -- uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+              return UpdateCredentialKeys{..}
             16 -> do
               eatTo <- S.get
               eatdRemainingAmount <- S.get
@@ -533,11 +505,11 @@ data Event =
               -- |Aggregation public key
               ebkuAggregationKey :: !BakerAggregationVerifyKey
            }            
-           -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
-           | AccountKeysUpdated
-           | AccountKeysAdded
-           | AccountKeysRemoved
-           | AccountKeysSignThresholdUpdated
+           -- | A set of credential keys was updated. Also covers the case of updating the signature threshold for the credential in question
+           | CredentialKeysUpdated {
+             -- |The credential that had its keys and threshold updated.
+             ckuCredId :: CredentialRegistrationID
+           }
            -- | New encrypted amount added to an account, with a given index.
            --
            -- This is used on the receiver's account when they get an encrypted amount transfer.
