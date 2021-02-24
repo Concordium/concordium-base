@@ -3,6 +3,9 @@ pub mod constants;
 mod ffi;
 mod types;
 
+#[cfg(test)]
+mod validation_tests;
+
 use anyhow::{anyhow, bail, ensure};
 use concordium_contracts_common::*;
 use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE, MAX_PARAMETER_SIZE};
