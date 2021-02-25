@@ -663,8 +663,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
-                  -- |Encountered index to which no account key belongs when removing or updating keys
-                  | NonExistentAccountKey
+                  -- |Encountered credential ID that does not exist
+                  | NonExistentCredentialID
                   -- |Attempted to add an account key to a key index already in use
                   | KeyIndexAlreadyInUse
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
@@ -693,6 +693,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NonExistentCredIDs ![IDTypes.CredentialRegistrationID]
                   -- | Attemp to remove the first credential 
                   | RemoveFirstCredential
+                  -- | The credential holder of the keys to be updated did not sign the transaction 
+                  | CredentialHolderDidNotSign
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
