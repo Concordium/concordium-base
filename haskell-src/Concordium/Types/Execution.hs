@@ -269,6 +269,13 @@ putPayload TransferWithSchedule{..} =
     S.put twsTo <>
     P.putWord8 (fromIntegral (length twsSchedule)) <>
     forM_ twsSchedule (\(a,b) -> S.put a >> S.put b)
+putPayload UpdateCredentials{..} =
+    S.putWord8 20 <>
+    S.putWord8 (fromIntegral (Map.size ucNewCredInfos)) <>
+    putSafeSizedMapOf S.put S.put ucNewCredInfos <>
+    S.putWord8 (fromIntegral (length ucRemoveCredIds)) <>
+    mapM_ S.put ucRemoveCredIds <>
+    S.put ucNewThreshold
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
@@ -321,10 +328,8 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ubkProofAggregation <- S.get
               return UpdateBakerKeys{..}
             13 -> do
-              -- len <- S.getWord8
               uckCredId <- S.get
               uckKeys <- S.get
-              -- uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
               return UpdateCredentialKeys{..}
             16 -> do
               eatTo <- S.get
@@ -353,6 +358,13 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               len <- S.getWord8
               twsSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
               return TransferWithSchedule{..}
+            20 -> do
+              newInfosLen <- S.getWord8
+              ucNewCredInfos <- getSafeSizedMapOf newInfosLen S.get S.get
+              removeCredsLen <- S.getWord8
+              ucRemoveCredIds <- replicateM (fromIntegral removeCredsLen) S.get
+              ucNewThreshold <- S.get
+              return UpdateCredentials{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
@@ -504,7 +516,7 @@ data Event =
               ebkuElectionKey :: !BakerElectionVerifyKey,
               -- |Aggregation public key
               ebkuAggregationKey :: !BakerAggregationVerifyKey
-           }            
+           }
            -- | A set of credential keys was updated. Also covers the case of updating the signature threshold for the credential in question
            | CredentialKeysUpdated {
              -- |The credential that had its keys and threshold updated.
@@ -580,7 +592,7 @@ newtype TransactionIndex = TransactionIndex Word64
 -- |The 'Maybe TransactionType' is to cover the case of a transaction payload
 -- that cannot be deserialized. A transaction is still included in a block, but
 -- it does not have a type.
-data TransactionSummaryType = 
+data TransactionSummaryType =
   TSTAccountTransaction !(Maybe TransactionType)
   | TSTCredentialDeploymentTransaction !CredentialType
   | TSTUpdateTransaction !UpdateType
@@ -691,7 +703,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | DuplicateCredIDs ![IDTypes.CredentialRegistrationID]
                   -- | A credential id that was to be removed is not part of the account.
                   | NonExistentCredIDs ![IDTypes.CredentialRegistrationID]
-                  -- | Attemp to remove the first credential 
+                  -- | Attemp to remove the first credential
                   | RemoveFirstCredential
     deriving (Show, Eq, Generic)
 

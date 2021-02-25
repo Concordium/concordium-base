@@ -56,7 +56,7 @@ pub fn verify_cdi<
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
-    reg_id: Option<AccountAddress>,
+    addr: Option<AccountAddress>,
 ) -> Result<(), CDIVerificationError> {
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
@@ -78,7 +78,7 @@ pub fn verify_cdi<
     // Compute the challenge prefix by hashing the values.
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cdi.values);
-    ro.append_message(b"regid", &reg_id);
+    ro.append_message(b"address", &addr);
     ro.append_message(b"global_context", &global_context);
 
     let commitments = &cdi.proofs.id_proofs.commitments;
@@ -161,7 +161,7 @@ pub fn verify_cdi<
     ) {
         return Err(CDIVerificationError::Proof);
     }
-    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, &reg_id);
+    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, &addr);
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that
     // we have as many signatures as verification keys.

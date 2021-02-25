@@ -572,7 +572,7 @@ pub fn create_unsigned_credential<
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
-    reg_id: Option<AccountAddress>,
+    addr: Option<AccountAddress>,
 ) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
@@ -685,7 +685,7 @@ where
     // Eventually we'll have to include the genesis hash.
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cred_values);
-    ro.append_message(b"regid", &reg_id);
+    ro.append_message(b"address", &addr);
     ro.append_message(b"global_context", &context.global_context);
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
@@ -803,7 +803,7 @@ where
     let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
         proofs: id_proofs,
-        reg_id,
+        addr,
     };
     Ok(info)
 }

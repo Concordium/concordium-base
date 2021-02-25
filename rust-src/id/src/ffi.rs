@@ -13,7 +13,7 @@ use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
-use std::{collections::BTreeMap, fmt, io::Cursor, str::FromStr};
+use std::{collections::BTreeMap, convert::TryInto, fmt, io::Cursor, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -151,7 +151,7 @@ extern "C" fn verify_cdi_ffi(
     ars_infos_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
-    regid_ptr: *const AccountAddress,
+    addr_ptr: *const u8, // pointer to an account address, 32 bytes
 ) -> i32 {
     if gc_ptr.is_null() {
         return -9;
@@ -160,10 +160,14 @@ extern "C" fn verify_cdi_ffi(
         return -10;
     }
 
-    let reg_id: Option<AccountAddress> = if regid_ptr.is_null() {
+    let reg_id: Option<AccountAddress> = if addr_ptr.is_null() {
         None
     } else {
-        Some(*from_ptr!(regid_ptr))
+        if let Ok(bytes) = slice_from_c_bytes!(addr_ptr, ACCOUNT_ADDRESS_SIZE).try_into() {
+            Some(AccountAddress(bytes))
+        } else {
+            return -14;
+        }
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);

@@ -47,7 +47,7 @@ transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV
 
 -- |A transaction signature is map from the index of the credential to another map from the key index to the actual signature.
 -- The credential index is relative to the account address, and the indices should be distinct.
--- The key index is relative to the credential. 
+-- The key index is relative to the credential.
 -- The maximum length of the list is 255, and the minimum length is 1.
 newtype TransactionSignature = TransactionSignature { tsSignatures :: Map.Map CredentialIndex (Map.Map KeyIndex Signature) }
   deriving (Eq, Show)
@@ -62,12 +62,14 @@ getTransactionNumSigs = foldl' (\l m -> l + length m) 0 . tsSignatures
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
     S.putWord8 (fromIntegral (length tsSignatures))
-    forM_ (Map.toAscList tsSignatures) $ \(credIndex, sigmap) -> S.put credIndex
-     <> S.putWord8 (fromIntegral (length sigmap)) <> forM_ (Map.toAscList sigmap) (\(idx, sig) -> S.put idx <> S.put sig)
+    forM_ (Map.toAscList tsSignatures) $ \(credIndex, sigmap) ->
+      S.put credIndex <>
+      S.putWord8 (fromIntegral (length sigmap)) <>
+      forM_ (Map.toAscList sigmap) (\(idx, sig) -> S.put idx <> S.put sig)
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
-    
+
     let accumulateCredSigs accum mlast count
           | count == 0 = return accum
           | otherwise = do
@@ -82,6 +84,7 @@ instance S.Serialize TransactionSignature where
               forM_ mlast $ \lasti -> unless (idx > lasti) $ fail "Signatures are not in canonical order."
               -- sig <- S.get
               sigmaplen <- S.getWord8
+              when (sigmaplen == 0) $ fail "There must be at least one signature for each listed credential."
               sigmap <- accumulateCredSigs Map.empty Nothing sigmaplen
               accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
     TransactionSignature <$> accumulateSigs Map.empty Nothing len
@@ -137,7 +140,7 @@ instance S.Serialize TransactionHeader where
 
 -- |An 'AccountTransaction' is a transaction that originates from
 -- a specific account (the sender), and is paid for by the sender.
--- 
+--
 -- The representation includes a 'TransactionSignHash' which is
 -- the value that is signed. This is derived from the header and
 -- payload, and so does not form part of the serialization.
@@ -414,20 +417,32 @@ signTransaction keys atrHeader atrPayload =
       atrSignature = TransactionSignature{..}
   in AccountTransaction{..}
 
+-- |Verify credential signatures. This checks
+--
+-- - the number of signatures is less than 255
+-- - __all__ signatures are valid
+-- - there are at least threshold number of signatures.
 verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
 verifyCredentialSignatures bodyHash sigs keys =
   let numSigs = length sigs
-      check = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys)) True (Map.toList sigs)
+      -- foldr is the right function to use here because the body is lazy in the second argument.
+      -- This does rely on the specific order of arguments since && is strict in the first argument, but not the second.
+      check = foldr (\(idx, sig) b -> maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys) && b) True (Map.toList sigs)
   in numSigs <= 255 && (fromIntegral numSigs >= credThreshold keys) && check
 
 -- |Verify that the given transaction was signed by the required number of keys.
+-- Concretely this means
 --
--- * @SPEC: <$DOCS/Transactions#transaction-signature>
+-- - enough credential holders signed the transaction
+-- - each of the credential signres has the required number of signatures, see 'verifyCredentialSignatures'
+-- - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
 verifyTransaction :: TransactionData msg => AccountInformation -> msg -> Bool
 verifyTransaction ai tx =
   let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
       TransactionSignature maps = transactionSignature tx
-      keysCheck = foldl' (\b (idx, sigmap) -> b && maybe False (verifyCredentialSignatures bodyHash sigmap) (getCredentialKeys idx ai)) True (Map.toList maps)
+      -- foldr is the right function to use here because the body is lazy in the second argument.
+      -- This does rely on the specific order of arguments since && is strict in the first argument, but not the second.
+      keysCheck = foldr (\(idx, sigmap) b -> maybe False (verifyCredentialSignatures bodyHash sigmap) (getCredentialKeys idx ai) && b) True (Map.toList maps)
       numSigs = length maps
       threshold = aiThreshold ai
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck

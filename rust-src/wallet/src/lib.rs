@@ -379,24 +379,21 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
+    // The mobile wallet for now only creates new accounts and does not support
+    // adding credentials onto existing ones. Once that is supported the address
+    // should be coming from the input data.
     let address: Option<AccountAddress> = None;
 
-    // if account data is present then use it, otherwise generate new.
+    // The mobile wallet can only create new accounts, which means new credential
+    // data will be generated.
     let cred_data = {
-        if let Some(cred_data) = v.get("credentialData") {
-            match from_value(cred_data.clone()) {
-                Ok(cred_data) => cred_data,
-                Err(e) => bail!("Cannot decode accountData {}", e),
-            }
-        } else {
-            let mut keys = std::collections::BTreeMap::new();
-            let mut csprng = thread_rng();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        let mut keys = std::collections::BTreeMap::new();
+        let mut csprng = thread_rng();
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
 
-            CredentialData {
-                keys,
-                threshold: SignatureThreshold(1),
-            }
+        CredentialData {
+            keys,
+            threshold: SignatureThreshold(1),
         }
     };
 
