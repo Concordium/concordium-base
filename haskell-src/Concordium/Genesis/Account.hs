@@ -10,8 +10,6 @@ import Data.Aeson.Types (
     (.:),
     (.:?),
  )
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Serialize
 
 

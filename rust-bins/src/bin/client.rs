@@ -662,7 +662,7 @@ fn handle_create_credential(cc: CreateCredential) {
         "address": address,
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-        "accountData": acc_data,
+        "credentialData": acc_data,
         "credential": versioned_cdi,
         "aci": id_use_data.aci,
     });

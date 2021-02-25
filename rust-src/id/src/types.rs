@@ -53,7 +53,7 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
+pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
@@ -1437,16 +1437,16 @@ pub struct UnsignedCredentialDeploymentInfo<
     #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
     pub proofs: IdOwnershipProofs<P, C>,
-    /// This is the RegId for the account that the credential is being deployed
-    /// to. In case of a new account, the RegId and CredId are the same, in
-    /// which case reg_id will be None, since the CredId is inside the
-    /// CredentialDeploymentValues anyway.
+    /// This is the address for the account that the credential is being
+    /// deployed to. In case of a new account, the address is derived from
+    /// the credId, which is stored inside CredentialDeploymentValues
+    /// anyway, and thus the address should be None.
     #[serde(
         rename = "regId",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id: Option<AccountAddress>,
+    pub addr: Option<AccountAddress>,
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -1699,7 +1699,7 @@ impl CredentialDataWithSigning for CredentialData {
         let to_sign = crate::utils::credential_hash_to_sign(
             &unsigned_cred_info.values,
             &unsigned_cred_info.proofs,
-            &unsigned_cred_info.reg_id,
+            &unsigned_cred_info.addr,
         );
         self.keys
             .iter()

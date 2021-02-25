@@ -17,7 +17,6 @@ import Concordium.ID.Types
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
 import Concordium.ID.AnonymityRevoker
-import Concordium.Crypto.ByteStringHelpers
 import qualified Data.FixedByteString as FBS
 
 type CredentialDeploymentInformationBytes = ByteString
@@ -43,10 +42,6 @@ foreign import ccall safe "verify_initial_cdi_ffi" verifyInitialCDIFFI
 withArInfoArray :: [Ptr ArInfo] -> [ArInfo] -> (Int -> Ptr (Ptr ArInfo) -> IO a) -> IO a
 withArInfoArray arPtrs [] k = withArrayLen arPtrs k
 withArInfoArray arPtrs (ar:ars) k = withArInfo ar $ \arPtr -> withArInfoArray (arPtr:arPtrs) ars k
-
-withRegId :: CredentialRegistrationID -> (Ptr GroupElement -> IO a) -> IO a
-withRegId (RegIdCred rid) = withGroupElement rid
-
 
 withAccountAddress :: AccountAddress -> (Ptr Word8 -> IO a) -> IO a
 withAccountAddress (AccountAddress fbs) = FBS.withPtrReadOnly fbs

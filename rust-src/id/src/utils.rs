@@ -238,7 +238,6 @@ pub fn verify_account_ownership_proof(
     }
     // set of processed keys already
     let mut processed = BTreeSet::new();
-    // the new keys get indices 0, 1, ..
     for (idx, key) in keys.iter() {
         // insert returns true if key was __not__ present
         if !processed.insert(key) {
@@ -256,6 +255,10 @@ pub fn verify_account_ownership_proof(
     true
 }
 
+/// Compute the hash of the credential deployment that should be signed by the
+/// account keys for deployment.
+/// If `reg_id` is `None` then this credential will create a new account, and
+/// otherwise it is going to be deployed to the given account address.
 pub fn credential_hash_to_sign<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,

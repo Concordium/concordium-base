@@ -237,17 +237,18 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
 }
 
 use std::rc::Rc;
-// Use the underlying type's instance.
+/// Use the underlying type's instance.
 impl<T: Serial> Serial for Rc<T> {
     fn serial<B: Buffer>(&self, out: &mut B) { out.put(self.as_ref()) }
 }
 
+/// Use the underlying type's instance. Note that serial + deserial does not
+/// preserve sharing. It will allocate a new copy of the structure.
 impl<T: Deserial> Deserial for Rc<T> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> { Ok(Rc::new(source.get()?)) }
 }
 
-// Implementations for the Option type:
-
+/// Deserialization is strict. It only accepts `0` or `1` tags.
 impl<T: Deserial> Deserial for Option<T> {
     fn deserial<X: ReadBytesExt>(source: &mut X) -> Fallible<Self> {
         let l: u8 = source.get()?;
@@ -261,6 +262,8 @@ impl<T: Deserial> Deserial for Option<T> {
     }
 }
 
+/// `None` is serialized as [0u8], `Some(v)` is serialized by prepending `1u8`
+/// to the serialization of `v`.
 impl<T: Serial> Serial for Option<T> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
