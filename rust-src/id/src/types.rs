@@ -6,10 +6,10 @@ use crate::{
         dlog,
     },
 };
-use base58check::*;
+use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
-use crypto_common::*;
+use crypto_common::{serde_impls::KeyPairDef, *};
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
@@ -35,7 +35,7 @@ use std::{
     fmt,
     io::{Cursor, Read},
     str::FromStr,
-}; // only for account addresses
+};
 
 /// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
@@ -1256,6 +1256,10 @@ impl From<ed25519::PublicKey> for VerifyKey {
 
 impl From<&ed25519::Keypair> for VerifyKey {
     fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+}
+
+impl From<&KeyPairDef> for VerifyKey {
+    fn from(kp: &KeyPairDef) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
 /// Compare byte representation.

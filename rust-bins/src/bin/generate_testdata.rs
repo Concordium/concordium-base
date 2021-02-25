@@ -4,7 +4,6 @@ use crypto_common::{serde_impls::KeyPairDef, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use either::Either::{Left, Right};
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
@@ -172,13 +171,13 @@ fn main() {
     {
         // output testdata.bin for basic verification checking.
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-        let acc_data = AccountData {
+        let acc_data = CredentialData {
             keys,
-            existing: Left(SignatureThreshold(2)),
+            threshold: SignatureThreshold(2),
         };
 
         let cdi_1 = create_credential(
@@ -188,15 +187,22 @@ fn main() {
             53,
             policy.clone(),
             &acc_data,
+            None,
         )
         .expect("We should have generated valid data.");
 
         // Generate the second credential for an existing account (the one
         // created by the first credential)
-        let acc_data_2 = AccountData {
-            keys:     acc_data.keys,
-            existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
+        let mut keys_2 = BTreeMap::new();
+        keys_2.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys_2.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys_2.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        let acc_data_2 = CredentialData {
+            keys:      acc_data.keys,
+            threshold: SignatureThreshold(1),
         };
+
+        let addr = AccountAddress::new(&cdi_1.values.cred_id);
 
         let cdi_2 = create_credential(
             context,
@@ -205,10 +211,11 @@ fn main() {
             53,
             policy.clone(),
             &acc_data_2,
+            Some(addr),
         )
         .expect("We should have generated valid data.");
 
-        let acc_keys = AccountKeys {
+        let acc_keys = CredentialPublicKeys {
             keys:      acc_data_2
                 .keys
                 .iter()
@@ -258,7 +265,7 @@ fn main() {
                 VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
             );
 
-            AccountKeys {
+            CredentialPublicKeys {
                 keys,
                 threshold: SignatureThreshold(2),
             }
@@ -329,18 +336,16 @@ fn main() {
     }
 
     // generate account credentials, parametrized
-    let mut generate = |maybe_acc_data, acc_num, idx| {
-        let acc_data = if let Some(acc_data) = maybe_acc_data {
-            acc_data
-        } else {
+    let mut generate = |maybe_addr, acc_num, idx| {
+        let acc_data = {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-            AccountData {
+            CredentialData {
                 keys,
-                existing: Left(SignatureThreshold(2)),
+                threshold: SignatureThreshold(2),
             }
         };
 
@@ -351,9 +356,10 @@ fn main() {
             acc_num,
             policy.clone(),
             &acc_data,
+            maybe_addr,
         )
         .expect("We should have generated valid data.");
-        let acc_addr = AccountAddress::new(&cdi.values.reg_id);
+        let acc_addr = AccountAddress::new(&cdi.values.cred_id);
         let versioned_cdi = Versioned::new(VERSION_0, cdi);
 
         if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &versioned_cdi) {
@@ -361,12 +367,9 @@ fn main() {
         } else {
             println!("Output credential {}.", idx);
         }
-        // return the account data that can be used to deploy more credentials
+        // return the account address that can be used to deploy more credentials
         // to the same account.
-        AccountData {
-            existing: Right(acc_addr),
-            ..acc_data
-        }
+        maybe_addr.unwrap_or(acc_addr)
     };
 
     let _ = generate(None, 0, 1);
@@ -374,9 +377,9 @@ fn main() {
     let _ = generate(None, 2, 3);
     // duplicate reg_id
     let _ = generate(None, 2, 4);
-    // use same account keypair
-    let acc_data = generate(None, 4, 5);
-    let _ = generate(Some(acc_data), 5, 6);
+    // deploy to the same account
+    let addr = generate(None, 4, 5);
+    let _ = generate(Some(addr), 5, 6);
     let _ = generate(None, 6, 7);
 
     let mut generate_initial = |prf, idx, ip_secret| {
