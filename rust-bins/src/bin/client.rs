@@ -4,7 +4,6 @@ use crypto_common::{serde_impls::KeyPairDef, *};
 use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::{Bls12, G1};
@@ -399,8 +398,8 @@ fn handle_verify_credential(vcred: VerifyCredential) {
         &global_ctx,
         &ip_info,
         &all_ars_infos.anonymity_revokers,
-        None,
         &credential,
+        None,
     ) {
         eprintln!("Credential verification failed due to {}", e)
     } else {
@@ -626,18 +625,26 @@ fn handle_create_credential(cc: CreateCredential) {
         } else {
             let mut csprng = thread_rng();
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-            AccountData {
+            CredentialData {
                 keys,
-                existing: Left(SignatureThreshold(2)),
+                threshold: SignatureThreshold(2),
             }
         }
     };
 
-    let cdi = create_credential(context, &id_object, &id_use_data, x, policy, &acc_data);
+    let cdi = create_credential(
+        context,
+        &id_object,
+        &id_use_data,
+        x,
+        policy,
+        &acc_data,
+        None,
+    );
 
     let cdi = match cdi {
         Ok(cdi) => cdi,
@@ -647,7 +654,7 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     };
 
-    let address = AccountAddress::new(&cdi.values.reg_id);
+    let address = AccountAddress::new(&cdi.values.cred_id);
 
     let versioned_cdi = Versioned::new(VERSION_0, AccountCredential::Normal { cdi });
 

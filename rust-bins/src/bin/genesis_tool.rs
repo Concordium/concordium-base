@@ -1,11 +1,10 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, types::Amount, *};
+use crypto_common::{base16_encode_string, serde_impls::KeyPairDef, types::Amount, *};
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use either::Either::Left;
 use id::{
     account_holder::*, constants::*, ffi::*, identity_provider::*, secret_sharing::Threshold,
     types::*,
@@ -205,7 +204,7 @@ fn main() -> std::io::Result<()> {
 
         let mut keys = BTreeMap::new();
         for idx in 0..common.num_keys {
-            keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
+            keys.insert(KeyIndex(idx as u8), KeyPairDef::generate(csprng));
         }
 
         let threshold = SignatureThreshold(
@@ -216,10 +215,7 @@ fn main() -> std::io::Result<()> {
             },
         );
 
-        let acc_data = AccountData {
-            keys,
-            existing: Left(threshold),
-        };
+        let acc_data = CredentialData { keys, threshold };
 
         let id_object = IdentityObject {
             pre_identity_object: pio,
@@ -243,7 +239,7 @@ fn main() -> std::io::Result<()> {
                 icdi,
             });
 
-        let acc_keys = AccountKeys {
+        let acc_keys = CredentialPublicKeys {
             keys: acc_data
                 .keys
                 .iter()
