@@ -102,6 +102,7 @@ pub enum Type {
     Array(u32, Box<Type>),
     Struct(Fields),
     Enum(Vec<(String, Fields)>),
+    String(SizeLength),
 }
 
 impl Type {
@@ -113,6 +114,7 @@ impl Type {
             Type::List(_, ty) => Type::List(size_len, ty),
             Type::Set(_, ty) => Type::Set(size_len, ty),
             Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
+            Type::String(_) => Type::String(size_len),
             t => t,
         }
     }
@@ -187,6 +189,10 @@ impl<K: SchemaType, V: SchemaType> SchemaType for BTreeMap<K, V> {
 }
 impl SchemaType for [u8] {
     fn get_type() -> Type { Type::List(SizeLength::U32, Box::new(Type::U8)) }
+}
+
+impl SchemaType for String {
+    fn get_type() -> Type { Type::String(SizeLength::U32) }
 }
 
 macro_rules! schema_type_array_x {
@@ -411,6 +417,10 @@ impl Serial for Type {
                 out.write_u8(21)?;
                 fields.serial(out)?;
             }
+            Type::String(len) => {
+                out.write_u8(22)?;
+                len.serial(out)?;
+            }
         }
         Ok(())
     }
@@ -468,6 +478,10 @@ impl Deserial for Type {
             21 => {
                 let variants = source.get()?;
                 Ok(Type::Enum(variants))
+            }
+            22 => {
+                let size_len = SizeLength::deserial(source)?;
+                Ok(Type::String(size_len))
             }
             _ => Err(ParseError::default()),
         }
@@ -647,6 +661,15 @@ mod impls {
                     let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
                     let fields = fields_ty.to_json(source)?;
                     Ok(json!({ name: fields }))
+                }
+                Type::String(size_len) => {
+                    let len = deserial_length(source, size_len)?;
+                    let mut bytes = Vec::with_capacity(len);
+                    for _ in 0..len {
+                        bytes.push(source.read_u8()?);
+                    }
+                    let string = String::from_utf8(bytes)?;
+                    Ok(Value::String(string))
                 }
             }
         }
