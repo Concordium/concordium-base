@@ -662,8 +662,16 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ExportDescription {
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Export {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let name = cursor.next(ctx)?;
+        let name: Name = cursor.next(ctx)?;
         let description = cursor.next(ctx)?;
+
+        if let ExportDescription::Func {
+            ..
+        } = description
+        {
+            ensure!(name.name.len() <= MAX_FUNC_NAME_LENGTH, ParseError::FuncNameTooLong);
+        }
+
         Ok(Export {
             name,
             description,
@@ -828,6 +836,7 @@ pub enum ParseError {
     },
     OnlySingleReturn,
     OnlyASCIINames,
+    FuncNameTooLong,
     StartFunctionsNotSupported,
 }
 
@@ -845,6 +854,9 @@ impl std::fmt::Display for ParseError {
             } => write!(f, "Unsupported import type {:#04x}. Only functions can be imported.", tag),
             ParseError::OnlySingleReturn => write!(f, "Only single return value is supported."),
             ParseError::OnlyASCIINames => write!(f, "Only ASCII names are allowed."),
+            ParseError::FuncNameTooLong => {
+                write!(f, "Names of functions are limited to {} characters.", MAX_FUNC_NAME_LENGTH)
+            }
             ParseError::StartFunctionsNotSupported => {
                 write!(f, "Start functions are not supported.")
             }

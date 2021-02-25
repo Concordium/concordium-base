@@ -47,6 +47,11 @@ pub const MAX_SWITCH_SIZE: usize = 4096;
 /// Maximum number of exports from a module.
 pub const MAX_NUM_EXPORTS: usize = 100;
 
+/// Maximum length of exported function names.
+/// A contract name is defined by its init name, so this also limits the length
+/// of contract names.
+pub const MAX_FUNC_NAME_LENGTH: usize = 100;
+
 /// The Wasm binary format magic hash.
 pub const MAGIC_HASH: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 
