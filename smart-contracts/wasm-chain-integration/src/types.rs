@@ -112,7 +112,7 @@ pub enum InitResult {
         remaining_energy: u64,
     },
     Reject {
-        reason:           u32,
+        reason:           u8,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -238,7 +238,7 @@ pub enum ReceiveResult {
         remaining_energy: u64,
     },
     Reject {
-        reason:           u32,
+        reason:           u8,
         remaining_energy: u64,
     },
     OutOfEnergy,
