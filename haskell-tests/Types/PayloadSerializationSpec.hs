@@ -10,7 +10,6 @@ import Test.QuickCheck
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import qualified Data.Serialize as S
 import qualified Data.Text as Text
 import Data.Int
@@ -100,9 +99,7 @@ genPayload = oneof [genDeployModule,
                     genUpdateBakerStake,
                     genUpdateBakerRestakeEarnings,
                     genUpdateBakerKeys,
-                    genUpdateAccountKeys,
-                    genAddAccountKeys,
-                    genRemoveAccountKeys,
+                    genUpdateCredentialKeys,
                     genTransferToEncrypted
                     ]
   where
@@ -192,25 +189,19 @@ genPayload = oneof [genDeployModule,
             return (idx, correspondingVerifyKey kp))
           return $ Map.fromList mapList
 
-        genSignThreshold = oneof [
-            (Just . SignatureThreshold <$> choose (1,255)),
-            (return Nothing)
-          ]
+        genSignThreshold = SignatureThreshold <$> choose (1,255)
 
-        genUpdateAccountKeys = do
-          uakKeys <- genAccountKeysMap
-          return UpdateAccountKeys{..}
+        genUpdateCredentialKeys = do
+          uckKeys <- genCredentialPublicKeys
+          uckCredId <- genCredentialId
+          return UpdateCredentialKeys{..}
 
-        genAddAccountKeys = do
-          aakThreshold <- genSignThreshold
-          aakKeys <- genAccountKeysMap
-          return AddAccountKeys{..}
+        genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
 
-        genRemoveAccountKeys = do
-          indices <- genIndices
-          rakThreshold <- genSignThreshold
-          let rakIndices = Set.fromList indices
-          return RemoveAccountKeys{..}
+        genCredentialPublicKeys = do
+          credKeys <- genAccountKeysMap
+          credThreshold <- genSignThreshold
+          return CredentialPublicKeys{..}
 
         genTransferToEncrypted =
            TransferToEncrypted . Amount <$> arbitrary

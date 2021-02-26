@@ -38,9 +38,9 @@ test bs = do
     l3 <- getWord32be
     c3 <- getByteString (fromIntegral l3)
     return (c1, k, c2, k3, c3)
-  unless (verifyCredential gc ipInfo arInfos Nothing cdi1) $ throwError "Verification of the first credential failed."
-  unless (verifyCredential gc ipInfo arInfos (Just accKeys) cdi2) $ throwError "Verification of the second credential failed."
-  when (verifyCredential gc ipInfo arInfos (Just accKeys') cdi2) $ throwError "Verification of with wrong keys should fail."
+  unless (verifyCredential gc ipInfo arInfos cdi1 Nothing) $ throwError "Verification of the first credential failed."
+  unless (verifyCredential gc ipInfo arInfos cdi2 (Just accKeys)) $ throwError "Verification of the second credential failed."
+  when (verifyCredential gc ipInfo arInfos cdi2 (Just accKeys')) $ throwError "Verification of with wrong keys should fail."
   unless (verifyInitialAccountCreation ipInfo icdi) $ throwError "Verification of initial credential deployment failed"
   return True
 
