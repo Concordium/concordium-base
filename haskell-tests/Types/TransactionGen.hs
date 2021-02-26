@@ -8,7 +8,6 @@ import Concordium.Types.Transactions
 import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.FFIDataTypes
 import Data.Time.Clock
-import qualified Data.Set as Set
 
 import Concordium.Common.Time
 import Concordium.Types
@@ -22,18 +21,10 @@ import qualified Data.ByteString.Short as BSS
 import System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Vector as Vec
 
+import Types.PayloadSerializationSpec
+
 schemes :: [SchemeId]
 schemes = [Ed25519]
-
--- |Simply generate a few 'ElgamalCipher' values for testing purposes.
-elgamalCiphers :: Vec.Vector ElgamalCipher
-elgamalCiphers = unsafePerformIO $ Vec.replicateM 200 generateElgamalCipher
-{-# NOINLINE elgamalCiphers #-}
-
-genElgamalCipher :: Gen ElgamalCipher
-genElgamalCipher = do
-  i <- choose (0, Vec.length elgamalCiphers - 1)
-  return $ elgamalCiphers Vec.! i
 
 verifyKeys :: Vec.Vector VerifyKey
 verifyKeys = unsafePerformIO $ Vec.replicateM 200 (correspondingVerifyKey <$> newKeyPair Ed25519)
@@ -84,40 +75,6 @@ genTransaction = do
   wmdData <- genAccountTransaction
   wmdArrivalTime <- TransactionTime <$> arbitrary
   return $ addMetadata NormalTransaction wmdArrivalTime wmdData
-
-genCredentialPublicKeys :: Gen CredentialPublicKeys
-genCredentialPublicKeys = do
-  maxNumKeys <- choose (1,255)
-  indices <- Set.fromList . map KeyIndex <$> replicateM maxNumKeys (choose (0, 255))
-  -- the actual number of key indices. Duplicate key indices might have been generated.
-  let numKeys = Set.size indices
-  keys <- replicateM numKeys genVerifyKey
-  credThreshold <- SignatureThreshold . fromIntegral <$> choose (1, numKeys)
-  return CredentialPublicKeys{credKeys = Map.fromList (zip (Set.toList indices) keys),..}
-
-
-genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
-genCredentialDeploymentInformation = do
-  cdvPublicKeys <- genCredentialPublicKeys
-  cdvCredId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
-  cdvIpId <- IP_ID <$> arbitrary
-  cdvArData <- Map.fromList <$> listOf (do
-    ardName <- do
-      n <- arbitrary
-      if n == 0 then return (ArIdentity 1) else return (ArIdentity n)
-    ardIdCredPubShare <- AREnc <$> genElgamalCipher
-    return (ardName, ChainArData{..}))
-  cdvThreshold <- Threshold <$> choose (1, max 1 (fromIntegral (length cdvArData)))
-  cdvPolicy <- do
-    let ym = YearMonth <$> choose (1000,9999) <*> choose (1,12)
-    pValidTo <- ym
-    pCreatedAt <- ym
-    let pItems = Map.empty
-    return Policy{..}
-  cdiProofs <- do l <- choose (0, 10000)
-                  Proofs . BSS.pack <$> vector l
-  let cdiValues = CredentialDeploymentValues{..}
-  return CredentialDeploymentInformation{..}
 
 genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
 genInitialCredentialDeploymentInformation = do
