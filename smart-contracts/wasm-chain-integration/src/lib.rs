@@ -584,16 +584,21 @@ pub fn invoke_init<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
         }
     };
     let remaining_energy = host.energy.energy;
-    if let Some(Value::I32(0)) = res {
-        Ok(InitResult::Success {
-            logs: host.logs,
-            state: host.state,
-            remaining_energy,
-        })
+    if let Some(Value::I32(n)) = res {
+        if n == 0 {
+            Ok(InitResult::Success {
+                logs: host.logs,
+                state: host.state,
+                remaining_energy,
+            })
+        } else {
+            Ok(InitResult::Reject {
+                reason: reason_from_wasm_error_code(n)?,
+                remaining_energy,
+            })
+        }
     } else {
-        Ok(InitResult::Reject {
-            remaining_energy,
-        })
+        bail!("Wasm module should return a value.")
     }
 }
 
@@ -700,10 +705,8 @@ pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
         } else if n >= 0 {
             bail!("Invalid return.")
         } else {
-            // TODO: Here we map all negative values to reject.
-            // This is a fine choice, but perhaps we should record
-            // the exact failure as well, so it can be inspected.
             Ok(ReceiveResult::Reject {
+                reason: reason_from_wasm_error_code(n)?,
                 remaining_energy,
             })
         }
@@ -712,6 +715,20 @@ pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
             "Invalid return. Expected a value, but receive nothing. This should not happen for \
              well-formed modules"
         );
+    }
+}
+
+/// Returns the absolute value of a returned Wasm error code, or 0 if the error
+/// code is invalid. This function should only be called on negative numbers.
+fn reason_from_wasm_error_code(n: i32) -> ExecResult<u32> {
+    ensure!(n != 0, "A wasm return value should not be treated as an error.");
+    if n > 0 {
+        Ok(0)
+    } else {
+        // When n is negative it corresponds to an error code obtained from Wasm.
+        // We want to display the error code as a positive number, that's why we
+        // use n's additive inverse.
+        Ok(-n as u32)
     }
 }
 

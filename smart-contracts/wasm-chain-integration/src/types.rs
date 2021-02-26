@@ -112,6 +112,7 @@ pub enum InitResult {
         remaining_energy: u64,
     },
     Reject {
+        reason:           u32,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -122,6 +123,7 @@ impl InitResult {
         match self {
             InitResult::OutOfEnergy => vec![0],
             InitResult::Reject {
+                reason,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(9);
@@ -236,6 +238,7 @@ pub enum ReceiveResult {
         remaining_energy: u64,
     },
     Reject {
+        reason:           u32,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -247,6 +250,7 @@ impl ReceiveResult {
         match self {
             OutOfEnergy => vec![0],
             Reject {
+                reason,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(9);
