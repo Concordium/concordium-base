@@ -136,8 +136,8 @@ impl AccountAddress {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial)]
 #[repr(transparent)]
 /// The values of this type must maintain the property that they are not 0.
-#[serde(transparent)]
 #[derive(SerdeSerialize)]
+#[serde(transparent)]
 pub struct SignatureThreshold(pub u8);
 
 impl Deserial for SignatureThreshold {
@@ -213,8 +213,8 @@ impl From<ed25519::Signature> for AccountOwnershipSignature {
 /// The list should be non-empty and at most 255 elements long, and have no
 /// duplicates. The current choice of data structure disallows duplicates by
 /// design.
-#[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
 pub struct AccountOwnershipProof {
     pub sigs: BTreeMap<KeyIndex, AccountOwnershipSignature>,
 }
@@ -247,10 +247,21 @@ impl AccountOwnershipProof {
     pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Hash,
+    Serialize,
+    SerdeSerialize,
+    SerdeDeserialize,
+)]
 #[repr(transparent)]
 #[serde(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
