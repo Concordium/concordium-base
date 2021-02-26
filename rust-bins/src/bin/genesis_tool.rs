@@ -1,7 +1,12 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, serde_impls::KeyPairDef, types::Amount, *};
+use crypto_common::{
+    base16_encode_string,
+    serde_impls::KeyPairDef,
+    types::{Amount, KeyIndex},
+    *,
+};
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
@@ -236,7 +241,7 @@ fn main() -> std::io::Result<()> {
 
         let versioned_credentials = {
             let mut credentials = BTreeMap::new();
-            credentials.insert(KeyIndex(0),  AccountCredential::Initial::<IpPairing, _, _> {
+            credentials.insert(KeyIndex(0), AccountCredential::Initial::<IpPairing, _, _> {
                 icdi,
             });
             Versioned::new(VERSION_0, credentials)

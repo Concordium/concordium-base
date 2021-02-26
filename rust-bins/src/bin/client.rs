@@ -1,6 +1,6 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{serde_impls::KeyPairDef, *};
+use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
 use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -15,17 +15,17 @@ use std::{
     convert::TryFrom,
     fs::File,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use structopt::StructOpt;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
 
-fn mk_ip_filename(path: &PathBuf, n: usize) -> (PathBuf, PathBuf) {
-    let mut public = path.clone();
+fn mk_ip_filename(path: &Path, n: usize) -> (PathBuf, PathBuf) {
+    let mut public = path.to_path_buf();
     public.push(format!("{}{}.pub.json", IP_NAME_PREFIX, n));
-    let mut private = path.clone();
+    let mut private = path.to_path_buf();
     private.push(format!("{}{}.json", IP_NAME_PREFIX, n));
     (public, private)
 }
@@ -38,10 +38,10 @@ fn mk_ip_description(n: usize) -> Description {
 
 // Generate name for the n-th anonymity revoker.
 // Returns the pair for public and public + private data.
-fn mk_ar_filename(path: &PathBuf, n: u32) -> (PathBuf, PathBuf) {
-    let mut public = path.clone();
+fn mk_ar_filename(path: &Path, n: u32) -> (PathBuf, PathBuf) {
+    let mut public = path.to_path_buf();
     public.push(format!("{}{}.pub.json", AR_NAME_PREFIX, n));
-    let mut private = path.clone();
+    let mut private = path.to_path_buf();
     private.push(format!("{}{}.json", AR_NAME_PREFIX, n));
     (public, private)
 }
@@ -579,10 +579,7 @@ fn handle_create_credential(cc: CreateCredential) {
     };
 
     // We ask what regid index they would like to use.
-    let x = match Input::new().with_prompt("Index").interact() {
-        Ok(x) => x,
-        Err(_) => 0, // default index
-    };
+    let x = Input::new().with_prompt("Index").interact().unwrap_or(0); // 0 is the default index
 
     // Now we have have everything we need to generate the proofs
     // we have
