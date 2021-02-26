@@ -246,11 +246,7 @@ fn main() -> std::io::Result<()> {
             });
             Versioned::new(VERSION_0, credentials)
         };
-        let acc_keys = {
-            let mut creds = BTreeMap::new();
-            creds.insert(KeyIndex(0), acc_data);
-            creds
-        };
+        let acc_keys = AccountKeys::from(acc_data);
 
         // unwrap is safe here since we've generated the credential already, and that
         // does the same computation.

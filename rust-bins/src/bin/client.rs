@@ -216,10 +216,9 @@ struct CreateCredential {
     private: PathBuf,
     #[structopt(
         long = "account",
-        help = "File with existing account private info (verification and signature keys). If not \
-                present a fresh key-pair will be generated."
+        help = "Account address onto which the credential should be deployed."
     )]
-    account: Option<PathBuf>,
+    account: Option<AccountAddress>,
     #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
     out: Option<PathBuf>,
     #[structopt(
@@ -603,33 +602,16 @@ fn handle_create_credential(cc: CreateCredential) {
     let context = IPContext::new(&ip_info, &ars, &global_ctx);
 
     // We now generate or read account verification/signature key pair.
-    let mut known_acc = false;
     let acc_data = {
-        if let Some(acc_data_file) = cc.account {
-            match read_json_from_file(acc_data_file) {
-                Ok(acc_data) => {
-                    known_acc = true;
-                    acc_data
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Could not read account data from provided file because {}",
-                        e
-                    );
-                    return;
-                }
-            }
-        } else {
-            let mut csprng = thread_rng();
-            let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        let mut csprng = thread_rng();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-            CredentialData {
-                keys,
-                threshold: SignatureThreshold(2),
-            }
+        CredentialData {
+            keys,
+            threshold: SignatureThreshold(2),
         }
     };
 
@@ -640,7 +622,7 @@ fn handle_create_credential(cc: CreateCredential) {
         x,
         policy,
         &acc_data,
-        None,
+        cc.account,
     );
 
     let cdi = match cdi {
@@ -662,21 +644,24 @@ fn handle_create_credential(cc: CreateCredential) {
         scalar:    enc_key,
     };
 
-    let account_data_json = json!({
-        "address": address,
-        "encryptionSecretKey": secret_key,
-        "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-        "credentialData": acc_data,
-        "credential": versioned_cdi,
-        "aci": id_use_data.aci,
-    });
-
-    if !known_acc {
+    if cc.account.is_none() {
+        let account_data_json = json!({
+            "address": address,
+            "encryptionSecretKey": secret_key,
+            "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+            "accountKeys": AccountKeys::from(acc_data),
+            "credential": versioned_cdi,
+            "aci": id_use_data.aci,
+        });
         println!(
             "Generated fresh verification and signature key of the account to file {}.",
             cc.keys_out.to_string_lossy()
         );
         write_json_to_file(&cc.keys_out, &account_data_json).ok();
+    } else {
+        println!("Generated additional keys for the account.");
+        let js = json!({ "credentialKeys": acc_data });
+        write_json_to_file(&cc.keys_out, &js).ok();
     }
 
     // Double check that the generated CDI is going to be successfully validated.
