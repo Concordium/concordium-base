@@ -162,12 +162,10 @@ extern "C" fn verify_cdi_ffi(
 
     let reg_id: Option<AccountAddress> = if addr_ptr.is_null() {
         None
+    } else if let Ok(bytes) = slice_from_c_bytes!(addr_ptr, ACCOUNT_ADDRESS_SIZE).try_into() {
+        Some(AccountAddress(bytes))
     } else {
-        if let Ok(bytes) = slice_from_c_bytes!(addr_ptr, ACCOUNT_ADDRESS_SIZE).try_into() {
-            Some(AccountAddress(bytes))
-        } else {
-            return -14;
-        }
+        return -14;
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
