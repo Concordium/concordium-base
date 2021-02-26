@@ -2,7 +2,11 @@
 
 ## Mobile wallet
 
-- in the response from `create_credential` the field `accountData` is renamed to `credentialData`.
+- in the response from `create_credential` the field `accountData` is renamed to
+  `accountKeys` and its structure is changed. It is now a dictionary of
+  dictionaries to reflect the two-level indexing of keys.
+- the "signatures" response from the transaction making functions is changed to
+  reflect the two level indexing of signatures.
 
 
 ## Other
@@ -11,7 +15,7 @@
   just on the challenge. See `credential_hash_to_sign` for what exactly is being
   hashed and signed.
 
-- the `client` tool renames `accountData` to `credentialData` in its
+- the `client` tool renames `accountData` to `accountKeys` in its
   `create_credential` function.
 
 - Transaction signatures have a double indexing now with (credentialIndex,

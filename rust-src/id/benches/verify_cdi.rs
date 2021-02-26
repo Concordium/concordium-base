@@ -1,5 +1,5 @@
 use criterion::*;
-use crypto_common::{serde_impls::KeyPairDef, *};
+use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
