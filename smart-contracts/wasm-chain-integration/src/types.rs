@@ -126,8 +126,9 @@ impl InitResult {
                 reason,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(9);
+                let mut out = Vec::with_capacity(10);
                 out.push(1);
+                out.push(*reason);
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
@@ -253,8 +254,9 @@ impl ReceiveResult {
                 reason,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(9);
+                let mut out = Vec::with_capacity(10);
                 out.push(1);
+                out.push(*reason);
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
