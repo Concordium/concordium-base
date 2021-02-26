@@ -234,18 +234,17 @@ fn main() -> std::io::Result<()> {
 
         let address = AccountAddress::new(&icdi.values.reg_id);
 
-        let versioned_cdi =
-            Versioned::new(VERSION_0, AccountCredential::Initial::<IpPairing, _, _> {
+        let versioned_credentials = {
+            let mut credentials = BTreeMap::new();
+            credentials.insert(KeyIndex(0),  AccountCredential::Initial::<IpPairing, _, _> {
                 icdi,
             });
-
-        let acc_keys = CredentialPublicKeys {
-            keys: acc_data
-                .keys
-                .iter()
-                .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))
-                .collect(),
-            threshold,
+            Versioned::new(VERSION_0, credentials)
+        };
+        let acc_keys = {
+            let mut creds = BTreeMap::new();
+            creds.insert(KeyIndex(0), acc_data);
+            creds
         };
 
         // unwrap is safe here since we've generated the credential already, and that
@@ -265,11 +264,11 @@ fn main() -> std::io::Result<()> {
             "address": address,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-            "accountData": acc_data,
-            "credential": versioned_cdi,
+            "accountKeys": acc_keys,
+            "credentials": versioned_credentials,
             "aci": id_object_use_data.aci,
         });
-        (account_data_json, versioned_cdi, acc_keys, address)
+        (account_data_json, versioned_credentials, acc_keys, address)
     };
 
     let mk_out_path = |s| {

@@ -1086,7 +1086,7 @@ mod tests {
     use super::*;
 
     use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use curve_arithmetic::Curve;
     use pedersen_scheme::key::CommitmentKey as PedersenKey;
 

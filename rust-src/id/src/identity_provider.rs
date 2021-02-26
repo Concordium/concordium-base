@@ -450,7 +450,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 mod tests {
     use super::*;
     use crate::test::*;
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use ff::Field;
     use pairing::bls12_381::G1;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};

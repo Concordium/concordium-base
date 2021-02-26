@@ -399,7 +399,7 @@ mod tests {
     use super::*;
 
     use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;

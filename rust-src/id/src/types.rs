@@ -9,7 +9,7 @@ use crate::{
 use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
-use crypto_common::{serde_impls::KeyPairDef, *};
+use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
@@ -180,13 +180,6 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
         }
     }
 }
-
-/// Index of an account key that is to be used.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
-#[repr(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(transparent)]
-pub struct KeyIndex(pub u8);
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct IpCdiSignature(ed25519::Signature);
@@ -1673,9 +1666,48 @@ pub trait CredentialDataWithSigning: PublicCredentialData {
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
+/// All account keys indexed by credentials.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+pub struct AccountKeys {
+    /// All keys per credential
+    #[serde(rename = "keys")]
+    pub keys: BTreeMap<KeyIndex, CredentialData>,
+    /// The account threshold.
+    #[serde(rename = "threshold")]
+    pub threshold: SignatureThreshold,
+}
+
+/// Create account keys with a single credential at index 0
+impl From<CredentialData> for AccountKeys {
+    fn from(cd: CredentialData) -> Self {
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), cd);
+        Self {
+            keys,
+            threshold: SignatureThreshold(1),
+        }
+    }
+}
+
+/// Create account keys with a single credential at index 0
+impl From<InitialAccountData> for AccountKeys {
+    fn from(cd: InitialAccountData) -> Self {
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), CredentialData {
+            keys:      cd.keys,
+            threshold: cd.threshold,
+        });
+        Self {
+            keys,
+            threshold: SignatureThreshold(1),
+        }
+    }
+}
+
 /// Credential data needed by the account holder to generate proofs to deploy
-/// the credential object. This contains all the keys on the account at the
-/// moment of credential deployment.
+/// the credential object. This contains all the keys on the credential at the
+/// moment of its deployment. If this creates the account then the account
+/// starts with exactly these keys.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialData {
     #[serde(rename = "keys")]
