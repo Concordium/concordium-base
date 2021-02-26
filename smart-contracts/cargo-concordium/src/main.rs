@@ -392,7 +392,7 @@ pub fn main() -> anyhow::Result<()> {
                     ..
                 } => {
                     let mut receive_ctx: ReceiveContext<Vec<OwnedPolicy>> = {
-                        let ctx_file = fs::read(context).expect("Could not open context file.");
+                        let ctx_file = fs::read(context).context("Could not open context file.")?;
                         serde_json::from_slice::<ReceiveContext<Vec<OwnedPolicy>>>(&ctx_file)
                             .context("Could not parse receive context")?
                     };
@@ -470,9 +470,8 @@ pub fn main() -> anyhow::Result<()> {
                                         amount,
                                         parameter,
                                     } => {
-                                        // Contract validation ensures that names are valid
-                                        // ascii sequences, so unwrap is OK.
-                                        let name_str = std::str::from_utf8(name).unwrap();
+                                        let name_str = std::str::from_utf8(name)
+                                            .context("Target name is not a valid UTF8 sequence.")?;
                                         eprintln!(
                                             "{}: send a message to contract at ({}, {}), calling \
                                              method {} with amount {} and parameter {:?}",
