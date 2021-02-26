@@ -361,7 +361,8 @@ pub fn parse_skeleton<'a>(input: &'a [u8]) -> ParseResult<Skeleton<'a>> {
 /// ASCII characters.
 impl<'a, Ctx> Parseable<'a, Ctx> for Name {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let name_bytes = cursor.next(ctx)?;
+        let name_bytes: &[u8] = cursor.next(ctx)?;
+        ensure!(name_bytes.len() <= MAX_NAME_SIZE, ParseError::NameTooLong);
         let name = std::str::from_utf8(name_bytes)?.to_string();
         ensure!(name.is_ascii(), ParseError::OnlyASCIINames);
         Ok(Name {
@@ -669,7 +670,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Export {
             ..
         } = description
         {
-            ensure!(name.name.len() <= MAX_FUNC_NAME_LENGTH, ParseError::FuncNameTooLong);
+            ensure!(name.name.len() <= MAX_FUNC_NAME_SIZE, ParseError::FuncNameTooLong);
         }
 
         Ok(Export {
@@ -836,6 +837,7 @@ pub enum ParseError {
     },
     OnlySingleReturn,
     OnlyASCIINames,
+    NameTooLong,
     FuncNameTooLong,
     StartFunctionsNotSupported,
 }
@@ -854,8 +856,9 @@ impl std::fmt::Display for ParseError {
             } => write!(f, "Unsupported import type {:#04x}. Only functions can be imported.", tag),
             ParseError::OnlySingleReturn => write!(f, "Only single return value is supported."),
             ParseError::OnlyASCIINames => write!(f, "Only ASCII names are allowed."),
+            ParseError::NameTooLong => write!(f, "Names are limited to {} bytes.", MAX_NAME_SIZE),
             ParseError::FuncNameTooLong => {
-                write!(f, "Names of functions are limited to {} characters.", MAX_FUNC_NAME_LENGTH)
+                write!(f, "Names of functions are limited to {} bytes.", MAX_FUNC_NAME_SIZE)
             }
             ParseError::StartFunctionsNotSupported => {
                 write!(f, "Start functions are not supported.")
