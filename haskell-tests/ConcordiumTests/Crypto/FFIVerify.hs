@@ -15,7 +15,6 @@ import Test.Hspec
 filePath :: FilePath
 filePath = "testdata/testdata.bin"
 
-
 getData :: Get (GlobalContext, IpInfo, [ArInfo])
 getData = get
 
@@ -28,7 +27,7 @@ readData bs = loop (runGetPartial getData bs)
 test :: BS.ByteString -> Either String Bool
 test bs = do
   ((gc, ipInfo, arInfos), rest) <- readData bs
-  (cdi1, accKeys, cdi2, accKeys', icdi) <- flip runGet rest $ do
+  (cdi1, addr, cdi2, addr', icdi) <- flip runGet rest $ do
     l1 <- getWord32be
     c1 <- getByteString (fromIntegral l1)
     k <- get
@@ -39,8 +38,8 @@ test bs = do
     c3 <- getByteString (fromIntegral l3)
     return (c1, k, c2, k3, c3)
   unless (verifyCredential gc ipInfo arInfos cdi1 Nothing) $ throwError "Verification of the first credential failed."
-  unless (verifyCredential gc ipInfo arInfos cdi2 (Just accKeys)) $ throwError "Verification of the second credential failed."
-  when (verifyCredential gc ipInfo arInfos cdi2 (Just accKeys')) $ throwError "Verification of with wrong keys should fail."
+  unless (verifyCredential gc ipInfo arInfos cdi2 (Just addr)) $ throwError "Verification with correct address failed."
+  when (verifyCredential gc ipInfo arInfos cdi2 (Just addr')) $ throwError "Verification with wrong address should fail."
   unless (verifyInitialAccountCreation ipInfo icdi) $ throwError "Verification of initial credential deployment failed"
   return True
 
