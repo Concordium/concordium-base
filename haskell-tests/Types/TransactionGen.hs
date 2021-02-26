@@ -8,6 +8,7 @@ import Concordium.Types.Transactions
 import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.FFIDataTypes
 import Data.Time.Clock
+import qualified Data.Set as Set
 
 import Concordium.Common.Time
 import Concordium.Types
@@ -44,7 +45,7 @@ genVerifyKey = do
   return $ verifyKeys Vec.! i
 
 genSchemeId :: Gen SchemeId
-genSchemeId = elements schemes 
+genSchemeId = elements schemes
 
 genAccountAddress :: Gen AccountAddress
 genAccountAddress = AccountAddress . FBS.pack <$> vector accountAddressSize
@@ -62,12 +63,17 @@ genAccountTransaction :: Gen AccountTransaction
 genAccountTransaction = do
   atrHeader <- genTransactionHeader
   atrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize atrHeader))
-  numKeys <- choose (1, 255)
-  atrSignature <- TransactionSignature . Map.fromList <$> replicateM numKeys (do
-    idx <- KeyIndex <$> arbitrary
-    sLen <- choose (50,70)
-    sig <- Signature . BSS.pack <$> vector sLen
-    return (idx, sig))
+  numCredentials <- choose (1,255)
+  allKeys <- replicateM numCredentials $ do
+    numKeys <- choose (1, 255)
+    credentialSignatures <- replicateM numKeys $ do
+      idx <- KeyIndex <$> arbitrary
+      sLen <- choose (50,70)
+      sig <- Signature . BSS.pack <$> vector sLen
+      return (idx, sig)
+    (, Map.fromList credentialSignatures) . CredentialIndex <$> arbitrary
+
+  let atrSignature = TransactionSignature (Map.fromList allKeys)
   return $! makeAccountTransaction atrSignature atrHeader atrPayload
 
 baseTime :: UTCTime
@@ -79,15 +85,21 @@ genTransaction = do
   wmdArrivalTime <- TransactionTime <$> arbitrary
   return $ addMetadata NormalTransaction wmdArrivalTime wmdData
 
+genCredentialPublicKeys :: Gen CredentialPublicKeys
+genCredentialPublicKeys = do
+  maxNumKeys <- choose (1,255)
+  indices <- Set.fromList . map KeyIndex <$> replicateM maxNumKeys (choose (0, 255))
+  -- the actual number of key indices. Duplicate key indices might have been generated.
+  let numKeys = Set.size indices
+  keys <- replicateM numKeys genVerifyKey
+  credThreshold <- SignatureThreshold . fromIntegral <$> choose (1, numKeys)
+  return CredentialPublicKeys{credKeys = Map.fromList (zip (Set.toList indices) keys),..}
+
+
 genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 genCredentialDeploymentInformation = do
-  let arbitraryNew = do
-        nacc <- choose (1,255)
-        keys <- replicateM nacc genVerifyKey
-        threshold <- choose (1, nacc)
-        return $ NewAccount keys (SignatureThreshold $ fromIntegral threshold)
-  cdvAccount <- arbitraryNew
-  cdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
+  cdvPublicKeys <- genCredentialPublicKeys
+  cdvCredId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
   cdvIpId <- IP_ID <$> arbitrary
   cdvArData <- Map.fromList <$> listOf (do
     ardName <- do
@@ -109,11 +121,7 @@ genCredentialDeploymentInformation = do
 
 genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
 genInitialCredentialDeploymentInformation = do
-  icdvAccount <- do
-        nacc <- choose (1,255)
-        keys <- replicateM nacc genVerifyKey
-        threshold <- choose (1, nacc)
-        return $ InitialCredentialAccount keys (SignatureThreshold $ fromIntegral threshold)
+  icdvAccount <- genCredentialPublicKeys
   icdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
   icdvIpId <- IP_ID <$> arbitrary
   icdvPolicy <- do
