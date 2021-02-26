@@ -419,12 +419,17 @@ encodeReceiveContext :: ReceiveContext -> ByteString
 encodeReceiveContext ReceiveContext{..} = runPut encoder
   where encoder =
           put invoker <>
-          putWord64le (_contractIndex (contractIndex selfAddress)) <>
-          putWord64le (_contractSubindex (contractSubindex selfAddress)) <>
+          encodeContractAddress selfAddress <>
           putWord64le (_amount selfBalance) <>
-          put sender <>
+          encodeAddress sender <>
           put owner <>
           putSenderPolicies rcSenderPolicies
+
+        encodeContractAddress (ContractAddress ind subind) =
+          putWord64le (_contractIndex ind) <>
+          putWord64le (_contractSubindex subind)
+        encodeAddress (AddressContract addr) = putWord8 1 <> encodeContractAddress addr
+        encodeAddress accAddr = putWord8 0 <> put accAddr
 
 data SenderPolicy = SenderPolicy {
   -- |Identity of the identity provider who signed the identity object
