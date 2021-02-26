@@ -132,6 +132,13 @@ stages:
     - echo "Running clippy"
     - cargo clippy --color=always --tests --benches -- -Dclippy::all
 
+"wasm-chain-integration cargo:test":
+  extends: .generic
+  stage: test
+  script:
+    - cd wasm-chain-integration
+    - cargo test
+
 "counter lint:fmt":
   extends: .generic-lint
   stage: lint
@@ -255,4 +262,4 @@ stages:
   script:
     - cd wasm-test/
     - cargo build
-    - ./target/debug/wasm-test --dir ../testdata/core/
+    - ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/

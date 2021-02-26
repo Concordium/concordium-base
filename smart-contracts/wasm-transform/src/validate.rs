@@ -16,7 +16,7 @@ use crate::{
     },
     parse::{
         parse_custom, parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult,
-        Skeleton,
+        Skeleton, EMPTY_CTX,
     },
     types::*,
 };
@@ -875,9 +875,9 @@ pub fn validate_module<'a>(
     }
 
     // The type section is valid as long as it's well-formed.
-    let ty: TypeSection = parse_sec_with_default(&skeleton.ty)?;
+    let ty: TypeSection = parse_sec_with_default(EMPTY_CTX, &skeleton.ty)?;
     // Imports are valid as long as they parse, and all the indices exist.
-    let import: ImportSection = parse_sec_with_default(&skeleton.import)?;
+    let import: ImportSection = parse_sec_with_default(EMPTY_CTX, &skeleton.import)?;
     {
         let mut seen_imports = BTreeSet::new();
         for i in import.imports.iter() {
@@ -900,16 +900,16 @@ pub fn validate_module<'a>(
     }
     // The table section is valid as long as it's well-formed.
     // We already check the limits at parse time.
-    let table: TableSection = parse_sec_with_default(&skeleton.table)?;
+    let table: TableSection = parse_sec_with_default(EMPTY_CTX, &skeleton.table)?;
 
     // The memory section is valid as long as it's well-formed.
     // We already check the limits at parse time.
-    let memory: MemorySection = parse_sec_with_default(&skeleton.memory)?;
+    let memory: MemorySection = parse_sec_with_default(EMPTY_CTX, &skeleton.memory)?;
 
     // The global section is valid as long as it's well-formed.
     // We already check that all the globals are initialized with
     // correct expressions.
-    let global: GlobalSection = parse_sec_with_default(&skeleton.global)?;
+    let global: GlobalSection = parse_sec_with_default(EMPTY_CTX, &skeleton.global)?;
     ensure!(
         global.globals.len() <= MAX_NUM_GLOBALS,
         "The number of globals must not exceed {}.",
@@ -918,12 +918,12 @@ pub fn validate_module<'a>(
 
     // The start section is valid as long as it parses correctly.
     // We make sure that there is no content in the start section during parsing.
-    let start = parse_sec_with_default(&skeleton.start)?;
+    let start = parse_sec_with_default(EMPTY_CTX, &skeleton.start)?;
 
     // The function type section is valid if it parses properly, and all the indices
     // of types are valid.
     // The code section then needs to match.
-    let func: FunctionSection = parse_sec_with_default(&skeleton.func)?;
+    let func: FunctionSection = parse_sec_with_default(EMPTY_CTX, &skeleton.func)?;
     for &type_idx in func.types.iter() {
         ensure!(ty.get(type_idx).is_some(), "Function refers to a type that does not exist.")
     }
@@ -935,7 +935,7 @@ pub fn validate_module<'a>(
     let total_funcs =
         import.imports.iter().filter(|&x| Import::is_func(x)).count() + func.types.len();
 
-    let code: CodeSkeletonSection = parse_sec_with_default(&skeleton.code)?;
+    let code: CodeSkeletonSection = parse_sec_with_default(EMPTY_CTX, &skeleton.code)?;
     ensure!(
         func.types.len() == code.impls.len(),
         "The number of functions in the function and code sections must match."
@@ -989,7 +989,7 @@ pub fn validate_module<'a>(
     }
     // Exports are mostly valid by parsing, but we need to make sure that
     // they are all distinct.
-    let export: ExportSection = parse_sec_with_default(&skeleton.export)?;
+    let export: ExportSection = parse_sec_with_default(EMPTY_CTX, &skeleton.export)?;
     let mut export_names = BTreeSet::new();
     ensure!(export.exports.len() <= MAX_NUM_EXPORTS, "Module exceeds maximum number of exports.");
     for e in export.exports.iter() {
@@ -1034,7 +1034,7 @@ pub fn validate_module<'a>(
     // the offset expression is of the correct type and constant.
     // We additionally need to check that all the functions referred
     // to in the table are defined.
-    let element: ElementSection = parse_sec_with_default(&skeleton.element)?;
+    let element: ElementSection = parse_sec_with_default(&global, &skeleton.element)?;
     ensure!(
         element.elements.is_empty() || table.table_type.is_some(),
         "There is an elements section, but no table."
@@ -1074,7 +1074,7 @@ pub fn validate_module<'a>(
     // the offset expression is of the correct type and constant.
     // We additionally need to check that all the locations referred
     // to in the table are defined.
-    let data: DataSection = parse_sec_with_default(&skeleton.data)?;
+    let data: DataSection = parse_sec_with_default(&global, &skeleton.data)?;
     // Make sure that if there are any data segments then a memory exists.
     // By parsing we already ensure that all the references are to a single memory
     // and that the initial memory is limited by MAX_INIT_MEMORY_SIZE.

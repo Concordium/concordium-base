@@ -337,9 +337,12 @@ pub enum ImportFunc {
     ReceiveOnly(ReceiveOnlyFunc),
 }
 
-impl<'a> Parseable<'a> for ImportFunc {
-    fn parse(cursor: &mut std::io::Cursor<&'a [u8]>) -> wasm_transform::parse::ParseResult<Self> {
-        match Byte::parse(cursor)? {
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
+    fn parse(
+        ctx: Ctx,
+        cursor: &mut std::io::Cursor<&'a [u8]>,
+    ) -> wasm_transform::parse::ParseResult<Self> {
+        match Byte::parse(ctx, cursor)? {
             0 => Ok(ImportFunc::ChargeEnergy),
             1 => Ok(ImportFunc::TrackCall),
             2 => Ok(ImportFunc::TrackReturn),
@@ -413,10 +416,13 @@ pub struct ProcessedImports {
     ty:             FunctionType,
 }
 
-impl<'a> Parseable<'a> for ProcessedImports {
-    fn parse(cursor: &mut std::io::Cursor<&'a [u8]>) -> wasm_transform::parse::ParseResult<Self> {
-        let tag = cursor.next()?;
-        let ty = cursor.next()?;
+impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
+    fn parse(
+        ctx: Ctx,
+        cursor: &mut std::io::Cursor<&'a [u8]>,
+    ) -> wasm_transform::parse::ParseResult<Self> {
+        let tag = cursor.next(ctx)?;
+        let ty = cursor.next(ctx)?;
         Ok(Self {
             tag,
             ty,
