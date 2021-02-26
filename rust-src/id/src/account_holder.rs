@@ -986,7 +986,10 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     let att_vec = &alist.alist;
     let n = att_vec.len();
     // only commitments to attributes which are not revealed.
-    assert!(n >= policy.policy_vec.len());
+    ensure!(
+        n >= policy.policy_vec.len(),
+        "Attribute list is shorter than the number of revealed items in the policy."
+    );
     let cmm_len = n - policy.policy_vec.len();
     let mut cmm_attributes = BTreeMap::new();
     let mut attributes_rand = HashMap::with_capacity(cmm_len);
