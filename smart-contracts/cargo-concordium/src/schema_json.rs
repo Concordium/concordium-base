@@ -299,6 +299,32 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON Object with one field required for an Enum")
             }
         }
+        Type::String(size_len) => {
+            if let Value::String(string) = json {
+                let len = string.len();
+                match size_len {
+                    SizeLength::U8 => {
+                        let len: u8 = len.try_into()?;
+                        serial!(len, out)?;
+                    }
+                    SizeLength::U16 => {
+                        let len: u16 = len.try_into()?;
+                        serial!(len, out)?;
+                    }
+                    SizeLength::U32 => {
+                        let len: u32 = len.try_into()?;
+                        serial!(len, out)?;
+                    }
+                    SizeLength::U64 => {
+                        let len: u64 = len.try_into()?;
+                        serial!(len, out)?;
+                    }
+                }
+                serial!(string, out)
+            } else {
+                bail!("JSON String required")
+            }
+        }
     }
 }
 

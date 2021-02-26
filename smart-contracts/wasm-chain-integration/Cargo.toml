@@ -23,7 +23,7 @@ version = "0"
 [dependencies.concordium-contracts-common]
 version = "0.3"
 git = "https://github.com/Concordium/concordium-contracts-common.git"
-branch = "main"
+branch = "cb-1031-schema-string-type"
 # path = "../../../concordium-contracts-common/"
 features = ["derive-serde"]
 
