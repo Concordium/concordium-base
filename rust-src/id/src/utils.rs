@@ -1,13 +1,12 @@
 use crate::{secret_sharing::Threshold, types::*};
+use crypto_common::{to_bytes, types::KeyIndex};
 use curve_arithmetic::{Curve, Pairing, Value};
+use ed25519_dalek::Verifier;
 use elgamal::*;
+use failure::Fallible;
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
 use rand::*;
-
-use crypto_common::to_bytes;
-use ed25519_dalek::Verifier;
-use failure::Fallible;
 use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, BTreeSet};
 

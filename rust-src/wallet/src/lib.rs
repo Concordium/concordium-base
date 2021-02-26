@@ -2,7 +2,10 @@
 extern crate failure;
 #[macro_use]
 extern crate serde_json;
-use crypto_common::{types::Amount, *};
+use crypto_common::{
+    types::{Amount, KeyIndex, Signature, TransactionSignature},
+    *,
+};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
@@ -16,7 +19,7 @@ use id::{
 };
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
-use serde_json::{from_str, from_value, to_string, Map, Value};
+use serde_json::{from_str, from_value, to_string, Value};
 use sha2::{Digest, Sha256};
 use std::{
     cmp::max,
@@ -37,38 +40,29 @@ struct TransferContext {
     pub to:     Option<AccountAddress>,
     pub expiry: u64,
     pub nonce:  u64,
-    pub keys:   Map<String, Value>,
+    pub keys:   AccountKeys,
     pub energy: u64,
 }
 
-/// Sign the given hash. This method will try to recover secret keys from the
-/// map and sign the given hash with each of the keys.
-fn make_signatures<H: AsRef<[u8]>>(
-    keys: &Map<String, Value>,
-    hash: &H,
-) -> Fallible<BTreeMap<u8, String>> {
+/// Sign the given hash.
+fn make_signatures<H: AsRef<[u8]>>(keys: AccountKeys, hash: &H) -> Fallible<TransactionSignature> {
+    // we'll just sign with all the keys we are given, disregarding the threshold.
+    // It is not our job here to decide and in any case the wallet is meant to
+    // support only single key accounts.
     let mut out = BTreeMap::new();
-    for (key_index_str, value) in keys.iter() {
-        let key_index = key_index_str.parse::<u8>()?;
-        match value.as_object() {
-            None => bail!("Malformed keys."),
-            Some(value) => {
-                let public = match value.get("verifyKey").and_then(Value::as_str) {
-                    None => bail!("Malformed keys: missing verifyKey."),
-                    Some(x) => base16_decode_string(&x)?,
-                };
-                let secret = match value.get("signKey").and_then(Value::as_str) {
-                    None => bail!("Malformed keys: missing signKey."),
-                    Some(x) => base16_decode_string(&x)?,
-                };
-                out.insert(
-                    key_index,
-                    base16_encode_string(&ed25519::Keypair { secret, public }.sign(hash.as_ref())),
-                );
-            }
+    for (cred_index, map) in keys.keys.into_iter() {
+        let mut cred_sigs = BTreeMap::new();
+        for (key_index, kp) in map.keys.into_iter() {
+            let public = kp.public;
+            let secret = kp.secret;
+            let signature = ed25519_dalek::Keypair { public, secret }.sign(hash.as_ref());
+            cred_sigs.insert(key_index, Signature {
+                sig: signature.to_bytes().to_vec(),
+            });
         }
+        out.insert(cred_index, cred_sigs);
     }
-    Ok(out)
+    Ok(TransactionSignature { signatures: out })
 }
 
 /// Create a JSON encoding of an encrypted transfer transaction.
@@ -118,7 +112,7 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload_bytes)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -172,7 +166,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -203,7 +197,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
     let encryption = encrypt_amount_with_fixed_randomness(&global_context, amount);
     let response = json!({
         "signatures": signatures,
@@ -253,7 +247,7 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload_bytes)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -336,23 +330,23 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         }
     };
 
+    let acc_keys = AccountKeys::from(initial_acc_data);
+
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let reg_id = &pio.pub_info_for_ip.reg_id;
     let address = AccountAddress::new(reg_id);
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
-        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(), /* the unwrap is safe since
-                                                                      * we've generated the
-                                                                      * RegID successfully
-                                                                      * above. */
+        // the unwrap is safe since we've generated the RegID successfully above.
+        scalar: id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
     };
 
     let response = json!({
         "idObjectRequest": Versioned::new(VERSION_0, pio),
         "privateIdObjectData": Versioned::new(VERSION_0, id_use_data),
         "initialAccountData": json!({
-            "accountData": initial_acc_data,
+            "accountKeys": acc_keys,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
             "accountAddress": address,
@@ -442,7 +436,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let response = json!({
         "credential": Versioned::new(VERSION_0, AccountCredential::Normal{cdi}),
-        "credentialData": cred_data,
+        "accountKeys": AccountKeys::from(cred_data),
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountAddress": address,

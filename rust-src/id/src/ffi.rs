@@ -281,7 +281,7 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
 mod test {
     use super::*;
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use dodis_yampolskiy_prf::secret as prf;
     use pairing::bls12_381::Bls12;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
