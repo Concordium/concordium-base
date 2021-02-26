@@ -112,7 +112,7 @@ pub enum InitResult {
         remaining_energy: u64,
     },
     Reject {
-        reason:           u8,
+        reason:           i32,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -126,9 +126,9 @@ impl InitResult {
                 reason,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(10);
+                let mut out = Vec::with_capacity(13);
                 out.push(1);
-                out.push(*reason);
+                out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
@@ -239,7 +239,7 @@ pub enum ReceiveResult {
         remaining_energy: u64,
     },
     Reject {
-        reason:           u8,
+        reason:           i32,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -254,9 +254,9 @@ impl ReceiveResult {
                 reason,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(10);
+                let mut out = Vec::with_capacity(13);
                 out.push(1);
-                out.push(*reason);
+                out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }

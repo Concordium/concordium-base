@@ -24,7 +24,6 @@ use wasm_transform::{
     utils,
     validate::ValidateImportExport,
 };
-use std::convert::TryFrom;
 
 pub type ExecResult<A> = anyhow::Result<A>;
 
@@ -722,20 +721,11 @@ pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
     }
 }
 
-/// Returns the absolute value of a returned Wasm error code, or 0 if the error
-/// code is invalid. An error code is invalid if it is positive or if its absolute value
-/// does not fit into a u8.
+/// Returns the passed Wasm error code if it is negative.
 /// This function should only be called on negative numbers.
-fn reason_from_wasm_error_code(n: i32) -> ExecResult<u8> {
-    ensure!(n != 0, "A wasm return value should not be treated as an error.");
-    if n > 0 {
-        Ok(0)
-    } else {
-        // When n is negative it corresponds to an error code obtained from Wasm.
-        // We want to display the error code as a positive number, that's why we
-        // use n's additive inverse.
-        Ok(u8::try_from(i32::wrapping_neg(n))?)
-    }
+fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
+    ensure!(n < 0, format!("Wasm return value of {} is treated as an error. Only negative should be treated as error.", n));
+    Ok(n)
 }
 
 /// A helper trait to support invoking contracts when the policy is given as a
