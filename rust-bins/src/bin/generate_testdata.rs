@@ -1,9 +1,8 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{serde_impls::KeyPairDef, *};
-use curve_arithmetic::Pairing;
+use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
@@ -215,15 +214,6 @@ fn main() {
         )
         .expect("We should have generated valid data.");
 
-        let acc_keys = CredentialPublicKeys {
-            keys:      acc_data_2
-                .keys
-                .iter()
-                .map(|(&idx, kp)| (idx, VerifyKey::from(kp.public)))
-                .collect(),
-            threshold: SignatureThreshold(2),
-        };
-
         let mut out = Vec::new();
         let gc_bytes = to_bytes(&global_ctx);
         out.put(&(gc_bytes.len() as u32));
@@ -243,34 +233,17 @@ fn main() {
         let cdi1_bytes = to_bytes(&cdi_1);
         out.put(&(cdi1_bytes.len() as u32));
         out.write_all(&cdi1_bytes).unwrap();
-        // and account keys and then the second credential
-        out.put(&acc_keys);
+        // and account address and then the second credential
+        out.put(&addr);
         let cdi2_bytes = to_bytes(&cdi_2);
         out.put(&(cdi2_bytes.len() as u32));
         out.write_all(&cdi2_bytes).unwrap();
 
-        // finally we add a completely new set of keys to have a simple negative test
-        let acc_keys_3 = {
-            let mut keys = BTreeMap::new();
-            keys.insert(
-                KeyIndex(0),
-                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
-            );
-            keys.insert(
-                KeyIndex(1),
-                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
-            );
-            keys.insert(
-                KeyIndex(2),
-                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
-            );
-
-            CredentialPublicKeys {
-                keys,
-                threshold: SignatureThreshold(2),
-            }
-        };
-        out.put(&acc_keys_3);
+        // output another random address
+        {
+            let other_addr = AccountAddress::new(&G1::generate(&mut csprng));
+            out.put(&other_addr)
+        }
 
         // Create an initial cdi and output it
         let icdi = create_initial_cdi(&ip_info, pub_info_for_ip, &attributes, &ip_cdi_secret_key);
