@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential, verifyInitialAccountCreation) where
 
-import Concordium.Crypto.FFIDataTypes
 import GHC.Word
 import System.IO.Unsafe
 import Foreign.Ptr

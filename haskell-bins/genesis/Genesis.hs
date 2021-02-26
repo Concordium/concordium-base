@@ -25,7 +25,6 @@ import Concordium.Genesis.Data
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
 import Concordium.Types.SeedState
-import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Updates
 
