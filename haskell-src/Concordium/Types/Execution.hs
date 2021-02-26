@@ -668,7 +668,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   -- possible. The data are the from address and the amount to transfer.
                   | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
-                  | Rejected -- ^Rejected due to contract logic.
+                  | Rejected { rejectReason :: Word8 } -- ^Rejected due to contract logic with given error code.
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
@@ -701,7 +701,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
-wasmRejectToRejectReason Wasm.ContractReject = Rejected
+wasmRejectToRejectReason (Wasm.ContractReject reason) = Rejected reason
 wasmRejectToRejectReason Wasm.RuntimeFailure = RuntimeFailure
 
 instance S.Serialize RejectReason

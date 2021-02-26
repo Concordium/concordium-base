@@ -591,6 +591,6 @@ getSuccessfulResultData messagesDecoder = do
 
 -- |Reason for failure of contract execution.
 data ContractExecutionFailure =
-  ContractReject -- ^Contract decided to terminate execution.
+  ContractReject { rejectReason :: Word8 } -- ^Contract decided to terminate execution.
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
