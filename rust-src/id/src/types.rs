@@ -1690,9 +1690,14 @@ pub struct AccountKeys {
 
 /// Create account keys with a single credential at index 0
 impl From<CredentialData> for AccountKeys {
-    fn from(cd: CredentialData) -> Self {
+    fn from(cd: CredentialData) -> Self { Self::from((KeyIndex(0), cd)) }
+}
+
+/// Create account keys with a single credential at the given index
+impl From<(KeyIndex, CredentialData)> for AccountKeys {
+    fn from((ki, cd): (KeyIndex, CredentialData)) -> Self {
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), cd);
+        keys.insert(ki, cd);
         Self {
             keys,
             threshold: SignatureThreshold(1),
