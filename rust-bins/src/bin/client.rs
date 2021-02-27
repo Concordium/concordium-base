@@ -76,6 +76,12 @@ struct StartIp {
     #[structopt(long = "ips", help = "File with a list of identity providers.", default_value = IDENTITY_PROVIDERS)]
     identity_providers: PathBuf,
     #[structopt(
+        long = "ip",
+        help = "Which identity provider to choose. If not given an interactive choice will be \
+                provided."
+    )]
+    identity_provider: Option<u32>,
+    #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers..",
         default_value = "database/anonymity_revokers.json"
@@ -94,6 +100,19 @@ struct StartIp {
         default_value = "database/global.json"
     )]
     global: PathBuf,
+    #[structopt(
+        name = "ar-threshold",
+        long = "ar-threshold",
+        help = "Anonymity revocation threshold.",
+        requires = "selected-ars"
+    )]
+    threshold: Option<u8>,
+    #[structopt(
+        long = "selected-ars",
+        help = "Indices of selected ars. If none are provided an interactive choice will be given.",
+        requires = "ar-threshold"
+    )]
+    selected_ars: Vec<u32>,
 }
 
 #[derive(StructOpt)]
@@ -916,7 +935,15 @@ fn handle_start_ip(sip: StartIp) {
     }
 
     let ip_info = {
-        if let Ok(ip_info_idx) = Select::new()
+        if let Some(ip) = sip.identity_provider {
+            match ips.identity_providers.get(&IpIdentity(ip)) {
+                Some(ip) => ip.clone(),
+                None => {
+                    eprintln!("Identity provider with identity {} does not exist.", ip);
+                    return;
+                }
+            }
+        } else if let Ok(ip_info_idx) = Select::new()
             .with_prompt("Choose identity provider")
             .items(&ips_names)
             .default(0)
@@ -941,51 +968,69 @@ fn handle_start_ip(sip: StartIp) {
         }
     };
 
-    let mrs: Vec<&str> = ars
-        .anonymity_revokers
-        .values()
-        .map(|x| x.ar_description.name.as_str())
-        .collect();
-
-    let ar_info = MultiSelect::new()
-        .with_prompt("Choose anonymity revokers")
-        .items(&mrs)
-        .interact()
-        .unwrap();
-    let num_ars = ar_info.len();
-    if ar_info.is_empty() {
-        eprintln!("You need to select an AR.");
-        return;
-    }
-    let keys = ars.anonymity_revokers.keys().collect::<Vec<_>>();
+    let ar_ids = if sip.selected_ars.is_empty() {
+        let mrs: Vec<&str> = ars
+            .anonymity_revokers
+            .values()
+            .map(|x| x.ar_description.name.as_str())
+            .collect();
+        let keys = ars.anonymity_revokers.keys().collect::<Vec<_>>();
+        let ar_ids = MultiSelect::new()
+            .with_prompt("Choose anonymity revokers")
+            .items(&mrs)
+            .interact()
+            .unwrap()
+            .iter()
+            .map(|&x| *keys[x])
+            .collect::<Vec<_>>();
+        if ar_ids.is_empty() {
+            eprintln!("You need to select an AR.");
+            return;
+        }
+        ar_ids
+    } else {
+        let res = sip
+            .selected_ars
+            .iter()
+            .map(|&x| ArIdentity::try_from(x))
+            .collect();
+        match res {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Incorrect AR identities: {}", e);
+                return;
+            }
+        }
+    };
+    let num_ars = ar_ids.len();
     let mut choice_ars = BTreeMap::new();
-    for idx in ar_info.into_iter() {
+    for ar_id in ar_ids.iter() {
         choice_ars.insert(
-            *keys[idx],
+            *ar_id,
             ars.anonymity_revokers
-                .get(keys[idx])
-                .expect("AR should exist by construction.")
+                .get(ar_id)
+                .expect("Chosen AR does not exist.")
                 .clone(),
         );
     }
 
-    let threshold = {
-        if let Ok(threshold) = Select::new()
-            .with_prompt("Revocation threshold")
-            .items(&(1..=num_ars).collect::<Vec<usize>>())
-            .default(1)
-            .interact()
-        {
-            Threshold((threshold + 1) as u8) // +1 because the indexing of the
-                                             // selection starts at 1
-        } else {
-            let d = max(1, num_ars - 1);
-            println!(
-                "Selecting default value (= {}) for revocation threshold.",
-                d
-            );
-            Threshold(d as u8)
-        }
+    let threshold = if let Some(thr) = sip.threshold {
+        Threshold(thr)
+    } else if let Ok(threshold) = Select::new()
+        .with_prompt("Revocation threshold")
+        .items(&(1..=num_ars).collect::<Vec<usize>>())
+        .default(1)
+        .interact()
+    {
+        Threshold((threshold + 1) as u8) // +1 because the indexing of the
+                                         // selection starts at 1
+    } else {
+        let d = max(1, num_ars - 1);
+        println!(
+            "Selecting default value (= {}) for revocation threshold.",
+            d
+        );
+        Threshold(d as u8)
     };
 
     let global_ctx = {
