@@ -245,9 +245,6 @@ putPayload UpdateCredentialKeys{..} = do
     P.putWord8 13
     S.put uckCredId
     S.put uckKeys
-    -- P.putWord8 (fromIntegral (length uakKeys))
-    -- forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
-    -- putMaybe S.put rakThreshold
 putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..} =
     S.putWord8 16 <>
     S.put eatTo <>

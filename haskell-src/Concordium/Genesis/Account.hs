@@ -87,13 +87,11 @@ getGenesisBakerGD2 = label "GenesisBaker" $ do
 data GenesisAccount = GenesisAccount
     { -- |The address of the account
       gaAddress :: !AccountAddress,
-    --   -- |The account keys
-    --   gaVerifyKeys :: !ID.AccountKeys,
       -- |The account threshold
       gaThreshold :: !ID.AccountThreshold,
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
-      -- |The account credentials
+      -- |The account credentials. At least a credential with index 0 must exist.
       gaCredentials :: !(Map.Map ID.CredentialIndex ID.AccountCredential),
       -- |The (optional) baker information
       gaBaker :: !(Maybe GenesisBaker)
@@ -125,9 +123,8 @@ instance FromJSON GenesisAccount where
                 fullCredentials <- parseJSON vValue
                 case mapM ID.values fullCredentials of
                     Nothing -> fail "Account credential is malformed."
-                    -- Just [] -> fail "Empty credentials"
-                    -- Just (c:cs) -> return (c :| cs)
                     Just cs -> return cs
+        unless (Map.member 0 gaCredentials) $ fail "Genesis account must have a credential with index 0."
         gaBaker <- obj .:? "baker"
         -- Check that bakers do not stake more than their balance.
         case gaBaker of
