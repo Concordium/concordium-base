@@ -216,9 +216,17 @@ struct CreateCredential {
     private: PathBuf,
     #[structopt(
         long = "account",
-        help = "Account address onto which the credential should be deployed."
+        help = "Account address onto which the credential should be deployed.",
+        requires = "key-index"
     )]
     account: Option<AccountAddress>,
+    #[structopt(
+        name = "key-index",
+        long = "key-index",
+        help = "Account address onto which the credential should be deployed.",
+        requires = "account"
+    )]
+    key_index: Option<u8>,
     #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
     out: Option<PathBuf>,
     #[structopt(
@@ -636,6 +644,15 @@ fn handle_create_credential(cc: CreateCredential) {
     let address = AccountAddress::new(&cdi.values.cred_id);
 
     let versioned_cdi = Versioned::new(VERSION_0, AccountCredential::Normal { cdi });
+    let cdi_json_value = serde_json::value::to_value(&versioned_cdi)
+        .expect("JSON Serialization of credentials failed.");
+
+    let versioned_credentials = {
+        let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
+        let mut credentials = BTreeMap::new();
+        credentials.insert(ki, versioned_cdi.value);
+        Versioned::new(VERSION_0, credentials)
+    };
 
     let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
 
@@ -644,13 +661,21 @@ fn handle_create_credential(cc: CreateCredential) {
         scalar:    enc_key,
     };
 
-    if cc.account.is_none() {
+    if let Some(addr) = cc.account {
+        println!("Generated additional keys for the account.");
+        let js = json!({
+            "address": addr,
+            "accountKeys": AccountKeys::from((KeyIndex(cc.key_index.unwrap()), acc_data)),
+            "credentials": versioned_credentials
+        });
+        write_json_to_file(&cc.keys_out, &js).ok();
+    } else {
         let account_data_json = json!({
             "address": address,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
             "accountKeys": AccountKeys::from(acc_data),
-            "credential": versioned_cdi,
+            "credentials": versioned_credentials,
             "aci": id_use_data.aci,
         });
         println!(
@@ -658,10 +683,6 @@ fn handle_create_credential(cc: CreateCredential) {
             cc.keys_out.to_string_lossy()
         );
         write_json_to_file(&cc.keys_out, &account_data_json).ok();
-    } else {
-        println!("Generated additional keys for the account.");
-        let js = json!({ "credentialKeys": acc_data });
-        write_json_to_file(&cc.keys_out, &js).ok();
     }
 
     // Double check that the generated CDI is going to be successfully validated.
@@ -678,11 +699,11 @@ fn handle_create_credential(cc: CreateCredential) {
     // accepted by the simple-client for sending transactions.
 
     if let Some(json_file) = cc.out {
-        match write_json_to_file(json_file, &versioned_cdi) {
+        match write_json_to_file(json_file, &cdi_json_value) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
-                output_json(&versioned_cdi);
+                output_json(&cdi_json_value);
             }
         }
     }
