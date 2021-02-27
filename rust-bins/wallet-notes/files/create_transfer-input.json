@@ -4,18 +4,26 @@
   "expiry": 1585699200,
   "nonce": 1,
   "keys": {
-    "0": {
-      "signKey": "db864d164a9cbb572aec4a86ab8601d5daf3b5ca20bf47a72188da67f29f6e9b",
-      "verifyKey": "d1775f75013889777fedebf6511153adff6b567239edcc10a7e62bc4e88b9c62"
+    "keys": {
+      "0": {
+        "keys": {
+          "0": {
+            "signKey": "64ba478c8c33ed3722ad4c5cab1b4376ff16c5fac2400695d53f0a416f2ec2a1",
+            "verifyKey": "62d162afce2b9d2cb20f4486ced04537c32f0e6b8a0e033d067ca05a22615054"
+          },
+          "1": {
+            "signKey": "76dd1512865cc3729b4a495cada741b889872b7308e5b61f7e2f71382e8d5395",
+            "verifyKey": "c2cde026f8c8482b8730d0571dcab27bed59c3ef11532d3a62cdd8d1bb7fbf94"
+          },
+          "2": {
+            "signKey": "ebb2fab346b0c7d8e51f63292f11e1d8f59c3f86629012ab454339e5ec60cfeb",
+            "verifyKey": "0e818bf96c12a1cc086bf3808f8a0553e948f2d10084f4f307c10b1fe865cd39"
+          }
+        },
+        "threshold": 2
+      }
     },
-    "1": {
-      "signKey": "bcfce29a522b44fa07d16629c8731b470de7df99a0af6b504e3b880d414b316e",
-      "verifyKey": "00d56fe011d7fad86eb19af6d8111ac786197a446bf49f4744baf8bf2f8f27b9"
-    },
-    "2": {
-      "signKey": "05b88a98c986f326bd7523092c3088ad5f31c80836669c0562fe6ff7e58054bc",
-      "verifyKey": "d3782ec10031ae864373b12d5b05e79576d0221f95d1d4de5649d8f449e0d4ed"
-    }
+    "threshold": 1
   },
   "energy": 1000,
   "amount": "1000000"
