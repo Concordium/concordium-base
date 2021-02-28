@@ -7,7 +7,7 @@ use core::{marker, mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
 use std::{collections::*, marker, mem::MaybeUninit, slice};
 
-static MAX_PREALLOCATED_CAPACITY: usize = 4096;
+pub(crate) static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
 /// Apply the given macro to each of the elements in the list
 /// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
