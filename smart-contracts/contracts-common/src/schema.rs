@@ -540,7 +540,7 @@ mod impls {
         item_to_json: impl Fn(&mut R) -> ParseResult<serde_json::Value>,
     ) -> ParseResult<Vec<serde_json::Value>> {
         let len = deserial_length(source, size_len)?;
-        let mut values = Vec::with_capacity(len);
+        let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
         for _ in 0..len {
             let value = item_to_json(source)?;
             values.push(value);
@@ -641,7 +641,8 @@ mod impls {
                 }
                 Type::Array(len, ty) => {
                     let len: usize = (*len).try_into()?;
-                    let mut values = Vec::with_capacity(len);
+                    let mut values =
+                        Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
                     for _ in 0..len {
                         let value = ty.to_json(source)?;
                         values.push(value);
@@ -664,12 +665,33 @@ mod impls {
                 }
                 Type::String(size_len) => {
                     let len = deserial_length(source, size_len)?;
-                    let mut bytes = Vec::with_capacity(len);
-                    for _ in 0..len {
-                        bytes.push(source.read_u8()?);
+                    // we are doing this case analysis so that we have a fast path for safe,
+                    // most common, lengths, and a slower one longer ones.
+                    if len <= MAX_PREALLOCATED_CAPACITY {
+                        let mut bytes = vec![0u8; len];
+                        source.read_exact(&mut bytes)?;
+                        let string = String::from_utf8(bytes)?;
+                        Ok(Value::String(string))
+                    } else {
+                        let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
+                        let mut buf = [0u8; 64];
+                        let mut read = 0;
+                        while read < len {
+                            let new = source.read(&mut buf)?;
+                            if new == 0 {
+                                break;
+                            } else {
+                                read += new;
+                                bytes.extend_from_slice(&buf[..new]);
+                            }
+                        }
+                        if read == len {
+                            let string = String::from_utf8(bytes)?;
+                            Ok(Value::String(string))
+                        } else {
+                            Err(ParseError {})
+                        }
                     }
-                    let string = String::from_utf8(bytes)?;
-                    Ok(Value::String(string))
                 }
             }
         }
