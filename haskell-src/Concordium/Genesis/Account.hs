@@ -142,9 +142,8 @@ putGenesisAccountGD2 cryptoParams GenesisAccount{..} = do
     let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.credId (gaCredentials Map.! 0))
     put encryptionKey
     put gaThreshold
-    putLength (length gaCredentials)
-    mapM_ put gaCredentials
-    putLength 0 -- No smart contracts
+    putLength (Map.size gaCredentials)
+    putSafeSizedMapOf put put gaCredentials
     -- Account nonce
     put minNonce
     -- Account amount
@@ -169,9 +168,7 @@ getGenesisAccountGD2 = label "GenesisAccount" $ do
     gaThreshold <- get
     nCredentials <- getLength
     when (nCredentials < 1) $ fail "A genesis account must have at least one credential"
-    gaCredentials <- getSafeMapOf get get -- (:|) <$> get <*> replicateM (nCredentials - 1) get
-    nContracts <- getLength
-    unless (nContracts == 0) $ fail "Genesis account must not have smart contracts"
+    gaCredentials <- getSafeSizedMapOf nCredentials get get -- (:|) <$> get <*> replicateM (nCredentials - 1) get
     -- Account nonce
     nonce <- get
     unless (nonce == minNonce) $ fail $ "Genesis account must have nonce " ++ show minNonce
