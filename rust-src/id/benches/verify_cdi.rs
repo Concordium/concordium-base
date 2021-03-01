@@ -1,22 +1,34 @@
 use criterion::*;
-use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
-use curve_arithmetic::Pairing;
+use crypto_common::{
+    serde_impls::KeyPairDef,
+    types::{KeyIndex, TransactionTime},
+    *,
+};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{
-    account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
-    secret_sharing::Threshold, types::*,
+    account_holder::*,
+    anonymity_revoker::*,
+    chain::*,
+    constants::{ArCurve, BaseField},
+    ffi::*,
+    identity_provider::*,
+    secret_sharing::Threshold,
+    types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
 
-type ExampleCurve = G1;
-
 type ExampleAttribute = AttributeKind;
 
-type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
+type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
+
+const EXPIRY: TransactionTime = TransactionTime {
+    seconds: 111111111111111111,
+};
 
 fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
@@ -25,7 +37,7 @@ fn bench_parts(c: &mut Criterion) {
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(&mut csprng);
 
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
+    let ah_info = CredentialHolderInfo::<ArCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
@@ -127,10 +139,11 @@ fn bench_parts(c: &mut Criterion) {
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
     let ip_info_des: IpInfo<Bls12> = from_bytes(&mut Cursor::new(&ip_info_ser)).unwrap();
     let des_context = IPContext::new(&ip_info_des, &ars_infos, &global_context);
-    let ver_ok = verify_credentials::<_, _, ExampleCurve>(
+    let ver_ok = verify_credentials::<_, _, ArCurve>(
         &pio_des,
         des_context,
         &alist,
+        EXPIRY,
         &ip_secret_key,
         &keypair.secret,
     );
@@ -173,7 +186,7 @@ fn bench_parts(c: &mut Criterion) {
         0,
         policy.clone(),
         &acc_data,
-        None,
+        &Left(EXPIRY),
     )
     .expect("Should generate the credential successfully.");
 
@@ -201,7 +214,7 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_verify_initial_cdi =
-        move |b: &mut Bencher, x: &(_, _)| b.iter(|| verify_initial_cdi(x.0, x.1).unwrap());
+        move |b: &mut Bencher, x: &(_, _)| b.iter(|| verify_initial_cdi(x.0, x.1, EXPIRY).unwrap());
     c.bench_with_input(
         BenchmarkId::new("Verify Initial CDI", ""),
         &(&ip_info, &initial_cdi),
@@ -209,8 +222,10 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_create_credential =
-        move |b: &mut Bencher, x: &(_, _, _, _, Policy<ExampleCurve, AttributeKind>, _)| {
-            b.iter(|| create_credential(x.0, x.1, x.2, x.3, x.4.clone(), x.5, None).unwrap())
+        move |b: &mut Bencher, x: &(_, _, _, _, Policy<ArCurve, AttributeKind>, _)| {
+            b.iter(|| {
+                create_credential(x.0, x.1, x.2, x.3, x.4.clone(), x.5, &Left(EXPIRY)).unwrap()
+            })
         };
     c.bench_with_input(
         BenchmarkId::new("Generate CDI", ""),
@@ -219,7 +234,7 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_verify_cdi = move |b: &mut Bencher, x: &(_, _, _, _)| {
-        b.iter(|| verify_cdi(x.0, x.1, x.2, x.3, None).unwrap())
+        b.iter(|| verify_cdi(x.0, x.1, x.2, x.3, &Left(EXPIRY)).unwrap())
     };
     c.bench_with_input(
         BenchmarkId::new("Verify CDI", ""),
@@ -234,6 +249,7 @@ fn bench_parts(c: &mut Criterion) {
                 &id_object.pre_identity_object,
                 context,
                 &id_object.alist,
+                EXPIRY,
                 &ip_secret_key,
                 &keypair.secret,
             )

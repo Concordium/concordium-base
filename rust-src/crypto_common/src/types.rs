@@ -235,6 +235,20 @@ pub struct TransactionSignature {
     pub signatures: BTreeMap<KeyIndex, BTreeMap<KeyIndex, Signature>>,
 }
 
+/// Datatype used to indicate transaction expiry.
+#[derive(
+    SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
+)]
+#[serde(transparent)]
+pub struct TransactionTime {
+    /// Seconds since the unix epoch.
+    pub seconds: u64,
+}
+
+impl From<u64> for TransactionTime {
+    fn from(seconds: u64) -> Self { Self { seconds } }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

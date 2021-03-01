@@ -1,15 +1,21 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
+use crypto_common::{
+    serde_impls::KeyPairDef,
+    types::{KeyIndex, TransactionTime},
+    *,
+};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
+use either::{Left, Right};
+use id::{
+    account_holder::*, constants::ArCurve, ffi::*, identity_provider::*, secret_sharing::Threshold,
+    types::*,
+};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};
 use structopt::StructOpt;
-
-type ExampleCurve = G1;
 
 type ExampleAttribute = AttributeKind;
 
@@ -41,6 +47,8 @@ struct GenerateTestData {
     anonymity_revokers: PathBuf,
 }
 
+const EXPIRY: TransactionTime = TransactionTime { seconds: u64::MAX };
+
 fn main() {
     let args = {
         let app = GenerateTestData::clap()
@@ -71,7 +79,7 @@ fn main() {
         }
     };
 
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
+    let ah_info = CredentialHolderInfo::<ArCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
@@ -141,6 +149,7 @@ fn main() {
         &pio,
         context,
         &attributes,
+        EXPIRY,
         &ip_secret_key,
         &ip_cdi_secret_key,
     );
@@ -186,7 +195,7 @@ fn main() {
             53,
             policy.clone(),
             &acc_data,
-            None,
+            &Left(EXPIRY),
         )
         .expect("We should have generated valid data.");
 
@@ -210,7 +219,7 @@ fn main() {
             53,
             policy.clone(),
             &acc_data_2,
-            Some(addr),
+            &Right(addr),
         )
         .expect("We should have generated valid data.");
 
@@ -246,7 +255,13 @@ fn main() {
         }
 
         // Create an initial cdi and output it
-        let icdi = create_initial_cdi(&ip_info, pub_info_for_ip, &attributes, &ip_cdi_secret_key);
+        let icdi = create_initial_cdi(
+            &ip_info,
+            pub_info_for_ip,
+            &attributes,
+            EXPIRY,
+            &ip_cdi_secret_key,
+        );
         let icdi_bytes = to_bytes(&icdi);
         out.put(&(icdi_bytes.len() as u32));
         out.write_all(&icdi_bytes).unwrap();
@@ -342,18 +357,19 @@ fn main() {
         }
         // return the account address that can be used to deploy more credentials
         // to the same account.
-        maybe_addr.unwrap_or(acc_addr)
+        maybe_addr.right_or(acc_addr)
     };
 
-    let _ = generate(None, 0, 1);
-    let _ = generate(None, 1, 2);
-    let _ = generate(None, 2, 3);
+    let _ = generate(&Left(EXPIRY), 0, 1);
+    let _ = generate(&Left(EXPIRY), 1, 2);
+    let _ = generate(&Left(EXPIRY), 2, 3);
     // duplicate reg_id
-    let _ = generate(None, 2, 4);
+    let _ = generate(&Left(EXPIRY), 2, 4);
     // deploy to the same account
-    let addr = generate(None, 4, 5);
-    let _ = generate(Some(addr), 5, 6);
-    let _ = generate(None, 6, 7);
+    let addr = generate(&Left(EXPIRY), 4, 5);
+    let ra = Right(addr);
+    let _ = generate(&ra, 5, 6);
+    let _ = generate(&Left(EXPIRY), 6, 7);
 
     let mut generate_initial = |prf, idx, ip_secret| {
         let initial_acc_data = {
@@ -367,7 +383,7 @@ fn main() {
                 threshold: SignatureThreshold(2),
             }
         };
-        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+        let ah_info = CredentialHolderInfo::<ArCurve> {
             id_cred: IdCredentials::generate(&mut csprng),
         };
         let aci = AccCredentialInfo {
@@ -386,6 +402,7 @@ fn main() {
             &context.ip_info,
             pio.pub_info_for_ip,
             &attributes,
+            EXPIRY,
             ip_secret,
         );
         let versioned_icdi = Versioned::new(VERSION_0, icdi);
@@ -405,11 +422,11 @@ fn main() {
     let mut csprng = thread_rng();
     let prf_key = prf::SecretKey::generate(&mut csprng);
     generate_initial(prf_key, 1, &ip_cdi_secret_key);
-    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let prf_key: prf::SecretKey<ArCurve> = prf::SecretKey::generate(&mut csprng);
     let prf_key_same = prf_key.clone();
     generate_initial(prf_key, 2, &ip_cdi_secret_key);
     generate_initial(prf_key_same, 3, &ip_cdi_secret_key); // Reuse of prf key
-    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let prf_key: prf::SecretKey<ArCurve> = prf::SecretKey::generate(&mut csprng);
     let wrong_keys = ed25519_dalek::Keypair::generate(&mut csprng);
     generate_initial(prf_key, 4, &wrong_keys.secret); // Wrong secret key
 }

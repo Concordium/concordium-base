@@ -1,6 +1,6 @@
 use pairing::bls12_381::{Bls12, G1};
 
-use crypto_common::{base16_decode_string, version::*};
+use crypto_common::{base16_decode_string, types::TransactionTime, version::*};
 use curve_arithmetic::*;
 use id::{
     constants::ArCurve,
@@ -121,6 +121,7 @@ pub fn create_identity_object(
     ip_info_str: &str,
     request_str: &str,
     alist_str: &str,
+    expiry: u64,
     ip_private_key_str: &str,
     ip_cdi_private_key_str: &str,
 ) -> Result<(String, String, String), String> {
@@ -158,6 +159,7 @@ pub fn create_identity_object(
         &ip_info,
         request.value.pub_info_for_ip.clone(),
         &alist,
+        TransactionTime::from(expiry),
         &ip_cdi_private_key,
     );
 
@@ -175,13 +177,11 @@ pub fn create_identity_object(
 
     let addr = AccountAddress::new(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
 
-    let v_initial_cdi = Versioned::new(VERSION_0, AccountCredential::Initial::<
-        id::constants::IpPairing,
-        _,
-        _,
-    > {
-        icdi,
-    });
+    let message = AccountCredentialMessage {
+        message_expiry: TransactionTime { seconds: expiry },
+        credential:     AccountCredential::Initial::<id::constants::IpPairing, _, _> { icdi },
+    };
+    let v_initial_cdi = Versioned::new(VERSION_0, message);
 
     let response = serde_json::json!({
         "request": v_initial_cdi,

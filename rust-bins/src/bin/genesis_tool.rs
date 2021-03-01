@@ -4,7 +4,7 @@ use client_server_helpers::*;
 use crypto_common::{
     base16_encode_string,
     serde_impls::KeyPairDef,
-    types::{Amount, KeyIndex},
+    types::{Amount, KeyIndex, TransactionTime},
     *,
 };
 use dodis_yampolskiy_prf::secret as prf;
@@ -197,10 +197,13 @@ fn main() -> std::io::Result<()> {
         let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
             .expect("Generating the pre-identity object should succeed.");
 
+        let expiry = TransactionTime { seconds: u64::MAX };
+
         let ver_ok = verify_credentials(
             &pio,
             context,
             &attributes,
+            expiry,
             &ip_data.ip_secret_key,
             &ip_data.ip_cdi_secret_key,
         );
@@ -234,6 +237,7 @@ fn main() -> std::io::Result<()> {
             &ip_data.public_ip_info,
             id_object.pre_identity_object.pub_info_for_ip,
             &id_object.alist,
+            expiry,
             &ip_data.ip_cdi_secret_key,
         );
 
