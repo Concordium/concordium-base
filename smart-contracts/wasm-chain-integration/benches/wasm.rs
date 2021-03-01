@@ -365,6 +365,28 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             );
         }
 
+        for energy in [1000, 10000, 100000, 1000000].iter() {
+            group.bench_with_input(
+                format!("timeout with energy n = {}", energy),
+                energy,
+                |b, &energy| {
+                    b.iter(|| {
+                        let mut host = MeteringHost {
+                            energy:            Energy {
+                                energy,
+                            },
+                            activation_frames: MAX_ACTIVATION_FRAMES,
+                        };
+                        let r = artifact.run(&mut host, "empty_loop", &[]).expect_err("Precondition violation. Execution should fail.");
+                        assert!(
+                            r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), // Should fail due to out of energy.
+                            "Execution did not fail due to out of energy: {}.", r
+                        )
+                    })
+                },
+            );
+        }
+
         group.finish();
     }
 }
