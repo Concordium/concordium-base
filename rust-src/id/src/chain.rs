@@ -6,7 +6,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
-use crypto_common::to_bytes;
+use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
@@ -56,11 +56,12 @@ pub fn verify_cdi<
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
-    addr: Option<AccountAddress>,
+    new_or_existing: &Either<TransactionTime, AccountAddress>,
 ) -> Result<(), CDIVerificationError> {
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
+    let addr = new_or_existing.as_ref().right();
     let rt_usize: usize = cdi.values.threshold.into();
     if rt_usize
         != cdi
@@ -161,7 +162,7 @@ pub fn verify_cdi<
     ) {
         return Err(CDIVerificationError::Proof);
     }
-    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, &addr);
+    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, new_or_existing);
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that
     // we have as many signatures as verification keys.
@@ -191,8 +192,12 @@ pub fn verify_initial_cdi<
 >(
     ip_info: &IpInfo<P>,
     cdi: &InitialCredentialDeploymentInfo<C, AttributeType>,
+    expiry: TransactionTime,
 ) -> Result<(), CDIVerificationError> {
-    let signed = Sha256::digest(&to_bytes(&cdi.values));
+    let mut hasher = Sha256::new();
+    hasher.update(&to_bytes(&expiry));
+    hasher.update(&to_bytes(&cdi.values));
+    let signed = hasher.finalize();
     match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
         Err(_) => Err(CDIVerificationError::Signature),
         _ => Ok(()),
@@ -403,6 +408,11 @@ mod tests {
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
+    use Either::{Left, Right};
+
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
 
     #[test]
     fn test_verify_cdi() {
@@ -439,7 +449,14 @@ mod tests {
             &initial_acc_data,
         );
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         assert!(ver_ok.is_ok());
 
         // Generate CDI
@@ -480,10 +497,10 @@ mod tests {
             0,
             policy.clone(),
             &cred_data,
-            None,
+            &Left(EXPIRY),
         )
         .expect("Should generate the credential successfully.");
-        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, None);
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
         assert_eq!(cdi_check, Ok(()));
 
         // Testing with an existing RegId (i.e. an existing account)
@@ -505,7 +522,7 @@ mod tests {
             1,
             policy,
             &cred_data,
-            Some(existing_reg_id),
+            &Right(existing_reg_id),
         )
         .expect("Should generate the credential successfully.");
         let cdi_check = verify_cdi(
@@ -513,7 +530,7 @@ mod tests {
             &ip_info,
             &ars_infos,
             &cdi,
-            Some(existing_reg_id),
+            &Right(existing_reg_id),
         );
         assert_eq!(cdi_check, Ok(()));
     }
@@ -547,12 +564,19 @@ mod tests {
         let (context, pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         assert!(ver_ok.is_ok());
 
         // Verify initial CDI
         let (_, initial_cdi) = ver_ok.unwrap();
-        let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi);
+        let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi, EXPIRY);
         assert_eq!(cdi_check, Ok(()));
     }
 }

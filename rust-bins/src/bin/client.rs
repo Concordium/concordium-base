@@ -1,11 +1,22 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
+use crypto_common::{
+    serde_impls::KeyPairDef,
+    types::{KeyIndex, TransactionTime},
+    *,
+};
 use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Either::{Left, Right};
 use elgamal::{PublicKey, SecretKey};
-use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
+use id::{
+    account_holder::*,
+    constants::{ArCurve, IpPairing},
+    identity_provider::*,
+    secret_sharing::*,
+    types::*,
+};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::json;
@@ -207,6 +218,12 @@ struct IpSignPio {
         default_value = "database/anonymity_revokers.json"
     )]
     anonymity_revokers: PathBuf,
+    #[structopt(
+        long = "expiry",
+        help = "Expiry time of the initial credential message. In seconds from __now__.",
+        required = true
+    )]
+    expiry: u64,
 }
 
 #[derive(StructOpt)]
@@ -236,14 +253,24 @@ struct CreateCredential {
     #[structopt(
         long = "account",
         help = "Account address onto which the credential should be deployed.",
-        requires = "key-index"
+        requires = "key-index",
+        required_unless = "expiry",
+        conflicts_with = "account"
     )]
     account: Option<AccountAddress>,
     #[structopt(
+        long = "expiry",
+        help = "Expiry time of the credential message. In seconds from now.",
+        required_unless = "account",
+        conflicts_with = "account"
+    )]
+    expiry: Option<u64>,
+    #[structopt(
         name = "key-index",
         long = "key-index",
-        help = "Account address onto which the credential should be deployed.",
-        requires = "account"
+        help = "Credential index of the new credential.",
+        requires = "account",
+        conflicts_with = "expiry"
     )]
     key_index: Option<u8>,
     #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
@@ -286,6 +313,20 @@ struct VerifyCredential {
         default_value = "database/anonymity_revokers.json"
     )]
     anonymity_revokers: PathBuf,
+    #[structopt(
+        long = "expiry",
+        help = "Expiry time of the credential message. NB: This is seconds since the unix epoch.",
+        required_unless = "account",
+        conflicts_with = "account"
+    )]
+    expiry: Option<u64>,
+    #[structopt(
+        long = "account",
+        help = "Address of the account onto which the credential will be deployed.",
+        required_unless = "expiry",
+        conflicts_with = "expiry"
+    )]
+    account: Option<AccountAddress>,
 }
 
 #[derive(StructOpt)]
@@ -420,12 +461,19 @@ fn handle_verify_credential(vcred: VerifyCredential) {
         }
     };
 
+    let new_or_existing = match (vcred.expiry, vcred.account) {
+        (None, None) => panic!("One of (expiry, address) is required."),
+        (None, Some(addr)) => Right(addr),
+        (Some(seconds), None) => Left(TransactionTime { seconds }),
+        (Some(_), Some(_)) => panic!("Exactly one of (expiry, address) is required."),
+    };
+
     if let Err(e) = id::chain::verify_cdi(
         &global_ctx,
         &ip_info,
         &all_ars_infos.anonymity_revokers,
         &credential,
-        None,
+        &new_or_existing,
     ) {
         eprintln!("Credential verification failed due to {}", e)
     } else {
@@ -642,6 +690,15 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     };
 
+    let new_or_existing = match (cc.expiry, cc.account) {
+        (None, None) => panic!("One of (expiry, address) is required."),
+        (None, Some(addr)) => Right(addr),
+        (Some(seconds), None) => Left(TransactionTime {
+            seconds: chrono::Utc::now().timestamp() as u64 + seconds,
+        }),
+        (Some(_), Some(_)) => panic!("Exactly one of (expiry, address) is required."),
+    };
+
     let cdi = create_credential(
         context,
         &id_object,
@@ -649,7 +706,7 @@ fn handle_create_credential(cc: CreateCredential) {
         x,
         policy,
         &acc_data,
-        cc.account,
+        &new_or_existing,
     );
 
     let cdi = match cdi {
@@ -840,7 +897,17 @@ fn handle_act_as_ip(aai: IpSignPio) {
         _phantom: Default::default(),
     };
     let context = IPContext::new(&ip_info, &ars, &global_ctx);
-    let vf = verify_credentials(&pio, context, &attributes, &ip_sec_key, &ip_cdi_secret_key);
+    let message_expiry = TransactionTime {
+        seconds: chrono::Utc::now().timestamp() as u64 + aai.expiry,
+    };
+    let vf = verify_credentials(
+        &pio,
+        context,
+        &attributes,
+        message_expiry,
+        &ip_sec_key,
+        &ip_cdi_secret_key,
+    );
 
     match vf {
         Ok((signature, icdi)) => {
@@ -867,7 +934,11 @@ fn handle_act_as_ip(aai: IpSignPio) {
             } else {
                 println!("The signature is: {}", base16_encode_string(signature));
             }
-            let versioned_icdi = Versioned::new(VERSION_0, icdi);
+            let icdi_message = AccountCredentialMessage::<IpPairing, ArCurve, _> {
+                message_expiry,
+                credential: AccountCredential::Initial { icdi },
+            };
+            let versioned_icdi = Versioned::new(VERSION_0, icdi_message);
             if let Some(json_file) = aai.out_icdi {
                 match write_json_to_file(json_file, &versioned_icdi) {
                     Ok(_) => println!("Wrote transaction payload to JSON file."),
