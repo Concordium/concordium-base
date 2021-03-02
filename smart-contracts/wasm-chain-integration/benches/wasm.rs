@@ -1,9 +1,12 @@
 use anyhow::bail;
+use concordium_contracts_common::{Address, Amount, ChainMetadata, ContractAddress, Timestamp};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
-    constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, Energy, ProcessedImports, TestHost,
+    constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, Energy, InitContext, InitHost,
+    Logs, Outcome, ProcessedImports, ReceiveContext, ReceiveHost, State, TestHost,
 };
+
 use wasm_transform::{
     artifact::{ArtifactNamedImport, TryFromImport},
     machine::{Host, Value},
@@ -17,6 +20,7 @@ static CONTRACT_BYTES_MINIMAL: &[u8] = include_bytes!("./code/minimal.wasm");
 static CONTRACT_BYTES_INSTRUCTIONS: &[u8] = include_bytes!("./code/instruction.wasm");
 static CONTRACT_BYTES_MEMORY_INSTRUCTIONS: &[u8] = include_bytes!("./code/memory-instruction.wasm");
 static CONTRACT_BYTES_LOOP: &[u8] = include_bytes!("./code/loop-energy.wasm");
+static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/host-functions.wasm");
 
 struct MeteringHost {
     energy:            Energy,
@@ -372,20 +376,290 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 |b, &energy| {
                     b.iter(|| {
                         let mut host = MeteringHost {
-                            energy:            Energy {
+                            energy: Energy {
                                 energy,
                             },
                             activation_frames: MAX_ACTIVATION_FRAMES,
                         };
-                        let r = artifact.run(&mut host, "empty_loop", &[]).expect_err("Precondition violation. Execution should fail.");
+                        let r = artifact
+                            .run(&mut host, "empty_loop", &[])
+                            .expect_err("Precondition violation. Execution should fail.");
                         assert!(
                             r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), // Should fail due to out of energy.
-                            "Execution did not fail due to out of energy: {}.", r
+                            "Execution did not fail due to out of energy: {}.",
+                            r
                         )
                     })
                 },
             );
         }
+
+        group.finish();
+    }
+
+    {
+        // Benchmarks for host functions.
+        // The preconditions (expected state and param) for each function are specified
+        // in host-functions.wat
+        let mut group = c.benchmark_group("host functions");
+
+        group.measurement_time(Duration::from_secs(10));
+
+        let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_HOST_FUNCTIONS)).unwrap();
+        let module = validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+        let artifact = module.compile::<ProcessedImports>().unwrap();
+
+        let owner = concordium_contracts_common::AccountAddress([0u8; 32]);
+
+        let init_ctx: InitContext<&[u8]> = InitContext {
+            metadata:        ChainMetadata {
+                slot_time: Timestamp::from_timestamp_millis(0),
+            },
+            init_origin:     owner,
+            sender_policies: &[],
+        };
+
+        let receive_ctx: ReceiveContext<&[u8]> = ReceiveContext {
+            metadata: ChainMetadata {
+                slot_time: Timestamp::from_timestamp_millis(0),
+            },
+            invoker: owner,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: Amount::from_gtu(1000),
+            sender: Address::Account(owner),
+            owner,
+            sender_policies: &[],
+        };
+
+        let setup_init_host = || -> InitHost {
+            InitHost {
+                energy:            Energy {
+                    energy: 10000000,
+                },
+                activation_frames: MAX_ACTIVATION_FRAMES,
+                logs:              Logs::new(),
+                state:             State::new(None),
+                param:             &[],
+                init_ctx:          &init_ctx,
+            }
+        };
+
+        let setup_receive_host = |state, param| -> ReceiveHost {
+            ReceiveHost {
+                energy: Energy {
+                    energy: 10000000,
+                },
+                activation_frames: MAX_ACTIVATION_FRAMES,
+                logs: Logs::new(),
+                state,
+                param,
+                outcomes: Outcome::new(),
+                receive_ctx: &receive_ctx,
+            }
+        };
+
+        group.bench_function("log_event", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.log_event", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_parameter_size", |b| {
+            b.iter(|| {
+                let mut host =
+                    setup_receive_host(State::new(None), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.get_parameter_size", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_parameter_section", |b| {
+            b.iter(|| {
+                let mut host =
+                    setup_receive_host(State::new(None), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+                assert!(
+                    artifact
+                        .run(&mut host, "hostfn.get_parameter_section", &[Value::I64(0)])
+                        .is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("state_size", |b| {
+            b.iter(|| {
+                let mut host =
+                    setup_receive_host(State::new(Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.state_size", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("load_state", |b| {
+            b.iter(|| {
+                let mut host =
+                    setup_receive_host(State::new(Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.load_state", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("write_state", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.write_state", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("resize_state", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.resize_state", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_slot_time", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.get_slot_time", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_init_origin", |b| {
+            b.iter(|| {
+                let mut host = setup_init_host();
+                assert!(
+                    artifact.run(&mut host, "init_get_init_origin", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_receive_invoker", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.get_receive_invoker", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_receive_sender", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.get_receive_sender", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_receive_self_address", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact
+                        .run(&mut host, "hostfn.get_receive_self_address", &[Value::I64(0)])
+                        .is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_receive_owner", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.get_receive_owner", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("get_receive_self_balance", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact
+                        .run(&mut host, "hostfn.get_receive_self_balance", &[Value::I64(0)])
+                        .is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("accept", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.accept", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("simple_transfer", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.simple_transfer", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("send", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.send", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("combine_and", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.combine_and", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
+
+        group.bench_function("combine_or", |b| {
+            b.iter(|| {
+                let mut host = setup_receive_host(State::new(None), &[]);
+                assert!(
+                    artifact.run(&mut host, "hostfn.combine_or", &[Value::I64(0)]).is_ok(),
+                    "Precondition failed."
+                );
+            });
+        });
 
         group.finish();
     }
