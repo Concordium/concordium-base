@@ -2011,7 +2011,7 @@ pub struct AccountCredentialMessage<
 > {
     #[serde(rename = "messageExpiry")]
     pub message_expiry: types::TransactionTime,
-    #[serde(flatten)]
+    #[serde(rename = "credential")]
     pub credential: AccountCredential<P, C, AttributeType>,
 }
 
