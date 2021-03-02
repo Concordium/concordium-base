@@ -1,5 +1,8 @@
 use anyhow::{bail, ensure};
-use crypto_common::{SerdeDeserialize, SerdeSerialize, VERSION_0, Versioned, base16_encode_string, types::TransactionTime};
+use crypto_common::{
+    base16_encode_string, types::TransactionTime, SerdeDeserialize, SerdeSerialize, Versioned,
+    VERSION_0,
+};
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
     constants::{ArCurve, IpPairing},
@@ -937,8 +940,8 @@ async fn create_signed_identity_object(
 
     let versioned_id = Versioned::new(VERSION_0, id);
 
-    let message_expiry = TransactionTime{
-        seconds: chrono::offset::Utc::now().timestamp() as u64 + 300 // 5min expiry.
+    let message_expiry = TransactionTime {
+        seconds: chrono::offset::Utc::now().timestamp() as u64 + 300, // 5min expiry.
     };
 
     // As a last step we submit the initial account creation to the chain.
@@ -957,7 +960,10 @@ async fn create_signed_identity_object(
         &server_config.ip_data.ip_cdi_secret_key,
     );
 
-    let versioned_credential = Versioned::new(VERSION_0, AccountCredential::<IpPairing, _, _>::Initial { icdi: initial_cdi });
+    let versioned_credential =
+        Versioned::new(VERSION_0, AccountCredential::<IpPairing, _, _>::Initial {
+            icdi: initial_cdi,
+        });
 
     // Store the created IdentityObject.
     // This is stored so it can later be retrieved by querying via the idCredPub.
@@ -969,8 +975,8 @@ async fn create_signed_identity_object(
         ),
         "Could not write to database."
     );
-    
-    let submission = AccountCredentialMessage{
+
+    let submission = AccountCredentialMessage {
         message_expiry,
         credential: versioned_credential.value,
     };
