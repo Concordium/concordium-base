@@ -43,14 +43,31 @@ $ ./example check-address <address>
   calls check_account_address_ext with the given address
 */
 
-void printStr(char *out, uint8_t flag) {
+int printStr(char *out, uint8_t flag) {
+  int r = 0;
   if (flag) {
     printf("%s\n", out);
   } else {
     fprintf(stderr, "Failure.\n");
     fprintf(stderr, "%s\n", out);
+    r = 1;
   }
   free_response_string_ext(out);
+  return r;
+}
+
+// check if the second string is a suffix of the first one.
+int ends_with(const char* str, const char* suffix) {
+  if (str == NULL || suffix == NULL) {
+    return 0;
+  }
+  size_t l = strlen(str);
+  size_t ls = strlen(suffix);
+  if (ls > l) {
+      return 0;
+  }
+  int cmp = strcmp(str + (l - ls), suffix);
+  return cmp == 0 ? 1 : 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -69,42 +86,45 @@ int main(int argc, char *argv[]) {
       fread(buffer, 1, length, f);
     }
     fclose (f);
-
     if (buffer) {
       uint8_t flag = 1;
       char *out;
       uint64_t decrypted;
-      if (strcmp(argv[1], "create_transfer-input.json") == 0) {
+      if (ends_with(argv[1], "create_transfer-input.json")) {
         out = create_transfer_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "create_id_request_and_private_data-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_id_request_and_private_data-input.json")) {
         out = create_id_request_and_private_data_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "create_credential-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_credential-input.json")) {
         out = create_credential_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "generate-accounts-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "generate-accounts-input.json")) {
         out = generate_accounts_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "create_encrypted_transfer-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_encrypted_transfer-input.json")) {
         out = create_encrypted_transfer_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "create_pub_to_sec_transfer-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_pub_to_sec_transfer-input.json")) {
         out = create_pub_to_sec_transfer_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "create_sec_to_pub_transfer-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_sec_to_pub_transfer-input.json")) {
         out = create_sec_to_pub_transfer_ext(buffer, &flag);
-        printStr(out, flag);
-      } else if (strcmp(argv[1], "decrypt_encrypted_amount-input.json") == 0) {
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "decrypt_encrypted_amount-input.json")) {
         decrypted = decrypt_encrypted_amount_ext(buffer, &flag);
         if (flag) {
           printf("Decrypted amount: %" PRIu64 "\n", decrypted);
+          return 0;
         } else {
           fprintf(stderr, "Failure.\n");
+          return 1;
         }
+      } else {
+        printf("Unrecognized option.");
+        return 1;
       }
     }
-
   } else {
     if (strcmp(argv[1], "check-address") == 0) {
       if (check_account_address_ext(argv[2])) {
@@ -112,12 +132,13 @@ int main(int argc, char *argv[]) {
       } else {
         printf("Account address invalid.\n");
       }
+      return 0;
     } else if (strcmp(argv[1], "combine-amounts") == 0) {
       uint8_t flag = 1;
       char *out;
       out = combine_encrypted_amounts_ext(argv[2], argv[3], &flag);
       printf("%s\n", out);
+      return (int)flag;
     }
   }
-  return 0;
 }

@@ -8,7 +8,7 @@ module Concordium.Genesis.Data(
 
 import Control.Monad
 import qualified Data.List as List
-import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import Data.Serialize
 import GHC.Generics (Generic)
 import Lens.Micro.Platform
@@ -57,7 +57,7 @@ getGenesisDataV2 = do
             | gbBakerId ab /= i ->
                 fail "BakerId does not match account index"
         _
-            | let acctRegId = ID.regId (NE.head (gaCredentials acct))
+            | let acctRegId = ID.credId (gaCredentials acct Map.! 0)
             , let acctEK = ID.makeEncryptionKey genesisCryptographicParameters acctRegId
             , ek /= acctEK ->
                 fail "Incorrect account encryption key"
