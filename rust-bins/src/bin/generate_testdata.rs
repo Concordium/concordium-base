@@ -9,7 +9,11 @@ use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use either::{Left, Right};
 use id::{
-    account_holder::*, constants::ArCurve, ffi::*, identity_provider::*, secret_sharing::Threshold,
+    account_holder::*,
+    constants::{ArCurve, IpPairing},
+    ffi::*,
+    identity_provider::*,
+    secret_sharing::Threshold,
     types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
@@ -348,9 +352,24 @@ fn main() {
         )
         .expect("We should have generated valid data.");
         let acc_addr = AccountAddress::new(&cdi.values.cred_id);
-        let versioned_cdi = Versioned::new(VERSION_0, cdi);
+        let js = match maybe_addr {
+            Left(message_expiry) => {
+                // if it is a new account we output a full message
+                let cred = AccountCredentialMessage {
+                    message_expiry: *message_expiry,
+                    credential:     AccountCredential::Normal { cdi },
+                };
+                let out = Versioned::new(VERSION_0, cred);
+                serde_json::to_value(out).expect("JSON serialization does not fail")
+            }
+            Right(_) => {
+                // if this goes onto an existing account we output just the credential.
+                let out = Versioned::new(VERSION_0, cdi);
+                serde_json::to_value(out).expect("JSON serialization does not fail")
+            }
+        };
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &versioned_cdi) {
+        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);
@@ -405,10 +424,14 @@ fn main() {
             EXPIRY,
             ip_secret,
         );
-        let versioned_icdi = Versioned::new(VERSION_0, icdi);
+        let cred = AccountCredentialMessage::<IpPairing, ArCurve, _> {
+            message_expiry: EXPIRY,
+            credential:     AccountCredential::Initial { icdi },
+        };
+        let versioned_msg = Versioned::new(VERSION_0, cred);
 
         if let Err(err) =
-            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_icdi)
+            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_msg)
         {
             eprintln!(
                 "Could not output initial credential = {}, because {}.",
