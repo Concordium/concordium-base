@@ -829,7 +829,6 @@ instance Serialize AccountCredentialWithProofs where
     1 -> NormalACWP <$> get
     _ -> fail "Unsupported credential type."
 
-
 -- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed and commitments kept.
 data AccountCredential =
   InitialAC InitialCredentialDeploymentValues
