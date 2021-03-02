@@ -334,6 +334,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
 
+    let mk_host = |energy| MeteringHost {
+        energy:            Energy {
+            energy,
+        },
+        activation_frames: MAX_ACTIVATION_FRAMES,
+    };
+
     {
         let mut group = c.benchmark_group("Exhaust energy");
 
@@ -349,12 +356,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 energy,
                 |b, &energy| {
                     b.iter(|| {
-                        let mut host = MeteringHost {
-                            energy:            Energy {
-                                energy,
-                            },
-                            activation_frames: MAX_ACTIVATION_FRAMES,
-                        };
+                        let mut host = mk_host(energy);
                         assert!(
                             // Should fail due to out of energy.
                             artifact.run(&mut host, "loop", &[Value::I32(0)]).is_err(),
@@ -371,13 +373,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 energy,
                 |b, &energy| {
                     b.iter(|| {
-                        let mut host = MeteringHost {
-                            energy:            Energy {
-                                energy,
-                            },
-                            activation_frames: MAX_ACTIVATION_FRAMES,
-                        };
+                        let mut host = mk_host(energy);
                         let r = artifact.run(&mut host, "empty_loop", &[]).expect_err("Precondition violation. Execution should fail.");
+                        assert!(
+                            r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), // Should fail due to out of energy.
+                            "Execution did not fail due to out of energy: {}.", r
+                        )
+                    })
+                },
+            );
+        }
+        for energy in [1000, 10000, 100000, 1000000].iter() {
+            group.bench_with_input(
+                format!("timeout br_if with energy n = {}", energy),
+                energy,
+                |b, &energy| {
+                    b.iter(|| {
+                        let mut host = mk_host(energy);
+                        let r = artifact.run(&mut host, "empty_loop_if", &[]).expect_err("Precondition violation. Execution should fail.");
                         assert!(
                             r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), // Should fail due to out of energy.
                             "Execution did not fail due to out of energy: {}.", r

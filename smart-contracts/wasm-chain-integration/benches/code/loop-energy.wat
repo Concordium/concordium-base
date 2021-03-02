@@ -12,6 +12,13 @@
       (br $loop)
     )
   )
+  (func $empty_loop_if (type $empty)
+    (loop $loop
+      (i32.const 1)
+      (br_if $loop)
+    )
+  )
   (export "loop" (func $loop))
   (export "empty_loop" (func $empty_loop))
+  (export "empty_loop_if" (func $empty_loop_if))
 )

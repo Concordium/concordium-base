@@ -60,7 +60,7 @@ pub mod cost {
     /// Cost of a jump (either Br, Loop, or analogous)
     /// Jumps are simply setting the instruction pointer, so
     /// they are priced cheaply.
-    pub const JUMP: Energy = 2;
+    pub const JUMP: Energy = 8;
     pub const JUMP_STACK: Energy = 1;
 
     /// Read n elements from the stack.
