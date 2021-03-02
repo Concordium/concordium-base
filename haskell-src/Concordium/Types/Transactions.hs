@@ -351,6 +351,14 @@ instance HasMessageExpiry BareBlockItem where
   msgExpiry (CredentialDeployment t) = messageExpiry t
   msgExpiry (ChainUpdate t) = updateTimeout . uiHeader $ t
 
+instance HasMessageExpiry a => HasMessageExpiry (WithMetadata a) where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = msgExpiry . wmdData
+
+instance HasMessageExpiry a => HasMessageExpiry (Versioned a) where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = msgExpiry . vValue
+
 -- |Embed a transaction as a block item.
 normalTransaction :: Transaction -> BlockItem
 -- the +1 is for the additional tag.

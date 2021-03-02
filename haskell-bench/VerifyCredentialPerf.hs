@@ -7,6 +7,7 @@ import Criterion.Types
 
 import qualified Data.ByteString.Char8 as BS
 
+import Concordium.Types
 import Concordium.ID.Account
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
@@ -14,6 +15,9 @@ import Concordium.ID.AnonymityRevoker
 
 import Data.Serialize
 
+-- This should match with the EXPIRY constant in generate_testdata.
+maxExpiry :: TransactionTime
+maxExpiry = TransactionTime maxBound
 
 filePath :: FilePath
 filePath = "testdata/testdata.bin"
@@ -40,7 +44,7 @@ setup = do
 verify :: Benchmark
 verify =
     env setup $ \ ~(gc, ipInfo, arInfos, cdi1) -> 
-          bench "Verify credential success" $ nf (flip (verifyCredential gc ipInfo arInfos) Nothing) cdi1
+          bench "Verify credential success" $ nf (flip (verifyCredential gc ipInfo arInfos) (Left maxExpiry)) cdi1
 
 main :: IO ()
 main = defaultMainWith (defaultConfig { timeLimit = 15 }) [
