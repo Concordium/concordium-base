@@ -22,9 +22,10 @@ import Concordium.Common.Version
 import Concordium.Types.Parameters
 import Concordium.Genesis.Parameters
 import Concordium.Genesis.Data
+import qualified Concordium.Genesis.Data.P0 as P0
+import qualified Concordium.Genesis.Data.P1 as P1
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
-import Concordium.Types.SeedState
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Updates
@@ -36,7 +37,8 @@ data Genesis
                            gdArs :: Maybe FilePath,
                            gdCryptoParams :: Maybe FilePath,
                            gdAccounts :: Maybe FilePath,
-                           gdUpdateAuthorizations :: Maybe FilePath
+                           gdUpdateAuthorizations :: Maybe FilePath,
+                           gdVersion :: Integer
                            }
       | PrintGenesisData { gdSource :: FilePath }
     deriving (Typeable, Data)
@@ -75,7 +77,12 @@ generateGenesisData = GenerateGenesisData {
                         name "update-authorizations" &=
                         opt (Nothing :: Maybe FilePath) &=
                         typFile &=
-                        help "JSON file with update authorizations."
+                        help "JSON file with update authorizations.",
+    gdVersion = 3 &=
+        explicit &=
+        name "gdver" &=
+        typ "VER" &=
+        help "Genesis data format version."
  } &= help "Parse JSON genesis parameters from INFILE and write serialized genesis data to OUTFILE"
   &= explicit &= name "make-genesis"
 
@@ -156,29 +163,63 @@ main = cmdArgsRun mode >>=
                   case fromJSON value of
                     Error err -> do
                       die $ "Could not decode genesis parameters: " ++ show err
-                    Success params -> do
-                      let genesisData = parametersToGenesisData params
-                      let totalGTU = genesisTotalGTU genesisData
-                      putStrLn "Successfully generated genesis data."
-                      putStrLn $ "Genesis time is set to: " ++ showTime (genesisTime genesisData)
-                      putStrLn $ "There are the following " ++ show (Prelude.length (genesisAccounts genesisData)) ++ " initial accounts in genesis:"
-                      forM_ (genesisAccounts genesisData) $ \account ->
-                        putStrLn $ "\tAccount: " ++ show (gaAddress account) ++ ", balance = " ++ showBalance totalGTU (gaBalance account)
-                      LBS.writeFile gdOutput (S.runPutLazy $ putVersionedGenesisDataV2 genesisData)
-                      putStrLn $ "Wrote genesis data to file " ++ show gdOutput
-                      exitSuccess
+                    Success params -> case gdVersion of
+                      2 -> do
+                        let genesisData = P0.parametersToGenesisData params
+                        let totalGTU = P0.genesisTotalGTU genesisData
+                        putStrLn "Successfully generated genesis data."
+                        putStrLn $ "Genesis time is set to: " ++ showTime (P0.genesisTime genesisData)
+                        putStrLn $ "There are the following " ++ show (Prelude.length (P0.genesisAccounts genesisData)) ++ " initial accounts in genesis:"
+                        forM_ (P0.genesisAccounts genesisData) $ \account ->
+                          putStrLn $ "\tAccount: " ++ show (gaAddress account) ++ ", balance = " ++ showBalance totalGTU (gaBalance account)
+                        LBS.writeFile gdOutput (S.runPutLazy $ P0.putVersionedGenesisData genesisData)
+                        putStrLn $ "Wrote genesis data to file " ++ show gdOutput
+                        exitSuccess
+                      3 -> do
+                        let genesisData = P1.parametersToGenesisData params
+                        putStrLn "Successfully generated genesis data."
+                        LBS.writeFile gdOutput (S.runPutLazy $ P1.putVersionedGenesisData genesisData)
+                        putStrLn $ "Wrote genesis data to file " ++ show gdOutput
+                        exitSuccess
+                      n -> do
+                        putStrLn $ "Unsupported genesis data version: " ++ show n
+                        exitFailure
         PrintGenesisData{..} -> do
           source <- LBS.readFile gdSource
-          case S.runGetLazy getExactVersionedGenesisData source of
+          case S.runGetLazy getVersionedGenesisData source of
             Left err -> putStrLn $ "Cannot parse genesis data:" ++ err
-            Right (GDP0 genData@GenesisDataV2{..}) -> do
+            Right (GDP1 P1.GDP1Regenesis{genesisCore = P1.CoreGenesisParameters{..}, ..}) -> do
+              putStrLn "Re-genesis data."
+              putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
+              putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
+              putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
+
+              putStrLn ""
+              putStrLn "Finalization parameters: "
+              let FinalizationParameters{..} = genesisFinalizationParameters
+              putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
+              putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
+              putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
+              putStrLn $ "  - skip shrink factor: " ++ show finalizationSkipShrinkFactor
+              putStrLn $ "  - skip grow factor: " ++ show finalizationSkipGrowFactor
+              putStrLn $ "  - delay shrink factor: " ++ show finalizationDelayShrinkFactor
+              putStrLn $ "  - delay grow factor: " ++ show finalizationDelayGrowFactor
+              putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
+
+              putStrLn ""
+              putStrLn $ "First genesis block: " ++ show genesisFirstGenesis
+              putStrLn $ "Previous (re)genesis block: " ++ show genesisPreviousGenesis
+              putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
+              putStrLn $ "State hash: " ++ show genesisStateHash
+
+            Right (GDP1 P1.GDP1Initial{genesisCore = P1.CoreGenesisParameters{..}, genesisInitialState = P1.GenesisState{..}}) -> do
               putStrLn "Genesis data."
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
-              putStrLn $ "Genesis nonce: " ++ show (currentLeadershipElectionNonce genesisSeedState)
-              putStrLn $ "Epoch length in slots: " ++ show (epochLength genesisSeedState)
+              putStrLn $ "Genesis nonce: " ++ show genesisLeadershipElectionNonce
+              putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
 
-              let totalGTU = genesisTotalGTU genData
+              let totalGTU = sum (gaBalance <$> genesisAccounts)
 
               putStrLn ""
               putStrLn $ "Genesis total GTU: " ++ show totalGTU
@@ -232,7 +273,7 @@ main = cmdArgsRun mode >>=
               putStrLn ""
               putStrLn $ "There are " ++ show (OrdMap.size (arRevokers genesisAnonymityRevokers)) ++ " anonymity revokers in genesis."
 
-              let bkrs = catMaybes (gaBaker <$> genesisAccounts)
+              let bkrs = catMaybes (gaBaker <$> toList genesisAccounts)
               let bkrTotalStake = foldl' (+) 0 (gbStake <$> bkrs)
               putStrLn $ "\nThere are " ++ show (length bkrs) ++ " bakers with total stake: " ++ showBalance totalGTU bkrTotalStake
 

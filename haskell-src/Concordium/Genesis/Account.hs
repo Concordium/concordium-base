@@ -10,10 +10,9 @@ import Data.Aeson.Types (
     (.:),
     (.:?),
  )
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import Data.Serialize
-
 
 import Concordium.Common.Version
 import Concordium.ID.Parameters (GlobalContext)
@@ -84,6 +83,29 @@ getGenesisBakerGD2 = label "GenesisBaker" $ do
     unless (pendingChange == 0) $ fail "Baker has a pending change, which is not allowed"
     return GenesisBaker{..}
 
+-- |Serialize a 'GenesisBaker' in the GenesisDataV3 format.
+putGenesisBakerGD3 :: Putter GenesisBaker
+putGenesisBakerGD3 GenesisBaker{..} = do
+    put gbStake
+    put gbRestakeEarnings
+    -- Baker info
+    put gbBakerId
+    put gbElectionVerifyKey
+    put gbSignatureVerifyKey
+    put gbAggregationVerifyKey
+
+-- |Deserialize a 'GenesisBaker' in the GenesisDataV3 format.
+getGenesisBakerGD3 :: Get GenesisBaker
+getGenesisBakerGD3 = label "GenesisBaker" $ do
+    gbStake <- get
+    gbRestakeEarnings <- get
+    -- Baker info
+    gbBakerId <- get
+    gbElectionVerifyKey <- get
+    gbSignatureVerifyKey <- get
+    gbAggregationVerifyKey <- get
+    return GenesisBaker{..}
+
 -- |A 'GenesisAccount' is special account existing in the genesis block.
 data GenesisAccount = GenesisAccount
     { -- |The address of the account
@@ -113,21 +135,22 @@ instance FromJSON GenesisAccount where
         gaAddress <- obj .: "address"
         gaVerifyKeys <- obj .: "accountKeys"
         gaBalance <- obj .: "balance"
-        gaCredentials <- obj .:? "credentials" >>= \case
-            Nothing -> do
-                Versioned{..} <- obj .: "credential"
-                unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
-                gaCredentialFull <- parseJSON vValue
-                case ID.values gaCredentialFull of
-                    Nothing -> fail "Account credential is malformed."
-                    Just gaCredential -> return (gaCredential :| [])
-            Just Versioned{..} -> do
-                unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
-                fullCredentials <- parseJSON vValue
-                case mapM ID.values fullCredentials of
-                    Nothing -> fail "Account credential is malformed."
-                    Just [] -> fail "Empty credentials"
-                    Just (c:cs) -> return (c :| cs)
+        gaCredentials <-
+            obj .:? "credentials" >>= \case
+                Nothing -> do
+                    Versioned{..} <- obj .: "credential"
+                    unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
+                    gaCredentialFull <- parseJSON vValue
+                    case ID.values gaCredentialFull of
+                        Nothing -> fail "Account credential is malformed."
+                        Just gaCredential -> return (gaCredential :| [])
+                Just Versioned{..} -> do
+                    unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
+                    fullCredentials <- parseJSON vValue
+                    case mapM ID.values fullCredentials of
+                        Nothing -> fail "Account credential is malformed."
+                        Just [] -> fail "Empty credentials"
+                        Just (c : cs) -> return (c :| cs)
         gaBaker <- obj .:? "baker"
         -- Check that bakers do not stake more than their balance.
         case gaBaker of
@@ -189,3 +212,33 @@ getGenesisAccountGD2 = label "GenesisAccount" $ do
     -- Baker
     gaBaker <- getMaybeOf getGenesisBakerGD2
     return (GenesisAccount{..}, encryptionKey)
+
+-- |Put a 'GenesisAccount' in the account serialization format
+-- used for GenesisDataV3.
+putGenesisAccountGD3 :: Putter GenesisAccount
+putGenesisAccountGD3 GenesisAccount{..} = do
+    -- Put the persisting account data
+    put gaAddress
+    put gaVerifyKeys
+    putLength (length gaCredentials)
+    mapM_ put gaCredentials
+    -- Account amount
+    put gaBalance
+    -- Baker
+    putMaybeOf putGenesisBakerGD2 gaBaker
+
+-- |Get a 'GenesisAccount' in the account serialization format
+-- used for GenesisDataV3.
+getGenesisAccountGD3 :: Get GenesisAccount
+getGenesisAccountGD3 = label "GenesisAccount" $ do
+    -- Get the persisting account data
+    gaAddress <- get
+    gaVerifyKeys <- get
+    nCredentials <- getLength
+    when (nCredentials < 1) $ fail "A genesis account must have at least one credential"
+    gaCredentials <- (:|) <$> get <*> replicateM (nCredentials - 1) get
+    -- Account amount
+    gaBalance <- get
+    -- Baker
+    gaBaker <- getMaybeOf getGenesisBakerGD2
+    return GenesisAccount{..}
