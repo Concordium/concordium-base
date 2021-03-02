@@ -253,14 +253,12 @@ struct CreateCredential {
     #[structopt(
         long = "account",
         help = "Account address onto which the credential should be deployed.",
-        requires = "key-index",
-        required_unless = "expiry",
-        conflicts_with = "account"
+        requires = "key-index"
     )]
     account: Option<AccountAddress>,
     #[structopt(
         long = "expiry",
-        help = "Expiry time of the credential message. In seconds from now.",
+        help = "Expiry time of the credential message. In seconds from __now__.",
         required_unless = "account",
         conflicts_with = "account"
     )]
@@ -319,12 +317,10 @@ struct VerifyCredential {
         required_unless = "account",
         conflicts_with = "account"
     )]
-    expiry: Option<u64>,
+    expiry: Option<TransactionTime>,
     #[structopt(
         long = "account",
-        help = "Address of the account onto which the credential will be deployed.",
-        required_unless = "expiry",
-        conflicts_with = "expiry"
+        help = "Address of the account onto which the credential will be deployed."
     )]
     account: Option<AccountAddress>,
 }
@@ -464,7 +460,7 @@ fn handle_verify_credential(vcred: VerifyCredential) {
     let new_or_existing = match (vcred.expiry, vcred.account) {
         (None, None) => panic!("One of (expiry, address) is required."),
         (None, Some(addr)) => Right(addr),
-        (Some(seconds), None) => Left(TransactionTime { seconds }),
+        (Some(tt), None) => Left(tt),
         (Some(_), Some(_)) => panic!("Exactly one of (expiry, address) is required."),
     };
 

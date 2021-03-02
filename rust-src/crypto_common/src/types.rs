@@ -10,7 +10,7 @@ use crate::{
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
 use failure::Fallible;
-use std::{collections::BTreeMap, ops::Add};
+use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
 
 /// Index of an account key that is to be used.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -247,6 +247,15 @@ pub struct TransactionTime {
 
 impl From<u64> for TransactionTime {
     fn from(seconds: u64) -> Self { Self { seconds } }
+}
+
+impl FromStr for TransactionTime {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let seconds = u64::from_str(s)?;
+        Ok(Self { seconds })
+    }
 }
 
 #[cfg(test)]
