@@ -1,30 +1,30 @@
 {
   "v": 0,
   "value": {
-    "account": {
-      "keys": [
-        {
+    "credentialPublicKeys": {
+      "keys": {
+        "0": {
           "schemeId": "Ed25519",
-          "verifyKey": "8c16e2f9e908b0ede5607341236455f8f5ad601418b5f9e91237ff6bf35ae928"
+          "verifyKey": "482c3b556ddb7b162d97db8a37e32c8e286e4ae13f14854f91de6e9ec5e35c05"
         },
-        {
+        "1": {
           "schemeId": "Ed25519",
-          "verifyKey": "f32589b30425112c1e310b607aa14fcc33b8bed1b8f170da83e05074dee4163c"
+          "verifyKey": "8b22d89d8f9b394e90d6527d2d33a0eb57fa72b1daba8a67c291055736b5204c"
         },
-        {
+        "2": {
           "schemeId": "Ed25519",
-          "verifyKey": "7670f97d0aecaa852980ac1c69c9672ea9bc35cf4d27991e943d45bdf4624dfe"
+          "verifyKey": "3b256aa1f1647d9e0c2bfa14e7bf535ed3f76da63101c14e535a9d0dd864ab24"
         }
-      ],
+      },
       "threshold": 2
     },
-    "regId": "b9daa279ba38b66034c5452b6a3af8b7e065524a205a03a42d90df741634c80f60e619abfafb751e3958bf596522ae49",
-    "ipIdentity": 1,
+    "regId": "912591e2f50b29cd6895133591d731ab1ac5cbea310da7d1ea68c1637d0bdb4e52d5c0b80c24eb21c985ec3b21f57aea",
+    "ipIdentity": 0,
     "policy": {
       "validTo": "202205",
       "createdAt": "202005",
       "revealedAttributes": {}
     },
-    "sig": "490eb1fdba274d9e1489df34ae8ee0b955ccb59e690896196e715a6f474850d6ca2bdaa51da252341712c9f4c6abe3f60fc1b48bda280d469f0bce70ecf4b20b"
+    "sig": "1d202e5db46c1eff7c53e8c42a44fedf4244944968ec406c840803a507636dd80e2ce0d6b11746ed73740370c5dae47647157c3e53fcdf11258007d8512c970f"
   }
 }

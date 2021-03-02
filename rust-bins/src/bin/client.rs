@@ -1,10 +1,9 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{serde_impls::KeyPairDef, *};
+use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
 use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::{Bls12, G1};
@@ -16,17 +15,17 @@ use std::{
     convert::TryFrom,
     fs::File,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use structopt::StructOpt;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
 
-fn mk_ip_filename(path: &PathBuf, n: usize) -> (PathBuf, PathBuf) {
-    let mut public = path.clone();
+fn mk_ip_filename(path: &Path, n: usize) -> (PathBuf, PathBuf) {
+    let mut public = path.to_path_buf();
     public.push(format!("{}{}.pub.json", IP_NAME_PREFIX, n));
-    let mut private = path.clone();
+    let mut private = path.to_path_buf();
     private.push(format!("{}{}.json", IP_NAME_PREFIX, n));
     (public, private)
 }
@@ -39,10 +38,10 @@ fn mk_ip_description(n: usize) -> Description {
 
 // Generate name for the n-th anonymity revoker.
 // Returns the pair for public and public + private data.
-fn mk_ar_filename(path: &PathBuf, n: u32) -> (PathBuf, PathBuf) {
-    let mut public = path.clone();
+fn mk_ar_filename(path: &Path, n: u32) -> (PathBuf, PathBuf) {
+    let mut public = path.to_path_buf();
     public.push(format!("{}{}.pub.json", AR_NAME_PREFIX, n));
-    let mut private = path.clone();
+    let mut private = path.to_path_buf();
     private.push(format!("{}{}.json", AR_NAME_PREFIX, n));
     (public, private)
 }
@@ -77,6 +76,12 @@ struct StartIp {
     #[structopt(long = "ips", help = "File with a list of identity providers.", default_value = IDENTITY_PROVIDERS)]
     identity_providers: PathBuf,
     #[structopt(
+        long = "ip",
+        help = "Which identity provider to choose. If not given an interactive choice will be \
+                provided."
+    )]
+    identity_provider: Option<u32>,
+    #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers..",
         default_value = "database/anonymity_revokers.json"
@@ -95,6 +100,19 @@ struct StartIp {
         default_value = "database/global.json"
     )]
     global: PathBuf,
+    #[structopt(
+        name = "ar-threshold",
+        long = "ar-threshold",
+        help = "Anonymity revocation threshold.",
+        requires = "selected-ars"
+    )]
+    threshold: Option<u8>,
+    #[structopt(
+        long = "selected-ars",
+        help = "Indices of selected ars. If none are provided an interactive choice will be given.",
+        requires = "ar-threshold"
+    )]
+    selected_ars: Vec<u32>,
 }
 
 #[derive(StructOpt)]
@@ -217,10 +235,17 @@ struct CreateCredential {
     private: PathBuf,
     #[structopt(
         long = "account",
-        help = "File with existing account private info (verification and signature keys). If not \
-                present a fresh key-pair will be generated."
+        help = "Account address onto which the credential should be deployed.",
+        requires = "key-index"
     )]
-    account: Option<PathBuf>,
+    account: Option<AccountAddress>,
+    #[structopt(
+        name = "key-index",
+        long = "key-index",
+        help = "Account address onto which the credential should be deployed.",
+        requires = "account"
+    )]
+    key_index: Option<u8>,
     #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
     out: Option<PathBuf>,
     #[structopt(
@@ -399,8 +424,8 @@ fn handle_verify_credential(vcred: VerifyCredential) {
         &global_ctx,
         &ip_info,
         &all_ars_infos.anonymity_revokers,
-        None,
         &credential,
+        None,
     ) {
         eprintln!("Credential verification failed due to {}", e)
     } else {
@@ -580,10 +605,7 @@ fn handle_create_credential(cc: CreateCredential) {
     };
 
     // We ask what regid index they would like to use.
-    let x = match Input::new().with_prompt("Index").interact() {
-        Ok(x) => x,
-        Err(_) => 0, // default index
-    };
+    let x = Input::new().with_prompt("Index").interact().unwrap_or(0); // 0 is the default index
 
     // Now we have have everything we need to generate the proofs
     // we have
@@ -607,37 +629,28 @@ fn handle_create_credential(cc: CreateCredential) {
     let context = IPContext::new(&ip_info, &ars, &global_ctx);
 
     // We now generate or read account verification/signature key pair.
-    let mut known_acc = false;
     let acc_data = {
-        if let Some(acc_data_file) = cc.account {
-            match read_json_from_file(acc_data_file) {
-                Ok(acc_data) => {
-                    known_acc = true;
-                    acc_data
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Could not read account data from provided file because {}",
-                        e
-                    );
-                    return;
-                }
-            }
-        } else {
-            let mut csprng = thread_rng();
-            let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        let mut csprng = thread_rng();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-            AccountData {
-                keys,
-                existing: Left(SignatureThreshold(2)),
-            }
+        CredentialData {
+            keys,
+            threshold: SignatureThreshold(2),
         }
     };
 
-    let cdi = create_credential(context, &id_object, &id_use_data, x, policy, &acc_data);
+    let cdi = create_credential(
+        context,
+        &id_object,
+        &id_use_data,
+        x,
+        policy,
+        &acc_data,
+        cc.account,
+    );
 
     let cdi = match cdi {
         Ok(cdi) => cdi,
@@ -647,9 +660,18 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     };
 
-    let address = AccountAddress::new(&cdi.values.reg_id);
+    let address = AccountAddress::new(&cdi.values.cred_id);
 
     let versioned_cdi = Versioned::new(VERSION_0, AccountCredential::Normal { cdi });
+    let cdi_json_value = serde_json::value::to_value(&versioned_cdi)
+        .expect("JSON Serialization of credentials failed.");
+
+    let versioned_credentials = {
+        let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
+        let mut credentials = BTreeMap::new();
+        credentials.insert(ki, versioned_cdi.value);
+        Versioned::new(VERSION_0, credentials)
+    };
 
     let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
 
@@ -658,16 +680,23 @@ fn handle_create_credential(cc: CreateCredential) {
         scalar:    enc_key,
     };
 
-    let account_data_json = json!({
-        "address": address,
-        "encryptionSecretKey": secret_key,
-        "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-        "accountData": acc_data,
-        "credential": versioned_cdi,
-        "aci": id_use_data.aci,
-    });
-
-    if !known_acc {
+    if let Some(addr) = cc.account {
+        println!("Generated additional keys for the account.");
+        let js = json!({
+            "address": addr,
+            "accountKeys": AccountKeys::from((KeyIndex(cc.key_index.unwrap()), acc_data)),
+            "credentials": versioned_credentials
+        });
+        write_json_to_file(&cc.keys_out, &js).ok();
+    } else {
+        let account_data_json = json!({
+            "address": address,
+            "encryptionSecretKey": secret_key,
+            "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+            "accountKeys": AccountKeys::from(acc_data),
+            "credentials": versioned_credentials,
+            "aci": id_use_data.aci,
+        });
         println!(
             "Generated fresh verification and signature key of the account to file {}.",
             cc.keys_out.to_string_lossy()
@@ -689,11 +718,11 @@ fn handle_create_credential(cc: CreateCredential) {
     // accepted by the simple-client for sending transactions.
 
     if let Some(json_file) = cc.out {
-        match write_json_to_file(json_file, &versioned_cdi) {
+        match write_json_to_file(json_file, &cdi_json_value) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
-                output_json(&versioned_cdi);
+                output_json(&cdi_json_value);
             }
         }
     }
@@ -906,7 +935,15 @@ fn handle_start_ip(sip: StartIp) {
     }
 
     let ip_info = {
-        if let Ok(ip_info_idx) = Select::new()
+        if let Some(ip) = sip.identity_provider {
+            match ips.identity_providers.get(&IpIdentity(ip)) {
+                Some(ip) => ip.clone(),
+                None => {
+                    eprintln!("Identity provider with identity {} does not exist.", ip);
+                    return;
+                }
+            }
+        } else if let Ok(ip_info_idx) = Select::new()
             .with_prompt("Choose identity provider")
             .items(&ips_names)
             .default(0)
@@ -931,51 +968,69 @@ fn handle_start_ip(sip: StartIp) {
         }
     };
 
-    let mrs: Vec<&str> = ars
-        .anonymity_revokers
-        .values()
-        .map(|x| x.ar_description.name.as_str())
-        .collect();
-
-    let ar_info = MultiSelect::new()
-        .with_prompt("Choose anonymity revokers")
-        .items(&mrs)
-        .interact()
-        .unwrap();
-    let num_ars = ar_info.len();
-    if ar_info.is_empty() {
-        eprintln!("You need to select an AR.");
-        return;
-    }
-    let keys = ars.anonymity_revokers.keys().collect::<Vec<_>>();
+    let ar_ids = if sip.selected_ars.is_empty() {
+        let mrs: Vec<&str> = ars
+            .anonymity_revokers
+            .values()
+            .map(|x| x.ar_description.name.as_str())
+            .collect();
+        let keys = ars.anonymity_revokers.keys().collect::<Vec<_>>();
+        let ar_ids = MultiSelect::new()
+            .with_prompt("Choose anonymity revokers")
+            .items(&mrs)
+            .interact()
+            .unwrap()
+            .iter()
+            .map(|&x| *keys[x])
+            .collect::<Vec<_>>();
+        if ar_ids.is_empty() {
+            eprintln!("You need to select an AR.");
+            return;
+        }
+        ar_ids
+    } else {
+        let res = sip
+            .selected_ars
+            .iter()
+            .map(|&x| ArIdentity::try_from(x))
+            .collect();
+        match res {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Incorrect AR identities: {}", e);
+                return;
+            }
+        }
+    };
+    let num_ars = ar_ids.len();
     let mut choice_ars = BTreeMap::new();
-    for idx in ar_info.into_iter() {
+    for ar_id in ar_ids.iter() {
         choice_ars.insert(
-            *keys[idx],
+            *ar_id,
             ars.anonymity_revokers
-                .get(keys[idx])
-                .expect("AR should exist by construction.")
+                .get(ar_id)
+                .expect("Chosen AR does not exist.")
                 .clone(),
         );
     }
 
-    let threshold = {
-        if let Ok(threshold) = Select::new()
-            .with_prompt("Revocation threshold")
-            .items(&(1..=num_ars).collect::<Vec<usize>>())
-            .default(1)
-            .interact()
-        {
-            Threshold((threshold + 1) as u8) // +1 because the indexing of the
-                                             // selection starts at 1
-        } else {
-            let d = max(1, num_ars - 1);
-            println!(
-                "Selecting default value (= {}) for revocation threshold.",
-                d
-            );
-            Threshold(d as u8)
-        }
+    let threshold = if let Some(thr) = sip.threshold {
+        Threshold(thr)
+    } else if let Ok(threshold) = Select::new()
+        .with_prompt("Revocation threshold")
+        .items(&(1..=num_ars).collect::<Vec<usize>>())
+        .default(1)
+        .interact()
+    {
+        Threshold((threshold + 1) as u8) // +1 because the indexing of the
+                                         // selection starts at 1
+    } else {
+        let d = max(1, num_ars - 1);
+        println!(
+            "Selecting default value (= {}) for revocation threshold.",
+            d
+        );
+        Threshold(d as u8)
     };
 
     let global_ctx = {

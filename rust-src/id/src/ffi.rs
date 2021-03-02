@@ -13,7 +13,7 @@ use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
-use std::{collections::BTreeMap, fmt, io::Cursor, str::FromStr};
+use std::{collections::BTreeMap, convert::TryInto, fmt, io::Cursor, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -149,10 +149,9 @@ extern "C" fn verify_cdi_ffi(
     ip_info_ptr: *const IpInfo<Bls12>,
     ars_infos_ptr: *const *mut ArInfo<G1>,
     ars_infos_len: size_t,
-    acc_keys_ptr: *const u8,
-    acc_keys_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
+    addr_ptr: *const u8, // pointer to an account address, 32 bytes
 ) -> i32 {
     if gc_ptr.is_null() {
         return -9;
@@ -161,15 +160,12 @@ extern "C" fn verify_cdi_ffi(
         return -10;
     }
 
-    let acc_keys = if acc_keys_ptr.is_null() {
+    let reg_id: Option<AccountAddress> = if addr_ptr.is_null() {
         None
+    } else if let Ok(bytes) = slice_from_c_bytes!(addr_ptr, ACCOUNT_ADDRESS_SIZE).try_into() {
+        Some(AccountAddress(bytes))
     } else {
-        let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
-        if let Ok(acc_keys) = AccountKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
-            Some(acc_keys)
-        } else {
-            return -11;
-        }
+        return -14;
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
@@ -196,8 +192,8 @@ extern "C" fn verify_cdi_ffi(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
                 &ars_infos,
-                acc_keys.as_ref(),
                 &cdi,
+                reg_id,
             ) {
                 Ok(()) => 1, // verification succeeded
                 Err(CDIVerificationError::RegId) => -1,
@@ -285,10 +281,8 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
 mod test {
     use super::*;
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use dodis_yampolskiy_prf::secret as prf;
-    use ed25519_dalek as ed25519;
-    use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
@@ -399,13 +393,13 @@ mod test {
         };
 
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-        let acc_data = AccountData {
+        let acc_data = CredentialData {
             keys,
-            existing: Left(SignatureThreshold(2)),
+            threshold: SignatureThreshold(2),
         };
 
         let id_use_data = IdObjectUseData { aci, randomness };
@@ -416,8 +410,16 @@ mod test {
             signature: ip_sig,
         };
 
-        let cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
-            .expect("Should generate the credential successfully.");
+        let cdi = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy,
+            &acc_data,
+            None,
+        )
+        .expect("Should generate the credential successfully.");
 
         let wrong_cdi = create_credential(
             context,
@@ -426,6 +428,7 @@ mod test {
             0,
             wrong_policy,
             &acc_data,
+            None,
         )
         .expect("Should generate the credential successfully.");
 
@@ -444,10 +447,9 @@ mod test {
             ip_info_ptr,
             ars_infos_ptr.as_ptr(),
             ars_infos_ptr.len() as size_t,
-            std::ptr::null(),
-            0,
             cdi_bytes.as_ptr(),
             cdi_bytes_len,
+            std::ptr::null(),
         );
         assert_eq!(cdi_check, 1);
         let wrong_cdi_bytes = to_bytes(&wrong_cdi);
@@ -457,10 +459,9 @@ mod test {
             ip_info_ptr,
             ars_infos_ptr.as_ptr(),
             ars_infos_ptr.len() as size_t,
-            std::ptr::null(),
-            0,
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
+            std::ptr::null(),
         );
         assert_ne!(wrong_cdi_check, 1);
     }

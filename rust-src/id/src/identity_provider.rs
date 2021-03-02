@@ -53,15 +53,18 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Verify signature:
     let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
     let proof_acc_sk = &pre_id_obj.poks.proof_acc_sk;
-    let keys = &pub_info_for_ip.vk_acc.account.keys;
-    let threshold = pub_info_for_ip.vk_acc.account.threshold;
+    let keys = &pub_info_for_ip.vk_acc.keys;
+    let threshold = pub_info_for_ip.vk_acc.threshold;
 
     // message signed
     let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
 
     let reason = Reason::IncorrectProof; // TODO: introduce different reason
 
-    if !utils::verify_accunt_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
+    // Notice that here we provide all the verification keys, and the
+    // function `verify_accunt_ownership_proof` assumes that
+    // we have as many signatures as verification keys.
+    if !utils::verify_account_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
         return Err(reason);
     }
 
@@ -447,7 +450,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 mod tests {
     use super::*;
     use crate::test::*;
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use ff::Field;
     use pairing::bls12_381::G1;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};

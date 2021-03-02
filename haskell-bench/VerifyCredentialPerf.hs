@@ -40,7 +40,7 @@ setup = do
 verify :: Benchmark
 verify =
     env setup $ \ ~(gc, ipInfo, arInfos, cdi1) -> 
-          bench "Verify credential success" $ nf (verifyCredential gc ipInfo arInfos Nothing) cdi1
+          bench "Verify credential success" $ nf (flip (verifyCredential gc ipInfo arInfos) Nothing) cdi1
 
 main :: IO ()
 main = defaultMainWith (defaultConfig { timeLimit = 15 }) [

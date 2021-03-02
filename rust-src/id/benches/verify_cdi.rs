@@ -1,9 +1,8 @@
 use criterion::*;
-use crypto_common::{serde_impls::KeyPairDef, *};
+use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
@@ -150,13 +149,13 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let mut keys = BTreeMap::new();
-    keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-    keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-    keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+    keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+    keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+    keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-    let acc_data = AccountData {
+    let acc_data = CredentialData {
         keys,
-        existing: Left(SignatureThreshold(2)),
+        threshold: SignatureThreshold(2),
     };
 
     let id_use_data = IdObjectUseData { aci, randomness };
@@ -174,6 +173,7 @@ fn bench_parts(c: &mut Criterion) {
         0,
         policy.clone(),
         &acc_data,
+        None,
     )
     .expect("Should generate the credential successfully.");
 
@@ -210,7 +210,7 @@ fn bench_parts(c: &mut Criterion) {
 
     let bench_create_credential =
         move |b: &mut Bencher, x: &(_, _, _, _, Policy<ExampleCurve, AttributeKind>, _)| {
-            b.iter(|| create_credential(x.0, x.1, x.2, x.3, x.4.clone(), x.5).unwrap())
+            b.iter(|| create_credential(x.0, x.1, x.2, x.3, x.4.clone(), x.5, None).unwrap())
         };
     c.bench_with_input(
         BenchmarkId::new("Generate CDI", ""),
@@ -219,7 +219,7 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_verify_cdi = move |b: &mut Bencher, x: &(_, _, _, _)| {
-        b.iter(|| verify_cdi(x.0, x.1, x.2, None, x.3).unwrap())
+        b.iter(|| verify_cdi(x.0, x.1, x.2, x.3, None).unwrap())
     };
     c.bench_with_input(
         BenchmarkId::new("Verify CDI", ""),

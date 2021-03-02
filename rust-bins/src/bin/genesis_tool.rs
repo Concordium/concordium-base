@@ -1,11 +1,15 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, types::Amount, *};
+use crypto_common::{
+    base16_encode_string,
+    serde_impls::KeyPairDef,
+    types::{Amount, KeyIndex},
+    *,
+};
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use either::Either::Left;
 use id::{
     account_holder::*, constants::*, ffi::*, identity_provider::*, secret_sharing::Threshold,
     types::*,
@@ -205,7 +209,7 @@ fn main() -> std::io::Result<()> {
 
         let mut keys = BTreeMap::new();
         for idx in 0..common.num_keys {
-            keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
+            keys.insert(KeyIndex(idx as u8), KeyPairDef::generate(csprng));
         }
 
         let threshold = SignatureThreshold(
@@ -216,10 +220,7 @@ fn main() -> std::io::Result<()> {
             },
         );
 
-        let acc_data = AccountData {
-            keys,
-            existing: Left(threshold),
-        };
+        let acc_data = CredentialData { keys, threshold };
 
         let id_object = IdentityObject {
             pre_identity_object: pio,
@@ -238,19 +239,14 @@ fn main() -> std::io::Result<()> {
 
         let address = AccountAddress::new(&icdi.values.reg_id);
 
-        let versioned_cdi =
-            Versioned::new(VERSION_0, AccountCredential::Initial::<IpPairing, _, _> {
+        let versioned_credentials = {
+            let mut credentials = BTreeMap::new();
+            credentials.insert(KeyIndex(0), AccountCredential::Initial::<IpPairing, _, _> {
                 icdi,
             });
-
-        let acc_keys = AccountKeys {
-            keys: acc_data
-                .keys
-                .iter()
-                .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))
-                .collect(),
-            threshold,
+            Versioned::new(VERSION_0, credentials)
         };
+        let acc_keys = AccountKeys::from(acc_data);
 
         // unwrap is safe here since we've generated the credential already, and that
         // does the same computation.
@@ -269,11 +265,11 @@ fn main() -> std::io::Result<()> {
             "address": address,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-            "accountData": acc_data,
-            "credential": versioned_cdi,
+            "accountKeys": acc_keys,
+            "credentials": versioned_credentials,
             "aci": id_object_use_data.aci,
         });
-        (account_data_json, versioned_cdi, acc_keys, address)
+        (account_data_json, versioned_credentials, acc_keys, address)
     };
 
     let mk_out_path = |s| {
