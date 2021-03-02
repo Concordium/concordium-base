@@ -20,7 +20,7 @@ import Lens.Micro.Platform
 import Lens.Micro.Internal
 import Concordium.Utils.Serialization
 
-import Data.List
+import Data.List (foldl')
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.Crypto.SignatureScheme as SigScheme
 

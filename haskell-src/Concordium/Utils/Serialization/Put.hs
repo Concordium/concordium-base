@@ -10,7 +10,7 @@ import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Reader
-import Data.ByteString.Lazy.Builder
+import Data.ByteString.Builder
 import Data.Serialize
 import System.IO
 

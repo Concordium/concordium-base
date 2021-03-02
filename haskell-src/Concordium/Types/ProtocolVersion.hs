@@ -6,6 +6,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
 -- For the most part, 'ProtocolVersion' should be used at the kind level, and
@@ -22,21 +23,33 @@
 module Concordium.Types.ProtocolVersion where
 
 import Data.Singletons.TH
+import Data.Serialize
 
 $( singletons
     [d|
         data ProtocolVersion = P0
+                            | P1
         |]
  )
 
 type OT4 = 'P0
 
+instance Serialize ProtocolVersion where
+    put P0 = putWord64be 0
+    put P1 = putWord64be 1
+    get = getWord64be >>= \case
+        0 -> return P0
+        1 -> return P1
+        v -> fail $ "Unknown protocol version: " ++ show v
+
 class IsProtocolVersion (pv :: ProtocolVersion) where
     protocolVersion :: SProtocolVersion pv
     default protocolVersion :: SingI pv => SProtocolVersion pv
     protocolVersion = sing
+    {-# INLINE protocolVersion #-}
 
 instance IsProtocolVersion 'P0
+instance IsProtocolVersion 'P1
 
 withIsProtocolVersion :: forall (pv :: ProtocolVersion) a. (IsProtocolVersion pv) => (SProtocolVersion pv -> a pv) -> a pv
 withIsProtocolVersion = ($ protocolVersion)
