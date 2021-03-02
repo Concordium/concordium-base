@@ -346,10 +346,22 @@ instance S.Serialize BareBlockItem  where
 class HasMessageExpiry a where
   msgExpiry :: a -> TransactionExpiryTime
 
+instance HasMessageExpiry AccountTransaction where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = thExpiry . transactionHeader
+
+instance HasMessageExpiry AccountCreation where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = messageExpiry
+
+instance HasMessageExpiry UpdateInstruction where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = updateTimeout . uiHeader
+
 instance HasMessageExpiry BareBlockItem where
-  msgExpiry (NormalTransaction t) = thExpiry . transactionHeader $ t
-  msgExpiry (CredentialDeployment t) = messageExpiry t
-  msgExpiry (ChainUpdate t) = updateTimeout . uiHeader $ t
+  msgExpiry (NormalTransaction t) = msgExpiry t
+  msgExpiry (CredentialDeployment t) = msgExpiry t
+  msgExpiry (ChainUpdate t) = msgExpiry t
 
 instance HasMessageExpiry a => HasMessageExpiry (WithMetadata a) where
   {-# INLINE msgExpiry #-}
