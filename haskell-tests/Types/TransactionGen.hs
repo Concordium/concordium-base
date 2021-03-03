@@ -98,9 +98,10 @@ genAccountCredentialWithProofs =
 
 genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
 genCredentialDeploymentWithMeta = do
-  wmdData <- genAccountCredentialWithProofs
+  credential <- genAccountCredentialWithProofs
+  messageExpiry <- TransactionTime <$> arbitrary
   wmdArrivalTime <- TransactionTime <$> arbitrary
-  return $ addMetadata CredentialDeployment wmdArrivalTime wmdData
+  return $ addMetadata CredentialDeployment wmdArrivalTime AccountCreation{..}
 
 genBlockItem :: Gen BlockItem
 genBlockItem = oneof [

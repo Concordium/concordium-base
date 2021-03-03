@@ -5,7 +5,7 @@ use crate::{
     utils,
 };
 use bulletproofs::range_proof::verify_efficient;
-use crypto_common::to_bytes;
+use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
@@ -311,6 +311,7 @@ pub fn verify_credentials<
     pre_id_obj: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
+    expiry: TransactionTime,
     ip_secret_key: &ps_sig::SecretKey<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> Result<
@@ -326,6 +327,7 @@ pub fn verify_credentials<
         &context.ip_info,
         pre_id_obj.pub_info_for_ip.clone(),
         alist,
+        expiry,
         &ip_cdi_secret_key,
     );
     Ok((sig, initial_cdi))
@@ -339,6 +341,7 @@ pub fn create_initial_cdi<
     ip_info: &IpInfo<P>,
     pub_info_for_ip: PublicInformationForIP<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
+    expiry: TransactionTime,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> InitialCredentialDeploymentInfo<C, AttributeType> {
     // The initial policy is empty, apart from the expiry date of the credential.
@@ -355,7 +358,7 @@ pub fn create_initial_cdi<
         cred_account: pub_info_for_ip.vk_acc,
     };
 
-    let sig = sign_initial_cred_values(&cred_values, ip_info, &ip_cdi_secret_key);
+    let sig = sign_initial_cred_values(&cred_values, expiry, ip_info, &ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
         sig,
@@ -368,10 +371,14 @@ pub fn sign_initial_cred_values<
     AttributeType: Attribute<C::Scalar>,
 >(
     initial_cred_values: &InitialCredentialDeploymentValues<C, AttributeType>,
+    expiry: TransactionTime,
     ip_info: &IpInfo<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> IpCdiSignature {
-    let to_sign = Sha256::digest(&to_bytes(&initial_cred_values));
+    let mut hasher = Sha256::new();
+    hasher.update(&to_bytes(&expiry));
+    hasher.update(&to_bytes(&initial_cred_values));
+    let to_sign = hasher.finalize();
     let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
     expanded_sk
         .sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key)
@@ -449,14 +456,15 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::*;
+    use crate::{constants::ArCurve, test::*};
     use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use ff::Field;
-    use pairing::bls12_381::G1;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
 
-    type ExampleCurve = G1;
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
 
     // Eval a polynomial at point.
     fn eval_poly<F: Field, X: AsRef<F>>(coeffs: &[X], x: &F) -> F {
@@ -472,7 +480,7 @@ mod tests {
     #[test]
     fn test_commitment_to_share() {
         let mut csprng = thread_rng();
-        let ck = CommitmentKey::<G1>::generate(&mut csprng);
+        let ck = CommitmentKey::<ArCurve>::generate(&mut csprng);
 
         // Make degree-d polynomial
         let d = csprng.gen_range(1, 10);
@@ -481,7 +489,7 @@ mod tests {
         let mut values = Vec::new();
         for _i in 0..=d {
             // Make commitments to coefficients
-            let v = PedersenValue::<G1>::generate(&mut csprng);
+            let v = PedersenValue::<ArCurve>::generate(&mut csprng);
             let (c, r) = ck.commit(&v, &mut csprng);
             coeffs.push(c);
             rands.push(r);
@@ -492,11 +500,11 @@ mod tests {
         for _ in 0..100 {
             let sh: ArIdentity = ArIdentity::new(std::cmp::max(1, csprng.next_u32()));
             // And evaluate the values and rands at sh.
-            let point = sh.to_scalar::<ExampleCurve>();
+            let point = sh.to_scalar::<ArCurve>();
             let pv = eval_poly(&values, &point);
             let rv = eval_poly(&rands, &point);
 
-            let p0 = utils::commitment_to_share(&sh.to_scalar::<ExampleCurve>(), &coeffs);
+            let p0 = utils::commitment_to_share(&sh.to_scalar::<ArCurve>(), &coeffs);
             assert_eq!(p0, ck.hide_worker(&pv, &rv));
         }
     }
@@ -513,7 +521,7 @@ mod tests {
             ip_secret_key,
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
@@ -533,7 +541,14 @@ mod tests {
         let attrs = test_create_attributes();
 
         // Act
-        let ver_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &attrs,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
 
         // Assert
         assert!(ver_ok.is_ok());
@@ -559,7 +574,7 @@ mod tests {
     // let attrs = test_create_attributes();
     //
     // Act (make dlog proof use wrong id_cred_sec)
-    // let wrong_id_cred_sec = ExampleCurve::generate_scalar(&mut csprng);
+    // let wrong_id_cred_sec = ArCurve::generate_scalar(&mut csprng);
     // pio.pok_sc = prove_dlog(
     // &mut csprng,
     // RandomOracle::empty(),
@@ -595,7 +610,7 @@ mod tests {
             public_ip_info: ip_info,
             ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
@@ -642,7 +657,7 @@ mod tests {
             public_ip_info: ip_info,
             ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
@@ -661,7 +676,7 @@ mod tests {
         // let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
-        let val = curve_arithmetic::Value::<G1>::generate(&mut csprng);
+        let val = curve_arithmetic::Value::<ArCurve>::generate(&mut csprng);
         let (cmm_prf, _) = context
             .global_context
             .on_chain_commitment_key

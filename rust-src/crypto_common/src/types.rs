@@ -10,7 +10,7 @@ use crate::{
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
 use failure::Fallible;
-use std::{collections::BTreeMap, ops::Add};
+use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
 
 /// Index of an account key that is to be used.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -235,6 +235,29 @@ pub struct TransactionSignature {
     pub signatures: BTreeMap<KeyIndex, BTreeMap<KeyIndex, Signature>>,
 }
 
+/// Datatype used to indicate transaction expiry.
+#[derive(
+    SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
+)]
+#[serde(transparent)]
+pub struct TransactionTime {
+    /// Seconds since the unix epoch.
+    pub seconds: u64,
+}
+
+impl From<u64> for TransactionTime {
+    fn from(seconds: u64) -> Self { Self { seconds } }
+}
+
+impl FromStr for TransactionTime {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let seconds = u64::from_str(s)?;
+        Ok(Self { seconds })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,7 +289,6 @@ mod tests {
             }
             let signatures = TransactionSignature { signatures };
             let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");
-            println!("{}", js);
             match serde_json::from_str::<TransactionSignature>(&js) {
                 Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
                 Err(e) => assert!(false, "{}", e),

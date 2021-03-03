@@ -9,6 +9,7 @@ use crypto_common::{
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
+use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use failure::Fallible;
 use id::{
@@ -358,6 +359,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
 fn create_credential_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
+    let expiry = try_get(&v, "expiry")?;
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
 
     let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
@@ -376,7 +378,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     // The mobile wallet for now only creates new accounts and does not support
     // adding credentials onto existing ones. Once that is supported the address
     // should be coming from the input data.
-    let address: Option<AccountAddress> = None;
+    let new_or_existing = Left(expiry);
 
     // The mobile wallet can only create new accounts, which means new credential
     // data will be generated.
@@ -418,12 +420,12 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         acc_num,
         policy,
         &cred_data,
-        address,
+        &new_or_existing,
     )?;
 
-    let address = match address {
-        None => AccountAddress::new(&cdi.values.cred_id),
-        Some(address) => address,
+    let address = match new_or_existing {
+        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Right(address) => address,
     };
 
     // unwrap is safe here since we've generated the credential already, and that
@@ -434,8 +436,13 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         scalar:    enc_key,
     };
 
+    let credential_message = AccountCredentialMessage {
+        message_expiry: expiry,
+        credential:     AccountCredential::Normal { cdi },
+    };
+
     let response = json!({
-        "credential": Versioned::new(VERSION_0, AccountCredential::Normal{cdi}),
+        "credential": Versioned::new(VERSION_0, credential_message),
         "accountKeys": AccountKeys::from(cred_data),
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),

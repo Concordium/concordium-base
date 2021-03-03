@@ -3,8 +3,9 @@ use crate::{
     types::*,
 };
 use byteorder::ReadBytesExt;
-use crypto_common::{size_t, *};
+use crypto_common::{size_t, types::TransactionTime, *};
 use curve_arithmetic::*;
+use either::Either::{Left, Right};
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
@@ -123,6 +124,7 @@ extern "C" fn verify_initial_cdi_ffi(
     // acc_keys_len: size_t,
     initial_cdi_ptr: *const u8,
     initial_cdi_len: size_t,
+    expiry: u64,
 ) -> i32 {
     let cdi_bytes = slice_from_c_bytes!(initial_cdi_ptr, initial_cdi_len as usize);
     match InitialCredentialDeploymentInfo::<G1, AttributeKind>::deserial(&mut Cursor::new(
@@ -133,6 +135,7 @@ extern "C" fn verify_initial_cdi_ffi(
             match chain::verify_initial_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(ip_info_ptr),
                 &cdi,
+                TransactionTime { seconds: expiry },
             ) {
                 Ok(()) => 1, // verification succeeded
                 Err(_) => -2, /* Only signature verification can fail, so just map all failures
@@ -151,7 +154,8 @@ extern "C" fn verify_cdi_ffi(
     ars_infos_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
-    addr_ptr: *const u8, // pointer to an account address, 32 bytes
+    addr_ptr: *const u8, // pointer to an account address, or null, 32 bytes
+    expiry: u64,         // if addr_ptr is null this is used
 ) -> i32 {
     if gc_ptr.is_null() {
         return -9;
@@ -160,10 +164,10 @@ extern "C" fn verify_cdi_ffi(
         return -10;
     }
 
-    let reg_id: Option<AccountAddress> = if addr_ptr.is_null() {
-        None
+    let new_or_existing = if addr_ptr.is_null() {
+        Left(TransactionTime { seconds: expiry })
     } else if let Ok(bytes) = slice_from_c_bytes!(addr_ptr, ACCOUNT_ADDRESS_SIZE).try_into() {
-        Some(AccountAddress(bytes))
+        Right(AccountAddress(bytes))
     } else {
         return -14;
     };
@@ -193,7 +197,7 @@ extern "C" fn verify_cdi_ffi(
                 from_ptr!(ip_info_ptr),
                 &ars_infos,
                 &cdi,
-                reg_id,
+                &new_or_existing,
             ) {
                 Ok(()) => 1, // verification succeeded
                 Err(CDIVerificationError::RegId) => -1,
@@ -280,19 +284,27 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crate::{
+        account_holder::*,
+        constants::{ArCurve, BaseField},
+        identity_provider::*,
+        secret_sharing::Threshold,
+        test::*,
+    };
     use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use dodis_yampolskiy_prf::secret as prf;
-    use pairing::bls12_381::Bls12;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
-    type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
-    type ExampleCurve = G1;
+    type ExampleAttributeList = AttributeList<BaseField, AttributeKind>;
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
+
     #[test]
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+        let ah_info = CredentialHolderInfo::<ArCurve> {
             id_cred: IdCredentials::generate(&mut csprng),
         };
 
@@ -353,7 +365,14 @@ mod test {
         let (pio, randomness) = generate_pio(&context, threshold, &aci, &acc_data)
             .expect("Creating the credential should succeed.");
 
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
 
         // First test, check that we have a valid signature.
         assert!(ver_ok.is_ok());
@@ -367,6 +386,7 @@ mod test {
             ip_info_ptr,
             initial_cdi_bytes.as_ptr(),
             initial_cdi_bytes_len,
+            EXPIRY.seconds,
         );
         assert_eq!(initial_cdi_check, 1);
 
@@ -417,7 +437,7 @@ mod test {
             0,
             policy,
             &acc_data,
-            None,
+            &Left(EXPIRY),
         )
         .expect("Should generate the credential successfully.");
 
@@ -428,7 +448,7 @@ mod test {
             0,
             wrong_policy,
             &acc_data,
-            None,
+            &Left(EXPIRY),
         )
         .expect("Should generate the credential successfully.");
 
@@ -450,6 +470,7 @@ mod test {
             cdi_bytes.as_ptr(),
             cdi_bytes_len,
             std::ptr::null(),
+            EXPIRY.seconds,
         );
         assert_eq!(cdi_check, 1);
         let wrong_cdi_bytes = to_bytes(&wrong_cdi);
@@ -462,6 +483,7 @@ mod test {
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
             std::ptr::null(),
+            EXPIRY.seconds,
         );
         assert_ne!(wrong_cdi_check, 1);
     }

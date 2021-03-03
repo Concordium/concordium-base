@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module ConcordiumTests.Crypto.FFIVerify where
 
+import Concordium.Types
 import Concordium.ID.Account
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
@@ -24,6 +25,10 @@ readData bs = loop (runGetPartial getData bs)
         loop (Partial k) = loop (k BS.empty)
         loop (Done r rest) = Right (r, rest)
 
+-- This should match with the EXPIRY constant in generate_testdata.
+maxExpiry :: TransactionTime
+maxExpiry = TransactionTime maxBound
+
 test :: BS.ByteString -> Either String Bool
 test bs = do
   ((gc, ipInfo, arInfos), rest) <- readData bs
@@ -37,10 +42,13 @@ test bs = do
     l3 <- getWord32be
     c3 <- getByteString (fromIntegral l3)
     return (c1, k, c2, k3, c3)
-  unless (verifyCredential gc ipInfo arInfos cdi1 Nothing) $ throwError "Verification of the first credential failed."
-  unless (verifyCredential gc ipInfo arInfos cdi2 (Just addr)) $ throwError "Verification with correct address failed."
-  when (verifyCredential gc ipInfo arInfos cdi2 (Just addr')) $ throwError "Verification with wrong address should fail."
-  unless (verifyInitialAccountCreation ipInfo icdi) $ throwError "Verification of initial credential deployment failed"
+  unless (verifyCredential gc ipInfo arInfos cdi1 (Left maxExpiry)) $ throwError "Verification of the first credential failed."
+  when (verifyCredential gc ipInfo arInfos cdi1 (Left 0)) $ throwError "Verification of the first credential succeeded with incorrect expiry."
+  when (verifyCredential gc ipInfo arInfos cdi1 (Right addr)) $ throwError "Verification of the first credential succeeded with addr instead of expiry."
+  unless (verifyCredential gc ipInfo arInfos cdi2 (Right addr)) $ throwError "Verification with correct address failed."
+  when (verifyCredential gc ipInfo arInfos cdi2 (Right addr')) $ throwError "Verification with wrong address should fail."
+  unless (verifyInitialAccountCreation ipInfo maxExpiry icdi) $ throwError "Verification of initial credential deployment failed"
+  when (verifyInitialAccountCreation ipInfo 0 icdi) $ throwError "Verification of initial credential with incorrect expiry succeeded."
   return True
 
 tests :: Spec

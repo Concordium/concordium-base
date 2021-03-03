@@ -1,5 +1,8 @@
 use anyhow::{bail, ensure};
-use crypto_common::{base16_encode_string, SerdeDeserialize, SerdeSerialize, Versioned, VERSION_0};
+use crypto_common::{
+    base16_encode_string, types::TransactionTime, SerdeDeserialize, SerdeSerialize, Versioned,
+    VERSION_0,
+};
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
     constants::{ArCurve, IpPairing},
@@ -937,6 +940,10 @@ async fn create_signed_identity_object(
 
     let versioned_id = Versioned::new(VERSION_0, id);
 
+    let message_expiry = TransactionTime {
+        seconds: chrono::offset::Utc::now().timestamp() as u64 + 300, // 5min expiry.
+    };
+
     // As a last step we submit the initial account creation to the chain.
     // TODO: We should check beforehand that the regid is fresh and that
     // no account with this regid already exists, since that will lead to failure of
@@ -949,13 +956,14 @@ async fn create_signed_identity_object(
             .pub_info_for_ip
             .clone(),
         &versioned_id.value.alist,
+        message_expiry,
         &server_config.ip_data.ip_cdi_secret_key,
     );
 
-    let submission = AccountCredential::<IpPairing, _, _>::Initial { icdi: initial_cdi };
-
-    // The proxy expects a versioned submission, so that is what we construction.
-    let versioned_submission = Versioned::new(VERSION_0, submission);
+    let versioned_credential =
+        Versioned::new(VERSION_0, AccountCredential::<IpPairing, _, _>::Initial {
+            icdi: initial_cdi,
+        });
 
     // Store the created IdentityObject.
     // This is stored so it can later be retrieved by querying via the idCredPub.
@@ -963,13 +971,21 @@ async fn create_signed_identity_object(
         db.write_identity_object(
             &base16_encoded_id_cred_pub,
             &versioned_id,
-            &versioned_submission
+            &versioned_credential
         ),
         "Could not write to database."
     );
 
+    let submission = AccountCredentialMessage {
+        message_expiry,
+        credential: versioned_credential.value,
+    };
+
+    // The proxy expects a versioned submission, so that is what we construction.
+    let versioned_submission = Versioned::new(VERSION_0, submission);
     // Submit and wait for the submission ID.
     let submission_value = to_value(versioned_submission).unwrap();
+
     match submit_account_creation(
         &client,
         server_config.submit_credential_url.clone(),

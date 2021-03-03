@@ -4,7 +4,7 @@ use client_server_helpers::*;
 use crypto_common::{
     base16_encode_string,
     serde_impls::KeyPairDef,
-    types::{Amount, KeyIndex},
+    types::{Amount, KeyIndex, TransactionTime},
     *,
 };
 use dodis_yampolskiy_prf::secret as prf;
@@ -197,10 +197,13 @@ fn main() -> std::io::Result<()> {
         let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
             .expect("Generating the pre-identity object should succeed.");
 
+        let expiry = TransactionTime { seconds: u64::MAX };
+
         let ver_ok = verify_credentials(
             &pio,
             context,
             &attributes,
+            expiry,
             &ip_data.ip_secret_key,
             &ip_data.ip_cdi_secret_key,
         );
@@ -234,6 +237,7 @@ fn main() -> std::io::Result<()> {
             &ip_data.public_ip_info,
             id_object.pre_identity_object.pub_info_for_ip,
             &id_object.alist,
+            expiry,
             &ip_data.ip_cdi_secret_key,
         );
 
@@ -269,7 +273,7 @@ fn main() -> std::io::Result<()> {
             "credentials": versioned_credentials,
             "aci": id_object_use_data.aci,
         });
-        (account_data_json, versioned_credentials, acc_keys, address)
+        (account_data_json, versioned_credentials, address)
     };
 
     let mk_out_path = |s| {
@@ -303,7 +307,7 @@ fn main() -> std::io::Result<()> {
 
             let mut accounts = Vec::with_capacity(num_accounts);
             for acc_num in 0..num_accounts {
-                let (account_data_json, credential_json, account_keys, address_json) =
+                let (account_data_json, credential_json, address_json) =
                     generate_account(&mut csprng);
 
                 if let Some(stake) = stake {
@@ -337,10 +341,10 @@ fn main() -> std::io::Result<()> {
 
                     let public_account_data = json!({
                         "schemeId": "Ed25519",
-                        "accountKeys": account_keys,
                         "address": address_json,
                         "balance": balance,
-                        "credential": credential_json,
+                        "accountThreshold": 1, // only a single credential
+                        "credentials": credential_json,
                         "baker": public_baker_data
                     });
 
@@ -358,10 +362,10 @@ fn main() -> std::io::Result<()> {
                 } else {
                     let public_account_data = json!({
                         "schemeId": "Ed25519",
-                        "accountKeys": account_keys,
                         "address": address_json,
                         "balance": balance,
-                        "credential": credential_json,
+                        "accountThreshold": 1, // only a single credential
+                        "credentials": credential_json,
                     });
                     accounts.push(public_account_data);
                 }

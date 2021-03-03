@@ -188,6 +188,24 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 instance HashableTo TransactionSignHashV0 AccountTransaction where
   getHash = atrSignHash
 
+-- |An 'AccountCreation' is a credential together with an expiry. It is a
+-- message that is included in a block, if valid, but it is not paid for
+-- directly by the sender.
+data AccountCreation = AccountCreation {
+  messageExpiry :: !TransactionExpiryTime,
+  credential :: !AccountCredentialWithProofs
+ } deriving(Eq, Show)
+
+instance S.Serialize AccountCreation where
+  put AccountCreation{..} = S.put messageExpiry <> S.put credential
+  get = AccountCreation <$> S.get <*> S.get
+
+instance FromJSON AccountCreation where
+  parseJSON = AE.withObject "AccountCreation" $ \obj -> do
+    messageExpiry <- obj AE..: "messageExpiry"
+    credential <- obj AE..: "credential"
+    return AccountCreation{..}
+
 --------------------------
 -- * Transaction metadata
 --------------------------
@@ -232,7 +250,7 @@ instance HashableTo TransactionHash (WithMetadata value) where
   getHash = wmdHash
 
 type Transaction = WithMetadata AccountTransaction
-type CredentialDeploymentWithMeta = WithMetadata AccountCredentialWithProofs
+type CredentialDeploymentWithMeta = WithMetadata AccountCreation
 
 addMetadata :: (a -> BareBlockItem) -> TransactionTime -> a -> WithMetadata a
 addMetadata f time a = WithMetadata {
@@ -250,19 +268,27 @@ fromAccountTransaction wmdArrivalTime wmdData =
       wmdSize = BS.length (S.encode wmdData) + 1
   in WithMetadata{..}
 
-fromCDI :: TransactionTime -> CredentialDeploymentInformation -> CredentialDeploymentWithMeta
-fromCDI wmdArrivalTime wmdData =
+fromCDI :: TransactionTime -- ^Arrival time
+        -> TransactionExpiryTime -- ^Expiry time of the message
+        -> CredentialDeploymentInformation
+        -> CredentialDeploymentWithMeta
+fromCDI wmdArrivalTime messageExpiry cdi =
   let cdiBytes = S.encode wmdData
-      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
-      wmdHash = getHash (CredentialDeployment (NormalACWP wmdData))
-  in WithMetadata{wmdData = NormalACWP wmdData,..}
+      wmdSize = BS.length cdiBytes + 1 -- + 1 for the tag
+      wmdData = AccountCreation {credential = NormalACWP cdi,..}
+      wmdHash = getHash (CredentialDeployment wmdData)
+  in WithMetadata{..}
 
-fromICDI :: TransactionTime -> InitialCredentialDeploymentInfo -> CredentialDeploymentWithMeta
-fromICDI wmdArrivalTime wmdData =
+fromICDI :: TransactionTime -- ^Arrival time
+         -> TransactionExpiryTime -- ^Expiry time of the message
+         -> InitialCredentialDeploymentInfo
+         -> CredentialDeploymentWithMeta
+fromICDI wmdArrivalTime messageExpiry icdi =
   let cdiBytes = S.encode wmdData
-      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
-      wmdHash = getHash (CredentialDeployment (InitialACWP wmdData))
-  in WithMetadata{wmdData = InitialACWP wmdData,..}
+      wmdSize = BS.length cdiBytes + 1 -- + 1 for the tag
+      wmdData = AccountCreation{credential = InitialACWP icdi,..}
+      wmdHash = getHash (CredentialDeployment wmdData)
+  in WithMetadata{..}
 
 -----------------
 -- * Block items
@@ -292,7 +318,7 @@ data BareBlockItem =
     biTransaction :: !AccountTransaction
   }
   | CredentialDeployment {
-      biCred :: !AccountCredentialWithProofs
+      biCred :: !AccountCreation
   }
   | ChainUpdate {
     biUpdate :: !UpdateInstruction
@@ -315,12 +341,42 @@ instance S.Serialize BareBlockItem  where
     CredentialDeploymentKind -> CredentialDeployment <$> S.get
     UpdateInstructionKind -> ChainUpdate <$> S.get
 
+-- |Datatypes which have an expiry, which here we set to mean the latest time
+-- the item can be included in a block.
+class HasMessageExpiry a where
+  msgExpiry :: a -> TransactionExpiryTime
+
+instance HasMessageExpiry AccountTransaction where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = thExpiry . transactionHeader
+
+instance HasMessageExpiry AccountCreation where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = messageExpiry
+
+instance HasMessageExpiry UpdateInstruction where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = updateTimeout . uiHeader
+
+instance HasMessageExpiry BareBlockItem where
+  msgExpiry (NormalTransaction t) = msgExpiry t
+  msgExpiry (CredentialDeployment t) = msgExpiry t
+  msgExpiry (ChainUpdate t) = msgExpiry t
+
+instance HasMessageExpiry a => HasMessageExpiry (WithMetadata a) where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = msgExpiry . wmdData
+
+instance HasMessageExpiry a => HasMessageExpiry (Versioned a) where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = msgExpiry . vValue
+
 -- |Embed a transaction as a block item.
 normalTransaction :: Transaction -> BlockItem
 -- the +1 is for the additional tag.
 normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, wmdSize = wmdSize + 1,..}
 
-credentialDeployment :: WithMetadata AccountCredentialWithProofs -> BlockItem
+credentialDeployment :: CredentialDeploymentWithMeta -> BlockItem
 credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, wmdSize = wmdSize + 1,..}
 
 chainUpdate :: WithMetadata UpdateInstruction -> BlockItem

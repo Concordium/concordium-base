@@ -10,6 +10,7 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
+use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{multicombine, Cipher};
@@ -523,7 +524,7 @@ pub fn create_credential<
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_data: &impl CredentialDataWithSigning,
-    reg_id: Option<AccountAddress>, // cred_key_info: CredentialKeyInfo
+    new_or_existing: &either::Either<TransactionTime, AccountAddress>,
 ) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
@@ -534,11 +535,11 @@ where
         cred_counter,
         policy,
         cred_data.get_cred_key_info(),
-        reg_id,
+        new_or_existing.as_ref().right(),
     )?;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: cred_data.sign(&unsigned_credential_info),
+        sigs: cred_data.sign(&new_or_existing, &unsigned_credential_info),
     };
 
     let cdp = CredDeploymentProofs {
@@ -572,7 +573,7 @@ pub fn create_unsigned_credential<
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
-    addr: Option<AccountAddress>,
+    addr: Option<&AccountAddress>,
 ) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
@@ -803,7 +804,6 @@ where
     let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
         proofs: id_proofs,
-        addr,
     };
     Ok(info)
 }
@@ -1088,9 +1088,15 @@ mod tests {
     use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use curve_arithmetic::Curve;
+    use either::Either::Left;
     use pedersen_scheme::key::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;
+
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
+
     // Construct PIO, test various proofs are valid
     // #[test]
     // pub fn test_pio_correctness() {
@@ -1230,7 +1236,14 @@ mod tests {
         let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         let (ip_sig, _) = ver_ok.unwrap();
 
         // Create CDI arguments
@@ -1270,7 +1283,7 @@ mod tests {
             cred_ctr,
             policy.clone(),
             &acc_data,
-            None,
+            &Left(EXPIRY),
         )
         .expect("Could not generate CDI");
 
