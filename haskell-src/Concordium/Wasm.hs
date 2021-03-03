@@ -414,22 +414,9 @@ data ReceiveContext = ReceiveContext
   }
 
 -- |Encode into a bytestring, using little endian serialization where
--- appropriate. This is the legacy P0 format.
-encodeReceiveContextP0 :: ReceiveContext -> ByteString
-encodeReceiveContextP0 ReceiveContext{..} = runPut encoder
-  where encoder =
-          put invoker <>
-          putWord64le (_contractIndex (contractIndex selfAddress)) <>
-          putWord64le (_contractSubindex (contractSubindex selfAddress)) <>
-          putWord64le (_amount selfBalance) <>
-          put sender <>
-          put owner <>
-          putSenderPolicies rcSenderPolicies
-
--- |Encode into a bytestring, using little endian serialization where
--- appropriate. This is the P1 format.
-encodeReceiveContextP1 :: ReceiveContext -> ByteString
-encodeReceiveContextP1 ReceiveContext{..} = runPut encoder
+-- appropriate.
+encodeReceiveContext :: ReceiveContext -> ByteString
+encodeReceiveContext ReceiveContext{..} = runPut encoder
   where encoder =
           put invoker <>
           encodeContractAddress selfAddress <>
@@ -443,12 +430,6 @@ encodeReceiveContextP1 ReceiveContext{..} = runPut encoder
           putWord64le (_contractSubindex subind)
         encodeAddress (AddressContract addr) = putWord8 1 <> encodeContractAddress addr
         encodeAddress accAddr = putWord8 0 <> put accAddr
-
--- |Encode into a bytestring, using little endian serialization where
--- appropriate.
-encodeReceiveContext :: SProtocolVersion pv -> ReceiveContext -> ByteString
-encodeReceiveContext SP0 = encodeReceiveContextP0
-encodeReceiveContext SP1 = encodeReceiveContextP1
 
 data SenderPolicy = SenderPolicy {
   -- |Identity of the identity provider who signed the identity object

@@ -746,34 +746,6 @@ newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutc
 newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
-{-
-type family BlockHash (pv :: ProtocolVersion) where
-  BlockHash 'P0 = BlockHashV0
-
-toGenericBlockHash :: SProtocolVersion pv -> BlockHash pv -> GenericBlockHash
-toGenericBlockHash SP0 = v0BlockHash
-{-# INLINE toGenericBlockHash #-}
-
-fromGenericBlockHash :: SProtocolVersion pv -> GenericBlockHash -> BlockHash pv
-fromGenericBlockHash SP0 = BlockHashV0
-{-# INLINE fromGenericBlockHash #-}
-
-putBlockHash :: SProtocolVersion pv -> S.Putter (BlockHash pv)
-putBlockHash = \case SP0 -> S.put
-{-# INLINE putBlockHash #-}
-
-getBlockHash :: SProtocolVersion pv -> S.Get (BlockHash pv)
-getBlockHash = \case SP0 -> S.get
-{-# INLINE getBlockHash #-}
-
-
-type family StateHash (pv :: ProtocolVersion) where
-  StateHash 'P0 = StateHashV0
-
-type family TransactionOutcomesHash (pv :: ProtocolVersion) where
-  TransactionOutcomesHash 'P0 = TransactionOutcomesHashV0
--}
-
 type StateHash = StateHashV0
 type TransactionOutcomesHash = TransactionOutcomesHashV0
 
