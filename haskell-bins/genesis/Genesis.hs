@@ -25,7 +25,6 @@ import Concordium.Genesis.Data
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
 import Concordium.Types.SeedState
-import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Updates
 
@@ -262,10 +261,10 @@ main = cmdArgsRun mode >>=
         showAccount totalGTU GenesisAccount{..} = do
           putStrLn $ "  - " ++ show gaAddress
           putStrLn $ "     * balance: " ++ showBalance totalGTU gaBalance
-          putStrLn $ "     * threshold: " ++ show (akThreshold gaVerifyKeys)
-          putStrLn $ "     * keys: "
-          forM_ (OrdMap.toList (akKeys gaVerifyKeys)) $ \(idx, k) ->
-            putStrLn $ "       - " ++ show idx ++ ": " ++ show k
+          putStrLn $ "     * threshold: " ++ show (gaThreshold)
+          -- putStrLn $ "     * keys: "
+          -- forM_ (OrdMap.toList (akKeys gaVerifyKeys)) $ \(idx, k) ->
+          --   putStrLn $ "       - " ++ show idx ++ ": " ++ show k
           forM_ gaBaker $ \GenesisBaker{..} -> do
             putStrLn $ "     * baker:"
             putStrLn $ "       + id: " ++ show gbBakerId

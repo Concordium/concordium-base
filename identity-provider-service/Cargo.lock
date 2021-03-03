@@ -935,6 +935,7 @@ name = "identity-provider-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "crypto_common",
  "curve_arithmetic",
