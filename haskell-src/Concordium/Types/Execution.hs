@@ -27,6 +27,7 @@ import qualified Data.Set as Set
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 
+import Data.Int (Int32)
 import Data.Word
 import GHC.Generics
 
@@ -668,7 +669,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   -- possible. The data are the from address and the amount to transfer.
                   | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
-                  | Rejected { rejectReason :: Word8 } -- ^Rejected due to contract logic with given error code.
+                  | Rejected { rejectReason :: Int32 } -- ^Rejected due to contract logic with given error code.
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
