@@ -48,7 +48,8 @@ data GenerateUpdateKeys
         gukFoundationAccount :: AuthDetails,
         gukMintDistribution :: AuthDetails,
         gukTransactionFeeDistribution :: AuthDetails,
-        gukGASRewards :: AuthDetails
+        gukGASRewards :: AuthDetails,
+        gukBakerStakeThreshold :: AuthDetails
     } deriving (Show)
 
 readKeyList :: ReadM [Word16]
@@ -71,6 +72,7 @@ parameters = GenerateUpdateKeys
     <*> option readAuthDetails (metavar "ACSTR" <> long "mint-distribution" <> help "Mint distribution update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "fee-distribution" <> help "Transaction fee distribution update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "gas-rewards" <> help "GAS rewards update access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "baker-minimum-threshold" <> help "Baker minimum threshold access structure")
 
 main :: IO ()
 main = customExecParser p opts >>= generateKeys
@@ -100,6 +102,7 @@ generateKeys GenerateUpdateKeys{..} = do
         asParamMintDistribution <- makeAS gukMintDistribution "Mint distribution update access structure"
         asParamTransactionFeeDistribution <- makeAS gukTransactionFeeDistribution "Transaction fee distribution update access structure"
         asParamGASRewards <- makeAS gukGASRewards "GAS rewards update access structure"
+        asBakerStakeThreshold <- makeAS gukBakerStakeThreshold "Baker minimum threshold access structure"
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k | k <- [0..gukKeyCount-1]]
         let auths = Authorizations{..}

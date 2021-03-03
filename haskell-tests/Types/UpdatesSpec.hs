@@ -47,6 +47,7 @@ genAuthorizations = do
     asParamMintDistribution <- genAccessStructure
     asParamTransactionFeeDistribution <- genAccessStructure
     asParamGASRewards <- genAccessStructure
+    asBakerStakeThreshold <- genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -104,7 +105,8 @@ genUpdatePayload = oneof [
         FoundationAccountUpdatePayload <$> genAddress,
         MintDistributionUpdatePayload <$> genMintDistribution,
         TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
-        GASRewardsUpdatePayload <$> genGASRewards]
+        GASRewardsUpdatePayload <$> genGASRewards,
+        BakerStakeThresholdPayload <$> arbitrary]
 
 genRawUpdateInstruction :: Gen RawUpdateInstruction
 genRawUpdateInstruction = do
@@ -137,6 +139,7 @@ genAuthorizationsAndKeys thr = do
         asParamMintDistribution <- genAccessStructure
         asParamTransactionFeeDistribution <- genAccessStructure
         asParamGASRewards <- genAccessStructure
+        asBakerStakeThreshold <- genAccessStructure
         return (Authorizations{..}, kps)
 
 {-
@@ -183,6 +186,7 @@ testUpdateInstruction keyGen isValid = forAll (genAuthorizationsAndKeys 3) $ \(a
                     MintDistributionUpdatePayload{} -> asParamMintDistribution auths
                     TransactionFeeDistributionUpdatePayload{} -> asParamTransactionFeeDistribution auths
                     GASRewardsUpdatePayload{} -> asParamGASRewards auths
+                    BakerStakeThresholdPayload{} -> asBakerStakeThreshold auths
             useKeys <- keyGen keys accessPublicKeys (fromIntegral accessThreshold)
             let ui = makeUpdateInstruction rui useKeys
             return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate auths ui)
