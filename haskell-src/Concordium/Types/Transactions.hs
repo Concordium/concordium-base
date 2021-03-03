@@ -45,42 +45,49 @@ transactionSignHashFromBytes = TransactionSignHashV0 . H.hash
 transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
 transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put atrHeader <> putEncodedPayload atrPayload
 
--- |A signature is an association list of index of the key, and the actual signature.
--- The index is relative to the account address, and the indices should be distinct.
+-- |A transaction signature is map from the index of the credential to another map from the key index to the actual signature.
+-- The credential index is relative to the account address, and the indices should be distinct.
+-- The key index is relative to the credential.
 -- The maximum length of the list is 255, and the minimum length is 1.
-newtype TransactionSignature = TransactionSignature { tsSignature :: Map.Map KeyIndex Signature }
+newtype TransactionSignature = TransactionSignature { tsSignatures :: Map.Map CredentialIndex (Map.Map KeyIndex Signature) }
   deriving (Eq, Show)
-  deriving (ToJSON, FromJSON) via (Map.Map KeyIndex Signature)
+  deriving (ToJSON, FromJSON) via (Map.Map CredentialIndex (Map.Map KeyIndex Signature))
+
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
-getTransactionNumSigs = length . tsSignature
-
+getTransactionNumSigs = foldl' (\l m -> l + length m) 0 . tsSignatures
 
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
-    S.putWord8 (fromIntegral (length tsSignature))
-    forM_ (Map.toAscList tsSignature) $ \(idx, sig) -> S.put idx <> S.put sig
+    S.putWord8 (fromIntegral (length tsSignatures))
+    forM_ (Map.toAscList tsSignatures) $ \(credIndex, sigmap) ->
+      S.put credIndex <>
+      S.putWord8 (fromIntegral (length sigmap)) <>
+      forM_ (Map.toAscList sigmap) (\(idx, sig) -> S.put idx <> S.put sig)
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
-    let accumulateSigs accum mlast count
+
+    let accumulateCredSigs accum mlast count
           | count == 0 = return accum
           | otherwise = do
               idx <- S.get
               forM_ mlast $ \lasti -> unless (idx > lasti) $ fail "Signatures are not in canonical order."
               sig <- S.get
-              accumulateSigs (Map.insert idx sig accum) (Just idx) (count - 1)
+              accumulateCredSigs (Map.insert idx sig accum) (Just idx) (count - 1)
+    let accumulateSigs accum mlast count
+          | count == 0 = return accum
+          | otherwise = do
+              idx <- S.get
+              forM_ mlast $ \lasti -> unless (idx > lasti) $ fail "Signatures are not in canonical order."
+              -- sig <- S.get
+              sigmaplen <- S.getWord8
+              when (sigmaplen == 0) $ fail "There must be at least one signature for each listed credential."
+              sigmap <- accumulateCredSigs Map.empty Nothing sigmaplen
+              accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
     TransactionSignature <$> accumulateSigs Map.empty Nothing len
-
--- |Size of the signature in bytes.
--- Should be kept up to date with the serialize instance.
-signatureSize :: TransactionSignature -> Int
-signatureSize TransactionSignature{..} =
-    1 -- length
-    + length tsSignature -- key indices
-    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignature) -- signatures
 
 -- | Data common to all transaction types.
 --
@@ -133,7 +140,7 @@ instance S.Serialize TransactionHeader where
 
 -- |An 'AccountTransaction' is a transaction that originates from
 -- a specific account (the sender), and is paid for by the sender.
--- 
+--
 -- The representation includes a 'TransactionSignHash' which is
 -- the value that is signed. This is derived from the header and
 -- payload, and so does not form part of the serialization.
@@ -181,6 +188,24 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 instance HashableTo TransactionSignHashV0 AccountTransaction where
   getHash = atrSignHash
 
+-- |An 'AccountCreation' is a credential together with an expiry. It is a
+-- message that is included in a block, if valid, but it is not paid for
+-- directly by the sender.
+data AccountCreation = AccountCreation {
+  messageExpiry :: !TransactionExpiryTime,
+  credential :: !AccountCredentialWithProofs
+ } deriving(Eq, Show)
+
+instance S.Serialize AccountCreation where
+  put AccountCreation{..} = S.put messageExpiry <> S.put credential
+  get = AccountCreation <$> S.get <*> S.get
+
+instance FromJSON AccountCreation where
+  parseJSON = AE.withObject "AccountCreation" $ \obj -> do
+    messageExpiry <- obj AE..: "messageExpiry"
+    credential <- obj AE..: "credential"
+    return AccountCreation{..}
+
 --------------------------
 -- * Transaction metadata
 --------------------------
@@ -225,7 +250,7 @@ instance HashableTo TransactionHash (WithMetadata value) where
   getHash = wmdHash
 
 type Transaction = WithMetadata AccountTransaction
-type CredentialDeploymentWithMeta = WithMetadata AccountCredentialWithProofs
+type CredentialDeploymentWithMeta = WithMetadata AccountCreation
 
 addMetadata :: (a -> BareBlockItem) -> TransactionTime -> a -> WithMetadata a
 addMetadata f time a = WithMetadata {
@@ -243,19 +268,27 @@ fromAccountTransaction wmdArrivalTime wmdData =
       wmdSize = BS.length (S.encode wmdData) + 1
   in WithMetadata{..}
 
-fromCDI :: TransactionTime -> CredentialDeploymentInformation -> CredentialDeploymentWithMeta
-fromCDI wmdArrivalTime wmdData =
+fromCDI :: TransactionTime -- ^Arrival time
+        -> TransactionExpiryTime -- ^Expiry time of the message
+        -> CredentialDeploymentInformation
+        -> CredentialDeploymentWithMeta
+fromCDI wmdArrivalTime messageExpiry cdi =
   let cdiBytes = S.encode wmdData
-      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
-      wmdHash = getHash (CredentialDeployment (NormalACWP wmdData))
-  in WithMetadata{wmdData = NormalACWP wmdData,..}
+      wmdSize = BS.length cdiBytes + 1 -- + 1 for the tag
+      wmdData = AccountCreation {credential = NormalACWP cdi,..}
+      wmdHash = getHash (CredentialDeployment wmdData)
+  in WithMetadata{..}
 
-fromICDI :: TransactionTime -> InitialCredentialDeploymentInfo -> CredentialDeploymentWithMeta
-fromICDI wmdArrivalTime wmdData =
+fromICDI :: TransactionTime -- ^Arrival time
+         -> TransactionExpiryTime -- ^Expiry time of the message
+         -> InitialCredentialDeploymentInfo
+         -> CredentialDeploymentWithMeta
+fromICDI wmdArrivalTime messageExpiry icdi =
   let cdiBytes = S.encode wmdData
-      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
-      wmdHash = getHash (CredentialDeployment (InitialACWP wmdData))
-  in WithMetadata{wmdData = InitialACWP wmdData,..}
+      wmdSize = BS.length cdiBytes + 1 -- + 1 for the tag
+      wmdData = AccountCreation{credential = InitialACWP icdi,..}
+      wmdHash = getHash (CredentialDeployment wmdData)
+  in WithMetadata{..}
 
 -----------------
 -- * Block items
@@ -285,7 +318,7 @@ data BareBlockItem =
     biTransaction :: !AccountTransaction
   }
   | CredentialDeployment {
-      biCred :: !AccountCredentialWithProofs
+      biCred :: !AccountCreation
   }
   | ChainUpdate {
     biUpdate :: !UpdateInstruction
@@ -308,12 +341,42 @@ instance S.Serialize BareBlockItem  where
     CredentialDeploymentKind -> CredentialDeployment <$> S.get
     UpdateInstructionKind -> ChainUpdate <$> S.get
 
+-- |Datatypes which have an expiry, which here we set to mean the latest time
+-- the item can be included in a block.
+class HasMessageExpiry a where
+  msgExpiry :: a -> TransactionExpiryTime
+
+instance HasMessageExpiry AccountTransaction where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = thExpiry . transactionHeader
+
+instance HasMessageExpiry AccountCreation where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = messageExpiry
+
+instance HasMessageExpiry UpdateInstruction where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = updateTimeout . uiHeader
+
+instance HasMessageExpiry BareBlockItem where
+  msgExpiry (NormalTransaction t) = msgExpiry t
+  msgExpiry (CredentialDeployment t) = msgExpiry t
+  msgExpiry (ChainUpdate t) = msgExpiry t
+
+instance HasMessageExpiry a => HasMessageExpiry (WithMetadata a) where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = msgExpiry . wmdData
+
+instance HasMessageExpiry a => HasMessageExpiry (Versioned a) where
+  {-# INLINE msgExpiry #-}
+  msgExpiry = msgExpiry . vValue
+
 -- |Embed a transaction as a block item.
 normalTransaction :: Transaction -> BlockItem
 -- the +1 is for the additional tag.
 normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, wmdSize = wmdSize + 1,..}
 
-credentialDeployment :: WithMetadata AccountCredentialWithProofs -> BlockItem
+credentialDeployment :: CredentialDeploymentWithMeta -> BlockItem
 credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, wmdSize = wmdSize + 1,..}
 
 chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
@@ -392,33 +455,52 @@ putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransactionSingle :: KeyPair -> TransactionHeader -> EncodedPayload -> AccountTransaction
-signTransactionSingle kp = signTransaction [(0, kp)]
+signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 
 -- |Sign a transaction with the given header and body, using the given keypairs.
 -- The function does not sanity checking that the keys are valid, or that the
 -- indices are distint.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-signTransaction :: [(KeyIndex, KeyPair)] -> TransactionHeader -> EncodedPayload -> AccountTransaction
+signTransaction :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransaction keys atrHeader atrPayload =
-  let 
+  let
       atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
       -- only sign the hash of the transaction
       bodyHash = transactionSignHashToByteString atrSignHash
-      tsSignature = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
+      credSignature cKeys = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) cKeys
+      tsSignatures = Map.fromList $ map (\(idx, cKeys) -> (idx, credSignature cKeys)) keys
       atrSignature = TransactionSignature{..}
   in AccountTransaction{..}
 
--- |Verify that the given transaction was signed by the required number of keys.
+-- |Verify credential signatures. This checks
 --
--- * @SPEC: <$DOCS/Transactions#transaction-signature>
-verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
-verifyTransaction keys tx =
+-- - the number of signatures is less than 255
+-- - __all__ signatures are valid
+-- - there are at least threshold number of signatures.
+verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
+verifyCredentialSignatures bodyHash sigs keys =
+  let numSigs = length sigs
+      -- foldr is the right function to use here because the body is lazy in the second argument.
+      -- This does rely on the specific order of arguments since && is strict in the first argument, but not the second.
+      check = foldr (\(idx, sig) b -> maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys) && b) True (Map.toList sigs)
+  in numSigs <= 255 && (fromIntegral numSigs >= credThreshold keys) && check
+
+-- |Verify that the given transaction was signed by the required number of keys.
+-- Concretely this means
+--
+-- - enough credential holders signed the transaction
+-- - each of the credential signres has the required number of signatures, see 'verifyCredentialSignatures'
+-- - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
+verifyTransaction :: TransactionData msg => AccountInformation -> msg -> Bool
+verifyTransaction ai tx =
   let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
-      TransactionSignature sigs = transactionSignature tx
-      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True (Map.toList sigs)
-      numSigs = length sigs
-      threshold = akThreshold keys
+      TransactionSignature maps = transactionSignature tx
+      -- foldr is the right function to use here because the body is lazy in the second argument.
+      -- This does rely on the specific order of arguments since && is strict in the first argument, but not the second.
+      keysCheck = foldr (\(idx, sigmap) b -> maybe False (verifyCredentialSignatures bodyHash sigmap) (getCredentialKeys idx ai) && b) True (Map.toList maps)
+      numSigs = length maps
+      threshold = aiThreshold ai
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
 
 -----------------------------------
@@ -600,7 +682,7 @@ instance S.Serialize SpecialTransactionOutcome where
 data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
-    } 
+    }
 
 makeLenses ''TransactionOutcomes
 

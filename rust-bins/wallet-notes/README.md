@@ -103,17 +103,12 @@ must be a valid JSON object with fields
   credentials from the same id object, otherwise the credential will not be
   accepted by the chain.
 
-- `"accountData"` ... this is an optional field describing the account to which
-  the generated credential should be attached. If not present we assume that a
-  fresh account is to be created, which means the library will generate an
-  account key for this account.
-
 The returned value is a JSON object with the following fields.
 
 - `"credential"` - this is the credential that is to be deployed on the chain. All
   data here is public.
 
-- `"accountData"` - contains the public and __private__ keys of the account the
+- `"credentialData"` - contains the public and __private__ keys of the account the
   credential belongs to. This is very sensitive and must be kept protected.
 
 - `"accountAddress"` - the address of the account this credential belongs to. This

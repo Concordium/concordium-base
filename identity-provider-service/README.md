@@ -131,6 +131,10 @@ The following steps can be taken to manually test an implementation of an identi
 provided here is tied into the test data provided in the `data` directory, i.e. if you change the identity-provider,
 then the following example won't be successful.
 
+The test data files can be regenerated with the
+[./generate-testdata.sh](./generate-testdata.sh) script, however this should
+only be done if some formats have changed.
+
 1. Act as a client that wants a new identity and send the request in [data/valid_request.json](./data/valid_request.json)
 1. If the identity provider returned successfully, then verify that the HTTP code is 302 Found, and that the `location` 
 header is `concordiumwallet://identity-issuer/callback#code_uri=url_where_identity_object_is_available`. The first part 
