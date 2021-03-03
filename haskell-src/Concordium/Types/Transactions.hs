@@ -188,7 +188,7 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 instance HashableTo TransactionSignHashV0 AccountTransaction where
   getHash = atrSignHash
 
--- |A 'CredentialTransaction' is a credential together with an expiry. It is a
+-- |An 'AccountCreation' is a credential together with an expiry. It is a
 -- message that is included in a block, if valid, but it is not paid for
 -- directly by the sender.
 data AccountCreation = AccountCreation {

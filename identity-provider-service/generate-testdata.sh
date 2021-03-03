@@ -56,3 +56,4 @@ jq '{idObjectRequest: ., redirectURI: "Example.com"}' $OUT_DIR/invalid_request.j
 
 cp $OUT_DIR/{global.json,anonymity_revokers.json} data/
 cp $OUT_DIR/identity_provider-0.json data/identity_provider.json
+cp $OUT_DIR/identity_provider-0.pub.json data/identity_provider.pub.json

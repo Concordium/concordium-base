@@ -289,7 +289,6 @@ mod tests {
             }
             let signatures = TransactionSignature { signatures };
             let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");
-            println!("{}", js);
             match serde_json::from_str::<TransactionSignature>(&js) {
                 Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
                 Err(e) => assert!(false, "{}", e),
