@@ -1,13 +1,18 @@
 use crate::{secret_sharing::Threshold, types::*};
-use curve_arithmetic::{Curve, Value};
+use crypto_common::{
+    to_bytes,
+    types::{KeyIndex, TransactionTime},
+};
+use curve_arithmetic::{Curve, Pairing, Value};
+use ed25519_dalek::Verifier;
+use either::Either;
 use elgamal::*;
+use failure::Fallible;
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
 use rand::*;
-
-use ed25519_dalek::Verifier;
-use failure::Fallible;
-use std::collections::BTreeSet;
+use sha2::{Digest, Sha256};
+use std::collections::{btree_map::BTreeMap, BTreeSet};
 
 /// Given a list of commitments g^{a_i}h^{r_i}
 /// and a point x (the share number), compute
@@ -215,8 +220,8 @@ pub fn encode_public_credential_values<F: PrimeField>(
 ///  - proof_acc_sk - the AccountOwnershipProof containing the signature to be
 ///    verified
 ///  - msg - the message
-pub fn verify_accunt_ownership_proof(
-    keys: &[VerifyKey],
+pub fn verify_account_ownership_proof(
+    keys: &BTreeMap<KeyIndex, VerifyKey>,
     threshold: SignatureThreshold,
     proof_acc_sk: &AccountOwnershipProof,
     msg: &[u8],
@@ -236,9 +241,7 @@ pub fn verify_accunt_ownership_proof(
     }
     // set of processed keys already
     let mut processed = BTreeSet::new();
-    // the new keys get indices 0, 1, ..
-    for (idx, key) in (0u8..).zip(keys.iter()) {
-        let idx = KeyIndex(idx);
+    for (idx, key) in keys.iter() {
         // insert returns true if key was __not__ present
         if !processed.insert(key) {
             return false;
@@ -253,6 +256,31 @@ pub fn verify_accunt_ownership_proof(
         }
     }
     true
+}
+
+/// Compute the hash of the credential deployment that should be signed by the
+/// account keys for deployment.
+/// If `new_or_existing` is `Left` then this credential will create a new
+/// account, and the transaction expiry should be signed.
+/// otherwise it is going to be deployed to the given account address, and the
+/// address should be signed.
+pub fn credential_hash_to_sign<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    values: &CredentialDeploymentValues<C, AttributeType>,
+    proofs: &IdOwnershipProofs<P, C>,
+    new_or_existing: &Either<TransactionTime, AccountAddress>,
+) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(&to_bytes(&values));
+    hasher.update(&to_bytes(&proofs));
+    // the serialization of Either has 0 tag for the left variant, and 1 for the
+    // right
+    hasher.update(&to_bytes(&new_or_existing));
+    let to_sign = &hasher.finalize();
+    to_sign.to_vec()
 }
 
 #[cfg(test)]

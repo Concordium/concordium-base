@@ -1,17 +1,25 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{serde_impls::KeyPairDef, *};
-use curve_arithmetic::Pairing;
+use crypto_common::{
+    serde_impls::KeyPairDef,
+    types::{KeyIndex, TransactionTime},
+    *,
+};
+use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as ed25519;
-use either::Either::{Left, Right};
-use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
+use either::{Left, Right};
+use id::{
+    account_holder::*,
+    constants::{ArCurve, IpPairing},
+    ffi::*,
+    identity_provider::*,
+    secret_sharing::Threshold,
+    types::*,
+};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};
 use structopt::StructOpt;
-
-type ExampleCurve = G1;
 
 type ExampleAttribute = AttributeKind;
 
@@ -43,6 +51,8 @@ struct GenerateTestData {
     anonymity_revokers: PathBuf,
 }
 
+const EXPIRY: TransactionTime = TransactionTime { seconds: u64::MAX };
+
 fn main() {
     let args = {
         let app = GenerateTestData::clap()
@@ -73,7 +83,7 @@ fn main() {
         }
     };
 
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
+    let ah_info = CredentialHolderInfo::<ArCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
@@ -143,6 +153,7 @@ fn main() {
         &pio,
         context,
         &attributes,
+        EXPIRY,
         &ip_secret_key,
         &ip_cdi_secret_key,
     );
@@ -172,13 +183,13 @@ fn main() {
     {
         // output testdata.bin for basic verification checking.
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-        let acc_data = AccountData {
+        let acc_data = CredentialData {
             keys,
-            existing: Left(SignatureThreshold(2)),
+            threshold: SignatureThreshold(2),
         };
 
         let cdi_1 = create_credential(
@@ -188,15 +199,22 @@ fn main() {
             53,
             policy.clone(),
             &acc_data,
+            &Left(EXPIRY),
         )
         .expect("We should have generated valid data.");
 
         // Generate the second credential for an existing account (the one
         // created by the first credential)
-        let acc_data_2 = AccountData {
-            keys:     acc_data.keys,
-            existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
+        let mut keys_2 = BTreeMap::new();
+        keys_2.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys_2.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys_2.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        let acc_data_2 = CredentialData {
+            keys:      acc_data.keys,
+            threshold: SignatureThreshold(1),
         };
+
+        let addr = AccountAddress::new(&cdi_1.values.cred_id);
 
         let cdi_2 = create_credential(
             context,
@@ -205,17 +223,9 @@ fn main() {
             53,
             policy.clone(),
             &acc_data_2,
+            &Right(addr),
         )
         .expect("We should have generated valid data.");
-
-        let acc_keys = AccountKeys {
-            keys:      acc_data_2
-                .keys
-                .iter()
-                .map(|(&idx, kp)| (idx, VerifyKey::from(kp.public)))
-                .collect(),
-            threshold: SignatureThreshold(2),
-        };
 
         let mut out = Vec::new();
         let gc_bytes = to_bytes(&global_ctx);
@@ -236,37 +246,26 @@ fn main() {
         let cdi1_bytes = to_bytes(&cdi_1);
         out.put(&(cdi1_bytes.len() as u32));
         out.write_all(&cdi1_bytes).unwrap();
-        // and account keys and then the second credential
-        out.put(&acc_keys);
+        // and account address and then the second credential
+        out.put(&addr);
         let cdi2_bytes = to_bytes(&cdi_2);
         out.put(&(cdi2_bytes.len() as u32));
         out.write_all(&cdi2_bytes).unwrap();
 
-        // finally we add a completely new set of keys to have a simple negative test
-        let acc_keys_3 = {
-            let mut keys = BTreeMap::new();
-            keys.insert(
-                KeyIndex(0),
-                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
-            );
-            keys.insert(
-                KeyIndex(1),
-                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
-            );
-            keys.insert(
-                KeyIndex(2),
-                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
-            );
-
-            AccountKeys {
-                keys,
-                threshold: SignatureThreshold(2),
-            }
-        };
-        out.put(&acc_keys_3);
+        // output another random address
+        {
+            let other_addr = AccountAddress::new(&G1::generate(&mut csprng));
+            out.put(&other_addr)
+        }
 
         // Create an initial cdi and output it
-        let icdi = create_initial_cdi(&ip_info, pub_info_for_ip, &attributes, &ip_cdi_secret_key);
+        let icdi = create_initial_cdi(
+            &ip_info,
+            pub_info_for_ip,
+            &attributes,
+            EXPIRY,
+            &ip_cdi_secret_key,
+        );
         let icdi_bytes = to_bytes(&icdi);
         out.put(&(icdi_bytes.len() as u32));
         out.write_all(&icdi_bytes).unwrap();
@@ -329,18 +328,16 @@ fn main() {
     }
 
     // generate account credentials, parametrized
-    let mut generate = |maybe_acc_data, acc_num, idx| {
-        let acc_data = if let Some(acc_data) = maybe_acc_data {
-            acc_data
-        } else {
+    let mut generate = |maybe_addr, acc_num, idx| {
+        let acc_data = {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
 
-            AccountData {
+            CredentialData {
                 keys,
-                existing: Left(SignatureThreshold(2)),
+                threshold: SignatureThreshold(2),
             }
         };
 
@@ -351,33 +348,47 @@ fn main() {
             acc_num,
             policy.clone(),
             &acc_data,
+            maybe_addr,
         )
         .expect("We should have generated valid data.");
-        let acc_addr = AccountAddress::new(&cdi.values.reg_id);
-        let versioned_cdi = Versioned::new(VERSION_0, cdi);
+        let acc_addr = AccountAddress::new(&cdi.values.cred_id);
+        let js = match maybe_addr {
+            Left(message_expiry) => {
+                // if it is a new account we output a full message
+                let cred = AccountCredentialMessage {
+                    message_expiry: *message_expiry,
+                    credential:     AccountCredential::Normal { cdi },
+                };
+                let out = Versioned::new(VERSION_0, cred);
+                serde_json::to_value(out).expect("JSON serialization does not fail")
+            }
+            Right(_) => {
+                // if this goes onto an existing account we output just the credential.
+                let out = Versioned::new(VERSION_0, cdi);
+                serde_json::to_value(out).expect("JSON serialization does not fail")
+            }
+        };
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &versioned_cdi) {
+        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);
         }
-        // return the account data that can be used to deploy more credentials
+        // return the account address that can be used to deploy more credentials
         // to the same account.
-        AccountData {
-            existing: Right(acc_addr),
-            ..acc_data
-        }
+        maybe_addr.right_or(acc_addr)
     };
 
-    let _ = generate(None, 0, 1);
-    let _ = generate(None, 1, 2);
-    let _ = generate(None, 2, 3);
+    let _ = generate(&Left(EXPIRY), 0, 1);
+    let _ = generate(&Left(EXPIRY), 1, 2);
+    let _ = generate(&Left(EXPIRY), 2, 3);
     // duplicate reg_id
-    let _ = generate(None, 2, 4);
-    // use same account keypair
-    let acc_data = generate(None, 4, 5);
-    let _ = generate(Some(acc_data), 5, 6);
-    let _ = generate(None, 6, 7);
+    let _ = generate(&Left(EXPIRY), 2, 4);
+    // deploy to the same account
+    let addr = generate(&Left(EXPIRY), 4, 5);
+    let ra = Right(addr);
+    let _ = generate(&ra, 5, 6);
+    let _ = generate(&Left(EXPIRY), 6, 7);
 
     let mut generate_initial = |prf, idx, ip_secret| {
         let initial_acc_data = {
@@ -391,7 +402,7 @@ fn main() {
                 threshold: SignatureThreshold(2),
             }
         };
-        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+        let ah_info = CredentialHolderInfo::<ArCurve> {
             id_cred: IdCredentials::generate(&mut csprng),
         };
         let aci = AccCredentialInfo {
@@ -410,12 +421,17 @@ fn main() {
             &context.ip_info,
             pio.pub_info_for_ip,
             &attributes,
+            EXPIRY,
             ip_secret,
         );
-        let versioned_icdi = Versioned::new(VERSION_0, icdi);
+        let cred = AccountCredentialMessage::<IpPairing, ArCurve, _> {
+            message_expiry: EXPIRY,
+            credential:     AccountCredential::Initial { icdi },
+        };
+        let versioned_msg = Versioned::new(VERSION_0, cred);
 
         if let Err(err) =
-            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_icdi)
+            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_msg)
         {
             eprintln!(
                 "Could not output initial credential = {}, because {}.",
@@ -429,11 +445,11 @@ fn main() {
     let mut csprng = thread_rng();
     let prf_key = prf::SecretKey::generate(&mut csprng);
     generate_initial(prf_key, 1, &ip_cdi_secret_key);
-    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let prf_key: prf::SecretKey<ArCurve> = prf::SecretKey::generate(&mut csprng);
     let prf_key_same = prf_key.clone();
     generate_initial(prf_key, 2, &ip_cdi_secret_key);
     generate_initial(prf_key_same, 3, &ip_cdi_secret_key); // Reuse of prf key
-    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let prf_key: prf::SecretKey<ArCurve> = prf::SecretKey::generate(&mut csprng);
     let wrong_keys = ed25519_dalek::Keypair::generate(&mut csprng);
     generate_initial(prf_key, 4, &wrong_keys.secret); // Wrong secret key
 }

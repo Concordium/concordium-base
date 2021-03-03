@@ -33,13 +33,10 @@ thomasAccount = accountAddressFrom 2
 accountAddressFrom :: Int -> AccountAddress
 accountAddressFrom n = fst (randomAccountAddress (mkStdGen n))
 
-{-# WARNING accountAddressFromCred "Do not use in production." #-}
-accountAddressFromCred :: CredentialDeploymentInformation -> AccountAddress
-accountAddressFromCred = credentialAccountAddress . cdiValues
-
-{-# WARNING accountAddressFromInitialCred "Do not use in production." #-}
-accountAddressFromInitialCred :: InitialCredentialDeploymentInfo -> AccountAddress
-accountAddressFromInitialCred = initialCredentialAccountAddress . icdiValues
+{-# WARNING accountAddressFromCredential "Do not use in production." #-}
+accountAddressFromCredential :: AccountCredentialWithProofs -> AccountAddress
+accountAddressFromCredential (InitialACWP icdi) = initialCredentialAccountAddress . icdiValues $ icdi
+accountAddressFromCredential (NormalACWP cdi) =  credentialAccountAddress . cdiValues $ cdi
 
 -- The expiry time is set to the same time as slot time, which is currently also 0.
 -- If slot time increases, in order for tests to pass transaction expiry must also increase.

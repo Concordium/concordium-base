@@ -10,9 +10,9 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
+use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
 use ff::Field;
@@ -59,12 +59,7 @@ pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         )
         .0;
 
-    let vk_acc = InitialCredentialAccount {
-        account: NewAccount {
-            keys:      initial_account.get_public_keys(),
-            threshold: initial_account.get_threshold(),
-        },
-    };
+    let vk_acc = initial_account.get_cred_key_info();
 
     let pub_info_for_ip = PublicInformationForIP {
         id_cred_pub,
@@ -528,7 +523,8 @@ pub fn create_credential<
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
-    acc_data: &impl AccountDataWithSigning,
+    cred_data: &impl CredentialDataWithSigning,
+    new_or_existing: &either::Either<TransactionTime, AccountAddress>,
 ) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
@@ -538,11 +534,12 @@ where
         id_object_use_data,
         cred_counter,
         policy,
-        acc_data,
+        cred_data.get_cred_key_info(),
+        new_or_existing.as_ref().right(),
     )?;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: acc_data.sign_challenge(&unsigned_credential_info.account_ownership_challenge),
+        sigs: cred_data.sign(&new_or_existing, &unsigned_credential_info),
     };
 
     let cdp = CredDeploymentProofs {
@@ -575,7 +572,8 @@ pub fn create_unsigned_credential<
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
-    acc_data: &impl PublicAccountData,
+    cred_key_info: CredentialPublicKeys,
+    addr: Option<&AccountAddress>,
 ) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
@@ -589,7 +587,7 @@ where
 
     let prf_key = &aci.prf_key;
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
+    let cred_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
         Ok(exp) => exp,
         Err(_) => bail!(
             "Cannot create CDI with this account number because K + {} = 0.",
@@ -599,11 +597,11 @@ where
 
     // RegId as well as Prf key commitments must be computed
     // with the same generators as in the commitment key.
-    let reg_id = context
+    let cred_id = context
         .global_context
         .on_chain_commitment_key
         .hide(
-            &Value::<C>::new(reg_id_exponent),
+            &Value::<C>::new(cred_id_exponent),
             &PedersenRandomness::zero(),
         )
         .0;
@@ -672,23 +670,14 @@ where
         &mut csprng,
     )?;
 
-    let cred_account = match acc_data.get_existing() {
-        // we are deploying on a new account
-        // take all the keys that
-        Either::Left(threshold) => {
-            CredentialAccount::NewAccount(acc_data.get_public_keys().to_vec(), threshold)
-        }
-        Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
-    };
-
     // We have all the values now.
     let cred_values = CredentialDeploymentValues {
-        reg_id,
+        cred_id,
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: context.ip_info.ip_identity,
         policy,
-        cred_account,
+        cred_key_info,
     };
 
     // We now produce all the proofs.
@@ -697,6 +686,7 @@ where
     // Eventually we'll have to include the genesis hash.
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cred_values);
+    ro.append_message(b"address", &addr);
     ro.append_message(b"global_context", &context.global_context);
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
@@ -735,8 +725,8 @@ where
         &commitments.cmm_cred_counter,
         &commitment_rands.cred_counter_rand,
         &commitment_rands.max_accounts_rand,
-        reg_id_exponent,
-        reg_id,
+        cred_id_exponent,
+        cred_id,
     );
 
     let choice_ar_handles = cred_values
@@ -790,14 +780,13 @@ where
     };
 
     // A list of signatures on the challenge used by the other proofs using the
-    // account keys.
+    // credential keys.
     // The challenge has domain separator "credential" followed by appending all
     // values of the credential to the ro, specifically appending the
     // CredentialDeploymentValues struct.
     //
     // The domain seperator in combination with appending all the data of the
     // credential deployment should make it non-reusable.
-    let unsigned_challenge = ro.get_challenge();
 
     let id_proofs = IdOwnershipProofs {
         sig: blinded_sig,
@@ -815,7 +804,6 @@ where
     let info = UnsignedCredentialDeploymentInfo {
         values: cred_values,
         proofs: id_proofs,
-        account_ownership_challenge: unsigned_challenge,
     };
     Ok(info)
 }
@@ -1098,13 +1086,17 @@ mod tests {
     use super::*;
 
     use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::serde_impls::KeyPairDef;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use curve_arithmetic::Curve;
-    use ed25519_dalek as ed25519;
-    use either::Left;
+    use either::Either::Left;
     use pedersen_scheme::key::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;
+
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
+
     // Construct PIO, test various proofs are valid
     // #[test]
     // pub fn test_pio_correctness() {
@@ -1244,7 +1236,14 @@ mod tests {
         let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         let (ip_sig, _) = ver_ok.unwrap();
 
         // Create CDI arguments
@@ -1267,13 +1266,13 @@ mod tests {
             _phantom: Default::default(),
         };
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
         let sigthres = SignatureThreshold(2);
-        let acc_data = AccountData {
+        let acc_data = CredentialData {
             keys,
-            existing: Left(sigthres),
+            threshold: sigthres,
         };
 
         let cred_ctr = 42;
@@ -1284,13 +1283,14 @@ mod tests {
             cred_ctr,
             policy.clone(),
             &acc_data,
+            &Left(EXPIRY),
         )
         .expect("Could not generate CDI");
 
         // Check cred_account
-        let cred_account_ok = match cdi.values.cred_account {
-            CredentialAccount::NewAccount(ref k, t) => k.len() == 3 && t == sigthres,
-            _ => false,
+        let cred_account_ok = {
+            let key_info = cdi.values.cred_key_info;
+            key_info.keys.len() == 3 && key_info.threshold == sigthres
         };
         assert!(cred_account_ok, "CDI cred_account is invalid");
 
@@ -1303,7 +1303,7 @@ mod tests {
                 &PedersenRandomness::zero(),
             )
             .0;
-        assert_eq!(cdi.values.reg_id, reg_id, "CDI reg_id is invalid");
+        assert_eq!(cdi.values.cred_id, reg_id, "CDI reg_id is invalid");
 
         // Check ip_identity
         assert_eq!(

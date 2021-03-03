@@ -1,24 +1,19 @@
 -- |This module defines the genesis data fromat for the 'P1' protocol version.
 module Concordium.Genesis.Data.P1 where
 
-import Control.Monad
 import Data.ByteString (ByteString)
-import qualified Data.List.NonEmpty as NE
 import Data.Serialize
 import qualified Data.Vector as Vec
-import Lens.Micro.Platform
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Genesis.Account
 import Concordium.Genesis.Data.Base
 import Concordium.Genesis.Parameters
-import qualified Concordium.ID.Types as ID
 import Concordium.Types
 import Concordium.Types.AnonymityRevokers
 import Concordium.Types.IdentityProviders
 import Concordium.Types.Parameters
-import qualified Concordium.Types.SeedState as SeedState
 import Concordium.Types.Updates
 import Concordium.Utils.Serialization
 
@@ -108,44 +103,6 @@ instance BasicGenesisData GenesisDataP1 where
     gdEpochLength = genesisEpochLength . genesisCore
     {-# INLINE gdEpochLength #-}
 
--- |Deserialize genesis data in the (legacy) V2 format.
-getGenesisDataV2 :: Get GenesisDataP1
-getGenesisDataV2 = do
-    genesisTime <- get
-    genesisSlotDuration <- get
-    genesisSeedState <- get
-    let genesisEpochLength = SeedState.epochLength genesisSeedState
-    let genesisLeadershipElectionNonce = SeedState.currentLeadershipElectionNonce genesisSeedState
-    nAccounts <- getLength
-    accountsAndEncryptionKeys <- replicateM nAccounts getGenesisAccountGD2
-    let genesisAccounts = Vec.fromList (fst <$> accountsAndEncryptionKeys)
-    genesisFinalizationParameters <- getFinalizationParametersGD2
-    genesisCryptographicParameters <- get
-    -- Verify that each baker account records the correct baker id
-    -- and that the serialized encryption key is correct
-    forM_ (zip [0 ..] accountsAndEncryptionKeys) $ \(i, (acct, ek)) -> case gaBaker acct of
-        Just ab
-            | gbBakerId ab /= i ->
-                fail "BakerId does not match account index"
-        _
-            | let acctRegId = ID.regId (NE.head (gaCredentials acct)),
-              let acctEK = ID.makeEncryptionKey genesisCryptographicParameters acctRegId,
-              ek /= acctEK ->
-                fail "Incorrect account encryption key"
-        _ -> return ()
-    genesisIdentityProviders <- get
-    genesisAnonymityRevokers <- get
-    genesisMaxBlockEnergy <- get
-    genesisAuthorizations <- get
-    genesisChainParameters <- get
-    unless (toInteger (genesisChainParameters ^. cpFoundationAccount) < toInteger (length genesisAccounts)) $
-        fail "Foundation account is not a valid account index."
-    return
-        GDP1Initial
-            { genesisCore = CoreGenesisParameters{..},
-              genesisInitialState = GenesisState{..}
-            }
-
 -- |Deserialize genesis data in the V3 format.
 getGenesisDataV3 :: Get GenesisDataP1
 getGenesisDataV3 =
@@ -183,7 +140,6 @@ putGenesisDataV3 GDP1Regenesis{..} = do
 getVersionedGenesisData :: Get GenesisDataP1
 getVersionedGenesisData =
     getVersion >>= \case
-        2 -> getGenesisDataV2
         3 -> getGenesisDataV3
         n -> fail $ "Unsupported genesis data version: " ++ show n
 
