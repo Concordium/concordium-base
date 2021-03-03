@@ -116,6 +116,7 @@ import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.Char (isPunctuation, isAlphaNum, isAscii)
 import qualified Data.HashMap.Strict as HM
 import Data.Hashable
+import Data.Int (Int32)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
 import qualified Data.Set as Set
@@ -596,6 +597,6 @@ getSuccessfulResultData messagesDecoder = do
 
 -- |Reason for failure of contract execution.
 data ContractExecutionFailure =
-  ContractReject { rejectReason :: Word8 } -- ^Contract decided to terminate execution.
+  ContractReject { rejectReason :: Int32 } -- ^Contract decided to terminate execution.
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
