@@ -269,7 +269,7 @@ fromAccountTransaction wmdArrivalTime wmdData =
   in WithMetadata{..}
 
 fromCDI :: TransactionTime -- ^Arrival time
-        -> TransactionTime -- ^Expiry time of the message
+        -> TransactionExpiryTime -- ^Expiry time of the message
         -> CredentialDeploymentInformation
         -> CredentialDeploymentWithMeta
 fromCDI wmdArrivalTime messageExpiry cdi =
@@ -280,7 +280,7 @@ fromCDI wmdArrivalTime messageExpiry cdi =
   in WithMetadata{..}
 
 fromICDI :: TransactionTime -- ^Arrival time
-         -> TransactionTime -- ^Expiry time of the message
+         -> TransactionExpiryTime -- ^Expiry time of the message
          -> InitialCredentialDeploymentInfo
          -> CredentialDeploymentWithMeta
 fromICDI wmdArrivalTime messageExpiry icdi =
