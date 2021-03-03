@@ -21,18 +21,10 @@ import qualified Data.ByteString.Short as BSS
 import System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Vector as Vec
 
+import Types.PayloadSerializationSpec
+
 schemes :: [SchemeId]
 schemes = [Ed25519]
-
--- |Simply generate a few 'ElgamalCipher' values for testing purposes.
-elgamalCiphers :: Vec.Vector ElgamalCipher
-elgamalCiphers = unsafePerformIO $ Vec.replicateM 200 generateElgamalCipher
-{-# NOINLINE elgamalCiphers #-}
-
-genElgamalCipher :: Gen ElgamalCipher
-genElgamalCipher = do
-  i <- choose (0, Vec.length elgamalCiphers - 1)
-  return $ elgamalCiphers Vec.! i
 
 verifyKeys :: Vec.Vector VerifyKey
 verifyKeys = unsafePerformIO $ Vec.replicateM 200 (correspondingVerifyKey <$> newKeyPair Ed25519)
@@ -44,7 +36,7 @@ genVerifyKey = do
   return $ verifyKeys Vec.! i
 
 genSchemeId :: Gen SchemeId
-genSchemeId = elements schemes 
+genSchemeId = elements schemes
 
 genAccountAddress :: Gen AccountAddress
 genAccountAddress = AccountAddress . FBS.pack <$> vector accountAddressSize
@@ -62,12 +54,17 @@ genAccountTransaction :: Gen AccountTransaction
 genAccountTransaction = do
   atrHeader <- genTransactionHeader
   atrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize atrHeader))
-  numKeys <- choose (1, 255)
-  atrSignature <- TransactionSignature . Map.fromList <$> replicateM numKeys (do
-    idx <- KeyIndex <$> arbitrary
-    sLen <- choose (50,70)
-    sig <- Signature . BSS.pack <$> vector sLen
-    return (idx, sig))
+  numCredentials <- choose (1,255)
+  allKeys <- replicateM numCredentials $ do
+    numKeys <- choose (1, 255)
+    credentialSignatures <- replicateM numKeys $ do
+      idx <- KeyIndex <$> arbitrary
+      sLen <- choose (50,70)
+      sig <- Signature . BSS.pack <$> vector sLen
+      return (idx, sig)
+    (, Map.fromList credentialSignatures) . CredentialIndex <$> arbitrary
+
+  let atrSignature = TransactionSignature (Map.fromList allKeys)
   return $! makeAccountTransaction atrSignature atrHeader atrPayload
 
 baseTime :: UTCTime
@@ -79,41 +76,9 @@ genTransaction = do
   wmdArrivalTime <- TransactionTime <$> arbitrary
   return $ addMetadata NormalTransaction wmdArrivalTime wmdData
 
-genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
-genCredentialDeploymentInformation = do
-  let arbitraryNew = do
-        nacc <- choose (1,255)
-        keys <- replicateM nacc genVerifyKey
-        threshold <- choose (1, nacc)
-        return $ NewAccount keys (SignatureThreshold $ fromIntegral threshold)
-  cdvAccount <- arbitraryNew
-  cdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
-  cdvIpId <- IP_ID <$> arbitrary
-  cdvArData <- Map.fromList <$> listOf (do
-    ardName <- do
-      n <- arbitrary
-      if n == 0 then return (ArIdentity 1) else return (ArIdentity n)
-    ardIdCredPubShare <- AREnc <$> genElgamalCipher
-    return (ardName, ChainArData{..}))
-  cdvThreshold <- Threshold <$> choose (1, max 1 (fromIntegral (length cdvArData)))
-  cdvPolicy <- do
-    let ym = YearMonth <$> choose (1000,9999) <*> choose (1,12)
-    pValidTo <- ym
-    pCreatedAt <- ym
-    let pItems = Map.empty
-    return Policy{..}
-  cdiProofs <- do l <- choose (0, 10000)
-                  Proofs . BSS.pack <$> vector l
-  let cdiValues = CredentialDeploymentValues{..}
-  return CredentialDeploymentInformation{..}
-
 genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
 genInitialCredentialDeploymentInformation = do
-  icdvAccount <- do
-        nacc <- choose (1,255)
-        keys <- replicateM nacc genVerifyKey
-        threshold <- choose (1, nacc)
-        return $ InitialCredentialAccount keys (SignatureThreshold $ fromIntegral threshold)
+  icdvAccount <- genCredentialPublicKeys
   icdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
   icdvIpId <- IP_ID <$> arbitrary
   icdvPolicy <- do
@@ -133,9 +98,10 @@ genAccountCredentialWithProofs =
 
 genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
 genCredentialDeploymentWithMeta = do
-  wmdData <- genAccountCredentialWithProofs
+  credential <- genAccountCredentialWithProofs
+  messageExpiry <- TransactionTime <$> arbitrary
   wmdArrivalTime <- TransactionTime <$> arbitrary
-  return $ addMetadata CredentialDeployment wmdArrivalTime wmdData
+  return $ addMetadata CredentialDeployment wmdArrivalTime AccountCreation{..}
 
 genBlockItem :: Gen BlockItem
 genBlockItem = oneof [

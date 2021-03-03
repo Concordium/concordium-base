@@ -2,7 +2,10 @@
 extern crate failure;
 #[macro_use]
 extern crate serde_json;
-use crypto_common::{types::Amount, *};
+use crypto_common::{
+    types::{Amount, KeyIndex, Signature, TransactionSignature},
+    *,
+};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
@@ -17,7 +20,7 @@ use id::{
 };
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
-use serde_json::{from_str, from_value, to_string, Map, Value};
+use serde_json::{from_str, from_value, to_string, Value};
 use sha2::{Digest, Sha256};
 use std::{
     cmp::max,
@@ -27,6 +30,7 @@ use std::{
     io::Cursor,
 };
 
+use crypto_common::serde_impls::KeyPairDef;
 type ExampleCurve = G1;
 
 /// Context for a transaction to send.
@@ -37,38 +41,29 @@ struct TransferContext {
     pub to:     Option<AccountAddress>,
     pub expiry: u64,
     pub nonce:  u64,
-    pub keys:   Map<String, Value>,
+    pub keys:   AccountKeys,
     pub energy: u64,
 }
 
-/// Sign the given hash. This method will try to recover secret keys from the
-/// map and sign the given hash with each of the keys.
-fn make_signatures<H: AsRef<[u8]>>(
-    keys: &Map<String, Value>,
-    hash: &H,
-) -> Fallible<BTreeMap<u8, String>> {
+/// Sign the given hash.
+fn make_signatures<H: AsRef<[u8]>>(keys: AccountKeys, hash: &H) -> Fallible<TransactionSignature> {
+    // we'll just sign with all the keys we are given, disregarding the threshold.
+    // It is not our job here to decide and in any case the wallet is meant to
+    // support only single key accounts.
     let mut out = BTreeMap::new();
-    for (key_index_str, value) in keys.iter() {
-        let key_index = key_index_str.parse::<u8>()?;
-        match value.as_object() {
-            None => bail!("Malformed keys."),
-            Some(value) => {
-                let public = match value.get("verifyKey").and_then(Value::as_str) {
-                    None => bail!("Malformed keys: missing verifyKey."),
-                    Some(x) => base16_decode_string(&x)?,
-                };
-                let secret = match value.get("signKey").and_then(Value::as_str) {
-                    None => bail!("Malformed keys: missing signKey."),
-                    Some(x) => base16_decode_string(&x)?,
-                };
-                out.insert(
-                    key_index,
-                    base16_encode_string(&ed25519::Keypair { secret, public }.sign(hash.as_ref())),
-                );
-            }
+    for (cred_index, map) in keys.keys.into_iter() {
+        let mut cred_sigs = BTreeMap::new();
+        for (key_index, kp) in map.keys.into_iter() {
+            let public = kp.public;
+            let secret = kp.secret;
+            let signature = ed25519_dalek::Keypair { public, secret }.sign(hash.as_ref());
+            cred_sigs.insert(key_index, Signature {
+                sig: signature.to_bytes().to_vec(),
+            });
         }
+        out.insert(cred_index, cred_sigs);
     }
-    Ok(out)
+    Ok(TransactionSignature { signatures: out })
 }
 
 /// Create a JSON encoding of an encrypted transfer transaction.
@@ -118,7 +113,7 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload_bytes)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -172,7 +167,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -203,7 +198,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
     let encryption = encrypt_amount_with_fixed_randomness(&global_context, amount);
     let response = json!({
         "signatures": signatures,
@@ -253,7 +248,7 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
         make_transaction_bytes(&ctx, &payload_bytes)
     };
 
-    let signatures = make_signatures(&ctx.keys, &hash)?;
+    let signatures = make_signatures(ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -336,23 +331,23 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         }
     };
 
+    let acc_keys = AccountKeys::from(initial_acc_data);
+
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let reg_id = &pio.pub_info_for_ip.reg_id;
     let address = AccountAddress::new(reg_id);
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
-        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(), /* the unwrap is safe since
-                                                                      * we've generated the
-                                                                      * RegID successfully
-                                                                      * above. */
+        // the unwrap is safe since we've generated the RegID successfully above.
+        scalar: id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
     };
 
     let response = json!({
         "idObjectRequest": Versioned::new(VERSION_0, pio),
         "privateIdObjectData": Versioned::new(VERSION_0, id_use_data),
         "initialAccountData": json!({
-            "accountData": initial_acc_data,
+            "accountKeys": acc_keys,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
             "accountAddress": address,
@@ -364,6 +359,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
 fn create_credential_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
+    let expiry = try_get(&v, "expiry")?;
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
 
     let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
@@ -379,22 +375,21 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
-    // if account data is present then use it, otherwise generate new.
-    let acc_data = {
-        if let Some(acc_data) = v.get("accountData") {
-            match from_value(acc_data.clone()) {
-                Ok(acc_data) => acc_data,
-                Err(e) => bail!("Cannot decode accountData {}", e),
-            }
-        } else {
-            let mut keys = std::collections::BTreeMap::new();
-            let mut csprng = thread_rng();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+    // The mobile wallet for now only creates new accounts and does not support
+    // adding credentials onto existing ones. Once that is supported the address
+    // should be coming from the input data.
+    let new_or_existing = Left(expiry);
 
-            AccountData {
-                keys,
-                existing: Left(SignatureThreshold(1)),
-            }
+    // The mobile wallet can only create new accounts, which means new credential
+    // data will be generated.
+    let cred_data = {
+        let mut keys = std::collections::BTreeMap::new();
+        let mut csprng = thread_rng();
+        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+
+        CredentialData {
+            keys,
+            threshold: SignatureThreshold(1),
         }
     };
 
@@ -424,12 +419,13 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         &id_use_data,
         acc_num,
         policy,
-        &acc_data,
+        &cred_data,
+        &new_or_existing,
     )?;
 
-    let address = match acc_data.existing {
-        Left(_) => AccountAddress::new(&cdi.values.reg_id),
-        Right(addr) => addr,
+    let address = match new_or_existing {
+        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Right(address) => address,
     };
 
     // unwrap is safe here since we've generated the credential already, and that
@@ -440,9 +436,14 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         scalar:    enc_key,
     };
 
+    let credential_message = AccountCredentialMessage {
+        message_expiry: expiry,
+        credential:     AccountCredential::Normal { cdi },
+    };
+
     let response = json!({
-        "credential": Versioned::new(VERSION_0, AccountCredential::Normal{cdi}),
-        "accountData": acc_data,
+        "credential": Versioned::new(VERSION_0, credential_message),
+        "accountKeys": AccountKeys::from(cred_data),
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountAddress": address,

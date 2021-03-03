@@ -55,6 +55,16 @@ unsafe fn get_string_arg(env: napi_env, buf: napi_value) -> Option<String> {
     }
 }
 
+unsafe fn get_u64_arg(env: napi_env, buf: napi_value) -> Option<u64> {
+    let mut out: i64 = 0;
+    let res = napi_get_value_int64(env, buf, &mut out);
+    if res == napi_status::napi_ok {
+        Some(out as u64)
+    } else {
+        None
+    }
+}
+
 // unsafe fn get_string_property(env: napi_env, obj: napi_value, name: &str) ->
 // Option<String> {     let mut local: napi_value = std::mem::zeroed();
 //     let name = std::ffi::CString::new(name).ok()?;
@@ -144,8 +154,8 @@ unsafe extern "C" fn create_identity_object_js(
     env: napi_env,
     info: napi_callback_info,
 ) -> napi_value {
-    let mut buffer: [napi_value; 5] = std::mem::MaybeUninit::zeroed().assume_init();
-    let mut argc = 5usize;
+    let mut buffer: [napi_value; 6] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 6usize;
     let mut this: napi_value = std::mem::zeroed();
     let ret = napi_get_cb_info(
         env,
@@ -158,10 +168,10 @@ unsafe extern "C" fn create_identity_object_js(
     if ret != napi_status::napi_ok {
         return create_error(env, "Cannot acquire context.");
     }
-    if argc != 5 {
+    if argc != 6 {
         return create_error(
             env,
-            &format!("Expected 5 arguments, but provided {}.", argc),
+            &format!("Expected 6 arguments, but provided {}.", argc),
         );
     }
     let ip_info = match get_string_arg(env, buffer[0]) {
@@ -176,11 +186,15 @@ unsafe extern "C" fn create_identity_object_js(
         Some(arg1) => arg1,
         None => return create_error(env, "The attribute list must be given as a string."),
     };
-    let ip_private_key = match get_string_arg(env, buffer[3]) {
+    let expiry = match get_u64_arg(env, buffer[3]) {
+        Some(x) => x,
+        None => return create_error(env, "The expiry must be a 64-bit integer."),
+    };
+    let ip_private_key = match get_string_arg(env, buffer[4]) {
         Some(arg1) => arg1,
         None => return create_error(env, "The private key must be given as a string."),
     };
-    let ip_cdi_private_key = match get_string_arg(env, buffer[4]) {
+    let ip_cdi_private_key = match get_string_arg(env, buffer[5]) {
         Some(arg1) => arg1,
         None => return create_error(env, "The CDI private key must be given as a string."),
     };
@@ -189,6 +203,7 @@ unsafe extern "C" fn create_identity_object_js(
         &ip_info,
         &request,
         &alist,
+        expiry,
         &ip_private_key,
         &ip_cdi_private_key,
     );

@@ -3,8 +3,21 @@
 //! FIXME: This should be moved into a concordium-common at some point when that
 //! is moved to the bottom of the dependency hierarchy.
 
-use crate::{Deserial, Get, SerdeDeserialize, SerdeSerialize, Serial};
-use std::ops::Add;
+use crate::{
+    deserial_vector_no_length, serial_vector_no_length, Buffer, Deserial, Get, SerdeDeserialize,
+    SerdeSerialize, Serial,
+};
+use byteorder::ReadBytesExt;
+use crypto_common_derive::Serialize;
+use failure::Fallible;
+use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
+
+/// Index of an account key that is to be used.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[repr(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
+pub struct KeyIndex(pub u8);
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -184,10 +197,104 @@ impl<'de> SerdeDeserialize<'de> for Amount {
     }
 }
 
+#[derive(Serialize, PartialEq, Eq, Debug)]
+/// A single signature. Using the same binary and JSON serialization as the
+/// Haskell counterpart. In particular this means encoding the length as 2
+/// bytes, and thus the largest size is 65535 bytes.
+pub struct Signature {
+    #[size_length = 2]
+    pub sig: Vec<u8>,
+}
+
+impl SerdeSerialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer, {
+        serializer.serialize_str(&hex::encode(&self.sig))
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>, {
+        let s = String::deserialize(deserializer)?;
+        let sig = hex::decode(s).map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
+        if sig.len() <= 65535 {
+            Ok(Signature { sig })
+        } else {
+            Err(serde::de::Error::custom("Signature length out of bounds."))
+        }
+    }
+}
+
+/// Transaction signature structure, to match the one on the Haskell side.
+#[derive(SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug)]
+#[serde(transparent)]
+pub struct TransactionSignature {
+    pub signatures: BTreeMap<KeyIndex, BTreeMap<KeyIndex, Signature>>,
+}
+
+/// Datatype used to indicate transaction expiry.
+#[derive(
+    SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
+)]
+#[serde(transparent)]
+pub struct TransactionTime {
+    /// Seconds since the unix epoch.
+    pub seconds: u64,
+}
+
+impl From<u64> for TransactionTime {
+    fn from(seconds: u64) -> Self { Self { seconds } }
+}
+
+impl FromStr for TransactionTime {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let seconds = u64::from_str(s)?;
+        Ok(Self { seconds })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
+    use rand::{
+        distributions::{Distribution, Uniform},
+        Rng,
+    };
+
+    #[test]
+    fn transaction_signature_serialization() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let num_creds = rng.gen_range(1, 30);
+            let mut signatures = BTreeMap::new();
+            for _ in 0..num_creds {
+                let num_keys = rng.gen_range(1, 20);
+                let mut cred_sigs = BTreeMap::new();
+                for _ in 0..num_keys {
+                    let num_elems = rng.gen_range(0, 200);
+                    let sig = Signature {
+                        sig: Uniform::new_inclusive(0, 255u8)
+                            .sample_iter(rng)
+                            .take(num_elems)
+                            .collect(),
+                    };
+                    cred_sigs.insert(KeyIndex(rng.gen()), sig);
+                }
+                signatures.insert(KeyIndex(rng.gen()), cred_sigs);
+            }
+            let signatures = TransactionSignature { signatures };
+            let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");
+            match serde_json::from_str::<TransactionSignature>(&js) {
+                Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
+                Err(e) => assert!(false, "{}", e),
+            }
+        }
+    }
 
     #[test]
     // test amount serialization is correct

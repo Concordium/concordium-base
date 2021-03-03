@@ -1,13 +1,23 @@
 use crate::{
-    account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
-    secret_sharing::Threshold, types::*,
+    account_holder::*,
+    anonymity_revoker::*,
+    chain::*,
+    constants::{ArCurve, BaseField, IpPairing},
+    ffi::*,
+    identity_provider::*,
+    secret_sharing::Threshold,
+    types::*,
 };
-use crypto_common::{serde_impls::KeyPairDef, *};
-use curve_arithmetic::{Curve, Pairing};
+use crypto_common::{
+    serde_impls::KeyPairDef,
+    types::{KeyIndex, TransactionTime},
+    *,
+};
+use curve_arithmetic::Curve;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
-use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 
@@ -16,24 +26,22 @@ use wasm_bindgen_test::*;
 #[cfg(all(target_arch = "wasm32", feature = "wasm-browser-test"))]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-use either::Left;
-
-type ExamplePairing = Bls12;
-
-type ExampleCurve = G1;
-
 type ExampleAttribute = AttributeKind;
 
-type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
+type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
+
+const EXPIRY: TransactionTime = TransactionTime {
+    seconds: 111111111111111111,
+};
 
 /// Create #num_ars anonymity revokers to be used by test
 pub fn test_create_ars<T: Rng>(
-    ar_base: &ExampleCurve,
+    ar_base: &ArCurve,
     num_ars: u8,
     csprng: &mut T,
 ) -> (
-    BTreeMap<ArIdentity, ArInfo<ExampleCurve>>,
-    BTreeMap<ArIdentity, SecretKey<ExampleCurve>>,
+    BTreeMap<ArIdentity, ArInfo<ArCurve>>,
+    BTreeMap<ArIdentity, SecretKey<ArCurve>>,
 ) {
     let mut ar_infos = BTreeMap::new();
     let mut ar_keys = BTreeMap::new();
@@ -41,7 +49,7 @@ pub fn test_create_ars<T: Rng>(
         let ar_id = ArIdentity::new(i as u32);
         let ar_secret_key = SecretKey::generate(ar_base, csprng);
         let ar_public_key = PublicKey::from(&ar_secret_key);
-        let ar_info = ArInfo::<ExampleCurve> {
+        let ar_info = ArInfo::<ArCurve> {
             ar_identity: ar_id,
             ar_description: Description {
                 name:        format!("AnonymityRevoker{}", i),
@@ -61,11 +69,11 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     csprng: &mut T,
     num_ars: u8,
     max_attrs: u8,
-) -> IpData<ExamplePairing> {
+) -> IpData<IpPairing> {
     // Create key for IP long enough to encode the attributes and anonymity
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
-    let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
+    let ip_secret_key = ps_sig::secret::SecretKey::<IpPairing>::generate(ps_len, csprng);
     let ip_verify_key = ps_sig::public::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(csprng);
     let ip_cdi_verify_key = keypair.public;
@@ -89,8 +97,8 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
 }
 
 /// Create random AccCredentialInfo (ACI) to be used by tests
-pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve> {
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
+pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ArCurve> {
+    let ah_info = CredentialHolderInfo::<ArCurve> {
         id_cred: IdCredentials::generate(csprng),
     };
 
@@ -104,16 +112,16 @@ pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve
 /// Create PreIdentityObject for an account holder to be used by tests,
 /// with the anonymity revocation using all the given ars_infos.
 pub fn test_create_pio<'a>(
-    aci: &AccCredentialInfo<ExampleCurve>,
-    ip_info: &'a IpInfo<ExamplePairing>,
-    ars_infos: &'a BTreeMap<ArIdentity, ArInfo<ExampleCurve>>,
-    global_ctx: &'a GlobalContext<ExampleCurve>,
+    aci: &AccCredentialInfo<ArCurve>,
+    ip_info: &'a IpInfo<IpPairing>,
+    ars_infos: &'a BTreeMap<ArIdentity, ArInfo<ArCurve>>,
+    global_ctx: &'a GlobalContext<ArCurve>,
     num_ars: u8, // should be at least 1
     initial_account_data: &InitialAccountData,
 ) -> (
-    IPContext<'a, ExamplePairing, ExampleCurve>,
-    PreIdentityObject<ExamplePairing, ExampleCurve>,
-    ps_sig::SigRetrievalRandomness<ExamplePairing>,
+    IPContext<'a, IpPairing, ArCurve>,
+    PreIdentityObject<IpPairing, ArCurve>,
+    ps_sig::SigRetrievalRandomness<IpPairing>,
 ) {
     // Create context with all anonymity revokers
     let context = IPContext::new(ip_info, ars_infos, global_ctx);
@@ -176,12 +184,19 @@ pub fn test_pipeline() {
     let (context, pio, randomness) =
         test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
     let alist = test_create_attributes();
-    let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+    let ver_ok = verify_credentials(
+        &pio,
+        context,
+        &alist,
+        EXPIRY,
+        &ip_secret_key,
+        &ip_cdi_secret_key,
+    );
     assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
     // Generate CDI
     let (ip_sig, initial_cdi) = ver_ok.unwrap();
-    let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi);
+    let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi, EXPIRY);
     assert_eq!(cdi_check, Ok(()));
     let initial_cdi_values = serialize_deserialize(&initial_cdi.values);
     assert!(
@@ -214,15 +229,15 @@ pub fn test_pipeline() {
         },
         _phantom: Default::default(),
     };
-    let acc_data = AccountData {
-        keys:     {
+    let acc_data = CredentialData {
+        keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
             keys
         },
-        existing: Left(SignatureThreshold(2)),
+        threshold: SignatureThreshold(2),
     };
     let cdi = create_credential(
         context,
@@ -231,9 +246,10 @@ pub fn test_pipeline() {
         0,
         policy.clone(),
         &acc_data,
+        &Left(EXPIRY),
     )
     .expect("Should generate the credential successfully.");
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
     assert_eq!(cdi_check, Ok(()));
 
     // Verify serialization
@@ -290,8 +306,16 @@ pub fn test_pipeline() {
     // generate a new cdi from a modified pre-identity object in which we swapped
     // two anonymity revokers. Verification of this credential should fail the
     // signature at the very least.
-    let mut cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
-        .expect("Should generate the credential successfully.");
+    let mut cdi = create_credential(
+        context,
+        &id_object,
+        &id_use_data,
+        0,
+        policy,
+        &acc_data,
+        &Left(EXPIRY),
+    )
+    .expect("Should generate the credential successfully.");
     // Swap two ar_data values for two anonymity revokers.
     let x_2 = cdi
         .values
@@ -314,7 +338,7 @@ pub fn test_pipeline() {
         .get_mut(&ArIdentity::new(3))
         .expect("AR 2 exists") = x_2;
     // Verification should now fail.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
     assert_ne!(cdi_check, Ok(()));
 }
 
