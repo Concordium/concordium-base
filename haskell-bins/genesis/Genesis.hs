@@ -22,7 +22,6 @@ import Concordium.Common.Version
 import Concordium.Types.Parameters
 import Concordium.Genesis.Parameters
 import Concordium.Genesis.Data
-import qualified Concordium.Genesis.Data.P0 as P0
 import qualified Concordium.Genesis.Data.P1 as P1
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
@@ -164,17 +163,6 @@ main = cmdArgsRun mode >>=
                     Error err -> do
                       die $ "Could not decode genesis parameters: " ++ show err
                     Success params -> case gdVersion of
-                      2 -> do
-                        let genesisData = P0.parametersToGenesisData params
-                        let totalGTU = P0.genesisTotalGTU genesisData
-                        putStrLn "Successfully generated genesis data."
-                        putStrLn $ "Genesis time is set to: " ++ showTime (P0.genesisTime genesisData)
-                        putStrLn $ "There are the following " ++ show (Prelude.length (P0.genesisAccounts genesisData)) ++ " initial accounts in genesis:"
-                        forM_ (P0.genesisAccounts genesisData) $ \account ->
-                          putStrLn $ "\tAccount: " ++ show (gaAddress account) ++ ", balance = " ++ showBalance totalGTU (gaBalance account)
-                        LBS.writeFile gdOutput (S.runPutLazy $ P0.putVersionedGenesisData genesisData)
-                        putStrLn $ "Wrote genesis data to file " ++ show gdOutput
-                        exitSuccess
                       3 -> do
                         let genesisData = P1.parametersToGenesisData params
                         putStrLn "Successfully generated genesis data."
