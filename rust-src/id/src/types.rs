@@ -1445,16 +1445,6 @@ pub struct UnsignedCredentialDeploymentInfo<
     #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
     pub proofs: IdOwnershipProofs<P, C>,
-    /// This is the address for the account that the credential is being
-    /// deployed to. In case of a new account, the address is derived from
-    /// the credId, which is stored inside CredentialDeploymentValues
-    /// anyway, and thus the address should be None.
-    #[serde(
-        rename = "regId",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub addr: Option<AccountAddress>,
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -1670,9 +1660,15 @@ pub trait PublicCredentialData {
 /// A helper trait to allow signing PublicInformationForIP in an implementation
 /// that does not give access to the secret keys.
 pub trait CredentialDataWithSigning: PublicCredentialData {
-    /// Sign a challenge with the secret keys of the account.
+    /// Sign the credential deployment information, proving ownership of account
+    /// keys.
+    /// If the first argument is Right(addr) then this credential is intended
+    /// for an existing account. If the first argument is Left(tt) then the
+    /// credential is going to create a new account, and the payload is the
+    /// expiry time of the transaction.
     fn sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
         &self,
+        message_expiry: &Either<types::TransactionTime, AccountAddress>,
         unsigned_cred_info: &UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
@@ -1746,12 +1742,13 @@ impl PublicCredentialData for CredentialData {
 impl CredentialDataWithSigning for CredentialData {
     fn sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
         &self,
+        new_or_existing: &Either<types::TransactionTime, AccountAddress>,
         unsigned_cred_info: &UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
         let to_sign = crate::utils::credential_hash_to_sign(
             &unsigned_cred_info.values,
             &unsigned_cred_info.proofs,
-            &unsigned_cred_info.addr,
+            &new_or_existing,
         );
         self.keys
             .iter()
@@ -1980,6 +1977,42 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             }
         }
     }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Deserial
+    for AccountCredential<P, C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        match source.get()? {
+            0u8 => {
+                let icdi = source.get()?;
+                Ok(AccountCredential::Initial { icdi })
+            }
+            1u8 => {
+                let cdi = source.get()?;
+                Ok(AccountCredential::Normal { cdi })
+            }
+            n => bail!("AccountCredential::deserial: Unsupported tag {}.", n),
+        }
+    }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                 Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct AccountCredentialMessage<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "messageExpiry")]
+    pub message_expiry: types::TransactionTime,
+    #[serde(rename = "credential")]
+    pub credential: AccountCredential<P, C, AttributeType>,
 }
 
 /// A type encapsulating both types of credential values, analogous to

@@ -214,8 +214,10 @@ stages:
       changes: &files-cargo-test-idiss
         - "**/Cargo.toml"
         - "**/*.rs"
-        - "rust-bins/wallet-notes/files/global.json"
-        - "rust-bins/wallet-notes/id-request.json"
+        - "identity-provider-service/data/global.json"
+        - "identity-provider-service/data/valid_request.json"
+        - "identity-provider-service/data/anonymity_revokers.json"
+        - "identity-provider-service/data/identity_provider.pub.json"
         - "idiss/*"
       when: on_success
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" &&

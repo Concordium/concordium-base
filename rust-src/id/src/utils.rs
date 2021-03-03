@@ -1,7 +1,11 @@
 use crate::{secret_sharing::Threshold, types::*};
-use crypto_common::{to_bytes, types::KeyIndex};
+use crypto_common::{
+    to_bytes,
+    types::{KeyIndex, TransactionTime},
+};
 use curve_arithmetic::{Curve, Pairing, Value};
 use ed25519_dalek::Verifier;
+use either::Either;
 use elgamal::*;
 use failure::Fallible;
 use ff::{Field, PrimeField};
@@ -256,8 +260,10 @@ pub fn verify_account_ownership_proof(
 
 /// Compute the hash of the credential deployment that should be signed by the
 /// account keys for deployment.
-/// If `reg_id` is `None` then this credential will create a new account, and
-/// otherwise it is going to be deployed to the given account address.
+/// If `new_or_existing` is `Left` then this credential will create a new
+/// account, and the transaction expiry should be signed.
+/// otherwise it is going to be deployed to the given account address, and the
+/// address should be signed.
 pub fn credential_hash_to_sign<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -265,12 +271,14 @@ pub fn credential_hash_to_sign<
 >(
     values: &CredentialDeploymentValues<C, AttributeType>,
     proofs: &IdOwnershipProofs<P, C>,
-    reg_id: &Option<AccountAddress>,
+    new_or_existing: &Either<TransactionTime, AccountAddress>,
 ) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(&to_bytes(&values));
     hasher.update(&to_bytes(&proofs));
-    hasher.update(&to_bytes(&reg_id));
+    // the serialization of Either has 0 tag for the left variant, and 1 for the
+    // right
+    hasher.update(&to_bytes(&new_or_existing));
     let to_sign = &hasher.finalize();
     to_sign.to_vec()
 }
