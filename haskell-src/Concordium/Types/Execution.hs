@@ -154,24 +154,11 @@ data Payload =
       -- key.
       ubkProofAggregation :: !BakerAggregationProof
       }
-  -- | Updates existing keys used for signing transactions for the sender's account
-  | UpdateAccountKeys {
-      -- |Update the account keys with to the ones in this map.
-      uakKeys :: !(Map.Map KeyIndex AccountVerificationKey)
-    }
   -- | Adds additional keys to the sender's account, optionally updating the signature threshold too
-  | AddAccountKeys {
-      -- |Map of key indices and the associated key to add
-      aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
-      -- |Optional value for updating the threshold of the signature scheme
-      aakThreshold :: !(Maybe SignatureThreshold)
-    }
-  -- | Remove keys from the sender's account, optionally updating the signature threshold too
-  | RemoveAccountKeys {
-      -- |List of indices of keys to remove
-      rakIndices :: !(Set.Set KeyIndex),
-      -- |Optional value for updating the threshold of the signature scheme
-      rakThreshold :: !(Maybe SignatureThreshold)
+  | UpdateCredentialKeys {
+      -- | New set of credential keys to be replaced with the existing ones, including updating the threshold.
+      uckCredId :: CredentialRegistrationID,
+      uckKeys :: !CredentialPublicKeys
     }
   -- | Send an encrypted amount to an account.
   | EncryptedAmountTransfer {
@@ -193,6 +180,12 @@ data Payload =
       twsTo :: !AccountAddress,
       twsSchedule :: ![(Timestamp, Amount)]
       }
+  -- | Updating the account threshold and the credentials linked to an account by adding or removing credentials. The credential with index 0 can never be removed.
+  | UpdateCredentials {
+      ucNewCredInfos :: !(Map.Map CredentialIndex CredentialDeploymentInformation),
+      ucRemoveCredIds :: ![CredentialRegistrationID],
+      ucNewThreshold :: !AccountThreshold
+  }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -248,20 +241,10 @@ putPayload UpdateBakerKeys{..} =
     S.put ubkProofSig <>
     S.put ubkProofElection <>
     S.put ubkProofAggregation
-putPayload UpdateAccountKeys{..} = do
+putPayload UpdateCredentialKeys{..} = do
     P.putWord8 13
-    P.putWord8 (fromIntegral (length uakKeys))
-    forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
-putPayload AddAccountKeys{..} = do
-    P.putWord8 14
-    P.putWord8 (fromIntegral (length aakKeys))
-    forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
-    putMaybe S.put aakThreshold
-putPayload RemoveAccountKeys{..} = do
-    P.putWord8 15
-    P.putWord8 (fromIntegral (length rakIndices))
-    forM_ (Set.toAscList rakIndices) S.put
-    putMaybe S.put rakThreshold
+    S.put uckCredId
+    S.put uckKeys
 putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..} =
     S.putWord8 16 <>
     S.put eatTo <>
@@ -283,6 +266,13 @@ putPayload TransferWithSchedule{..} =
     S.put twsTo <>
     P.putWord8 (fromIntegral (length twsSchedule)) <>
     forM_ twsSchedule (\(a,b) -> S.put a >> S.put b)
+putPayload UpdateCredentials{..} =
+    S.putWord8 20 <>
+    S.putWord8 (fromIntegral (Map.size ucNewCredInfos)) <>
+    putSafeSizedMapOf S.put S.put ucNewCredInfos <>
+    S.putWord8 (fromIntegral (length ucRemoveCredIds)) <>
+    mapM_ S.put ucRemoveCredIds <>
+    S.put ucNewThreshold
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
@@ -335,19 +325,9 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ubkProofAggregation <- S.get
               return UpdateBakerKeys{..}
             13 -> do
-              len <- S.getWord8
-              uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-              return UpdateAccountKeys{..}
-            14 -> do
-              len <- S.getWord8
-              aakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-              aakThreshold <- getMaybe S.get
-              return AddAccountKeys{..}
-            15 -> do
-              len <- S.getWord8
-              rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
-              rakThreshold <- getMaybe S.get
-              return RemoveAccountKeys{..}
+              uckCredId <- S.get
+              uckKeys <- S.get
+              return UpdateCredentialKeys{..}
             16 -> do
               eatTo <- S.get
               eatdRemainingAmount <- S.get
@@ -375,6 +355,13 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               len <- S.getWord8
               twsSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
               return TransferWithSchedule{..}
+            20 -> do
+              newInfosLen <- S.getWord8
+              ucNewCredInfos <- getSafeSizedMapOf newInfosLen S.get S.get
+              removeCredsLen <- S.getWord8
+              ucRemoveCredIds <- replicateM (fromIntegral removeCredsLen) S.get
+              ucNewThreshold <- S.get
+              return UpdateCredentials{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
@@ -526,12 +513,12 @@ data Event =
               ebkuElectionKey :: !BakerElectionVerifyKey,
               -- |Aggregation public key
               ebkuAggregationKey :: !BakerAggregationVerifyKey
-           }            
-           -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
-           | AccountKeysUpdated
-           | AccountKeysAdded
-           | AccountKeysRemoved
-           | AccountKeysSignThresholdUpdated
+           }
+           -- | A set of credential keys was updated. Also covers the case of updating the signature threshold for the credential in question
+           | CredentialKeysUpdated {
+             -- |The credential that had its keys and threshold updated.
+             ckuCredId :: CredentialRegistrationID
+           }
            -- | New encrypted amount added to an account, with a given index.
            --
            -- This is used on the receiver's account when they get an encrypted amount transfer.
@@ -582,6 +569,15 @@ data Event =
                etwsTo :: !AccountAddress,
                etwsAmount :: ![(Timestamp, Amount)]
                }
+           | CredentialsUpdated {
+               cuAccount :: !AccountAddress,
+               -- |A list of newly added credentials. No order is guaranteed.
+               cuNewCredIds :: ![CredentialRegistrationID],
+               -- |A list of credentials that were removed from the account.
+               cuRemovedCredIds :: ![CredentialRegistrationID],
+               -- |A new account threshold.
+               cuNewThreshold :: !AccountThreshold
+              }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -593,7 +589,7 @@ newtype TransactionIndex = TransactionIndex Word64
 -- |The 'Maybe TransactionType' is to cover the case of a transaction payload
 -- that cannot be deserialized. A transaction is still included in a block, but
 -- it does not have a type.
-data TransactionSummaryType = 
+data TransactionSummaryType =
   TSTAccountTransaction !(Maybe TransactionType)
   | TSTCredentialDeploymentTransaction !CredentialType
   | TSTUpdateTransaction !UpdateType
@@ -676,8 +672,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
-                  -- |Encountered index to which no account key belongs when removing or updating keys
-                  | NonExistentAccountKey
+                  -- |Encountered credential ID that does not exist
+                  | NonExistentCredentialID
                   -- |Attempted to add an account key to a key index already in use
                   | KeyIndexAlreadyInUse
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
@@ -698,6 +694,16 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | FirstScheduledReleaseExpired
                   -- | Account tried to transfer with schedule to itself, that's not allowed.
                   | ScheduledSelfTransfer !AccountAddress
+                  -- | At least one of the credentials was either malformed or its proof was incorrect.
+                  | InvalidCredentials
+                  -- | Some of the credential IDs already exist or are duplicated in the transaction.
+                  | DuplicateCredIDs ![IDTypes.CredentialRegistrationID]
+                  -- | A credential id that was to be removed is not part of the account.
+                  | NonExistentCredIDs ![IDTypes.CredentialRegistrationID]
+                  -- | Attemp to remove the first credential
+                  | RemoveFirstCredential
+                  -- | The credential holder of the keys to be updated did not sign the transaction
+                  | CredentialHolderDidNotSign
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
