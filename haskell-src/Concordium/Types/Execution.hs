@@ -255,7 +255,7 @@ putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..
 putPayload TransferToEncrypted{..} =
     S.putWord8 17 <>
     S.put tteAmount
-putPayload TransferToPublic{ttpData = SecToPubAmountTransferData{..}, ..} =
+putPayload TransferToPublic{ttpData = SecToPubAmountTransferData{..}} =
     S.putWord8 18 <>
     S.put stpatdRemainingAmount <>
     S.put stpatdTransferAmount <>
