@@ -103,6 +103,8 @@ pub enum Type {
     Struct(Fields),
     Enum(Vec<(String, Fields)>),
     String(SizeLength),
+    ContractName(SizeLength),
+    ReceiveName(SizeLength),
 }
 
 impl Type {
@@ -193,6 +195,14 @@ impl SchemaType for [u8] {
 
 impl SchemaType for String {
     fn get_type() -> Type { Type::String(SizeLength::U32) }
+}
+
+impl SchemaType for OwnedContractName {
+    fn get_type() -> Type { Type::ContractName(SizeLength::U32) }
+}
+
+impl SchemaType for OwnedReceiveName {
+    fn get_type() -> Type { Type::ReceiveName(SizeLength::U32) }
 }
 
 macro_rules! schema_type_array_x {
@@ -421,6 +431,14 @@ impl Serial for Type {
                 out.write_u8(22)?;
                 len.serial(out)?;
             }
+            Type::ContractName(len_size) => {
+                out.write_u8(23)?;
+                len_size.serial(out)?;
+            }
+            Type::ReceiveName(len_size) => {
+                out.write_u8(24)?;
+                len_size.serial(out)?;
+            }
         }
         Ok(())
     }
@@ -480,8 +498,16 @@ impl Deserial for Type {
                 Ok(Type::Enum(variants))
             }
             22 => {
-                let size_len = SizeLength::deserial(source)?;
-                Ok(Type::String(size_len))
+                let len_size = SizeLength::deserial(source)?;
+                Ok(Type::String(len_size))
+            }
+            23 => {
+                let len_size = SizeLength::deserial(source)?;
+                Ok(Type::ContractName(len_size))
+            }
+            24 => {
+                let len_size = SizeLength::deserial(source)?;
+                Ok(Type::ReceiveName(len_size))
             }
             _ => Err(ParseError::default()),
         }
@@ -546,6 +572,35 @@ mod impls {
             values.push(value);
         }
         Ok(values)
+    }
+
+    fn deserial_string<R: Read>(source: &mut R, size_len: &SizeLength) -> ParseResult<String> {
+        let len = deserial_length(source, size_len)?;
+        // we are doing this case analysis so that we have a fast path for safe,
+        // most common, lengths, and a slower one longer ones.
+        if len <= MAX_PREALLOCATED_CAPACITY {
+            let mut bytes = vec![0u8; len];
+            source.read_exact(&mut bytes)?;
+            Ok(String::from_utf8(bytes)?)
+        } else {
+            let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
+            let mut buf = [0u8; 64];
+            let mut read = 0;
+            while read < len {
+                let new = source.read(&mut buf)?;
+                if new == 0 {
+                    break;
+                } else {
+                    read += new;
+                    bytes.extend_from_slice(&buf[..new]);
+                }
+            }
+            if read == len {
+                Ok(String::from_utf8(bytes)?)
+            } else {
+                Err(ParseError {})
+            }
+        }
     }
 
     impl Type {
@@ -664,34 +719,21 @@ mod impls {
                     Ok(json!({ name: fields }))
                 }
                 Type::String(size_len) => {
-                    let len = deserial_length(source, size_len)?;
-                    // we are doing this case analysis so that we have a fast path for safe,
-                    // most common, lengths, and a slower one longer ones.
-                    if len <= MAX_PREALLOCATED_CAPACITY {
-                        let mut bytes = vec![0u8; len];
-                        source.read_exact(&mut bytes)?;
-                        let string = String::from_utf8(bytes)?;
-                        Ok(Value::String(string))
-                    } else {
-                        let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
-                        let mut buf = [0u8; 64];
-                        let mut read = 0;
-                        while read < len {
-                            let new = source.read(&mut buf)?;
-                            if new == 0 {
-                                break;
-                            } else {
-                                read += new;
-                                bytes.extend_from_slice(&buf[..new]);
-                            }
-                        }
-                        if read == len {
-                            let string = String::from_utf8(bytes)?;
-                            Ok(Value::String(string))
-                        } else {
-                            Err(ParseError {})
-                        }
-                    }
+                    let string = deserial_string(source, size_len)?;
+                    Ok(Value::String(string))
+                }
+                Type::ContractName(size_len) => {
+                    let contract_name = OwnedContractName::new(deserial_string(source, size_len)?);
+                    let name_without_init =
+                        contract_name.contract_name().ok_or_else(ParseError::default)?;
+                    Ok(json!({ "contract": name_without_init }))
+                }
+                Type::ReceiveName(size_len) => {
+                    let receive_name = OwnedReceiveName::new(deserial_string(source, size_len)?);
+                    let contract_name =
+                        receive_name.contract_name().ok_or_else(ParseError::default)?;
+                    let func_name = receive_name.func_name().ok_or_else(ParseError::default)?;
+                    Ok(json!({"contract": contract_name, "func": func_name}))
                 }
             }
         }

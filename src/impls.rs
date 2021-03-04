@@ -294,6 +294,48 @@ impl Deserial for Address {
     }
 }
 
+impl<'a> Serial for ContractName<'a> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let name = self.get_chain_name();
+        let len = name.len() as u32;
+        len.serial(out)?;
+        serial_vector_no_length(name.as_bytes(), out)
+    }
+}
+
+impl Serial for OwnedContractName {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.get_chain_name().serial(out)
+    }
+}
+
+impl Deserial for OwnedContractName {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        Ok(OwnedContractName::new(source.get()?))
+    }
+}
+
+impl<'a> Serial for ReceiveName<'a> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let name = self.get_chain_name();
+        let len = name.len() as u32;
+        len.serial(out)?;
+        serial_vector_no_length(name.as_bytes(), out)
+    }
+}
+
+impl Serial for OwnedReceiveName {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.get_chain_name().serial(out)
+    }
+}
+
+impl Deserial for OwnedReceiveName {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        Ok(OwnedReceiveName::new(source.get()?))
+    }
+}
+
 impl Serial for ChainMetadata {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.slot_time.serial(out) }
 }
