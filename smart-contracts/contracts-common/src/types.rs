@@ -598,6 +598,86 @@ pub enum Address {
     Contract(ContractAddress),
 }
 
+/// A contract name. Expected format: "init_<contract_name>".
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub struct ContractName<'a>(&'a str);
+
+impl<'a> ContractName<'a> {
+    /// Create a new ContractName. Expected format: "init_<contract_name>".
+    #[inline(always)]
+    pub fn new(name: &'a str) -> Self { ContractName(name) }
+
+    /// Get contract name used on chain: "init_<contract_name>".
+    #[inline(always)]
+    pub fn get_chain_name(&self) -> &str { self.0 }
+}
+
+/// A contract name (owned version). Expected format: "init_<contract_name>".
+#[derive(Eq, PartialEq, Debug)]
+pub struct OwnedContractName(String);
+
+impl OwnedContractName {
+    /// Create a new OwnedContractName. Expected format: "init_<contract_name>".
+    #[inline(always)]
+    pub fn new(name: String) -> Self { OwnedContractName(name) }
+
+    /// Get contract name used on chain: "init_<contract_name>".
+    #[inline(always)]
+    pub fn get_chain_name(&self) -> &String { &self.0 }
+
+    /// Try to extract the contract name by removing the "init_" prefix.
+    #[inline(always)]
+    pub fn contract_name(&self) -> Option<&str> { self.get_chain_name().strip_prefix("init_") }
+
+    /// Convert to ContractName by reference.
+    #[inline(always)]
+    pub fn as_ref(&self) -> ContractName { ContractName(self.get_chain_name().as_str()) }
+}
+
+/// A receive name. Expected format: "<contract_name>.<func_name>".
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub struct ReceiveName<'a>(&'a str);
+
+impl<'a> ReceiveName<'a> {
+    /// Create a new ReceiveName. Expected format:
+    /// "<contract_name>.<func_name>".
+    pub fn new(name: &'a str) -> Self { ReceiveName(name) }
+
+    /// Get receive name used on chain: "<contract_name>.<func_name>".
+    pub fn get_chain_name(&self) -> &str { self.0 }
+}
+
+/// A receive name (owned version). Expected format:
+/// "<contract_name>.<func_name>".
+#[derive(Eq, PartialEq, Debug)]
+pub struct OwnedReceiveName(String);
+
+impl OwnedReceiveName {
+    /// Create a new OwnedReceiveName. Expected format:
+    /// "<contract_name>.<func_name>".
+    pub fn new(name: String) -> Self { OwnedReceiveName(name) }
+
+    /// Get receive name used on chain: "<contract_name>.<func_name>".
+    pub fn get_chain_name(&self) -> &String { &self.0 }
+
+    /// Try to extract the contract name by splitting at the first dot.
+    pub fn contract_name(&self) -> Option<&str> { self.get_name_parts().map(|parts| parts.0) }
+
+    /// Try to extract the func name by splitting at the first dot.
+    pub fn func_name(&self) -> Option<&str> { self.get_name_parts().map(|parts| parts.1) }
+
+    /// Try to extract (contract_name, func_name) by splitting at the first dot.
+    fn get_name_parts(&self) -> Option<(&str, &str)> {
+        let mut splitter = self.get_chain_name().splitn(2, '.');
+        let contract = splitter.next()?;
+        let func = splitter.next()?;
+        Some((contract, func))
+    }
+
+    /// Convert to ReceiveName by reference.
+    pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
+}
+
 /// Genesis block has slot number 0, and otherwise it is always the case that a
 /// parent of a block has a slot number strictly less than the block itself.
 /// However in contrast to `BlockHeight`, slot numbers are not strictly
