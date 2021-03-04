@@ -3,7 +3,6 @@ use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
     base16_encode_string,
-    serde_impls::KeyPairDef,
     types::{Amount, KeyIndex, TransactionTime},
     *,
 };
@@ -210,11 +209,6 @@ fn main() -> std::io::Result<()> {
 
         let (ip_sig, _) = ver_ok.expect("There is an error in signing");
 
-        let mut keys = BTreeMap::new();
-        for idx in 0..common.num_keys {
-            keys.insert(KeyIndex(idx as u8), KeyPairDef::generate(csprng));
-        }
-
         let threshold = SignatureThreshold(
             if common.num_keys == 1 {
                 1
@@ -223,7 +217,10 @@ fn main() -> std::io::Result<()> {
             },
         );
 
-        let acc_data = CredentialData { keys, threshold };
+        let acc_data = CredentialData {
+            keys: initial_acc_data.keys,
+            threshold,
+        };
 
         let id_object = IdentityObject {
             pre_identity_object: pio,
