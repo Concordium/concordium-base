@@ -69,7 +69,7 @@ pub struct Energy {
 pub const MEMORY_COST_FACTOR: u32 = 100;
 
 #[derive(Debug)]
-pub(crate) struct OutOfEnergy;
+pub struct OutOfEnergy;
 
 impl std::fmt::Display for OutOfEnergy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
