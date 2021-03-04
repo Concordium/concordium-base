@@ -144,6 +144,11 @@ maxParameterLen = 1024
 maxWasmModuleSize :: Word32
 maxWasmModuleSize = 65536 -- 65kB
 
+-- |Maximum byte size of function names.
+-- Must stay in sync with MAX_FUNC_NAME_SIZE from wasm-transform.
+maxFuncNameSize :: Int
+maxFuncNameSize = 100
+
 --------------------------------------------------------------------------------
 
 -- | The source of a contract in binary wasm format.
@@ -231,14 +236,18 @@ newtype InitName = InitName { initName :: Text }
 -- |Check whether the given text is a valid init name.
 -- This is the case if
 --
+-- * length is <= maxFuncNameSize
 -- * all characters are valid ascii characters in alphanumeric or punctuation classes
 -- * the name does not contain @.@
 -- * the name starts with `init_`
 isValidInitName :: Text -> Bool
 isValidInitName proposal =
-  let hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+  -- The limit is specified in bytes, but Text.length returns the number of chars.
+  -- This is not a problem, as we only allow ASCII.
+  let hasValidLength = Text.length proposal <= maxFuncNameSize
+      hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
       hasDot = Text.any (== '.') proposal
-  in "init_" `Text.isPrefixOf` proposal && hasValidCharacters && not hasDot
+  in "init_" `Text.isPrefixOf` proposal && hasValidLength && hasValidCharacters && not hasDot
 
 instance AE.FromJSON InitName where
   parseJSON = AE.withText "InitName" $ \initName -> do
@@ -262,13 +271,17 @@ newtype ReceiveName = ReceiveName { receiveName :: Text }
 -- |Check whether the given text is a valid receive name.
 -- This is the case if
 --
+-- * length is <= maxFuncNameSize
 -- * all characters are valid ascii characters in alphanumeric or punctuation classes
 -- * the name contains @.@
 isValidReceiveName :: Text -> Bool
 isValidReceiveName proposal =
-  let hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+  -- The limit is specified in bytes, but Text.length returns the number of chars.
+  -- This is not a problem, as we only allow ASCII.
+  let hasValidLength = Text.length proposal <= maxFuncNameSize
+      hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
       hasDot = Text.any (== '.') proposal
-  in hasValidCharacters && hasDot
+  in hasValidLength && hasValidCharacters && hasDot
 
 -- |Extract the contract name from the init function name.
 initContractName :: InitName -> Text
@@ -419,12 +432,17 @@ encodeReceiveContext :: ReceiveContext -> ByteString
 encodeReceiveContext ReceiveContext{..} = runPut encoder
   where encoder =
           put invoker <>
-          putWord64le (_contractIndex (contractIndex selfAddress)) <>
-          putWord64le (_contractSubindex (contractSubindex selfAddress)) <>
+          encodeContractAddress selfAddress <>
           putWord64le (_amount selfBalance) <>
-          put sender <>
+          encodeAddress sender <>
           put owner <>
           putSenderPolicies rcSenderPolicies
+
+        encodeContractAddress (ContractAddress ind subind) =
+          putWord64le (_contractIndex ind) <>
+          putWord64le (_contractSubindex subind)
+        encodeAddress (AddressContract addr) = putWord8 1 <> encodeContractAddress addr
+        encodeAddress accAddr = putWord8 0 <> put accAddr
 
 data SenderPolicy = SenderPolicy {
   -- |Identity of the identity provider who signed the identity object

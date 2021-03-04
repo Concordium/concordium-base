@@ -6,10 +6,10 @@ use crate::{
         dlog,
     },
 };
-use base58check::*;
+use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
-use crypto_common::*;
+use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
@@ -35,7 +35,7 @@ use std::{
     fmt,
     io::{Cursor, Read},
     str::FromStr,
-}; // only for account addresses
+};
 
 /// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
@@ -53,7 +53,7 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
+pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
@@ -136,8 +136,8 @@ impl AccountAddress {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial)]
 #[repr(transparent)]
 /// The values of this type must maintain the property that they are not 0.
-#[serde(transparent)]
 #[derive(SerdeSerialize)]
+#[serde(transparent)]
 pub struct SignatureThreshold(pub u8);
 
 impl Deserial for SignatureThreshold {
@@ -181,13 +181,6 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
     }
 }
 
-/// Index of an account key that is to be used.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
-#[repr(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(transparent)]
-pub struct KeyIndex(pub u8);
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct IpCdiSignature(ed25519::Signature);
 
@@ -220,8 +213,8 @@ impl From<ed25519::Signature> for AccountOwnershipSignature {
 /// The list should be non-empty and at most 255 elements long, and have no
 /// duplicates. The current choice of data structure disallows duplicates by
 /// design.
-#[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
 pub struct AccountOwnershipProof {
     pub sigs: BTreeMap<KeyIndex, AccountOwnershipSignature>,
 }
@@ -254,10 +247,21 @@ impl AccountOwnershipProof {
     pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Hash,
+    Serialize,
+    SerdeSerialize,
+    SerdeDeserialize,
+)]
 #[repr(transparent)]
 #[serde(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
@@ -1258,6 +1262,10 @@ impl From<&ed25519::Keypair> for VerifyKey {
     fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
+impl From<&KeyPairDef> for VerifyKey {
+    fn from(kp: &KeyPairDef) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+}
+
 /// Compare byte representation.
 impl Ord for VerifyKey {
     fn cmp(&self, other: &VerifyKey) -> Ordering {
@@ -1306,138 +1314,6 @@ pub struct NewAccount {
     pub threshold: SignatureThreshold,
 }
 
-/// What account should this credential be deployed to, or the keys of the new
-/// account.
-#[derive(Debug, PartialEq, Eq)]
-pub enum CredentialAccount {
-    ExistingAccount(AccountAddress),
-    NewAccount(Vec<VerifyKey>, SignatureThreshold),
-}
-
-impl SerdeSerialize for CredentialAccount {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        use CredentialAccount::*;
-        match self {
-            ExistingAccount(addr) => addr.serialize(ser),
-            NewAccount(ref keys, threshold) => {
-                let mut map = ser.serialize_map(Some(2))?;
-                map.serialize_entry("keys", keys)?;
-                map.serialize_entry("threshold", threshold)?;
-                map.end()
-            }
-        }
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for CredentialAccount {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        // expect a map, but also handle string
-        des.deserialize_any(CredentialAccountVisitor)
-    }
-}
-
-pub struct CredentialAccountVisitor;
-
-impl<'de> Visitor<'de> for CredentialAccountVisitor {
-    type Value = CredentialAccount;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            formatter,
-            "Either a string with account address or a map with keys and threshold."
-        )
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        let bytes = decode(v).map_err(de::Error::custom)?;
-        let addr = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
-        Ok(CredentialAccount::ExistingAccount(addr))
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-        let mut map = map;
-        let mut keys = None;
-        let mut threshold = None;
-        while keys.is_none() || threshold.is_none() {
-            if let Some(k) = map.next_key::<String>()? {
-                if k == "keys" {
-                    if keys.is_none() {
-                        keys = Some(map.next_value()?);
-                    } else {
-                        return Err(de::Error::custom("Duplicate key 'keys'."));
-                    }
-                } else if k == "threshold" {
-                    if threshold.is_none() {
-                        threshold = Some(map.next_value()?)
-                    } else {
-                        return Err(de::Error::custom("Duplicate key 'threshold'."));
-                    }
-                }
-            } else {
-                return Err(de::Error::custom(
-                    "At least the two keys 'keys' and 'threshold' are expected.",
-                ));
-            }
-        }
-        Ok(CredentialAccount::NewAccount(
-            keys.unwrap(),
-            threshold.unwrap(),
-        ))
-    }
-}
-
-impl Serial for CredentialAccount {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        use CredentialAccount::*;
-        match self {
-            ExistingAccount(ref addr) => {
-                out.write_u8(0).expect("Writing to buffer should succeed.");
-                addr.serial(out);
-            }
-            NewAccount(ref keys, threshold) => {
-                out.write_u8(1).expect("Writing to buffer should succeed.");
-                let len = keys.len() as u8;
-                len.serial(out);
-                for key in keys.iter() {
-                    key.serial(out);
-                }
-                threshold.serial(out);
-            }
-        }
-    }
-}
-
-impl Deserial for CredentialAccount {
-    fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
-        use CredentialAccount::*;
-        let c = cur.read_u8()?;
-        match c {
-            0 => Ok(ExistingAccount(cur.get()?)),
-            1 => {
-                let len = cur.read_u8()?;
-                if len == 0 {
-                    bail!("Need at least one key.")
-                }
-                let mut keys = Vec::with_capacity(len as usize);
-                for _ in 0..len {
-                    keys.push(cur.get()?);
-                }
-                let threshold = cur.get()?;
-                Ok(NewAccount(keys, threshold))
-            }
-            _ => bail!("Only two variants of this type exist."),
-        }
-    }
-}
-
-/// What account should this credential be deployed to, or the keys of the new
-/// account.
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-#[serde(transparent)]
-pub struct InitialCredentialAccount {
-    pub account: NewAccount,
-}
-
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
@@ -1445,16 +1321,16 @@ pub struct InitialCredentialAccount {
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Account this credential belongs to.
-    #[serde(rename = "account")]
-    pub cred_account: CredentialAccount,
+    /// Credential keys (i.e. account holder keys).
+    #[serde(rename = "credentialPublicKeys")]
+    pub cred_key_info: CredentialPublicKeys,
     /// Credential registration id of the credential.
     #[serde(
-        rename = "regId",
+        rename = "credId",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id: C,
+    pub cred_id: C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -1482,8 +1358,8 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
 ))]
 pub struct InitialCredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Account this credential belongs to.
-    #[serde(rename = "account")]
-    pub cred_account: InitialCredentialAccount,
+    #[serde(rename = "credentialPublicKeys")]
+    pub cred_account: CredentialPublicKeys,
     /// Credential registration id of the credential.
     #[serde(
         rename = "regId",
@@ -1553,7 +1429,7 @@ pub struct CredentialDeploymentInfo<
 
 /// This is the CredentialDeploymentInfo structure, that instead of containing
 /// CredDeploymentProofs, it contains UnsignedCredDeploymentProofs, and
-/// the missing unsigned_challenge.
+/// the reg_id that also has to be signed.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
@@ -1569,16 +1445,6 @@ pub struct UnsignedCredentialDeploymentInfo<
     #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
     pub proofs: IdOwnershipProofs<P, C>,
-    /// Challenge from random oracle. This should be signed by the secret keys
-    /// that belongs to the account in the values. When signed, it can be used
-    /// to transform the UnsignedCredDeploymentProofs to
-    /// CredDeploymentProofs.
-    #[serde(
-        rename = "accountOwnershipChallenge",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub account_ownership_challenge: Challenge,
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -1623,7 +1489,7 @@ pub struct PublicInformationForIP<C: Curve> {
     )]
     pub reg_id: C,
     #[serde(rename = "publicKeys")]
-    pub vk_acc: InitialCredentialAccount,
+    pub vk_acc: CredentialPublicKeys,
 }
 
 /// Context needed to generate pre-identity object as well as to check it.
@@ -1745,10 +1611,18 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
 /// access to the secret keys.
 /// NB: the threshold should be at most the number of keypairs.
 pub trait PublicInitialAccountData {
-    /// Get the number of keys required to sign a message from the account.
+    /// Get the public keys of the credential
+    fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey>;
+    /// Get the signature threshold of the account.
     fn get_threshold(&self) -> SignatureThreshold;
-    /// Get the public keys of the account.
-    fn get_public_keys(&self) -> Vec<VerifyKey>;
+
+    /// Get the CredentialPublicKeys struct directly
+    fn get_cred_key_info(&self) -> CredentialPublicKeys {
+        CredentialPublicKeys {
+            keys:      self.get_public_keys(),
+            threshold: self.get_threshold(),
+        }
+    }
 }
 
 /// A helper trait to allow signing PublicInformationForIP in an implementation
@@ -1764,38 +1638,127 @@ pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
-/// A helper trait to access the public parts of the AccountData
+/// A helper trait to access the public parts of the CredentialData
 /// structure. We use this to allow implementations that does not give or have
 /// access to the secret keys.
 /// NB: the threshold should be at most the number of keypairs.
-pub trait PublicAccountData {
-    /// Get the public keys of the account
-    fn get_public_keys(&self) -> Vec<VerifyKey>;
-    /// if its an existing account, get the address, otherwise
-    /// get the signature threshold of the account.
-    fn get_existing(&self) -> Either<SignatureThreshold, AccountAddress>;
+pub trait PublicCredentialData {
+    /// Get the public keys of the credential
+    fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey>;
+    /// Get the signature threshold of the account.
+    fn get_threshold(&self) -> SignatureThreshold;
+
+    /// Get the CredentialPublicKeys struct directly
+    fn get_cred_key_info(&self) -> CredentialPublicKeys {
+        CredentialPublicKeys {
+            keys:      self.get_public_keys(),
+            threshold: self.get_threshold(),
+        }
+    }
 }
 
 /// A helper trait to allow signing PublicInformationForIP in an implementation
 /// that does not give access to the secret keys.
-pub trait AccountDataWithSigning: PublicAccountData {
-    /// Sign a challenge with the secret keys of the account.
-    fn sign_challenge(
+pub trait CredentialDataWithSigning: PublicCredentialData {
+    /// Sign the credential deployment information, proving ownership of account
+    /// keys.
+    /// If the first argument is Right(addr) then this credential is intended
+    /// for an existing account. If the first argument is Left(tt) then the
+    /// credential is going to create a new account, and the payload is the
+    /// expiry time of the transaction.
+    fn sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
         &self,
-        challenge: &Challenge,
+        message_expiry: &Either<types::TransactionTime, AccountAddress>,
+        unsigned_cred_info: &UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
-/// Account data needed by the account holder to generate proofs to deploy the
-/// credential object. This contains all the keys on the account at the moment
-/// of credential deployment.
-pub struct AccountData {
-    pub keys: BTreeMap<KeyIndex, ed25519::Keypair>,
-    /// If it is an existing account, its address, otherwise the signature
-    /// threshold of the new account.
-    pub existing: Either<SignatureThreshold, AccountAddress>,
+/// All account keys indexed by credentials.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+pub struct AccountKeys {
+    /// All keys per credential
+    #[serde(rename = "keys")]
+    pub keys: BTreeMap<KeyIndex, CredentialData>,
+    /// The account threshold.
+    #[serde(rename = "threshold")]
+    pub threshold: SignatureThreshold,
 }
 
+/// Create account keys with a single credential at index 0
+impl From<CredentialData> for AccountKeys {
+    fn from(cd: CredentialData) -> Self { Self::from((KeyIndex(0), cd)) }
+}
+
+/// Create account keys with a single credential at the given index
+impl From<(KeyIndex, CredentialData)> for AccountKeys {
+    fn from((ki, cd): (KeyIndex, CredentialData)) -> Self {
+        let mut keys = BTreeMap::new();
+        keys.insert(ki, cd);
+        Self {
+            keys,
+            threshold: SignatureThreshold(1),
+        }
+    }
+}
+
+/// Create account keys with a single credential at index 0
+impl From<InitialAccountData> for AccountKeys {
+    fn from(cd: InitialAccountData) -> Self {
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), CredentialData {
+            keys:      cd.keys,
+            threshold: cd.threshold,
+        });
+        Self {
+            keys,
+            threshold: SignatureThreshold(1),
+        }
+    }
+}
+
+/// Credential data needed by the account holder to generate proofs to deploy
+/// the credential object. This contains all the keys on the credential at the
+/// moment of its deployment. If this creates the account then the account
+/// starts with exactly these keys.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+pub struct CredentialData {
+    #[serde(rename = "keys")]
+    pub keys: BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    #[serde(rename = "threshold")]
+    pub threshold: SignatureThreshold,
+}
+
+impl PublicCredentialData for CredentialData {
+    fn get_threshold(&self) -> SignatureThreshold { self.threshold }
+
+    fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
+        self.keys
+            .iter()
+            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .collect()
+    }
+}
+
+impl CredentialDataWithSigning for CredentialData {
+    fn sign<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>(
+        &self,
+        new_or_existing: &Either<types::TransactionTime, AccountAddress>,
+        unsigned_cred_info: &UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
+    ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
+        let to_sign = crate::utils::credential_hash_to_sign(
+            &unsigned_cred_info.values,
+            &unsigned_cred_info.proofs,
+            &new_or_existing,
+        );
+        self.keys
+            .iter()
+            .map(|(&idx, kp)| {
+                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
+                (idx, expanded_sk.sign(&to_sign, &kp.public).into())
+            })
+            .collect()
+    }
+}
 /// This contains all the keys on the account of the initial credential
 /// deployment.
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -1806,66 +1769,14 @@ pub struct InitialAccountData {
     pub threshold: SignatureThreshold,
 }
 
-impl SerdeSerialize for AccountData {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let mut map = ser.serialize_map(Some(2))?;
-        match self.existing {
-            Either::Left(ref threshold) => map.serialize_entry("threshold", threshold)?,
-            Either::Right(ref address) => map.serialize_entry("address", address)?,
-        };
-
-        let mut key_map = BTreeMap::new();
-        for (idx, kp) in self.keys.iter() {
-            let mut kp_map: BTreeMap<&str, String> = BTreeMap::new();
-            kp_map.insert("verifyKey", base16_encode_string(&kp.public));
-            kp_map.insert("signKey", base16_encode_string(&kp.secret));
-            key_map.insert(idx, kp_map);
-        }
-        map.serialize_entry("keys", &key_map)?;
-        map.end()
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for AccountData {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        des.deserialize_map(AccountDataVisitor)
-    }
-}
-
-impl PublicAccountData for AccountData {
-    fn get_existing(&self) -> Either<SignatureThreshold, AccountAddress> { self.existing }
-
-    fn get_public_keys(&self) -> Vec<VerifyKey> {
-        self.keys
-            .values()
-            .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-            .collect::<Vec<_>>()
-    }
-}
-
-impl AccountDataWithSigning for AccountData {
-    fn sign_challenge(
-        &self,
-        challenge: &Challenge,
-    ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
-        self.keys
-            .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(challenge.as_ref(), &kp.public).into())
-            })
-            .collect()
-    }
-}
-
 impl PublicInitialAccountData for InitialAccountData {
     fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
-    fn get_public_keys(&self) -> Vec<VerifyKey> {
+    fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
-            .values()
-            .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
-            .collect::<Vec<_>>()
+            .iter()
+            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .collect()
     }
 }
 
@@ -1885,103 +1796,17 @@ impl InitialAccountDataWithSigning for InitialAccountData {
     }
 }
 
-pub struct AccountDataVisitor;
-
-impl<'de> Visitor<'de> for AccountDataVisitor {
-    type Value = AccountData;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "Account data structure.")
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-        let mut map = map;
-        let mut keys: Option<BTreeMap<KeyIndex, BTreeMap<String, String>>> = None;
-        let mut existing = None;
-        while keys.is_none() || existing.is_none() {
-            if let Some(k) = map.next_key::<String>()? {
-                if k == "keys" {
-                    if keys.is_none() {
-                        keys = Some(map.next_value()?);
-                    } else {
-                        return Err(de::Error::custom("Duplicate key 'keys'."));
-                    }
-                } else if k == "threshold" {
-                    if existing.is_none() {
-                        existing = Some(Either::Left(map.next_value()?))
-                    } else {
-                        return Err(de::Error::custom("Duplicate key 'threshold'."));
-                    }
-                } else if k == "address" {
-                    if existing.is_none() {
-                        existing = Some(Either::Right(map.next_value()?))
-                    } else {
-                        return Err(de::Error::custom("Duplicate key 'address'."));
-                    }
-                }
-            } else {
-                return Err(de::Error::custom(
-                    "At least the two keys 'keys' and 'threshold'/'address' are expected.",
-                ));
-            }
-        }
-        let mut out_keys = BTreeMap::new();
-        for (&idx, kp) in keys.unwrap().iter() {
-            let vf_key = kp
-                .get("verifyKey")
-                .ok_or_else(|| de::Error::custom("verifyKey not present."))?;
-            let public = base16_decode_string(vf_key).map_err(de::Error::custom)?;
-            let sign_key = kp
-                .get("signKey")
-                .ok_or_else(|| de::Error::custom("signKey not present."))?;
-            let secret = base16_decode_string(sign_key).map_err(de::Error::custom)?;
-            if out_keys
-                .insert(idx, ed25519::Keypair { secret, public })
-                .is_some()
-            {
-                return Err(de::Error::custom("duplicate key index."));
-            }
-        }
-        Ok(AccountData {
-            keys:     out_keys,
-            existing: existing.unwrap(),
-        })
-    }
-}
-
-// Manual implementation to be able to encode length as 1.
-impl Serial for AccountData {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        let len = self.keys.len() as u8;
-        out.put(&len);
-        serial_map_no_length(&self.keys, out);
-        out.put(&self.existing);
-    }
-}
-
-impl Deserial for AccountData {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let len: u8 = source.get()?;
-        if len == 0 {
-            bail!("Need at least one key.")
-        }
-        let keys = deserial_map_no_length(source, usize::from(len))?;
-        let existing = source.get()?;
-        Ok(AccountData { keys, existing })
-    }
-}
-
-/// Public account keys currently on the account, together with the threshold
+/// Public credential keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct AccountKeys {
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+pub struct CredentialPublicKeys {
     #[serde(rename = "keys")]
     pub keys: BTreeMap<KeyIndex, VerifyKey>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
 
-impl Serial for AccountKeys {
+impl Serial for CredentialPublicKeys {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let len = self.keys.len() as u8;
         out.put(&len);
@@ -1990,7 +1815,7 @@ impl Serial for AccountKeys {
     }
 }
 
-impl Deserial for AccountKeys {
+impl Deserial for CredentialPublicKeys {
     fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
         let len = cur.read_u8()?;
         if len == 0 {
@@ -1998,11 +1823,11 @@ impl Deserial for AccountKeys {
         }
         let keys = deserial_map_no_length(cur, usize::from(len))?;
         let threshold = cur.get()?;
-        Ok(AccountKeys { keys, threshold })
+        Ok(CredentialPublicKeys { keys, threshold })
     }
 }
 
-impl AccountKeys {
+impl CredentialPublicKeys {
     pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
 }
 
@@ -2152,6 +1977,42 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             }
         }
     }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Deserial
+    for AccountCredential<P, C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        match source.get()? {
+            0u8 => {
+                let icdi = source.get()?;
+                Ok(AccountCredential::Initial { icdi })
+            }
+            1u8 => {
+                let cdi = source.get()?;
+                Ok(AccountCredential::Normal { cdi })
+            }
+            n => bail!("AccountCredential::deserial: Unsupported tag {}.", n),
+        }
+    }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                 Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct AccountCredentialMessage<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "messageExpiry")]
+    pub message_expiry: types::TransactionTime,
+    #[serde(rename = "credential")]
+    pub credential: AccountCredential<P, C, AttributeType>,
 }
 
 /// A type encapsulating both types of credential values, analogous to

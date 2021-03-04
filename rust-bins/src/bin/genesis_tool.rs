@@ -1,11 +1,15 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, types::Amount, *};
+use crypto_common::{
+    base16_encode_string,
+    serde_impls::KeyPairDef,
+    types::{Amount, KeyIndex, TransactionTime},
+    *,
+};
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use either::Either::Left;
 use id::{
     account_holder::*, constants::*, ffi::*, identity_provider::*, secret_sharing::Threshold,
     types::*,
@@ -193,10 +197,13 @@ fn main() -> std::io::Result<()> {
         let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
             .expect("Generating the pre-identity object should succeed.");
 
+        let expiry = TransactionTime { seconds: u64::MAX };
+
         let ver_ok = verify_credentials(
             &pio,
             context,
             &attributes,
+            expiry,
             &ip_data.ip_secret_key,
             &ip_data.ip_cdi_secret_key,
         );
@@ -205,7 +212,7 @@ fn main() -> std::io::Result<()> {
 
         let mut keys = BTreeMap::new();
         for idx in 0..common.num_keys {
-            keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
+            keys.insert(KeyIndex(idx as u8), KeyPairDef::generate(csprng));
         }
 
         let threshold = SignatureThreshold(
@@ -216,10 +223,7 @@ fn main() -> std::io::Result<()> {
             },
         );
 
-        let acc_data = AccountData {
-            keys,
-            existing: Left(threshold),
-        };
+        let acc_data = CredentialData { keys, threshold };
 
         let id_object = IdentityObject {
             pre_identity_object: pio,
@@ -233,24 +237,20 @@ fn main() -> std::io::Result<()> {
             &ip_data.public_ip_info,
             id_object.pre_identity_object.pub_info_for_ip,
             &id_object.alist,
+            expiry,
             &ip_data.ip_cdi_secret_key,
         );
 
         let address = AccountAddress::new(&icdi.values.reg_id);
 
-        let versioned_cdi =
-            Versioned::new(VERSION_0, AccountCredential::Initial::<IpPairing, _, _> {
+        let versioned_credentials = {
+            let mut credentials = BTreeMap::new();
+            credentials.insert(KeyIndex(0), AccountCredential::Initial::<IpPairing, _, _> {
                 icdi,
             });
-
-        let acc_keys = AccountKeys {
-            keys: acc_data
-                .keys
-                .iter()
-                .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))
-                .collect(),
-            threshold,
+            Versioned::new(VERSION_0, credentials)
         };
+        let acc_keys = AccountKeys::from(acc_data);
 
         // unwrap is safe here since we've generated the credential already, and that
         // does the same computation.
@@ -269,11 +269,11 @@ fn main() -> std::io::Result<()> {
             "address": address,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-            "accountData": acc_data,
-            "credential": versioned_cdi,
+            "accountKeys": acc_keys,
+            "credentials": versioned_credentials,
             "aci": id_object_use_data.aci,
         });
-        (account_data_json, versioned_cdi, acc_keys, address)
+        (account_data_json, versioned_credentials, address)
     };
 
     let mk_out_path = |s| {
@@ -307,7 +307,7 @@ fn main() -> std::io::Result<()> {
 
             let mut accounts = Vec::with_capacity(num_accounts);
             for acc_num in 0..num_accounts {
-                let (account_data_json, credential_json, account_keys, address_json) =
+                let (account_data_json, credential_json, address_json) =
                     generate_account(&mut csprng);
 
                 if let Some(stake) = stake {
@@ -341,10 +341,10 @@ fn main() -> std::io::Result<()> {
 
                     let public_account_data = json!({
                         "schemeId": "Ed25519",
-                        "accountKeys": account_keys,
                         "address": address_json,
                         "balance": balance,
-                        "credential": credential_json,
+                        "accountThreshold": 1, // only a single credential
+                        "credentials": credential_json,
                         "baker": public_baker_data
                     });
 
@@ -362,10 +362,10 @@ fn main() -> std::io::Result<()> {
                 } else {
                     let public_account_data = json!({
                         "schemeId": "Ed25519",
-                        "accountKeys": account_keys,
                         "address": address_json,
                         "balance": balance,
-                        "credential": credential_json,
+                        "accountThreshold": 1, // only a single credential
+                        "credentials": credential_json,
                     });
                     accounts.push(public_account_data);
                 }

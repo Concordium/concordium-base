@@ -6,7 +6,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
-use crypto_common::to_bytes;
+use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
@@ -55,12 +55,13 @@ pub fn verify_cdi<
     // NB: The following map only needs to be a superset of the ars
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
-    acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
+    new_or_existing: &Either<TransactionTime, AccountAddress>,
 ) -> Result<(), CDIVerificationError> {
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
+    let addr = new_or_existing.as_ref().right();
     let rt_usize: usize = cdi.values.threshold.into();
     if rt_usize
         != cdi
@@ -78,6 +79,7 @@ pub fn verify_cdi<
     // Compute the challenge prefix by hashing the values.
     let mut ro = RandomOracle::domain("credential");
     ro.append_message(b"cred_values", &cdi.values);
+    ro.append_message(b"address", &addr);
     ro.append_message(b"global_context", &global_context);
 
     let commitments = &cdi.proofs.id_proofs.commitments;
@@ -88,7 +90,7 @@ pub fn verify_cdi<
     let verifier_reg_id = com_mult::ComMult {
         cmms:    [
             commitments.cmm_prf.combine(&commitments.cmm_cred_counter),
-            Commitment(cdi.values.reg_id),
+            Commitment(cdi.values.cred_id),
             Commitment(on_chain_commitment_key.g),
         ],
         cmm_key: on_chain_commitment_key,
@@ -160,48 +162,18 @@ pub fn verify_cdi<
     ) {
         return Err(CDIVerificationError::Proof);
     }
-
-    // message signed in proofs.proofs_acc_sk.sigs
-    let signed = ro.get_challenge();
-
-    match cdv.cred_account {
-        CredentialAccount::ExistingAccount(_addr) => {
-            // in this case we must have been given the account keys.
-            if let Some(acc_keys) = acc_keys {
-                if proofs.proof_acc_sk.num_proofs() < acc_keys.threshold {
-                    return Err(CDIVerificationError::AccountOwnership);
-                }
-                // we at least have enough proofs now, if they are all valid and have valid
-                // indices
-
-                for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
-                    if let Some(key) = acc_keys.get(idx) {
-                        let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                        match key.verify(signed.as_ref(), &proof) {
-                            Ok(_) => (),
-                            _ => return Err(CDIVerificationError::AccountOwnership),
-                        }
-                    } else {
-                        return Err(CDIVerificationError::AccountOwnership);
-                    }
-                }
-            } else {
-                // in case of an existing account we must have been given account keys
-                return Err(CDIVerificationError::AccountOwnership);
-            }
-        }
-        CredentialAccount::NewAccount(ref keys, threshold) => {
-            // message signed in proofs.proofs_acc_sk.sigs
-            if !utils::verify_accunt_ownership_proof(
-                &keys,
-                threshold,
-                &proofs.proof_acc_sk,
-                signed.as_ref(),
-            ) {
-                return Err(CDIVerificationError::AccountOwnership);
-            }
-        }
-    };
+    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, new_or_existing);
+    // Notice that here we provide all the verification keys, and the
+    // function `verify_accunt_ownership_proof` assumes that
+    // we have as many signatures as verification keys.
+    if !utils::verify_account_ownership_proof(
+        &cdv.cred_key_info.keys,
+        cdv.cred_key_info.threshold,
+        &proofs.proof_acc_sk,
+        signed.as_ref(),
+    ) {
+        return Err(CDIVerificationError::AccountOwnership);
+    }
 
     let check_policy = verify_policy(&on_chain_commitment_key, &commitments, &cdi.values.policy);
 
@@ -220,8 +192,12 @@ pub fn verify_initial_cdi<
 >(
     ip_info: &IpInfo<P>,
     cdi: &InitialCredentialDeploymentInfo<C, AttributeType>,
+    expiry: TransactionTime,
 ) -> Result<(), CDIVerificationError> {
-    let signed = Sha256::digest(&to_bytes(&cdi.values));
+    let mut hasher = Sha256::new();
+    hasher.update(&to_bytes(&expiry));
+    hasher.update(&to_bytes(&cdi.values));
+    let signed = hasher.finalize();
     match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
         Err(_) => Err(CDIVerificationError::Signature),
         _ => Ok(()),
@@ -428,12 +404,15 @@ mod tests {
     use super::*;
 
     use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
-    use crypto_common::serde_impls::KeyPairDef;
-    use ed25519_dalek as ed25519;
-    use either::Left;
+    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
+    use Either::{Left, Right};
+
+    const EXPIRY: TransactionTime = TransactionTime {
+        seconds: 111111111111111111,
+    };
 
     #[test]
     fn test_verify_cdi() {
@@ -470,7 +449,14 @@ mod tests {
             &initial_acc_data,
         );
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         assert!(ver_ok.is_ok());
 
         // Generate CDI
@@ -493,20 +479,59 @@ mod tests {
             },
             _phantom: Default::default(),
         };
-        let acc_data = AccountData {
-            keys:     {
+        let cred_data = CredentialData {
+            keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
                 keys
             },
-            existing: Left(SignatureThreshold(2)),
+            threshold: SignatureThreshold(2),
         };
         let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
-        let cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
-            .expect("Should generate the credential successfully.");
-        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
+        let cdi = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy.clone(),
+            &cred_data,
+            &Left(EXPIRY),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        assert_eq!(cdi_check, Ok(()));
+
+        // Testing with an existing RegId (i.e. an existing account)
+        let existing_reg_id = AccountAddress::new(&cdi.values.cred_id);
+        let cred_data = CredentialData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let cdi = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            1,
+            policy,
+            &cred_data,
+            &Right(existing_reg_id),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &cdi,
+            &Right(existing_reg_id),
+        );
         assert_eq!(cdi_check, Ok(()));
     }
 
@@ -539,12 +564,19 @@ mod tests {
         let (context, pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         assert!(ver_ok.is_ok());
 
         // Verify initial CDI
         let (_, initial_cdi) = ver_ok.unwrap();
-        let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi);
+        let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi, EXPIRY);
         assert_eq!(cdi_check, Ok(()));
     }
 }

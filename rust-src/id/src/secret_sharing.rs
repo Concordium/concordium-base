@@ -9,8 +9,8 @@ use std::convert::TryFrom;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serial)]
 /// Revealing threshold, i.e., degree of the polynomial + 1.
 /// This value must always be at least 1.
-#[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
 pub struct Threshold(pub u8);
 
 impl Deserial for Threshold {

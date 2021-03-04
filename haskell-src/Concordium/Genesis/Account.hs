@@ -10,8 +10,6 @@ import Data.Aeson.Types (
     (.:),
     (.:?),
  )
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Serialize
 
 
@@ -20,6 +18,7 @@ import Concordium.ID.Parameters (GlobalContext)
 import qualified Concordium.ID.Types as ID
 import Concordium.Types
 import Concordium.Utils.Serialization
+import qualified Data.Map.Strict as Map
 
 -- |'GenesisBaker' is an abstraction of a baker at genesis.
 -- It includes the minimal information for generating a baker.
@@ -88,12 +87,12 @@ getGenesisBakerGD2 = label "GenesisBaker" $ do
 data GenesisAccount = GenesisAccount
     { -- |The address of the account
       gaAddress :: !AccountAddress,
-      -- |The account keys
-      gaVerifyKeys :: !ID.AccountKeys,
+      -- |The account threshold
+      gaThreshold :: !ID.AccountThreshold,
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
-      -- |The account credentials
-      gaCredentials :: !(NonEmpty ID.AccountCredential),
+      -- |The account credentials. At least a credential with index 0 must exist.
+      gaCredentials :: !(Map.Map ID.CredentialIndex ID.AccountCredential),
       -- |The (optional) baker information
       gaBaker :: !(Maybe GenesisBaker)
     }
@@ -108,7 +107,8 @@ data GenesisAccount = GenesisAccount
 instance FromJSON GenesisAccount where
     parseJSON = withObject "GenesisAccount" $ \obj -> do
         gaAddress <- obj .: "address"
-        gaVerifyKeys <- obj .: "accountKeys"
+        -- gaVerifyKeys <- obj .: "accountKeys"
+        gaThreshold <- obj .: "accountThreshold"
         gaBalance <- obj .: "balance"
         gaCredentials <- obj .:? "credentials" >>= \case
             Nothing -> do
@@ -117,14 +117,14 @@ instance FromJSON GenesisAccount where
                 gaCredentialFull <- parseJSON vValue
                 case ID.values gaCredentialFull of
                     Nothing -> fail "Account credential is malformed."
-                    Just gaCredential -> return (gaCredential :| [])
+                    Just gaCredential -> return (Map.singleton 0 gaCredential)
             Just Versioned{..} -> do
                 unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
                 fullCredentials <- parseJSON vValue
                 case mapM ID.values fullCredentials of
                     Nothing -> fail "Account credential is malformed."
-                    Just [] -> fail "Empty credentials"
-                    Just (c:cs) -> return (c :| cs)
+                    Just cs -> return cs
+        unless (Map.member 0 gaCredentials) $ fail "Genesis account must have a credential with index 0."
         gaBaker <- obj .:? "baker"
         -- Check that bakers do not stake more than their balance.
         case gaBaker of
@@ -139,12 +139,11 @@ putGenesisAccountGD2 :: GlobalContext -> Putter GenesisAccount
 putGenesisAccountGD2 cryptoParams GenesisAccount{..} = do
     -- Put the persisting account data
     put gaAddress
-    let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.regId (NE.head gaCredentials))
+    let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.credId (gaCredentials Map.! 0))
     put encryptionKey
-    put gaVerifyKeys
-    putLength (length gaCredentials)
-    mapM_ put gaCredentials
-    putLength 0 -- No smart contracts
+    put gaThreshold
+    putLength (Map.size gaCredentials)
+    putSafeSizedMapOf put put gaCredentials
     -- Account nonce
     put minNonce
     -- Account amount
@@ -166,12 +165,10 @@ getGenesisAccountGD2 = label "GenesisAccount" $ do
     -- Get the persisting account data
     gaAddress <- get
     encryptionKey <- get
-    gaVerifyKeys <- get
+    gaThreshold <- get
     nCredentials <- getLength
     when (nCredentials < 1) $ fail "A genesis account must have at least one credential"
-    gaCredentials <- (:|) <$> get <*> replicateM (nCredentials - 1) get
-    nContracts <- getLength
-    unless (nContracts == 0) $ fail "Genesis account must not have smart contracts"
+    gaCredentials <- getSafeSizedMapOf nCredentials get get -- (:|) <$> get <*> replicateM (nCredentials - 1) get
     -- Account nonce
     nonce <- get
     unless (nonce == minNonce) $ fail $ "Genesis account must have nonce " ++ show minNonce
