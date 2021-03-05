@@ -374,6 +374,12 @@ fn main() {
         } else {
             println!("Output credential {}.", idx);
         }
+        
+        if let Err(err) = write_json_to_file(&format!("credential-private-keys-{}.json", idx), &acc_data) {
+            eprintln!("Could not output private keys = {}, because {}.", idx, err);
+        } else {
+            println!("Output private keys {}.", idx);
+        }
         // return the account address that can be used to deploy more credentials
         // to the same account.
         maybe_addr.right_or(acc_addr)
