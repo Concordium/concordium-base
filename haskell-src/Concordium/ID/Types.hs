@@ -164,8 +164,6 @@ instance S.Serialize AccountInformation where
 getCredentialKeys :: CredentialIndex -> AccountInformation -> Maybe CredentialPublicKeys
 getCredentialKeys idx ai = Map.lookup idx (aiCredentials ai)
 
--- type AccountKeys = CredentialPublicKeys
-
 makeCredentialPublicKeys :: [VerifyKey] -> SignatureThreshold -> CredentialPublicKeys
 makeCredentialPublicKeys keys credThreshold =
   CredentialPublicKeys{
