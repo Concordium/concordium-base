@@ -325,6 +325,75 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON String required")
             }
         }
+        Type::ContractName(size_len) => {
+            if let Value::Object(fields) = json {
+                ensure!(fields.len() == 1, "Expected only one field");
+                if let Some(Value::String(name)) = fields.get("contract") {
+                    // TODO: This logic should be centralized in the ContractName type.
+                    let contract_name = format!("init_{}", name);
+                    let len = contract_name.len();
+                    match size_len {
+                        SizeLength::U8 => {
+                            let len: u8 = len.try_into()?;
+                            serial!(len, out)?;
+                        }
+                        SizeLength::U16 => {
+                            let len: u16 = len.try_into()?;
+                            serial!(len, out)?;
+                        }
+                        SizeLength::U32 => {
+                            let len: u32 = len.try_into()?;
+                            serial!(len, out)?;
+                        }
+                        SizeLength::U64 => {
+                            let len: u64 = len.try_into()?;
+                            serial!(len, out)?;
+                        }
+                    }
+                    serial!(contract_name, out)
+                } else {
+                    bail!("Missing field 'contract' of type JSON String")
+                }
+            } else {
+                bail!("JSON Object required for contract name")
+            }
+        }
+        Type::ReceiveName(size_len) => {
+            if let Value::Object(fields) = json {
+                ensure!(fields.len() == 2, "Expected object with two fields 'contract' and 'func'");
+                if let Some(Value::String(contract)) = fields.get("contract") {
+                    if let Some(Value::String(func)) = fields.get("func") {
+                        let receive_name = format!("{}.{}", contract, func);
+                        let len = receive_name.len();
+                        match size_len {
+                            SizeLength::U8 => {
+                                let len: u8 = len.try_into()?;
+                                serial!(len, out)?;
+                            }
+                            SizeLength::U16 => {
+                                let len: u16 = len.try_into()?;
+                                serial!(len, out)?;
+                            }
+                            SizeLength::U32 => {
+                                let len: u32 = len.try_into()?;
+                                serial!(len, out)?;
+                            }
+                            SizeLength::U64 => {
+                                let len: u64 = len.try_into()?;
+                                serial!(len, out)?;
+                            }
+                        }
+                        serial!(receive_name, out)
+                    } else {
+                        bail!("Missing field 'func' of type JSON String");
+                    }
+                } else {
+                    bail!("Missing field 'contract' of type JSON String");
+                }
+            } else {
+                bail!("JSON Object required for contract name")
+            }
+        }
     }
 }
 
@@ -336,7 +405,7 @@ fn write_bytes_from_json_schema_fields<W: Write>(
     match fields {
         Fields::Named(fields) => {
             if let Value::Object(map) = json {
-                ensure!(fields.len() >= map.len(), "To many fields provided");
+                ensure!(fields.len() >= map.len(), "Too many fields provided");
                 for (field_name, field_ty) in fields {
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
