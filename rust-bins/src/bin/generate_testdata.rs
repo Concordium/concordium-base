@@ -374,8 +374,10 @@ fn main() {
         } else {
             println!("Output credential {}.", idx);
         }
-        
-        if let Err(err) = write_json_to_file(&format!("credential-private-keys-{}.json", idx), &acc_data) {
+
+        if let Err(err) =
+            write_json_to_file(&format!("credential-private-keys-{}.json", idx), &acc_data)
+        {
             eprintln!("Could not output private keys = {}, because {}.", idx, err);
         } else {
             println!("Output private keys {}.", idx);
@@ -399,11 +401,11 @@ fn main() {
     // Generating account and deploying several credentials to same account
     let addr2 = generate(&Left(EXPIRY), 7, 8);
     let ra2 = Right(addr2);
-    let _ = generate(ra2, 8, 9);
-    let _ = generate(ra2, 9, 10);
-    let _ = generate(ra2, 10, 11);
-    let _ = generate(ra2, 11, 12);
-    let _ = generate(ra2, 12, 13);
+    let _ = generate(&ra2, 8, 9);
+    let _ = generate(&ra2, 9, 10);
+    let _ = generate(&ra2, 10, 11);
+    let _ = generate(&ra2, 11, 12);
+    let _ = generate(&ra2, 12, 13);
 
     let mut generate_initial = |prf, idx, ip_secret| {
         let initial_acc_data = {
