@@ -11,7 +11,7 @@
 
 
   ;; Logging events
-  (import "concordium" "log_event" (func $log_event (param $start i32) (param $length i32)))
+  (import "concordium" "log_event" (func $log_event (param $start i32) (param $length i32) (result i32)))
 
   ;; Function parameter
   (import "concordium" "get_parameter_size" (func $get_parameter_size (result i32)))
@@ -55,105 +55,160 @@
 
 
   (func (export "hostfn.log_event") (param i64) (result i32)
-    (call $log_event (i32.const 0) (i32.const 10))
+    (loop $loop 
+       (call $log_event (i32.const 0) (i32.const 10))
+       (drop)
+       (br $loop)
+    )
     (return (call $accept))
   )
 
   ;; Precondition: Send parameter of size 10.
   (func (export "hostfn.get_parameter_size") (param i64) (result i32)
-    (call $get_parameter_size)
+    (loop $loop 
+        (call $get_parameter_size)
+        (br $loop)
+    )
     (return (i32.const 0))
   )
 
   ;; Precondition: Send parameter of size 10.
   (func (export "hostfn.get_parameter_section") (param i64) (result i32)
-    (call $get_parameter_section (i32.const 0) (i32.const 10) (i32.const 0))
+    (loop $loop
+        (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 0))
+        (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.state_size") (param i64) (result i32)
-    (call $state_size)
+    (loop $loop
+        (call $state_size)
+        (br $loop)
+    )
     (return (i32.const 0))
   )
 
   ;; Precondition: Setup state with size 10.
   (func (export "hostfn.load_state") (param i64) (result i32)
-    (call $load_state (i32.const 0) (i32.const 10) (i32.const 0))
+    (loop $loop
+      (call $load_state (i32.const 0) (i32.const 10) (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.write_state") (param i64) (result i32)
-    (call $write_state (i32.const 0) (i32.const 10) (i32.const 0))
+    (loop $loop
+      (call $write_state (i32.const 0) (i32.const 10) (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.resize_state") (param i64) (result i32)
-    (call $resize_state (i32.const 10))
+    (loop $loop
+      (call $resize_state (i32.const 10))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.get_slot_time") (param i64) (result i32)
-    (call $get_slot_time)
+    (loop $loop
+       (call $get_slot_time)
+       (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "init_get_init_origin") (param i64) (result i32)
-    (call $get_init_origin (i32.const 0))
+    (loop $loop
+       (call $get_init_origin (i32.const 0))
+       (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.get_receive_invoker") (param i64) (result i32)
-    (call $get_receive_invoker (i32.const 0))
+    (loop $loop
+      (call $get_receive_invoker (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.get_receive_sender") (param i64) (result i32)
-    (call $get_receive_sender (i32.const 0))
+    (loop $loop
+      (call $get_receive_sender (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.get_receive_self_address") (param i64) (result i32)
-    (call $get_receive_self_address (i32.const 0))
+    (loop $loop
+      (call $get_receive_self_address (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.get_receive_owner") (param i64) (result i32)
-    (call $get_receive_owner (i32.const 0))
+    (loop $loop
+      (call $get_receive_owner (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.get_receive_self_balance") (param i64) (result i32)
-    (call $get_receive_self_balance (i32.const 0))
+    (loop $loop
+      (call $get_receive_self_balance (i32.const 0))
+      (br $loop)
+    )
     (return (i32.const 0))
   )
 
   (func (export "hostfn.accept") (param i64) (result i32)
-    (call $accept)
+    (loop $loop
+      (call $accept)
+      (br $loop)
+    )
+    (return (i32.const 0))
   )
 
   ;; Precondition:
   ;; - Address specified in data section should be valid.
   ;; - Contract balance >= 1.
   (func (export "hostfn.simple_transfer") (param i64) (result i32)
-    (call $simple_transfer
-      (i32.const 0) ;; Address of 32 bytes. Specified in data section.
-      (i64.const 1) ;; amount
-      )
+    (loop $loop
+      (call $simple_transfer
+        (i32.const 0) ;; Address of 32 bytes. Specified in data section.
+        (i64.const 1) ;; amount
+        )
+      (br $loop)
+    )
+    (i32.const 0)
   )
 
   ;; Preconditions:
   ;;  - Contract address should be <0,0>
   ;;  - Receive_name specified in data section should exist.
   (func (export "hostfn.send") (param i64) (result i32)
-    (call $send
-      (i64.const 0)  ;; addr_index
-      (i64.const 0)  ;; addr_subindex
-      (i32.const 32) ;; receive_name: "hostfn.send_target", specified in data section.
-      (i32.const 18) ;; receive_name_len
-      (i64.const 0)  ;; amount
-      (i32.const 0)  ;; parameter
-      (i32.const 0)  ;; parameter_len
-      )
+    (loop $loop
+      (call $send
+        (i64.const 0)  ;; addr_index
+        (i64.const 0)  ;; addr_subindex
+        (i32.const 32) ;; receive_name: "hostfn.send_target", specified in data section.
+        (i32.const 18) ;; receive_name_len
+        (i64.const 0)  ;; amount
+        (i32.const 0)  ;; parameter
+        (i32.const 0)  ;; parameter_len
+        )
+      (br $loop)
+    )
+    (i32.const 0)
   )
 
   ;; Not benched directly. Used by hostfn.send.
@@ -162,11 +217,19 @@
   )
 
   (func (export "hostfn.combine_and") (param i64) (result i32)
-    (call $combine_and (call $accept) (call $accept))
+    (loop $loop
+      (call $combine_and (call $accept) (call $accept))
+      (br $loop)
+    )
+    (i32.const 0)
   )
 
   (func (export "hostfn.combine_or") (param i64) (result i32)
-    (call $combine_or (call $accept) (call $accept))
+    (loop $loop
+      (call $combine_or (call $accept) (call $accept))
+      (br $loop)
+    )
+    (i32.const 0)
   )
 
   (memory 1)

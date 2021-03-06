@@ -55,7 +55,7 @@ pub mod cost {
 
     /// Part of a cost of a function call related to allocating
     /// a new function frame and storing values of locals, etc.
-    pub const FUNC_FRAME_BASE: Energy = 1000;
+    pub const FUNC_FRAME_BASE: Energy = 50;
 
     /// Cost of a jump (either Br, Loop, or analogous)
     /// Jumps are simply setting the instruction pointer, so
@@ -340,16 +340,6 @@ pub mod cost {
 
 use cost::Energy;
 
-///Add energy accounting instructions.
-fn account_energy(exp: &mut InstrSeq, e: Energy) {
-    // TODO the current specification says we use an I64Const. Decide what is
-    // actually the best also regarding conversion etc. Probably i64 is actually
-    // fine. NB: The u64 energy value is written as is, and will be
-    // reinterpreted as u64 again in the host function call.
-    exp.push(OpCode::I64Const(e as i64));
-    exp.push(OpCode::Call(FN_IDX_ACCOUNT_ENERGY));
-}
-
 // // TODO: Add stack accounting instructions.
 // fn account_stack_size(exp: &mut InstrSeq, size: i64) {
 //     exp.push(OpCode::I64Const(size));
@@ -378,7 +368,14 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         lookup_label(&self.labels, idx)
     }
 
-    fn account_energy(&mut self, e: Energy) { account_energy(&mut self.new_seq, e) }
+    fn account_energy(&mut self, e: Energy) {
+        // TODO the current specification says we use an I64Const. Decide what is
+        // actually the best also regarding conversion etc. Probably i64 is actually
+        // fine. NB: The u64 energy value is written as is, and will be
+        // reinterpreted as u64 again in the host function call.
+        self.new_seq.push(OpCode::I64Const(e as i64));
+        self.new_seq.push(OpCode::Call(FN_IDX_ACCOUNT_ENERGY));
+    }
 
     // TODO fn account_stack_size(&mut self, size: i64) { account_stack_size(&mut
     // self.new_seq, size) }
