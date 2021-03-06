@@ -338,6 +338,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
 
+    let mk_host = |energy| MeteringHost {
+        energy:            Energy {
+            energy,
+        },
+        activation_frames: MAX_ACTIVATION_FRAMES,
+    };
+
     {
         let mut group = c.benchmark_group("Exhaust energy");
 
@@ -353,12 +360,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 energy,
                 |b, &energy| {
                     b.iter(|| {
-                        let mut host = MeteringHost {
-                            energy:            Energy {
-                                energy,
-                            },
-                            activation_frames: MAX_ACTIVATION_FRAMES,
-                        };
+                        let mut host = mk_host(energy);
                         assert!(
                             // Should fail due to out of energy.
                             artifact.run(&mut host, "loop", &[Value::I32(0)]).is_err(),
@@ -392,6 +394,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
 
         group.bench_function("empty_loop", exec("empty_loop", &[]));
+        group.bench_function("empty_loop_br_if_success", exec("empty_loop_br_if_success", &[]));
+        group.bench_function("empty_loop_br_if_fail", exec("empty_loop_br_if_fail", &[]));
         group.bench_function("call empty function", exec("call_empty_function", &[]));
         group.finish();
     }
@@ -598,7 +602,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             "combine_or",
             run_receive(None, &[], "hostfn.combine_or", &[Value::I64(0)]),
         );
-
         group.finish();
     }
 }

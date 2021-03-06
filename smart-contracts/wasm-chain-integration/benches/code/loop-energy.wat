@@ -14,6 +14,23 @@
     )
   )
 
+  ;; infinite empty loop with br_if with success
+  (func (export "empty_loop_br_if_success")
+    (loop $loop
+      (i32.const 1)
+      (br_if $loop)
+    )
+  )
+
+  ;; infinite empty loop with br_if with failure
+  (func (export "empty_loop_br_if_fail")
+    (loop $loop
+      (i32.const 0)
+      (br_if $loop)
+      (br $loop)
+    )
+  )
+
   ;; a function with no arguments that immediately returns.
   (func $just_return)
 
