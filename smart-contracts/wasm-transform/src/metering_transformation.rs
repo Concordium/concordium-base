@@ -45,29 +45,23 @@ fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> TransformationResult<u
     }
 }
 
-/// Definition of energy costs of instructions. See cost specification.
-/// TODO The concrete factors between different costs are not specified in the
-/// specification yet, and the values chosen here are rather exemplary; they
-/// still have to be carefully determined.
+/// Definition of energy costs of instructions.
 pub mod cost {
     pub type Energy = u64;
     use super::*;
 
     /// Part of a cost of a function call related to allocating
     /// a new function frame and storing values of locals, etc.
-    pub const FUNC_FRAME_BASE: Energy = 50;
+    pub const FUNC_FRAME_BASE: Energy = 10;
 
-    /// Cost of a jump (either Br, Loop, or analogous)
-    /// Jumps are simply setting the instruction pointer, so
-    /// they are priced cheaply.
+    /// Cost of a jump (either Br, Loop, or analogous).
     pub const JUMP: Energy = 8;
-    pub const JUMP_STACK: Energy = 1;
 
     /// Read n elements from the stack.
-    pub const fn read_stack(n: usize) -> Energy { (n as Energy) * 2 }
+    pub const fn read_stack(n: u32) -> Energy { n as Energy }
 
     /// Write n elements to the stack.
-    pub const fn write_stack(n: u32) -> Energy { (n as Energy) * 2 }
+    pub const fn write_stack(n: u32) -> Energy { n as Energy }
 
     /// Copy n elements from one place in the stack to another.
     /// Used by jumps and function returns.
@@ -77,13 +71,7 @@ pub mod cost {
     pub const TEST: Energy = 2;
     /// Cost of a bounds check in, for example, BrTable, and memory loads
     /// and stores.
-    pub const BOUNDS: Energy = 10;
-
-    /// Cost of reading n bytes from linear memory.
-    pub const fn read_mem(n: usize) -> Energy { 10 + (n as Energy) * 5 }
-
-    /// Cost of writing n bytes to linear memory.
-    pub const fn write_mem(n: usize) -> Energy { 10 + (n as Energy) * 5 }
+    pub const BOUNDS: Energy = 2;
 
     /// # Numeric instructions
     /// Base cost of a unary instruction.
@@ -91,7 +79,7 @@ pub mod cost {
     /// Base cost of a binary instruction.
     pub const BINOP: Energy = read_stack(2) + write_stack(1);
     /// Cost of a `const` instruction.
-    pub const CONST: Energy = write_stack(1);
+    pub const CONST: Energy = 1 + write_stack(1);
 
     /// Cost of a simple unary instruction. Which at present contains
     /// all unary numeric instructions.
@@ -102,13 +90,15 @@ pub mod cost {
     pub const SIMPLE_BINOP: Energy = BINOP + 1;
     /// See for example https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/
     /// The cost of `MUL`, `DIV` and `REM` is in general more, so we account for
-    /// that.
-    pub const MUL: Energy = BINOP + 4;
-    pub const DIV: Energy = BINOP + 10;
-    pub const REM: Energy = BINOP + 10;
+    /// that. However the ratio compared to add is not that much more since our
+    /// current implementation is an interpreter, and consequently there are
+    /// overheads in argument handling that dominate the costs.
+    pub const MUL: Energy = BINOP + 2;
+    pub const DIV: Energy = BINOP + 2;
+    pub const REM: Energy = BINOP + 2;
 
     /// Parametric instructions
-    pub const DROP: Energy = 1;
+    pub const DROP: Energy = 2;
     pub const SELECT: Energy = TEST + copy_stack(1);
 
     /// Local variable instructions are cheap. We treat them as stack
@@ -117,22 +107,24 @@ pub mod cost {
     pub const SET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const TEE_LOCAL: Energy = read_stack(1) + write_stack(1);
     /// Looking up globals is cheap compared to linear memory.
-    /// So we price it analogously.
-    pub const GET_GLOBAL: Energy = read_stack(1) + 10;
-    pub const SET_GLOBAL: Energy = read_stack(1) + 10;
+    /// They are essentially the same as locals, except they are in a different
+    /// array.
+    pub const GET_GLOBAL: Energy = read_stack(1) + write_stack(1);
+    pub const SET_GLOBAL: Energy = read_stack(1) + write_stack(1);
 
     /// # Memory instructions.
-    /// Load n bytes from linear memoryl
-    pub const fn load(n: usize) -> Energy { BOUNDS + read_mem(n) }
+    /// Load either an i32 or i64 from linear memory.
+    /// In practice the cost does not dependn on the number of bytes.
+    pub const LOAD_WORD: Energy = 4;
 
     /// Store n bytes in linear memory.
-    pub const fn store(n: usize) -> Energy { BOUNDS + write_mem(n) }
+    pub const fn store(n: usize) -> Energy { BOUNDS + 2 + n as Energy }
 
-    /// Checking memory size is reasonably expensive and should not be used
-    /// much. So we price it quite high.
-    pub const MEMSIZE: Energy = write_stack(1) + 100;
-    /// Constant part for the memory grow instruction.
-    pub const MEMGROW: Energy = read_stack(1) + write_stack(1) + 100;
+    /// Checking memory size is pretty cheap, it is just a vec.len() call.
+    pub const MEMSIZE: Energy = write_stack(1) + 3;
+    /// Constant part for the memory grow instruction. The variable part is
+    /// charged for by the host function.
+    pub const MEMGROW: Energy = read_stack(1) + write_stack(1) + 8;
 
     /// Control instructions
     ///
@@ -167,12 +159,12 @@ pub mod cost {
     }
 
     /// Cost incurred by the number of locals when invoking a function (to be
-    /// charged after invocation).
+    /// charged after invocation). The number of locals is only the number of
+    /// declared locals, not including function parameters.
     pub const fn invoke_after(num_locals: u32) -> Energy {
         // Enter frame and allocate the given number of locals.
-        // We want to charge for this quite steeply since it can lead
-        // to a lot of memory use.
-        100 * (num_locals as Energy)
+        // Each local takes 8 bytes.
+        4 * (num_locals as Energy)
     }
 
     /// Cost of call_indirect with the given number of arguments and results.
@@ -183,7 +175,7 @@ pub mod cost {
 
     /// Cost of a dynamic type check. The argument is the number of types
     /// i.e., parameters + results that need to be checked.
-    pub const fn type_check(len: usize) -> Energy { 500 + ((2 * len) as Energy) }
+    pub const fn type_check(len: usize) -> Energy { len as Energy }
 
     /// Get the cost of the given instruction in the context of the stack of
     /// labels, and the module.
@@ -244,25 +236,25 @@ pub mod cost {
             GlobalSet(_) => SET_GLOBAL,
 
             // Memory instructions
-            I32Load(_) => load(4),
-            I64Load(_) => load(8),
-            I32Load8S(_) => load(1),
-            I32Load8U(_) => load(1),
-            I32Load16S(_) => load(2),
-            I32Load16U(_) => load(2),
-            I64Load8S(_) => load(1),
-            I64Load8U(_) => load(1),
-            I64Load16S(_) => load(2),
-            I64Load16U(_) => load(2),
-            I64Load32S(_) => load(4),
-            I64Load32U(_) => load(4),
-            I32Store(_) => store(4),
-            I64Store(_) => store(8),
-            I32Store8(_) => store(1),
-            I32Store16(_) => store(2),
-            I64Store8(_) => store(1),
-            I64Store16(_) => store(2),
-            I64Store32(_) => store(4),
+            I32Load(_) => LOAD_WORD,
+            I64Load(_) => LOAD_WORD,
+            I32Load8S(_) => LOAD_WORD,
+            I32Load8U(_) => LOAD_WORD,
+            I32Load16S(_) => LOAD_WORD,
+            I32Load16U(_) => LOAD_WORD,
+            I64Load8S(_) => LOAD_WORD,
+            I64Load8U(_) => LOAD_WORD,
+            I64Load16S(_) => LOAD_WORD,
+            I64Load16U(_) => LOAD_WORD,
+            I64Load32S(_) => LOAD_WORD,
+            I64Load32U(_) => LOAD_WORD,
+            I32Store(_) => BOUNDS + 2 + 4,
+            I64Store(_) => BOUNDS + 2 + 6,
+            I32Store8(_) => BOUNDS + 2 + 1,
+            I32Store16(_) => BOUNDS + 2 + 4,
+            I64Store8(_) => BOUNDS + 2 + 1 + 2,
+            I64Store16(_) => BOUNDS + 2 + 2 + 3,
+            I64Store32(_) => BOUNDS + 2 + 2 + 4,
             MemorySize => MEMSIZE,
             MemoryGrow => MEMGROW,
 
@@ -653,7 +645,13 @@ pub fn inject_accounting<C: HasTransformationContext>(
     // At the beginning of a function, we charge for its invocation and the first
     // unconditionally executed instructions of the body and account for its maximum
     // stack size.
-    let energy = cost::invoke_after(function.num_locals);
+    let num_params: u32 = function.ty.parameters.len().try_into()?;
+    let energy =
+        cost::invoke_after(function.num_locals.checked_sub(num_params).ok_or_else(|| {
+            anyhow!(
+                "Precondition violation. Number of locals is less than the number of parameters."
+            )
+        })?);
 
     let labels = vec![BlockType::from(function.ty.result)];
     let mut transformer = InstrSeqTransformer {

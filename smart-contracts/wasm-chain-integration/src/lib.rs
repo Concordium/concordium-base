@@ -128,8 +128,16 @@ impl Energy {
         }
     }
 
-    /// TODO: This needs more specification. At the moment it is not used, but
-    /// should be.
+    /// Charge energy for allocating the given number of pages.
+    /// Since there is a hard limit on the amount of memory this is not so
+    /// essential. The base cost of calling this host function is already
+    /// covered by the metering transformation, hence if num_pages=0 it is
+    /// OK for this function to charge nothing.
+    ///
+    /// This function will charge regardless of whether memory allocation
+    /// actually happens, i.e., even if growing the memory would go over the
+    /// maximum. This is OK since trying to allocate too much memory is likely
+    /// going to lead to program failure anyhow.
     pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()> {
         let to_charge = u64::from(num_pages) * u64::from(MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
         self.tick_energy(to_charge)

@@ -233,8 +233,10 @@ pub struct Code {
     /// Type index carried over from the source. This should match the ty type
     /// above.
     pub ty_idx: TypeIndex,
+    /// The number of locals of a function. NB: This includes parameters and
+    /// locals declared inside the function.
     pub num_locals: u32,
-    /// Declaration of the locals.
+    /// Declaration of the locals. This does not include parameters.
     pub locals: Vec<Local>,
     /// And a sequence of instructions.
     pub expr: Expression,

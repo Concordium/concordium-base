@@ -371,9 +371,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             );
         }
 
-        let exec = |name, args| {
+        let mut exec = |name, args| {
             let artifact = &artifact;
-            move |b: &mut criterion::Bencher| {
+            group.bench_function(name, move |b: &mut criterion::Bencher| {
                 b.iter(|| {
                     let mut host = MeteringHost {
                         energy:            Energy {
@@ -390,13 +390,97 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         r
                     )
                 })
-            }
+            });
         };
 
-        group.bench_function("empty_loop", exec("empty_loop", &[]));
-        group.bench_function("empty_loop_br_if_success", exec("empty_loop_br_if_success", &[]));
-        group.bench_function("empty_loop_br_if_fail", exec("empty_loop_br_if_fail", &[]));
-        group.bench_function("call empty function", exec("call_empty_function", &[]));
+        exec("empty_loop", &[]);
+        exec("empty_loop_br_if_success", &[]);
+        exec("empty_loop_br_if_fail", &[]);
+        exec("br.table_20", &[]);
+        exec("call_empty_function", &[]);
+        exec("call_empty_function_100", &[]);
+        exec("call_empty_function_100_locals", &[]);
+        exec("call_indirect_empty_function", &[]);
+        exec("call_indirect_empty_function_100", &[]);
+        exec("block", &[]);
+        exec("block_10", &[]);
+        exec("loop_10", &[]);
+        exec("drop", &[]);
+        exec("select_1", &[]);
+        exec("select_2", &[]);
+        exec("local.get_i32", &[Value::I32(13)]);
+        exec("local.get_i64", &[Value::I64(13)]);
+        exec("local.set_i32", &[Value::I32(13)]);
+        exec("local.set_i64", &[Value::I64(13)]);
+        exec("global.get_i32", &[]);
+        exec("global.get_i64", &[]);
+        exec("i32.load", &[]);
+        exec("i64.load", &[]);
+        exec("i32.load.offset", &[]);
+        exec("i64.load.offset", &[]);
+        exec("i32.load8_u", &[]);
+        exec("i32.load8_s", &[]);
+        exec("i32.load16_u", &[]);
+        exec("i32.load16_s", &[]);
+        exec("i64.load8_u", &[]);
+        exec("i64.load8_s", &[]);
+        exec("i64.load16_u", &[]);
+        exec("i64.load16_s", &[]);
+        exec("i64.load32_u", &[]);
+        exec("i64.load32_s", &[]);
+        exec("i32.store", &[]);
+        exec("i64.store", &[]);
+        exec("i32.store8", &[]);
+        exec("i64.store8", &[]);
+        exec("i32.store16", &[]);
+        exec("i64.store16", &[]);
+        exec("i64.store32", &[]);
+        exec("memory.size", &[]);
+        exec("memory.grow", &[]);
+        exec("memory.grow_1_page", &[]);
+        exec("i32.const", &[]);
+        exec("i64.const", &[]);
+        exec("i32.eqz", &[]);
+        exec("i32.eq", &[]);
+        exec("i32.lt_s", &[]);
+        exec("i32.lt_u", &[]);
+        exec("i32.gt_s", &[]);
+        exec("i32.gt_u", &[]);
+        exec("i32.le_s", &[]);
+        exec("i32.le_u", &[]);
+        exec("i32.ge_s", &[]);
+        exec("i32.ge_u", &[]);
+        exec("i64.eqz", &[]);
+        exec("i64.eq", &[]);
+        exec("i64.lt_s", &[]);
+        exec("i64.lt_u", &[]);
+        exec("i64.gt_s", &[]);
+        exec("i64.gt_u", &[]);
+        exec("i64.le_s", &[]);
+        exec("i64.le_u", &[]);
+        exec("i64.ge_s", &[]);
+        exec("i64.ge_u", &[]);
+        exec("i32.clz", &[]);
+        exec("i32.ctz", &[]);
+        exec("i32.popcnt", &[]);
+        exec("i32.add", &[]);
+        exec("i32.sub", &[]);
+        exec("i32.mul", &[]);
+        exec("i32.div_s", &[]);
+        exec("i32.div_u", &[]);
+        exec("i32.rem_s", &[]);
+        exec("i32.rem_u", &[]);
+        exec("i64.clz", &[]);
+        exec("i64.ctz", &[]);
+        exec("i64.popcnt", &[]);
+        exec("i64.add", &[]);
+        exec("i64.sub", &[]);
+        exec("i64.mul", &[]);
+        exec("i64.div_s", &[]);
+        exec("i64.div_u", &[]);
+        exec("i64.rem_s", &[]);
+        exec("i64.rem_u", &[]);
+        exec("i32.wrap_i64", &[]);
         group.finish();
     }
 

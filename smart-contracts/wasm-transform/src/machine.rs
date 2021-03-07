@@ -520,12 +520,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         function_frames.push(current_frame);
                         for ty in f.locals() {
                             match ty {
-                                ValueType::I32 => stack.push(StackValue {
-                                    short: 0,
-                                }),
-                                ValueType::I64 => stack.push(StackValue {
-                                    long: 0,
-                                }),
+                                ValueType::I32 => stack.push(StackValue::from(0u32)),
+                                ValueType::I64 => stack.push(StackValue::from(0u64)),
                             }
                         }
                         instructions = f.code();
