@@ -99,15 +99,7 @@ module Concordium.Types (
   TransactionOutcomesHash,
   StateHashV0(..),
   StateHash,
-  --GenericBlockHash,
-  -- BlockHashV0(..),
   BlockHash(..),
-  {-
-  toGenericBlockHash,
-  fromGenericBlockHash,
-  putBlockHash,
-  getBlockHash,
-  -}
   BlockHeight(..),
   Slot(..),
   EpochLength,
