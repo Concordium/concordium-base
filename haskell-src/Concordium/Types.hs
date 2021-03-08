@@ -26,10 +26,10 @@ module Concordium.Types (
   RewardFraction(..),
   makeRewardFraction,
   addRewardFraction,
+  hundredThousand,
   complementRewardFraction,
   takeFraction,
   fractionToRational,
-
   -- * Time units
   Duration(..),
   durationToNominalDiffTime,
@@ -77,7 +77,8 @@ module Concordium.Types (
   -- * Baking
   ElectionDifficulty(..),
   makeElectionDifficulty,
-  isValidElectionDifficulty,
+  makeElectionDifficultyUnchecked,
+  getDoubleFromElectionDifficulty,
   LotteryPower,
   BakerAggregationProof,
   BakerAggregationPrivateKey,
@@ -207,43 +208,90 @@ type BakerAggregationPrivateKey = Bls.SecretKey
 type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 
--- | The type of the birk parameter "election difficulty".
--- The value must be in the range [0,1).
-newtype ElectionDifficulty = ElectionDifficulty {electionDifficulty :: Double}
-  deriving newtype (Eq, Ord, Show, ToJSON)
+-- |A wrapper type over units that are measured as parts per 100000.
+-- This wrapper will be used by both @RewardFraction@ and @ElectionDifficulty@.
+-- It was agreed in tokenomics discussions to be sufficient.
+newtype PartsPerHundredThousands = PartsPerHundredThousands { partsPerHundredThousand :: Word32 }
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral)
 
-instance S.Serialize ElectionDifficulty where
-    get = do
-        d <- ElectionDifficulty <$> S.get
-        if isValidElectionDifficulty d then
-          return d
-        else
-          fail "Invalid election difficulty (must be in the range [0,1))."
-    put = S.put . electionDifficulty
+hundredThousand :: Word32
+hundredThousand = 100000
+
+instance S.Serialize PartsPerHundredThousands where
+  put (PartsPerHundredThousands f) = S.putWord32be f
+  get = do
+    f <- S.getWord32be
+    unless (f <= hundredThousand) $ fail "Parts per hundred thousandths out of bounds"
+    return (PartsPerHundredThousands f)
+
+instance Show PartsPerHundredThousands where
+  show (PartsPerHundredThousands f) = show (fromIntegral f / 100000 :: Double)
+
+instance ToJSON PartsPerHundredThousands where
+  toJSON (PartsPerHundredThousands f) = Number (scientific (fromIntegral f) (-5))
+
+instance FromJSON PartsPerHundredThousands where
+  parseJSON (Number s0) = do
+    let s = normalize s0
+    let ex = base10Exponent s
+    unless (ex <= 0 && ex >= -5) $ fail "Precision out of bounds"
+    let v = coefficient s * 10 ^ (5 + ex)
+    unless (v >= 0 && v <= fromIntegral hundredThousand) $ fail "Fraction out of bounds"
+    return (PartsPerHundredThousands (fromIntegral v))
+  parseJSON _ = fail "Expected number"
+
+-- |Make a 'PartsPerHundredThousands'.
+makePartsPerHundredThousands
+  :: Word32
+  -- ^Hundred thousandths
+  -> PartsPerHundredThousands
+makePartsPerHundredThousands v = assert (v <= hundredThousand) (PartsPerHundredThousands v)
+
+-- |Add two PartsPerHundredThousands.
+addPartsPerHundredThousands :: PartsPerHundredThousands -> PartsPerHundredThousands -> Maybe PartsPerHundredThousands
+addPartsPerHundredThousands (PartsPerHundredThousands a) (PartsPerHundredThousands b)
+  | a + b <= hundredThousand = Just (PartsPerHundredThousands (a + b))
+  | otherwise = Nothing
+
+-- |Compute @1 - f@.
+complementPartsPerHundredThousands :: PartsPerHundredThousands -> PartsPerHundredThousands
+complementPartsPerHundredThousands (PartsPerHundredThousands a) = PartsPerHundredThousands (hundredThousand - a)
+
+-- |Compute a fraction of an amount, with the fraction given as parts per 100000.
+-- The amount is rounded down to the nearest microGTU.
+takeFractionFromPartsPerHundredThousands :: PartsPerHundredThousands -> Amount -> Amount
+takeFractionFromPartsPerHundredThousands f = fromInteger . (`div` 100000) . (toInteger (partsPerHundredThousand f) *) . toInteger
+
+partsPerHundredThousandsToRational :: PartsPerHundredThousands -> Rational
+partsPerHundredThousandsToRational f = toInteger (partsPerHundredThousand f) % 100000
+
+-- |Due to limitations on the ledger, there has to be some restriction on the
+-- precision of the input for updating ElectionDifficult. For this purpose,
+-- we will consider the parameter on the ChainUpdate as parts per 100000 which
+-- should probably give enough precision.
+--
+-- This value will be converted into a Double when checking the election probability.
+-- The value must be in the range [0,100000).
+newtype ElectionDifficulty = ElectionDifficulty { edPartsPerHundredThousands :: PartsPerHundredThousands }
+  deriving (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize, Num, Integral, Enum, Real) via PartsPerHundredThousands
 
 instance HashableTo Hash.Hash ElectionDifficulty where
-    getHash e = Hash.hash $ S.encode e
+    getHash = Hash.hash . S.encode
 
 instance Monad m => MHashableTo m Hash.Hash ElectionDifficulty
 
-instance FromJSON ElectionDifficulty where
-    parseJSON v = do
-        d <- ElectionDifficulty <$> parseJSON v
-        if isValidElectionDifficulty d then
-          return d
-        else
-          fail "Invalid election difficulty (must be in the range [0,1))."
+makeElectionDifficulty
+  :: Word32
+  -> ElectionDifficulty
+makeElectionDifficulty v = let ppht = makePartsPerHundredThousands v in assert (ppht < 100000) $ ElectionDifficulty ppht
 
--- |Convert a 'Double' to an 'ElectionDifficulty'. This requires
--- the value to be in the range @[0,1)@.
-makeElectionDifficulty :: Double -> ElectionDifficulty
-makeElectionDifficulty d = assert (d >= 0 && d < 1) $ ElectionDifficulty d
+makeElectionDifficultyUnchecked
+   :: Word32
+   -> ElectionDifficulty
+makeElectionDifficultyUnchecked = ElectionDifficulty . PartsPerHundredThousands
 
--- |Verify that an 'ElectionDifficulty' is valid, that is, in the range
--- @[0,1)@. This is checked by 'makeElectionDifficulty' as well as the
--- 'Serialize' and 'FromJSON' instances of 'ElectionDifficulty'.
-isValidElectionDifficulty :: ElectionDifficulty -> Bool
-isValidElectionDifficulty (ElectionDifficulty d) = d >= 0 && d < 1
+getDoubleFromElectionDifficulty :: ElectionDifficulty -> Double
+getDoubleFromElectionDifficulty = (/ 100000) . fromIntegral
 
 type FinalizationCommitteeSize = Word32
 -- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
@@ -364,59 +412,29 @@ mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrManti
 -- |A fraction in [0,1], represented as parts per 100000.
 -- This resolution (thousandths of a percent) was agreed in tokenomics discussions
 -- to be sufficient.
-newtype RewardFraction = RewardFraction {fracPerHundredThousand :: Word32}
-  deriving newtype (Eq,Ord)
+newtype RewardFraction = RewardFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
+  deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize)
 
-hundredThousand :: Word32
-hundredThousand = 100000
-
-instance Show RewardFraction where
-  show (RewardFraction f) = show (fromIntegral f / 100000 :: Double)
-
-instance S.Serialize RewardFraction where
-  put (RewardFraction f) = S.putWord32be f
-  get = do
-    f <- S.getWord32be
-    unless (f <= hundredThousand) $ fail "Reward fraction out of bounds"
-    return (RewardFraction f)
-
-instance ToJSON RewardFraction where
-  toJSON (RewardFraction f) = Number (scientific (fromIntegral f) (-5))
-
-instance FromJSON RewardFraction where
-  parseJSON (Number s0) = do
-    let s = normalize s0
-    let ex = base10Exponent s
-    unless (ex <= 0 && ex >= -5) $ fail "Precision out of bounds"
-    let v = coefficient s * 10 ^ (5 + ex)
-    unless (v >= 0 && v <= fromIntegral hundredThousand) $ fail "Fraction out of bounds"
-    return (RewardFraction (fromIntegral v))
-  parseJSON _ = fail "Expected number"
-
--- |Make a 'RewardFraction'.
 makeRewardFraction
-  :: Word32
-  -- ^Hundred thousandths
-  -> RewardFraction
-makeRewardFraction v = assert (v <= hundredThousand) (RewardFraction v)
+   :: Word32
+   -> RewardFraction
+makeRewardFraction = RewardFraction . makePartsPerHundredThousands
 
--- |Add two reward fractions.
 addRewardFraction :: RewardFraction -> RewardFraction -> Maybe RewardFraction
-addRewardFraction (RewardFraction a) (RewardFraction b)
-  | a + b <= hundredThousand = Just (RewardFraction (a + b))
-  | otherwise = Nothing
+addRewardFraction (RewardFraction a) (RewardFraction b) = RewardFraction <$> addPartsPerHundredThousands a b
 
 -- |Compute @1 - f@.
 complementRewardFraction :: RewardFraction -> RewardFraction
-complementRewardFraction (RewardFraction a) = RewardFraction (hundredThousand - a)
+complementRewardFraction (RewardFraction f) = RewardFraction $ complementPartsPerHundredThousands f
 
 -- |Compute a fraction of an amount.
 -- The amount is rounded down to the nearest microGTU.
 takeFraction :: RewardFraction -> Amount -> Amount
-takeFraction f = fromInteger . (`div` 100000) . (toInteger (fracPerHundredThousand f) *) . toInteger
+takeFraction (RewardFraction f) = takeFractionFromPartsPerHundredThousands f
 
 fractionToRational :: RewardFraction -> Rational
-fractionToRational f = toInteger (fracPerHundredThousand f) % 100000
+fractionToRational (RewardFraction f) = partsPerHundredThousandsToRational f
+
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
