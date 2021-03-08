@@ -746,17 +746,13 @@ type TransactionHash = TransactionHashV0
 -- which causes the AccountTransactionIndex template haskell derivation of
 -- database schemas to fail.
 
-{-
--- |A container type for block hashes which is independent of how the hash
+-- |The type of a block hashe. This should be independent of how the hash
 -- is computed. Even if the hashing scheme changes over time, it should be
 -- effectively impossible for two blocks on the same chain to have the same
--- 'GenericBlockHash'.
+-- 'BlockHash'.
 --
 -- (This type may need to change if the hash size changes or a different
 -- hash function is used.)
-type GenericBlockHash = Hash.Hash
--}
-
 newtype BlockHash = BlockHash {blockHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
