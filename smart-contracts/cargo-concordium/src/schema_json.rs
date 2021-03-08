@@ -168,24 +168,7 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         Type::List(size_len, ty) => {
             if let Value::Array(values) = json {
                 let len = values.len();
-                match size_len {
-                    SizeLength::U8 => {
-                        let len: u8 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U16 => {
-                        let len: u16 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U32 => {
-                        let len: u32 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U64 => {
-                        let len: u64 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                }
+                write_bytes_for_length_of_size(len, size_len, out)?;
                 for value in values {
                     write_bytes_from_json_schema_type(ty, value, out)?;
                 }
@@ -197,24 +180,7 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         Type::Set(size_len, ty) => {
             if let Value::Array(values) = json {
                 let len = values.len();
-                match size_len {
-                    SizeLength::U8 => {
-                        let len: u8 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U16 => {
-                        let len: u16 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U32 => {
-                        let len: u32 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U64 => {
-                        let len: u64 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                }
+                write_bytes_for_length_of_size(len, size_len, out)?;
                 for value in values {
                     write_bytes_from_json_schema_type(ty, value, out)?;
                 }
@@ -226,24 +192,7 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         Type::Map(size_len, key_ty, val_ty) => {
             if let Value::Array(entries) = json {
                 let len = entries.len();
-                match size_len {
-                    SizeLength::U8 => {
-                        let len: u8 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U16 => {
-                        let len: u16 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U32 => {
-                        let len: u32 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U64 => {
-                        let len: u64 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                }
+                write_bytes_for_length_of_size(len, size_len, out)?;
                 for entry in entries {
                     if let Value::Array(pair) = entry {
                         ensure!(pair.len() == 2, "Expected key-value pair");
@@ -302,24 +251,7 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         Type::String(size_len) => {
             if let Value::String(string) = json {
                 let len = string.len();
-                match size_len {
-                    SizeLength::U8 => {
-                        let len: u8 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U16 => {
-                        let len: u16 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U32 => {
-                        let len: u32 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                    SizeLength::U64 => {
-                        let len: u64 = len.try_into()?;
-                        serial!(len, out)?;
-                    }
-                }
+                write_bytes_for_length_of_size(len, size_len, out)?;
                 serial!(string, out)
             } else {
                 bail!("JSON String required")
@@ -332,24 +264,7 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                     // TODO: This logic should be centralized in the ContractName type.
                     let contract_name = format!("init_{}", name);
                     let len = contract_name.len();
-                    match size_len {
-                        SizeLength::U8 => {
-                            let len: u8 = len.try_into()?;
-                            serial!(len, out)?;
-                        }
-                        SizeLength::U16 => {
-                            let len: u16 = len.try_into()?;
-                            serial!(len, out)?;
-                        }
-                        SizeLength::U32 => {
-                            let len: u32 = len.try_into()?;
-                            serial!(len, out)?;
-                        }
-                        SizeLength::U64 => {
-                            let len: u64 = len.try_into()?;
-                            serial!(len, out)?;
-                        }
-                    }
+                    write_bytes_for_length_of_size(len, size_len, out)?;
                     serial!(contract_name, out)
                 } else {
                     bail!("Missing field 'contract' of type JSON String")
@@ -365,24 +280,7 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                     if let Some(Value::String(func)) = fields.get("func") {
                         let receive_name = format!("{}.{}", contract, func);
                         let len = receive_name.len();
-                        match size_len {
-                            SizeLength::U8 => {
-                                let len: u8 = len.try_into()?;
-                                serial!(len, out)?;
-                            }
-                            SizeLength::U16 => {
-                                let len: u16 = len.try_into()?;
-                                serial!(len, out)?;
-                            }
-                            SizeLength::U32 => {
-                                let len: u32 = len.try_into()?;
-                                serial!(len, out)?;
-                            }
-                            SizeLength::U64 => {
-                                let len: u64 = len.try_into()?;
-                                serial!(len, out)?;
-                            }
-                        }
+                        write_bytes_for_length_of_size(len, size_len, out)?;
                         serial!(receive_name, out)
                     } else {
                         bail!("Missing field 'func' of type JSON String");
@@ -431,5 +329,30 @@ fn write_bytes_from_json_schema_fields<W: Write>(
             }
         }
         Fields::None => Ok(()),
+    }
+}
+
+fn write_bytes_for_length_of_size<W: Write>(
+    len: usize,
+    size_len: &SizeLength,
+    out: &mut W,
+) -> anyhow::Result<()> {
+    match size_len {
+        SizeLength::U8 => {
+            let len: u8 = len.try_into()?;
+            serial!(len, out)
+        }
+        SizeLength::U16 => {
+            let len: u16 = len.try_into()?;
+            serial!(len, out)
+        }
+        SizeLength::U32 => {
+            let len: u32 = len.try_into()?;
+            serial!(len, out)
+        }
+        SizeLength::U64 => {
+            let len: u64 = len.try_into()?;
+            serial!(len, out)
+        }
     }
 }
