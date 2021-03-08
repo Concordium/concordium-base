@@ -280,16 +280,26 @@ instance HashableTo Hash.Hash ElectionDifficulty where
 
 instance Monad m => MHashableTo m Hash.Hash ElectionDifficulty
 
+-- |Make an election difficulty fraction.
+-- The numerator (Word32) must be strictly less than 100000. This function will raise an exception otherwise.
 makeElectionDifficulty
   :: Word32
   -> ElectionDifficulty
 makeElectionDifficulty v = let ppht = makePartsPerHundredThousands v in assert (ppht < 100000) $ ElectionDifficulty ppht
 
+
+-- |Same as `makeElectionDifficulty`, but does not check its precondition.
 makeElectionDifficultyUnchecked
    :: Word32
    -> ElectionDifficulty
 makeElectionDifficultyUnchecked = ElectionDifficulty . PartsPerHundredThousands
 
+-- |Convert election difficulty to an IEEE754 double. In general this involves
+-- some amount of rounding. Since the numerator of election difficulty is at
+-- most 32-bits it can be fully represented as a Double without any loss of
+-- precision. Thus the only source of rounding is division by 100000 which is
+-- very small.
+-- The maximum absolute error for any value of is about 7 * 10^-12.
 getDoubleFromElectionDifficulty :: ElectionDifficulty -> Double
 getDoubleFromElectionDifficulty = (/ 100000) . fromIntegral
 
