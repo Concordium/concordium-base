@@ -252,7 +252,8 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::String(string) = json {
                 let len = string.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
-                serial!(string, out)
+                serial_vector_no_length(string.as_bytes(), out)
+                    .map_err(|_| anyhow!("Failed writing"))
             } else {
                 bail!("JSON String required")
             }
@@ -261,11 +262,11 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Object(fields) = json {
                 ensure!(fields.len() == 1, "Expected only one field");
                 if let Some(Value::String(name)) = fields.get("contract") {
-                    // TODO: This logic should be centralized in the ContractName type.
                     let contract_name = format!("init_{}", name);
                     let len = contract_name.len();
                     write_bytes_for_length_of_size(len, size_len, out)?;
-                    serial!(contract_name, out)
+                    serial_vector_no_length(contract_name.as_bytes(), out)
+                        .map_err(|_| anyhow!("Failed writing"))
                 } else {
                     bail!("Missing field 'contract' of type JSON String")
                 }
@@ -281,7 +282,8 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                         let receive_name = format!("{}.{}", contract, func);
                         let len = receive_name.len();
                         write_bytes_for_length_of_size(len, size_len, out)?;
-                        serial!(receive_name, out)
+                        serial_vector_no_length(receive_name.as_bytes(), out)
+                            .map_err(|_| anyhow!("Failed writing"))
                     } else {
                         bail!("Missing field 'func' of type JSON String");
                     }
