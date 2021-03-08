@@ -29,7 +29,7 @@ linuxBuild True env verbosity = do
   noticeNoWrap verbosity "Static linking."
   -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml", "--target", "x86_64-unknown-linux-musl"]
-    (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : ("RUSTFLAGS", "-C target-feature=-crt-static") : env)
+    (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
   let copyLib lib = do
         let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ lib ++ ".a"
             target = "./lib/lib" ++ lib ++ ".a"
@@ -38,7 +38,7 @@ linuxBuild True env verbosity = do
   mapM_ copyLib concordiumLibs
 linuxBuild False env verbosity = do
   noticeNoWrap verbosity "Dynamic linking."
-  rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
+  rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] env
   let copyLib lib = do
         let source = "../rust-src/target/release/lib" ++ lib
             target = "./lib/lib" ++ lib
@@ -54,7 +54,7 @@ windowsBuild env verbosity = do
         rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
         rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
         notice verbosity $ "Copied " ++ lib ++ "."
-  rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true")  : env)
+  rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] env
   notice verbosity "Copying libraries to ./lib"
   mapM_ copyLib concordiumLibs
 
@@ -81,7 +81,7 @@ osxBuild static env verbosity = do
             rawSystemExit verbosity "ln" ["-s", "-f", source, target]
             noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
             noticeNoWrap verbosity $ "Removed: " ++ others
-  rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true")  : env)
+  rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] env
   notice verbosity "Linking libraries to ./lib"
   mapM_ copyLib concordiumLibs
 
