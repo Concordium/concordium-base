@@ -676,8 +676,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NonExistentCredentialID
                   -- |Attempted to add an account key to a key index already in use
                   | KeyIndexAlreadyInUse
-                  -- |When the account key threshold is updated, it must not exceed the amount of existing keys
-                  | InvalidAccountKeySignThreshold
+                  -- |When the account threshold is updated, it must not exceed the amount of existing keys
+                  | InvalidAccountThreshold
+                  -- |When the credential key threshold is updated, it must not exceed the amount of existing keys
+                  | InvalidCredentialKeySignThreshold
                   -- |Proof for an encrypted amount transfer did not validate.
                   | InvalidEncryptedAmountTransferProof
                   -- |Proof for a secret to public transfer did not validate.
