@@ -25,9 +25,7 @@ import Concordium.Types
 import Types.PayloadSerializationSpec (genAddress)
 
 genElectionDifficulty :: Gen ElectionDifficulty
-genElectionDifficulty = do
-    (w :: Word64) <- arbitrary
-    return $ makeElectionDifficulty $ encodeFloat (toInteger w) (-64)
+genElectionDifficulty = makeElectionDifficulty <$> arbitrary `suchThat` (< 100000)
 
 genAuthorizations :: Gen Authorizations
 genAuthorizations = do
@@ -76,24 +74,24 @@ genMintDistribution = do
         _mdMintPerSlot <- genMintRate
         bf <- choose (0,100000)
         ff <- choose (0,100000-bf)
-        let _mdBakingReward = RewardFraction bf
-            _mdFinalizationReward = RewardFraction ff
+        let _mdBakingReward = makeRewardFraction bf
+            _mdFinalizationReward = makeRewardFraction ff
         return MintDistribution{..}
 
 genTransactionFeeDistribution :: Gen TransactionFeeDistribution
 genTransactionFeeDistribution = do
         bf <- choose (0,100000)
         gf <- choose (0,100000-bf)
-        let _tfdBaker = RewardFraction bf
-            _tfdGASAccount = RewardFraction gf
+        let _tfdBaker = makeRewardFraction bf
+            _tfdGASAccount = makeRewardFraction gf
         return TransactionFeeDistribution{..}
 
 genGASRewards :: Gen GASRewards
 genGASRewards = do
-        _gasBaker <- RewardFraction <$> choose (0,100000)
-        _gasFinalizationProof <- RewardFraction <$> choose (0,100000)
-        _gasAccountCreation <- RewardFraction <$> choose (0,100000)
-        _gasChainUpdate <- RewardFraction <$> choose (0,100000)
+        _gasBaker <- makeRewardFraction <$> choose (0,100000)
+        _gasFinalizationProof <- makeRewardFraction <$> choose (0,100000)
+        _gasAccountCreation <- makeRewardFraction <$> choose (0,100000)
+        _gasChainUpdate <- makeRewardFraction <$> choose (0,100000)
         return GASRewards{..}
 
 genUpdatePayload :: Gen UpdatePayload
