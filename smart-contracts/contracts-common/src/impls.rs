@@ -311,7 +311,9 @@ impl Serial for OwnedContractName {
 
 impl Deserial for OwnedContractName {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        Ok(OwnedContractName::new(source.get()?))
+        let owned_contract_name =
+            OwnedContractName::new(source.get()?).map_err(|_| ParseError::default())?;
+        Ok(owned_contract_name)
     }
 }
 
@@ -332,7 +334,9 @@ impl Serial for OwnedReceiveName {
 
 impl Deserial for OwnedReceiveName {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        Ok(OwnedReceiveName::new(source.get()?))
+        let owned_receive_name =
+            OwnedReceiveName::new(source.get()?).map_err(|_| ParseError::default())?;
+        Ok(owned_receive_name)
     }
 }
 

@@ -603,9 +603,20 @@ pub enum Address {
 pub struct ContractName<'a>(&'a str);
 
 impl<'a> ContractName<'a> {
-    /// Create a new ContractName. Expected format: "init_<contract_name>".
+    /// Create a new ContractName and check the format. Expected format:
+    /// "init_<contract_name>".
     #[inline(always)]
-    pub fn new(name: &'a str) -> Self { ContractName(name) }
+    pub fn new(name: &'a str) -> Result<Self, NewContractNameError> {
+        if !name.starts_with("init_") {
+            return Err(NewContractNameError::MissingInitPrefix);
+        }
+        Ok(ContractName(name))
+    }
+
+    /// Create a new ContractName without checking the format. Expected format:
+    /// "init_<contract_name>".
+    #[inline(always)]
+    pub fn unchecked_new(name: &'a str) -> Self { ContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
@@ -617,9 +628,20 @@ impl<'a> ContractName<'a> {
 pub struct OwnedContractName(String);
 
 impl OwnedContractName {
-    /// Create a new OwnedContractName. Expected format: "init_<contract_name>".
+    /// Create a new OwnedContractName and check the format. Expected format:
+    /// "init_<contract_name>".
     #[inline(always)]
-    pub fn new(name: String) -> Self { OwnedContractName(name) }
+    pub fn new(name: String) -> Result<Self, NewContractNameError> {
+        if !name.starts_with("init_") {
+            return Err(NewContractNameError::MissingInitPrefix);
+        }
+        Ok(OwnedContractName(name))
+    }
+
+    /// Create a new OwnedContractName without checking the format. Expected
+    /// format: "init_<contract_name>".
+    #[inline(always)]
+    pub fn unchecked_new(name: String) -> Self { OwnedContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
@@ -634,14 +656,37 @@ impl OwnedContractName {
     pub fn as_ref(&self) -> ContractName { ContractName(self.get_chain_name().as_str()) }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewContractNameError {
+    MissingInitPrefix,
+}
+
+impl fmt::Display for NewContractNameError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NewContractNameError::*;
+        match self {
+            MissingInitPrefix => write!(f, "Contract names have the format 'init_<contract_name>'"),
+        }
+    }
+}
+
 /// A receive name. Expected format: "<contract_name>.<func_name>".
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub struct ReceiveName<'a>(&'a str);
 
 impl<'a> ReceiveName<'a> {
-    /// Create a new ReceiveName. Expected format:
+    /// Create a new ReceiveName and check the format. Expected format:
     /// "<contract_name>.<func_name>".
-    pub fn new(name: &'a str) -> Self { ReceiveName(name) }
+    pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
+        if !name.contains('.') {
+            return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        Ok(ReceiveName(name))
+    }
+
+    /// Create a new ReceiveName without checking the format. Expected format:
+    /// "<contract_name>.<func_name>".
+    pub fn unchecked_new(name: &'a str) -> Self { ReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(&self) -> &str { self.0 }
@@ -653,9 +698,18 @@ impl<'a> ReceiveName<'a> {
 pub struct OwnedReceiveName(String);
 
 impl OwnedReceiveName {
-    /// Create a new OwnedReceiveName. Expected format:
+    /// Create a new OwnedReceiveName and check the format. Expected format:
     /// "<contract_name>.<func_name>".
-    pub fn new(name: String) -> Self { OwnedReceiveName(name) }
+    pub fn new(name: String) -> Result<Self, NewReceiveNameError> {
+        if !name.contains('.') {
+            return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        Ok(OwnedReceiveName(name))
+    }
+
+    /// Create a new OwnedReceiveName without checking the format. Expected
+    /// format: "<contract_name>.<func_name>".
+    pub fn unchecked_new(name: String) -> Self { OwnedReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(&self) -> &String { &self.0 }
@@ -676,6 +730,22 @@ impl OwnedReceiveName {
 
     /// Convert to ReceiveName by reference.
     pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewReceiveNameError {
+    MissingDotSeparator,
+}
+
+impl fmt::Display for NewReceiveNameError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NewReceiveNameError::*;
+        match self {
+            MissingDotSeparator => {
+                write!(f, "Receive names have the format '<contract_name>.<func_name>'.")
+            }
+        }
+    }
 }
 
 /// Genesis block has slot number 0, and otherwise it is always the case that a
