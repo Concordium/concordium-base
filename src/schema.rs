@@ -86,10 +86,12 @@ pub enum Type {
     U16,
     U32,
     U64,
+    U128,
     I8,
     I16,
     I32,
     I64,
+    I128,
     Amount,
     AccountAddress,
     ContractAddress,
@@ -138,6 +140,9 @@ impl SchemaType for u32 {
 impl SchemaType for u64 {
     fn get_type() -> Type { Type::U64 }
 }
+impl SchemaType for u128 {
+    fn get_type() -> Type { Type::U128 }
+}
 impl SchemaType for i8 {
     fn get_type() -> Type { Type::I8 }
 }
@@ -149,6 +154,9 @@ impl SchemaType for i32 {
 }
 impl SchemaType for i64 {
     fn get_type() -> Type { Type::I64 }
+}
+impl SchemaType for i128 {
+    fn get_type() -> Type { Type::I128 }
 }
 impl SchemaType for Amount {
     fn get_type() -> Type { Type::Amount }
@@ -338,91 +346,62 @@ impl Deserial for SizeLength {
 impl Serial for Type {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
-            Type::Unit => {
-                out.write_u8(0)?;
-            }
-            Type::Bool => {
-                out.write_u8(1)?;
-            }
-            Type::U8 => {
-                out.write_u8(2)?;
-            }
-            Type::U16 => {
-                out.write_u8(3)?;
-            }
-            Type::U32 => {
-                out.write_u8(4)?;
-            }
-            Type::U64 => {
-                out.write_u8(5)?;
-            }
-            Type::I8 => {
-                out.write_u8(6)?;
-            }
-            Type::I16 => {
-                out.write_u8(7)?;
-            }
-            Type::I32 => {
-                out.write_u8(8)?;
-            }
-            Type::I64 => {
-                out.write_u8(9)?;
-            }
-            Type::Amount => {
-                out.write_u8(10)?;
-            }
-            Type::AccountAddress => {
-                out.write_u8(11)?;
-            }
-            Type::ContractAddress => {
-                out.write_u8(12)?;
-            }
-            Type::Timestamp => {
-                out.write_u8(13)?;
-            }
-            Type::Duration => {
-                out.write_u8(14)?;
-            }
+            Type::Unit => out.write_u8(0),
+            Type::Bool => out.write_u8(1),
+            Type::U8 => out.write_u8(2),
+            Type::U16 => out.write_u8(3),
+            Type::U32 => out.write_u8(4),
+            Type::U64 => out.write_u8(5),
+            Type::I8 => out.write_u8(6),
+            Type::I16 => out.write_u8(7),
+            Type::I32 => out.write_u8(8),
+            Type::I64 => out.write_u8(9),
+            Type::Amount => out.write_u8(10),
+            Type::AccountAddress => out.write_u8(11),
+            Type::ContractAddress => out.write_u8(12),
+            Type::Timestamp => out.write_u8(13),
+            Type::Duration => out.write_u8(14),
             Type::Pair(left, right) => {
                 out.write_u8(15)?;
                 left.serial(out)?;
-                right.serial(out)?;
+                right.serial(out)
             }
             Type::List(len_size, ty) => {
                 out.write_u8(16)?;
                 len_size.serial(out)?;
-                ty.serial(out)?;
+                ty.serial(out)
             }
             Type::Set(len_size, ty) => {
                 out.write_u8(17)?;
                 len_size.serial(out)?;
-                ty.serial(out)?;
+                ty.serial(out)
             }
             Type::Map(len_size, key, value) => {
                 out.write_u8(18)?;
                 len_size.serial(out)?;
                 key.serial(out)?;
-                value.serial(out)?;
+                value.serial(out)
             }
             Type::Array(len, ty) => {
                 out.write_u8(19)?;
                 len.serial(out)?;
-                ty.serial(out)?;
+                ty.serial(out)
             }
             Type::Struct(fields) => {
                 out.write_u8(20)?;
-                fields.serial(out)?;
+                fields.serial(out)
             }
             Type::Enum(fields) => {
                 out.write_u8(21)?;
-                fields.serial(out)?;
+                fields.serial(out)
             }
             Type::String(len) => {
                 out.write_u8(22)?;
-                len.serial(out)?;
+                len.serial(out)
             }
+            Type::U128 => out.write_u8(23),
+            Type::I128 => out.write_u8(24),
         }
-        Ok(())
     }
 }
 
@@ -483,6 +462,8 @@ impl Deserial for Type {
                 let size_len = SizeLength::deserial(source)?;
                 Ok(Type::String(size_len))
             }
+            23 => Ok(Type::U128),
+            24 => Ok(Type::I128),
             _ => Err(ParseError::default()),
         }
     }
@@ -582,6 +563,10 @@ mod impls {
                     let n = u64::deserial(source)?;
                     Ok(Value::Number(n.into()))
                 }
+                Type::U128 => {
+                    let n = u128::deserial(source)?;
+                    Ok(Value::String(n.to_string()))
+                }
                 Type::I8 => {
                     let n = i8::deserial(source)?;
                     Ok(Value::Number(n.into()))
@@ -597,6 +582,10 @@ mod impls {
                 Type::I64 => {
                     let n = i64::deserial(source)?;
                     Ok(Value::Number(n.into()))
+                }
+                Type::I128 => {
+                    let n = i128::deserial(source)?;
+                    Ok(Value::String(n.to_string()))
                 }
                 Type::Amount => {
                     let n = Amount::deserial(source)?;
