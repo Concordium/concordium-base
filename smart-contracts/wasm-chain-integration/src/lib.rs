@@ -724,7 +724,11 @@ pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
 /// Returns the passed Wasm error code if it is negative.
 /// This function should only be called on negative numbers.
 fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
-    ensure!(n < 0, format!("Wasm return value of {} is treated as an error. Only negative should be treated as error.", n));
+    ensure!(
+        n < 0,
+        "Wasm return value of {} is treated as an error. Only negative should be treated as error.",
+        n
+    );
     Ok(n)
 }
 
