@@ -16,7 +16,7 @@ fn contract_init(
     logger: &mut impl HasLogger,
 ) -> InitResult<State> {
     let step: u8 = (amount.micro_gtu % 256) as u8;
-    logger.log(&(0u8, step));
+    logger.log(&(0u8, step)).map_err(|_| Reject{})?;
     let state = State {
         step,
         current_count: 0,
@@ -43,7 +43,7 @@ fn contract_receive<A: HasActions>(
 ) -> Result<A, ReceiveError> {
     ensure!(amount.micro_gtu > 10, ReceiveError::SmallAmount);
     ensure!(ctx.sender().matches_account(&ctx.owner()), ReceiveError::OnlyOwner);
-    logger.log(&(1u8, state.step));
+    logger.log(&(1u8, state.step)).expect("Cannot happen.");
     state.current_count += u32::from(state.step);
     Ok(A::accept())
 }
@@ -64,7 +64,7 @@ fn contract_receive_optimized<A: HasActions>(
     ensure!(amount.micro_gtu > 10); // Amount too small, not increasing.
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can increment.
     let state: State = state_cursor.get()?;
-    logger.log(&(1u8, state.step));
+    logger.log(&(1u8, state.step)).expect("Cannot happen.");
     // get to the current count position.
     state_cursor.seek(SeekFrom::Start(1))?;
     // and overwrite it with the new count.

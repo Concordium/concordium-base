@@ -41,7 +41,7 @@ fn log_event_cost(x: u32) -> u64 {
 
 /// Cost of copying the given amount of bytes from the host (e.g., parameter or
 /// contract state) to the Wasm memory.
-fn copy_from_host_cost(x: u32) -> u64 { 50 + 1 * u64::from(x) }
+fn copy_from_host_cost(x: u32) -> u64 { 50 + u64::from(x) }
 
 /// Cost of a "send" action. `x` is the size of the parameter in bytes.
 fn action_send_cost(x: u32) -> u64 {

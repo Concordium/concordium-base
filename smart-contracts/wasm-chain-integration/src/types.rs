@@ -148,16 +148,16 @@ impl InitResult {
 
 /// Data that accompanies the send action.
 pub struct SendAction {
-    pub(crate) to_addr:   ContractAddress,
-    pub(crate) name:      Vec<u8>,
-    pub(crate) amount:    u64,
-    pub(crate) parameter: Vec<u8>,
+    pub to_addr:   ContractAddress,
+    pub name:      Vec<u8>,
+    pub amount:    u64,
+    pub parameter: Vec<u8>,
 }
 
 /// Data that accompanies the simple transfer action.
 pub struct SimpleTransferAction {
-    pub(crate) to_addr: AccountAddress, // 32 bytes
-    pub(crate) amount:  u64,            // 8 bytes
+    pub to_addr: AccountAddress, // 32 bytes
+    pub amount:  u64,            // 8 bytes
 }
 
 /// Actions produced by running a receive function.

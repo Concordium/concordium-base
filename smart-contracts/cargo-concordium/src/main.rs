@@ -465,35 +465,31 @@ pub fn main() -> anyhow::Result<()> {
                             for (i, action) in actions.iter().enumerate() {
                                 match action {
                                     Action::Send {
-                                        to_addr,
-                                        name,
-                                        amount,
-                                        parameter,
+                                        data,
                                     } => {
-                                        let name_str = std::str::from_utf8(name)
+                                        let name_str = std::str::from_utf8(&data.name)
                                             .context("Target name is not a valid UTF8 sequence.")?;
                                         eprintln!(
                                             "{}: send a message to contract at ({}, {}), calling \
                                              method {} with amount {} and parameter {:?}",
                                             i,
-                                            to_addr.index,
-                                            to_addr.subindex,
+                                            data.to_addr.index,
+                                            data.to_addr.subindex,
                                             name_str,
-                                            amount,
+                                            data.amount,
                                             parameter
                                         )
                                     }
                                     Action::SimpleTransfer {
-                                        to_addr,
-                                        amount,
+                                        data,
                                     } => {
                                         eprintln!(
                                             "{}: simple transfer to account {} of amount {}",
                                             i,
-                                            serde_json::to_string(to_addr).context(
+                                            serde_json::to_string(&data.to_addr).context(
                                                 "Address not valid JSON, should not happen."
                                             )?,
-                                            amount
+                                            data.amount
                                         );
                                     }
                                     Action::And {

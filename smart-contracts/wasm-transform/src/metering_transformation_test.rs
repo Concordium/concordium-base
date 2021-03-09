@@ -1052,7 +1052,7 @@ fn test_memory_load_store_1() {
             I64Store(MEMARG),
         ],
         flatten![
-            energy!(ENTRY + 3 * CONST + 2 * load(8) + SIMPLE_BINOP + store(8)),
+            energy!(ENTRY + 3 * CONST + 2 * 3 + SIMPLE_BINOP + store(8)),
             stack!(S),
             [
                 I32Const(128),

@@ -122,7 +122,7 @@ dependencies = [
  "anyhow",
  "cargo_toml",
  "clap",
- "concordium-contracts-common 0.3.2 (git+https://github.com/Concordium/concordium-contracts-common.git?branch=main)",
+ "concordium-contracts-common",
  "criterion",
  "hex",
  "serde_json",
@@ -189,17 +189,6 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
-]
-
-[[package]]
-name = "concordium-contracts-common"
-version = "0.3.2"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#d3996ac14c014119949e7f5067b1a05126bf988d"
-dependencies = [
- "base58check",
- "chrono",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -924,7 +913,7 @@ name = "wasm-chain-integration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "concordium-contracts-common 0.3.2",
+ "concordium-contracts-common",
  "libc",
  "serde",
  "wasm-transform",
