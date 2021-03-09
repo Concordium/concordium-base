@@ -587,6 +587,10 @@ pub fn invoke_init<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
         }
     };
     let remaining_energy = host.energy.energy;
+    // process the return value.
+    // - 0 indicates success
+    // - positive values are a protocol violation, so they lead to a runtime error
+    // - negative values lead to a rejection with a specific reject reason.
     if let Some(Value::I32(n)) = res {
         if n == 0 {
             Ok(InitResult::Success {
