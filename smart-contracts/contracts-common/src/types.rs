@@ -1118,4 +1118,81 @@ mod test {
                 + 1000 * 60 * 60 * 2 // 2h
         )
     }
+
+    #[test]
+    fn test_valid_new_contract_name() {
+        let contract_name = ContractName::new("init_contract");
+        assert!(contract_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_contract_name() {
+        let contract_name = ContractName::new("no_init_prefix");
+        assert!(contract_name.is_err())
+    }
+
+    #[test]
+    fn test_getters_for_contract_name() {
+        let expected_chain_name = "init_contract";
+        let contract_name = ContractName::new(expected_chain_name).unwrap();
+        assert_eq!(contract_name.get_chain_name(), expected_chain_name);
+    }
+
+    #[test]
+    fn test_valid_new_owned_contract_name() {
+        let contract_name = OwnedContractName::new("init_contract".to_string());
+        assert!(contract_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_owned_contract_name() {
+        let contract_name = OwnedContractName::new("no_init_prefix".to_string());
+        assert!(contract_name.is_err())
+    }
+
+    #[test]
+    fn test_getters_for_owned_contract_name() {
+        let contract_name = OwnedContractName::new("init_contract".to_string()).unwrap();
+        assert_eq!(contract_name.get_chain_name(), "init_contract");
+        assert_eq!(contract_name.contract_name(), Some("contract"));
+    }
+
+    #[test]
+    fn test_valid_new_receive_name() {
+        let receive_name = ReceiveName::new("contract.receive");
+        assert!(receive_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_receive_name() {
+        let receive_name = ReceiveName::new("no_dot_separator");
+        assert!(receive_name.is_err())
+    }
+
+    #[test]
+    fn test_getters_for_receive_name() {
+        let expected_chain_name = "contract.receive";
+        let receive_name = ReceiveName::new(expected_chain_name).unwrap();
+        assert_eq!(receive_name.get_chain_name(), expected_chain_name);
+    }
+
+    #[test]
+    fn test_valid_new_owned_receive_name() {
+        let receive_name = OwnedReceiveName::new("contract.receive".to_string());
+        assert!(receive_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_owned_receive_name() {
+        let receive_name = OwnedReceiveName::new("no_dot_separator".to_string());
+        assert!(receive_name.is_err())
+    }
+
+    #[test]
+    fn test_getters_for_owned_receive_name() {
+        let receive_name = OwnedReceiveName::new("contract.receive".to_string()).unwrap();
+        assert_eq!(receive_name.get_chain_name(), "contract.receive");
+        assert_eq!(receive_name.contract_name(), Some("contract"));
+        assert_eq!(receive_name.func_name(), Some("receive"));
+    }
 }
