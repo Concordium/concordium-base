@@ -24,6 +24,7 @@ import Concordium.Types.Parameters
 import qualified Concordium.Types.SeedState as SeedState
 import Concordium.Types.Updates
 import Concordium.Utils.Serialization
+import qualified Concordium.Crypto.SHA256 as Hash
 
 data GenesisDataV2 = GenesisDataV2
     { genesisTime :: !Timestamp,
@@ -144,3 +145,6 @@ parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainPara
     foundationAccountIndex = case List.findIndex ((gcpFoundationAccount ==) . gaAddress) gpInitialAccounts of
         Nothing -> error "Foundation account is missing"
         Just i -> fromIntegral i
+
+hashGenesisData :: GenesisData -> Hash.Hash
+hashGenesisData genData = Hash.hashLazy . runPutLazy $ put genesisSlot >> put genData

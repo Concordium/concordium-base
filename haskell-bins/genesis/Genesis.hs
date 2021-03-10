@@ -15,6 +15,7 @@ import Lens.Micro.Platform
 import qualified Data.Vector as Vec
 import Data.Foldable
 import Data.Maybe
+import System.FilePath
 
 import Data.Text(Text)
 import qualified Data.HashMap.Strict as Map
@@ -164,6 +165,7 @@ main = cmdArgsRun mode >>=
                       forM_ (genesisAccounts genesisData) $ \account ->
                         putStrLn $ "\tAccount: " ++ show (gaAddress account) ++ ", balance = " ++ showBalance totalGTU (gaBalance account)
                       LBS.writeFile gdOutput (S.runPutLazy $ putVersionedGenesisDataV2 genesisData)
+                      LBS.writeFile (takeDirectory gdOutput </> "genesis_hash") (encode [hashGenesisData genesisData])
                       putStrLn $ "Wrote genesis data to file " ++ show gdOutput
                       exitSuccess
         PrintGenesisData{..} -> do
