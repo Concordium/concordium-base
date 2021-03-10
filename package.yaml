@@ -24,7 +24,6 @@ custom-setup:
 description:         See README
 
 default-extensions:
-- DataKinds
 - FlexibleContexts
 - FlexibleInstances
 - FunctionalDependencies
