@@ -18,11 +18,18 @@ import Concordium.Types.Updates
 import Concordium.Utils.Serialization
 
 -- |Core parameters that are set at genesis.
+-- These parameters are not updatable (except via protocol update) and
+-- so are specified anew in any regenesis block.
 data CoreGenesisParameters = CoreGenesisParameters
-    { genesisTime :: !Timestamp,
+    { -- |The nominal time of the genesis block.
+      genesisTime :: !Timestamp,
+      -- |The duration of each slot.
       genesisSlotDuration :: !Duration,
+      -- |Length of a baking epoch.
       genesisEpochLength :: !EpochLength,
+      -- |The maximum total energy that may be expended by transactions in a block.
       genesisMaxBlockEnergy :: !Energy,
+      -- |The parameters of the finalization protocol.
       genesisFinalizationParameters :: !FinalizationParameters
     }
     deriving (Eq, Show)
@@ -43,13 +50,27 @@ instance Serialize CoreGenesisParameters where
         return CoreGenesisParameters{..}
 
 -- |Initial state configuration for genesis.
+--
+-- The initial accounts are assigned account indexes sequentially based
+-- on their index in 'genesisAccounts'. This means that, when accounts
+-- are bakers, their baker ID must correspond to this index.
+--
+-- It is also required that the foundation account specified in the
+-- chain parameters is one of the genesis accounts.
 data GenesisState = GenesisState
-    { genesisCryptographicParameters :: !CryptographicParameters,
+    { -- |Cryptographic parameters for on-chain proofs.
+        genesisCryptographicParameters :: !CryptographicParameters,
+        -- |The initial collection of identity providers.
       genesisIdentityProviders :: !IdentityProviders,
+      -- |The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
+      -- |The initial authorization structure for chain updates.
       genesisAuthorizations :: !Authorizations,
+      -- |The initial (updatable) chain parameters.
       genesisChainParameters :: !ChainParameters,
+      -- |The initial leadership election nonce.
       genesisLeadershipElectionNonce :: !LeadershipElectionNonce,
+      -- |The initial accounts on the chain.
       genesisAccounts :: !(Vec.Vector GenesisAccount)
     }
     deriving (Eq, Show)
@@ -76,17 +97,49 @@ instance Serialize GenesisState where
         return GenesisState{..}
 
 -- |Genesis data for the P1 protocol version.
+-- Two types of genesis data are supported.
+--
+-- * 'GDP1Initial' represents an initial genesis block.
+--   It specifies how the initial state should be configured.
+--
+-- * 'GDP1Regenesis' represents a reset of the protocol with
+--   a new genesis block.  This includes the full serialized
+--   block state to use from this point forward.
+--
+-- The serialization of the block state may not be unique, so
+-- only the hash of it is used in defining the hash of the
+-- genesis block.
+--
+-- The relationship between the new state and the state of the
+-- terminal block of the old chain should be defined by the
+-- chain update mechanism used.
+--
+-- To the extent that the 'CoreGenesisParameters' are represented
+-- in the block state, they must agree. (This is probably only
+-- the epoch length.)
 data GenesisDataP1
-    = GDP1Initial
-        { genesisCore :: !CoreGenesisParameters,
+    = -- |An initial genesis block.
+      GDP1Initial
+        { -- |The immutable genesis parameters.
+          genesisCore :: !CoreGenesisParameters,
+          -- |The blueprint for the initial state at genesis.
           genesisInitialState :: !GenesisState
         }
-    | GDP1Regenesis
-        { genesisCore :: !CoreGenesisParameters,
+    | -- |A re-genesis block.
+    GDP1Regenesis
+        { -- |The immutable genesis parameters.
+        -- (These need not be invariant across re-genesis.)
+            genesisCore :: !CoreGenesisParameters,
+            -- |The hash of the first genesis block in the chain.
           genesisFirstGenesis :: !BlockHash,
+          -- |The hash of the preceding (re)genesis block.
           genesisPreviousGenesis :: !BlockHash,
+          -- |The hash of the last finalized block that terminated the chain before the
+          -- new genesis.
           genesisTerminalBlock :: !BlockHash,
+          -- |The hash of the block state for the regenesis.
           genesisStateHash :: !StateHash,
+          -- |The serialized block state. This must match the specified hash.
           genesisNewState :: !ByteString
         }
     deriving (Eq, Show)
@@ -184,6 +237,12 @@ parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainPara
         Nothing -> error "Foundation account is missing"
         Just i -> fromIntegral i
 
+-- |Compute the block hash of the genesis block with the given genesis data.
+-- Every block hash is derived from a message that begins with the block slot,
+-- which is 0 for genesis blocks.  For the genesis block, as of 'P1', we include
+-- a signifier of the protocol version next.
+--
+-- Note, for regenesis blocks, the state is only represented by its hash.
 genesisBlockHash :: GenesisDataP1 -> BlockHash
 genesisBlockHash GDP1Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
