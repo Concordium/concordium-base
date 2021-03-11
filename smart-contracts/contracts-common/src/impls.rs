@@ -65,8 +65,21 @@ impl Serial for u64 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(*self) }
 }
 
+impl Serial for u128 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(&self.to_le_bytes())
+    }
+}
+
 impl Deserial for u64 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_u64() }
+}
+
+impl Deserial for u128 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let bytes = read_n_bytes!(16, source);
+        Ok(u128::from_le_bytes(bytes))
+    }
 }
 
 impl Serial for i8 {
@@ -99,6 +112,19 @@ impl Serial for i64 {
 
 impl Deserial for i64 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_i64() }
+}
+
+impl Serial for i128 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(&self.to_le_bytes())
+    }
+}
+
+impl Deserial for i128 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let bytes = read_n_bytes!(16, source);
+        Ok(i128::from_le_bytes(bytes))
+    }
 }
 
 /// Serialization of `bool` encodes it as a single byte, `false` is represented
