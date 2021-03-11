@@ -159,12 +159,32 @@ pub trait Write {
     fn write_i64(&mut self, x: i64) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
 }
 
+/// The `write` method always appends data to the end of the vector.
 impl Write for Vec<u8> {
     type Err = ();
 
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> {
         let _ = self.extend_from_slice(buf);
         Ok(buf.len())
+    }
+}
+
+/// This implementation overwrite the contents of the slice and updates the
+/// reference to point to the unwritten part. The slice is (by necessity) never
+/// extended.
+/// This is in contrast to the `Vec<u8>` implementation which always extends the
+/// vector with the data that is written.
+impl Write for &mut [u8] {
+    type Err = ();
+
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> {
+        let to_write = core::cmp::min(buf.len(), self.len());
+        let (overwrite, rest) = core::mem::replace(self, &mut []).split_at_mut(to_write);
+        overwrite.copy_from_slice(&buf[..to_write]);
+        *self = rest;
+        Ok(to_write)
     }
 }
 
@@ -222,4 +242,26 @@ pub trait Get<T> {
 impl<R: Read, T: Deserial> Get<T> for R {
     #[inline(always)]
     fn get(&mut self) -> ParseResult<T> { T::deserial(self) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn write_u8_slice() {
+        let mut xs = [0u8; 10];
+        let mut slice: &mut [u8] = &mut xs;
+        assert!(0xAAAAAAAAu32.serial(&mut slice).is_ok(), "Writing u32 should succeed.");
+        assert_eq!(slice.len(), 6, "The new slice should be of length 6 (= 10 - 4)");
+        assert!(0xBBBBBBBBu32.serial(&mut slice).is_ok(), "Writing the second u32 should succeed.");
+        assert_eq!(slice.len(), 2, "The new slice should be of length 2 (= 10 - 4 - 4)");
+        assert!(0xCCCCu16.serial(&mut slice).is_ok(), "Writing the final u16 should succeed.");
+        assert_eq!(slice.len(), 0, "The new slice should be of length 0 (= 10 - 4 - 4 - 2)");
+        assert!(0u8.serial(&mut slice).is_err(), "Writing past the end should fail.");
+        assert_eq!(
+            xs,
+            [0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB, 0xCC, 0xCC],
+            "The original array has incorrect content."
+        );
+    }
 }
