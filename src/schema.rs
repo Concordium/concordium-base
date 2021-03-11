@@ -206,11 +206,11 @@ impl SchemaType for String {
 }
 
 impl SchemaType for OwnedContractName {
-    fn get_type() -> Type { Type::ContractName(SizeLength::U32) }
+    fn get_type() -> Type { Type::ContractName(SizeLength::U16) }
 }
 
 impl SchemaType for OwnedReceiveName {
-    fn get_type() -> Type { Type::ReceiveName(SizeLength::U32) }
+    fn get_type() -> Type { Type::ReceiveName(SizeLength::U16) }
 }
 
 macro_rules! schema_type_array_x {
