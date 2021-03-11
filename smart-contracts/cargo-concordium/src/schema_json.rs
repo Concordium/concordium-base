@@ -325,6 +325,22 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON String required")
             }
         }
+        Type::U128 => {
+            if let Value::String(string) = json {
+                let n: u128 = string.parse().context("Could not parse as u128.")?;
+                serial!(n, out)
+            } else {
+                bail!("JSON String required")
+            }
+        }
+        Type::I128 => {
+            if let Value::String(string) = json {
+                let n: i128 = string.parse().context("Could not parse as i128.")?;
+                serial!(n, out)
+            } else {
+                bail!("JSON String required")
+            }
+        }
     }
 }
 
