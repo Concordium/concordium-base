@@ -22,6 +22,10 @@
   should have the same format and has the same meaning as the `expiry` field
   when creating transactions, i.e., it is a u64 and denotes the number of
   seconds since the unix epoch.
+- the `credential` field object in the response from `create_credential` is modified.
+  There is a new field `credentialPublicKeys` and the old field `account` is removed.
+- there is a new field inside the `credential` object in the response from `create_credential`.
+  The field is `messageExpiry`, it is mandatory and has type `u64`.
 
 ## Other
 
