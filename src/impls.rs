@@ -1,4 +1,4 @@
-use crate::{traits::*, types::*};
+use crate::{constants::*, traits::*, types::*};
 
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections::*, string::String, vec::Vec};
@@ -6,8 +6,6 @@ use alloc::{boxed::Box, collections::*, string::String, vec::Vec};
 use core::{marker, mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
 use std::{collections::*, marker, mem::MaybeUninit, slice};
-
-pub(crate) static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
 /// Apply the given macro to each of the elements in the list
 /// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
