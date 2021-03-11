@@ -1,9 +1,11 @@
 -- |This module defines the genesis data fromat for the 'P1' protocol version.
 module Concordium.Genesis.Data.P1 where
 
+import Control.Monad
 import Data.ByteString (ByteString)
 import Data.Serialize
 import qualified Data.Vector as Vec
+import Lens.Micro.Platform
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -59,8 +61,8 @@ instance Serialize CoreGenesisParameters where
 -- chain parameters is one of the genesis accounts.
 data GenesisState = GenesisState
     { -- |Cryptographic parameters for on-chain proofs.
-        genesisCryptographicParameters :: !CryptographicParameters,
-        -- |The initial collection of identity providers.
+      genesisCryptographicParameters :: !CryptographicParameters,
+      -- |The initial collection of identity providers.
       genesisIdentityProviders :: !IdentityProviders,
       -- |The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
@@ -94,6 +96,12 @@ instance Serialize GenesisState where
         genesisLeadershipElectionNonce <- get
         nGenesisAccounts <- getLength
         genesisAccounts <- Vec.replicateM nGenesisAccounts getGenesisAccountGD3
+        Vec.forM_ (Vec.indexed genesisAccounts) $ \case
+            (i, GenesisAccount{gaBaker = Just GenesisBaker{..}})
+                | (gbBakerId /= fromIntegral i) -> fail "Baker Id is incorrect."
+            _ -> return ()
+        unless (genesisChainParameters ^. cpFoundationAccount < fromIntegral (Vec.length genesisAccounts)) $
+            fail "Invalid foundation account."
         return GenesisState{..}
 
 -- |Genesis data for the P1 protocol version.
@@ -115,8 +123,12 @@ instance Serialize GenesisState where
 -- chain update mechanism used.
 --
 -- To the extent that the 'CoreGenesisParameters' are represented
--- in the block state, they must agree. (This is probably only
+-- in the block state, they should agree. (This is probably only
 -- the epoch length.)
+--
+-- Note that the invariants regarding the 'genesisNewState' are
+-- soft: deserialization does not check them, or even that the
+-- serialization is valid.
 data GenesisDataP1
     = -- |An initial genesis block.
       GDP1Initial
@@ -126,11 +138,11 @@ data GenesisDataP1
           genesisInitialState :: !GenesisState
         }
     | -- |A re-genesis block.
-    GDP1Regenesis
+      GDP1Regenesis
         { -- |The immutable genesis parameters.
-        -- (These need not be invariant across re-genesis.)
-            genesisCore :: !CoreGenesisParameters,
-            -- |The hash of the first genesis block in the chain.
+          -- (These need not be invariant across re-genesis.)
+          genesisCore :: !CoreGenesisParameters,
+          -- |The hash of the first genesis block in the chain.
           genesisFirstGenesis :: !BlockHash,
           -- |The hash of the preceding (re)genesis block.
           genesisPreviousGenesis :: !BlockHash,
@@ -139,7 +151,7 @@ data GenesisDataP1
           genesisTerminalBlock :: !BlockHash,
           -- |The hash of the block state for the regenesis.
           genesisStateHash :: !StateHash,
-          -- |The serialized block state. This must match the specified hash.
+          -- |The serialized block state. This should match the specified hash.
           genesisNewState :: !ByteString
         }
     deriving (Eq, Show)
