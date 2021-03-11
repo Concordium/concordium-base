@@ -131,8 +131,15 @@ newtype CredentialIndex = CredentialIndex Word8
     deriving (Eq, Ord, Enum, Num, Real, Integral)
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
--- Introducing here a type containing all the information needed for verifying a transaction,
--- i.e. the account threshold, all the credential thresholds, and all the credential public keys.
+-- |The credential index of the initial credential on an account (0).
+-- This credential is special as it can never be modified or removed,
+-- and is used to derive the account address and account encryption key.
+initialCredentialIndex :: CredentialIndex
+initialCredentialIndex = 0
+
+-- |The information about an account's credentials necessary for verifying the signature(s) on
+-- a transaction. Namely, the account threshold, and for each credential, its threshold and
+-- public keys.
 data AccountInformation = AccountInformation {
   aiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
   aiThreshold :: !AccountThreshold 

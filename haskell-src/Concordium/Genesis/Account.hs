@@ -79,7 +79,7 @@ data GenesisAccount = GenesisAccount
       gaThreshold :: !ID.AccountThreshold,
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
-      -- |The account credentials. At least a credential with index 0 must exist.
+      -- |The account credentials. At least a credential with index 'initialCredentialIndex' (0) must exist.
       gaCredentials :: !(Map.Map ID.CredentialIndex ID.AccountCredential),
       -- |The (optional) baker information
       gaBaker :: !(Maybe GenesisBaker)
@@ -104,14 +104,15 @@ instance FromJSON GenesisAccount where
                 gaCredentialFull <- parseJSON vValue
                 case ID.values gaCredentialFull of
                     Nothing -> fail "Account credential is malformed."
-                    Just gaCredential -> return (Map.singleton 0 gaCredential)
+                    Just gaCredential -> return (Map.singleton ID.initialCredentialIndex gaCredential)
             Just Versioned{..} -> do
                 unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
                 fullCredentials <- parseJSON vValue
                 case mapM ID.values fullCredentials of
                     Nothing -> fail "Account credential is malformed."
                     Just cs -> return cs
-        unless (Map.member 0 gaCredentials) $ fail "Genesis account must have a credential with index 0."
+        unless (Map.member ID.initialCredentialIndex gaCredentials) $ fail $
+            "Genesis account must have a credential with index" ++ show ID.initialCredentialIndex  ++ "."
         gaBaker <- obj .:? "baker"
         -- Check that bakers do not stake more than their balance.
         case gaBaker of
@@ -140,7 +141,8 @@ getGenesisAccountGD3 = label "GenesisAccount" $ do
     gaAddress <- get
     gaThreshold <- get
     gaCredentials <- getSafeMapOf get get
-    unless (isJust $ Map.lookup 0 gaCredentials) $ fail "A genesis account must have a credential with index 0."
+    unless (isJust $ Map.lookup ID.initialCredentialIndex gaCredentials) $ fail $
+        "A genesis account must have a credential with index " ++ show ID.initialCredentialIndex ++ "."
     -- Account amount
     gaBalance <- get
     -- Baker
