@@ -498,6 +498,7 @@ impl Deserial for Type {
 #[cfg(feature = "derive-serde")]
 mod impls {
     use super::*;
+    use crate::constants::*;
     impl Fields {
         pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
             use serde_json::*;

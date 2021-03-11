@@ -1,3 +1,4 @@
+use crate::constants;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
@@ -610,6 +611,9 @@ impl<'a> ContractName<'a> {
         if !name.starts_with("init_") {
             return Err(NewContractNameError::MissingInitPrefix);
         }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewContractNameError::TooLong);
+        }
         Ok(ContractName(name))
     }
 
@@ -635,6 +639,9 @@ impl OwnedContractName {
         if !name.starts_with("init_") {
             return Err(NewContractNameError::MissingInitPrefix);
         }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewContractNameError::TooLong);
+        }
         Ok(OwnedContractName(name))
     }
 
@@ -659,6 +666,7 @@ impl OwnedContractName {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewContractNameError {
     MissingInitPrefix,
+    TooLong,
 }
 
 impl fmt::Display for NewContractNameError {
@@ -666,6 +674,9 @@ impl fmt::Display for NewContractNameError {
         use NewContractNameError::*;
         match self {
             MissingInitPrefix => write!(f, "Contract names have the format 'init_<contract_name>'"),
+            TooLong => {
+                write!(f, "Contract names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
+            }
         }
     }
 }
@@ -680,6 +691,9 @@ impl<'a> ReceiveName<'a> {
     pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
         if !name.contains('.') {
             return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewReceiveNameError::TooLong);
         }
         Ok(ReceiveName(name))
     }
@@ -703,6 +717,9 @@ impl OwnedReceiveName {
     pub fn new(name: String) -> Result<Self, NewReceiveNameError> {
         if !name.contains('.') {
             return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewReceiveNameError::TooLong);
         }
         Ok(OwnedReceiveName(name))
     }
@@ -735,6 +752,7 @@ impl OwnedReceiveName {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewReceiveNameError {
     MissingDotSeparator,
+    TooLong,
 }
 
 impl fmt::Display for NewReceiveNameError {
@@ -743,6 +761,9 @@ impl fmt::Display for NewReceiveNameError {
         match self {
             MissingDotSeparator => {
                 write!(f, "Receive names have the format '<contract_name>.<func_name>'.")
+            }
+            TooLong => {
+                write!(f, "Receive names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
             }
         }
     }
@@ -1126,9 +1147,17 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_new_contract_name() {
+    fn test_invalid_new_contract_name_missing_prefix() {
         let contract_name = ContractName::new("no_init_prefix");
-        assert!(contract_name.is_err())
+        assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix))
+    }
+
+    #[test]
+    fn test_invalid_new_contract_name_too_long() {
+        // Is too long when the prefix is included.
+        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize));
+        let contract_name = ContractName::new(long_name.as_str());
+        assert_eq!(contract_name, Err(NewContractNameError::TooLong))
     }
 
     #[test]
@@ -1145,9 +1174,17 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_new_owned_contract_name() {
+    fn test_invalid_new_owned_contract_name_missing_prefix() {
         let contract_name = OwnedContractName::new("no_init_prefix".to_string());
-        assert!(contract_name.is_err())
+        assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix))
+    }
+
+    #[test]
+    fn test_invalid_new_owned_contract_name_too_long() {
+        // Is too long when the prefix is included.
+        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize));
+        let contract_name = OwnedContractName::new(long_name);
+        assert_eq!(contract_name, Err(NewContractNameError::TooLong))
     }
 
     #[test]
@@ -1164,9 +1201,17 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_new_receive_name() {
+    fn test_invalid_new_receive_name_missing_dot() {
         let receive_name = ReceiveName::new("no_dot_separator");
-        assert!(receive_name.is_err())
+        assert_eq!(receive_name, Err(NewReceiveNameError::MissingDotSeparator))
+    }
+
+    #[test]
+    fn test_invalid_new_receive_name_too_long() {
+        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize);
+        let long_name = format!("{}.{}", long_str, long_str);
+        let contract_name = ReceiveName::new(long_name.as_str());
+        assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
     }
 
     #[test]
@@ -1183,9 +1228,17 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_new_owned_receive_name() {
+    fn test_invalid_new_owned_receive_name_missing_dot() {
         let receive_name = OwnedReceiveName::new("no_dot_separator".to_string());
-        assert!(receive_name.is_err())
+        assert_eq!(receive_name, Err(NewReceiveNameError::MissingDotSeparator))
+    }
+
+    #[test]
+    fn test_invalid_new_owned_receive_name_too_long() {
+        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize);
+        let long_name = format!("{}.{}", long_str, long_str);
+        let contract_name = OwnedReceiveName::new(long_name);
+        assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
     }
 
     #[test]
