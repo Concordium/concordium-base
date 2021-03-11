@@ -103,14 +103,14 @@ pub mod cost {
 
     /// Local variable instructions are cheap. We treat them as stack
     /// operations.
-    pub const GET_LOCAL: Energy = read_stack(1) + write_stack(1);
-    pub const SET_LOCAL: Energy = read_stack(1) + write_stack(1);
-    pub const TEE_LOCAL: Energy = read_stack(1) + write_stack(1);
+    pub const GET_LOCAL: Energy = 1 + read_stack(1) + write_stack(1);
+    pub const SET_LOCAL: Energy = 1 + read_stack(1) + write_stack(1);
+    pub const TEE_LOCAL: Energy = 1 + read_stack(1) + write_stack(1);
     /// Looking up globals is cheap compared to linear memory.
     /// They are essentially the same as locals, except they are in a different
     /// array.
-    pub const GET_GLOBAL: Energy = read_stack(1) + write_stack(1);
-    pub const SET_GLOBAL: Energy = read_stack(1) + write_stack(1);
+    pub const GET_GLOBAL: Energy = 1 + read_stack(1) + write_stack(1);
+    pub const SET_GLOBAL: Energy = 1 + read_stack(1) + write_stack(1);
 
     /// # Memory instructions.
     /// Load either an i32 or i64 from linear memory.

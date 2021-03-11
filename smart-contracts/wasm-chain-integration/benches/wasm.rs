@@ -338,13 +338,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
 
-    let mk_host = |energy| MeteringHost {
-        energy:            Energy {
-            energy,
-        },
-        activation_frames: MAX_ACTIVATION_FRAMES,
-    };
-
     {
         let mut group = c.benchmark_group("Exhaust energy");
 
@@ -354,30 +347,16 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut module = validate::validate_module(&TestHost, &skeleton).unwrap();
         module.inject_metering().unwrap();
         let artifact = module.compile::<MeteringImport>().unwrap();
-        for energy in [1000, 10000, 100000, 1000000].iter() {
-            group.bench_with_input(
-                format!("execute with energy n = {}", energy),
-                energy,
-                |b, &energy| {
-                    b.iter(|| {
-                        let mut host = mk_host(energy);
-                        assert!(
-                            // Should fail due to out of energy.
-                            artifact.run(&mut host, "loop", &[Value::I32(0)]).is_err(),
-                            "Precondition violation."
-                        )
-                    })
-                },
-            );
-        }
 
+        // Execute the function `name` with arguments `args` until running out of
+        // energy. Raise an exception if execution terminates in some other way.
         let mut exec = |name, args| {
             let artifact = &artifact;
             group.bench_function(name, move |b: &mut criterion::Bencher| {
                 b.iter(|| {
                     let mut host = MeteringHost {
                         energy:            Energy {
-                            energy: 1000000,
+                            energy: 1000000, // should correspond to about 1ms of execution.
                         },
                         activation_frames: MAX_ACTIVATION_FRAMES,
                     };
@@ -393,6 +372,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             });
         };
 
+        exec("loop", &[Value::I32(0)]);
         exec("empty_loop", &[]);
         exec("empty_loop_br_if_success", &[]);
         exec("empty_loop_br_if_fail", &[]);

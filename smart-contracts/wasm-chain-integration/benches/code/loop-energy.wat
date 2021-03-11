@@ -1,4 +1,9 @@
 (module
+ ;; This module defines minimal functions which loop on a single instruction (as
+ ;; much as possible, sometimes a context needs to be set up).
+ ;; Its purpose is to measure energy assignment of single instructions via benchmarks.
+ ;; The idea is to run the infinite loop with a pre-defined amount of energy and benchmark termination time.
+ ;; This is done in the `benches/wasm.rs` file.
   (global $g1 i32 (i32.const 13))
   (global $g2 i64 (i64.const 13))
   (type $empty (func))

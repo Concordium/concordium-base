@@ -41,7 +41,10 @@ fn log_event_cost(x: u32) -> u64 {
 
 /// Cost of copying the given amount of bytes from the host (e.g., parameter or
 /// contract state) to the Wasm memory.
-fn copy_from_host_cost(x: u32) -> u64 { 50 + u64::from(x) }
+fn copy_from_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
+/// Cost of copying the given amount of bytes from the host (e.g., parameter or
+/// contract state) from the Wasm to host memory.
+fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
 
 /// Cost of a "send" action. `x` is the size of the parameter in bytes.
 fn action_send_cost(x: u32) -> u64 {
@@ -382,11 +385,12 @@ fn call_common<C: HasCommon>(
         }
         CommonFunc::GetPolicySection => {
             let offset = unsafe { stack.pop_u32() } as usize;
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
+            host.energy().tick_energy(copy_from_host_cost(length))?;
             let start = unsafe { stack.pop_u32() } as usize;
-            let write_end = start + length; // this cannot overflow on 64-bit machines.
+            let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
-            let end = std::cmp::min(offset + length, host.policies_bytes().len());
+            let end = std::cmp::min(offset + length as usize, host.policies_bytes().len());
             ensure!(offset <= end, "Attempting to read non-existent policy.");
             let amt = (&mut memory[start..write_end]).write(&host.policies_bytes()[offset..end])?;
             stack.push_value(amt as u32);
@@ -405,18 +409,20 @@ fn call_common<C: HasCommon>(
         }
         CommonFunc::LoadState => {
             let offset = unsafe { stack.pop_u32() };
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            let end = start + length; // this cannot overflow on 64-bit machines.
+            host.energy().tick_energy(copy_from_host_cost(length))?;
+            let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
             let res = host.state().load_state(offset, &mut memory[start..end])?;
             stack.push_value(res);
         }
         CommonFunc::WriteState => {
             let offset = unsafe { stack.pop_u32() };
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            let end = start + length; // this cannot overflow on 64-bit machines.
+            host.energy().tick_energy(copy_to_host_cost(length))?;
+            let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
             let res = host.state().write_state(offset, &memory[start..end])?;
             stack.push_value(res);
