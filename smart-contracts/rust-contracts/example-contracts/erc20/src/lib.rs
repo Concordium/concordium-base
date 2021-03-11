@@ -85,7 +85,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Reject)]
 enum ReceiveError {
     /// Failed parsing the parameter
     ParseParams,
