@@ -26,7 +26,7 @@ fn contract_init(
 
 /// Custom Error type only for testing purposes.
 /// Not usable when contract is deployed to the chain.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Reject)]
 enum ReceiveError {
     /// Amount too small to allow increasing.
     SmallAmount,

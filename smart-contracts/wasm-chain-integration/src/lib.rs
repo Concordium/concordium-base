@@ -653,16 +653,25 @@ pub fn invoke_init<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
         }
     };
     let remaining_energy = host.energy.energy;
-    if let Some(Value::I32(0)) = res {
-        Ok(InitResult::Success {
-            logs: host.logs,
-            state: host.state,
-            remaining_energy,
-        })
+    // process the return value.
+    // - 0 indicates success
+    // - positive values are a protocol violation, so they lead to a runtime error
+    // - negative values lead to a rejection with a specific reject reason.
+    if let Some(Value::I32(n)) = res {
+        if n == 0 {
+            Ok(InitResult::Success {
+                logs: host.logs,
+                state: host.state,
+                remaining_energy,
+            })
+        } else {
+            Ok(InitResult::Reject {
+                reason: reason_from_wasm_error_code(n)?,
+                remaining_energy,
+            })
+        }
     } else {
-        Ok(InitResult::Reject {
-            remaining_energy,
-        })
+        bail!("Wasm module should return a value.")
     }
 }
 
@@ -769,10 +778,8 @@ pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
         } else if n >= 0 {
             bail!("Invalid return.")
         } else {
-            // TODO: Here we map all negative values to reject.
-            // This is a fine choice, but perhaps we should record
-            // the exact failure as well, so it can be inspected.
             Ok(ReceiveResult::Reject {
+                reason: reason_from_wasm_error_code(n)?,
                 remaining_energy,
             })
         }
@@ -782,6 +789,17 @@ pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
              well-formed modules"
         );
     }
+}
+
+/// Returns the passed Wasm error code if it is negative.
+/// This function should only be called on negative numbers.
+fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
+    ensure!(
+        n < 0,
+        "Wasm return value of {} is treated as an error. Only negative should be treated as error.",
+        n
+    );
+    Ok(n)
 }
 
 /// A helper trait to support invoking contracts when the policy is given as a

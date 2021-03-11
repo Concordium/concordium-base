@@ -112,6 +112,7 @@ pub enum InitResult {
         remaining_energy: u64,
     },
     Reject {
+        reason:           i32,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -122,10 +123,12 @@ impl InitResult {
         match self {
             InitResult::OutOfEnergy => vec![0],
             InitResult::Reject {
+                reason,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(9);
+                let mut out = Vec::with_capacity(13);
                 out.push(1);
+                out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
@@ -253,6 +256,7 @@ pub enum ReceiveResult {
         remaining_energy: u64,
     },
     Reject {
+        reason:           i32,
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -264,10 +268,12 @@ impl ReceiveResult {
         match self {
             OutOfEnergy => vec![0],
             Reject {
+                reason,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(9);
+                let mut out = Vec::with_capacity(13);
                 out.push(1);
+                out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }

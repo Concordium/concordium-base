@@ -373,8 +373,9 @@ pub fn main() -> anyhow::Result<()> {
                         }
                         InitResult::Reject {
                             remaining_energy,
+                            reason,
                         } => {
-                            eprintln!("Init call rejected.");
+                            eprintln!("Init call rejected with reason {}.", reason);
                             eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         InitResult::OutOfEnergy => {
@@ -508,8 +509,9 @@ pub fn main() -> anyhow::Result<()> {
                         }
                         ReceiveResult::Reject {
                             remaining_energy,
+                            reason,
                         } => {
-                            eprintln!("Receive call rejected.");
+                            eprintln!("Receive call rejected with reason {}", reason);
                             eprintln!("Energy spent is {}", runner.energy - remaining_energy)
                         }
                         ReceiveResult::OutOfEnergy => {
