@@ -665,7 +665,11 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   -- possible. The data are the from address and the amount to transfer.
                   | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
-                  | Rejected { rejectReason :: Int32 } -- ^Rejected due to contract logic with given error code.
+                  | RejectedInit { rejectReason :: !Int32 } -- ^Rejected due to contract logic in init function of a contract.
+                  | RejectedReceive { rejectReason :: !Int32,
+                                      contractAddress :: !ContractAddress,
+                                      receiveName :: !Wasm.ReceiveName,
+                                      parameter :: !Wasm.Parameter}
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
@@ -709,9 +713,13 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | CredentialHolderDidNotSign
     deriving (Show, Eq, Generic)
 
-wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
-wasmRejectToRejectReason (Wasm.ContractReject reason) = Rejected reason
-wasmRejectToRejectReason Wasm.RuntimeFailure = RuntimeFailure
+wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
+wasmRejectToRejectReasonInit (Wasm.ContractReject reason) = RejectedInit reason
+wasmRejectToRejectReasonInit Wasm.RuntimeFailure = RuntimeFailure
+
+wasmRejectToRejectReasonReceive :: ContractAddress -> Wasm.ReceiveName -> Wasm.Parameter -> Wasm.ContractExecutionFailure -> RejectReason
+wasmRejectToRejectReasonReceive addr name param (Wasm.ContractReject reason) = RejectedReceive reason addr name param
+wasmRejectToRejectReasonReceive _ _ _ Wasm.RuntimeFailure = RuntimeFailure
 
 instance S.Serialize RejectReason
 instance AE.ToJSON RejectReason
