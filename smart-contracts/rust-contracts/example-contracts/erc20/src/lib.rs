@@ -73,7 +73,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     // Let the creator have all the tokens
     let creator = ctx.init_origin();
-    logger.log(&Event::Transfer(AccountAddress([0u8; 32]), creator, init_params.total_supply));
+    logger.log(&Event::Transfer(AccountAddress([0u8; 32]), creator, init_params.total_supply))?;
     let mut balances = BTreeMap::new();
     balances.insert(creator, init_params.total_supply);
 
@@ -94,6 +94,17 @@ enum ReceiveError {
     /// The account owner is not allowing you to send this much
     MoreThanAllowed,
     InsufficientFunds,
+    LogFull,
+    LogMalformed,
+}
+
+impl From<LogError> for ReceiveError {
+    fn from(le: LogError) -> Self {
+        match le {
+            LogError::Full => Self::LogFull,
+            LogError::Malformed => Self::LogMalformed,
+        }
+    }
 }
 
 impl From<ParseError> for ReceiveError {
@@ -122,7 +133,7 @@ fn contract_receive<A: HasActions>(
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.balances.insert(sender_address, sender_balance - amount);
             state.balances.insert(receiver_address, receiver_balance + amount);
-            logger.log(&Event::Transfer(sender_address, receiver_address, amount));
+            logger.log(&Event::Transfer(sender_address, receiver_address, amount))?;
         }
         Request::TransferFromTo(owner_address, receiver_address, amount) => {
             let allowed_amount = *state.allowed.get(&(owner_address, sender_address)).unwrap_or(&0);
@@ -135,11 +146,11 @@ fn contract_receive<A: HasActions>(
             state.allowed.insert((owner_address, sender_address), allowed_amount - amount);
             state.balances.insert(owner_address, owner_balance - amount);
             state.balances.insert(receiver_address, receiver_balance + amount);
-            logger.log(&Event::Transfer(owner_address, receiver_address, amount));
+            logger.log(&Event::Transfer(owner_address, receiver_address, amount))?;
         }
         Request::AllowTransfer(spender_address, amount) => {
             state.allowed.insert((sender_address, spender_address), amount);
-            logger.log(&Event::Approval(sender_address, spender_address, amount));
+            logger.log(&Event::Approval(sender_address, spender_address, amount))?;
         }
     }
     Ok(A::accept())

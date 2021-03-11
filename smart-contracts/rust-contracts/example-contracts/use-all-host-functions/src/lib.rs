@@ -16,7 +16,7 @@ fn contract_receive<A: HasActions>(
     logger: &mut impl HasLogger,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
-    logger.log_bytes(&[1, 2, 3]); // Exercises log_event()
+    logger.log_bytes(&[1, 2, 3])?; // Exercises log_event()
     let _x: u8 = ctx.parameter_cursor().get()?; // Exercises get_parameter_size() & get_parameter_section()
     let state_contents: [u8; 32] = state.get()?; // Exercises state_size() & load_state()
     state.write(&state_contents)?; // Exercises write_state()

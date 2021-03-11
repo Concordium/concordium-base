@@ -16,7 +16,7 @@ fn contract_init(
     logger: &mut impl HasLogger,
 ) -> InitResult<State> {
     let step: u8 = (amount.micro_gtu % 256) as u8;
-    logger.log(&(0u8, step)).map_err(|_| Reject{})?;
+    logger.log(&(0u8, step))?;
     let state = State {
         step,
         current_count: 0,
