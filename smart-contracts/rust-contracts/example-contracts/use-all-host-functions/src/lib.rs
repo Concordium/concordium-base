@@ -24,7 +24,7 @@ fn contract_receive<A: HasActions>(
                       // get_receive_ctx_size() currently unreachable
     Ok(A::send_raw(
         &ctx.self_address(),
-        ReceiveName::unchecked_new("use_all.receive"),
+        ReceiveName::new_unchecked("use_all.receive"),
         Amount::from_micro_gtu(100),
         &[1, 2, 3],
     )
