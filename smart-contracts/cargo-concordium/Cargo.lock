@@ -194,7 +194,7 @@ dependencies = [
 [[package]]
 name = "concordium-contracts-common"
 version = "0.3.2"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=cb-1203-ergonomic-send#b9f7c1afcdff99b5b12d25cabc5ac972ecf75404"
+source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#acae8d93b72472134ff6a6b63e630b0f14ba5b00"
 dependencies = [
  "base58check",
  "chrono",
