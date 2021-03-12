@@ -36,6 +36,7 @@ pipeline {
         stage('build') {
             agent { 
                 docker {
+                    reuseNode true
                     image 'concordium/base:latest' 
                     registryUrl 'https://192549843005.dkr.ecr.eu-west-1.amazonaws.com/'
                     args '-u root'
