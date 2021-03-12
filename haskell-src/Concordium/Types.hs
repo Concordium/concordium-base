@@ -745,7 +745,7 @@ type TransactionHash = TransactionHashV0
 -- which causes the AccountTransactionIndex template haskell derivation of
 -- database schemas to fail.
 
--- |The type of a block hashe. This should be independent of how the hash
+-- |The type of a block hash. This should be independent of how the hash
 -- is computed. Even if the hashing scheme changes over time, it should be
 -- effectively impossible for two blocks on the same chain to have the same
 -- 'BlockHash'.
