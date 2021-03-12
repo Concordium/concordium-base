@@ -216,8 +216,6 @@ putVersionedGenesisData gd = do
     putGenesisDataV3 gd
 
 -- |Convert 'GenesisParameters' to 'GenesisDataP1'.
--- If some of the parameters are not valid, or inconsistent, this function will
--- raise an exception.
 parametersToGenesisData :: GenesisParameters -> GenesisDataP1
 parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainParameters{..}, ..} =
     GDP1Initial
