@@ -1,6 +1,6 @@
 use crate::constants;
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(not(feature = "std"))]
 use core::{convert, fmt, iter, ops, str};
 #[cfg(feature = "std")]
@@ -704,11 +704,15 @@ impl<'a> ReceiveName<'a> {
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(&self) -> &str { self.0 }
+
+    /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
+    /// operation that requires memory allocation.
+    pub fn to_owned(&self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 }
 
 /// A receive name (owned version). Expected format:
 /// "<contract_name>.<func_name>".
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct OwnedReceiveName(String);
 
 impl OwnedReceiveName {
@@ -760,7 +764,7 @@ impl fmt::Display for NewReceiveNameError {
         use NewReceiveNameError::*;
         match self {
             MissingDotSeparator => {
-                write!(f, "Receive names have the format '<contract_name>.<func_name>'.")
+                f.write_str("Receive names have the format '<contract_name>.<func_name>'.")
             }
             TooLong => {
                 write!(f, "Receive names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
@@ -1028,7 +1032,7 @@ pub mod attributes {
 /// }
 ///
 /// #[receive(contract = "mycontract", name="some_receive_name")]
-/// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+/// fn contract_receive<R: HasReceiveContext, L: HasLogger, A: HasActions>(
 ///     ctx: &R,
 ///     receive_amount: Amount,
 ///     logger: &mut L,
