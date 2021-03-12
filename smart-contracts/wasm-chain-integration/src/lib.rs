@@ -8,7 +8,7 @@ mod validation_tests;
 
 use anyhow::{anyhow, bail, ensure};
 use concordium_contracts_common::*;
-use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE, MAX_PARAMETER_SIZE};
+use constants::*;
 use machine::Value;
 use std::{
     collections::{BTreeMap, LinkedList},
@@ -33,27 +33,6 @@ pub struct Logs {
     pub logs: LinkedList<Vec<u8>>,
 }
 
-/// Cost of logging an event of a given size.
-fn log_event_cost(x: u32) -> u64 {
-    // this corresponds to 1NRG per byte stored + base cost
-    constants::LOG_EVENT_BASE_COST + 1000 * u64::from(x)
-}
-
-/// Cost of copying the given amount of bytes from the host (e.g., parameter or
-/// contract state) to the Wasm memory.
-fn copy_from_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
-/// Cost of copying the given amount of bytes from the host (e.g., parameter or
-/// contract state) from the Wasm to host memory.
-fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
-
-/// Cost of a "send" action. `x` is the size of the parameter in bytes.
-fn action_send_cost(x: u32) -> u64 {
-    // the 1000 factor corresponds to 1NRG per byte.
-    // With this the maximum amount of data that would have to be stored would be
-    // 3MB with the expected maximum of 3000000NRG per block
-    constants::BASE_SEND_ACTION_COST + 1000 * u64::from(x)
-}
-
 impl Logs {
     pub fn new() -> Self {
         Self {
@@ -63,8 +42,9 @@ impl Logs {
 
     /// The return value is
     ///
-    /// 0 if data was not logged because the amount of logs is already at the
-    /// maximum 1 if data was logged.
+    /// - 0 if data was not logged because it would exceed maximum number of
+    ///   logs
+    /// - 1 if data was logged.
     pub fn log_event(&mut self, event: Vec<u8>) -> i32 {
         let cur_len = self.logs.len();
         if cur_len < constants::MAX_NUM_LOGS {
@@ -369,12 +349,15 @@ fn call_common<C: HasCommon>(
 ) -> machine::RunResult<()> {
     match f {
         CommonFunc::GetParameterSize => {
+            // the cost of this function is adequately reflected by the base cost of a
+            // function call so we do not charge extra.
             stack.push_value(host.param().len() as u32);
         }
         CommonFunc::GetParameterSection => {
             let offset = unsafe { stack.pop_u32() } as usize;
             let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
+            // change energy linearly in the amount of data written.
             host.energy().tick_energy(copy_from_host_cost(length))?;
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
@@ -386,6 +369,7 @@ fn call_common<C: HasCommon>(
         CommonFunc::GetPolicySection => {
             let offset = unsafe { stack.pop_u32() } as usize;
             let length = unsafe { stack.pop_u32() };
+            // change energy linearly in the amount of data written.
             host.energy().tick_energy(copy_from_host_cost(length))?;
             let start = unsafe { stack.pop_u32() } as usize;
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
@@ -401,9 +385,12 @@ fn call_common<C: HasCommon>(
             let end = start + length as usize;
             ensure!(end <= memory.len(), "Illegal memory access.");
             if length <= constants::MAX_LOG_SIZE {
+                // only charge if we actually log something.
                 host.energy().tick_energy(log_event_cost(length))?;
                 stack.push_value(host.logs().log_event(memory[start..end].to_vec()))
             } else {
+                // otherwise the cost is adequately reflected by just the cost of a function
+                // call.
                 stack.push_value(-1i32)
             }
         }
@@ -411,6 +398,7 @@ fn call_common<C: HasCommon>(
             let offset = unsafe { stack.pop_u32() };
             let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
+            // change energy linearly in the amount of data written.
             host.energy().tick_energy(copy_from_host_cost(length))?;
             let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
@@ -421,6 +409,7 @@ fn call_common<C: HasCommon>(
             let offset = unsafe { stack.pop_u32() };
             let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
+            // change energy linearly in the amount of data written.
             host.energy().tick_energy(copy_to_host_cost(length))?;
             let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
@@ -430,12 +419,22 @@ fn call_common<C: HasCommon>(
         CommonFunc::ResizeState => {
             let new_size = stack.pop();
             let new_size = unsafe { new_size.short } as u32;
+            let old_size = host.state().len();
+            if new_size > old_size {
+                // resizing is very similar to writing 0 to the newly allocated parts,
+                // but since we don't have to read anything we charge it more cheaply.
+                host.energy().tick_energy(additional_state_size_cost(new_size - old_size))?;
+            }
             stack.push_value(host.state().resize_state(new_size));
         }
         CommonFunc::StateSize => {
+            // the cost of this function is adequately reflected by the base cost of a
+            // function call so we do not charge extra.
             stack.push_value(host.state().len());
         }
         CommonFunc::GetSlotTime => {
+            // the cost of this function is adequately reflected by the base cost of a
+            // function call so we do not charge extra.
             stack.push_value(host.metadata().slot_time.timestamp_millis());
         }
     }

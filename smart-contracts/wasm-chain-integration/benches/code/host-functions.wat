@@ -106,9 +106,19 @@
     (return (i32.const 0))
   )
 
-  (func (export "hostfn.resize_state") (param i64) (result i32)
+  ;; try to do the most pessimistic sequence of resizes.
+  ;; resize from 0 to max sizes back to 0, repeat
+  (func (export "hostfn.resize_state") (param $arg i64) (result i32)
     (loop $loop
-      (call $resize_state (i32.const 10))
+      (if (i64.eqz (local.get $arg))
+        (block
+          (local.set $arg (i64.const 1))
+          (call $resize_state (i32.const 0))
+          (br $loop)
+        )
+      )
+      (local.set $arg (i64.const 0))
+      (call $resize_state (i32.const 16383))
       (br $loop)
     )
     (return (i32.const 0))
@@ -234,3 +244,7 @@
 
   (memory 1)
 )
+
+;; Local Variables:
+;; compile-command: "wat2wasm host-functions.wat"
+;; End:

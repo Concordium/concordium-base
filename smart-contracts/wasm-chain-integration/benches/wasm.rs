@@ -249,10 +249,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
 
+    // execute n instructions and measure the time
     {
         let mut group = c.benchmark_group("Instruction execution");
 
-        group.measurement_time(Duration::from_secs(20));
+        group.measurement_time(Duration::from_secs(10));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_INSTRUCTIONS)).unwrap();
         let module = validate::validate_module(&TestHost, &skeleton).unwrap();
@@ -338,10 +339,17 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
 
+    // the exhaust energy benchmark group
     {
         let mut group = c.benchmark_group("Exhaust energy");
 
-        group.measurement_time(Duration::from_secs(20));
+        let nrg = 1000;
+
+        // the throughput is meant to correspond to 1NRG. The reported throughput should
+        // be around 1M elements per second.
+        group
+            .measurement_time(Duration::from_secs(10))
+            .throughput(criterion::Throughput::Elements(nrg));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
         let mut module = validate::validate_module(&TestHost, &skeleton).unwrap();
@@ -356,7 +364,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     let mut host = MeteringHost {
                         energy:            Energy {
-                            energy: 1000000, // should correspond to about 1ms of execution.
+                            energy: nrg * 1000, // should correspond to about 1ms of execution.
                         },
                         activation_frames: MAX_ACTIVATION_FRAMES,
                     };
@@ -470,7 +478,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         // in host-functions.wat
         let mut group = c.benchmark_group("host functions");
 
-        group.measurement_time(Duration::from_secs(10));
+        let nrg = 1000;
+
+        // the throughput is meant to correspond to 1NRG. The reported throughput should
+        // be around 1M elements per second.
+        group
+            .measurement_time(Duration::from_secs(10))
+            .throughput(criterion::Throughput::Elements(nrg));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_HOST_FUNCTIONS)).unwrap();
         let module = {
@@ -510,7 +524,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let setup_init_host = || -> InitHost {
             InitHost {
                 energy:            Energy {
-                    energy: 1000000,
+                    energy: nrg * 1000,
                 },
                 activation_frames: MAX_ACTIVATION_FRAMES,
                 logs:              Logs::new(),
@@ -523,7 +537,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let setup_receive_host = |state, param| -> ReceiveHost {
             ReceiveHost {
                 energy: Energy {
-                    energy: 1000000,
+                    energy: nrg * 1000,
                 },
                 activation_frames: MAX_ACTIVATION_FRAMES,
                 logs: Logs::new(),
