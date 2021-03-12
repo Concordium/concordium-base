@@ -22,9 +22,9 @@ version = "0"
 
 [dependencies.concordium-contracts-common]
 version = "0.3.2"
-# git = "https://github.com/Concordium/concordium-contracts-common.git"
-# branch = "main"
-path = "../concordium-contracts-common/"
+git = "https://github.com/Concordium/concordium-contracts-common.git"
+branch = "main"
+# path = "../concordium-contracts-common/"
 features = ["derive-serde"]
 
 [lib]
