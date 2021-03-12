@@ -298,6 +298,8 @@ fn main() -> anyhow::Result<()> {
                                                     }
                                                     ParseError::OnlySingleReturn => {}
                                                     ParseError::OnlyASCIINames => {}
+                                                    ParseError::NameTooLong => {}
+                                                    ParseError::FuncNameTooLong => {}
                                                     ParseError::StartFunctionsNotSupported => {}
                                                 }
                                             } else if let Some(e) =

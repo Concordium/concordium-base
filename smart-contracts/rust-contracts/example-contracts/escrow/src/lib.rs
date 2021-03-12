@@ -54,7 +54,7 @@ struct State {
     init_params: InitParams,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Reject)]
 enum InitError {
     /// Failed parsing the parameter
     ParseParams,
@@ -80,7 +80,7 @@ fn contract_init(ctx: &impl HasInitContext<()>) -> Result<State, InitError> {
     Ok(state)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Reject)]
 enum ReceiveError {
     /// Failed parsing the parameter
     ParseParams,
