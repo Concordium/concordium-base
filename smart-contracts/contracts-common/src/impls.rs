@@ -326,7 +326,10 @@ impl Deserial for Address {
 
 impl<'a> Serial for ContractName<'a> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.get_chain_name().serial(out)
+        let name = self.get_chain_name();
+        let len = name.len() as u16;
+        len.serial(out)?;
+        serial_vector_no_length(name.as_bytes(), out)
     }
 }
 
@@ -336,15 +339,21 @@ impl Serial for OwnedContractName {
 
 impl Deserial for OwnedContractName {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let bytes = deserial_vector_no_length(source, len as usize)?;
+        let name = String::from_utf8(bytes).map_err(|_| ParseError::default())?;
         let owned_contract_name =
-            OwnedContractName::new(source.get()?).map_err(|_| ParseError::default())?;
+            OwnedContractName::new(name).map_err(|_| ParseError::default())?;
         Ok(owned_contract_name)
     }
 }
 
 impl<'a> Serial for ReceiveName<'a> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.get_chain_name().serial(out)
+        let name = self.get_chain_name();
+        let len = name.len() as u16;
+        len.serial(out)?;
+        serial_vector_no_length(name.as_bytes(), out)
     }
 }
 
@@ -354,8 +363,10 @@ impl Serial for OwnedReceiveName {
 
 impl Deserial for OwnedReceiveName {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let owned_receive_name =
-            OwnedReceiveName::new(source.get()?).map_err(|_| ParseError::default())?;
+        let len: u16 = source.get()?;
+        let bytes = deserial_vector_no_length(source, len as usize)?;
+        let name = String::from_utf8(bytes).map_err(|_| ParseError::default())?;
+        let owned_receive_name = OwnedReceiveName::new(name).map_err(|_| ParseError::default())?;
         Ok(owned_receive_name)
     }
 }
