@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
-{-# LANGUAGE BangPatterns #-}
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature

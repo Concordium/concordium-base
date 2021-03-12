@@ -1,5 +1,4 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE LambdaCase #-}
 module ConcordiumTests.ID.Types where
 
 import Concordium.Common.Version
