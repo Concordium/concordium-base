@@ -1,12 +1,9 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)

@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential, verifyInitialAccountCreation) where
 
