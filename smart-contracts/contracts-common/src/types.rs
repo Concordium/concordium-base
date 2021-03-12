@@ -1,5 +1,6 @@
+use crate::constants;
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(not(feature = "std"))]
 use core::{convert, fmt, iter, ops, str};
 #[cfg(feature = "std")]
@@ -598,6 +599,180 @@ pub enum Address {
     Contract(ContractAddress),
 }
 
+/// A contract name. Expected format: "init_<contract_name>".
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub struct ContractName<'a>(&'a str);
+
+impl<'a> ContractName<'a> {
+    /// Create a new ContractName and check the format. Expected format:
+    /// "init_<contract_name>".
+    #[inline(always)]
+    pub fn new(name: &'a str) -> Result<Self, NewContractNameError> {
+        if !name.starts_with("init_") {
+            return Err(NewContractNameError::MissingInitPrefix);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewContractNameError::TooLong);
+        }
+        Ok(ContractName(name))
+    }
+
+    /// Create a new ContractName without checking the format. Expected format:
+    /// "init_<contract_name>".
+    #[inline(always)]
+    pub fn unchecked_new(name: &'a str) -> Self { ContractName(name) }
+
+    /// Get contract name used on chain: "init_<contract_name>".
+    #[inline(always)]
+    pub fn get_chain_name(&self) -> &str { self.0 }
+}
+
+/// A contract name (owned version). Expected format: "init_<contract_name>".
+#[derive(Eq, PartialEq, Debug)]
+pub struct OwnedContractName(String);
+
+impl OwnedContractName {
+    /// Create a new OwnedContractName and check the format. Expected format:
+    /// "init_<contract_name>".
+    #[inline(always)]
+    pub fn new(name: String) -> Result<Self, NewContractNameError> {
+        if !name.starts_with("init_") {
+            return Err(NewContractNameError::MissingInitPrefix);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewContractNameError::TooLong);
+        }
+        Ok(OwnedContractName(name))
+    }
+
+    /// Create a new OwnedContractName without checking the format. Expected
+    /// format: "init_<contract_name>".
+    #[inline(always)]
+    pub fn unchecked_new(name: String) -> Self { OwnedContractName(name) }
+
+    /// Get contract name used on chain: "init_<contract_name>".
+    #[inline(always)]
+    pub fn get_chain_name(&self) -> &String { &self.0 }
+
+    /// Try to extract the contract name by removing the "init_" prefix.
+    #[inline(always)]
+    pub fn contract_name(&self) -> Option<&str> { self.get_chain_name().strip_prefix("init_") }
+
+    /// Convert to ContractName by reference.
+    #[inline(always)]
+    pub fn as_ref(&self) -> ContractName { ContractName(self.get_chain_name().as_str()) }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewContractNameError {
+    MissingInitPrefix,
+    TooLong,
+}
+
+impl fmt::Display for NewContractNameError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NewContractNameError::*;
+        match self {
+            MissingInitPrefix => write!(f, "Contract names have the format 'init_<contract_name>'"),
+            TooLong => {
+                write!(f, "Contract names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
+            }
+        }
+    }
+}
+
+/// A receive name. Expected format: "<contract_name>.<func_name>".
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub struct ReceiveName<'a>(&'a str);
+
+impl<'a> ReceiveName<'a> {
+    /// Create a new ReceiveName and check the format. Expected format:
+    /// "<contract_name>.<func_name>".
+    pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
+        if !name.contains('.') {
+            return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewReceiveNameError::TooLong);
+        }
+        Ok(ReceiveName(name))
+    }
+
+    /// Create a new ReceiveName without checking the format. Expected format:
+    /// "<contract_name>.<func_name>".
+    pub fn unchecked_new(name: &'a str) -> Self { ReceiveName(name) }
+
+    /// Get receive name used on chain: "<contract_name>.<func_name>".
+    pub fn get_chain_name(&self) -> &str { self.0 }
+
+    /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
+    /// operation that requires memory allocation.
+    pub fn to_owned(&self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
+}
+
+/// A receive name (owned version). Expected format:
+/// "<contract_name>.<func_name>".
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct OwnedReceiveName(String);
+
+impl OwnedReceiveName {
+    /// Create a new OwnedReceiveName and check the format. Expected format:
+    /// "<contract_name>.<func_name>".
+    pub fn new(name: String) -> Result<Self, NewReceiveNameError> {
+        if !name.contains('.') {
+            return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewReceiveNameError::TooLong);
+        }
+        Ok(OwnedReceiveName(name))
+    }
+
+    /// Create a new OwnedReceiveName without checking the format. Expected
+    /// format: "<contract_name>.<func_name>".
+    pub fn unchecked_new(name: String) -> Self { OwnedReceiveName(name) }
+
+    /// Get receive name used on chain: "<contract_name>.<func_name>".
+    pub fn get_chain_name(&self) -> &String { &self.0 }
+
+    /// Try to extract the contract name by splitting at the first dot.
+    pub fn contract_name(&self) -> Option<&str> { self.get_name_parts().map(|parts| parts.0) }
+
+    /// Try to extract the func name by splitting at the first dot.
+    pub fn func_name(&self) -> Option<&str> { self.get_name_parts().map(|parts| parts.1) }
+
+    /// Try to extract (contract_name, func_name) by splitting at the first dot.
+    fn get_name_parts(&self) -> Option<(&str, &str)> {
+        let mut splitter = self.get_chain_name().splitn(2, '.');
+        let contract = splitter.next()?;
+        let func = splitter.next()?;
+        Some((contract, func))
+    }
+
+    /// Convert to ReceiveName by reference.
+    pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewReceiveNameError {
+    MissingDotSeparator,
+    TooLong,
+}
+
+impl fmt::Display for NewReceiveNameError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NewReceiveNameError::*;
+        match self {
+            MissingDotSeparator => {
+                f.write_str("Receive names have the format '<contract_name>.<func_name>'.")
+            }
+            TooLong => {
+                write!(f, "Receive names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
+            }
+        }
+    }
+}
+
 /// Genesis block has slot number 0, and otherwise it is always the case that a
 /// parent of a block has a slot number strictly less than the block itself.
 /// However in contrast to `BlockHeight`, slot numbers are not strictly
@@ -857,7 +1032,7 @@ pub mod attributes {
 /// }
 ///
 /// #[receive(contract = "mycontract", name="some_receive_name")]
-/// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+/// fn contract_receive<R: HasReceiveContext, L: HasLogger, A: HasActions>(
 ///     ctx: &R,
 ///     receive_amount: Amount,
 ///     logger: &mut L,
@@ -967,5 +1142,114 @@ mod test {
                 + 1000 * 60 * 3      // 3m
                 + 1000 * 60 * 60 * 2 // 2h
         )
+    }
+
+    #[test]
+    fn test_valid_new_contract_name() {
+        let contract_name = ContractName::new("init_contract");
+        assert!(contract_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_contract_name_missing_prefix() {
+        let contract_name = ContractName::new("no_init_prefix");
+        assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix))
+    }
+
+    #[test]
+    fn test_invalid_new_contract_name_too_long() {
+        // Is too long when the prefix is included.
+        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize));
+        let contract_name = ContractName::new(long_name.as_str());
+        assert_eq!(contract_name, Err(NewContractNameError::TooLong))
+    }
+
+    #[test]
+    fn test_getters_for_contract_name() {
+        let expected_chain_name = "init_contract";
+        let contract_name = ContractName::new(expected_chain_name).unwrap();
+        assert_eq!(contract_name.get_chain_name(), expected_chain_name);
+    }
+
+    #[test]
+    fn test_valid_new_owned_contract_name() {
+        let contract_name = OwnedContractName::new("init_contract".to_string());
+        assert!(contract_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_owned_contract_name_missing_prefix() {
+        let contract_name = OwnedContractName::new("no_init_prefix".to_string());
+        assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix))
+    }
+
+    #[test]
+    fn test_invalid_new_owned_contract_name_too_long() {
+        // Is too long when the prefix is included.
+        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize));
+        let contract_name = OwnedContractName::new(long_name);
+        assert_eq!(contract_name, Err(NewContractNameError::TooLong))
+    }
+
+    #[test]
+    fn test_getters_for_owned_contract_name() {
+        let contract_name = OwnedContractName::new("init_contract".to_string()).unwrap();
+        assert_eq!(contract_name.get_chain_name(), "init_contract");
+        assert_eq!(contract_name.contract_name(), Some("contract"));
+    }
+
+    #[test]
+    fn test_valid_new_receive_name() {
+        let receive_name = ReceiveName::new("contract.receive");
+        assert!(receive_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_receive_name_missing_dot() {
+        let receive_name = ReceiveName::new("no_dot_separator");
+        assert_eq!(receive_name, Err(NewReceiveNameError::MissingDotSeparator))
+    }
+
+    #[test]
+    fn test_invalid_new_receive_name_too_long() {
+        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize);
+        let long_name = format!("{}.{}", long_str, long_str);
+        let contract_name = ReceiveName::new(long_name.as_str());
+        assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
+    }
+
+    #[test]
+    fn test_getters_for_receive_name() {
+        let expected_chain_name = "contract.receive";
+        let receive_name = ReceiveName::new(expected_chain_name).unwrap();
+        assert_eq!(receive_name.get_chain_name(), expected_chain_name);
+    }
+
+    #[test]
+    fn test_valid_new_owned_receive_name() {
+        let receive_name = OwnedReceiveName::new("contract.receive".to_string());
+        assert!(receive_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_owned_receive_name_missing_dot() {
+        let receive_name = OwnedReceiveName::new("no_dot_separator".to_string());
+        assert_eq!(receive_name, Err(NewReceiveNameError::MissingDotSeparator))
+    }
+
+    #[test]
+    fn test_invalid_new_owned_receive_name_too_long() {
+        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize);
+        let long_name = format!("{}.{}", long_str, long_str);
+        let contract_name = OwnedReceiveName::new(long_name);
+        assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
+    }
+
+    #[test]
+    fn test_getters_for_owned_receive_name() {
+        let receive_name = OwnedReceiveName::new("contract.receive".to_string()).unwrap();
+        assert_eq!(receive_name.get_chain_name(), "contract.receive");
+        assert_eq!(receive_name.contract_name(), Some("contract"));
+        assert_eq!(receive_name.func_name(), Some("receive"));
     }
 }
