@@ -15,6 +15,7 @@ import Lens.Micro.Platform
 import qualified Data.Vector as Vec
 import Data.Foldable
 import Data.Maybe
+import System.FilePath
 
 import Data.Text(Text)
 import qualified Data.HashMap.Strict as Map
@@ -163,10 +164,13 @@ main = cmdArgsRun mode >>=
                       die $ "Could not decode genesis parameters: " ++ show err
                     Success params -> case gdVersion of
                       3 -> do
-                        let genesisData = P1.parametersToGenesisData params
+                        let genesisData = GDP1 $ P1.parametersToGenesisData params
                         putStrLn "Successfully generated genesis data."
-                        LBS.writeFile gdOutput (S.runPutLazy $ P1.putVersionedGenesisData genesisData)
-                        putStrLn $ "Wrote genesis data to file " ++ show gdOutput
+                        LBS.writeFile gdOutput (S.runPutLazy $ putVersionedGenesisData genesisData)
+                        putStrLn $ "Wrote genesis data to file " ++ gdOutput
+                        let hashFile = takeDirectory gdOutput </> "genesis_hash"
+                        LBS.writeFile hashFile (encode [genesisBlockHash genesisData])
+                        putStrLn $ "Wrote genesis hash list to file " ++ hashFile
                         exitSuccess
                       n -> do
                         putStrLn $ "Unsupported genesis data version: " ++ show n
