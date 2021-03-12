@@ -260,7 +260,9 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::ContractName(size_len) => {
             if let Value::Object(fields) = json {
-                let contract = fields.get("contract").context("Missing field 'contract' of type JSON String")?;
+                let contract = fields
+                    .get("contract")
+                    .context("Missing field 'contract' of type JSON String")?;
                 ensure!(fields.len() == 1, "Expected only one field");
                 if let Value::String(name) = contract {
                     let contract_name = format!("init_{}", name);
@@ -277,8 +279,11 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::ReceiveName(size_len) => {
             if let Value::Object(fields) = json {
-                let contract = fields.get("contract").context("Missing field 'contract' of type JSON String")?;
-                let func = fields.get("func").context("Missing field 'func' of type JSON String")?;
+                let contract = fields
+                    .get("contract")
+                    .context("Missing field 'contract' of type JSON String")?;
+                let func =
+                    fields.get("func").context("Missing field 'func' of type JSON String")?;
                 ensure!(fields.len() == 2, "Expected only two fields");
                 if let Value::String(contract) = contract {
                     if let Value::String(func) = func {
