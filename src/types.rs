@@ -620,7 +620,7 @@ impl<'a> ContractName<'a> {
     /// Create a new ContractName without checking the format. Expected format:
     /// "init_<contract_name>".
     #[inline(always)]
-    pub fn unchecked_new(name: &'a str) -> Self { ContractName(name) }
+    pub fn new_unchecked(name: &'a str) -> Self { ContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
@@ -648,7 +648,7 @@ impl OwnedContractName {
     /// Create a new OwnedContractName without checking the format. Expected
     /// format: "init_<contract_name>".
     #[inline(always)]
-    pub fn unchecked_new(name: String) -> Self { OwnedContractName(name) }
+    pub fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
@@ -700,7 +700,7 @@ impl<'a> ReceiveName<'a> {
 
     /// Create a new ReceiveName without checking the format. Expected format:
     /// "<contract_name>.<func_name>".
-    pub fn unchecked_new(name: &'a str) -> Self { ReceiveName(name) }
+    pub fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(&self) -> &str { self.0 }
@@ -730,7 +730,7 @@ impl OwnedReceiveName {
 
     /// Create a new OwnedReceiveName without checking the format. Expected
     /// format: "<contract_name>.<func_name>".
-    pub fn unchecked_new(name: String) -> Self { OwnedReceiveName(name) }
+    pub fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(&self) -> &String { &self.0 }
