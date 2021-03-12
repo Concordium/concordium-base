@@ -30,22 +30,44 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "concordium-contracts-common"
 version = "0.3.2"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#83bf7c279553215ca4bb324d1ea626ec4784a0d7"
+source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#bf557a29acf5a3f70a20f97bb5d56c2877a36003"
+
+[[package]]
+name = "concordium-contracts-common"
+version = "0.3.2"
 
 [[package]]
 name = "concordium-std"
 version = "0.5.0"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#83bf7c279553215ca4bb324d1ea626ec4784a0d7"
+source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#bf557a29acf5a3f70a20f97bb5d56c2877a36003"
 dependencies = [
- "concordium-contracts-common",
- "concordium-std-derive",
+ "concordium-contracts-common 0.3.2 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
+ "concordium-std-derive 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
+ "wee_alloc",
+]
+
+[[package]]
+name = "concordium-std"
+version = "0.5.0"
+dependencies = [
+ "concordium-contracts-common 0.3.2",
+ "concordium-std-derive 0.5.0",
  "wee_alloc",
 ]
 
 [[package]]
 name = "concordium-std-derive"
 version = "0.5.0"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#83bf7c279553215ca4bb324d1ea626ec4784a0d7"
+source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#bf557a29acf5a3f70a20f97bb5d56c2877a36003"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "concordium-std-derive"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -57,7 +79,7 @@ name = "counter"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]
@@ -80,7 +102,7 @@ name = "erc20"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]
@@ -88,7 +110,7 @@ name = "escrow"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]
@@ -110,7 +132,7 @@ name = "fib"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]
@@ -140,7 +162,7 @@ name = "lockup"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]
@@ -178,7 +200,7 @@ name = "rate-limited"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]
@@ -199,7 +221,7 @@ name = "simple-game"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0",
  "hex",
  "sha2",
 ]
@@ -218,10 +240,10 @@ dependencies = [
 [[package]]
 name = "two-step-transfer"
 version = "0.1.0"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#83bf7c279553215ca4bb324d1ea626ec4784a0d7"
+source = "git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main#bf557a29acf5a3f70a20f97bb5d56c2877a36003"
 dependencies = [
  "byteorder",
- "concordium-std",
+ "concordium-std 0.5.0 (git+https://github.com/Concordium/concordium-rust-smart-contracts?branch=main)",
 ]
 
 [[package]]

@@ -149,17 +149,36 @@ impl InitResult {
     }
 }
 
+/// Data that accompanies the send action.
+pub struct SendAction {
+    pub to_addr:   ContractAddress,
+    pub name:      Vec<u8>,
+    pub amount:    u64,
+    pub parameter: Vec<u8>,
+}
+
+/// Data that accompanies the simple transfer action.
+pub struct SimpleTransferAction {
+    pub to_addr: AccountAddress, // 32 bytes
+    pub amount:  u64,            // 8 bytes
+}
+
+/// Actions produced by running a receive function.
+/// NB: The first two variants are deliberately using an Rc as opposed to just
+/// inlining the SendAction/SimpleTransferAction. The reason for this is that
+/// the variants have quite a big size difference, and we do not wish to
+/// allocate 80 bytes for each Accept action, which would happen if we did not
+/// use an indirection via an Rc.
+///
+/// Rc was chosen instead of the Box because we sometimes need to clone values
+/// of this type.
 #[derive(Clone)]
 pub enum Action {
     Send {
-        to_addr:   ContractAddress,
-        name:      Vec<u8>,
-        amount:    u64,
-        parameter: Vec<u8>,
+        data: std::rc::Rc<SendAction>,
     },
     SimpleTransfer {
-        to_addr: AccountAddress,
-        amount:  u64,
+        data: std::rc::Rc<SimpleTransferAction>,
     },
     And {
         l: u32,
@@ -180,30 +199,28 @@ impl Action {
         use Action::*;
         match self {
             Send {
-                to_addr,
-                name,
-                amount,
-                parameter,
+                data,
             } => {
-                let mut out = Vec::with_capacity(1 + 8 + 8 + name.len() + 4 + parameter.len() + 4);
+                let name_len = data.name.len();
+                let param_len = data.parameter.len();
+                let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
                 out.push(0);
-                out.extend_from_slice(&to_addr.index.to_be_bytes());
-                out.extend_from_slice(&to_addr.subindex.to_be_bytes());
-                out.extend_from_slice(&(name.len() as u16).to_be_bytes());
-                out.extend_from_slice(&name);
-                out.extend_from_slice(&amount.to_be_bytes());
-                out.extend_from_slice(&(parameter.len() as u16).to_be_bytes());
-                out.extend_from_slice(&parameter);
+                out.extend_from_slice(&data.to_addr.index.to_be_bytes());
+                out.extend_from_slice(&data.to_addr.subindex.to_be_bytes());
+                out.extend_from_slice(&(name_len as u16).to_be_bytes());
+                out.extend_from_slice(&data.name);
+                out.extend_from_slice(&data.amount.to_be_bytes());
+                out.extend_from_slice(&(param_len as u16).to_be_bytes());
+                out.extend_from_slice(&data.parameter);
                 out
             }
             SimpleTransfer {
-                to_addr,
-                amount,
+                data,
             } => {
                 let mut out = Vec::with_capacity(1 + 32 + 8);
                 out.push(1);
-                out.extend_from_slice(&to_addr.0);
-                out.extend_from_slice(&amount.to_be_bytes());
+                out.extend_from_slice(&data.to_addr.0);
+                out.extend_from_slice(&data.amount.to_be_bytes());
                 out
             }
             Or {
@@ -473,7 +490,7 @@ impl ValidateImportExport for ConcordiumAllowedImports {
                 "get_parameter_size" => type_matches!(ty => []; I32),
                 "get_parameter_section" => type_matches!(ty => [I32, I32, I32]; I32),
                 "get_policy_section" => type_matches!(ty => [I32, I32, I32]; I32),
-                "log_event" => type_matches!(ty => [I32, I32]),
+                "log_event" => type_matches!(ty => [I32, I32]; I32),
                 "load_state" => type_matches!(ty => [I32, I32, I32]; I32),
                 "write_state" => type_matches!(ty => [I32, I32, I32]; I32),
                 "resize_state" => type_matches!(ty => [I32]; I32),
@@ -518,6 +535,9 @@ impl ValidateImportExport for ConcordiumAllowedImports {
 }
 
 pub fn is_valid_receive_name(bs: &str) -> bool {
+    if bs.as_bytes().len() > MAX_EXPORT_NAME_LEN {
+        return false;
+    }
     let valid_characters =
         bs.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
     valid_characters && bs.contains('.')

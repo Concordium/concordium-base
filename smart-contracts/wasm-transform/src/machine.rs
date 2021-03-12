@@ -412,6 +412,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     } // else do nothing and start executing the if branch
                 }
                 InternalOpcode::Br => {
+                    // we could optimize this for the common case of jumping to end/beginning of a
+                    // current block.
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     stack.set_pos(stack.size() - diff as usize);
@@ -427,6 +429,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
+                    // we could optimize this for the common case of jumping to end/beginning of a
+                    // current block.
                     let cur_size = stack.size();
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
@@ -516,12 +520,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         function_frames.push(current_frame);
                         for ty in f.locals() {
                             match ty {
-                                ValueType::I32 => stack.push(StackValue {
-                                    short: 0,
-                                }),
-                                ValueType::I64 => stack.push(StackValue {
-                                    long: 0,
-                                }),
+                                ValueType::I32 => stack.push(StackValue::from(0u32)),
+                                ValueType::I64 => stack.push(StackValue::from(0u64)),
                             }
                         }
                         instructions = f.code();

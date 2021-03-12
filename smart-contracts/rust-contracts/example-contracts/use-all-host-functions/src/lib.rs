@@ -16,14 +16,18 @@ fn contract_receive<A: HasActions>(
     logger: &mut impl HasLogger,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
-    logger.log_bytes(&[1, 2, 3]); // Exercises log_event()
+    logger.log_raw(&[1, 2, 3])?; // Exercises log_event()
     let _x: u8 = ctx.parameter_cursor().get()?; // Exercises get_parameter_size() & get_parameter_section()
     let state_contents: [u8; 32] = state.get()?; // Exercises state_size() & load_state()
     state.write(&state_contents)?; // Exercises write_state()
     state.reserve(0); // Exercises state_size() & resize_state()
                       // get_receive_ctx_size() currently unreachable
-    Ok(A::send(&ctx.self_address(), "receive", Amount::from_micro_gtu(100), &[1, 2, 3]).and_then(
-        A::simple_transfer(&ctx.owner(), Amount::from_micro_gtu(100)).or_else(A::accept()),
-    ))
+    Ok(A::send_raw(
+        &ctx.self_address(),
+        ReceiveName::new_unchecked("use_all.receive"),
+        Amount::from_micro_gtu(100),
+        &[1, 2, 3],
+    )
+    .and_then(A::simple_transfer(&ctx.owner(), Amount::from_micro_gtu(100)).or_else(A::accept())))
     // Exercises combine_and, combine_or, send, simple_transfer and accept
 }

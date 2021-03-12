@@ -8,7 +8,7 @@ mod validation_tests;
 
 use anyhow::{anyhow, bail, ensure};
 use concordium_contracts_common::*;
-use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE, MAX_PARAMETER_SIZE};
+use constants::*;
 use machine::Value;
 use std::{
     collections::{BTreeMap, LinkedList},
@@ -40,7 +40,20 @@ impl Logs {
         }
     }
 
-    pub fn log_event(&mut self, event: Vec<u8>) { self.logs.push_back(event); }
+    /// The return value is
+    ///
+    /// - 0 if data was not logged because it would exceed maximum number of
+    ///   logs
+    /// - 1 if data was logged.
+    pub fn log_event(&mut self, event: Vec<u8>) -> i32 {
+        let cur_len = self.logs.len();
+        if cur_len < constants::MAX_NUM_LOGS {
+            self.logs.push_back(event);
+            1
+        } else {
+            0
+        }
+    }
 
     pub fn iterate(&self) -> impl Iterator<Item = &Vec<u8>> { self.logs.iter() }
 
@@ -98,8 +111,16 @@ impl Energy {
         }
     }
 
-    /// TODO: This needs more specification. At the moment it is not used, but
-    /// should be.
+    /// Charge energy for allocating the given number of pages.
+    /// Since there is a hard limit on the amount of memory this is not so
+    /// essential. The base cost of calling this host function is already
+    /// covered by the metering transformation, hence if num_pages=0 it is
+    /// OK for this function to charge nothing.
+    ///
+    /// This function will charge regardless of whether memory allocation
+    /// actually happens, i.e., even if growing the memory would go over the
+    /// maximum. This is OK since trying to allocate too much memory is likely
+    /// going to lead to program failure anyhow.
     pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()> {
         let to_charge = u64::from(num_pages) * u64::from(MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
         self.tick_energy(to_charge)
@@ -125,9 +146,12 @@ impl Outcome {
         let response = self.cur_state.len();
         let addr: [u8; 32] = bytes.try_into()?;
         let to_addr = AccountAddress(addr);
-        self.cur_state.push(Action::SimpleTransfer {
+        let data = std::rc::Rc::new(SimpleTransferAction {
             to_addr,
             amount,
+        });
+        self.cur_state.push(Action::SimpleTransfer {
+            data,
         });
         Ok(response as u32)
     }
@@ -154,11 +178,14 @@ impl Outcome {
             index:    addr_index,
             subindex: addr_subindex,
         };
-        self.cur_state.push(Action::Send {
+        let data = std::rc::Rc::new(SendAction {
             to_addr,
             name,
             amount,
             parameter,
+        });
+        self.cur_state.push(Action::Send {
+            data,
         });
         Ok(response as u32)
     }
@@ -243,41 +270,42 @@ impl State {
     }
 }
 
-struct InitHost<'a> {
+pub struct InitHost<'a> {
     /// Remaining energy for execution.
-    energy: Energy,
+    pub energy: Energy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    activation_frames: u32,
+    pub activation_frames: u32,
     /// Logs produced during execution.
-    logs: Logs,
+    pub logs: Logs,
     /// The contract's state.
-    state: State,
+    pub state: State,
     /// The parameter to the init method.
-    param: &'a [u8],
+    pub param: &'a [u8],
     /// The init context for this invocation.
-    init_ctx: &'a InitContext<&'a [u8]>,
+    pub init_ctx: &'a InitContext<&'a [u8]>,
 }
 
-struct ReceiveHost<'a> {
+pub struct ReceiveHost<'a> {
     /// Remaining energy for execution.
-    energy: Energy,
+    pub energy: Energy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    activation_frames: u32,
+    pub activation_frames: u32,
     /// Logs produced during execution.
-    logs: Logs,
+    pub logs: Logs,
     /// The contract's state.
-    state: State,
+    pub state: State,
     /// The parameter to the init method.
-    param: &'a [u8],
+    pub param: &'a [u8],
     /// Outcomes of the execution, i.e., the actions tree.
-    outcomes: Outcome,
+    pub outcomes: Outcome,
     /// The receive context for this call.
-    receive_ctx: &'a ReceiveContext<&'a [u8]>,
+    pub receive_ctx: &'a ReceiveContext<&'a [u8]>,
 }
 
 pub trait HasCommon {
+    fn energy(&mut self) -> &mut Energy;
     fn logs(&mut self) -> &mut Logs;
     fn state(&mut self) -> &mut State;
     fn param(&self) -> &[u8];
@@ -286,6 +314,8 @@ pub trait HasCommon {
 }
 
 impl<'a> HasCommon for InitHost<'a> {
+    fn energy(&mut self) -> &mut Energy { &mut self.energy }
+
     fn logs(&mut self) -> &mut Logs { &mut self.logs }
 
     fn state(&mut self) -> &mut State { &mut self.state }
@@ -298,6 +328,8 @@ impl<'a> HasCommon for InitHost<'a> {
 }
 
 impl<'a> HasCommon for ReceiveHost<'a> {
+    fn energy(&mut self) -> &mut Energy { &mut self.energy }
+
     fn logs(&mut self) -> &mut Logs { &mut self.logs }
 
     fn state(&mut self) -> &mut State { &mut self.state }
@@ -317,51 +349,69 @@ fn call_common<C: HasCommon>(
 ) -> machine::RunResult<()> {
     match f {
         CommonFunc::GetParameterSize => {
+            // the cost of this function is adequately reflected by the base cost of a
+            // function call so we do not charge extra.
             stack.push_value(host.param().len() as u32);
         }
         CommonFunc::GetParameterSection => {
             let offset = unsafe { stack.pop_u32() } as usize;
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            let write_end = start + length; // this cannot overflow on 64-bit machines.
+            // charge energy linearly in the amount of data written.
+            host.energy().tick_energy(copy_from_host_cost(length))?;
+            let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
-            let end = std::cmp::min(offset + length, host.param().len());
+            let end = std::cmp::min(offset + length as usize, host.param().len());
             ensure!(offset <= end, "Attempting to read non-existent parameter.");
             let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
             stack.push_value(amt as u32);
         }
         CommonFunc::GetPolicySection => {
             let offset = unsafe { stack.pop_u32() } as usize;
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
+            // charge energy linearly in the amount of data written.
+            host.energy().tick_energy(copy_from_host_cost(length))?;
             let start = unsafe { stack.pop_u32() } as usize;
-            let write_end = start + length; // this cannot overflow on 64-bit machines.
+            let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
-            let end = std::cmp::min(offset + length, host.policies_bytes().len());
+            let end = std::cmp::min(offset + length as usize, host.policies_bytes().len());
             ensure!(offset <= end, "Attempting to read non-existent policy.");
             let amt = (&mut memory[start..write_end]).write(&host.policies_bytes()[offset..end])?;
             stack.push_value(amt as u32);
         }
         CommonFunc::LogEvent => {
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            let end = start + length;
+            let end = start + length as usize;
             ensure!(end <= memory.len(), "Illegal memory access.");
-            host.logs().log_event(memory[start..end].to_vec());
+            if length <= constants::MAX_LOG_SIZE {
+                // only charge if we actually log something.
+                host.energy().tick_energy(log_event_cost(length))?;
+                stack.push_value(host.logs().log_event(memory[start..end].to_vec()))
+            } else {
+                // otherwise the cost is adequately reflected by just the cost of a function
+                // call.
+                stack.push_value(-1i32)
+            }
         }
         CommonFunc::LoadState => {
             let offset = unsafe { stack.pop_u32() };
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            let end = start + length; // this cannot overflow on 64-bit machines.
+            // charge energy linearly in the amount of data written.
+            host.energy().tick_energy(copy_from_host_cost(length))?;
+            let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
             let res = host.state().load_state(offset, &mut memory[start..end])?;
             stack.push_value(res);
         }
         CommonFunc::WriteState => {
             let offset = unsafe { stack.pop_u32() };
-            let length = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            let end = start + length; // this cannot overflow on 64-bit machines.
+            // charge energy linearly in the amount of data written.
+            host.energy().tick_energy(copy_to_host_cost(length))?;
+            let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
             let res = host.state().write_state(offset, &memory[start..end])?;
             stack.push_value(res);
@@ -369,12 +419,22 @@ fn call_common<C: HasCommon>(
         CommonFunc::ResizeState => {
             let new_size = stack.pop();
             let new_size = unsafe { new_size.short } as u32;
+            let old_size = host.state().len();
+            if new_size > old_size {
+                // resizing is very similar to writing 0 to the newly allocated parts,
+                // but since we don't have to read anything we charge it more cheaply.
+                host.energy().tick_energy(additional_state_size_cost(new_size - old_size))?;
+            }
             stack.push_value(host.state().resize_state(new_size));
         }
         CommonFunc::StateSize => {
+            // the cost of this function is adequately reflected by the base cost of a
+            // function call so we do not charge extra.
             stack.push_value(host.state().len());
         }
         CommonFunc::GetSlotTime => {
+            // the cost of this function is adequately reflected by the base cost of a
+            // function call so we do not charge extra.
             stack.push_value(host.metadata().slot_time.timestamp_millis());
         }
     }
@@ -432,9 +492,11 @@ impl<'a> ReceiveHost<'a> {
     ) -> ExecResult<()> {
         match rof {
             ReceiveOnlyFunc::Accept => {
+                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
                 stack.push_value(self.outcomes.accept());
             }
             ReceiveOnlyFunc::SimpleTransfer => {
+                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
                 let amount = unsafe { stack.pop_u64() };
                 let addr_start = unsafe { stack.pop_u32() } as usize;
                 // Overflow is not possible in the next line on 64-bit machines.
@@ -444,10 +506,12 @@ impl<'a> ReceiveHost<'a> {
                 )
             }
             ReceiveOnlyFunc::Send => {
-                let parameter_len = unsafe { stack.pop_u32() } as usize;
+                // all `as usize` are safe on 64-bit systems since we are converging from a u32
+                let parameter_len = unsafe { stack.pop_u32() };
+                self.energy().tick_energy(action_send_cost(parameter_len))?;
                 let parameter_start = unsafe { stack.pop_u32() } as usize;
                 // Overflow is not possible in the next line on 64-bit machines.
-                let parameter_end = parameter_start + parameter_len;
+                let parameter_end = parameter_start + parameter_len as usize;
                 let amount = unsafe { stack.pop_u64() };
                 let receive_name_len = unsafe { stack.pop_u32() } as usize;
                 let receive_name_start = unsafe { stack.pop_u32() } as usize;
@@ -467,12 +531,14 @@ impl<'a> ReceiveHost<'a> {
                 stack.push_value(res);
             }
             ReceiveOnlyFunc::CombineAnd => {
+                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
                 let right = unsafe { stack.pop_u32() };
                 let left = unsafe { stack.pop_u32() };
                 let res = self.outcomes.combine_and(left, right)?;
                 stack.push_value(res);
             }
             ReceiveOnlyFunc::CombineOr => {
+                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
                 let right = unsafe { stack.pop_u32() };
                 let left = unsafe { stack.pop_u32() };
                 let res = self.outcomes.combine_or(left, right)?;
@@ -497,8 +563,10 @@ impl<'a> ReceiveHost<'a> {
             ReceiveOnlyFunc::GetReceiveSender => {
                 let start = unsafe { stack.pop_u32() } as usize;
                 ensure!(start < memory.len(), "Illegal memory access for receive sender.");
-                let bytes = to_bytes(self.receive_ctx.sender());
-                (&mut memory[start..]).write_all(&bytes)?;
+                self.receive_ctx
+                    .sender()
+                    .serial::<&mut [u8]>(&mut &mut memory[start..])
+                    .map_err(|_| anyhow!("Memory out of bounds."))?;
             }
             ReceiveOnlyFunc::GetReceiveOwner => {
                 let start = unsafe { stack.pop_u32() } as usize;
@@ -524,7 +592,10 @@ impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<()> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
+            ImportFunc::ChargeEnergy => {
+                let amount = unsafe { stack.pop_u64() };
+                self.energy.tick_energy(amount)?;
+            }
             ImportFunc::TrackCall => {
                 if let Some(fr) = self.activation_frames.checked_sub(1) {
                     self.activation_frames = fr

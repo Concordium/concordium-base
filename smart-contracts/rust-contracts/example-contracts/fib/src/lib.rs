@@ -32,9 +32,18 @@ fn contract_receive<A: HasActions>(
         Ok(A::accept())
     } else {
         let self_address = ctx.self_address();
-        Ok(A::send(&self_address, "fib.receive", Amount::zero(), &(n - 1).to_le_bytes()).and_then(
-            A::send(&self_address, "fib.receive", Amount::zero(), &(n - 2).to_le_bytes()),
-        ))
+        Ok(A::send_raw(
+            &self_address,
+            ReceiveName::new_unchecked("fib.receive"),
+            Amount::zero(),
+            &(n - 1).to_le_bytes(),
+        )
+        .and_then(A::send_raw(
+            &self_address,
+            ReceiveName::new_unchecked("fib.receive"),
+            Amount::zero(),
+            &(n - 2).to_le_bytes(),
+        )))
     }
 }
 
