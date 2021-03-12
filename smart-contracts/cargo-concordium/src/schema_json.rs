@@ -262,44 +262,52 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Object(fields) = json {
                 let contract = fields
                     .get("contract")
-                    .context("Missing field 'contract' of type JSON String")?;
-                ensure!(fields.len() == 1, "Expected only one field");
+                    .context("Missing field 'contract' of type JSON String.")?;
+                ensure!(
+                    fields.len() == 1,
+                    "Expected only one field but {} were provided.",
+                    fields.len()
+                );
                 if let Value::String(name) = contract {
                     let contract_name = format!("init_{}", name);
                     let len = contract_name.len();
                     write_bytes_for_length_of_size(len, size_len, out)?;
                     serial_vector_no_length(contract_name.as_bytes(), out)
-                        .map_err(|_| anyhow!("Failed writing"))
+                        .map_err(|_| anyhow!("Failed writing."))
                 } else {
-                    bail!("JSON String required for field 'contract'");
+                    bail!("JSON String required for field 'contract'.");
                 }
             } else {
-                bail!("JSON Object required for contract name")
+                bail!("JSON Object required for contract name.")
             }
         }
         Type::ReceiveName(size_len) => {
             if let Value::Object(fields) = json {
                 let contract = fields
                     .get("contract")
-                    .context("Missing field 'contract' of type JSON String")?;
+                    .context("Missing field 'contract' of type JSON String.")?;
                 let func =
-                    fields.get("func").context("Missing field 'func' of type JSON String")?;
-                ensure!(fields.len() == 2, "Expected only two fields");
+                    fields.get("func").context("Missing field 'func' of type JSON String.")?;
+                ensure!(
+                    fields.len() == 2,
+                    "Expected exactly two fields but {} were provided.",
+                    fields.len()
+                );
                 if let Value::String(contract) = contract {
                     if let Value::String(func) = func {
                         let receive_name = format!("{}.{}", contract, func);
                         let len = receive_name.len();
                         write_bytes_for_length_of_size(len, size_len, out)?;
                         serial_vector_no_length(receive_name.as_bytes(), out)
-                            .map_err(|_| anyhow!("Failed writing"))
+                            .map_err(|_| anyhow!("Failed writing."))
                     } else {
-                        bail!("JSON String required for field 'func'");
+                        bail!("JSON String required for field 'func'.");
                     }
                 } else {
-                    bail!("JSON String required for field 'contract'");
+                    bail!("JSON String required for field 'contract'.");
                 }
             } else {
-                bail!("JSON Object required for contract name")
+                bail!("JSON Object required for contract name.")
             }
         }
         Type::U128 => {
