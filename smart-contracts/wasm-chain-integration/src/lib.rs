@@ -357,7 +357,7 @@ fn call_common<C: HasCommon>(
             let offset = unsafe { stack.pop_u32() } as usize;
             let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            // change energy linearly in the amount of data written.
+            // charge energy linearly in the amount of data written.
             host.energy().tick_energy(copy_from_host_cost(length))?;
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
@@ -369,7 +369,7 @@ fn call_common<C: HasCommon>(
         CommonFunc::GetPolicySection => {
             let offset = unsafe { stack.pop_u32() } as usize;
             let length = unsafe { stack.pop_u32() };
-            // change energy linearly in the amount of data written.
+            // charge energy linearly in the amount of data written.
             host.energy().tick_energy(copy_from_host_cost(length))?;
             let start = unsafe { stack.pop_u32() } as usize;
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
@@ -398,7 +398,7 @@ fn call_common<C: HasCommon>(
             let offset = unsafe { stack.pop_u32() };
             let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            // change energy linearly in the amount of data written.
+            // charge energy linearly in the amount of data written.
             host.energy().tick_energy(copy_from_host_cost(length))?;
             let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
@@ -409,7 +409,7 @@ fn call_common<C: HasCommon>(
             let offset = unsafe { stack.pop_u32() };
             let length = unsafe { stack.pop_u32() };
             let start = unsafe { stack.pop_u32() } as usize;
-            // change energy linearly in the amount of data written.
+            // charge energy linearly in the amount of data written.
             host.energy().tick_energy(copy_to_host_cost(length))?;
             let end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(end <= memory.len(), "Illegal memory access.");
