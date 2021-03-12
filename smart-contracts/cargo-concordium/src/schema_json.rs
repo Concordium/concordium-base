@@ -260,15 +260,16 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::ContractName(size_len) => {
             if let Value::Object(fields) = json {
+                let contract = fields.get("contract").context("Missing field 'contract' of type JSON String")?;
                 ensure!(fields.len() == 1, "Expected only one field");
-                if let Some(Value::String(name)) = fields.get("contract") {
+                if let Value::String(name) = contract {
                     let contract_name = format!("init_{}", name);
                     let len = contract_name.len();
                     write_bytes_for_length_of_size(len, size_len, out)?;
                     serial_vector_no_length(contract_name.as_bytes(), out)
                         .map_err(|_| anyhow!("Failed writing"))
                 } else {
-                    bail!("Missing field 'contract' of type JSON String")
+                    bail!("JSON String required for field 'contract'");
                 }
             } else {
                 bail!("JSON Object required for contract name")
@@ -276,19 +277,21 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::ReceiveName(size_len) => {
             if let Value::Object(fields) = json {
-                ensure!(fields.len() == 2, "Expected object with two fields 'contract' and 'func'");
-                if let Some(Value::String(contract)) = fields.get("contract") {
-                    if let Some(Value::String(func)) = fields.get("func") {
+                let contract = fields.get("contract").context("Missing field 'contract' of type JSON String")?;
+                let func = fields.get("func").context("Missing field 'func' of type JSON String")?;
+                ensure!(fields.len() == 2, "Expected only two fields");
+                if let Value::String(contract) = contract {
+                    if let Value::String(func) = func {
                         let receive_name = format!("{}.{}", contract, func);
                         let len = receive_name.len();
                         write_bytes_for_length_of_size(len, size_len, out)?;
                         serial_vector_no_length(receive_name.as_bytes(), out)
                             .map_err(|_| anyhow!("Failed writing"))
                     } else {
-                        bail!("Missing field 'func' of type JSON String");
+                        bail!("JSON String required for field 'func'");
                     }
                 } else {
-                    bail!("Missing field 'contract' of type JSON String");
+                    bail!("JSON String required for field 'contract'");
                 }
             } else {
                 bail!("JSON Object required for contract name")
@@ -350,6 +353,8 @@ fn write_bytes_from_json_schema_fields<W: Write>(
     }
 }
 
+/// Serializes the length using the number of bytes specified by the size_len.
+/// Returns an error if the length cannot be represented by the number of bytes.
 fn write_bytes_for_length_of_size<W: Write>(
     len: usize,
     size_len: &SizeLength,
