@@ -8,11 +8,83 @@ license-file = "../../LICENSE-APACHE"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+pairing = "0.15"
+ff = "0.5"
+rand = "=0.7"
+hex = "0.4"
+serde = "1.0"
+serde_json = "1.0"
+failure = "0.1"
+chrono = "0.4"
+ed25519-dalek = "=1.0.0"
+byteorder = "1.3"
+either = "1.6"
+sha2 = "0.9"
 libc = "0.2"
 
-[dependencies.wallet]
-path = "../rust-src/wallet"
+[dependencies.crypto_common]
+path = "../rust-src/crypto_common"
 version = "0"
+
+[dependencies.curve_arithmetic]
+path = "../rust-src/curve_arithmetic"
+version = "0"
+
+[dependencies.elgamal]
+path = "../rust-src/elgamal"
+version = "0"
+
+[dependencies.dodis_yampolskiy_prf]
+path = "../rust-src/dodis_yampolskiy_prf"
+version = "0"
+
+[dependencies.id]
+path = "../rust-src/id"
+version = "0"
+
+[dependencies.pedersen_scheme]
+path = "../rust-src/pedersen_scheme"
+version = "0"
+
+[dependencies.ps_sig]
+path = "../rust-src/ps_sig"
+version = "0"
+
+[dependencies.eddsa_ed25519]
+path = "../rust-src/eddsa_ed25519"
+version = "0"
+
+[dependencies.ffi_helpers]
+path = "../rust-src/ffi_helpers"
+version = "0"
+
+[dependencies.encrypted_transfers]
+path = "../rust-src/encrypted_transfers"
+version = "0"
+
+# Dependencies for the build.rs script.
+[build-dependencies.elgamal]
+path = "../rust-src/elgamal"
+version = "0"
+
+[build-dependencies.id]
+path = "../rust-src/id"
+version = "0"
+
+[build-dependencies.crypto_common]
+path = "../rust-src/crypto_common"
+version = "0"
+
+# Use the same optimization level for building build.rs as for the library
+# itself in release mode. This is necessary because some of the dependencies
+# (e.g., id) have a `cdylib/staticlib` crate-type which builds some artifacts
+# even though they are not needed directly by the build script. This then leads
+# to name clashes and failed compilation.
+#
+# Ideally we would have the crate-type of dependencies feature configurable, but
+# this is not supported by Cargo at the moment.
+[profile.release.build-override]
+opt-level = 3
 
 # this dependency is only needed for Android.
 [target.'cfg(target_os = "android")'.dependencies]

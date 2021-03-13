@@ -1,6 +1,11 @@
 #![allow(non_snake_case)]
 #![allow(unused_assignments)]
 
+use crate::{
+    check_account_address, combine_encrypted_amounts, create_credential, create_encrypted_transfer,
+    create_id_request_and_private_data, create_pub_to_sec_transfer, create_sec_to_pub_transfer,
+    create_transfer, decrypt_encrypted_amount, generate_accounts,
+};
 use jni::{
     objects::{JClass, JString, JValue},
     sys::{jboolean, jint, jobject},
