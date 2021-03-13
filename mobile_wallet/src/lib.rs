@@ -12,12 +12,7 @@ use ed25519_dalek::Signer;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use failure::Fallible;
-use id::{
-    account_holder::{create_credential, generate_pio},
-    ffi::AttributeKind,
-    secret_sharing::Threshold,
-    types::*,
-};
+use id::{account_holder, ffi::AttributeKind, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
@@ -325,7 +320,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         threshold: SignatureThreshold(1),
     };
     let (pio, randomness) = {
-        match generate_pio(&context, threshold, &aci, &initial_acc_data) {
+        match account_holder::generate_pio(&context, threshold, &aci, &initial_acc_data) {
             Some(x) => x,
             None => bail!("Generating the pre-identity object failed."),
         }
@@ -340,7 +335,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
         // the unwrap is safe since we've generated the RegID successfully above.
-        scalar: id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
+        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
     };
 
     let response = json!({
@@ -413,7 +408,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
 
-    let cdi = create_credential(
+    let cdi = account_holder::create_credential(
         context,
         &id_object,
         &id_use_data,
@@ -599,7 +594,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_transfer_ext -> create_transfer_aux);
+    => create_transfer -> create_transfer_aux);
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
     /// UTF8-encoded string. The input string should contain the JSON payload of an
@@ -618,7 +613,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_id_request_and_private_data_ext -> create_id_request_and_private_data_aux);
+    => create_id_request_and_private_data -> create_id_request_and_private_data_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -632,7 +627,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_credential_ext -> create_credential_aux);
+    => create_credential -> create_credential_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -646,7 +641,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_encrypted_transfer_ext -> create_encrypted_transfer_aux);
+    => create_encrypted_transfer -> create_encrypted_transfer_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -660,7 +655,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_pub_to_sec_transfer_ext -> create_pub_to_sec_transfer_aux);
+    => create_pub_to_sec_transfer -> create_pub_to_sec_transfer_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -674,7 +669,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_sec_to_pub_transfer_ext -> create_sec_to_pub_transfer_aux);
+    => create_sec_to_pub_transfer -> create_sec_to_pub_transfer_aux);
 
 make_wrapper!(
     /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
@@ -690,7 +685,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointers must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => combine_encrypted_amounts_ext --> combine_encrypted_amounts_aux);
+    => combine_encrypted_amounts --> combine_encrypted_amounts_aux);
 
 make_wrapper!(
     /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
@@ -705,7 +700,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => generate_accounts_ext -> generate_accounts_aux);
+    => generate_accounts -> generate_accounts_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///
@@ -721,7 +716,7 @@ make_wrapper!(
 /// The input pointer must point to a null-terminated buffer, otherwise this
 /// function will fail in unspecified ways.
 #[no_mangle]
-pub unsafe fn decrypt_encrypted_amount_ext(input_ptr: *const c_char, success: *mut u8) -> u64 {
+pub unsafe fn decrypt_encrypted_amount(input_ptr: *const c_char, success: *mut u8) -> u64 {
     let input_str = if input_ptr.is_null() {
         *success = 0;
         return 0;
@@ -746,7 +741,7 @@ pub unsafe fn decrypt_encrypted_amount_ext(input_ptr: *const c_char, success: *m
 #[no_mangle]
 /// # Safety
 /// The input must be NUL-terminated.
-pub unsafe fn check_account_address_ext(input_ptr: *const c_char) -> u8 {
+pub unsafe fn check_account_address(input_ptr: *const c_char) -> u8 {
     let input_str = {
         match CStr::from_ptr(input_ptr).to_str() {
             Ok(s) => s,
@@ -764,14 +759,11 @@ pub unsafe fn check_account_address_ext(input_ptr: *const c_char) -> u8 {
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
+pub unsafe fn free_response_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         let _ = CString::from_raw(ptr);
     }
 }
 
-
 #[cfg(target_os = "android")]
 mod android;
-#[cfg(not(target_os = "android"))]
-mod ios;

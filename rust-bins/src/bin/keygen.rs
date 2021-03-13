@@ -20,7 +20,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use structopt::StructOpt;
 
