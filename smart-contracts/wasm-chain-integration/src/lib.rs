@@ -170,7 +170,7 @@ impl Outcome {
         ensure!(is_valid_receive_name(name_str), "Not a valid receive name.");
         let name = receive_name_bytes.to_vec();
 
-        ensure!(parameter_bytes.len() < MAX_PARAMETER_SIZE, "Parameter exceeds max size.");
+        ensure!(parameter_bytes.len() <= MAX_PARAMETER_SIZE, "Parameter exceeds max size.");
 
         let parameter = parameter_bytes.to_vec();
 
