@@ -21,8 +21,7 @@ use wasm_transform::{
     machine,
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
-    utils,
-    validate::ValidateImportExport,
+    utils, validate,
 };
 
 pub type ExecResult<A> = anyhow::Result<A>;
@@ -167,7 +166,7 @@ impl Outcome {
         let response = self.cur_state.len();
 
         let name_str = std::str::from_utf8(receive_name_bytes)?;
-        ensure!(is_valid_receive_name(name_str), "Not a valid receive name.");
+        ensure!(validate::is_valid_receive_name(name_str), "Not a valid receive name.");
         let name = receive_name_bytes.to_vec();
 
         ensure!(parameter_bytes.len() <= MAX_PARAMETER_SIZE, "Parameter exceeds max size.");
@@ -899,7 +898,7 @@ impl<I> machine::Host<I> for TrapHost {
 /// prints to standard out.
 pub struct TestHost;
 
-impl ValidateImportExport for TestHost {
+impl validate::ValidateImportExport for TestHost {
     /// Simply ensure that there are no duplicates.
     #[inline(always)]
     fn validate_import_function(
