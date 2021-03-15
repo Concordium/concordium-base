@@ -675,6 +675,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
                   | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
+                  | StakeUnderMinimumThresholdForBaking -- ^The amount provided is under the threshold required for becoming a baker
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
                   | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
                   -- |Encountered credential ID that does not exist

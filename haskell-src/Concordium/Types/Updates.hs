@@ -280,7 +280,9 @@ data Authorizations = Authorizations {
         -- |Parameter keys: transaction fee distribution
         asParamTransactionFeeDistribution :: !AccessStructure,
         -- |Parameter keys: GAS rewards
-        asParamGASRewards :: !AccessStructure
+        asParamGASRewards :: !AccessStructure,
+        -- |Parameter keys: Baker Minimum Threshold
+        asBakerStakeThreshold :: !AccessStructure
     }
     deriving (Eq, Show)
 
@@ -298,6 +300,7 @@ instance Serialize Authorizations where
         put asParamMintDistribution
         put asParamTransactionFeeDistribution
         put asParamGASRewards
+        put asBakerStakeThreshold
     get = label "deserialization update authorizations" $ do
         keyCount <- getWord16be
         asKeys <- Vec.replicateM (fromIntegral keyCount) get
@@ -318,6 +321,7 @@ instance Serialize Authorizations where
         asParamMintDistribution <- getChecked
         asParamTransactionFeeDistribution <- getChecked
         asParamGASRewards <- getChecked
+        asBakerStakeThreshold <- getChecked
         return Authorizations{..}
 
 instance HashableTo SHA256.Hash Authorizations where
@@ -349,6 +353,7 @@ instance AE.FromJSON Authorizations where
         asParamMintDistribution <- parseAS "mintDistribution"
         asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
         asParamGASRewards <- parseAS "paramGASRewards"
+        asBakerStakeThreshold <- parseAS "bakerMinimumThreshold"
         return Authorizations{..}
 
 instance AE.ToJSON Authorizations where
@@ -363,7 +368,8 @@ instance AE.ToJSON Authorizations where
                 "foundationAccount" AE..= t asParamFoundationAccount,
                 "mintDistribution" AE..= t asParamMintDistribution,
                 "transactionFeeDistribution" AE..= t asParamTransactionFeeDistribution,
-                "paramGASRewards" AE..= t asParamGASRewards
+                "paramGASRewards" AE..= t asParamGASRewards,
+                "bakerMinimumThreshold" AE..= t asBakerStakeThreshold
             ]
         where
             t AccessStructure{..} = AE.object [
@@ -395,6 +401,8 @@ data UpdateType
     -- ^Update the distribution of transaction fees
     | UpdateGASRewards
     -- ^Update the GAS rewards
+    | UpdateBakerStakeThreshold
+    -- ^Minimum amount to register as a baker
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -415,6 +423,7 @@ instance Serialize UpdateType where
     put UpdateMintDistribution = putWord8 6
     put UpdateTransactionFeeDistribution = putWord8 7
     put UpdateGASRewards = putWord8 8
+    put UpdateBakerStakeThreshold = putWord8 9
     get = getWord8 >>= \case
         0 -> return UpdateAuthorization
         1 -> return UpdateProtocol
@@ -425,6 +434,7 @@ instance Serialize UpdateType where
         6 -> return UpdateMintDistribution
         7 -> return UpdateTransactionFeeDistribution
         8 -> return UpdateGASRewards
+        9 -> return UpdateBakerStakeThreshold
         n -> fail $ "invalid update type: " ++ show n
 
 -- |Payload of a protocol update.
@@ -540,6 +550,8 @@ data UpdatePayload
     -- ^Update the distribution of transaction fees
     | GASRewardsUpdatePayload !GASRewards
     -- ^Update the GAS rewards
+    | BakerStakeThresholdPayload !Amount
+    -- ^Update the minimum amount to register as a baker
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
@@ -552,6 +564,7 @@ instance Serialize UpdatePayload where
     put (MintDistributionUpdatePayload u) = put UpdateMintDistribution >> put u
     put (TransactionFeeDistributionUpdatePayload u) = put UpdateTransactionFeeDistribution >> put u
     put (GASRewardsUpdatePayload u) = put UpdateGASRewards >> put u
+    put (BakerStakeThresholdPayload u) = put UpdateBakerStakeThreshold >> put u
     get = get >>= \case
             UpdateAuthorization -> AuthorizationUpdatePayload <$> get
             UpdateProtocol -> ProtocolUpdatePayload <$> get
@@ -562,6 +575,7 @@ instance Serialize UpdatePayload where
             UpdateMintDistribution -> MintDistributionUpdatePayload <$> get
             UpdateTransactionFeeDistribution -> TransactionFeeDistributionUpdatePayload <$> get
             UpdateGASRewards -> GASRewardsUpdatePayload <$> get
+            UpdateBakerStakeThreshold -> BakerStakeThresholdPayload <$> get
 
 $(deriveJSON defaultOptions{
     constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
@@ -580,6 +594,7 @@ updateType FoundationAccountUpdatePayload{} = UpdateFoundationAccount
 updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
+updateType BakerStakeThresholdPayload{} = UpdateBakerStakeThreshold
 
 -- |Determine if signatures from the given set of keys would be
 -- sufficient to authorize the given update.
@@ -593,6 +608,7 @@ checkUpdateAuthorizationKeys Authorizations{..} (FoundationAccountUpdatePayload 
 checkUpdateAuthorizationKeys Authorizations{..} (MintDistributionUpdatePayload _) ks = checkKeySet asParamMintDistribution ks
 checkUpdateAuthorizationKeys Authorizations{..} (TransactionFeeDistributionUpdatePayload _) ks = checkKeySet asParamTransactionFeeDistribution ks
 checkUpdateAuthorizationKeys Authorizations{..} (GASRewardsUpdatePayload _) ks = checkKeySet asParamGASRewards ks
+checkUpdateAuthorizationKeys Authorizations{..} (BakerStakeThresholdPayload _) ks = checkKeySet asBakerStakeThreshold ks
 
 -- |Signatures on an update instruction.
 -- The serialization of 'UpdateInstructionSignatures' is uniquely determined.
