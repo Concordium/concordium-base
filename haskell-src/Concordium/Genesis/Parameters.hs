@@ -34,6 +34,8 @@ data GenesisChainParameters = GenesisChainParameters
       gcpRewardParameters :: !RewardParameters
     , -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress
+    , -- |Minimum threshold required for registering as a baker.
+      gcpBakerStakeThreshold :: !Amount
     }
 
 instance FromJSON GenesisChainParameters where
@@ -46,6 +48,7 @@ instance FromJSON GenesisChainParameters where
             <*> v .: "accountCreationLimit"
             <*> v .: "rewardParameters"
             <*> v .: "foundationAccount"
+            <*> v .: "minimumThresholdForBaking"
 
 instance ToJSON GenesisChainParameters where
     toJSON GenesisChainParameters{..} =
@@ -57,6 +60,7 @@ instance ToJSON GenesisChainParameters where
             , "accountCreationLimit" AE..= gcpAccountCreationLimit
             , "rewardParameters" AE..= gcpRewardParameters
             , "foundationAccount" AE..= gcpFoundationAccount
+            , "minimumThresholdForBaking" AE..= gcpBakerStakeThreshold
             ]
 
 -- 'GenesisParameters' provides a convenient abstraction for

@@ -45,6 +45,8 @@ data ChainParameters = ChainParameters
       _cpRewardParameters :: !RewardParameters,
       -- |Foundation account index.
       _cpFoundationAccount :: !AccountIndex
+    , -- |Minimum threshold required for registering as a baker.
+      _cpBakerStakeThreshold :: !Amount
     }
     deriving (Eq, Show)
 
@@ -64,6 +66,8 @@ makeChainParameters ::
     RewardParameters ->
     -- |Foundation account
     AccountIndex ->
+    -- |Minimum threshold required for registering as a baker
+    Amount ->
     ChainParameters
 makeChainParameters
     _cpElectionDifficulty
@@ -72,7 +76,8 @@ makeChainParameters
     _cpBakerExtraCooldownEpochs
     _cpAccountCreationLimit
     _cpRewardParameters
-    _cpFoundationAccount =
+    _cpFoundationAccount
+    _cpBakerStakeThreshold =
         ChainParameters{..}
       where
         _cpEnergyRate = computeEnergyRate _cpMicroGTUPerEuro _cpEuroPerEnergy
@@ -112,6 +117,11 @@ cpFoundationAccount = lens _cpFoundationAccount (\cp fa -> cp{_cpFoundationAccou
 cpAccountCreationLimit :: Lens' ChainParameters CredentialsPerBlockLimit
 cpAccountCreationLimit = lens _cpAccountCreationLimit (\cp acl -> cp{_cpAccountCreationLimit = acl})
 
+-- |Minimum baker threshold parameter.
+{-# INLINE cpBakerStakeThreshold #-}
+cpBakerStakeThreshold :: Lens' ChainParameters Amount
+cpBakerStakeThreshold = lens _cpBakerStakeThreshold (\cp bmt -> cp{_cpBakerStakeThreshold = bmt})
+
 instance HasRewardParameters ChainParameters where
     rewardParameters = lens _cpRewardParameters (\cp rp -> cp{_cpRewardParameters = rp})
 
@@ -124,7 +134,8 @@ instance Serialize ChainParameters where
         put _cpAccountCreationLimit
         put _cpRewardParameters
         put _cpFoundationAccount
-    get = makeChainParameters <$> get <*> get <*> get <*> get <*> get <*> get <*> get
+        put _cpBakerStakeThreshold
+    get = makeChainParameters <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance HashableTo Hash.Hash ChainParameters where
     getHash = Hash.hash . encode
@@ -141,6 +152,7 @@ instance FromJSON ChainParameters where
             <*> v .: "accountCreationLimit"
             <*> v .: "rewardParameters"
             <*> v .: "foundationAccountIndex"
+            <*> v .: "minimumThresholdForBaking"
 
 instance ToJSON ChainParameters where
     toJSON ChainParameters{..} =
@@ -152,6 +164,7 @@ instance ToJSON ChainParameters where
               "accountCreationLimit" AE..= _cpAccountCreationLimit,
               "rewardParameters" AE..= _cpRewardParameters,
               "foundationAccountIndex" AE..= _cpFoundationAccount
+            , "minimumThresholdForBaking" AE..= _cpBakerStakeThreshold
             ]
 
 -- |Parameters that affect finalization.
