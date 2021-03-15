@@ -243,6 +243,7 @@ parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainPara
             gcpAccountCreationLimit
             gcpRewardParameters
             foundationAccountIndex
+            gcpBakerStakeThreshold
     foundationAccountIndex = case Vec.findIndex ((gcpFoundationAccount ==) . gaAddress) genesisAccounts of
         Nothing -> error "Foundation account is missing"
         Just i -> fromIntegral i

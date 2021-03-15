@@ -8,6 +8,8 @@ import Data.Hashable
 import qualified Data.Text as Text
 import Data.Char
 import Test.QuickCheck
+import Concordium.Types.HashableTo
+import qualified Concordium.Crypto.SHA256 as Hash
 
 import qualified Text.ParserCombinators.ReadP as RP
 
@@ -29,6 +31,11 @@ instance FromJSON Amount where
 
 instance ToJSON Amount where
   toJSON = String . Text.pack . show . _amount
+
+instance HashableTo Hash.Hash Amount where
+    getHash = Hash.hash . S.encode
+
+instance (Monad m) => MHashableTo m Hash.Hash Amount where
 
 -- |Converts an amount to GTU decimal representation.
 amountToString :: Amount -> String
