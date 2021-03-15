@@ -353,7 +353,7 @@ instance AE.FromJSON Authorizations where
         asParamMintDistribution <- parseAS "mintDistribution"
         asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
         asParamGASRewards <- parseAS "paramGASRewards"
-        asBakerStakeThreshold <- parseAS "bakerMinimumThreshold"
+        asBakerStakeThreshold <- parseAS "bakerStakeThreshold"
         return Authorizations{..}
 
 instance AE.ToJSON Authorizations where
@@ -369,7 +369,7 @@ instance AE.ToJSON Authorizations where
                 "mintDistribution" AE..= t asParamMintDistribution,
                 "transactionFeeDistribution" AE..= t asParamTransactionFeeDistribution,
                 "paramGASRewards" AE..= t asParamGASRewards,
-                "bakerMinimumThreshold" AE..= t asBakerStakeThreshold
+                "bakerStakeThreshold" AE..= t asBakerStakeThreshold
             ]
         where
             t AccessStructure{..} = AE.object [
@@ -550,7 +550,7 @@ data UpdatePayload
     -- ^Update the distribution of transaction fees
     | GASRewardsUpdatePayload !GASRewards
     -- ^Update the GAS rewards
-    | BakerStakeThresholdPayload !Amount
+    | BakerStakeThresholdUpdatePayload !Amount
     -- ^Update the minimum amount to register as a baker
     deriving (Eq, Show)
 
@@ -564,7 +564,7 @@ instance Serialize UpdatePayload where
     put (MintDistributionUpdatePayload u) = put UpdateMintDistribution >> put u
     put (TransactionFeeDistributionUpdatePayload u) = put UpdateTransactionFeeDistribution >> put u
     put (GASRewardsUpdatePayload u) = put UpdateGASRewards >> put u
-    put (BakerStakeThresholdPayload u) = put UpdateBakerStakeThreshold >> put u
+    put (BakerStakeThresholdUpdatePayload u) = put UpdateBakerStakeThreshold >> put u
     get = get >>= \case
             UpdateAuthorization -> AuthorizationUpdatePayload <$> get
             UpdateProtocol -> ProtocolUpdatePayload <$> get
@@ -575,7 +575,7 @@ instance Serialize UpdatePayload where
             UpdateMintDistribution -> MintDistributionUpdatePayload <$> get
             UpdateTransactionFeeDistribution -> TransactionFeeDistributionUpdatePayload <$> get
             UpdateGASRewards -> GASRewardsUpdatePayload <$> get
-            UpdateBakerStakeThreshold -> BakerStakeThresholdPayload <$> get
+            UpdateBakerStakeThreshold -> BakerStakeThresholdUpdatePayload <$> get
 
 $(deriveJSON defaultOptions{
     constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
@@ -594,7 +594,7 @@ updateType FoundationAccountUpdatePayload{} = UpdateFoundationAccount
 updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
-updateType BakerStakeThresholdPayload{} = UpdateBakerStakeThreshold
+updateType BakerStakeThresholdUpdatePayload{} = UpdateBakerStakeThreshold
 
 -- |Determine if signatures from the given set of keys would be
 -- sufficient to authorize the given update.
@@ -608,7 +608,7 @@ checkUpdateAuthorizationKeys Authorizations{..} (FoundationAccountUpdatePayload 
 checkUpdateAuthorizationKeys Authorizations{..} (MintDistributionUpdatePayload _) ks = checkKeySet asParamMintDistribution ks
 checkUpdateAuthorizationKeys Authorizations{..} (TransactionFeeDistributionUpdatePayload _) ks = checkKeySet asParamTransactionFeeDistribution ks
 checkUpdateAuthorizationKeys Authorizations{..} (GASRewardsUpdatePayload _) ks = checkKeySet asParamGASRewards ks
-checkUpdateAuthorizationKeys Authorizations{..} (BakerStakeThresholdPayload _) ks = checkKeySet asBakerStakeThreshold ks
+checkUpdateAuthorizationKeys Authorizations{..} (BakerStakeThresholdUpdatePayload _) ks = checkKeySet asBakerStakeThreshold ks
 
 -- |Signatures on an update instruction.
 -- The serialization of 'UpdateInstructionSignatures' is uniquely determined.

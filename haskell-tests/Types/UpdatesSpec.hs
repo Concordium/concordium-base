@@ -106,7 +106,7 @@ genUpdatePayload = oneof [
         MintDistributionUpdatePayload <$> genMintDistribution,
         TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
         GASRewardsUpdatePayload <$> genGASRewards,
-        BakerStakeThresholdPayload <$> arbitrary]
+        BakerStakeThresholdUpdatePayload <$> arbitrary]
 
 genRawUpdateInstruction :: Gen RawUpdateInstruction
 genRawUpdateInstruction = do
@@ -186,7 +186,7 @@ testUpdateInstruction keyGen isValid = forAll (genAuthorizationsAndKeys 3) $ \(a
                     MintDistributionUpdatePayload{} -> asParamMintDistribution auths
                     TransactionFeeDistributionUpdatePayload{} -> asParamTransactionFeeDistribution auths
                     GASRewardsUpdatePayload{} -> asParamGASRewards auths
-                    BakerStakeThresholdPayload{} -> asBakerStakeThreshold auths
+                    BakerStakeThresholdUpdatePayload{} -> asBakerStakeThreshold auths
             useKeys <- keyGen keys accessPublicKeys (fromIntegral accessThreshold)
             let ui = makeUpdateInstruction rui useKeys
             return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate auths ui)
