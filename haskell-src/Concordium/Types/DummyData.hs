@@ -15,7 +15,7 @@ import Concordium.ID.Types
 
 {-# WARNING dummyblockPointer "Do not use in production." #-}
 dummyblockPointer :: BlockHash
-dummyblockPointer = BlockHashV0 minBound
+dummyblockPointer = BlockHash minBound
 
 {-# WARNING mateuszAccount "Do not use in production." #-}
 mateuszAccount :: AccountAddress

@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE DerivingVia, GADTs, ScopedTypeVariables, OverloadedStrings #-}
 {-|
 Module      : Concordium.Wasm
 Description : Types used in the smart contract framework.

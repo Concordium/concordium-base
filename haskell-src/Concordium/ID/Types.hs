@@ -1,5 +1,10 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
+{-# LANGUAGE TypeFamilies #-}
+
 module Concordium.ID.Types where
 
 import Data.Word
@@ -131,8 +136,15 @@ newtype CredentialIndex = CredentialIndex Word8
     deriving (Eq, Ord, Enum, Num, Real, Integral)
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
--- Introducing here a type containing all the information needed for verifying a transaction,
--- i.e. the account threshold, all the credential thresholds, and all the credential public keys.
+-- |The credential index of the initial credential on an account (0).
+-- This credential is special as it can never be modified or removed,
+-- and is used to derive the account address and account encryption key.
+initialCredentialIndex :: CredentialIndex
+initialCredentialIndex = 0
+
+-- |The information about an account's credentials necessary for verifying the signature(s) on
+-- a transaction. Namely, the account threshold, and for each credential, its threshold and
+-- public keys.
 data AccountInformation = AccountInformation {
   aiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
   aiThreshold :: !AccountThreshold 
@@ -163,8 +175,6 @@ instance S.Serialize AccountInformation where
 {-# INLINE getCredentialKeys #-}
 getCredentialKeys :: CredentialIndex -> AccountInformation -> Maybe CredentialPublicKeys
 getCredentialKeys idx ai = Map.lookup idx (aiCredentials ai)
-
--- type AccountKeys = CredentialPublicKeys
 
 makeCredentialPublicKeys :: [VerifyKey] -> SignatureThreshold -> CredentialPublicKeys
 makeCredentialPublicKeys keys credThreshold =

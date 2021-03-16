@@ -1,4 +1,6 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, ScopedTypeVariables, DerivingStrategies #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Concordium.Common.Version where
 
 import Data.Word

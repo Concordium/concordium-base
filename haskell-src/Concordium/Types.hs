@@ -1,10 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 -- |Basic blockchain types.
 module Concordium.Types (
   -- * Cost units
@@ -97,8 +95,7 @@ module Concordium.Types (
   TransactionOutcomesHash,
   StateHashV0(..),
   StateHash,
-  BlockHashV0(..),
-  BlockHash,
+  BlockHash(..),
   BlockHeight(..),
   Slot(..),
   EpochLength,
@@ -130,7 +127,10 @@ module Concordium.Types (
   -- * Hashing
   Hashed(..),
   unhashed,
-  makeHashed) where
+  makeHashed,
+  
+  -- * Protocol version
+  module Concordium.Types.ProtocolVersion) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
@@ -147,6 +147,7 @@ import Concordium.Types.Block
 import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
+import Concordium.Types.ProtocolVersion
 
 import Control.Exception (assert)
 import Control.Monad
@@ -741,7 +742,14 @@ type TransactionHash = TransactionHashV0
 -- which causes the AccountTransactionIndex template haskell derivation of
 -- database schemas to fail.
 
-newtype BlockHashV0 = BlockHashV0 {v0BlockHash :: Hash.Hash}
+-- |The type of a block hash. This should be independent of how the hash
+-- is computed. Even if the hashing scheme changes over time, it should be
+-- effectively impossible for two blocks on the same chain to have the same
+-- 'BlockHash'.
+--
+-- (This type may need to change if the hash size changes or a different
+-- hash function is used.)
+newtype BlockHash = BlockHash {blockHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutcomesHash :: Hash.Hash}
@@ -750,7 +758,6 @@ newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutc
 newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
-type BlockHash = BlockHashV0
 type StateHash = StateHashV0
 type TransactionOutcomesHash = TransactionOutcomesHashV0
 
