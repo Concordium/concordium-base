@@ -1,4 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
 -- | Dummy values generated for the tests
 
 module Concordium.Crypto.DummyData (

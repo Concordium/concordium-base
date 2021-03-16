@@ -1,5 +1,4 @@
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE TemplateHaskell #-}
 module Data.Base58Encoding.TH where
 
 import qualified Data.Vector.Storable as Vec

@@ -1,7 +1,5 @@
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_HADDOCK not-home #-}
 -- |This module provides a prototype implementation of
 -- EDDSA scheme of Curve Ed25519

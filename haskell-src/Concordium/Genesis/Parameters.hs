@@ -64,7 +64,14 @@ instance ToJSON GenesisChainParameters where
             ]
 
 -- 'GenesisParameters' provides a convenient abstraction for
--- constructing 'GenesisData'.
+-- constructing 'GenesisData'.  The following invariants are
+-- required to hold:
+--
+-- * There must be at least one baker account in 'gpInitialAccounts'.
+-- * Each baker in 'gpInitialAccounts' must have the correct baker id,
+--   corresponding to its index in the list.
+-- * The foundation account specified in 'gpChainParameters' must
+--   correspond to an account in 'gpInitialAccounts'.
 data GenesisParametersV2 = GenesisParametersV2
     { -- |Time at which genesis occurs.
       gpGenesisTime :: Timestamp
@@ -108,6 +115,11 @@ instance FromJSON GenesisParametersV2 where
         let hasBaker GenesisAccount{gaBaker = Nothing} = False
             hasBaker _ = True
         unless (any hasBaker gpInitialAccounts) $ fail "Must have at least one baker at genesis"
+        let
+            validateBaker (bid, GenesisAccount{gaBaker = Just bkr})
+              = unless (gbBakerId bkr == bid) $ fail $ "Expected baker id " ++ show bid ++ " but was " ++ show (gbBakerId bkr)
+            validateBaker _ = return ()
+        mapM_ validateBaker (zip [0..] gpInitialAccounts)
         gpMaxBlockEnergy <- v .: "maxBlockEnergy"
         gpAuthorizations <- v .: "updateAuthorizations"
         gpChainParameters <- v .: "chainParameters"

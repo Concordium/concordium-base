@@ -698,7 +698,7 @@ instance S.Serialize TransactionOutcomes where
 
 -- TODO: fix this to use an lfmb tree. Potentially change storage type to the tree in blockstate too.
 -- Does this need to be domain seperated? (Would require serialisation changes?)
-instance HashableTo TransactionOutcomesHash TransactionOutcomes where
+instance HashableTo TransactionOutcomesHashV0 TransactionOutcomes where
     getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.encode transactionoutcomes
 
 emptyTransactionOutcomes :: TransactionOutcomes

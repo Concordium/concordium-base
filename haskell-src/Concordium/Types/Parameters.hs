@@ -15,6 +15,7 @@ import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
+    ( HasRewardParameters(rewardParameters), RewardParameters )
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
@@ -22,27 +23,27 @@ type CryptographicParameters = GlobalContext
 -- |Updatable chain parameters.
 data ChainParameters = ChainParameters
     { -- |Election difficulty parameter.
-      _cpElectionDifficulty :: !ElectionDifficulty
-    , -- |Euro:Energy rate.
-      _cpEuroPerEnergy :: !ExchangeRate
-    , -- |uGTU:Euro rate.
-      _cpMicroGTUPerEuro :: !ExchangeRate
-    , -- |uGTU:Energy rate.
+      _cpElectionDifficulty :: !ElectionDifficulty,
+      -- |Euro:Energy rate.
+      _cpEuroPerEnergy :: !ExchangeRate,
+      -- |uGTU:Euro rate.
+      _cpMicroGTUPerEuro :: !ExchangeRate,
+      -- |uGTU:Energy rate.
       -- This is derived, but will be computed when the other
       -- rates are updated since it is more useful.
-      _cpEnergyRate :: !EnergyRate
-    , -- |Number of additional epochs that bakers must cool down when
+      _cpEnergyRate :: !EnergyRate,
+      -- |Number of additional epochs that bakers must cool down when
       -- removing stake. The cool-down will effectively be 2 epochs
       -- longer than this value, since at any given time, the bakers
       -- (and stakes) for the current and next epochs have already
       -- been determined.
-      _cpBakerExtraCooldownEpochs :: !Epoch
-    , -- |LimitAccountCreation: the maximum number of accounts
+      _cpBakerExtraCooldownEpochs :: !Epoch,
+      -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
-      _cpAccountCreationLimit :: !CredentialsPerBlockLimit
-    , -- |Reward parameters.
-      _cpRewardParameters :: !RewardParameters
-    , -- |Foundation account index.
+      _cpAccountCreationLimit :: !CredentialsPerBlockLimit,
+      -- |Reward parameters.
+      _cpRewardParameters :: !RewardParameters,
+      -- |Foundation account index.
       _cpFoundationAccount :: !AccountIndex
     , -- |Minimum threshold required for registering as a baker.
       _cpBakerStakeThreshold :: !Amount
@@ -156,43 +157,43 @@ instance FromJSON ChainParameters where
 instance ToJSON ChainParameters where
     toJSON ChainParameters{..} =
         object
-            [ "electionDifficulty" AE..= _cpElectionDifficulty
-            , "euroPerEnergy" AE..= _cpEuroPerEnergy
-            , "microGTUPerEuro" AE..= _cpMicroGTUPerEuro
-            , "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs
-            , "accountCreationLimit" AE..= _cpAccountCreationLimit
-            , "rewardParameters" AE..= _cpRewardParameters
-            , "foundationAccountIndex" AE..= _cpFoundationAccount
+            [ "electionDifficulty" AE..= _cpElectionDifficulty,
+              "euroPerEnergy" AE..= _cpEuroPerEnergy,
+              "microGTUPerEuro" AE..= _cpMicroGTUPerEuro,
+              "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs,
+              "accountCreationLimit" AE..= _cpAccountCreationLimit,
+              "rewardParameters" AE..= _cpRewardParameters,
+              "foundationAccountIndex" AE..= _cpFoundationAccount
             , "minimumThresholdForBaking" AE..= _cpBakerStakeThreshold
             ]
 
 -- |Parameters that affect finalization.
 data FinalizationParameters = FinalizationParameters
     { -- |Number of levels to skip between finalizations.
-      finalizationMinimumSkip :: BlockHeight
-    , -- |Maximum size of the finalization committee; determines the minimum stake
+      finalizationMinimumSkip :: BlockHeight,
+      -- |Maximum size of the finalization committee; determines the minimum stake
       -- required to join the committee as @totalGTU / finalizationCommitteeMaxSize@.
-      finalizationCommitteeMaxSize :: FinalizationCommitteeSize
-    , -- |Base delay time used in finalization.
-      finalizationWaitingTime :: Duration
-    , -- |Factor used to shrink the finalization gap. Must be strictly between 0 and 1.
-      finalizationSkipShrinkFactor :: Ratio Word64
-    , -- |Factor used to grow the finalization gap. Must be strictly greater than 1.
-      finalizationSkipGrowFactor :: Ratio Word64
-    , -- |Factor for shrinking the finalization delay (i.e. number of descendent blocks
+      finalizationCommitteeMaxSize :: FinalizationCommitteeSize,
+      -- |Base delay time used in finalization.
+      finalizationWaitingTime :: Duration,
+      -- |Factor used to shrink the finalization gap. Must be strictly between 0 and 1.
+      finalizationSkipShrinkFactor :: Ratio Word64,
+      -- |Factor used to grow the finalization gap. Must be strictly greater than 1.
+      finalizationSkipGrowFactor :: Ratio Word64,
+      -- |Factor for shrinking the finalization delay (i.e. number of descendent blocks
       -- required to be eligible as a finalization target).
-      finalizationDelayShrinkFactor :: Ratio Word64
-    , -- |Factor for growing the finalization delay when it takes more than one round
+      finalizationDelayShrinkFactor :: Ratio Word64,
+      -- |Factor for growing the finalization delay when it takes more than one round
       -- to finalize a block.
-      finalizationDelayGrowFactor :: Ratio Word64
-    , -- |Whether to allow the delay to be 0. (This allows a block to be finalized as soon
+      finalizationDelayGrowFactor :: Ratio Word64,
+      -- |Whether to allow the delay to be 0. (This allows a block to be finalized as soon
       -- as it is baked.)
       finalizationAllowZeroDelay :: Bool
     }
     deriving (Eq, Show)
 
--- |Serialize 'FinalizationParameters' in the format used for
--- @GenesisDataV2@.
+-- |Serialize 'FinalizationParameters' in the V2 GenesisData
+-- format.
 putFinalizationParametersGD2 :: Putter FinalizationParameters
 putFinalizationParametersGD2 FinalizationParameters{..} = do
     put finalizationMinimumSkip
@@ -206,8 +207,8 @@ putFinalizationParametersGD2 FinalizationParameters{..} = do
     put finalizationDelayGrowFactor
     put finalizationAllowZeroDelay
 
--- |Deserialize 'FinalizationParameters' in the format used for
--- @GenesisDataV2@.
+-- |Deserialize 'FinalizationParameters' in the V2 GenesisData
+-- format.
 getFinalizationParametersGD2 :: Get FinalizationParameters
 getFinalizationParametersGD2 = label "FinalizationParameters" $ do
     finalizationMinimumSkip <- get
@@ -219,6 +220,41 @@ getFinalizationParametersGD2 = label "FinalizationParameters" $ do
     finalizationOldStyleSkip <- get
     when finalizationOldStyleSkip $
         fail "finalizationOldStyleSkip must be False"
+    finalizationSkipShrinkFactor <- get
+    unless (finalizationSkipShrinkFactor > 0 && finalizationSkipShrinkFactor < 1) $
+        fail "skipShrinkFactor must be strictly between 0 and 1"
+    finalizationSkipGrowFactor <- get
+    unless (finalizationSkipGrowFactor > 1) $
+        fail "skipGrowFactor must be strictly greater than 1"
+    finalizationDelayShrinkFactor <- get
+    unless (finalizationDelayShrinkFactor > 0 && finalizationDelayShrinkFactor < 1) $
+        fail "delayShrinkFactor must be strictly between 0 and 1"
+    finalizationDelayGrowFactor <- get
+    unless (finalizationDelayGrowFactor > 1) $
+        fail "delayGrowFactor must be strictly greater than 1"
+    finalizationAllowZeroDelay <- get
+    return FinalizationParameters{..}
+
+-- |Serialize 'FinalizationParameters' in the V3 GenesisData
+-- format.
+putFinalizationParametersGD3 :: Putter FinalizationParameters
+putFinalizationParametersGD3 FinalizationParameters{..} = do
+    put finalizationMinimumSkip
+    put finalizationCommitteeMaxSize
+    put finalizationWaitingTime
+    put finalizationSkipShrinkFactor
+    put finalizationSkipGrowFactor
+    put finalizationDelayShrinkFactor
+    put finalizationDelayGrowFactor
+    put finalizationAllowZeroDelay
+
+-- |Deserialize 'FinalizationParameters' in the V3 GenesisData
+-- format
+getFinalizationParametersGD3 :: Get FinalizationParameters
+getFinalizationParametersGD3 = label "FinalizationParameters" $ do
+    finalizationMinimumSkip <- get
+    finalizationCommitteeMaxSize <- get
+    finalizationWaitingTime <- get
     finalizationSkipShrinkFactor <- get
     unless (finalizationSkipShrinkFactor > 0 && finalizationSkipShrinkFactor < 1) $
         fail "skipShrinkFactor must be strictly between 0 and 1"

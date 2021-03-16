@@ -10,11 +10,10 @@ import Data.Aeson.Types (
     (.:),
     (.:?),
  )
+import Data.Maybe
 import Data.Serialize
 
-
 import Concordium.Common.Version
-import Concordium.ID.Parameters (GlobalContext)
 import qualified Concordium.ID.Types as ID
 import Concordium.Types
 import Concordium.Utils.Serialization
@@ -49,13 +48,9 @@ instance FromJSON GenesisBaker where
         gbBakerId <- v .: "bakerId"
         return GenesisBaker{..}
 
--- |Serialize a 'GenesisBaker' in the GenesisDataV2 format.
--- Since this is based on the serialization of the full
--- @AccountBaker@ structure, we also include the pending
--- change to the baker, which is @NoChange@ for a genesis
--- baker.
-putGenesisBakerGD2 :: Putter GenesisBaker
-putGenesisBakerGD2 GenesisBaker{..} = do
+-- |Serialize a 'GenesisBaker' in the GenesisDataV3 format.
+putGenesisBakerGD3 :: Putter GenesisBaker
+putGenesisBakerGD3 GenesisBaker{..} = do
     put gbStake
     put gbRestakeEarnings
     -- Baker info
@@ -63,15 +58,10 @@ putGenesisBakerGD2 GenesisBaker{..} = do
     put gbElectionVerifyKey
     put gbSignatureVerifyKey
     put gbAggregationVerifyKey
-    -- Pending change (none)
-    putWord8 0
 
--- |Deserialize a 'GenesisBaker' in the GenesisDataV2 format.
--- Since this is based on the serialization of the full @AccountBaker@
--- structure, we must also deserialize the pending change to the baker,
--- which is required to be @NoChange@.
-getGenesisBakerGD2 :: Get GenesisBaker
-getGenesisBakerGD2 = label "GenesisBaker" $ do
+-- |Deserialize a 'GenesisBaker' in the GenesisDataV3 format.
+getGenesisBakerGD3 :: Get GenesisBaker
+getGenesisBakerGD3 = label "GenesisBaker" $ do
     gbStake <- get
     gbRestakeEarnings <- get
     -- Baker info
@@ -79,8 +69,6 @@ getGenesisBakerGD2 = label "GenesisBaker" $ do
     gbElectionVerifyKey <- get
     gbSignatureVerifyKey <- get
     gbAggregationVerifyKey <- get
-    pendingChange <- getWord8
-    unless (pendingChange == 0) $ fail "Baker has a pending change, which is not allowed"
     return GenesisBaker{..}
 
 -- |A 'GenesisAccount' is special account existing in the genesis block.
@@ -91,7 +79,7 @@ data GenesisAccount = GenesisAccount
       gaThreshold :: !ID.AccountThreshold,
       -- |The balance of the account at genesis
       gaBalance :: !Amount,
-      -- |The account credentials. At least a credential with index 0 must exist.
+      -- |The account credentials. At least a credential with index 'initialCredentialIndex' (0) must exist.
       gaCredentials :: !(Map.Map ID.CredentialIndex ID.AccountCredential),
       -- |The (optional) baker information
       gaBaker :: !(Maybe GenesisBaker)
@@ -107,7 +95,6 @@ data GenesisAccount = GenesisAccount
 instance FromJSON GenesisAccount where
     parseJSON = withObject "GenesisAccount" $ \obj -> do
         gaAddress <- obj .: "address"
-        -- gaVerifyKeys <- obj .: "accountKeys"
         gaThreshold <- obj .: "accountThreshold"
         gaBalance <- obj .: "balance"
         gaCredentials <- obj .:? "credentials" >>= \case
@@ -117,14 +104,15 @@ instance FromJSON GenesisAccount where
                 gaCredentialFull <- parseJSON vValue
                 case ID.values gaCredentialFull of
                     Nothing -> fail "Account credential is malformed."
-                    Just gaCredential -> return (Map.singleton 0 gaCredential)
+                    Just gaCredential -> return (Map.singleton ID.initialCredentialIndex gaCredential)
             Just Versioned{..} -> do
                 unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
                 fullCredentials <- parseJSON vValue
                 case mapM ID.values fullCredentials of
                     Nothing -> fail "Account credential is malformed."
                     Just cs -> return cs
-        unless (Map.member 0 gaCredentials) $ fail "Genesis account must have a credential with index 0."
+        unless (Map.member ID.initialCredentialIndex gaCredentials) $ fail $
+            "Genesis account must have a credential with index" ++ show ID.initialCredentialIndex  ++ "."
         gaBaker <- obj .:? "baker"
         -- Check that bakers do not stake more than their balance.
         case gaBaker of
@@ -133,53 +121,30 @@ instance FromJSON GenesisAccount where
         return GenesisAccount{..}
 
 -- |Put a 'GenesisAccount' in the account serialization format
--- used for GenesisDataV2.  Note that the format permits arbitrary
--- accounts, but the 'GenesisAccount' restricts this.
-putGenesisAccountGD2 :: GlobalContext -> Putter GenesisAccount
-putGenesisAccountGD2 cryptoParams GenesisAccount{..} = do
+-- used for GenesisDataV3.
+putGenesisAccountGD3 :: Putter GenesisAccount
+putGenesisAccountGD3 GenesisAccount{..} = do
     -- Put the persisting account data
     put gaAddress
-    let encryptionKey = ID.makeEncryptionKey cryptoParams (ID.credId (gaCredentials Map.! 0))
-    put encryptionKey
     put gaThreshold
-    putLength (Map.size gaCredentials)
-    putSafeSizedMapOf put put gaCredentials
-    -- Account nonce
-    put minNonce
+    putSafeMapOf put put gaCredentials
     -- Account amount
     put gaBalance
-    -- Encrypted amount
-    put initialAccountEncryptedAmount
-    -- Release schedule
-    putLength 0
     -- Baker
-    putMaybeOf putGenesisBakerGD2 gaBaker
+    putMaybeOf putGenesisBakerGD3 gaBaker
 
 -- |Get a 'GenesisAccount' in the account serialization format
--- used for GenesisDataV2.  Note that the format permits arbitrary
--- accounts, but the 'GenesisAccount' restricts this.  This returns
--- both the account and the encryption key (which should be checked
--- in the context of the cryptographic context).
-getGenesisAccountGD2 :: Get (GenesisAccount, ID.AccountEncryptionKey)
-getGenesisAccountGD2 = label "GenesisAccount" $ do
+-- used for GenesisDataV3.
+getGenesisAccountGD3 :: Get GenesisAccount
+getGenesisAccountGD3 = label "GenesisAccount" $ do
     -- Get the persisting account data
     gaAddress <- get
-    encryptionKey <- get
     gaThreshold <- get
-    nCredentials <- getLength
-    when (nCredentials < 1) $ fail "A genesis account must have at least one credential"
-    gaCredentials <- getSafeSizedMapOf nCredentials get get -- (:|) <$> get <*> replicateM (nCredentials - 1) get
-    -- Account nonce
-    nonce <- get
-    unless (nonce == minNonce) $ fail $ "Genesis account must have nonce " ++ show minNonce
+    gaCredentials <- getSafeMapOf get get
+    unless (isJust $ Map.lookup ID.initialCredentialIndex gaCredentials) $ fail $
+        "A genesis account must have a credential with index " ++ show ID.initialCredentialIndex ++ "."
     -- Account amount
     gaBalance <- get
-    -- Encrypted amount
-    encAmt <- get
-    unless (encAmt == initialAccountEncryptedAmount) $ fail "Genesis account must have empty encrypted amount"
-    -- Release schedule
-    len <- getLength
-    unless (len == 0) $ fail "Genesis account must not have a release schedule"
     -- Baker
-    gaBaker <- getMaybeOf getGenesisBakerGD2
-    return (GenesisAccount{..}, encryptionKey)
+    gaBaker <- getMaybeOf getGenesisBakerGD3
+    return GenesisAccount{..}
