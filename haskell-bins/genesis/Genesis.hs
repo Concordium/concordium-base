@@ -36,7 +36,7 @@ data Genesis
                            gdArs :: Maybe FilePath,
                            gdCryptoParams :: Maybe FilePath,
                            gdAccounts :: Maybe FilePath,
-                           gdUpdateAuthorizations :: Maybe FilePath,
+                           gdUpdateKeys :: Maybe FilePath,
                            gdVersion :: Integer
                            }
       | PrintGenesisData { gdSource :: FilePath }
@@ -71,12 +71,12 @@ generateGenesisData = GenerateGenesisData {
                            opt (Nothing :: Maybe FilePath) &=
                            typFile &=
                            help "JSON file with initial accounts, whether they are bakers or not.",
-    gdUpdateAuthorizations = def &=
+    gdUpdateKeys = def &=
                         explicit &=
-                        name "update-authorizations" &=
+                        name "update-keys" &=
                         opt (Nothing :: Maybe FilePath) &=
                         typFile &=
-                        help "JSON file with update authorizations.",
+                        help "JSON file with update keys.",
     gdVersion = 3 &=
         explicit &=
         name "gdver" &=
@@ -158,7 +158,7 @@ main = cmdArgsRun mode >>=
                   vAr <- maybeModifyValueVersioned expectedArInfosVersion gdArs "anonymityRevokers" vId
                   vCP <- maybeModifyValueVersioned expectedCryptoParamsVersion gdCryptoParams "cryptographicParameters" vAr
                   vAdditionalAccs <- maybeModifyValue gdAccounts "initialAccounts" vCP
-                  value <- maybeModifyValue gdUpdateAuthorizations "updateAuthorizations" vAdditionalAccs
+                  value <- maybeModifyValue gdUpdateKeys "updateKeys" vAdditionalAccs
                   case fromJSON value of
                     Error err -> do
                       die $ "Could not decode genesis parameters: " ++ show err
@@ -272,13 +272,20 @@ main = cmdArgsRun mode >>=
               putStrLn "Genesis accounts:"
               forM_ genesisAccounts (showAccount totalGTU)
 
-              let Authorizations{..} = genesisAuthorizations
+              let UpdateKeysCollection{level2Keys = Authorizations{..}, ..} = genesisUpdateKeys
               putStrLn ""
-              putStrLn "Genesis update authorizations:"
+              putStrLn "Root level update authorizations:"
+              putStrLn $ " - "  ++ show (hlkThreshold rootKeys) ++ " of:"
+              Vec.mapM_ (\k -> putStrLn $ "    " ++ show k) (hlkKeys rootKeys)
+              putStrLn ""
+              putStrLn "Level 1 update authorizations:"
+              putStrLn $ " - "  ++ show (hlkThreshold level1Keys) ++ " of:"
+              Vec.mapM_ (\k -> putStrLn $ "    " ++ show k) (hlkKeys level1Keys)
+              putStrLn ""
+              putStrLn "Level 2 update authorizations:"
               putStrLn "  - public keys:"
               Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
               printAccessStructure "emergency" asEmergency
-              printAccessStructure "authorization" asAuthorization
               printAccessStructure "protocol" asProtocol
               printAccessStructure "election difficulty" asParamElectionDifficulty
               printAccessStructure "euro per energy" asParamEuroPerEnergy

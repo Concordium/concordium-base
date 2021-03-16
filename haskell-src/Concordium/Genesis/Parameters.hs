@@ -63,8 +63,8 @@ instance ToJSON GenesisChainParameters where
             , "minimumThresholdForBaking" AE..= gcpBakerStakeThreshold
             ]
 
--- 'GenesisParameters' provides a convenient abstraction for
--- constructing 'GenesisData'.  The following invariants are
+-- | 'GenesisParameters' provides a convenient abstraction for
+-- constructing 'GenesisData'. The following invariants are
 -- required to hold:
 --
 -- * There must be at least one baker account in 'gpInitialAccounts'.
@@ -94,8 +94,8 @@ data GenesisParametersV2 = GenesisParametersV2
       gpInitialAccounts :: [GenesisAccount]
     , -- |Maximum total energy that can be consumed by the transactions in a block
       gpMaxBlockEnergy :: Energy
-    , -- |The initial update authorizations
-      gpAuthorizations :: Authorizations
+    , -- |The collection of update keys for performing updates
+      gpUpdateKeys :: UpdateKeysCollection
     , -- |The initial (updatable) chain parameters
       gpChainParameters :: GenesisChainParameters
     }
@@ -121,7 +121,7 @@ instance FromJSON GenesisParametersV2 where
             validateBaker _ = return ()
         mapM_ validateBaker (zip [0..] gpInitialAccounts)
         gpMaxBlockEnergy <- v .: "maxBlockEnergy"
-        gpAuthorizations <- v .: "updateAuthorizations"
+        gpUpdateKeys <- v .: "updateKeys"
         gpChainParameters <- v .: "chainParameters"
         let facct = gcpFoundationAccount gpChainParameters
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $

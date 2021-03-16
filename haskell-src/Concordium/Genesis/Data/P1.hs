@@ -66,8 +66,8 @@ data GenesisState = GenesisState
       genesisIdentityProviders :: !IdentityProviders,
       -- |The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
-      -- |The initial authorization structure for chain updates.
-      genesisAuthorizations :: !Authorizations,
+      -- |The initial update keys structure for chain updates.
+      genesisUpdateKeys :: !UpdateKeysCollection,
       -- |The initial (updatable) chain parameters.
       genesisChainParameters :: !ChainParameters,
       -- |The initial leadership election nonce.
@@ -82,7 +82,7 @@ instance Serialize GenesisState where
         put genesisCryptographicParameters
         put genesisIdentityProviders
         put genesisAnonymityRevokers
-        put genesisAuthorizations
+        put genesisUpdateKeys
         put genesisChainParameters
         put genesisLeadershipElectionNonce
         putLength (length genesisAccounts)
@@ -91,7 +91,7 @@ instance Serialize GenesisState where
         genesisCryptographicParameters <- get
         genesisIdentityProviders <- get
         genesisAnonymityRevokers <- get
-        genesisAuthorizations <- get
+        genesisUpdateKeys <- get
         genesisChainParameters <- get
         genesisLeadershipElectionNonce <- get
         nGenesisAccounts <- getLength
@@ -233,7 +233,7 @@ parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainPara
     genesisIdentityProviders = gpIdentityProviders
     genesisAnonymityRevokers = gpAnonymityRevokers
     genesisMaxBlockEnergy = gpMaxBlockEnergy
-    genesisAuthorizations = gpAuthorizations
+    genesisUpdateKeys = gpUpdateKeys
     genesisChainParameters =
         makeChainParameters
             gcpElectionDifficulty
