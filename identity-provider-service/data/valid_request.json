@@ -7,15 +7,9 @@
         "regId": "8eabfa3614c8154fa35ab3c647df2e438aa9f317093425553f17231f4abd7ba952d511b96365d7f76c4bbcf6d23f196c",
         "publicKeys": {
           "keys": {
-            "0": {
-              "schemeId": "Ed25519",
-              "verifyKey": "af9980c8595ebdb732f81b24483a4b5432f381aafc1832659998798d000349f2"
-            },
-            "1": {
-              "schemeId": "Ed25519",
-              "verifyKey": "3b06c29fb2552ced1dcead375a2e49f42f77f77bb13f52131d8667ab99cf3c18"
-            },
-            "2": {
+              "0": "af9980c8595ebdb732f81b24483a4b5432f381aafc1832659998798d000349f2",
+              "1": "3b06c29fb2552ced1dcead375a2e49f42f77f77bb13f52131d8667ab99cf3c18",
+              "2": {
               "schemeId": "Ed25519",
               "verifyKey": "0e143d907a1262afa24dabe42e173919340c3dbd8e7f0be832a6b9f5b593f320"
             }
