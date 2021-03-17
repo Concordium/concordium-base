@@ -371,6 +371,34 @@ instance HasMessageExpiry a => HasMessageExpiry (Versioned a) where
   {-# INLINE msgExpiry #-}
   msgExpiry = msgExpiry . vValue
 
+instance HasCredentialType AccountCreation where
+  {-# INLINE credentialType #-}
+  credentialType = credentialType . credential
+
+instance CredentialValuesFields AccountCreation where
+  {-# INLINE credId #-}
+  credId = credId . credential
+  {-# INLINE ipId #-}
+  ipId = ipId . credential
+  {-# INLINE policy #-}
+  policy = policy . credential
+  {-# INLINE credPubKeys #-}
+  credPubKeys = credPubKeys . credential
+
+instance HasCredentialType a => HasCredentialType (WithMetadata a) where
+  {-# INLINE credentialType #-}
+  credentialType = credentialType . wmdData
+
+instance CredentialValuesFields a => CredentialValuesFields (WithMetadata a) where
+  {-# INLINE credId #-}
+  credId = credId . wmdData
+  {-# INLINE ipId #-}
+  ipId = ipId . wmdData
+  {-# INLINE policy #-}
+  policy = policy . wmdData
+  {-# INLINE credPubKeys #-}
+  credPubKeys = credPubKeys . wmdData
+
 -- |Embed a transaction as a block item.
 normalTransaction :: Transaction -> BlockItem
 -- the +1 is for the additional tag.

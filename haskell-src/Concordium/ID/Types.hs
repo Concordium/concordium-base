@@ -130,6 +130,9 @@ data CredentialPublicKeys = CredentialPublicKeys {
   credThreshold :: !SignatureThreshold
   } deriving(Eq, Show, Ord)
 
+-- |Get the number of keys that are part of the credential.
+credNumKeys :: CredentialPublicKeys -> Int
+credNumKeys CredentialPublicKeys{..} = Map.size credKeys
 
 -- |Indices of the credentials linked to an account
 newtype CredentialIndex = CredentialIndex Word8
@@ -902,16 +905,25 @@ instance ToJSON AccountCredential where
 -- for both the values, as well as values with proofs.
 class CredentialValuesFields a where
   -- |Extract the validity information for the credential.
+  {-# INLINE validTo #-}
   validTo :: a -> CredentialValidTo
+  validTo = pValidTo . policy
   credId :: a -> CredentialRegistrationID
   ipId :: a -> IdentityProviderIdentity
   policy :: a -> Policy
   credPubKeys :: a -> CredentialPublicKeys
 
-instance CredentialValuesFields AccountCredential where
-  validTo (NormalAC cdv _) = pValidTo . cdvPolicy $ cdv
-  validTo (InitialAC icdv) = pValidTo . icdvPolicy $ icdv
+instance CredentialValuesFields CredentialDeploymentInformation where
+  {-# INLINE credId #-}
+  credId = cdvCredId . cdiValues
+  {-# INLINE ipId #-}
+  ipId = cdvIpId . cdiValues
+  {-# INLINE policy #-}
+  policy = cdvPolicy . cdiValues
+  {-# INLINE credPubKeys #-}
+  credPubKeys = cdvPublicKeys . cdiValues
 
+instance CredentialValuesFields AccountCredential where
   credId (NormalAC cdv _) = cdvCredId cdv
   credId (InitialAC icdv) = icdvRegId icdv
 
@@ -926,9 +938,6 @@ instance CredentialValuesFields AccountCredential where
 
 
 instance CredentialValuesFields AccountCredentialWithProofs where
-  validTo (NormalACWP cdi) = pValidTo . cdvPolicy . cdiValues $ cdi
-  validTo (InitialACWP icdi) = pValidTo . icdvPolicy . icdiValues $ icdi
-
   credId (NormalACWP cdi) = cdvCredId . cdiValues $ cdi
   credId (InitialACWP icdi) = icdvRegId . icdiValues $ icdi
 

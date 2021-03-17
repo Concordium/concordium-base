@@ -370,14 +370,10 @@ instance Show ContractState where
 newtype ByteSize = ByteSize { _byteSize :: Word64 }
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
 
--- |It is assumed the type `a` can reliable represent 64-bit unsigned values.
--- It is intended to be used to automatically get the desired output type, using
--- something that is an instance of Num.
-contractStateSize :: forall a . Integral a => ContractState -> a -> Maybe a
-contractStateSize cs bs =
-  if len <= bs then Just len
-  else Nothing
-  where len = fromIntegral (BS.length (contractState cs))
+-- |Get the size of the contract state in bytes.
+{-# INLINE contractStateSize #-}
+contractStateSize :: ContractState -> ByteSize
+contractStateSize = fromIntegral . BS.length . contractState
 
 -- The serialize instance uses Word32 for length. This should be reasonable since
 -- no instance should ever be able to produce a state bigger than 4GB.
