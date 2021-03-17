@@ -1188,7 +1188,7 @@ pub enum VerifyKey {
 
 impl SerdeSerialize for VerifyKey {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let mut map = ser.serialize_map(Some(1))?;
+        let mut map = ser.serialize_map(Some(2))?;
         match self {
             VerifyKey::Ed25519VerifyKey(ref key) => {
                 map.serialize_entry("schemeId", "Ed25519")?;
@@ -1202,7 +1202,7 @@ impl SerdeSerialize for VerifyKey {
 impl<'de> SerdeDeserialize<'de> for VerifyKey {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         // expect a map, but also handle string
-        des.deserialize_map(VerifyKeyVisitor)
+        des.deserialize_any(VerifyKeyVisitor)
     }
 }
 
