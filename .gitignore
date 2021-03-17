@@ -30,3 +30,4 @@ pkg
 *.hie
 *.iml
 lib/
+/idiss/libidiss.node
