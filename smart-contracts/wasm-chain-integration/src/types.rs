@@ -468,7 +468,7 @@ macro_rules! type_matches {
 
 pub struct ConcordiumAllowedImports;
 
-impl ValidateImportExport for ConcordiumAllowedImports {
+impl validate::ValidateImportExport for ConcordiumAllowedImports {
     fn validate_import_function(
         &self,
         duplicate: bool,
@@ -532,15 +532,6 @@ impl ValidateImportExport for ConcordiumAllowedImports {
                 item_name.as_ref().contains('.')
             }
     }
-}
-
-pub fn is_valid_receive_name(bs: &str) -> bool {
-    if bs.as_bytes().len() > MAX_EXPORT_NAME_LEN {
-        return false;
-    }
-    let valid_characters =
-        bs.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
-    valid_characters && bs.contains('.')
 }
 
 impl TryFromImport for ProcessedImports {
