@@ -9,6 +9,7 @@ module Concordium.Types.Execution where
 import Prelude hiding(fail)
 
 import Control.Monad.Reader
+import Control.Monad.Except
 
 import Data.Char
 import qualified Data.Aeson as AE
@@ -35,6 +36,7 @@ import Concordium.Types.Execution.TH
 import Concordium.Types.Updates
 import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
+import qualified Concordium.Crypto.ByteStringHelpers as BSH
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.EncryptedTransfers
 
@@ -61,6 +63,48 @@ instance AE.FromJSON AccountOwnershipProof where
 
 instance AE.ToJSON AccountOwnershipProof where
   toJSON (AccountOwnershipProof proofs) = AE.toJSON $ HMap.fromList proofs
+
+-- |Data type for registering data on chain.
+-- Max length of 'maxRegisteredDataSize' is assumed.
+-- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
+newtype RegisteredData = RegisteredData BSH.ByteStringHex
+  deriving newtype (Eq, Show)
+
+-- |Maximum size for 'RegisteredData'.
+maxRegisteredDataSize :: Int
+maxRegisteredDataSize = 256
+
+-- |Construct 'RegisteredData' from a 'BSS.ShortByteString'.
+-- Fails if the length exceeds 'maxRegisteredDataSize'.
+registeredDataFromBSS :: MonadError String m => BSS.ShortByteString -> m RegisteredData
+registeredDataFromBSS bss = if len <= maxRegisteredDataSize
+                              then return . RegisteredData . BSH.ByteStringHex $ bss
+                              else throwError $ "Max size for registered data is " ++ show maxRegisteredDataSize
+                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+  where len = BSS.length bss
+
+-- Uses two bytes for length to be more future-proof.
+instance S.Serialize RegisteredData where
+  put (RegisteredData (BSH.ByteStringHex bss)) = do
+    S.putWord16be (fromIntegral (BSS.length bss))
+    forM_ (BSS.unpack bss) S.put
+
+  get = do
+    l <- S.getWord16be
+    bss <- BSS.pack <$> replicateM (fromIntegral l) S.get
+    case registeredDataFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
+
+instance AE.FromJSON RegisteredData where
+  parseJSON v = do
+    (BSH.ByteStringHex bss) <- AE.parseJSON v
+    case registeredDataFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
+
+instance AE.ToJSON RegisteredData where
+  toJSON (RegisteredData rd) = AE.toJSON rd
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
@@ -184,6 +228,11 @@ data Payload =
       ucRemoveCredIds :: ![CredentialRegistrationID],
       ucNewThreshold :: !AccountThreshold
   }
+  -- | Register data on the chain.
+  | RegisterData {
+      -- | The data to register.
+      rdData :: !RegisteredData
+  }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -271,6 +320,9 @@ putPayload UpdateCredentials{..} =
     S.putWord8 (fromIntegral (length ucRemoveCredIds)) <>
     mapM_ S.put ucRemoveCredIds <>
     S.put ucNewThreshold
+putPayload RegisterData{..} =
+  S.putWord8 21 <>
+  S.put rdData
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
@@ -360,6 +412,9 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ucRemoveCredIds <- replicateM (fromIntegral removeCredsLen) S.get
               ucNewThreshold <- S.get
               return UpdateCredentials{..}
+            21 -> do
+              rdData <- S.get
+              return RegisterData{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
@@ -576,6 +631,12 @@ data Event =
                -- |A new account threshold.
                cuNewThreshold :: !AccountThreshold
               }
+           -- | Data was registered on the chain.
+           | DataRegistered {
+               -- | The actual data.
+               drData :: !RegisteredData
+           }
+
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
