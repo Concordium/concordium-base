@@ -108,9 +108,9 @@ executables:
       - -Werror=missing-methods
       - -Wredundant-constraints
       - -fno-ignore-asserts
-    when:
-      - condition: "!os(windows) && !flag(static)"
-        ghc-options: -dynamic
+    # when:
+    #   - condition: "!os(windows) && !flag(static)"
+    #     ghc-options: -dynamic
     dependencies:
       - aeson-pretty >= 0.8
       - concordium-base
@@ -120,9 +120,9 @@ executables:
   genesis:
     main: Genesis.hs
     source-dirs: haskell-bins/genesis
-    when:
-      - condition: "!os(windows) && !flag(static)"
-        ghc-options: -dynamic
+    # when:
+    #   - condition: "!os(windows) && !flag(static)"
+    #     ghc-options: -dynamic
 
     ghc-options:
     - -Wall
