@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 54d91fe2b562b3d6877af092ccb3850a51faab604a2b9c2bb0c00d8ea1518186
+-- hash: 75be3c56577f24f4cde919a422655ecf5933d94985c43366396194645681b242
 
 name:           concordium-base
 version:        0.1.0.0
@@ -33,6 +33,7 @@ library
       Concordium.Common.Amount
       Concordium.Common.Time
       Concordium.Common.Version
+      Concordium.Cost
       Concordium.Crypto.BlockSignature
       Concordium.Crypto.BlsSignature
       Concordium.Crypto.ByteStringHelpers
@@ -171,6 +172,8 @@ executable generate-update-keys
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  if !os(windows) && !flag(static)
+    ghc-options: -dynamic
   default-language: Haskell2010
 
 executable genesis
@@ -213,6 +216,8 @@ executable genesis
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  if !os(windows) && !flag(static)
+    ghc-options: -dynamic
   default-language: Haskell2010
 
 test-suite test
