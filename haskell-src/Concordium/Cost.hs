@@ -112,9 +112,12 @@ removeBakerCost = 300
 
 -- |C_t for updating account credentials
 updateCredentialsCost ::
-  [Int] -- ^ A list of keys attached to each new credential.
+  Int -- ^ The number of credentials on the account before the update.
+  -> [Int] -- ^ A list of keys attached to each new credential.
   -> Energy
-updateCredentialsCost = sum . map (deployCredential ID.Normal)
+updateCredentialsCost numCredentials =
+   (updateCredentialsBaseCost +)
+   . updateCredentialsVariableCost numCredentials
 
 -- |C_t for deploying a Wasm module.
 -- The argument is the size of the Wasm module in bytes.
@@ -141,9 +144,15 @@ updateContractInstanceCost ::
 updateContractInstanceCost ie ms se ss =
   lookupModule ms + lookupContractState se + toEnergy ie + maybe 0 toEnergy ss + updateContractInstanceBaseCost
 
--- |C_t for updating existing credential keys. Parametrised by amount of new keys.
-updateCredentialKeysCost :: Int -> Energy
-updateCredentialKeysCost numKeys = 100 * fromIntegral numKeys
+-- |C_t for updating existing credential keys. Parametrised by amount of
+-- existing credentials and new keys. Due to the way the accounts are stored a
+-- new copy of all credentials will be created, so we need to account for that
+-- storage increase.
+updateCredentialKeysCost ::
+  Int -- ^ The number of existing credentials on the account.
+  -> Int -- ^ The number of keys that will belong to the credential.
+  -> Energy
+updateCredentialKeysCost numCredentials numKeys = 500 * fromIntegral numCredentials + 100 * fromIntegral numKeys
 
 -- * NRG assignments for non-account transactions.
 
@@ -190,3 +199,23 @@ initializeContractInstanceCreateCost = 200
 -- costs. Even if no code is run.
 updateContractInstanceBaseCost :: Energy
 updateContractInstanceBaseCost = 300
+
+-- |Base cost of updating credentials. There is a non-trivial amount of lookup
+-- that needs to be done before we can start any checking. This ensures that
+-- those lookups are not a problem. If the credential updates are genuine then
+-- this cost is going to be negligible compared to verifying the credential.
+updateCredentialsBaseCost :: Energy
+updateCredentialsBaseCost = 500
+
+-- |Variable cost of updating credentials.
+updateCredentialsVariableCost ::
+  Int -- ^ The number of credentials on the account before the update.
+  -> [Int] -- ^ A list of keys attached to each new credential.
+  -> Energy
+updateCredentialsVariableCost numCredentials =
+  (500 * fromIntegral numCredentials +)
+  . sum . map (deployCredential ID.Normal)
+  -- the 500 * numCredentials is to account for transactions which do nothing,
+  -- e.g., don't add don't remove, and don't update the threshold. These still
+  -- have a cost since the way the accounts are stored it will update the stored
+  -- account data, which does take up quite a bit of space per credential.
