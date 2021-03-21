@@ -101,16 +101,11 @@ instance FromJSON GenesisAccount where
             Nothing -> do
                 Versioned{..} <- obj .: "credential"
                 unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
-                gaCredentialFull <- parseJSON vValue
-                case ID.values gaCredentialFull of
-                    Nothing -> fail "Account credential is malformed."
-                    Just gaCredential -> return (Map.singleton ID.initialCredentialIndex gaCredential)
+                gaCredential <- parseJSON vValue
+                return (Map.singleton ID.initialCredentialIndex gaCredential)
             Just Versioned{..} -> do
                 unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
-                fullCredentials <- parseJSON vValue
-                case mapM ID.values fullCredentials of
-                    Nothing -> fail "Account credential is malformed."
-                    Just cs -> return cs
+                parseJSON vValue
         unless (Map.member ID.initialCredentialIndex gaCredentials) $ fail $
             "Genesis account must have a credential with index" ++ show ID.initialCredentialIndex  ++ "."
         gaBaker <- obj .:? "baker"
