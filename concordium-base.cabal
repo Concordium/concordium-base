@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5a9f8492076e61f488cd2c7774b808b496722614556ee5ef825c8a8f7c5af547
+-- hash: 54d91fe2b562b3d6877af092ccb3850a51faab604a2b9c2bb0c00d8ea1518186
 
 name:           concordium-base
 version:        0.1.0.0
@@ -232,7 +232,6 @@ test-suite test
       ConcordiumTests.ID.Types
       Types.AccountEncryptedAmountSpec
       Types.AmountSpec
-      Types.Execution.RegisteredDataSpec
       Types.PayloadSerializationSpec
       Types.RewardTypes
       Types.TransactionGen

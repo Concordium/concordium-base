@@ -72,6 +72,11 @@ module Concordium.Types (
   -- * Addresses
   Address(..),
 
+  -- * Registered Data
+  RegisteredData(..),
+  registeredDataFromBSS,
+  maxRegisteredDataSize,
+
   -- * Baking
   ElectionDifficulty(..),
   makeElectionDifficulty,
@@ -138,6 +143,7 @@ import Data.Scientific
 import Concordium.Common.Amount
 import Concordium.Common.Time
 import qualified Concordium.Crypto.BlockSignature as Sig
+import qualified Concordium.Crypto.ByteStringHelpers as BSH
 import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
@@ -151,6 +157,7 @@ import Concordium.Types.ProtocolVersion
 
 import Control.Exception (assert)
 import Control.Monad
+import Control.Monad.Except
 
 import Data.Hashable (Hashable)
 import Data.Word
@@ -573,6 +580,47 @@ instance S.Serialize Nonce where
 
 minNonce :: Nonce
 minNonce = 1
+
+-- |Data type for registering data on chain.
+-- Max length of 'maxRegisteredDataSize' is assumed.
+-- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
+newtype RegisteredData = RegisteredData BSS.ShortByteString
+  deriving Eq
+  deriving AE.ToJSON via BSH.ByteStringHex
+
+-- |Maximum size for 'RegisteredData'.
+maxRegisteredDataSize :: Int
+maxRegisteredDataSize = 256
+
+instance Show RegisteredData where
+  show (RegisteredData bss) = show . BSH.ByteStringHex $ bss
+
+-- |Construct 'RegisteredData' from a 'BSS.ShortByteString'.
+-- Fails if the length exceeds 'maxRegisteredDataSize'.
+registeredDataFromBSS :: MonadError String m => BSS.ShortByteString -> m RegisteredData
+registeredDataFromBSS bss = if len <= maxRegisteredDataSize
+                              then return . RegisteredData $ bss
+                              else throwError $ "Max size for registered data is " ++ show maxRegisteredDataSize
+                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+  where len = BSS.length bss
+
+-- Uses two bytes for length to be more future-proof.
+instance S.Serialize RegisteredData where
+  put (RegisteredData bss) = do
+    S.putWord16be . fromIntegral . BSS.length $ bss
+    S.putShortByteString bss
+
+  get = do
+    l <- fromIntegral <$> S.getWord16be
+    unless (l <= maxRegisteredDataSize) $ fail "Data too long"
+    RegisteredData <$> S.getShortByteString l
+
+instance AE.FromJSON RegisteredData where
+  parseJSON v = do
+    (BSH.ByteStringHex bss) <- AE.parseJSON v
+    case registeredDataFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
 
 -- * Account encrypted amount.
 
