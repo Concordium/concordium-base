@@ -81,7 +81,8 @@ genPayload = oneof [genDeployModule,
                     genUpdateBakerRestakeEarnings,
                     genUpdateBakerKeys,
                     genUpdateCredentialKeys,
-                    genTransferToEncrypted
+                    genTransferToEncrypted,
+                    genRegisterData
                     ]
   where
         genCredentialUpdate = do
@@ -169,6 +170,11 @@ genPayload = oneof [genDeployModule,
 
         genTransferToEncrypted =
            TransferToEncrypted . Amount <$> arbitrary
+
+        genRegisterData = do
+          n <- chooseInt (0, maxRegisteredDataSize)
+          rdData <- RegisteredData . BSS.pack <$> vectorOf n arbitrary
+          return RegisterData{..}
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary

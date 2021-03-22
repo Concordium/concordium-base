@@ -19,7 +19,6 @@ import qualified Types.AmountSpec
 import qualified Types.UpdatesSpec
 import qualified Types.AccountEncryptedAmountSpec
 import qualified Types.RewardTypes
-import qualified Types.Execution.RegisteredDataSpec
 
 main :: IO  ()
 main = hspec $ parallel $ do
@@ -34,7 +33,6 @@ main = hspec $ parallel $ do
     ConcordiumTests.ID.Types.tests
     ConcordiumTests.Crypto.Ed25519DlogProofs.tests
     ConcordiumTests.Crypto.EncryptedTransfers.tests
-    Types.Execution.RegisteredDataSpec.tests
     -- NB: The following tests are far from complete. They do not test what
     -- happens when data is corrupt in various ways (number of commmited values
     -- is incorrect, or similar)
