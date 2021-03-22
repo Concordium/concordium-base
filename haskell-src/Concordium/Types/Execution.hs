@@ -155,7 +155,7 @@ data Payload =
   -- | Adds additional keys to the sender's account, optionally updating the signature threshold too
   | UpdateCredentialKeys {
       -- | New set of credential keys to be replaced with the existing ones, including updating the threshold.
-      uckCredId :: CredentialRegistrationID,
+      uckCredId :: !CredentialRegistrationID,
       uckKeys :: !CredentialPublicKeys
     }
   -- | Send an encrypted amount to an account.
