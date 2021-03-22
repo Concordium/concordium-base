@@ -184,6 +184,11 @@ data Payload =
       ucRemoveCredIds :: ![CredentialRegistrationID],
       ucNewThreshold :: !AccountThreshold
   }
+  -- | Register data on the chain.
+  | RegisterData {
+      -- | The data to register.
+      rdData :: !RegisteredData
+  }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -271,6 +276,9 @@ putPayload UpdateCredentials{..} =
     S.putWord8 (fromIntegral (length ucRemoveCredIds)) <>
     mapM_ S.put ucRemoveCredIds <>
     S.put ucNewThreshold
+putPayload RegisterData{..} =
+  S.putWord8 21 <>
+  S.put rdData
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
@@ -360,6 +368,9 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ucRemoveCredIds <- replicateM (fromIntegral removeCredsLen) S.get
               ucNewThreshold <- S.get
               return UpdateCredentials{..}
+            21 -> do
+              rdData <- S.get
+              return RegisterData{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
@@ -576,6 +587,12 @@ data Event =
                -- |A new account threshold.
                cuNewThreshold :: !AccountThreshold
               }
+           -- | Data was registered on the chain.
+           | DataRegistered {
+               -- | The actual data.
+               drData :: !RegisteredData
+           }
+
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
