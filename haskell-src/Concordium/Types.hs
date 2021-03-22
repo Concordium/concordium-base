@@ -586,14 +586,11 @@ minNonce = 1
 -- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
 newtype RegisteredData = RegisteredData BSS.ShortByteString
   deriving Eq
-  deriving AE.ToJSON via BSH.ByteStringHex
+  deriving (AE.ToJSON, Show) via BSH.ByteStringHex
 
 -- |Maximum size for 'RegisteredData'.
 maxRegisteredDataSize :: Int
 maxRegisteredDataSize = 256
-
-instance Show RegisteredData where
-  show (RegisteredData bss) = show . BSH.ByteStringHex $ bss
 
 -- |Construct 'RegisteredData' from a 'BSS.ShortByteString'.
 -- Fails if the length exceeds 'maxRegisteredDataSize'.
