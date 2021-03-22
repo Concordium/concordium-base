@@ -119,6 +119,10 @@ updateCredentialsCost numCredentials =
    (updateCredentialsBaseCost +)
    . updateCredentialsVariableCost numCredentials
 
+-- |C_t for registering data on chain.
+registerDataCost :: Energy
+registerDataCost = 300
+
 -- |C_t for deploying a Wasm module.
 -- The argument is the size of the Wasm module in bytes.
 deployModuleCost :: Word64 -> Energy
