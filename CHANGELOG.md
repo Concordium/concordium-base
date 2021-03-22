@@ -43,3 +43,5 @@
 
 - replaced key handling transaction types (add, update, remove) with a single
   transaction to update keys of a specific credential.
+
+- New transaction/payload type `RegisterData`. And a corresponding event `DataRegistered`.
