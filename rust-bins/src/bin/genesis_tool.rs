@@ -38,24 +38,28 @@ enum GenesisTool {
             long = "template",
             help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
             value_name = "TEMPLATE",
-            default_value = "account"
+            default_value = "account",
+            env = "TEMPLATE"
         )]
         template: String,
         #[structopt(
             long = "balance",
             help = "Initial balance on each of the accounts, in GTU.",
-            default_value = "1000000"
+            default_value = "1000000",
+            env = "INITIAL_BALANCE"
         )]
         balance: Amount,
         #[structopt(
             long = "stake",
             help = "Initial stake of the bakers, in GTU. If this is set then all accounts will be \
-                    bakers."
+                    bakers.",
+            env = "INITIAL_STAKE"
         )]
         stake: Option<Amount>,
         #[structopt(
             long = "restake",
-            help = "Restake earnings automatically. This only has effect if 'stake' is set."
+            help = "Restake earnings automatically. This only has effect if 'stake' is set.",
+            env = "RESTAKE_EARNINGS"
         )]
         restake: bool,
         #[structopt(flatten)]
@@ -67,31 +71,36 @@ enum GenesisTool {
 struct CommonOptions {
     #[structopt(
         long = "ip-info",
-        help = "File with (versioned) public information about the identity provider."
+        help = "File with (versioned) public information about the identity provider.",
+        env = "IP_INFO_FILE"
     )]
     ip_info: PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
-        default_value = "database/global.json"
+        default_value = "database/global.json",
+        env = "GLOBAL_FILE"
     )]
     global: PathBuf,
     #[structopt(
         long = "ar-info",
         help = "File with the (versioned) public keys of the anonymity revoker.",
-        default_value = "database/anonymity_revoker-0.pub.json"
+        default_value = "database/anonymity_revoker-0.pub.json",
+        env = "AR_INFO_FILE"
     )]
     ar_info: PathBuf,
     #[structopt(
         long = "num-keys",
         help = "The number of keys each account should have. Threshold is set to max(1, K-1).",
-        default_value = "3"
+        default_value = "3",
+        env = "NUM_KEYS"
     )]
     num_keys: usize,
     #[structopt(
         long = "out-dir",
         help = "Directory to write the generated files into.",
-        default_value = "."
+        default_value = ".",
+        env = "OUT_DIR"
     )]
     out_dir: PathBuf,
 }
