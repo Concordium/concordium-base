@@ -116,7 +116,8 @@ pub fn validate_request(
 
 fn show_err<D: Display>(err: D) -> String { format!("ERROR: {}", err) }
 
-/// Create an identity object and the anonymity revocation record.
+/// Create an identity object, the anonymity revocation record, and the initial
+/// account object.
 pub fn create_identity_object(
     ip_info_str: &str,
     request_str: &str,
