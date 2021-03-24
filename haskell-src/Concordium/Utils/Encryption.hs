@@ -294,4 +294,5 @@ askPassword descr = do
   passwordInput <- bracket_ (hSetEcho stdin False) (hSetEcho stdin True) T.getLine
   let password = T.encodeUtf8 passwordInput
   putStrLn ""
+  hFlush stdout
   return (Password password)
