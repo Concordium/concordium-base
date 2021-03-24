@@ -13,6 +13,7 @@ import qualified Data.Set as Set
 import Control.Monad.State.Class
 import Data.Maybe
 import Data.Char
+import Control.Monad.Except
 
 -- |Strict version of `At`.
 --
@@ -165,3 +166,9 @@ whenAddToSet val setLens act = do
 firstLower :: String -> String
 firstLower [] = []
 firstLower (c:cs) = toLower c : cs
+
+-- | In the 'Left' case of an 'Either', transform the error using the given function and
+-- "rethrow" it in the current 'MonadError'.
+embedErr :: MonadError e m => Either e' a -> (e' -> e) -> m a
+embedErr (Left x) f = throwError (f x)
+embedErr (Right a) _ = return a

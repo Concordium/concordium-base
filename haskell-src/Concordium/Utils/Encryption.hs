@@ -11,11 +11,14 @@ import Control.Exception
 import qualified Data.Aeson as AE
 import Data.Aeson ((.:),(.=))
 import Data.ByteString(ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LazyBS
 import qualified Data.ByteString.Base64 as Base64
 import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
+import System.IO
 
 import Crypto.Random
 import Crypto.Cipher.AES
@@ -23,6 +26,8 @@ import Crypto.Cipher.Types
 import Crypto.Data.Padding
 import Crypto.KDF.PBKDF2
 import Crypto.Error
+
+import Concordium.Utils (embedErr)
 
 -- | A wrapper for 'ByteString' to be used for passwords.
 -- Using this dedicated type is supposed to reduce the risk of accidentally exposing passwords.
@@ -242,12 +247,6 @@ decryptJSON :: (MonadError DecryptJSONFailure m, AE.FromJSON a)
 decryptJSON (EncryptedJSON encryptedText) pwd = do
   decrypted <- decryptText encryptedText pwd `embedErr` DecryptionFailure
   AE.eitherDecodeStrict decrypted `embedErr` IncorrectJSON
-  where
-    -- | In the 'Left' case of an 'Either', transform the error using the given function and
-    -- "rethrow" it in the current 'MonadError'.
-    embedErr :: MonadError e m => Either e' a -> (e' -> e) -> m a
-    embedErr (Left x) f = throwError (f x)
-    embedErr (Right a) _ = return a
 
 -- | Encrypt a JSON-serializable value.
 encryptJSON :: (AE.ToJSON a)
@@ -259,3 +258,40 @@ encryptJSON :: (AE.ToJSON a)
 encryptJSON encryptionMethod keyDerivationMethod value pwd =
   let json = LazyBS.toStrict $ AE.encode value in
     EncryptedJSON <$> encryptText encryptionMethod keyDerivationMethod json pwd
+
+-- | Try to decode json, which may be encrypted as 'EncryptedJSON'.
+--   When encrypted, use the password action to retrieve a password.
+decodeMaybeEncrypted :: (AE.FromJSON a)
+  => IO Password -- ^ Password action to use if data is encrypted.
+  -> ByteString  -- ^ JSON to decode.
+  -> IO (Either String a)
+decodeMaybeEncrypted getPwd json = do
+  case AE.eitherDecodeStrict json of
+    Left _ -> return $ AE.eitherDecodeStrict json `embedErr` (\err -> "Error decoding JSON: " ++ err)
+    Right encryptedJSON -> do
+      pwd <- getPwd
+      return $ decryptJSON encryptedJSON pwd `embedErr` (("Error decoding encrypted JSON: " ++) . displayException)
+
+-- | Encrypt a file as 'EncryptedJSON' with AES256 and PBKDF2SHA256.
+--   Prompts for a password to encrypt with.
+encryptFileAsEncryptedJSON :: FilePath -- ^ File to encrypt.
+                           -> FilePath -- ^ Out file.
+                           -> IO ()
+encryptFileAsEncryptedJSON inFile outFile = do
+  content <- BS.readFile inFile
+  pwd <- askPassword "Enter password to encrypt with: "
+  encContent <- AE.encode <$> encryptText AES256 PBKDF2SHA256 content pwd
+  LazyBS.writeFile outFile encContent
+
+-- | Ask for a password on standard input not showing what is typed.
+askPassword
+  :: String -- ^ A text to display after which the password is typed (nothing is appended to this).
+  -> IO Password
+askPassword descr = do
+  putStr descr
+  hFlush stdout
+  -- Get the password from command line, not showing what is typed by temporarily disabling echo.
+  passwordInput <- bracket_ (hSetEcho stdin False) (hSetEcho stdin True) T.getLine
+  let password = T.encodeUtf8 passwordInput
+  putStrLn ""
+  return (Password password)
