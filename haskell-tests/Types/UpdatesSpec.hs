@@ -35,10 +35,9 @@ genAuthorizations = do
     let genAccessStructure = do
             asnKeys <- choose (1, nKeys)
             accessPublicKeys <- Set.fromList . take asnKeys <$> shuffle [0..fromIntegral nKeys - 1]
-            accessThreshold <- choose (1, fromIntegral asnKeys)
+            accessThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral asnKeys)
             return AccessStructure {..}
     asEmergency <- genAccessStructure
-    asAuthorization <- genAccessStructure
     asProtocol <- genAccessStructure
     asParamElectionDifficulty <- genAccessStructure
     asParamEuroPerEnergy <- genAccessStructure
@@ -95,9 +94,29 @@ genGASRewards = do
         _gasChainUpdate <- makeRewardFraction <$> choose (0,100000)
         return GASRewards{..}
 
-genUpdatePayload :: Gen UpdatePayload
-genUpdatePayload = oneof [
-        AuthorizationUpdatePayload <$> genAuthorizations,
+genHigherLevelKeys :: Gen (HigherLevelKeys a)
+genHigherLevelKeys = do
+  size <- getSize
+  nKeys <- choose (1, min 65535 (1 + size))
+  hlkKeys <- Vec.fromList . fmap Sig.correspondingVerifyKey <$> vectorOf nKeys genSigSchemeKeyPair
+  hlkThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral nKeys)
+  return HigherLevelKeys {..}
+
+genRootUpdate :: Gen RootUpdate
+genRootUpdate = oneof [
+       RootKeysRootUpdate <$> genHigherLevelKeys,
+       Level1KeysRootUpdate <$> genHigherLevelKeys,
+       Level2KeysRootUpdate <$> genAuthorizations
+       ]
+
+genLevel1Update :: Gen Level1Update
+genLevel1Update = oneof [
+  Level1KeysLevel1Update <$> genHigherLevelKeys,
+  Level2KeysLevel1Update <$> genAuthorizations
+  ]
+
+genLevel2UpdatePayload :: Gen UpdatePayload
+genLevel2UpdatePayload = oneof [
         ProtocolUpdatePayload <$> genProtocolUpdate,
         ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
         EuroPerEnergyUpdatePayload <$> genExchangeRate,
@@ -108,6 +127,13 @@ genUpdatePayload = oneof [
         GASRewardsUpdatePayload <$> genGASRewards,
         BakerStakeThresholdUpdatePayload <$> arbitrary]
 
+genUpdatePayload :: Gen UpdatePayload
+genUpdatePayload = oneof [
+        genLevel2UpdatePayload,
+        RootUpdatePayload <$> genRootUpdate,
+        Level1UpdatePayload <$> genLevel1Update
+        ]
+
 genRawUpdateInstruction :: Gen RawUpdateInstruction
 genRawUpdateInstruction = do
         ruiSeqNumber <- Nonce <$> arbitrary
@@ -116,10 +142,18 @@ genRawUpdateInstruction = do
         ruiPayload <- genUpdatePayload
         return RawUpdateInstruction{..}
 
+genLevel2RawUpdateInstruction :: Gen RawUpdateInstruction
+genLevel2RawUpdateInstruction = do
+        ruiSeqNumber <- Nonce <$> arbitrary
+        ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
+        ruiTimeout <- TransactionTime <$> arbitrary
+        ruiPayload <- genLevel2UpdatePayload
+        return RawUpdateInstruction{..}
+
 -- |Generate an 'Authorizations' structure and the list of key pairs.
 -- The threshold for each access structure is specified.
 genAuthorizationsAndKeys :: 
-    Word16 -- ^Threshold for each access structure
+    UpdateKeysThreshold -- ^Threshold for each access structure
     -> Gen (Authorizations, [Sig.KeyPair])
 genAuthorizationsAndKeys thr = do
         let nKeys = fromIntegral thr * 12
@@ -130,7 +164,6 @@ genAuthorizationsAndKeys thr = do
                 accessPublicKeys <- Set.fromList . take asnKeys <$> shuffle [0..fromIntegral nKeys - 1]
                 return AccessStructure {accessThreshold = thr, ..}
         asEmergency <- genAccessStructure
-        asAuthorization <- genAccessStructure
         asProtocol <- genAccessStructure
         asParamElectionDifficulty <- genAccessStructure
         asParamEuroPerEnergy <- genAccessStructure
@@ -141,6 +174,29 @@ genAuthorizationsAndKeys thr = do
         asParamGASRewards <- genAccessStructure
         asBakerStakeThreshold <- genAccessStructure
         return (Authorizations{..}, kps)
+
+genLevel1Keys ::
+  UpdateKeysThreshold
+  -> Gen (HigherLevelKeys Level1KeysKind, [Sig.KeyPair])
+genLevel1Keys thr = do
+  kps <- vectorOf (fromIntegral thr * 2) genSigSchemeKeyPair
+  let hlkKeys = Vec.fromList $ Sig.correspondingVerifyKey <$> kps
+  return (HigherLevelKeys{hlkThreshold = thr,..}, kps)
+
+genRootKeys ::
+  UpdateKeysThreshold
+  -> Gen (HigherLevelKeys RootKeysKind, [Sig.KeyPair])
+genRootKeys thr = do
+  kps <- vectorOf (fromIntegral thr * 2) genSigSchemeKeyPair
+  let hlkKeys = Vec.fromList $ Sig.correspondingVerifyKey <$> kps
+  return (HigherLevelKeys{hlkThreshold = thr,..}, kps)
+
+genKeyCollection :: UpdateKeysThreshold -> Gen (UpdateKeysCollection, [Sig.KeyPair], [Sig.KeyPair], [Sig.KeyPair])
+genKeyCollection thr = do
+  (rootKeys, a) <- genRootKeys thr
+  (level1Keys, b) <- genLevel1Keys thr
+  (level2Keys, c) <- genAuthorizationsAndKeys thr
+  return (UpdateKeysCollection{..}, a, b, c)
 
 {-
 genUpdateInstruction :: Gen UpdateInstruction
@@ -169,28 +225,35 @@ testJSONUpdatePayload = forAll (resize 50 genUpdatePayload) chk
                 Right up' -> up === up'
 
 -- |Function type for generating a set of keys to sign an update instruction with.
-type SignKeyGen = [Sig.KeyPair] -> Set.Set UpdateKeyIndex -> Int -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
+type SignKeyGen =
+  -- available keys
+  [Sig.KeyPair] ->
+  -- a set of key indices authorized
+  Set.Set UpdateKeyIndex ->
+  -- The threshold
+  Int ->
+  -- The keys then used to sign the update
+  Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
 
 -- |Generate an update instruction signed using the keys generated by the parameter.
 -- The second argument indicates whether the signature should be valid.
 testUpdateInstruction :: SignKeyGen -> Bool -> Property
-testUpdateInstruction keyGen isValid = forAll (genAuthorizationsAndKeys 3) $ \(auths,keys) ->
-        forAll genRawUpdateInstruction $ \rui -> do
-            let AccessStructure{..} = case ruiPayload rui of
-                    AuthorizationUpdatePayload{} -> asAuthorization auths
-                    ProtocolUpdatePayload{} -> asProtocol auths
-                    ElectionDifficultyUpdatePayload{} -> asParamElectionDifficulty auths
-                    EuroPerEnergyUpdatePayload{} -> asParamEuroPerEnergy auths
-                    MicroGTUPerEuroUpdatePayload{} -> asParamMicroGTUPerEuro auths
-                    FoundationAccountUpdatePayload{} -> asParamFoundationAccount auths
-                    MintDistributionUpdatePayload{} -> asParamMintDistribution auths
-                    TransactionFeeDistributionUpdatePayload{} -> asParamTransactionFeeDistribution auths
-                    GASRewardsUpdatePayload{} -> asParamGASRewards auths
-                    BakerStakeThresholdUpdatePayload{} -> asBakerStakeThreshold auths
-            useKeys <- keyGen keys accessPublicKeys (fromIntegral accessThreshold)
-            let ui = makeUpdateInstruction rui useKeys
-            return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate auths ui)
-                .&&. label "Serialization check" (checkSerialization ui)
+testUpdateInstruction keyGen isValid =
+  forAll (genKeyCollection 3) $ \(kc, rootK, level1K, level2K) ->
+  forAll genRawUpdateInstruction $ \rui -> do
+  let p = ruiPayload rui
+  keysToSign <- case p of
+             RootUpdatePayload{} -> f p kc rootK
+             Level1UpdatePayload{} -> f p kc level1K
+             _ -> f p kc level2K
+  let ui = makeUpdateInstruction rui keysToSign
+  return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate kc ui)
+           .&&. label "Serialization check" (checkSerialization ui)
+  where
+    f :: UpdatePayload -> UpdateKeysCollection -> [Sig.KeyPair] -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
+    f pld ukc availableKeys = do
+          let (keyIndices, thr) = extractKeysIndices pld ukc
+          keyGen availableKeys keyIndices (fromIntegral thr)
 
 -- |Make a collection of keys that should be sufficient to sign.
 makeKeysGood :: SignKeyGen
@@ -210,9 +273,18 @@ makeKeysFewGood keys authIxs threshold = do
 -- |Make a collection of keys, none of which are authorized to sign.
 makeKeysOther :: SignKeyGen
 makeKeysOther keys authIxs _ = do
-        let otherKeys = [(i, k) | (i, k) <- [0..] `zip` keys, i `Set.notMember` authIxs]
-        nKeys <- choose (1, length otherKeys)
-        Map.fromList . take nKeys <$> shuffle otherKeys
+  if length keys == Set.size authIxs
+    then do
+    -- in this case, which can only happen when doing a level1 or root update
+    -- the generated key will be an invalid one instead of a non-authorized one
+    -- because there are no not-authorized keys in that case.
+    -- Essentially it will just fail (as it should do).
+    idx <- (length keys +) <$> choose (0, length keys - 1)
+    Map.singleton (fromIntegral idx) <$> genSigSchemeKeyPair
+    else do
+    let otherKeys = [(i, k) | (i, k) <- [0..] `zip` keys, i `Set.notMember` authIxs]
+    nKeys <- choose (1, length otherKeys)
+    Map.fromList . take nKeys <$> shuffle otherKeys
 
 -- |Make a key that is different to one in the keys.
 makeKeyInvalid :: SignKeyGen
@@ -229,7 +301,7 @@ makeKeyBadIndex keys _ _ = do
         idx <- choose (fromIntegral (length keys), maxBound)
         Map.singleton idx <$> genSigSchemeKeyPair
 
--- |Combine two key generators, preferring the left one where indexes overlap.
+-- |Combine two key generators, preferring the left one where indices overlap.
 combineKeys :: SignKeyGen -> SignKeyGen -> SignKeyGen
 combineKeys kg1 kg2 keys authIxs threshold = do
         k1 <- kg1 keys authIxs threshold
@@ -241,8 +313,8 @@ tests = parallel $ do
     specify "UpdatePayload serialization" $ withMaxSuccess 1000 testSerializeUpdatePayload
     specify "UpdatePayload JSON" $ withMaxSuccess 1000 testJSONUpdatePayload
     specify "Valid update instructions" $ withMaxSuccess 1000 (testUpdateInstruction makeKeysGood True)
-    specify "Valid update instructions, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeysOther makeKeysGood) True)
+    specify "Valid update instructions, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeysOther makeKeysGood) False)
     specify "Update instructions, too few good" $ withMaxSuccess 1000 (testUpdateInstruction makeKeysFewGood False)
-    specify "Update instructions, too few good, extraneous singatures" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeysOther makeKeysFewGood) False)
+    specify "Update instructions, too few good, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeysOther makeKeysFewGood) False)
     specify "Update instructions, enough good, one bad" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeyInvalid makeKeysGood) False)
     specify "Update instructions, enough good, one bad (bad index)" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeyBadIndex makeKeysGood) False)

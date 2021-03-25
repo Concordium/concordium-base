@@ -68,14 +68,14 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 
 ----------------
--- * Parameters
+-- * Parameter updates
 ----------------
 
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
 -- It must be the case that
--- @m_dBakingReward + _mdFinalizationReward <= 1@.
---  The remaining amount is the platform development charge.
+-- @_mdBakingReward + _mdFinalizationReward <= 1@.
+-- The remaining amount is the platform development charge.
 data MintDistribution = MintDistribution {
     -- |Mint rate per slot
     _mdMintPerSlot :: !MintRate,
@@ -222,7 +222,7 @@ instance Serialize RewardParameters where
     return RewardParameters{..}
 
 --------------------
--- * Authorizations
+-- * Update Keys Types
 --------------------
 
 -- |Key type for update authorization.
@@ -231,12 +231,25 @@ type UpdatePublicKey = VerifyKey
 -- |Index of a key in an 'Authorizations'.
 type UpdateKeyIndex = Word16
 
--- |Access structure for update authorization.
+-- |A wrapper over Word16 to ensure on Serialize.get and Aeson.parseJSON that it
+-- is not zero and it doesn't exceed the max value.
+newtype UpdateKeysThreshold = UpdateKeysThreshold { uktTheThreshold :: Word16 }
+ deriving (Show, Eq, Enum, Num, Real, Ord, Integral, AE.ToJSON, AE.FromJSON)
+
+instance Serialize UpdateKeysThreshold where
+  put = putWord16be . uktTheThreshold
+  get = UpdateKeysThreshold <$> getWord16be
+
+--------------------
+-- * Authorizations updates (Level 2 keys)
+--------------------
+
+-- |Access structure for level 2 update authorization.
 data AccessStructure = AccessStructure {
         -- |Public keys
         accessPublicKeys :: !(Set.Set UpdateKeyIndex),
         -- |Number of keys required to authorize an update
-        accessThreshold :: !Word16
+        accessThreshold :: !UpdateKeysThreshold
     }
     deriving (Eq, Show)
 
@@ -244,17 +257,13 @@ instance Serialize AccessStructure where
     put AccessStructure{..} = do
         putWord16be (fromIntegral (Set.size accessPublicKeys))
         mapM_ putWord16be (Set.toAscList accessPublicKeys)
-        putWord16be accessThreshold
+        put accessThreshold
     get = do
         keyCount <- getWord16be
         accessPublicKeys <- getSafeSizedSetOf keyCount getWord16be
-        accessThreshold <- getWord16be
-        when (accessThreshold > keyCount) $ fail "invalid threshold"
+        accessThreshold <- get
+        when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
-
--- |Check that an access structure authorizes the given key set.
-checkKeySet :: AccessStructure -> Set.Set UpdateKeyIndex -> Bool
-checkKeySet AccessStructure{..} ks = Set.size (ks `Set.intersection` accessPublicKeys) >= fromIntegral accessThreshold
 
 -- |The set of keys authorized for chain updates, together with
 -- access structures determining which keys are authorized for
@@ -263,8 +272,6 @@ data Authorizations = Authorizations {
         asKeys :: !(Vec.Vector UpdatePublicKey),
         -- |New emergency keys
         asEmergency :: !AccessStructure,
-        -- |New authorization update keys
-        asAuthorization :: !AccessStructure,
         -- |New protocol update keys
         asProtocol :: !AccessStructure,
         -- |Parameter keys: election difficulty
@@ -291,7 +298,6 @@ instance Serialize Authorizations where
         putWord16be (fromIntegral (Vec.length asKeys))
         mapM_ put asKeys
         put asEmergency
-        put asAuthorization
         put asProtocol
         put asParamElectionDifficulty
         put asParamEuroPerEnergy
@@ -312,7 +318,6 @@ instance Serialize Authorizations where
                         | otherwise -> fail "invalid key index"
                     Nothing -> return r
         asEmergency <- getChecked
-        asAuthorization <- getChecked
         asProtocol <- getChecked
         asParamElectionDifficulty <- getChecked
         asParamEuroPerEnergy <- getChecked
@@ -335,16 +340,14 @@ instance AE.FromJSON Authorizations where
         let
             parseAS x = v .: x >>= AE.withObject (unpack x) (\o -> do
                 accessPublicKeys :: Set.Set UpdateKeyIndex <- o .: "authorizedKeys"
-                accessThreshold :: Word16 <- o .: "threshold"
-                when (fromIntegral accessThreshold > Set.size accessPublicKeys) $
-                    fail "invalid threshold"
+                accessThreshold <- o .: "threshold"
+                when (accessThreshold > fromIntegral (Set.size accessPublicKeys) || accessThreshold < 1) $ fail "Invalid threshold"
                 case Set.lookupMax accessPublicKeys of
                     Just maxKeyIndex
                         | fromIntegral maxKeyIndex >= Vec.length asKeys -> fail "invalid key index"
                     _ -> return AccessStructure{..}
                 )
         asEmergency <- parseAS "emergency"
-        asAuthorization <- parseAS "authorization"
         asProtocol <- parseAS "protocol"
         asParamElectionDifficulty <- parseAS "electionDifficulty"
         asParamEuroPerEnergy <- parseAS "euroPerEnergy"
@@ -360,7 +363,6 @@ instance AE.ToJSON Authorizations where
     toJSON Authorizations{..} = AE.object [
                 "keys" AE..= Vec.toList asKeys,
                 "emergency" AE..= t asEmergency,
-                "authorization" AE..= t asAuthorization,
                 "protocol" AE..= t asProtocol,
                 "electionDifficulty" AE..= t asParamElectionDifficulty,
                 "euroPerEnergy" AE..= t asParamEuroPerEnergy,
@@ -377,65 +379,163 @@ instance AE.ToJSON Authorizations where
                     "threshold" AE..= accessThreshold
                 ]
 
+-----------------
+-- * Higher Level keys (Root and Level 1 keys)
+-----------------
+
+data RootKeysKind
+data Level1KeysKind
+
+-- |This data structure will be used for all the updates that update Root or
+-- level 1 keys, and to store the authorized keys for those operations. The phantom
+-- type has to be either RootKeysKind or Level1KeysKind.
+data HigherLevelKeys keyKind = HigherLevelKeys {
+  hlkKeys :: !(Vec.Vector UpdatePublicKey),
+  hlkThreshold :: !UpdateKeysThreshold
+  } deriving (Eq, Show)
+
+instance Serialize (HigherLevelKeys a) where
+  put HigherLevelKeys{..} = do
+    putWord16be (fromIntegral (Vec.length hlkKeys))
+    mapM_ put hlkKeys
+    put hlkThreshold
+  get = do
+    keyCount <- getWord16be
+    hlkKeys <- Vec.replicateM (fromIntegral keyCount) get
+    hlkThreshold <- get
+    when (hlkThreshold > fromIntegral keyCount || hlkThreshold < 1) $ fail "Invalid threshold"
+    return HigherLevelKeys{..}
+
+instance AE.FromJSON (HigherLevelKeys a) where
+  parseJSON = AE.withObject "HigherLevelKeys" $ \v -> do
+    hlkKeys <- Vec.fromList <$> v .: "keys"
+    hlkThreshold <- (v .: "threshold")
+    when (hlkThreshold > fromIntegral (Vec.length hlkKeys) || hlkThreshold < 1) $ fail "Invalid threshold"
+    return HigherLevelKeys{..}
+
+instance AE.ToJSON (HigherLevelKeys a) where
+  toJSON HigherLevelKeys{..} = AE.object [
+    "keys" AE..= Vec.toList hlkKeys,
+    "threshold" AE..= hlkThreshold
+    ]
+
+instance HashableTo SHA256.Hash (HigherLevelKeys a) where
+  getHash = SHA256.hash . encode
+
+instance Monad m => MHashableTo m SHA256.Hash (HigherLevelKeys a) where
+
+--------------------
+-- * Root update
+--------------------
+
+-- |Root updates are the highest kind of updates. They can update every other
+-- set of keys, even themselves. They can only be performed by Root level keys.
+data RootUpdate =
+  RootKeysRootUpdate {
+    rkruKeys :: !(HigherLevelKeys RootKeysKind)
+  }
+  -- ^Update the root keys
+  | Level1KeysRootUpdate {
+    l1kruKeys :: !(HigherLevelKeys Level1KeysKind)
+  }
+  -- ^Update the Level 1 keys
+  | Level2KeysRootUpdate {
+    l2kruAuthorizations :: !Authorizations
+  }
+  -- ^Update the level 2 keys
+  deriving (Eq, Show)
+
+instance Serialize RootUpdate where
+  put RootKeysRootUpdate{..} = do
+    putWord8 0
+    put rkruKeys
+  put Level1KeysRootUpdate{..} = do
+    putWord8 1
+    put l1kruKeys
+  put Level2KeysRootUpdate{..} = do
+    putWord8 2
+    put l2kruAuthorizations
+  get = label "RootUpdate" $ do
+    variant <- getWord8
+    case variant of
+      0 -> RootKeysRootUpdate <$> get
+      1 -> Level1KeysRootUpdate <$> get
+      2 -> Level2KeysRootUpdate <$> get
+      _ -> fail $ "Unknown variant: " ++ show variant
+
+instance AE.FromJSON RootUpdate where
+  parseJSON = AE.withObject "RootUpdate" $ \o -> do
+    variant :: Text <- o .: "typeOfUpdate"
+    case variant of
+         "rootKeysUpdate" -> RootKeysRootUpdate <$> o .: "updatePayload"
+         "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
+         "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
+         _ -> fail $ "Unknown variant: " ++ show variant
+
+instance AE.ToJSON RootUpdate where
+  toJSON RootKeysRootUpdate{..} =
+    AE.object [ "typeOfUpdate" AE..= ("rootKeysUpdate" :: Text),
+                "updatePayload" AE..= rkruKeys
+              ]
+  toJSON Level1KeysRootUpdate{..} =
+    AE.object [ "typeOfUpdate" AE..= ("level1KeysUpdate" :: Text),
+                "updatePayload" AE..= l1kruKeys
+              ]
+  toJSON Level2KeysRootUpdate{..} =
+    AE.object [ "typeOfUpdate" AE..= ("level2KeysUpdate" :: Text),
+                "updatePayload" AE..= l2kruAuthorizations
+              ]
+
+--------------------
+-- * Level 1 updates
+--------------------
+
+-- |Level 1 updates are the intermediate update kind. They can update themselves
+-- or level 2 keys. They can only be performed by Level 1 keys.
+data Level1Update =
+  Level1KeysLevel1Update {
+    l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
+  }
+  | Level2KeysLevel1Update {
+    l2kl1uAuthorizations :: Authorizations
+  }
+  deriving (Eq, Show)
+
+instance Serialize Level1Update where
+  put Level1KeysLevel1Update{..} = do
+    putWord8 0
+    put l1kl1uKeys
+  put Level2KeysLevel1Update{..} = do
+    putWord8 1
+    put l2kl1uAuthorizations
+  get = label "Level1Update" $ do
+    variant <- getWord8
+    case variant of
+      0 -> Level1KeysLevel1Update <$> get
+      1 -> Level2KeysLevel1Update <$> get
+      _ -> fail $ "Unknown variant: " ++ show variant
+
+instance AE.FromJSON Level1Update where
+  parseJSON = AE.withObject "Level1Update" $ \o -> do
+    variant :: Text <- o .: "typeOfUpdate"
+    case variant of
+      "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
+      "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
+      _ -> fail $ "Unknown variant: " ++ show variant
+
+instance AE.ToJSON Level1Update where
+  toJSON Level1KeysLevel1Update{..} =
+    AE.object [ "typeOfUpdate" AE..= ("level1KeysUpdate" :: Text),
+                "updatePayload" AE..= l1kl1uKeys
+              ]
+  toJSON Level2KeysLevel1Update{..} =
+    AE.object [ "typeOfUpdate" AE..= ("level2KeysUpdate" :: Text),
+                "updatePayload" AE..= l2kl1uAuthorizations
+              ]
+
 ----------------------
 -- * Protocol updates
 ----------------------
-
--- |Types of updates to the chain.
-data UpdateType
-    = UpdateAuthorization
-    -- ^Update the access structures that authorize updates
-    | UpdateProtocol
-    -- ^Update the chain protocol
-    | UpdateElectionDifficulty
-    -- ^Update the election difficulty
-    | UpdateEuroPerEnergy
-    -- ^Update the euro per energy exchange rate
-    | UpdateMicroGTUPerEuro
-    -- ^Update the microGTU per euro exchange rate
-    | UpdateFoundationAccount
-    -- ^Update the address of the foundation account
-    | UpdateMintDistribution
-    -- ^Update the distribution of newly minted GTU
-    | UpdateTransactionFeeDistribution
-    -- ^Update the distribution of transaction fees
-    | UpdateGASRewards
-    -- ^Update the GAS rewards
-    | UpdateBakerStakeThreshold
-    -- ^Minimum amount to register as a baker
-    deriving (Eq, Ord, Show, Ix, Bounded, Enum)
-
--- The JSON instance will encode all values as strings, lower-casing the first
--- character, so, e.g., `toJSON UpdateProtocol = String "updateProtocol"`.
-$(deriveJSON defaultOptions{
-    constructorTagModifier = firstLower,
-    allNullaryToStringTag = True
-    }
-    ''UpdateType)
-
-instance Serialize UpdateType where
-    put UpdateAuthorization = putWord8 0
-    put UpdateProtocol = putWord8 1
-    put UpdateElectionDifficulty = putWord8 2
-    put UpdateEuroPerEnergy = putWord8 3
-    put UpdateMicroGTUPerEuro = putWord8 4
-    put UpdateFoundationAccount = putWord8 5
-    put UpdateMintDistribution = putWord8 6
-    put UpdateTransactionFeeDistribution = putWord8 7
-    put UpdateGASRewards = putWord8 8
-    put UpdateBakerStakeThreshold = putWord8 9
-    get = getWord8 >>= \case
-        0 -> return UpdateAuthorization
-        1 -> return UpdateProtocol
-        2 -> return UpdateElectionDifficulty
-        3 -> return UpdateEuroPerEnergy
-        4 -> return UpdateMicroGTUPerEuro
-        5 -> return UpdateFoundationAccount
-        6 -> return UpdateMintDistribution
-        7 -> return UpdateTransactionFeeDistribution
-        8 -> return UpdateGASRewards
-        9 -> return UpdateBakerStakeThreshold
-        n -> fail $ "invalid update type: " ++ show n
 
 -- |Payload of a protocol update.
 data ProtocolUpdate = ProtocolUpdate {
@@ -495,8 +595,118 @@ instance AE.FromJSON ProtocolUpdate where
             return ProtocolUpdate{..}
 
 -------------------------
+-- * Keys collection
+-------------------------
+
+-- |A data structure that holds a complete set of update keys. It will be stored
+-- in the BlockState.
+data UpdateKeysCollection = UpdateKeysCollection {
+  rootKeys :: !(HigherLevelKeys RootKeysKind),
+  level1Keys :: !(HigherLevelKeys Level1KeysKind),
+  level2Keys :: !Authorizations
+  } deriving (Eq, Show)
+
+instance Serialize UpdateKeysCollection where
+  put UpdateKeysCollection{..} = do
+    put rootKeys
+    put level1Keys
+    put level2Keys
+  get = UpdateKeysCollection <$> get <*> get <*> get
+
+instance HashableTo SHA256.Hash UpdateKeysCollection where
+  getHash = SHA256.hash . encode
+
+instance Monad m => MHashableTo m SHA256.Hash UpdateKeysCollection where
+
+instance AE.FromJSON UpdateKeysCollection where
+  parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
+    rootKeys <- v .: "rootKeys"
+    level1Keys <- v .: "level1Keys"
+    level2Keys <- v .: "level2Keys"
+    return UpdateKeysCollection{..}
+
+instance AE.ToJSON UpdateKeysCollection where
+  toJSON UpdateKeysCollection{..} = AE.object [
+    "rootKeys" AE..= rootKeys,
+    "level1Keys" AE..= level1Keys,
+    "level2Keys" AE..= level2Keys
+    ]
+
+-------------------------
 -- * Update Instructions
 -------------------------
+
+-- |Types of updates to the chain. Used to disambiguate to which queue of updates should the value be pushed.
+data UpdateType
+    = UpdateProtocol
+    -- ^Update the chain protocol
+    | UpdateElectionDifficulty
+    -- ^Update the election difficulty
+    | UpdateEuroPerEnergy
+    -- ^Update the euro per energy exchange rate
+    | UpdateMicroGTUPerEuro
+    -- ^Update the microGTU per euro exchange rate
+    | UpdateFoundationAccount
+    -- ^Update the address of the foundation account
+    | UpdateMintDistribution
+    -- ^Update the distribution of newly minted GTU
+    | UpdateTransactionFeeDistribution
+    -- ^Update the distribution of transaction fees
+    | UpdateGASRewards
+    -- ^Update the GAS rewards
+    | UpdateBakerStakeThreshold
+    -- ^Minimum amount to register as a baker
+    | UpdateRootKeysWithRootKeys
+    -- ^Update the root keys with the root keys
+    | UpdateLevel1KeysWithRootKeys
+    -- ^Update the level 1 keys with the root keys
+    | UpdateLevel2KeysWithRootKeys
+    -- ^Update the level 2 keys with the root keys
+    | UpdateLevel1KeysWithLevel1Keys
+    -- ^Update the level 1 keys with the level 1 keys
+    | UpdateLevel2KeysWithLevel1Keys
+    -- ^Update the level 2 keys with the level 1 keys
+    deriving (Eq, Ord, Show, Ix, Bounded, Enum)
+
+-- The JSON instance will encode all values as strings, lower-casing the first
+-- character, so, e.g., `toJSON UpdateProtocol = String "updateProtocol"`.
+$(deriveJSON defaultOptions{
+    constructorTagModifier = firstLower,
+    allNullaryToStringTag = True
+    }
+    ''UpdateType)
+
+instance Serialize UpdateType where
+    put UpdateProtocol = putWord8 1
+    put UpdateElectionDifficulty = putWord8 2
+    put UpdateEuroPerEnergy = putWord8 3
+    put UpdateMicroGTUPerEuro = putWord8 4
+    put UpdateFoundationAccount = putWord8 5
+    put UpdateMintDistribution = putWord8 6
+    put UpdateTransactionFeeDistribution = putWord8 7
+    put UpdateGASRewards = putWord8 8
+    put UpdateBakerStakeThreshold = putWord8 9
+    put UpdateRootKeysWithRootKeys = putWord8 10
+    put UpdateLevel1KeysWithRootKeys = putWord8 11
+    put UpdateLevel2KeysWithRootKeys = putWord8 12
+    put UpdateLevel1KeysWithLevel1Keys = putWord8 13
+    put UpdateLevel2KeysWithLevel1Keys = putWord8 14
+    get = getWord8 >>= \case
+        1 -> return UpdateProtocol
+        2 -> return UpdateElectionDifficulty
+        3 -> return UpdateEuroPerEnergy
+        4 -> return UpdateMicroGTUPerEuro
+        5 -> return UpdateFoundationAccount
+        6 -> return UpdateMintDistribution
+        7 -> return UpdateTransactionFeeDistribution
+        8 -> return UpdateGASRewards
+        9 -> return UpdateBakerStakeThreshold
+        10 -> return UpdateRootKeysWithRootKeys
+        11 -> return UpdateLevel1KeysWithRootKeys
+        12 -> return UpdateLevel2KeysWithRootKeys
+        13 -> return UpdateLevel1KeysWithLevel1Keys
+        14 -> return UpdateLevel2KeysWithLevel1Keys
+        n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
 type UpdateSequenceNumber = Nonce
@@ -505,9 +715,13 @@ type UpdateSequenceNumber = Nonce
 minUpdateSequenceNumber :: UpdateSequenceNumber
 minUpdateSequenceNumber = minNonce
 
+--------------------
+-- * Update Header
+--------------------
+
 -- |The header for an update instruction, consisting of the
 -- sequence number, effective time, expiry time (timeout),
--- and payload size.  This structure is the same for all
+-- and payload size. This structure is the same for all
 -- update payload types.
 data UpdateHeader = UpdateHeader {
         updateSeqNumber :: !UpdateSequenceNumber,
@@ -530,11 +744,13 @@ instance Serialize UpdateHeader where
         updatePayloadSize <- get
         return UpdateHeader{..}
 
+--------------------
+-- * Update Payload
+--------------------
+
 -- |The payload of an update instruction.
 data UpdatePayload
-    = AuthorizationUpdatePayload !Authorizations
-    -- ^Update the authorization structure
-    | ProtocolUpdatePayload !ProtocolUpdate
+    = ProtocolUpdatePayload !ProtocolUpdate
     -- ^Update the protocol
     | ElectionDifficultyUpdatePayload !ElectionDifficulty
     -- ^Update the election difficulty parameter
@@ -552,10 +768,13 @@ data UpdatePayload
     -- ^Update the GAS rewards
     | BakerStakeThresholdUpdatePayload !Amount
     -- ^Update the minimum amount to register as a baker
+    | RootUpdatePayload !RootUpdate
+    -- ^Root level updates
+    | Level1UpdatePayload !Level1Update
+    -- ^Level 1 update
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
-    put (AuthorizationUpdatePayload u) = put UpdateAuthorization >> put u
     put (ProtocolUpdatePayload u) = put UpdateProtocol >> put u
     put (ElectionDifficultyUpdatePayload u) = put UpdateElectionDifficulty >> put u
     put (EuroPerEnergyUpdatePayload u) = put UpdateEuroPerEnergy >> put u
@@ -565,8 +784,18 @@ instance Serialize UpdatePayload where
     put (TransactionFeeDistributionUpdatePayload u) = put UpdateTransactionFeeDistribution >> put u
     put (GASRewardsUpdatePayload u) = put UpdateGASRewards >> put u
     put (BakerStakeThresholdUpdatePayload u) = put UpdateBakerStakeThreshold >> put u
+    put (RootUpdatePayload u) = do
+      case u of
+        RootKeysRootUpdate _ -> put UpdateRootKeysWithRootKeys
+        Level1KeysRootUpdate _ -> put UpdateLevel1KeysWithRootKeys
+        Level2KeysRootUpdate _ -> put UpdateLevel2KeysWithRootKeys
+      put u
+    put (Level1UpdatePayload u) = do
+      case u of
+        Level1KeysLevel1Update _ -> put UpdateLevel1KeysWithLevel1Keys
+        Level2KeysLevel1Update _ -> put UpdateLevel2KeysWithLevel1Keys
+      put u
     get = get >>= \case
-            UpdateAuthorization -> AuthorizationUpdatePayload <$> get
             UpdateProtocol -> ProtocolUpdatePayload <$> get
             UpdateElectionDifficulty -> ElectionDifficultyUpdatePayload <$> get
             UpdateEuroPerEnergy -> EuroPerEnergyUpdatePayload <$> get
@@ -576,6 +805,11 @@ instance Serialize UpdatePayload where
             UpdateTransactionFeeDistribution -> TransactionFeeDistributionUpdatePayload <$> get
             UpdateGASRewards -> GASRewardsUpdatePayload <$> get
             UpdateBakerStakeThreshold -> BakerStakeThresholdUpdatePayload <$> get
+            UpdateRootKeysWithRootKeys -> RootUpdatePayload <$> get
+            UpdateLevel1KeysWithRootKeys -> RootUpdatePayload <$> get
+            UpdateLevel2KeysWithRootKeys -> RootUpdatePayload <$> get
+            UpdateLevel1KeysWithLevel1Keys -> Level1UpdatePayload <$> get
+            UpdateLevel2KeysWithLevel1Keys -> Level1UpdatePayload <$> get
 
 $(deriveJSON defaultOptions{
     constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
@@ -583,9 +817,8 @@ $(deriveJSON defaultOptions{
     }
     ''UpdatePayload)
 
--- |Determine the 'UpdateType' associate with an 'UpdatePayload'.
+-- |Determine the 'UpdateType' associated with an 'UpdatePayload'.
 updateType :: UpdatePayload -> UpdateType
-updateType AuthorizationUpdatePayload{} = UpdateAuthorization
 updateType ProtocolUpdatePayload{} = UpdateProtocol
 updateType ElectionDifficultyUpdatePayload{} = UpdateElectionDifficulty
 updateType EuroPerEnergyUpdatePayload{} = UpdateEuroPerEnergy
@@ -595,34 +828,55 @@ updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
 updateType BakerStakeThresholdUpdatePayload{} = UpdateBakerStakeThreshold
+updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeysWithRootKeys
+updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1KeysWithRootKeys
+updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2KeysWithRootKeys
+updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1KeysWithLevel1Keys
+updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2KeysWithLevel1Keys
 
--- |Determine if signatures from the given set of keys would be
--- sufficient to authorize the given update.
-checkUpdateAuthorizationKeys :: Authorizations -> UpdatePayload -> Set.Set UpdateKeyIndex -> Bool
-checkUpdateAuthorizationKeys Authorizations{..} (AuthorizationUpdatePayload _) ks = checkKeySet asAuthorization ks
-checkUpdateAuthorizationKeys Authorizations{..} (ProtocolUpdatePayload _) ks = checkKeySet asProtocol ks
-checkUpdateAuthorizationKeys Authorizations{..} (ElectionDifficultyUpdatePayload _) ks = checkKeySet asParamElectionDifficulty ks
-checkUpdateAuthorizationKeys Authorizations{..} (EuroPerEnergyUpdatePayload _) ks = checkKeySet asParamEuroPerEnergy ks
-checkUpdateAuthorizationKeys Authorizations{..} (MicroGTUPerEuroUpdatePayload _) ks = checkKeySet asParamMicroGTUPerEuro ks
-checkUpdateAuthorizationKeys Authorizations{..} (FoundationAccountUpdatePayload _) ks = checkKeySet asParamFoundationAccount ks
-checkUpdateAuthorizationKeys Authorizations{..} (MintDistributionUpdatePayload _) ks = checkKeySet asParamMintDistribution ks
-checkUpdateAuthorizationKeys Authorizations{..} (TransactionFeeDistributionUpdatePayload _) ks = checkKeySet asParamTransactionFeeDistribution ks
-checkUpdateAuthorizationKeys Authorizations{..} (GASRewardsUpdatePayload _) ks = checkKeySet asParamGASRewards ks
-checkUpdateAuthorizationKeys Authorizations{..} (BakerStakeThresholdUpdatePayload _) ks = checkKeySet asBakerStakeThreshold ks
+-- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
+extractKeysIndices :: UpdatePayload -> UpdateKeysCollection -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
+extractKeysIndices p =
+  case p of
+    ProtocolUpdatePayload{} -> f asProtocol
+    ElectionDifficultyUpdatePayload{} -> f asParamElectionDifficulty
+    EuroPerEnergyUpdatePayload{} -> f asParamEuroPerEnergy
+    MicroGTUPerEuroUpdatePayload{} -> f asParamMicroGTUPerEuro
+    FoundationAccountUpdatePayload{} -> f asParamFoundationAccount
+    MintDistributionUpdatePayload{} -> f asParamMintDistribution
+    TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
+    GASRewardsUpdatePayload{} -> f asParamGASRewards
+    BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold
+    RootUpdatePayload{} -> g rootKeys
+    Level1UpdatePayload{} -> g level1Keys
+  where f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
+        g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0..(fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
 
--- |Signatures on an update instruction.
--- The serialization of 'UpdateInstructionSignatures' is uniquely determined.
-newtype UpdateInstructionSignatures = UpdateInstructionSignatures {updateInstructionSignatures :: Map.Map UpdateKeyIndex Signature}
-    deriving newtype (Eq, Show)
+-- |Extract the vector of public keys that are authorized for this kind of update. Note
+-- that for a level 2 update it will return the whole set of level 2 keys.
+extractPubKeys :: UpdatePayload -> UpdateKeysCollection -> Vec.Vector UpdatePublicKey
+extractPubKeys p =
+  case p of
+    RootUpdatePayload{} -> hlkKeys . rootKeys
+    Level1UpdatePayload{} -> hlkKeys . level1Keys
+    _ -> asKeys . level2Keys
 
-instance Serialize UpdateInstructionSignatures where
-    put (UpdateInstructionSignatures m) = do
-        putWord16be (fromIntegral (Map.size m))
-        putSafeSizedMapOf put put m
-    get = do
-        sz <- getWord16be
-        when (sz == 0) $ fail "signatures must not be empty"
-        UpdateInstructionSignatures <$> getSafeSizedMapOf sz get get
+-- |Check that an access structure authorizes the given key set, this means particularly
+-- that all the keys are authorized and the number of keys is above the threshold.
+checkEnoughKeys ::
+  -- |Set of known key indices.
+  (Set.Set UpdateKeyIndex, UpdateKeysThreshold) ->
+  -- |Set of key indices that signed the update.
+  Set.Set UpdateKeyIndex ->
+  Bool
+checkEnoughKeys (knownIndices, thr) ks =
+  let numOfAuthorizedKeysReceived = Set.size (ks `Set.intersection` knownIndices) in
+    numOfAuthorizedKeysReceived >= fromIntegral thr
+    && numOfAuthorizedKeysReceived == Set.size ks
+
+--------------------
+-- * Signatures
+--------------------
 
 -- |Hash of an update instruction, as used for signing.
 newtype UpdateInstructionSignHashV0 = UpdateInstructionSignHashV0 {v0UpdateInstructionSignHash :: SHA256.Hash}
@@ -638,6 +892,38 @@ makeUpdateInstructionSignHash ::
     -- ^Serialized update instruction header and payload
     -> UpdateInstructionSignHash
 makeUpdateInstructionSignHash body = UpdateInstructionSignHashV0 (SHA256.hash body)
+
+-- |Signatures on an update instruction.
+-- The serialization of 'UpdateInstructionSignatures' is uniquely determined.
+-- It can't be empty and in that case will be rejected when parsing.
+newtype UpdateInstructionSignatures = UpdateInstructionSignatures {
+  signatures :: Map.Map UpdateKeyIndex Signature
+  } deriving newtype (Eq, Show)
+
+instance Serialize UpdateInstructionSignatures where
+    put (UpdateInstructionSignatures m) = do
+        putWord16be (fromIntegral (Map.size m))
+        putSafeSizedMapOf put put m
+    get = do
+        sz <- getWord16be
+        when (sz == 0) $ fail "signatures must not be empty"
+        UpdateInstructionSignatures <$> getSafeSizedMapOf sz get get
+
+-- |Check that a hash is correctly signed by the keys specified by the map indices.
+checkCorrectSignatures ::
+  UpdateInstructionSignHash ->
+  Vec.Vector UpdatePublicKey ->
+  UpdateInstructionSignatures ->
+  Bool
+checkCorrectSignatures signHash keyVec UpdateInstructionSignatures{..} =
+  all checkSig $ Map.toList signatures
+  where checkSig (i, sig) = case keyVec Vec.!? fromIntegral i of
+                              Nothing -> False
+                              Just verKey -> verify verKey (encode signHash) sig
+
+--------------------
+-- * Update instruction
+--------------------
 
 -- |An update instruction.
 -- The header must have the correct length of the payload, and the
@@ -691,11 +977,22 @@ putRawUpdateInstruction RawUpdateInstruction{..} = do
 
 -- |Produce a signature for an update instruction with the given 'UpdateInstructionSignHash'
 -- using the supplied keys.
-signUpdateInstruction :: UpdateInstructionSignHash -> Map.Map UpdateKeyIndex KeyPair -> UpdateInstructionSignatures
-signUpdateInstruction sh = UpdateInstructionSignatures . fmap (\kp -> sign kp (encode sh))
+signUpdateInstruction ::
+  -- |The hash to sign.
+  UpdateInstructionSignHash ->
+  -- |The map of keys to use for signing.
+  Map.Map UpdateKeyIndex KeyPair ->
+  UpdateInstructionSignatures
+signUpdateInstruction sh =
+  UpdateInstructionSignatures . fmap (\kp -> sign kp (encode sh))
 
 -- |Make an 'UpdateInstruction' by signing a 'RawUpdateInstruction' with the given keys.
-makeUpdateInstruction :: RawUpdateInstruction -> Map.Map UpdateKeyIndex KeyPair -> UpdateInstruction
+makeUpdateInstruction ::
+  -- |The raw update instruction
+  RawUpdateInstruction ->
+  -- |The keys to be used to sign this instruction.
+  Map.Map UpdateKeyIndex KeyPair ->
+  UpdateInstruction
 makeUpdateInstruction rui@RawUpdateInstruction{..} keys = UpdateInstruction {
             uiHeader = UpdateHeader {
                     updateSeqNumber = ruiSeqNumber,
@@ -707,39 +1004,25 @@ makeUpdateInstruction rui@RawUpdateInstruction{..} keys = UpdateInstruction {
             ..
         }
     where
-        uiSignHash = makeUpdateInstructionSignHash (runPut $ putRawUpdateInstruction rui)
-        uiSignatures = signUpdateInstruction uiSignHash keys
+      uiSignHash = makeUpdateInstructionSignHash (runPut $ putRawUpdateInstruction rui)
+      uiSignatures = signUpdateInstruction uiSignHash keys
 
 ----------------
 -- * Validation
 ----------------
 
--- |Check if the signatures on an 'UpdateInstruction' are valid with respect
--- to the given 'Authorizations'. This does not check if the keys are the
--- correct ones to authorize the update.
-checkUpdateInstructionSignatures
-    :: Authorizations
-    -- ^Current authorizations
-    -> UpdateInstruction
-    -- ^Instruction to verify
-    -> Bool
-checkUpdateInstructionSignatures auth UpdateInstruction{..} = all checkSig sigs
-    where
-        sigs = Map.toList (updateInstructionSignatures uiSignatures)
-        checkSig (i, sig) = case asKeys auth Vec.!? fromIntegral i of
-            Nothing -> False
-            Just verKey -> verify verKey (encode uiSignHash) sig
-
--- |Check if an update is authorized by the given 'Authorizations'.
+-- |Check if an update is authorized by the given 'UpdateKeysCollection'.
 -- That is, it must have signatures from at least the required threshold of
 -- those authorized to perform the given update, and all signatures must be
--- valid.
+-- valid and authorized.
 checkAuthorizedUpdate
-    :: Authorizations
+    :: UpdateKeysCollection
     -- ^Current authorizations
     -> UpdateInstruction
     -- ^Instruction to verify
     -> Bool
-checkAuthorizedUpdate auth ui
-    = checkUpdateAuthorizationKeys auth (uiPayload ui) (Map.keysSet (updateInstructionSignatures (uiSignatures ui)))
-        && checkUpdateInstructionSignatures auth ui
+checkAuthorizedUpdate ukc UpdateInstruction{uiSignatures=u@UpdateInstructionSignatures{..},..} =
+      -- check number of authorized keys is above threshold
+      checkEnoughKeys (extractKeysIndices uiPayload ukc) (Map.keysSet signatures)
+      -- check signatures validate
+      && checkCorrectSignatures uiSignHash (extractPubKeys uiPayload ukc) u
