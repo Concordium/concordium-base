@@ -725,6 +725,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | RemoveFirstCredential
                   -- | The credential holder of the keys to be updated did not sign the transaction
                   | CredentialHolderDidNotSign
+                  -- |Account is not allowed to have multiple credentials because it contains a non-zero encrypted transfer.
+                  | NotAllowedMultipleCredentials
+                  -- |The account is not allowed to receive encrypted transfers because it has multiple credentials.
+                  | NotAllowedToReceiveEncrypted
+                  -- |The account is not allowed to send encrypted transfers (or transfer from/to public to/from encrypted)
+                  | NotAllowedToHandleEncrypted
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason

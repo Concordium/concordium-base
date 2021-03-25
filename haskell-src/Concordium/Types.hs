@@ -50,6 +50,7 @@ module Concordium.Types (
   AccountAddress(..),
   AccountEncryptedAmount(..),
   initialAccountEncryptedAmount,
+  isZeroAccountEncryptedAmount,
   incomingEncryptedAmounts,
   getIncomingAmountsList,
   aggregatedAmount,
@@ -645,6 +646,15 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   -- 'maxNumIncoming' values.
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount)
 } deriving(Eq, Show)
+
+-- |Check whether the account encrypted amount is zero. This checks that there
+-- are no incoming amounts, and that the self amount is a specific encryption of
+-- 0, with randomness 0.
+isZeroAccountEncryptedAmount :: AccountEncryptedAmount -> Bool
+isZeroAccountEncryptedAmount AccountEncryptedAmount{..} =
+  _aggregatedAmount == Nothing &&
+  null _incomingEncryptedAmounts &&
+  isZeroEncryptedAmount _selfAmount
 
 -- | When serializing to a JSON, we will put the aggregated amount if present at the
 -- beginning of the `"incomingAmounts"` field.
