@@ -10,6 +10,7 @@ import Data.Time.Clock
 
 import Concordium.Common.Time
 import Concordium.Types
+import Concordium.Constants
 import Concordium.ID.Types
 import Concordium.ID.DummyData
 
@@ -43,7 +44,7 @@ genAccountAddress = AccountAddress . FBS.pack <$> vector accountAddressSize
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
   thSender <- genAccountAddress
-  thPayloadSize <- PayloadSize . fromIntegral <$> sized (\n -> choose (n, 10*(n+1)))
+  thPayloadSize <- PayloadSize <$> choose (0, maxPayloadSize)
   thNonce <- Nonce <$> arbitrary
   thEnergyAmount <- Energy <$> arbitrary
   thExpiry <- TransactionTime <$> arbitrary

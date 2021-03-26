@@ -132,23 +132,9 @@ import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Types
 import Concordium.Types
+import Concordium.Constants
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
-
---------------------------------------------------------------------------------
-
--- |Maximum length of the parameter to init and receive methods.
-maxParameterLen :: Word16
-maxParameterLen = 1024
-
--- |Maximum module size.
-maxWasmModuleSize :: Word32
-maxWasmModuleSize = 65536 -- 65kB
-
--- |Maximum byte size of function names.
--- Must stay in sync with MAX_FUNC_NAME_SIZE from wasm-transform.
-maxFuncNameSize :: Int
-maxFuncNameSize = 100
 
 --------------------------------------------------------------------------------
 
@@ -172,9 +158,9 @@ moduleSourceLength = fromIntegral . BS.length . moduleSource
 -- |Web assembly module in binary format.
 data WasmModule = WasmModule {
   -- |Version of the Wasm standard and on-chain API this module corresponds to.
-  wasmVersion :: Word32,
+  wasmVersion :: !Word32,
   -- |Source in binary wasm format.
-  wasmSource :: ModuleSource
+  wasmSource :: !ModuleSource
   } deriving(Eq, Show)
 
 getModuleRef :: WasmModule -> ModuleRef

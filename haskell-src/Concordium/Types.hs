@@ -155,6 +155,7 @@ import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
+import Concordium.Constants
 
 import Control.Exception (assert)
 import Control.Monad
@@ -740,7 +741,10 @@ newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
 -- * @SPEC: <$DOCS/Transactions#transaction-header>
 instance S.Serialize PayloadSize where
   put (PayloadSize n) = S.putWord32be n
-  get = PayloadSize <$> S.getWord32be
+  get = do
+    thePayloadSize <- S.getWord32be
+    when (thePayloadSize > maxPayloadSize) $ fail "Payload size exceeds maximum transaction payload size."
+    return PayloadSize{..}
 
 -- |Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
