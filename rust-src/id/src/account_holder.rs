@@ -29,17 +29,13 @@ use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 /// information (group generators, shared commitment keys, etc).
 /// NB: this function cannot be inlined in generate_pio, as it is used
 /// externally.
-pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    context: &IPContext<P, C>,
+pub fn build_pub_info_for_ip<C: Curve>(
+    gc: &GlobalContext<C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
     initial_account: &impl PublicInitialAccountData,
 ) -> Option<PublicInformationForIP<C>> {
-    let id_cred_pub = context
-        .global_context
-        .on_chain_commitment_key
-        .g
-        .mul_by_scalar(id_cred_sec);
+    let id_cred_pub = gc.on_chain_commitment_key.g.mul_by_scalar(id_cred_sec);
 
     // From create_credential:
     // let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
@@ -50,8 +46,7 @@ pub fn build_pub_info_for_ip<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // RegId as well as Prf key commitments must be computed
     // with the same generators as in the commitment key.
-    let reg_id = context
-        .global_context
+    let reg_id = gc
         .on_chain_commitment_key
         .hide(
             &Value::<C>::new(reg_id_exponent),
@@ -89,7 +84,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Step 3: We should sign IDcred_PUB ,policy_ACC ,RegID_ACC ,vk_ACC ,pk_ACC
     let pub_info_for_ip = build_pub_info_for_ip(
-        context,
+        context.global_context,
         &aci.cred_holder_info.id_cred.id_cred_sec,
         prf_key,
         initial_account,
@@ -961,7 +956,7 @@ pub struct CommitmentsRandomness<C: Curve> {
 /// For the other values the verifier (the chain) will compute commitments with
 /// randomness 0 in order to verify knowledge of the signature.
 #[allow(clippy::too_many_arguments)]
-fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
+pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     prf_key: &prf::SecretKey<C>,

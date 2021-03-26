@@ -3,16 +3,13 @@ use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
     base16_encode_string,
-    types::{Amount, KeyIndex, TransactionTime},
+    types::{Amount, KeyIndex},
     *,
 };
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use id::{
-    account_holder::*, constants::*, ffi::*, identity_provider::*, secret_sharing::Threshold,
-    types::*,
-};
+use id::{account_holder::*, constants::*, ffi::*, secret_sharing::Threshold, types::*};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
 use std::{
@@ -41,24 +38,28 @@ enum GenesisTool {
             long = "template",
             help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
             value_name = "TEMPLATE",
-            default_value = "account"
+            default_value = "account",
+            env = "TEMPLATE"
         )]
         template: String,
         #[structopt(
             long = "balance",
             help = "Initial balance on each of the accounts, in GTU.",
-            default_value = "1000000"
+            default_value = "1000000",
+            env = "INITIAL_BALANCE"
         )]
         balance: Amount,
         #[structopt(
             long = "stake",
             help = "Initial stake of the bakers, in GTU. If this is set then all accounts will be \
-                    bakers."
+                    bakers.",
+            env = "INITIAL_STAKE"
         )]
         stake: Option<Amount>,
         #[structopt(
             long = "restake",
-            help = "Restake earnings automatically. This only has effect if 'stake' is set."
+            help = "Restake earnings automatically. This only has effect if 'stake' is set.",
+            env = "RESTAKE_EARNINGS"
         )]
         restake: bool,
         #[structopt(flatten)]
@@ -69,32 +70,37 @@ enum GenesisTool {
 #[derive(StructOpt)]
 struct CommonOptions {
     #[structopt(
-        long = "ip-data",
-        help = "File with all information about the identity provider (public and private)."
+        long = "ip-info",
+        help = "File with (versioned) public information about the identity provider.",
+        env = "IP_INFO_FILE"
     )]
-    ip_data: PathBuf,
+    ip_info: PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
-        default_value = "database/global.json"
+        default_value = "database/global.json",
+        env = "GLOBAL_FILE"
     )]
     global: PathBuf,
     #[structopt(
-        long = "ars",
-        help = "File with a list of anonymity revokers..",
-        default_value = "database/anonymity_revokers.json"
+        long = "ar-info",
+        help = "File with the (versioned) public keys of the anonymity revoker.",
+        default_value = "database/anonymity_revoker-0.pub.json",
+        env = "AR_INFO_FILE"
     )]
-    anonymity_revokers: PathBuf,
+    ar_info: PathBuf,
     #[structopt(
         long = "num-keys",
         help = "The number of keys each account should have. Threshold is set to max(1, K-1).",
-        default_value = "3"
+        default_value = "3",
+        env = "NUM_KEYS"
     )]
     num_keys: usize,
     #[structopt(
         long = "out-dir",
         help = "Directory to write the generated files into.",
-        default_value = "."
+        default_value = ".",
+        env = "OUT_DIR"
     )]
     out_dir: PathBuf,
 }
@@ -115,7 +121,7 @@ fn main() -> std::io::Result<()> {
     let mut csprng = thread_rng();
 
     // Load identity provider and anonymity revokers.
-    let ip_data = read_json_from_file::<_, IpData<IpPairing>>(&common.ip_data)?;
+    let ip_info = read_json_from_file::<_, Versioned<IpInfo<IpPairing>>>(&common.ip_info)?.value;
 
     let global_ctx = read_global_context(&common.global).ok_or_else(|| {
         Error::new(
@@ -124,14 +130,7 @@ fn main() -> std::io::Result<()> {
         )
     })?;
 
-    let ars_infos = read_anonymity_revokers(&common.anonymity_revokers)?;
-
-    let context = IPContext::new(
-        &ip_data.public_ip_info,
-        &ars_infos.anonymity_revokers,
-        &global_ctx,
-    );
-    let threshold = Threshold((ars_infos.anonymity_revokers.len() - 1) as u8);
+    let ar_info = read_json_from_file::<_, Versioned<ArInfo<ArCurve>>>(&common.ar_info)?.value;
 
     if common.num_keys == 0 && common.num_keys > 255 {
         return Err(Error::new(
@@ -193,66 +192,87 @@ fn main() -> std::io::Result<()> {
             threshold: initial_threshold,
         };
 
-        let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
-            .expect("Generating the pre-identity object should succeed.");
+        let acc_data = build_pub_info_for_ip(
+            &global_ctx,
+            &aci.cred_holder_info.id_cred.id_cred_sec,
+            &aci.prf_key,
+            &initial_acc_data,
+        )
+        .expect("Could not generate account.");
 
-        let expiry = TransactionTime { seconds: u64::MAX };
+        let policy = Policy {
+            valid_to:   attributes.valid_to,
+            created_at: attributes.created_at,
+            policy_vec: BTreeMap::<_, ExampleAttribute>::new(),
+            _phantom:   Default::default(),
+        };
 
-        let ver_ok = verify_credentials(
-            &pio,
-            context,
-            &attributes,
-            expiry,
-            &ip_data.ip_secret_key,
-            &ip_data.ip_cdi_secret_key,
-        );
+        let ar_data = {
+            let mut ar_data = BTreeMap::new();
+            ar_data.insert(ar_info.ar_identity, ChainArData {
+                enc_id_cred_pub_share: ar_info
+                    .ar_public_key
+                    .encrypt_exponent(csprng, &aci.prf_key.to_value()),
+            });
+            ar_data
+        };
 
-        let (ip_sig, _) = ver_ok.expect("There is an error in signing");
+        let cred_counter = 0;
 
-        let threshold = SignatureThreshold(
-            if common.num_keys == 1 {
-                1
-            } else {
-                common.num_keys as u8 - 1
-            },
-        );
+        // only a single dummy anonymity revoker.
+        let threshold = Threshold(1);
 
-        let acc_data = CredentialData {
-            keys: initial_acc_data.keys,
+        let chosen_ars = {
+            let mut chosen_ars = BTreeMap::new();
+            chosen_ars.insert(ar_info.ar_identity, ar_info.clone());
+            chosen_ars
+        };
+
+        let (_, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
+            &aci.cred_holder_info.id_cred.id_cred_sec,
+            &chosen_ars,
             threshold,
-        };
-
-        let id_object = IdentityObject {
-            pre_identity_object: pio,
-            alist:               attributes,
-            signature:           ip_sig,
-        };
-
-        let id_object_use_data = IdObjectUseData { aci, randomness };
-
-        let icdi = create_initial_cdi(
-            &ip_data.public_ip_info,
-            id_object.pre_identity_object.pub_info_for_ip,
-            &id_object.alist,
-            expiry,
-            &ip_data.ip_cdi_secret_key,
+            &global_ctx.on_chain_commitment_key,
         );
 
-        let address = AccountAddress::new(&icdi.values.reg_id);
+        let (commitments, _) = compute_commitments(
+            &global_ctx.on_chain_commitment_key,
+            &attributes,
+            &aci.prf_key,
+            cred_counter,
+            &cmm_id_cred_sec_sharing_coeff,
+            cmm_coeff_randomness,
+            &policy,
+            csprng,
+        )
+        .expect("Could not compute commitments.");
+
+        let cdv = CredentialDeploymentValues {
+            cred_key_info: acc_data.vk_acc,
+            cred_id: acc_data.reg_id,
+            ip_identity: ip_info.ip_identity,
+            threshold,
+            ar_data,
+            policy,
+        };
+
+        let address = AccountAddress::new(&cdv.cred_id);
+
+        // we output a credential without proofs but with commitments.
+        // This is enough for inclusion in genesis, since we do not care
+        // about proofs, assuming everything in genesis is trusted.
+        let cdvc = AccountCredentialWithoutProofs::Normal { cdv, commitments };
 
         let versioned_credentials = {
             let mut credentials = BTreeMap::new();
-            credentials.insert(KeyIndex(0), AccountCredential::Initial::<IpPairing, _, _> {
-                icdi,
-            });
+            credentials.insert(KeyIndex(0), cdvc);
             Versioned::new(VERSION_0, credentials)
         };
-        let acc_keys = AccountKeys::from(acc_data);
+        let acc_keys = AccountKeys::from(initial_acc_data);
 
         // unwrap is safe here since we've generated the credential already, and that
         // does the same computation.
-        let enc_key = id_object_use_data
-            .aci
+        let enc_key = aci
             .prf_key
             .prf_exponent(id::constants::INITIAL_CREDENTIAL_INDEX)
             .unwrap();
@@ -268,7 +288,7 @@ fn main() -> std::io::Result<()> {
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
             "accountKeys": acc_keys,
             "credentials": versioned_credentials,
-            "aci": id_object_use_data.aci,
+            "aci": aci,
         });
         (account_data_json, versioned_credentials, address)
     };
