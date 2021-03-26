@@ -238,7 +238,11 @@ newtype UpdateKeysThreshold = UpdateKeysThreshold { uktTheThreshold :: Word16 }
 
 instance Serialize UpdateKeysThreshold where
   put = putWord16be . uktTheThreshold
-  get = UpdateKeysThreshold <$> getWord16be
+  get = do
+    r <- getWord16be
+    when (r == 0) $ fail "UpdateKeysThreshold cannot be 0."
+    return (UpdateKeysThreshold r)
+
 
 --------------------
 -- * Authorizations updates (Level 2 keys)
@@ -497,7 +501,7 @@ data Level1Update =
     l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
   }
   | Level2KeysLevel1Update {
-    l2kl1uAuthorizations :: Authorizations
+    l2kl1uAuthorizations :: !Authorizations
   }
   deriving (Eq, Show)
 
