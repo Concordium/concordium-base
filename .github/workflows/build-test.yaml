@@ -1,0 +1,158 @@
+# Workflow triggered by pushes to the master branch and PRs targeting it
+# (as long as the commits contain code changes).
+#
+# Jobs:
+# - build-test: Build and test both the Haskell and Rust sources.
+#               The job is skipped if the workflow was triggered by a PR
+#               with a title starting (case insensitively) with "wip".
+#
+# The steps in 'build-test' are ordered to fail as fast as possible
+# and restore caches as late as possible.
+# The dependencies between the steps are described in inline comments below
+# along with a few suggestions for improving parallelization.
+
+name: Build and test
+
+on:
+  pull_request:
+    branches: master
+    paths:
+    - '.github/workflows/build-test.yaml'
+    - '**.hs'
+    - 'stack*.yaml'
+    - 'package.yaml'
+    - 'base.cabal'
+    - '**.rs'
+    - 'testdata/**'
+  push:
+    branches: master
+    paths:
+    - '.github/workflows/build-test.yaml'
+    - '**.hs'
+    - 'stack*.yaml'
+    - 'package.yaml'
+    - 'base.cabal'
+    - '**.rs'
+    - 'testdata/**'
+  workflow_dispatch: # allow manual trigger
+
+env:
+  dummy: 0                 # change to force cache invalidation
+  CARGO_TERM_COLOR: always # implicitly adds '--color=always' to all cargo commands
+
+jobs:
+  build-test:
+    needs: rustfmt
+    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        plan:
+        - ghc: 8.10.4 # used as cache key only; stack uses the one specified in stack.yaml
+          rust: 1.45.2
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # RUST #
+
+    # Set up Rust and restore dependencies and targets from cache.
+    # This must be done before checking the Rust sources.
+    - name: Cache cargo dependencies and targets
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          rust-src/target
+          rust-bins/target
+          identity-provider-service/target
+          idiss/target
+          mobile_wallet/target
+          lib
+        key: ${{ runner.os }}-{{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-{{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.plan.rust }}
+        override: true
+        components: clippy
+    # Lightweight check that Rust code compiles.
+    # Catching failure here avoids restoring of Haskell caches.
+    - name: Check that all Rust targets build
+      run: |
+        cargo check --manifest-path rust-src/Cargo.toml --workspace
+        cargo check --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
+        cargo check --manifest-path idiss/Cargo.toml --workspace
+        cargo check --manifest-path mobile_wallet/Cargo.toml --workspace
+        cargo check --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
+    # Rust code linting.
+    # Could be run in parallel in a separate job
+    # (the step is probably too fast for that to make sense though).
+    - name: Run cargo clippy on all targets
+      run: |
+        cargo clippy --manifest-path rust-src/Cargo.toml --workspace
+        cargo clippy --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
+        cargo clippy --manifest-path idiss/Cargo.toml
+        cargo clippy --manifest-path mobile_wallet/Cargo.toml
+        cargo clippy --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
+
+    # HASKELL #
+
+    # Set up Haskell by caching '~/.stack', '.stack-work', and '~/.local/bin' separately.
+    # This must be done before compiling the Haskell sources
+    # (which in turns compiles the Rust sources).
+    # The cache entry keys depend on the GHC version and contents of 'package.yaml' and 'stack.yaml'
+    # but will fall back to cache entries from different versions if no match is found.
+    - name: Cache stack global package DB
+      id: stack-global
+      uses: actions/cache@v2
+      with:
+        path: ~/.stack
+        key: ${{ runner.os }}-{{ env.dummy }}-stack-global-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-{{ env.dummy }}-stack-global-${{ matrix.plan.ghc }}
+    - name: Cache stack-installed programs in '~/.local/bin'
+      id: stack-programs
+      uses: actions/cache@v2
+      with:
+        path: ~/.local/bin
+        key: ${{ runner.os }}-{{ env.dummy }}-stack-programs-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-{{ env.dummy }}-stack-programs-${{ matrix.plan.ghc }}
+    - name: Cache '.stack-work'
+      uses: actions/cache@v2
+      with:
+        path: .stack-work
+        key: ${{ runner.os }}-{{ env.dummy }}-stack-work-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-{{ env.dummy }}-stack-work-${{ matrix.plan.ghc }}
+
+    - name: Install GHC (unless it was cached)
+      if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
+      run: |
+        stack setup --install-ghc
+    - name: Build haskell dependencies (unless they were cached)
+      if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
+      run: |
+        stack build --test --bench --only-dependencies
+
+    # Compile Rust and Haskell sources.
+    # Must be done before running any tests.
+    - name: Build all Haskell components
+      run: |
+        stack build --test --bench --force-dirty --ghc-options=-split-sections --no-run-tests --no-run-benchmarks
+
+    # Run Rust and Haskell tests. Could run in parallel in separate jobs.
+    - name: Test Rust crates
+      run: |
+        cargo test --manifest-path rust-src/Cargo.toml --all --verbose --release
+        cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release
+    - name: Test haskell
+      run: |
+        stack build --test --ghc-options=-split-sections
