@@ -50,6 +50,7 @@ module Concordium.Types (
   AccountAddress(..),
   AccountEncryptedAmount(..),
   initialAccountEncryptedAmount,
+  isZeroAccountEncryptedAmount,
   incomingEncryptedAmounts,
   getIncomingAmountsList,
   aggregatedAmount,
@@ -154,6 +155,7 @@ import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
+import Concordium.Constants
 
 import Control.Exception (assert)
 import Control.Monad
@@ -646,6 +648,15 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount)
 } deriving(Eq, Show)
 
+-- |Check whether the account encrypted amount is zero. This checks that there
+-- are no incoming amounts, and that the self amount is a specific encryption of
+-- 0, with randomness 0.
+isZeroAccountEncryptedAmount :: AccountEncryptedAmount -> Bool
+isZeroAccountEncryptedAmount AccountEncryptedAmount{..} =
+  _aggregatedAmount == Nothing &&
+  null _incomingEncryptedAmounts &&
+  isZeroEncryptedAmount _selfAmount
+
 -- | When serializing to a JSON, we will put the aggregated amount if present at the
 -- beginning of the `"incomingAmounts"` field.
 instance AE.ToJSON AccountEncryptedAmount where
@@ -730,7 +741,10 @@ newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
 -- * @SPEC: <$DOCS/Transactions#transaction-header>
 instance S.Serialize PayloadSize where
   put (PayloadSize n) = S.putWord32be n
-  get = PayloadSize <$> S.getWord32be
+  get = do
+    thePayloadSize <- S.getWord32be
+    when (thePayloadSize > maxPayloadSize) $ fail "Payload size exceeds maximum transaction payload size."
+    return PayloadSize{..}
 
 -- |Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }

@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6bc02873aafff0963e93e414f3323fb83c18591ffc5515367e04271981ad138b
+-- hash: c01b4375fa68ea1d5accaa609ed351a13c1cf5cd4af34ef4f84acb274e2686a9
 
 name:           concordium-base
 version:        0.1.0.0
@@ -33,6 +33,7 @@ library
       Concordium.Common.Amount
       Concordium.Common.Time
       Concordium.Common.Version
+      Concordium.Constants
       Concordium.Cost
       Concordium.Crypto.BlockSignature
       Concordium.Crypto.BlsSignature

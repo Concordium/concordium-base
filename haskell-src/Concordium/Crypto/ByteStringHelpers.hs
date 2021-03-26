@@ -129,17 +129,23 @@ instance AE.FromJSON ByteStringHex where
     in if BS.null rest then return (ByteStringHex (BSS.toShort bs))
        else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
--- |Use the serialize instance of a type to deserialize
+-- |Use the serialize instance of a type to deserialize. In contrast to
+-- 'bsDeserializeBase16' this takes Text as input.
 deserializeBase16 :: (Serialize a, MonadFail m) => Text.Text -> m a
-deserializeBase16 t =
+deserializeBase16 = bsDeserializeBase16 . Text.encodeUtf8
+
+-- |Try to decode a hex string and deserialize it with the provided instance.
+bsDeserializeBase16 :: (Serialize a, MonadFail m) => BS.ByteString -> m a
+bsDeserializeBase16 input =
         if BS.null rest then
             case decode bs of
                 Left er -> fail er
                 Right r -> return r
         else
-            fail $ "Could not decode as base-16: " ++ show t
+            fail $ "Could not decode as base-16: " ++ show input
     where
-        (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+        (bs, rest) = BS16.decode input
+
 
 -- |Use the serialize instance to convert from base 16 to value, but add
 -- explicit length as 4 bytes big endian in front.

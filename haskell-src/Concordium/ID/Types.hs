@@ -894,7 +894,7 @@ instance FromJSON AccountCredential where
       Normal -> do
         co <- v .: "contents"
         cdv <- parseJSON co
-        coms <- withObject "Account credential" (.: "commitments") co
+        coms <- withObject "Credential commitments" (.: "commitments") co
         return $ NormalAC cdv coms
 
 instance ToJSON AccountCredential where

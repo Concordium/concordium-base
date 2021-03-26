@@ -13,6 +13,23 @@ type Group = pairing::bls12_381::G1;
 /// This function is safe if the pointers are all non-null, and produced
 /// by `Box::into_raw` for the input pointers.
 #[no_mangle]
+unsafe extern "C" fn is_zero_encrypted_amount(
+    high_ptr: *const Cipher<Group>,
+    low_ptr: *const Cipher<Group>,
+) -> u8 {
+    let high = from_ptr!(high_ptr);
+    let low = from_ptr!(low_ptr);
+    let res = high.0.is_zero_point()
+        && high.1.is_zero_point()
+        && low.0.is_zero_point()
+        && low.1.is_zero_point();
+    u8::from(res)
+}
+
+/// # Safety
+/// This function is safe if the pointers are all non-null, and produced
+/// by `Box::into_raw` for the input pointers.
+#[no_mangle]
 unsafe extern "C" fn aggregate_encrypted_amounts(
     first_high_ptr: *const Cipher<Group>,
     first_low_ptr: *const Cipher<Group>,

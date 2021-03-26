@@ -669,7 +669,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidModuleReference !ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
                   | RuntimeFailure -- ^Runtime exception occurred when running either the init or receive method.
-                  | ReceiverAccountNoCredential !AccountAddress
                   -- ^The receiver account does not have a valid credential.
                   | ReceiverContractNoCredential !ContractAddress
                   -- ^The receiver contract does not have a valid credential.
@@ -726,6 +725,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | RemoveFirstCredential
                   -- | The credential holder of the keys to be updated did not sign the transaction
                   | CredentialHolderDidNotSign
+                  -- |Account is not allowed to have multiple credentials because it contains a non-zero encrypted transfer.
+                  | NotAllowedMultipleCredentials
+                  -- |The account is not allowed to receive encrypted transfers because it has multiple credentials.
+                  | NotAllowedToReceiveEncrypted
+                  -- |The account is not allowed to send encrypted transfers (or transfer from/to public to/from encrypted)
+                  | NotAllowedToHandleEncrypted
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -752,7 +757,6 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                                                  -- of (has the nonce following that of) an invalid transaction.
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
-                 | NoValidCredential -- ^No valid credential on the sender account.
                  | ExpiredTransaction -- ^The transaction has expired.
                  | ExceedsMaxBlockEnergy -- ^The transaction's deposited energy exceeds the maximum block energy limit.
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
