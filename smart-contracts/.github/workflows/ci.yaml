@@ -1,0 +1,236 @@
+name: Build and test
+
+# This job runs rustfmt and clippy linting,
+# cargo check on cargo-concordium,
+# and then it runs cargo test and ./target/debug/wasm-test
+
+on:
+  push:
+    branches: main
+
+  pull_request:
+    branches: main
+
+  workflow_dispatch: # allows manual trigger
+
+env:
+  # from concordium/rustfmt:0.17
+  RUST_FMT: nightly-2019-11-13-x86_64-unknown-linux-gnu
+  RUST_CLIPPY: 1.45.2
+  TARGET: wasm32-unknown-unknown
+
+jobs:
+  "lint_fmt":
+    name: ${{ matrix.build-dir }} lint:fmt
+    # Don't run on pull request that are still WIP
+    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-dir:
+          - 'wasm-transform'
+          - 'cargo-concordium'
+          - 'wasm-chain-integration'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_FMT }}
+          override: true
+          components: rustfmt
+      - name: Format
+        working-directory: ${{ matrix.build-dir }}
+        run: |
+          cargo fmt -- --color=always --check
+
+  "lint_fmt_example_contracts":
+    name: ${{ matrix.example-contract }} lint:fmt
+    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example-contract:
+          - 'escrow'
+          - 'lockup'
+          - 'use-all-host-functions'
+          - 'rate-limited'
+          - 'counter'
+          - 'context-test'
+          - 'fib'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_FMT }}
+          override: true
+          target: ${{ env.TARGET }}
+          components: rustfmt
+      - name: Format
+        working-directory: rust-contracts/example-contracts/${{ matrix.example-contract }}
+        run: |
+          cargo fmt -- --color=always --check
+
+  "lint_clippy":
+    name: ${{ matrix.build-dir }} lint:clippy
+    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-dir:
+          - 'wasm-transform'
+          - 'cargo-concordium'
+          - 'wasm-chain-integration'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+          target: ${{ env.TARGET }}
+          components: clippy
+      - name: Clippy
+        working-directory: ${{ matrix.build-dir }}
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          cargo clippy --color=always --tests -- -Dclippy::all
+
+  "lint_clippy_example_contracts":
+    name: ${{ matrix.example-contract }} lint:clippy
+    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example-contract:
+          - 'escrow'
+          - 'lockup'
+          - 'use-all-host-functions'
+          - 'rate-limited'
+          - 'counter'
+          - 'context-test'
+          - 'fib'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+          target: ${{ env.TARGET }}
+          components: clippy
+      - name: Clippy
+        working-directory: rust-contracts/example-contracts/${{ matrix.example-contract }}
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          cargo clippy --color=always --tests -- -Dclippy::all
+
+  "cargo-concordium_cargo_build-bench":
+    name: cargo-concordium cargo:build-bench
+    runs-on: ubuntu-latest
+    needs:
+      - lint_clippy_example_contracts
+      - lint_clippy
+      - lint_fmt_example_contracts
+      - lint_fmt
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+          target: ${{ env.TARGET }}
+          components: clippy
+      - name: Cargo check
+        working-directory: cargo-concordium
+        run: cargo check --benches --tests
+
+  "cargo_test":
+    name: ${{ matrix.build-dir }} cargo:test
+    runs-on: ubuntu-latest
+    needs:
+      - cargo-concordium_cargo_build-bench
+    strategy:
+      matrix:
+        build-dir:
+          - 'cargo-concordium'
+          - 'wasm-transform'
+          - 'wasm-chain-integration'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+      - name: Test
+        working-directory: ${{ matrix.build-dir }}
+        run: cargo test
+
+  "cargo_test_example_contracts":
+    name: ${{ matrix.example-contract }} cargo:test
+    runs-on: ubuntu-latest
+    needs:
+      - cargo-concordium_cargo_build-bench
+    strategy:
+      matrix:
+        example-contract:
+          - 'counter'
+          # removed because test fail with "implement me"
+          # - 'escrow'
+          
+          # the following 2 contracts fail to build due to:
+          # error: building tests with panic=abort is not supported without `-Zpanic_abort_tests`
+          # - 'fib'
+          # - 'lockup'
+          
+          #Remaining example contracts have not yet been added to ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+      - name: Test
+        working-directory: rust-contracts/example-contracts/${{ matrix.example-contract }}
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          cargo test --target x86_64-unknown-linux-gnu
+
+  "wasm-core-spec_cargo_test":
+    name: wasm-core-spec cargo:test
+    runs-on: ubuntu-latest
+    needs:
+      - cargo-concordium_cargo_build-bench
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+      - name: Test
+        working-directory: wasm-test
+        run: |
+          cargo build
+          ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/
+
