@@ -11,10 +11,14 @@ name: Run rustfmt
 on:
   push:
     branches: master
-    paths: '**.rs'
+    paths:
+    - '.github/workflows/rustfmt.yaml'
+    - '**.rs'
   pull_request:
     branches: master
-    paths: '**.rs'
+    paths:
+    - '.github/workflows/rustfmt.yaml'
+    - '**.rs'
   workflow_dispatch: # allow manual trigger
 
 env:
