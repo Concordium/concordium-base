@@ -42,7 +42,6 @@ env:
 
 jobs:
   build-test:
-    needs: rustfmt
     if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
     runs-on: ubuntu-latest
 
