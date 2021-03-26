@@ -4,7 +4,7 @@
 # Jobs:
 # - build-test: Build and test both the Haskell and Rust sources.
 #               The job is skipped if the workflow was triggered by a PR
-#               with a title starting (case insensitively) with "wip".
+#               marked as a draft.
 #
 # The steps in 'build-test' are ordered to fail as fast as possible
 # and restore caches as late as possible.
@@ -42,8 +42,8 @@ env:
 
 jobs:
   build-test:
-    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
     runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
 
     strategy:
       matrix:
