@@ -1,10 +1,12 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 -- | Event logging monad.
 module Concordium.Logger where
 
 import Control.Exception
+import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (MonadTrans (..))
 import Control.Monad.Trans.Reader
@@ -80,7 +82,7 @@ type LogIO = LoggerT IO
 -- | The 'LoggerT' monad transformer equips a monad with logging
 --  functionality.
 newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod m) m a}
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m))
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m), MonadThrow, MonadCatch)
 
 
 instance MonadTrans LoggerT where

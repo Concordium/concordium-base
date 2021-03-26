@@ -129,6 +129,9 @@ module Concordium.Types (
   unhashed,
   makeHashed,
   
+  -- * Regenesis
+  GenesisIndex,
+
   -- * Protocol version
   module Concordium.Types.ProtocolVersion) where
 
@@ -779,6 +782,11 @@ transactionTimeToSlot genesis slotDur t
   | otherwise = fromIntegral $ (tsMillis (tt - genesis - 1) `div` durationMillis slotDur) + 1
   where
     tt = transactionTimeToTimestamp t
+
+-- |Type indicating the index of a (re)genesis block.
+-- The initial genesis block has index @0@ and each subsequent regenesis
+-- has an incrementally higher index.
+type GenesisIndex = Word32
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -68,3 +69,11 @@ putVersionedGenesisData = case protocolVersion @pv of
 genesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHash
 genesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.genesisBlockHash . unGDP1
+
+-- |A dependent pair of a protocol version and genesis data.
+data PVGenesisData = forall pv. IsProtocolVersion pv => PVGenesisData (GenesisData pv)
+
+-- |Deserialize genesis data with a version tag to a 'PVGenesisData'.
+-- This can should attempt to parse with all supported protocol versions.
+getPVGenesisData :: Get PVGenesisData
+getPVGenesisData = PVGenesisData . GDP1 <$> P1.getVersionedGenesisData

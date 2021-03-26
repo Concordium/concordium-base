@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 54d91fe2b562b3d6877af092ccb3850a51faab604a2b9c2bb0c00d8ea1518186
+-- hash: f7384ceb2f13225af425e268f9abf9a24939d1b694c236584310e1695bbb84e7
 
 name:           concordium-base
 version:        0.1.0.0
@@ -105,6 +105,7 @@ library
     , cereal >=0.5
     , containers >=0.6
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -150,6 +151,7 @@ executable generate-update-keys
     , concordium-base
     , containers >=0.6
     , deepseq >=1.4
+    , exceptions >=0.10
     , filepath >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -193,6 +195,7 @@ executable genesis
     , concordium-base
     , containers >=0.6
     , deepseq >=1.4
+    , exceptions >=0.10
     , filepath >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -254,6 +257,7 @@ test-suite test
     , concordium-base
     , containers
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , hspec >=2.6
@@ -299,6 +303,7 @@ benchmark bls-perf
     , containers >=0.6
     , criterion >=1.5
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -340,6 +345,7 @@ benchmark ed25519-perf
     , containers >=0.6
     , criterion >=1.5
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -381,6 +387,7 @@ benchmark ed25519dlog-perf
     , containers >=0.6
     , criterion >=1.5
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -422,6 +429,7 @@ benchmark sha256-perf
     , containers >=0.6
     , criterion >=1.5
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -463,6 +471,7 @@ benchmark verify-credential-perf
     , containers >=0.6
     , criterion >=1.5
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3

@@ -50,6 +50,7 @@ dependencies:
 - cereal >= 0.5
 - containers >= 0.6
 - deepseq >= 1.4
+- exceptions >= 0.10
 - ghc-prim >= 0.5.3
 - hashable >= 1.2
 - microlens >=0.3

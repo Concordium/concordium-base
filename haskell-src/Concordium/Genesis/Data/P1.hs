@@ -2,7 +2,7 @@
 module Concordium.Genesis.Data.P1 where
 
 import Control.Monad
-import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Serialize
 import qualified Data.Vector as Vec
 import Lens.Micro.Platform
@@ -152,7 +152,7 @@ data GenesisDataP1
           -- |The hash of the block state for the regenesis.
           genesisStateHash :: !StateHash,
           -- |The serialized block state. This should match the specified hash.
-          genesisNewState :: !ByteString
+          genesisNewState :: !LBS.ByteString
         }
     deriving (Eq, Show)
 
@@ -182,7 +182,7 @@ getGenesisDataV3 =
             genesisPreviousGenesis <- get
             genesisTerminalBlock <- get
             genesisStateHash <- get
-            genesisNewState <- getByteStringLen
+            genesisNewState <- getLazyByteStringLen
             return GDP1Regenesis{..}
         _ -> fail "Unrecognised genesis data type"
 
@@ -199,7 +199,7 @@ putGenesisDataV3 GDP1Regenesis{..} = do
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
-    putByteStringLen genesisNewState
+    putLazyByteStringLen genesisNewState
 
 -- |Deserialize genesis data with a version tag.
 getVersionedGenesisData :: Get GenesisDataP1
