@@ -259,8 +259,12 @@ encryptJSON encryptionMethod keyDerivationMethod value pwd =
   let json = LazyBS.toStrict $ AE.encode value in
     EncryptedJSON <$> encryptText encryptionMethod keyDerivationMethod json pwd
 
--- | Try to decode json, which may be encrypted as 'EncryptedJSON'.
---   When encrypted, use the password action to retrieve a password.
+-- | Try to decode json, which may be encrypted as 'EncryptedJSON'. If the
+-- object contains the fields 'metadata' and 'cipherText' then we assume that it
+-- requires decryption, otherwise we assume that it should parse as a given
+-- type.
+--
+-- When encrypted, use the password action to retrieve a password.
 decodeMaybeEncrypted :: (AE.FromJSON a)
   => IO Password -- ^ Password action to use if data is encrypted.
   -> ByteString  -- ^ JSON to decode.
