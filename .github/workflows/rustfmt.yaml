@@ -4,7 +4,7 @@
 # The workflow consists of the single job 'rustfmt'
 # which checks formatting of the Rust sources using the 'rustfmt' tool.
 # The job is skipped if the workflow was triggered by a PR
-# with a title starting (case insensitively) with "wip".
+# marked as a draft.
 
 name: Run rustfmt
 
@@ -26,8 +26,8 @@ env:
 
 jobs:
   rustfmt:
-    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
     runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
 
     strategy:
       matrix:
