@@ -77,6 +77,7 @@ library
       Concordium.Types.Transactions
       Concordium.Types.Updates
       Concordium.Utils
+      Concordium.Utils.Encryption
       Concordium.Utils.Serialization
       Concordium.Utils.Serialization.Put
       Concordium.Wasm
@@ -102,10 +103,12 @@ library
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , containers >=0.6
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -146,11 +149,13 @@ executable generate-update-keys
     , aeson-pretty >=0.8
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
+    , cryptonite >=0.27
     , deepseq >=1.4
     , filepath >=1.4
     , ghc-prim >=0.5.3
@@ -188,12 +193,14 @@ executable genesis
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , cmdargs >=0.10
     , concordium-base
     , containers >=0.6
+    , cryptonite >=0.27
     , deepseq >=1.4
     , filepath >=1.4
     , ghc-prim >=0.5.3
@@ -232,6 +239,7 @@ test-suite test
       ConcordiumTests.Crypto.VRF
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
+      ConcordiumTests.Utils.Encryption
       Types.AccountEncryptedAmountSpec
       Types.AmountSpec
       Types.PayloadSerializationSpec
@@ -250,11 +258,13 @@ test-suite test
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -294,12 +304,14 @@ benchmark bls-perf
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
     , criterion >=1.5
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -335,12 +347,14 @@ benchmark ed25519-perf
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
     , criterion >=1.5
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -376,12 +390,14 @@ benchmark ed25519dlog-perf
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
     , criterion >=1.5
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -417,12 +433,14 @@ benchmark sha256-perf
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
     , criterion >=1.5
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -458,12 +476,14 @@ benchmark verify-credential-perf
     , aeson >=1.4.2
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
+    , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
     , criterion >=1.5
+    , cryptonite >=0.27
     , deepseq >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
