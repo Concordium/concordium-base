@@ -12,9 +12,9 @@ import qualified Data.Aeson as AE
 import Data.Aeson ((.:),(.=))
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as LazyBS
 import qualified Data.ByteString.Base64 as Base64
-import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
@@ -56,13 +56,31 @@ instance AE.FromJSON SupportedKeyDerivationMethod where
     if t == "PBKDF2WithHmacSHA256" then return PBKDF2SHA256
     else fail $ "Unsupported key derivation method: " ++ T.unpack t
 
+-- |Bytestring whose JSON instances use base64 encoding.
+newtype Base64ByteString = Base64ByteString { theBS :: ByteString }
+    deriving(Eq)
+
+instance Show Base64ByteString where
+  show (Base64ByteString x) = BS8.unpack (Base64.encode x)
+
+instance AE.ToJSON Base64ByteString where
+  -- text decode is safe here because base64 encoding will produce
+  -- only ascii, hence valid utf8 characters.
+  toJSON (Base64ByteString x) = AE.String (T.decodeUtf8 (Base64.encode x))
+
+instance AE.FromJSON Base64ByteString where
+  parseJSON = AE.withText "base 64 encoded bytestring" $ \t ->
+    case Base64.decode (T.encodeUtf8 t) of
+      Left err -> fail err
+      Right x -> return (Base64ByteString x)
+
 -- | Meta data for an encrypted text. Needed for decryption.
 data EncryptionMetadata = EncryptionMetadata
   { emEncryptionMethod :: !SupportedEncryptionMethod
   , emKeyDerivationMethod :: !SupportedKeyDerivationMethod
   , emIterations :: !Word
-  , emSalt :: !Text
-  , emInitializationVector :: !Text
+  , emSalt :: !Base64ByteString
+  , emInitializationVector :: !Base64ByteString
   }
   deriving (Eq, Show)
 
@@ -91,7 +109,7 @@ instance AE.FromJSON EncryptionMetadata where
 -- | An encrypted text with meta data needed for decryption.
 data EncryptedText = EncryptedText
   { etMetadata :: !EncryptionMetadata
-  , etCipherText :: !Text
+  , etCipherText :: !Base64ByteString
   } deriving (Eq, Show)
 
 instance AE.ToJSON EncryptedText where
@@ -140,33 +158,23 @@ decryptText :: (MonadError DecryptionFailure m)
 decryptText EncryptedText{etMetadata=EncryptionMetadata{..},..} pwd = do
   case (emEncryptionMethod, emKeyDerivationMethod) of
     (AES256, PBKDF2SHA256) -> do
-      salt <- decodeBase64 "salt" emSalt
-      initVec <- decodeBase64 "initializationVector" emInitializationVector
-      cipher <- decodeBase64 "cipherText" etCipherText
-
-      iv <- case makeIV initVec of
+      iv <- case makeIV (theBS emInitializationVector) of
               Nothing -> throwError MakingInitializationVectorFailed
               Just iv -> return iv
       let keyLen = 32
 
       -- NB: fromIntegral is safe to do as too large Word values will result in negative Int values, which should be rejected.
-      let key = fastPBKDF2_SHA256 (Parameters (fromIntegral emIterations) keyLen) (getPassword pwd) salt :: ByteString
+      let key = fastPBKDF2_SHA256 (Parameters (fromIntegral emIterations) keyLen) (getPassword pwd) (theBS emSalt) :: ByteString
       (aes :: AES256) <- case cipherInit key of
                            CryptoFailed err -> throwError $ CipherInitializationFailed err
                            CryptoPassed a -> return a
 
-      let decrypted = cbcDecrypt aes iv cipher :: ByteString
+      let decrypted = cbcDecrypt aes iv (theBS etCipherText) :: ByteString
       -- Unpadding for 16 byte block size.
       let unpadded = unpad (PKCS7 16) decrypted
       case unpadded of
         Nothing -> throwError UnpaddingFailed
         Just text -> return text
-
-  where decodeBase64 :: MonadError DecryptionFailure m => String -> Text -> m ByteString
-        -- Decoding fails if the input is not valid base64.
-        decodeBase64 name s = case Base64.decode $ T.encodeUtf8 s of
-          Left err -> throwError $ DecodeError name err
-          Right v -> return v
 
 -- | Encrypt a 'ByteString' with the given password, using the given encryption and key derivation
 -- method. Initialization vector and salt are generated randomly using 'getRandomBytes' from
@@ -209,18 +217,13 @@ encryptText emEncryptionMethod emKeyDerivationMethod text pwd =
       -- Padding for 16 byte block size.
       let paddedText = pad (PKCS7 16) text
       let cipher = cbcEncrypt aes iv paddedText
-      return EncryptedText { etCipherText = encodeBase64 cipher
+      return EncryptedText { etCipherText = Base64ByteString cipher
                            , etMetadata = EncryptionMetadata
-                                          { emSalt = encodeBase64 salt
-                                          , emInitializationVector = encodeBase64 initVec
+                                          { emSalt = Base64ByteString salt
+                                          , emInitializationVector = Base64ByteString initVec
                                           , ..
                                           }
                            }
-
-  where encodeBase64 :: ByteString -> Text
-        -- NB: T.decodeUtf8 expects valid UTF8 and will throw an exception otherwise;
-        -- the base64 encoding however produces valid UTF8.
-        encodeBase64 = T.decodeUtf8 . Base64.encode
 
 -- | An encrypted JSON serialization of a value of the given type.
 newtype EncryptedJSON a = EncryptedJSON EncryptedText

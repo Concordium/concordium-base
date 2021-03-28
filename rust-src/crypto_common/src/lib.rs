@@ -26,3 +26,8 @@ pub type size_t = usize;
 pub use libc::c_char;
 #[cfg(target_arch = "wasm32")]
 pub use std::os::raw::c_char;
+
+#[cfg(feature = "encryption")]
+/// Module that provides a simple API for symmetric encryption in the output
+/// formats compatible used by Concordium.
+pub mod encryption;
