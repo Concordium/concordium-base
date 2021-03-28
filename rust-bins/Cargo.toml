@@ -29,7 +29,10 @@ url = "2.1.1"
 chrono = "0.4.19"
 either = "1.6"
 openssl-sys = {version = "0.9", optional = true}
-
+block-modes = "0.7"
+aes = "0.6"
+base64 = "0.13"
+pbkdf2 = "0.6" # 0.7 is currently the latest, but is not supported on 1.45.2
 
 [dependencies.keygen_bls]
 path = "../rust-src/keygen_bls"
@@ -38,6 +41,7 @@ version = "0"
 [dependencies.crypto_common]
 path = "../rust-src/crypto_common"
 version = "0"
+features = ["encryption"]
 
 [dependencies.crypto_common_derive]
 path = "../rust-src/crypto_common_derive"
