@@ -669,8 +669,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidModuleReference !ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
                   | RuntimeFailure -- ^Runtime exception occurred when running either the init or receive method.
-                  -- ^The receiver account does not have a valid credential.
-                  | ReceiverContractNoCredential !ContractAddress
                   -- ^The receiver contract does not have a valid credential.
                   | AmountTooLarge !Address !Amount
                   -- ^When one wishes to transfer an amount from A to B but there
