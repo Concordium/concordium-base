@@ -3,6 +3,7 @@ use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
     base16_encode_string,
+    encryption::{encrypt, Password},
     types::{Amount, KeyIndex},
     *,
 };
@@ -62,6 +63,13 @@ enum GenesisTool {
             env = "RESTAKE_EARNINGS"
         )]
         restake: bool,
+        #[structopt(
+            long = "baker-credentials-password",
+            help = "Output bakers keys with the provided password. Only has effect if 'stake' is \
+                    set.",
+            env = "BAKER_KEYS_PASSWORD"
+        )]
+        baker_keys_password: Option<Password>,
         #[structopt(flatten)]
         common: CommonOptions,
     },
@@ -306,6 +314,7 @@ fn main() -> std::io::Result<()> {
             balance,
             stake,
             restake,
+            ref baker_keys_password,
             ..
         } => {
             let num_accounts = num;
@@ -336,17 +345,6 @@ fn main() -> std::io::Result<()> {
                     let agg_sign_key = agg::SecretKey::<IpPairing>::generate(&mut csprng);
                     let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
 
-                    // Output baker vrf and election keys in a json file.
-                    let baker_data_json = json!({
-                        "bakerId": acc_num,
-                        "electionPrivateKey": base16_encode_string(&vrf_key.secret),
-                        "electionVerifyKey": base16_encode_string(&vrf_key.public),
-                        "signatureSignKey": base16_encode_string(&sign_key.secret),
-                        "signatureVerifyKey": base16_encode_string(&sign_key.public),
-                        "aggregationSignKey": base16_encode_string(&agg_sign_key),
-                        "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
-                    });
-
                     let public_baker_data = json!({
                         "bakerId": acc_num,
                         "electionVerifyKey": base16_encode_string(&vrf_key.public),
@@ -365,15 +363,35 @@ fn main() -> std::io::Result<()> {
                         "baker": public_baker_data
                     });
 
+                    // Output baker vrf and election keys in a json file.
+                    let baker_data_json = json!({
+                        "bakerId": acc_num,
+                        "electionPrivateKey": base16_encode_string(&vrf_key.secret),
+                        "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                        "signatureSignKey": base16_encode_string(&sign_key.secret),
+                        "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                        "aggregationSignKey": base16_encode_string(&agg_sign_key),
+                        "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
+                    });
+
+                    // If the password is provided then encrypt, otherwise output in plaintext.
+                    let baker_credentials_out = if let Some(pass) = baker_keys_password.as_ref() {
+                        let plaintext = serde_json::to_vec(&baker_data_json)
+                            .expect("Cannot convert to JSON, should not happen.");
+                        let encrypted = encrypt(pass, &plaintext, &mut csprng);
+                        serde_json::to_value(&encrypted).expect("JSON serialization must succeed.")
+                    } else {
+                        baker_data_json
+                    };
                     if let Err(err) = write_json_to_file(
                         mk_out_path(format!("baker-{}-credentials.json", acc_num)),
-                        &baker_data_json,
+                        &baker_credentials_out,
                     ) {
                         eprintln!(
                             "Could not output baker credential for baker {}, because {}.",
                             acc_num, err
                         );
-                    }
+                    };
                     accounts.push(public_account_data);
                     bakers.push(public_baker_data);
                 } else {
