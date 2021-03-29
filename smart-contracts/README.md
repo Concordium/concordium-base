@@ -9,7 +9,8 @@ Everything in this repository should build with stable rust at the moment (at le
 ```
  cargo +nightly-2019-11-13 fmt
 ```
-(the exact version used by the CI can be found in [.gitlab-ci.yml](./.gitlab-ci.yml) file). You will need to have a recent enough nightly version installed, which can be done via
+(the exact version used by the CI can be found in [.github/workflows/ci.yaml](.github/workflows/ci.yaml) file).
+You will need to have a recent enough nightly version installed, which can be done via
 ```
 rustup toolchain install nightly-2019-11-13
 ```
@@ -23,22 +24,16 @@ This repository contains several packages to support smart contracts on and off-
 
 Currently it consists of the following parts
 - [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
-- [wasmer-transform](./wasmer-transform), an interpreter providing the functionality needed by the scheduler to execute smart contracts.
-- [cargo-concordium](./cargo-concordium) which is a small tool for developing smart contracts. It uses the API exposed in wasmer-interp to execute smart contracts directly and can initialize and update smart contracts, in a desired state. See the `--help` option of the tool for details on how to invoke it.
+- [wasm-transform](./wasm-transform), an interpreter and validator providing the functionality needed by the scheduler to execute smart contracts.
+- [wasm-chain-integration](./wasm-chain-integration/) exposes the interface needed by the node
+- [cargo-concordium](./cargo-concordium) which is a small tool for developing smart contracts. It uses the API exposed in `wasm-chain-integration` to execute smart contracts directly and can initialize and update smart contracts, in a desired state. See the `--help` option of the tool for details on how to invoke it.
 It can also be used to build contracts embedded with schemas (see section about [contract schemas](#contract-schema)).
 - [concordium-contracts-common](./concordium-contracts-common) which contains common functionality used by smart contracts as well as the host environment to provide data for smart contracts. It defines common datatypes that need to cross boundaries, and common serialization formats.
 
 ## Rust-contracts
 
-The [rust-contracts](./rust-contracts) aims to be organized into two (conceptually, technically three) parts.
-
-The first consisting of crates [concordium-std](./concordium-std/concordium-std) and [concordium-std-derive](./concordium-std/concordium-std-derive) contains Rust packages that are meant to be developed into the core API all Rust smart contracts use. It wraps the primitives that are allowed to be used on the chain in safer wrappers. The goal is to provide an API that spans from low-level, requiring the user to be very careful, but allowing precise control over resources, to a high-level one with more safety, but less efficiency for more advanced uses.
-
-The `concordium-std` library is what is intended to be used directly, and the `concordium-std-derive` provides some procedural macros that are re-exported by `concordium-std`. These are used to remove the boilerplate FFI wrappers that are needed for each smart contract.
-Currently there are two macros `init` and `receive` that can be used to generate low-level init and receive functions.
-The reason these macros are in a separate crate is because such macros must be in a special crate type `proc-macro`, which cannot have other exports than said macros.
-
-The second, [example-contracts](./rust-contracts/example-contracts) is meant for, well, example contracts using the aforementioned API.
+The [rust-contracts](./rust-contracts) contains [example-contracts](./rust-contracts/example-contracts) is for testing.
+**They are toy contracts utterly unsuitable for any production use.**
 The list of currently implemented contracts is as follows:
 - [counter](./rust-contracts/example-contracts/counter) a counter contract with a simple logic on who can increment the counter. This is the minimal example.
 - [fib](./rust-contracts/example-contracts/fib) a contract calculating the requested fibonacci number, either directly or with recursive contract invocations; this is useful to demonstrate cost accounting.
@@ -77,7 +72,7 @@ Running `cargo build` will produce a single `.wasm` module in
 
 By default the module will be quite big in size, depending on the options used
 (e.g., whether it is compiled with `std` or not, it can be from 600+kB to more
-than a MB). However most of that code is redundant and can be stripped away.
+than a MB). However most of that is debug information in custom sections and can be stripped away.
 There are various tools and libraries for this. One such suite of tools is [Web
 assembly binary toolkit (wabt)](https://github.com/WebAssembly/wabt) and its
 tool `wasm-strip`.

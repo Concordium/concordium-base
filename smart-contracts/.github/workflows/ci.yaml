@@ -22,8 +22,8 @@ env:
 jobs:
   "lint_fmt":
     name: ${{ matrix.build-dir }} lint:fmt
-    # Don't run on pull request that are still WIP
-    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    # Don't run on draft pull requests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -48,7 +48,8 @@ jobs:
 
   "lint_fmt_example_contracts":
     name: ${{ matrix.example-contract }} lint:fmt
-    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    # Don't run on draft pull requests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -78,7 +79,8 @@ jobs:
 
   "lint_clippy":
     name: ${{ matrix.build-dir }} lint:clippy
-    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    # Don't run on draft pull requests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -105,7 +107,8 @@ jobs:
 
   "lint_clippy_example_contracts":
     name: ${{ matrix.example-contract }} lint:clippy
-    if: ${{!startsWith(github.event.pull_request.title, 'wip')}}
+    # Don't run on draft pull requests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     strategy:
       matrix:

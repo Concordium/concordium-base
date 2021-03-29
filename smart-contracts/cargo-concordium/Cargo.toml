@@ -1,8 +1,10 @@
 [package]
 name = "cargo-concordium"
 version = "0.2.0"
-authors = ["Concordium <info@concordium.com>"]
+authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
+license = "Apache-2.0"
+license-file = "../LICENSE-APACHE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
