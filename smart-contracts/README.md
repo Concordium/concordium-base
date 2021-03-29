@@ -214,6 +214,22 @@ cargo test --target=wasm32-unknown-unknown
 
 This kind of testing is perfectly adequate for a large amount of functional correctness testing, however ultimately we also want to test code as it will be deployed to the chain. For this, one can use `cargo concordium run` that will execute smart contracts in a given state and parameters.
 
+# Fuzzing the smart-contract interpreter
+
+## Prerequisites
+- `cargo-fuzz`
+- for generating coverage information: `cargo-cov` and `cargo-profdata`
+
+## Running the fuzzer
+- Change to the `wasm-chain-integration` directory 
+- Run `cargo fuzz run interpreter -- -max-len=1200000`
+
+This will fuzz the smart-contract interpreter on randomly generated but valid Wasm programs.
+The random Wasm program generation is implemented in our [fork of wasm-smith](https://github.com/Concordium/wasm-tools).
+
+## Visualizing coverage
+
+Run `scripts/generate-coverage.py fuzz/coverage/interpreter` to generate code-coverage reports.
 
 # Contract schema
 The state of a contract is a bunch of bytes and how to interpret these bytes into representations such as structs and enums is hidden away into the contract functions after compilation.

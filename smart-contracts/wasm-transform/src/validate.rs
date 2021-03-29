@@ -474,7 +474,7 @@ pub trait Handler<O> {
 impl Handler<OpCode> for Vec<OpCode> {
     type Outcome = (Self, usize);
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn handle_opcode(
         &mut self,
         _state: &ValidationState,
@@ -485,7 +485,7 @@ impl Handler<OpCode> for Vec<OpCode> {
         Ok(())
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn finish(self, state: &ValidationState) -> anyhow::Result<Self::Outcome> {
         Ok((self, state.max_reachable_height))
     }
@@ -1130,7 +1130,7 @@ pub fn validate_module<'a>(
                 "Initialization expression for the data segment exceeds initial memory size {} > \
                  {}.",
                 end,
-                memory_type.limits.min
+                memory_type.limits.min * PAGE_SIZE
             );
         }
     } else {

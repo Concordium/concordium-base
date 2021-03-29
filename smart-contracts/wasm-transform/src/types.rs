@@ -376,7 +376,7 @@ impl From<Option<ValueType>> for BlockType {
 }
 
 impl BlockType {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn is_empty(self) -> bool {
         match self {
             BlockType::EmptyType => true,

@@ -103,12 +103,12 @@ impl TryFromImport for MeteringImport {
 }
 
 impl Host<MeteringImport> for MeteringHost {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
         f: &MeteringImport,

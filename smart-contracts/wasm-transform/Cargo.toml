@@ -6,6 +6,9 @@ edition = "2018"
 license = "MPL-2.0"
 license-file = "../LICENSE-MPL-2.0"
 
+[features]
+fuzz-coverage = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 leb128 = "0.2.4"

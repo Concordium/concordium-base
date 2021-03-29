@@ -28,7 +28,7 @@ pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
     module.compile()
 }
 
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 /// Parse an artifact from an array of bytes. This does as much zero-copy
 /// deserialization as possible. In particular the function bodies are not
 /// deserialized and are simply retained as references into the original array.

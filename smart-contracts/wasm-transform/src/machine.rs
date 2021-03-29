@@ -89,16 +89,16 @@ impl std::fmt::Display for RuntimeError {
 }
 
 impl RuntimeStack {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn size(&self) -> usize { self.pos }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn pop(&mut self) -> StackValue {
         self.pos -= 1;
         self.stack[self.pos]
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn push(&mut self, x: StackValue) {
         if self.pos < self.stack.len() {
             self.stack[self.pos] = x;
@@ -108,16 +108,16 @@ impl RuntimeStack {
         self.pos += 1;
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn peek_mut(&mut self) -> &mut StackValue { &mut self.stack[self.pos - 1] }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn peek(&mut self) -> StackValue { self.stack[self.pos - 1] }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn set_pos(&mut self, pos: usize) { self.pos = pos; }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     pub fn push_value<F>(&mut self, f: F)
     where
         StackValue: From<F>, {
@@ -149,7 +149,7 @@ impl RuntimeStack {
     pub unsafe fn peek_u64(&mut self) -> u64 { self.peek().long as u64 }
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u16(bytes: &[u8], pc: &mut usize) -> u16 {
     let mut dst = [0u8; 2];
     let end = *pc + 2;
@@ -158,7 +158,7 @@ fn get_u16(bytes: &[u8], pc: &mut usize) -> u16 {
     u16::from_le_bytes(dst)
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
     let mut dst = [0u8; 4];
     let end = *pc + 4;
@@ -167,7 +167,7 @@ fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
     u32::from_le_bytes(dst)
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_i32(bytes: &[u8], pc: &mut usize) -> i32 {
     let mut dst = [0u8; 4];
     let end = *pc + 4;
@@ -176,7 +176,7 @@ fn get_i32(bytes: &[u8], pc: &mut usize) -> i32 {
     i32::from_le_bytes(dst)
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u64(bytes: &[u8], pc: &mut usize) -> u64 {
     let mut dst = [0u8; 8];
     let end = *pc + 8;
@@ -185,12 +185,12 @@ fn get_u64(bytes: &[u8], pc: &mut usize) -> u64 {
     u64::from_le_bytes(dst)
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u8(bytes: &[u8], pos: usize) -> RunResult<u8> {
     bytes.get(pos).copied().ok_or_else(|| anyhow!("Memory access out of bounds."))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u16(bytes: &[u8], pos: usize) -> RunResult<u16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
     let mut dst = [0u8; 2];
@@ -198,7 +198,7 @@ fn read_u16(bytes: &[u8], pos: usize) -> RunResult<u16> {
     Ok(u16::from_le_bytes(dst))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u32(bytes: &[u8], pos: usize) -> RunResult<u32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
     let mut dst = [0u8; 4];
@@ -206,12 +206,12 @@ fn read_u32(bytes: &[u8], pos: usize) -> RunResult<u32> {
     Ok(u32::from_le_bytes(dst))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i8(bytes: &[u8], pos: usize) -> RunResult<i8> {
     bytes.get(pos).map(|&x| x as i8).ok_or_else(|| anyhow!("Memory access out of bounds."))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i16(bytes: &[u8], pos: usize) -> RunResult<i16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
     let mut dst = [0u8; 2];
@@ -219,7 +219,7 @@ fn read_i16(bytes: &[u8], pos: usize) -> RunResult<i16> {
     Ok(i16::from_le_bytes(dst))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i32(bytes: &[u8], pos: usize) -> RunResult<i32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
     let mut dst = [0u8; 4];
@@ -227,7 +227,7 @@ fn read_i32(bytes: &[u8], pos: usize) -> RunResult<i32> {
     Ok(i32::from_le_bytes(dst))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
     ensure!(pos + 8 <= bytes.len(), "Memory access out of bounds.");
     let mut dst = [0u8; 8];
@@ -235,7 +235,7 @@ fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
     Ok(i64::from_le_bytes(dst))
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_memory_pos(
     instructions: &[u8],
     stack: &mut RuntimeStack,
@@ -248,33 +248,33 @@ fn get_memory_pos(
     Ok(pos)
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()> {
     ensure!(pos < memory.len(), "Illegal memory access.");
     (&mut memory[pos..]).write_all(bytes)?;
     Ok(())
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn unary_i32(stack: &mut RuntimeStack, f: impl Fn(i32) -> i32) {
     let val = stack.peek_mut();
     val.short = f(unsafe { val.short });
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn unary_i64(stack: &mut RuntimeStack, f: impl Fn(i64) -> i64) {
     let val = stack.peek_mut();
     val.long = f(unsafe { val.long });
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i32(stack: &mut RuntimeStack, f: impl Fn(i32, i32) -> i32) {
     let right = stack.pop();
     let left = stack.peek_mut();
     left.short = f(unsafe { left.short }, unsafe { right.short });
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i32_partial(
     stack: &mut RuntimeStack,
     f: impl Fn(i32, i32) -> Option<i32>,
@@ -286,14 +286,14 @@ fn binary_i32_partial(
     Ok(())
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i64(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i64) {
     let right = stack.pop();
     let left = stack.peek_mut();
     left.long = f(unsafe { left.long }, unsafe { right.long });
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i64_partial(
     stack: &mut RuntimeStack,
     f: impl Fn(i64, i64) -> Option<i64>,
@@ -305,7 +305,7 @@ fn binary_i64_partial(
     Ok(())
 }
 
-#[inline(always)]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) {
     let right = stack.pop();
     let left = stack.peek_mut();

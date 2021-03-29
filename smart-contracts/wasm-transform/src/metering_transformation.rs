@@ -751,7 +751,7 @@ impl Module {
         }));
         self.ty.types = new_types;
 
-        // Add functions to the beggining of the import list.
+        // Add functions to the beginning of the import list.
         let mut new_imports =
             Vec::with_capacity(NUM_ADDED_FUNCTIONS as usize + self.import.imports.len());
         new_imports.push(Import {

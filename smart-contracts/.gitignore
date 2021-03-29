@@ -18,6 +18,7 @@ pkg
 *.iml
 *.state-*
 *.state
+**/.idea
 
 /rust-contracts/concordium-std/Cargo.lock
 /concordium-contracts-common/Cargo.lock
