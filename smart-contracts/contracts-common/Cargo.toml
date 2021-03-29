@@ -12,6 +12,7 @@ readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
+arbitrary = { version = "0.4", features = ["derive"], optional = true }
 
 [dependencies.serde]
 optional = true
@@ -36,6 +37,8 @@ default = ["std"]
 std = []
 
 derive-serde = ["serde", "serde_json", "std", "base58check", "chrono"]
+
+fuzz = ["derive-serde", "arbitrary"]
 
 [lib]
 # Since we don't define an allocator in this crate, we can only produce an rlib
