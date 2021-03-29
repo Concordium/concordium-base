@@ -1,4 +1,4 @@
-# Workflow triggered by pushes to the master branch and PRs targeting it
+# Workflow triggered by pushes to the main branch and PRs targeting it
 # (as long as the commits contain code changes).
 #
 # Jobs:
@@ -15,7 +15,7 @@ name: Build and test
 
 on:
   pull_request:
-    branches: master
+    branches: main
     paths:
     - '.github/workflows/build-test.yaml'
     - '**.hs'
@@ -25,7 +25,7 @@ on:
     - '**.rs'
     - 'testdata/**'
   push:
-    branches: master
+    branches: main
     paths:
     - '.github/workflows/build-test.yaml'
     - '**.hs'
@@ -148,10 +148,13 @@ jobs:
         stack build --test --bench --force-dirty --ghc-options=-split-sections --no-run-tests --no-run-benchmarks
 
     # Run Rust and Haskell tests. Could run in parallel in separate jobs.
+    - name: Test haskell
+      run: |
+        stack build --test --bench --ghc-options=-split-sections --no-run-benchmarks
+
+    # Test rust sources after to avoid rebuilding Rust sources in the haskell
+    # test job.
     - name: Test Rust crates
       run: |
         cargo test --manifest-path rust-src/Cargo.toml --all --verbose --release
         cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release
-    - name: Test haskell
-      run: |
-        stack build --test --ghc-options=-split-sections

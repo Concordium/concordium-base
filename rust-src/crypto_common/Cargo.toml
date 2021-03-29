@@ -1,8 +1,10 @@
 [package]
 name = "crypto_common"
 version = "0.1.0"
-authors = ["Concordium AG <contact@concordium.com>"]
+authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
+license = "MPL-2.0"
+license-file = "../../LICENSE"
 
 [features]
 encryption = ["block-modes", "aes", "base64", "pbkdf2", "sha2", "hmac"]

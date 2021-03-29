@@ -29,7 +29,7 @@ Is a utility for generating authorization keys for different kinds of updates.
 It is used for generating such keys for internal testing. The key generation it
 supports is not very secure.
 
-## [genesis](./haskell-bins/genesis/)
+### [genesis](./haskell-bins/genesis/)
 
 Is a tool that takes all the parameters, accounts, and other data that goes into
 a genesis block, and combines them into a single file that is needed to start
@@ -129,3 +129,10 @@ The typical workflow should be the following.
 - make changes, commit and push on a separate branch
 - make a merge request to merge your branch into master. Assign somebody else
   with knowledge of the code to review the changes before they are merged.
+
+# Licenses
+
+Most of the sources in this repository are licensed under [MPL-2.0](./LICENSE).
+Some Rust packages are licensed under [APACHE-2.0](./LICENSE-APACHE). The
+`license` field in Cargo.toml package indicates which license the sources in
+that package are under.
