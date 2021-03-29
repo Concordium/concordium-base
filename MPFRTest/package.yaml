@@ -1,8 +1,9 @@
 name:                mpfr-test
 version:             0.1.0.0
-# license:             
-author:              "Felix Wiemuth"
-maintainer:          "Felix Wiemuth <fw@concordium.com>"
+license:             "MPL-2.0"
+license-file:        "../LICENSE"
+author:              "Concordium AG"
+maintainer:          "developers@concordium.com"
 # copyright:           
 
 extra-source-files:

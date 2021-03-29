@@ -4,18 +4,20 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c01b4375fa68ea1d5accaa609ed351a13c1cf5cd4af34ef4f84acb274e2686a9
+-- hash: 7eaa7403793b3e5ab92a451a158a922442f53c3399265692e643144111450e6c
 
 name:           concordium-base
 version:        0.1.0.0
 description:    See README
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2018 Author name here
-license:        BSD3
+author:         Concordium AG
+maintainer:     developers@concordium.com
+copyright:      Concordium AG
+license:        MPL-2.0
+license-file:   LICENSE
 build-type:     Custom
 extra-source-files:
     README.md
+    LICENSE
 
 custom-setup
   setup-depends:
