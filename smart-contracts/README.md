@@ -216,20 +216,55 @@ This kind of testing is perfectly adequate for a large amount of functional corr
 
 # Fuzzing the smart-contract interpreter
 
-## Prerequisites
-- `cargo-fuzz`
+We provide a fuzzer for the [Wasm smart-contract interpreter](wasm-chain-integration) which allows to test the 
+interpreter on randomly generated Wasm programs. In a nutshell,
+we generate valid, type-correct Wasm programs as inputs to the interpreter, and use a mutation-based fuzzer to
+make the nondeterministic choices that guide the random program generation. Specifically, the fuzzing cycle works as 
+follows:
+
+1. The fuzzer (a [Rust wrapper](https://crates.io/crates/libfuzzer-sys) around LLVM's 
+   [libfuzzer](https://llvm.org/docs/LibFuzzer.html)) generates a random array `r` of bytes.
+2. We generate a "random" Wasm smart contract `s`: whenever we need to make a nondeterministic choice (how many functions to 
+   generate, whether to use a function call, arithmetic expression, variable, or literal to generate an integer value, 
+   etc.) we consult bytes from array `r`.
+3. A fuzzing utility ([cargo fuzz](https://crates.io/crates/cargo-fuzz)) instruments the interpreter code to make it
+   suitable for collecting code-coverage information. This allows the fuzzer to keep track of the execution paths
+   that were taken in each of the runs (more on that below).
+4. We run the instrumented interpreter code on `s`, feeding information about code coverage back to the fuzzer.
+5. This loop continues until an interpreter run results in a crash, at which point the fuzzer terminates with information
+   on how to reproduce the crash.
+   
+In each iteration of this cycle, the fuzzer compares the code coverage of the previous interpreter run with the code 
+coverage encountered so far. It then uses various heuristics to decide how to best change the created byte arrays in
+order to explore new execution paths.
+
+The random Wasm smart-contract generation is implemented in a [fork](https://github.com/Concordium/wasm-tools)
+of the [wasm-smith Wasm program generator](https://docs.rs/wasm-smith/0.4.1/wasm_smith/)
+and is described in a great [blog post](https://fitzgeraldnick.com/2020/08/24/writing-a-test-case-generator.html)
+by Nick Fitzerald.
+
+So far the fuzzer discovered three [bugs](wasm-chain-integration/fuzz/fixed_artifacts/interpreter), which we fixed.
+
+## Software requirements
+- [cargo-fuzz](https://crates.io/crates/cargo-fuzz) 
+- [libfuzzer](https://llvm.org/docs/LibFuzzer.html)
 - for generating coverage information: `cargo-cov` and `cargo-profdata`
 
 ## Running the fuzzer
-- Change to the `wasm-chain-integration` directory 
-- Run `cargo fuzz run interpreter -- -max-len=1200000`
+- `$ cd wasm-chain-integration` 
+- `$ cargo fuzz run interpreter -- -max-len=1200000`
 
-This will fuzz the smart-contract interpreter on randomly generated but valid Wasm programs.
-The random Wasm program generation is implemented in our [fork of wasm-smith](https://github.com/Concordium/wasm-tools).
+This will fuzz the smart-contract interpreter on randomly generated but valid Wasm programs, until the fuzzer finds
+a crash.
 
-## Visualizing coverage
+## Visualizing code coverage
 
-Run `scripts/generate-coverage.py fuzz/coverage/interpreter` to generate code-coverage reports.
+After the fuzzer runs for some time it will be discovering new execution paths slower and slower.
+When that happens it can be useful to see how many times it executed each of the instructions in the interpreter
+source code. To generate source code that is annotated with the number of times that each line of code was executed, run
+
+- `cd wasm-chain-integration`
+- `fuzz/scripts/generate-coverage.py fuzz/corpus/interpreter`
 
 # Contract schema
 The state of a contract is a bunch of bytes and how to interpret these bytes into representations such as structs and enums is hidden away into the contract functions after compilation.
