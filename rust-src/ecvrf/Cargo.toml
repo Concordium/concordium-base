@@ -3,7 +3,6 @@ name="ecvrf"
 authors = ["Concordium AG <developers@concordium.com>"]
 version="0.0.1"
 edition = "2018"
-license = "MPL-2.0"
 license-file = "../../LICENSE"
 
 [dependencies]
