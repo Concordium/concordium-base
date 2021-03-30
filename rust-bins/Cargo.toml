@@ -3,7 +3,6 @@ name = "misc_tools"
 version = "0.1.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
-license = "Apache-2.0"
 license-file = "../../LICENSE-APACHE"
 
 [features]
