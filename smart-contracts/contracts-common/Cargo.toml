@@ -1,9 +1,9 @@
 [package]
 name = "concordium-contracts-common"
 version = "0.3.2"
-authors = ["Concordium <info@concordium.com>"]
+authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
-license = "Apache-2.0"
+license = "MPL-2.0"
 description = "Common functionality used by smart contracts and the host environment on the Concordium blockchain."
 homepage = "https://github.com/Concordium/concordium-contracts-common"
 repository = "https://github.com/Concordium/concordium-contracts-common"
