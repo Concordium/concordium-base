@@ -155,7 +155,7 @@ dependencies = [
 [[package]]
 name = "concordium-contracts-common"
 version = "0.3.2"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=mra/fuzzing#2ab668d24d59eb29c0b08beab41e4ff84f530fcb"
+source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#a8e9fd37ea9016c4e30d3e67445a272a114705a1"
 dependencies = [
  "arbitrary",
  "base58check",

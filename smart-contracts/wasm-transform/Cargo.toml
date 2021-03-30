@@ -3,7 +3,6 @@ name = "wasm-transform"
 version = "0.1.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
-license = "MPL-2.0"
 license-file = "../LICENSE-MPL-2.0"
 
 [features]
