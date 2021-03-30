@@ -2,7 +2,7 @@ use crate::curve_arithmetic::CurveDecodingError;
 use ff::{Field, PrimeField};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
-use sha2::{Digest, Sha512};
+use sha2::{Digest, Sha256};
 use std::{
     convert::TryInto,
     io::{Cursor, Write},
@@ -503,11 +503,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // Instead of forming two new byte arrays we pass a boolean to hash_bytes_to_fq
     // function below.
 
-    // Notice, this hashing functions varies from the one used by the paper We
-    // use sha512 iteratively until the first 47 bytes + 5 bits of the resulting
-    // digest represents a field element
-    let t0 = hash_bytes_to_fq(false, bytes);
-    let t1 = hash_bytes_to_fq(true, bytes);
+    let (t0, t1) = hash_to_field(&bytes, &[1, 2, 3]);
 
     // compute the two points on E1'(Fq) - the 11 isogenous curve
     let (x0, y0, z0) = simplified_swu(t0);
@@ -517,7 +513,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // it is faster to add the two points before evaluating the isogeny, but
     // we omit this for now, since we don't have an efficient implementation
     // of the curve.
-    let (x0, y0, z0) = iso_11(x0, y0, z0);
+    let (x0, y0, z0) = iso_11(x0, y0, z0); // todo would it be significantly faster?
     let (x1, y1, z1) = iso_11(x1, y1, z1);
 
     // convert into points on the curve
@@ -531,6 +527,91 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // the curve)
     p0.mul_assign(1 + 15_132_376_222_941_642_752);
     p0
+}
+
+fn hash_to_field(msg: &[u8], dst: &[u8]) -> (Fq, Fq) {
+    // todo return field elements
+    let (u_0, u_1, u_2, u_3) = expand_message_xmd(msg, dst);
+
+    // View u_0, u_1 as integers and reduce mod p
+
+    (fq_from_bytes(&u_0, &u_1), fq_from_bytes(&u_2, &u_3))
+}
+
+fn fq_from_bytes(left_bytes: &[u8; 32], right_bytes: &[u8; 32]) -> Fq {
+    // todo clean up entire function
+    let mut u_0_0 = [0u64; 6];
+    for (chunk, f) in left_bytes.chunks(8).zip(u_0_0[..4].iter_mut()) {
+        *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
+    }
+    let mut u_0_1 = [0u64; 6];
+    for (chunk, f) in right_bytes[32..].chunks(8).zip(u_0_1[..4].iter_mut()) {
+        *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
+    }
+    let two_to_256_fqrepr = [0u64, 0, 0, 1, 0, 0]; // 2^256
+    let two_to_256_fq = Fq::from_repr(FqRepr(two_to_256_fqrepr)).unwrap(); // Safe as < 381 bits
+
+    // Only the leading 4 u64s are initialized, i.e. safe to unwrap 256 bit FqRepr:
+    let u_0_0_fq = Fq::from_repr(FqRepr(u_0_0)).unwrap();
+    let mut u_0_1_fq = Fq::from_repr(FqRepr(u_0_1)).unwrap();
+    u_0_1_fq.mul_assign(&two_to_256_fq); // u_0[32..] * 2^256
+    u_0_1_fq.add_assign(&u_0_0_fq); // u_0[..32] + u_0[32..] * 2^256 = u_0
+
+    u_0_1_fq
+}
+
+// Implements .. todo
+// len_in_bytes is always 128
+// Domain separation string (dst) should be at most 255 bytes
+fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) {
+    // DST_prime = DST || I2OSP(len(DST), 1)
+    let mut dst_prime = dst.to_vec();
+    dst_prime.push(dst.len().try_into().unwrap()); // panics if dst is more than 255 bytes
+                                                   // msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
+
+    // b_0 = H(msg_prime)
+    let mut h = Sha256::new();
+    // todo a possible optimization here would be to save the state of H(Z_pad) and
+    // intialize H with that:
+    h.update(vec![0; 64]); // z_pad = I2OSP(0, 64), 64 is the input block size of Sha265
+    h.update(msg);
+    h.update(vec![128, 0]); // l_i_b_str = I2OSP(128, 2)
+    h.update(vec![0]);
+    h.update(&dst_prime);
+    let mut b_0: [u8; 32] = [0u8; 32];
+    b_0.copy_from_slice(h.clone().finalize().as_slice()); // todo are the clones needed?
+
+    // b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
+    h.update(vec![1]);
+    h.update(&dst_prime);
+    let mut b_1: [u8; 32] = [0u8; 32];
+    b_1.copy_from_slice(h.clone().finalize().as_slice());
+
+    // b_2 = H(strxor(b_0, b_1)  || I2OSP(2, 1) || DST_prime)
+    let xor: Vec<u8> = b_0.iter().zip(b_1.iter()).map(|(x, y)| x ^ y).collect();
+    h.update(xor);
+    h.update(vec![2]);
+    h.update(&dst_prime);
+    let mut b_2: [u8; 32] = [0u8; 32];
+    b_2.copy_from_slice(h.clone().finalize().as_slice());
+
+    // b_3 = H(strxor(b_1, b_2)  || I2OSP(3, 1) || DST_prime)
+    let xor: Vec<u8> = b_1.iter().zip(b_2.iter()).map(|(x, y)| x ^ y).collect();
+    h.update(xor);
+    h.update(vec![3]);
+    h.update(&dst_prime);
+    let mut b_3: [u8; 32] = [0u8; 32];
+    b_3.copy_from_slice(h.clone().finalize().as_slice());
+
+    // b_4 = H(strxor(b_2, b_3)  || I2OSP(4, 1) || DST_prime)
+    let xor: Vec<u8> = b_2.iter().zip(b_3.iter()).map(|(x, y)| x ^ y).collect();
+    h.update(xor);
+    h.update(vec![4]);
+    h.update(dst_prime);
+    let mut b_4: [u8; 32] = [0u8; 32];
+    b_4.copy_from_slice(h.finalize().as_slice());
+
+    (b_1, b_2, b_3, b_4)
 }
 
 // Returns a point on E1 with coordinates x,y,z.
@@ -569,33 +650,6 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
             Ok(p) => Ok(G1::from(p)),
             Err(_) => Err(CurveDecodingError::NotOnCurve),
         }
-    }
-}
-
-/// Hash to Fq by hashing using Sha512 and decode the first 381 bits as an
-/// unsigned integer in little endian representation. Repeat feeding the
-/// output of the hash into the hash until successful.
-pub fn hash_bytes_to_fq(one: bool, bytes: &[u8]) -> Fq {
-    let mut h = Sha512::new();
-    let mut hash: [u8; 64] = [0u8; 64];
-    h.update(if one { [1u8] } else { [0u8] });
-    h.update(bytes);
-    let mut fqrepr = [0u64; 6];
-    // We need 381 bits to represent the Fq field, so the topmost three bits will
-    // always be unset.
-    let mask: u64 = !(0b111 << 61);
-    loop {
-        hash.copy_from_slice(&h.finalize_reset());
-        for (chunk, f) in hash.chunks_exact(8).zip(fqrepr.iter_mut()) {
-            *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
-        }
-        // Clear the topmost 3 bits.
-        fqrepr[5] &= mask;
-        // keep trying to hash, until we hit an element in Fq
-        if let Ok(fq) = Fq::from_repr(FqRepr(fqrepr)) {
-            return fq;
-        }
-        h.update(&hash[..]);
     }
 }
 
