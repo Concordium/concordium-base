@@ -24,9 +24,6 @@ use wasm_transform::{
 };
 #[cfg(feature = "fuzz")]
 pub mod fuzz;
-#[cfg(feature = "fuzz")]
-pub mod types;
-#[cfg(not(feature = "fuzz"))]
 mod types;
 
 pub type ExecResult<A> = anyhow::Result<A>;

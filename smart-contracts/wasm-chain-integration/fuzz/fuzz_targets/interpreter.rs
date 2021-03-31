@@ -6,7 +6,7 @@
 use libfuzzer_sys::fuzz_target;
 use wasm_chain_integration::fuzz::*;
 
-use wasm_chain_integration::{get_inits, get_receives, invoke_init, invoke_receive, types::*};
+use wasm_chain_integration::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunctionBytes},
     output::Output,
