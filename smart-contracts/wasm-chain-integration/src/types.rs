@@ -67,7 +67,9 @@ impl<Policies> ReceiveContext<Policies> {
     pub fn self_address(&self) -> &ContractAddress { &self.self_address }
 }
 
-pub(crate) fn deserial_receive_context(source: &[u8]) -> ParseResult<ReceiveContext<&[u8]>> {
+pub(crate) fn deserial_receive_context<'a>(
+    source: &'a [u8],
+) -> ParseResult<ReceiveContext<&'a [u8]>> {
     let mut cursor = Cursor::new(source);
     let metadata = cursor.get()?;
     let invoker = cursor.get()?;
@@ -91,7 +93,7 @@ pub(crate) fn deserial_receive_context(source: &[u8]) -> ParseResult<ReceiveCont
     }
 }
 
-pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[u8]>> {
+pub(crate) fn deserial_init_context<'a>(source: &'a [u8]) -> ParseResult<InitContext<&'a [u8]>> {
     let mut cursor = Cursor::new(source);
     let metadata = cursor.get()?;
     let init_origin = cursor.get()?;
