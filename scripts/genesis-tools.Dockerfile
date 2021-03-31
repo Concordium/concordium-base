@@ -10,14 +10,14 @@
 # The builder is based on a base image that has stack, haskell, and rust installed.
 # The only argument is the branch name of a concordium-base repository branch, given as BASE_REF.
 
-FROM 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base:0.18 AS builder
+FROM concordium/base:0.19 AS builder
 
 # Which branch of concordium-base to build the tools from.
-ARG BASE_REF=master
+ARG BASE_REF=main
 
-RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-RUN --mount=type=ssh git clone --depth 1 --branch ${BASE_REF} git@gitlab.com:Concordium/concordium-base.git
+RUN --mount=type=ssh git clone --depth 1 --branch ${BASE_REF} git@github.com:Concordium/concordium-base.git
 
 WORKDIR /concordium-base
 
@@ -54,6 +54,9 @@ COPY --from=builder /concordium-base/libs/ /usr/local/lib/
 
 # And binaries into PATH.
 COPY --from=builder /concordium-base/bins/ /usr/local/bin/
+
+# Make a workspace for mapping and running commands.
+RUN mkdir /home/workspace
 
 # Finally, update the shared library cache so that binaries can be run without setting LD_LIBRARY_PATH
 RUN ldconfig
