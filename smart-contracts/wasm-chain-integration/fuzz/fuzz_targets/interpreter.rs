@@ -1,5 +1,8 @@
 #![no_main]
 
+/// Fuzz target for the Wasm smart-contract interpreter to test parsing,
+/// validation, metering injection, Wasm code generation, and init/receive
+/// function execution.
 use libfuzzer_sys::fuzz_target;
 use wasm_chain_integration::fuzz::*;
 
@@ -13,14 +16,41 @@ use wasm_transform::{
     validate::validate_module,
 };
 
+/// The energy limit on the mainnet is 3 mln NRG. However, we increase the limit
+/// to 10 mln here in order to allow the interpreter to potentially explore more
+/// execution paths. This should roughly correspond to a maximum execution time
+/// of 10 seconds.
 const ENERGY: u64 = 10_000_000;
+/// A configuration object to set what information should be printed while
+/// fuzzing.
 const CONFIG: PrintConfig = PrintConfig {
-    print_success:                    false,
-    print_failure:                    false,
+    /// Report when a module was successfully compiled and finished executing
+    /// without errors.
+    print_success: false,
+    /// Report when a module compilation or execution resulted in an error.
+    print_failure: false,
+    /// Always print out a module in .wat format before it is passed to the
+    /// interpreter.
     print_module_before_interpreting: false,
-    print_failing_module:             false,
+    /// Print out a module in .wat format, but only if it resulted in a
+    /// compilation or runtime error.
+    print_failing_module: false,
 };
 
+// Creates a random, but type-correct Wasm module, along with a random
+// - amount to pass to the init/receive function
+// - init and receive context
+// - smart-contract state
+// - parameter to the receive function.
+// This generated data is used to validate, insert metering, and compile the
+// generated module, and execute all its init and receive functions. We also
+// test that the generated artifact can be (de)serialized.
+// If any of those steps fail, this code will crash, and the fuzzer will report
+// it.
+//
+// Note that this code will execute all the functions generated in the smart
+// contract because the module creates an auxiliary receive function for all
+// functions.
 fuzz_target!(|input: RandomizedInterpreterInput<InterpreterConfig>| {
     let RandomizedInterpreterInput {
         amount,

@@ -240,7 +240,7 @@ order to explore new execution paths.
 
 The random Wasm smart-contract generation is implemented in a [fork](https://github.com/Concordium/wasm-tools)
 of the [wasm-smith Wasm program generator](https://docs.rs/wasm-smith/0.4.1/wasm_smith/)
-and is described in a great [blog post](https://fitzgeraldnick.com/2020/08/24/writing-a-test-case-generator.html)
+which is described in a great [blog post](https://fitzgeraldnick.com/2020/08/24/writing-a-test-case-generator.html)
 by Nick Fitzerald.
 
 So far the fuzzer discovered three [bugs](wasm-chain-integration/fuzz/fixed_artifacts/interpreter), which we fixed.
