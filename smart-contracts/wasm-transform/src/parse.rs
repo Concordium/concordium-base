@@ -119,7 +119,7 @@ pub trait GetParseable<A, Ctx> {
 
 /// A generic implementation for a cursor.
 impl<'a, 'b, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'b mut Cursor<&'a [u8]> {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn next(self, ctx: Ctx) -> ParseResult<A> { A::parse(ctx, self) }
 }
 
@@ -127,7 +127,7 @@ impl<'a, 'b, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'b mut Cursor
 /// readable type. Instead this instance additionally ensures that all of the
 /// input data is used by the parser.
 impl<'a, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'a [u8] {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn next(self, ctx: Ctx) -> ParseResult<A> {
         let mut cursor = Cursor::new(self);
         let res = A::parse(ctx, &mut cursor)?;
@@ -1134,7 +1134,7 @@ impl<'a> Iterator for OpCodeIterator<'a> {
 pub struct CodeSkeleton<'a> {
     /// Declaration of the locals.
     pub locals: Vec<Local>,
-    /// And uninterpreter instructions.
+    /// And uninterpreted instructions.
     pub expr_bytes: &'a [u8],
 }
 

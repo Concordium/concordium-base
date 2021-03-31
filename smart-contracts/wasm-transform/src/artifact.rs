@@ -32,7 +32,7 @@ impl std::fmt::Debug for StackValue {
 }
 
 impl From<i32> for StackValue {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(short: i32) -> Self {
         Self {
             short,
@@ -41,7 +41,7 @@ impl From<i32> for StackValue {
 }
 
 impl From<u32> for StackValue {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(short: u32) -> Self {
         Self {
             short: short as i32,
@@ -50,7 +50,7 @@ impl From<u32> for StackValue {
 }
 
 impl From<i64> for StackValue {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(long: i64) -> Self {
         Self {
             long,
@@ -59,7 +59,7 @@ impl From<i64> for StackValue {
 }
 
 impl From<u64> for StackValue {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(long: u64) -> Self {
         Self {
             long: long as i64,
@@ -68,7 +68,7 @@ impl From<u64> for StackValue {
 }
 
 impl From<GlobalInit> for StackValue {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(g: GlobalInit) -> Self {
         match g {
             GlobalInit::I32(short) => Self {
@@ -302,48 +302,48 @@ pub trait RunnableCode {
 }
 
 impl RunnableCode for CompiledFunction {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_params(&self) -> u32 { self.params.len() as u32 }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn return_type(&self) -> BlockType { self.return_type }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn params(&self) -> &[ValueType] { &self.params }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_locals(&self) -> u32 { self.num_locals }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn locals(&self) -> LocalsIterator { LocalsIterator::new(self.num_locals, &self.locals) }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn code(&self) -> &[u8] { &self.code.bytes }
 }
 
 impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_params(&self) -> u32 { self.params.len() as u32 }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn return_type(&self) -> BlockType { self.return_type }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn params(&self) -> &[ValueType] { &self.params }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_locals(&self) -> u32 { self.num_locals }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn locals(&self) -> LocalsIterator { LocalsIterator::new(self.num_locals, &self.locals) }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn code(&self) -> &[u8] { self.code }
 }
 

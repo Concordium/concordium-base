@@ -1,7 +1,6 @@
 pub mod constants;
 #[cfg(feature = "enable-ffi")]
 mod ffi;
-mod types;
 
 #[cfg(test)]
 mod validation_tests;
@@ -23,10 +22,13 @@ use wasm_transform::{
     types::{ExportDescription, Module, Name},
     utils, validate,
 };
+#[cfg(feature = "fuzz")]
+pub mod fuzz;
+mod types;
 
 pub type ExecResult<A> = anyhow::Result<A>;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 /// Structure to support logging of events from smart contracts.
 pub struct Logs {
     pub logs: LinkedList<Vec<u8>>,
@@ -211,7 +213,7 @@ impl Outcome {
 }
 
 /// Smart contract state.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct State {
     pub state: Vec<u8>,
 }
@@ -441,12 +443,12 @@ fn call_common<C: HasCommon>(
 }
 
 impl<'a> machine::Host<ProcessedImports> for InitHost<'a> {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
         f: &ProcessedImports,
@@ -578,12 +580,12 @@ impl<'a> ReceiveHost<'a> {
 }
 
 impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
         f: &ProcessedImports,
@@ -622,7 +624,7 @@ pub type PolicyBytes<'a> = &'a [u8];
 
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
-    artifact: Artifact<ProcessedImports, C>,
+    artifact: &Artifact<ProcessedImports, C>,
     amount: u64,
     init_ctx: InitContext<P>,
     init_name: &str,
@@ -680,7 +682,7 @@ pub fn invoke_init<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
 }
 
 /// Invokes an init-function from a given artifact *bytes*
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_artifact<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     artifact_bytes: &[u8],
     amount: u64,
@@ -690,11 +692,11 @@ pub fn invoke_init_from_artifact<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     energy: u64,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
 /// Invokes an init-function from Wasm module bytes
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
@@ -704,13 +706,13 @@ pub fn invoke_init_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     energy: u64,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 /// metering.
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
@@ -720,12 +722,12 @@ pub fn invoke_init_with_metering_from_source<A: AsRef<[u8]>, P: SerialPolicies<A
     energy: u64,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<C: RunnableCode, A: AsRef<[u8]>, P: SerialPolicies<A>>(
-    artifact: Artifact<ProcessedImports, C>,
+    artifact: &Artifact<ProcessedImports, C>,
     amount: u64,
     receive_ctx: ReceiveContext<P>,
     current_state: &[u8],
@@ -833,7 +835,7 @@ impl SerialPolicies<Vec<u8>> for Vec<OwnedPolicy> {
 }
 
 /// Invokes an receive-function from a given artifact *bytes*
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_artifact<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     artifact_bytes: &[u8],
     amount: u64,
@@ -844,11 +846,11 @@ pub fn invoke_receive_from_artifact<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }
 
 /// Invokes an receive-function from Wasm module bytes
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
@@ -859,12 +861,12 @@ pub fn invoke_receive_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }
 
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
-#[inline]
+#[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<A: AsRef<[u8]>, P: SerialPolicies<A>>(
     source_bytes: &[u8],
     amount: u64,
@@ -875,7 +877,7 @@ pub fn invoke_receive_with_metering_from_source<A: AsRef<[u8]>, P: SerialPolicie
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }
 
 /// A host which traps for any function call.
@@ -900,7 +902,7 @@ pub struct TestHost;
 
 impl validate::ValidateImportExport for TestHost {
     /// Simply ensure that there are no duplicates.
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn validate_import_function(
         &self,
         duplicate: bool,
@@ -911,7 +913,7 @@ impl validate::ValidateImportExport for TestHost {
         !duplicate
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn validate_export_function(
         &self,
         _item_name: &Name,

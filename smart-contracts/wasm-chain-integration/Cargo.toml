@@ -3,7 +3,6 @@ name = "wasm-chain-integration"
 version = "0.1.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
-license = "MPL-2.0"
 license-file = "../LICENSE-MPL-2.0"
 
 [features]
@@ -11,12 +10,17 @@ license-file = "../LICENSE-MPL-2.0"
 # for use from Haskell.
 enable-ffi = []
 default=["enable-ffi"]
+fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
+fuzz-coverage = ["wasm-transform/fuzz-coverage"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 libc = "0.2"
 anyhow = "1.0.33"
 serde = "1.0"
+arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
+wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
+wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", optional = true }
 
 [dependencies.wasm-transform]
 path = "../wasm-transform"
@@ -26,7 +30,6 @@ version = "0"
 version = "0.3.2"
 git = "https://github.com/Concordium/concordium-contracts-common.git"
 branch = "main"
-# path = "../concordium-contracts-common/"
 features = ["derive-serde"]
 
 [lib]

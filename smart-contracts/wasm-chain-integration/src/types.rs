@@ -1,5 +1,7 @@
 use crate::*;
 use anyhow::bail;
+#[cfg(feature = "fuzz")]
+use arbitrary::Arbitrary;
 use serde::Deserialize as SerdeDeserialize;
 use wasm_transform::{
     artifact::TryFromImport,
@@ -15,6 +17,7 @@ pub const MAX_EXPORT_NAME_LEN: usize = 100;
 ///
 /// TODO: We could optimize this to be initialized lazily
 #[derive(SerdeDeserialize)]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
 #[serde(rename_all = "camelCase")]
 pub struct InitContext<Policies = Vec<OwnedPolicy>> {
     pub metadata:        ChainMetadata,
@@ -27,6 +30,7 @@ pub struct InitContext<Policies = Vec<OwnedPolicy>> {
 /// TODO: We could optimize this to be initialized lazily.
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
 pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
     pub metadata:        ChainMetadata,
     pub invoker:         AccountAddress,  //32 bytes
@@ -105,6 +109,7 @@ pub(crate) fn deserial_init_context<'a>(source: &'a [u8]) -> ParseResult<InitCon
     }
 }
 
+#[derive(Debug)]
 pub enum InitResult {
     Success {
         state:            State,
@@ -150,6 +155,7 @@ impl InitResult {
 }
 
 /// Data that accompanies the send action.
+#[derive(Debug)]
 pub struct SendAction {
     pub to_addr:   ContractAddress,
     pub name:      Vec<u8>,
@@ -158,6 +164,7 @@ pub struct SendAction {
 }
 
 /// Data that accompanies the simple transfer action.
+#[derive(Debug)]
 pub struct SimpleTransferAction {
     pub to_addr: AccountAddress, // 32 bytes
     pub amount:  u64,            // 8 bytes
@@ -172,7 +179,7 @@ pub struct SimpleTransferAction {
 ///
 /// Rc was chosen instead of the Box because we sometimes need to clone values
 /// of this type.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Action {
     Send {
         data: std::rc::Rc<SendAction>,
@@ -248,6 +255,7 @@ impl Action {
     }
 }
 
+#[derive(Debug)]
 pub enum ReceiveResult {
     Success {
         state:            State,
