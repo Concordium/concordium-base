@@ -8,7 +8,7 @@ pipeline {
     agent any
     environment {
         image_repo = 'concordium/genesis-tools'
-	image_name = "${image_repo}:${image_tag}"
+        image_name = "${image_repo}:${image_tag}"
     }
     stages {
 	stage('dockerhub-login') {
