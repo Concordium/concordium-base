@@ -503,7 +503,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // Instead of forming two new byte arrays we pass a boolean to hash_bytes_to_fq
     // function below.
 
-    let (t0, t1) = hash_to_field(&bytes, &[1, 2, 3]);
+    let (t0, t1) = hash_to_field(&bytes, "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_".as_bytes());
 
     // compute the two points on E1'(Fq) - the 11 isogenous curve
     let (x0, y0, z0) = simplified_swu(t0);
@@ -538,26 +538,28 @@ fn hash_to_field(msg: &[u8], dst: &[u8]) -> (Fq, Fq) {
     (fq_from_bytes(&u_0, &u_1), fq_from_bytes(&u_2, &u_3))
 }
 
+// Interpret input as integers (big endian)
+// Return (left*2^256 + right) as Fq
 fn fq_from_bytes(left_bytes: &[u8; 32], right_bytes: &[u8; 32]) -> Fq {
-    // todo clean up entire function
-    let mut u_0_0 = [0u64; 6];
-    for (chunk, f) in left_bytes.chunks(8).zip(u_0_0[..4].iter_mut()) {
-        *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
-    }
-    let mut u_0_1 = [0u64; 6];
-    for (chunk, f) in right_bytes[32..].chunks(8).zip(u_0_1[..4].iter_mut()) {
-        *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
-    }
-    let two_to_256_fqrepr = [0u64, 0, 0, 1, 0, 0]; // 2^256
-    let two_to_256_fq = Fq::from_repr(FqRepr(two_to_256_fqrepr)).unwrap(); // Safe as < 381 bits
+    fn le_u64s_from_be_bytes(bytes: &[u8]) -> Fq {
+        let mut digits = [0u64; 6];
 
-    // Only the leading 4 u64s are initialized, i.e. safe to unwrap 256 bit FqRepr:
-    let u_0_0_fq = Fq::from_repr(FqRepr(u_0_0)).unwrap();
-    let mut u_0_1_fq = Fq::from_repr(FqRepr(u_0_1)).unwrap();
-    u_0_1_fq.mul_assign(&two_to_256_fq); // u_0[32..] * 2^256
-    u_0_1_fq.add_assign(&u_0_0_fq); // u_0[..32] + u_0[32..] * 2^256 = u_0
+        for i in 0..4 {
+            digits[3-i] = u64::from_be_bytes(bytes[i*8..(i+1)*8].try_into().expect("Chunk Size is always 8."));
+        }
 
-    u_0_1_fq
+        Fq::from_repr(FqRepr(digits)).expect("Only the leading 4 u64s are initialized")
+    }
+
+    let two_to_256_fqrepr = [0u64, 0, 0, 0, 1, 0]; // 2^256
+    let two_to_256_fq = Fq::from_repr(FqRepr(two_to_256_fqrepr)).expect("2^256 fits in modulus");
+
+    let mut left_fq = le_u64s_from_be_bytes(left_bytes);
+    let right_fq = le_u64s_from_be_bytes(right_bytes);
+    left_fq.mul_assign(&two_to_256_fq); // u_0[..32] * 2^256
+    left_fq.add_assign(&right_fq); // u_0[32..] + u_0[32..] * 2^256 = u_0
+
+    left_fq
 }
 
 // Implements .. todo
@@ -1338,4 +1340,47 @@ mod tests {
         }
 
     }
+
+    // Test vectors for BLS12381G1_XMD:SHA-256_SSWU_RO_ from 
+    // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.9.1
+    // DST = QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_
+    #[test]
+    fn test_hash_to_curve() {
+        // Legend:
+            // Steps:
+            // 1. u = hash_to_field(msg, 2)
+            // 2. Q0 = map_to_curve(u[0])
+            // 3. Q1 = map_to_curve(u[1])
+            // 4. R = Q0 + Q1              # Point addition
+            // 5. P = clear_cofactor(R)
+            // 6. return P
+        
+        let dst = "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_".as_bytes();
+        
+        {
+            // msg = ""
+            let msg = "".as_bytes();
+            // P.x     = 052926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1
+            // P.y     = 08ba738453bfed09cb546dbb0783dbb3a5f1f566ed67bb6be0e8c67e2e81a4cc68ee29813bb7994998f3eae0c9c6a265
+            // u[0]    = 0ba14bd907ad64a016293ee7c2d276b8eae71f25a4b941eece7b0d89f17f75cb3ae5438a614fb61d6835ad59f29c564f
+            // u[1]    = 019b9bd7979f12657976de2884c7cce192b82c177c80e0ec604436a7f538d231552f0d96d9f7babe5fa3b19b3ff25ac9
+            // Q0.x    = 11a3cce7e1d90975990066b2f2643b9540fa40d6137780df4e753a8054d07580db3b7f1f03396333d4a359d1fe3766fe
+            // Q0.y    = 0eeaf6d794e479e270da10fdaf768db4c96b650a74518fc67b04b03927754bac66f3ac720404f339ecdcc028afa091b7
+            // Q1.x    = 160003aaf1632b13396dbad518effa00fff532f604de1a7fc2082ff4cb0afa2d63b2c32da1bef2bf6c5ca62dc6b72f9c
+            // Q1.y    = 0d8bb2d14e20cf9f6036152ed386d79189415b6d015a20133acb4e019139b94e9c146aaad5817f866c95d609a361735e
+    
+            // Verify hash to field:
+            let (u_0, u_1) = hash_to_field(msg, dst);
+            assert_eq!(u_0.into_repr().0, [0x6835ad59f29c564f, 0x3ae5438a614fb61d, 0xce7b0d89f17f75cb, 0xeae71f25a4b941ee, 0x16293ee7c2d276b8, 0x0ba14bd907ad64a0]);
+            assert_eq!(u_1.into_repr().0, [0x5fa3b19b3ff25ac9, 0x552f0d96d9f7babe, 0x604436a7f538d231, 0x92b82c177c80e0ec, 0x7976de2884c7cce1, 0x019b9bd7979f1265]);
+            
+            //Verify hash to curve:
+            let res = hash_to_g1(msg);
+            println!("P: {:x?}", res);
+            println!("P: {:x?}", res.into_affine());
+            // println!("P: {:x?}", res.into_affine().x);
+            // assert_eq!(1,0);
+        }
+    }
+
 }
