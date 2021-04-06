@@ -2,6 +2,7 @@
 // 'https://gitlab.com/Concordium/infra/jenkins-jobs/-/blob/master/docker_image_genesis_tools.groovy':
 // - image_tag (default: "latest")
 // - base_image_tag
+// - base_ref
 
 pipeline {
     agent any
