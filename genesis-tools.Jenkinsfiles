@@ -22,9 +22,10 @@ pipeline {
             steps {
                 sh '''\
                     docker build \
-                        --build-arg BASE_IMAGE_TAG="$base_image_tag" \
-                        --label BASE_IMAGE_TAG="$base_image_tag" \
-                        --label GIT_COMMIT="$GIT_COMMIT" \
+                        --build-arg base_image_tag="$base_image_tag" \
+                        --build-arg base_ref='main' \
+                        --label base_image_tag="$base_image_tag" \
+                        --label git_commit="$GIT_COMMIT" \
                         -f "scripts/genesis-tools.Dockerfile" \
                         -t "$image_name" \
                         .

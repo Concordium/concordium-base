@@ -8,16 +8,17 @@
 # - genesis to finally combine all the input files into a `genesis.dat` file.
 
 # The builder is based on a base image that has stack, haskell, and rust installed.
-# The only argument is the branch name of a concordium-base repository branch, given as BASE_REF.
+# The only argument is the branch name of a concordium-base repository branch, given as 'base_ref'.
 
-FROM concordium/base:0.19 AS builder
+ARG base_image_tag
+FROM concordium/base:${base_image_tag} AS builder
 
 # Which branch of concordium-base to build the tools from.
-ARG BASE_REF=main
+ARG base_ref=main
 
 RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-RUN --mount=type=ssh git clone --depth 1 --branch ${BASE_REF} git@github.com:Concordium/concordium-base.git
+RUN --mount=type=ssh git clone --depth 1 --branch ${base_ref} git@github.com:Concordium/concordium-base.git
 
 WORKDIR /concordium-base
 
