@@ -567,49 +567,55 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
     // DST_prime = DST || I2OSP(len(DST), 1)
     let mut dst_prime = dst.to_vec();
     dst_prime.push(dst.len().try_into().unwrap()); // panics if dst is more than 255 bytes
-                                                   // msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
-
+    // msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
+    
     // b_0 = H(msg_prime)
     let mut h = Sha256::new();
-    // todo a possible optimization here would be to save the state of H(Z_pad) and
-    // intialize H with that:
+    // todo a possible optimization here would be to save the state of H(Z_pad)
     h.update(vec![0; 64]); // z_pad = I2OSP(0, 64), 64 is the input block size of Sha265
     h.update(msg);
-    h.update(vec![128, 0]); // l_i_b_str = I2OSP(128, 2)
+    h.update(vec![0, 128]); // l_i_b_str = I2OSP(128, 2)
     h.update(vec![0]);
     h.update(&dst_prime);
     let mut b_0: [u8; 32] = [0u8; 32];
-    b_0.copy_from_slice(h.clone().finalize().as_slice()); // todo are the clones needed?
-
+    b_0.copy_from_slice(h.finalize().as_slice());
+    
     // b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
+    let mut h = Sha256::new();
+    h.update(b_0);
     h.update(vec![1]);
     h.update(&dst_prime);
     let mut b_1: [u8; 32] = [0u8; 32];
-    b_1.copy_from_slice(h.clone().finalize().as_slice());
-
+    b_1.copy_from_slice(h.finalize().as_slice());
+    
     // b_2 = H(strxor(b_0, b_1)  || I2OSP(2, 1) || DST_prime)
+    let mut h = Sha256::new();
     let xor: Vec<u8> = b_0.iter().zip(b_1.iter()).map(|(x, y)| x ^ y).collect();
     h.update(xor);
     h.update(vec![2]);
     h.update(&dst_prime);
     let mut b_2: [u8; 32] = [0u8; 32];
-    b_2.copy_from_slice(h.clone().finalize().as_slice());
-
+    b_2.copy_from_slice(h.finalize().as_slice());
+    
     // b_3 = H(strxor(b_1, b_2)  || I2OSP(3, 1) || DST_prime)
-    let xor: Vec<u8> = b_1.iter().zip(b_2.iter()).map(|(x, y)| x ^ y).collect();
+    let mut h = Sha256::new();
+    let xor: Vec<u8> = b_0.iter().zip(b_2.iter()).map(|(x, y)| x ^ y).collect();
     h.update(xor);
     h.update(vec![3]);
     h.update(&dst_prime);
     let mut b_3: [u8; 32] = [0u8; 32];
-    b_3.copy_from_slice(h.clone().finalize().as_slice());
-
+    b_3.copy_from_slice(h.finalize().as_slice());
+    
     // b_4 = H(strxor(b_2, b_3)  || I2OSP(4, 1) || DST_prime)
-    let xor: Vec<u8> = b_2.iter().zip(b_3.iter()).map(|(x, y)| x ^ y).collect();
+    let mut h = Sha256::new();
+    let xor: Vec<u8> = b_0.iter().zip(b_3.iter()).map(|(x, y)| x ^ y).collect();
     h.update(xor);
     h.update(vec![4]);
     h.update(dst_prime);
     let mut b_4: [u8; 32] = [0u8; 32];
     b_4.copy_from_slice(h.finalize().as_slice());
+
+    //todo use loop
 
     (b_1, b_2, b_3, b_4)
 }
@@ -1288,5 +1294,48 @@ mod tests {
         .unwrap();
         let z_expected = Fq::from_repr(FqRepr([1, 0, 0, 0, 0, 0])).unwrap();
         test_isogeny_map(x, y, z, x_expected, y_expected, z_expected);
+    }
+
+    // Test vectors for expand_message_xmd from
+    // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-K.1
+    // DST          = QUUX-V01-CS02-with-expander
+    // hash         = SHA256
+    // len_in_bytes = 0x80
+    #[test]
+    fn test_expand_message_xmd() {
+        let domain_string = "QUUX-V01-CS02-with-expander";
+        let dst = domain_string.as_bytes();
+        {
+            // msg     =
+            // uniform_bytes =  8bcffd1a3cae24cf9cd7ab85628fd111bb17e3739d3b53f89580d217aa79526f
+            //                  1708354a76a402d3569d6a9d19ef3de4d0b991e4f54b9f20dcde9b95a66824cb
+            //                  df6c1a963a1913d43fd7ac443a02fc5d9d8d77e2071b86ab114a9f34150954a7
+            //                  531da568a1ea8c760861c0cde2005afc2c114042ee7b5848f5303f0611cf297f
+            
+            let msg = "".as_bytes();
+            let (a, b, c, d) = expand_message_xmd(msg, dst);
+
+            assert_eq!(a.to_vec(), vec![0x8b, 0xcf, 0xfd, 0x1a, 0x3c, 0xae, 0x24, 0xcf, 0x9c, 0xd7, 0xab, 0x85, 0x62, 0x8f, 0xd1, 0x11, 0xbb, 0x17, 0xe3, 0x73, 0x9d, 0x3b, 0x53, 0xf8, 0x95, 0x80, 0xd2, 0x17, 0xaa, 0x79, 0x52, 0x6f]);
+            assert_eq!(b.to_vec(), vec![0x17, 0x08, 0x35, 0x4a, 0x76, 0xa4, 0x02, 0xd3, 0x56, 0x9d, 0x6a, 0x9d, 0x19, 0xef, 0x3d, 0xe4, 0xd0, 0xb9, 0x91, 0xe4, 0xf5, 0x4b, 0x9f, 0x20, 0xdc, 0xde, 0x9b, 0x95, 0xa6, 0x68, 0x24, 0xcb]);
+            assert_eq!(c.to_vec(), vec![0xdf, 0x6c, 0x1a, 0x96, 0x3a, 0x19, 0x13, 0xd4, 0x3f, 0xd7, 0xac, 0x44, 0x3a, 0x02, 0xfc, 0x5d, 0x9d, 0x8d, 0x77, 0xe2, 0x07, 0x1b, 0x86, 0xab, 0x11, 0x4a, 0x9f, 0x34, 0x15, 0x09, 0x54, 0xa7]);
+            assert_eq!(d.to_vec(), vec![0x53, 0x1d, 0xa5, 0x68, 0xa1, 0xea, 0x8c, 0x76, 0x08, 0x61, 0xc0, 0xcd, 0xe2, 0x00, 0x5a, 0xfc, 0x2c, 0x11, 0x40, 0x42, 0xee, 0x7b, 0x58, 0x48, 0xf5, 0x30, 0x3f, 0x06, 0x11, 0xcf, 0x29, 0x7f]);
+        }
+
+        {
+            // msg     = abc
+            // uniform_bytes =  fe994ec51bdaa821598047b3121c149b364b178606d5e72bfbb713933acc29c1
+            //                  86f316baecf7ea22212f2496ef3f785a27e84a40d8b299cec56032763eceeff4
+            //                  c61bd1fe65ed81decafff4a31d0198619c0aa0c6c51fca15520789925e813dcf
+            //                  d318b542f8799441271f4db9ee3b8092a7a2e8d5b75b73e28fb1ab6b4573c192
+            
+            let msg = "abc".as_bytes();
+            let (a, b, c, d) = expand_message_xmd(msg, dst);
+
+            assert_eq!(a.to_vec(), vec![0xfe, 0x99, 0x4e, 0xc5, 0x1b, 0xda, 0xa8, 0x21, 0x59, 0x80, 0x47, 0xb3, 0x12, 0x1c, 0x14, 0x9b, 0x36, 0x4b, 0x17, 0x86, 0x06, 0xd5, 0xe7, 0x2b, 0xfb, 0xb7, 0x13, 0x93, 0x3a, 0xcc, 0x29, 0xc1]);
+            assert_eq!(b.to_vec(), vec![0x86, 0xf3, 0x16, 0xba, 0xec, 0xf7, 0xea, 0x22, 0x21, 0x2f, 0x24, 0x96, 0xef, 0x3f, 0x78, 0x5a, 0x27, 0xe8, 0x4a, 0x40, 0xd8, 0xb2, 0x99, 0xce, 0xc5, 0x60, 0x32, 0x76, 0x3e, 0xce, 0xef, 0xf4]);
+            assert_eq!(c.to_vec(), vec![0xc6, 0x1b, 0xd1, 0xfe, 0x65, 0xed, 0x81, 0xde, 0xca, 0xff, 0xf4, 0xa3, 0x1d, 0x01, 0x98, 0x61, 0x9c, 0x0a, 0xa0, 0xc6, 0xc5, 0x1f, 0xca, 0x15, 0x52, 0x07, 0x89, 0x92, 0x5e, 0x81, 0x3d, 0xcf]);
+            assert_eq!(d.to_vec(), vec![0xd3, 0x18, 0xb5, 0x42, 0xf8, 0x79, 0x94, 0x41, 0x27, 0x1f, 0x4d, 0xb9, 0xee, 0x3b, 0x80, 0x92, 0xa7, 0xa2, 0xe8, 0xd5, 0xb7, 0x5b, 0x73, 0xe2, 0x8f, 0xb1, 0xab, 0x6b, 0x45, 0x73, 0xc1, 0x92]);
+        }
+
     }
 }
