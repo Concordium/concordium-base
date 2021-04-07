@@ -20,16 +20,18 @@ pipeline {
         }
         stage('build') {
             steps {
-                sh '''\
-                    docker build \
-                        --build-arg base_image_tag="$base_image_tag" \
-                        --label base_image_tag="$base_image_tag" \
-                        --label base_ref="$base_ref" \
-                        --label git_commit="$GIT_COMMIT" \
-                        -f "scripts/genesis-tools.Dockerfile" \
-                        -t "$image_name" \
-                        .
-                '''.stripIndent()
+                sshagent(credentials: ['github-ci']) {
+                    sh '''\
+                        docker build \
+                            --build-arg base_image_tag="$base_image_tag" \
+                            --label base_image_tag="$base_image_tag" \
+                            --label base_ref="$base_ref" \
+                            --label git_commit="$GIT_COMMIT" \
+                            -f "scripts/genesis-tools.Dockerfile" \
+                            -t "$image_name" \
+                            .
+                    '''.stripIndent()
+                }
             }
         }
         stage('push') {
