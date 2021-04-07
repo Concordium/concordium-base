@@ -11,10 +11,6 @@
 ARG base_image_tag
 FROM concordium/base:${base_image_tag} AS builder
 
-#RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
-#RUN --mount=type=ssh git clone --depth 1 --branch ${base_ref} git@github.com:Concordium/concordium-base.git
-#WORKDIR /concordium-base
-
 COPY . /build
 WORKDIR /build
 
