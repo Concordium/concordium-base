@@ -20,6 +20,9 @@ pipeline {
             }
         }
         stage('build') {
+            environment {
+                DOCKER_BUILDKIT=1
+            }
             steps {
                 sh '''\
                     docker build \
