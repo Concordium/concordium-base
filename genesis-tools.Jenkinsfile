@@ -2,7 +2,6 @@
 // 'https://gitlab.com/Concordium/infra/jenkins-jobs/-/blob/master/docker_image_genesis_tools.groovy':
 // - image_tag (default: "latest")
 // - base_image_tag
-// - base_ref
 
 pipeline {
     agent any
@@ -24,7 +23,6 @@ pipeline {
                 sh '''\
                     docker build \
                         --build-arg base_image_tag="$base_image_tag" \
-                        --build-arg base_ref="$base_ref" \
                         --label base_image_tag="$base_image_tag" \
                         --label base_ref="$base_ref" \
                         --label git_commit="$GIT_COMMIT" \

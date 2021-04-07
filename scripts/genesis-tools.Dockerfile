@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:experimental
-
 # This Dockerfile builds a relatively small docker image that contains all the tools
 # needed to generate a genesis block. These tools are
 # - genesis_tool to create accounts
@@ -13,14 +11,8 @@
 ARG base_image_tag
 FROM concordium/base:${base_image_tag} AS builder
 
-# Which branch of concordium-base to build the tools from.
-ARG base_ref=main
-
-RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-RUN --mount=type=ssh git clone --depth 1 --branch ${base_ref} git@github.com:Concordium/concordium-base.git
-
-WORKDIR /concordium-base
+COPY . /build
+WORKDIR /build
 
 # Build haskell tools.
 RUN stack build concordium-base:exe:generate-update-keys concordium-base:exe:genesis
@@ -51,10 +43,10 @@ RUN apt-get update && \
         libpq-dev
 
 # Copy shared libraries to a location in the library path.
-COPY --from=builder /concordium-base/libs/ /usr/local/lib/
+COPY --from=builder /build/libs/ /usr/local/lib/
 
 # And binaries into PATH.
-COPY --from=builder /concordium-base/bins/ /usr/local/bin/
+COPY --from=builder /build/bins/ /usr/local/bin/
 
 # Make a workspace for mapping and running commands.
 RUN mkdir /home/workspace
