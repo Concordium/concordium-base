@@ -47,10 +47,10 @@ RUN apt-get update && \
         libpq-dev
 
 # Copy shared libraries to a location in the library path.
-COPY --from=builder /concordium-base/libs/ /usr/local/lib/
+COPY --from=builder /build/libs/ /usr/local/lib/
 
 # And binaries into PATH.
-COPY --from=builder /concordium-base/bins/ /usr/local/bin/
+COPY --from=builder /build/bins/ /usr/local/bin/
 
 # Make a workspace for mapping and running commands.
 RUN mkdir /home/workspace
