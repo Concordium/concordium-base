@@ -6,6 +6,7 @@ import Data.Aeson
 import Data.Proxy
 import Data.Time
 import Data.Time.Clock.POSIX
+import Data.Ratio((%))
 import qualified Data.Text as Text
 import qualified Data.Text.Read as Text
 import Data.Word
@@ -83,7 +84,7 @@ timestampToSeconds :: Timestamp -> Word64
 timestampToSeconds ts = tsMillis ts `div` 1000
 
 durationToNominalDiffTime :: Duration -> NominalDiffTime
-durationToNominalDiffTime dur = fromIntegral (durationMillis dur) / 1000
+durationToNominalDiffTime dur = fromRational (toInteger (durationMillis dur) % 1000)
 
 addDuration :: Timestamp -> Duration -> Timestamp
 addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
