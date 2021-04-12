@@ -34,6 +34,7 @@ block-modes = "0.7"
 aes = "0.6"
 base64 = "0.13"
 pbkdf2 = "0.6" # 0.7 is currently the latest, but is not supported on 1.45.2
+rpassword = "5.0"
 
 [dependencies.keygen_bls]
 path = "../rust-src/keygen_bls"
