@@ -159,6 +159,14 @@ pub enum DecryptionError {
     BlockMode,
 }
 
+impl std::fmt::Display for DecryptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DecryptionError::BlockMode => write!(f, "Decryption error"),
+        }
+    }
+}
+
 /// Dual to the `encrypt` method.
 pub fn decrypt(pass: &Password, et: &EncryptedData) -> Result<Vec<u8>, DecryptionError> {
     // Derive the key for AES.
