@@ -18,7 +18,7 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength
     let mut sk = Fr::zero();
     // shift with
     // 452312848583266388373324160190187140051835877600158453279131187530910662656 =
-    // 2^31
+    // 2^248
     let shift = Fr::from_repr(FrRepr([0, 0, 0, 72057594037927936])).unwrap();
     let mut salt = Sha256::digest(&salt[..]);
     while sk.is_zero() {
