@@ -39,7 +39,7 @@ struct Decrypt {
     credential: PathBuf,
     #[structopt(
         long = "ar-private",
-        help = "File with anonymity revoker's private and public keys. Plaintext or encrypted."
+        help = "File with anonymity revoker's private and public keys. As plaintext or encrypted."
     )]
     ar_private: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to")]
