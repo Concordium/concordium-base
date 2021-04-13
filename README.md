@@ -4,6 +4,8 @@ This repository contains core Rust and Haskell libraries used by various
 components of the Concordium blockchain, as well as some tools used for testing
 and development.
 
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.0-4baaaa.svg)](https://github.com/Concordium/.github/blob/main/.github/CODE_OF_CONDUCT.md)
+
 ## Haskell modules
 
 ### [haskell-src](./haskell-src)
