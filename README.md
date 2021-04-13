@@ -1,3 +1,6 @@
+
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.0-4baaaa.svg)](https://github.com/Concordium/.github/blob/main/.github/CODE_OF_CONDUCT.md)
+
 This library provides the core API that can be used to write smart contracts
 for the Concordium blockchain in the Rust programming language. It aims to
 provide safe wrappers around the core primitives exposed by the chain and
