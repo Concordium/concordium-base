@@ -831,6 +831,84 @@ fn iso_map(x: &Fq, y: &Fq) -> (Fq, Fq) {
     (x_num, y_num)
 }
 
+// Implements SSWU exactly as section 6.6.2
+fn basic_sswu(u: Fq) -> (Fq, Fq) {
+    let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+    let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+    let z = Fq::from_repr(FqRepr::from(11)).unwrap();
+
+    fn inv0(f: Fq) -> Fq {
+        if f.is_zero() {
+            f
+        } else {
+            f.inverse().unwrap()
+        }
+    }
+
+
+    // 1. tv1 = inv0(Z^2 * u^4 + Z * u^2)
+    let mut zu2 = u;
+    zu2.square();
+    zu2.mul_assign(&z); // Z * u^2
+    let mut tv1 = zu2;
+    tv1.square();
+    tv1.add_assign(&zu2);
+    tv1 = inv0(tv1);
+
+    // 2.  x1 = (-B / A) * (1 + tv1)
+    let mut x1 = b;
+    x1.negate();
+    x1.mul_assign(&a.inverse().unwrap()); // -B/A
+    let mut tv1_1 = tv1;
+    tv1_1.add_assign(&Fq::one());
+
+    // 3.  If tv1 == 0, set x1 = B / (Z * A)
+    if tv1.is_zero() {
+        let mut za = z;
+        za.mul_assign(&a);
+        x1 = b;
+        x1.mul_assign(&za.inverse().unwrap());
+    }
+
+    // 4. gx1 = x1^3 + A * x1 + B
+    let mut gx1 = x1;
+    gx1.square();
+    gx1.mul_assign(&x1);
+    let mut ax = a;
+    ax.mul_assign(&x1);
+    gx1.add_assign(&ax);
+    gx1.add_assign(&b);
+
+    // 5.  x2 = Z * u^2 * x1
+    let mut x2 = zu2;
+    x2.mul_assign(&x1);
+
+    // 6. gx2 = x2^3 + A * x2 + B
+    let mut gx2 = x2;
+    gx2.square(); //x2^2
+    gx2.add_assign(&a); // x2^2+A
+    gx2.mul_assign(&x2); // x2^3 + A*x2
+    gx2.add_assign(&b); // x2^3 + A*x2 + B
+
+    println!("bsswu:");
+    println!("x1: {:x?}", x1);
+    println!("x2: {:x?}", x2);
+    // 7.  If is_square(gx1), set x = x1 and y = sqrt(gx1)
+    let (x, y) = match gx1.sqrt() {
+        Some(sqrt_gx1) => (x1, sqrt_gx1),
+        None => (x2, gx2.sqrt().unwrap()) // 8.  Else set x = x2 and y = sqrt(gx2)
+    };
+    // 9.  If sgn0(u) != sgn0(y), set y = -y
+    // 10. return (x, y)
+    if sign(u) == sign(y) {
+        (x, y)
+    } else {
+        let mut y = y;
+        y.negate();
+        (x, y)
+    }
+}
+
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
 #[allow(clippy::many_single_char_names, clippy::unreadable_literal)]
 fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
@@ -1604,15 +1682,26 @@ mod tests {
             neg_q.negate();
             println!("-q: {:#x?}", neg_q);// 
 
-            
-
             // sswu_3mod4(u1);
 
+            let (x, y) = basic_sswu(u0);
+            // let mut encoded_point = G1Uncompressed::empty();
+            println!("SSWU:");
+            println!("x: {:x?}", x);
+            println!("y: {:x?}", y);
+            assert!(is_on_curve_iso(x, y)); // the point is not on the curve
+            
+            let (xiso, yiso) = iso_map(&x, &y);
+            println!("New iso map:");
+            println!("x: {:x?}", xiso);
+            println!("y: {:x?}", yiso);
+            
+            assert!(is_on_curve(xiso, yiso));
 
             //Verify hash to curve:
             // let res = hash_to_g1(msg);
-            // println!("P: {:x?}", res);
-            // println!("P: {:x?}", res.into_affine());
+            // println!("P: {:#x?}", res);
+            // println!("P: {:#x?}", res.into_affine());
             assert_eq!(1,0); // fail to println debug
         }
     }
