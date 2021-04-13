@@ -1094,7 +1094,7 @@ fn handle_start_ip(sip: StartIp) {
     } else if let Ok(threshold) = Select::new()
         .with_prompt("Revocation threshold")
         .items(&(1..=num_ars).collect::<Vec<usize>>())
-        .default(1)
+        .default(0)
         .interact()
     {
         Threshold((threshold + 1) as u8) // +1 because the indexing of the
