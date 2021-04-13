@@ -526,7 +526,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
 
     // Clear cofactors (ensuring that the point is in the correct order subgroup of
     // the curve)
-    p0.mul_assign(1 + 15_132_376_222_941_642_752);
+    p0.mul_assign(1 + 15_132_376_222_941_642_752); // 15_132_376_222_941_642_753
     p0
 }
 
@@ -662,7 +662,7 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
 // Input: u, an element of F.
 // Output: (xn, xd, yn, yd) such that (xn / xd, yn / yd) is a
 //         point on the target curve.
-fn sswu_3mod4(u: Fq) {
+fn sswu_3mod4(u: Fq) -> (Fq, Fq, Fq, Fq) {
     let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
     let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
     // Constants:
@@ -803,23 +803,32 @@ fn sswu_3mod4(u: Fq) {
 
     // 34. return (xn, xd, y, 1)
     // i.e. (xn / xd, y) is a point on the target curve
-    xn.mul_assign(&xd.inverse().unwrap()); // xn/xd
 
-    // let mut encoded_point = G1Uncompressed::empty();
-    println!("x: {:x?}", xn);
-    println!("y: {:x?}", y);
-    
-    let (xi, yi, zi) = iso_11(xn, y, Fq::one());
-    println!("xi: {:x?}", xi);
-    println!("yi: {:x?}", yi);
-    println!("zi: {:x?}", zi);
+    (xn, xd, y, Fq::one())
+}
 
-    let q = from_coordinates_unchecked(xi, yi, zi).unwrap();
-    println!("q: {:x?}", q);// has the right x
-    let mut neg_q = q;
-    neg_q.negate();
-    println!("-q: {:x?}", neg_q);// 
+fn iso_map(x: &Fq, y: &Fq) -> (Fq, Fq) {
+    fn horners(coefficients: &[[u64; 6]], variable: &Fq) -> Fq {
+        let clen = coefficients.len();
+        // unwrapping the Ki constants never fails
+        let mut res = Fq::from_repr(FqRepr(coefficients[clen - 1])).unwrap();
+        // skip the last coefficient since we already used it
+        for coeff in coefficients.iter().rev().skip(1) {
+            res.mul_assign(variable);
+            let coeff = Fq::from_repr(FqRepr(*coeff)).unwrap(); // unwrapping the Ki constants never fails
+            res.add_assign(&coeff);
+        }
+        res
+    }
+    let mut x_num = horners(&K1, x);
+    let x_den = horners(&K2, x);
+    x_num.mul_assign(&x_den.inverse().unwrap());
+    let mut y_num = horners(&K3, x);
+    let y_den = horners(&K4, x);
+    y_num.mul_assign(&y_den.inverse().unwrap());
+    y_num.mul_assign(y);
 
+    (x_num, y_num)
 }
 
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
@@ -1535,9 +1544,70 @@ mod tests {
             assert_eq!(u0.into_repr().0, [0x6835ad59f29c564f, 0x3ae5438a614fb61d, 0xce7b0d89f17f75cb, 0xeae71f25a4b941ee, 0x16293ee7c2d276b8, 0x0ba14bd907ad64a0]);
             assert_eq!(u1.into_repr().0, [0x5fa3b19b3ff25ac9, 0x552f0d96d9f7babe, 0x604436a7f538d231, 0x92b82c177c80e0ec, 0x7976de2884c7cce1, 0x019b9bd7979f1265]);
             
+            fn is_on_curve(x: Fq, y: Fq) -> bool {
+                let mut y2 = y;
+                y2.square();
+                let mut x3b = x;
+                x3b.square();
+                x3b.mul_assign(&x);
+                x3b.add_assign(&Fq::from_repr(FqRepr::from(4)).unwrap());
+                y2 == x3b
+            }
+            
+            fn is_on_curve_iso(x: Fq, y: Fq) -> bool {
+                
+                let mut y2 = y;
+                y2.square();
+                
+                let mut x3axb = x;
+                x3axb.square();
+                x3axb.mul_assign(&x);
+
+                let mut ax = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+                ax.mul_assign(&x);
+                x3axb.add_assign(&ax);
+
+                let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+                x3axb.add_assign(&b);
+                y2 == x3axb
+            }
+            
             // Verify map to curve:
-            sswu_3mod4(u0);
+            let (xn, xd, y, _) = sswu_3mod4(u0);
+            
+            let mut x = xn;
+            x.mul_assign(&xd.inverse().unwrap()); // x = xn/xd
+
+            // let mut encoded_point = G1Uncompressed::empty();
+            println!("SSWU:");
+            println!("x: {:x?}", x);
+            println!("y: {:x?}", y);
+            // assert!(is_on_curve_iso(x, y)); // the point is not on the curve
+            
+            let (xiso, yiso) = iso_map(&x, &y);
+            println!("New iso map:");
+            println!("x: {:x?}", xiso);
+            println!("y: {:x?}", yiso);
+
+            // assert!(is_on_curve(xiso, yiso)); // the point is not on the curve
+
+            println!("Old iso map:");
+            let (xi, yi, zi) = iso_11(x, y, Fq::one());
+            println!("xi: {:x?}", xi);
+            println!("yi: {:x?}", yi);
+            println!("zi: {:x?}", zi);
+            println!("Old iso map affine:");
+            let q = from_coordinates_unchecked(xi, yi, zi).unwrap();
+            println!("q: {:#x?}", q);// has the right x
+            println!("Old iso map affine negated:");
+            let mut neg_q = q;
+            neg_q.negate();
+            println!("-q: {:#x?}", neg_q);// 
+
+            
+
             // sswu_3mod4(u1);
+
 
             //Verify hash to curve:
             // let res = hash_to_g1(msg);
