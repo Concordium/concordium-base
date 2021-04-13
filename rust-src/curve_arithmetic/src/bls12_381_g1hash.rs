@@ -1,5 +1,5 @@
 use crate::curve_arithmetic::CurveDecodingError;
-use ff::{Field, PrimeField};
+use ff::{Field, PrimeField, SqrtField};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
 use sha2::{Digest, Sha256};
@@ -32,17 +32,6 @@ pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
 
 // The a-coefficient of the 11-isogenous curve to G1
 #[allow(clippy::unreadable_literal)]
-pub(crate) const E11_B: [u64; 6] = [
-    0xd1cc48e98e172be0,
-    0x5a23215a316ceaa5,
-    0xa0b9c14fcef35ef5,
-    0x2016c1f0f24f4070,
-    0x018b12e8753eee3b,
-    0x12e2908d11688030,
-];
-
-// The b-coefficient of the 11-isogenous curve to G1
-#[allow(clippy::unreadable_literal)]
 pub(crate) const E11_A: [u64; 6] = [
     0x5cf428082d584c1d,
     0x98936f8da0e0f97f,
@@ -50,6 +39,17 @@ pub(crate) const E11_A: [u64; 6] = [
     0xb0ea985383ee66a8,
     0x3d693a02c96d4982,
     0x00144698a3b8e943,
+];
+
+// The b-coefficient of the 11-isogenous curve to G1
+#[allow(clippy::unreadable_literal)]
+pub(crate) const E11_B: [u64; 6] = [
+    0xd1cc48e98e172be0,
+    0x5a23215a316ceaa5,
+    0xa0b9c14fcef35ef5,
+    0x2016c1f0f24f4070,
+    0x018b12e8753eee3b,
+    0x12e2908d11688030,
 ];
 
 // Coefficients of the 11-isogeny rational maps,
@@ -509,6 +509,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     let (x0, y0, z0) = simplified_swu(t0);
     let (x1, y1, z1) = simplified_swu(t1);
 
+
     // evaluate the 11-isogeny on the points.
     // it is faster to add the two points before evaluating the isogeny, but
     // we omit this for now, since we don't have an efficient implementation
@@ -530,10 +531,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
 }
 
 fn hash_to_field(msg: &[u8], dst: &[u8]) -> (Fq, Fq) {
-    // todo return field elements
     let (u_0, u_1, u_2, u_3) = expand_message_xmd(msg, dst);
-
-    // View u_0, u_1 as integers and reduce mod p
 
     (fq_from_bytes(&u_0, &u_1), fq_from_bytes(&u_2, &u_3))
 }
@@ -562,8 +560,8 @@ fn fq_from_bytes(left_bytes: &[u8; 32], right_bytes: &[u8; 32]) -> Fq {
     left_fq
 }
 
-// Implements .. todo
-// len_in_bytes is always 128
+// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-5.4.1
+// len_in_bytes is fixed to 128
 // Domain separation string (dst) should be at most 255 bytes
 fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) {
     // DST_prime = DST || I2OSP(len(DST), 1)
@@ -659,6 +657,169 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
             Err(_) => Err(CurveDecodingError::NotOnCurve),
         }
     }
+}
+
+// Input: u, an element of F.
+// Output: (xn, xd, yn, yd) such that (xn / xd, yn / yd) is a
+//         point on the target curve.
+fn sswu_3mod4(u: Fq) {
+    let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+    let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+    // Constants:
+    // 1.  c1 = (q - 3) / 4           # Integer arithmetic
+    // 2.  c2 = sqrt(-Z^3)
+    // Z = 11
+    let z = Fq::from_repr(FqRepr::from(11)).unwrap();
+    let mut c2 = z;
+    c2.square();
+    c2.mul_assign(&z);
+    c2.negate();
+    c2 = c2.sqrt().unwrap(); //todo use constant
+
+    // Steps:
+    // 1.  tv1 = u^2
+    let mut tv1 = u.clone();
+    tv1.square();
+
+    // 2.  tv3 = Z * tv1
+    let mut tv3 = z.clone();
+    tv3.mul_assign(&tv1);
+
+    // 3.  tv2 = tv3^2
+    let mut tv2 = tv3.clone();
+    tv2.square();
+
+    // 4.   xd = tv2 + tv3
+    let mut xd = tv2.clone();
+    xd.add_assign(&tv3);
+
+    // 5.  x1n = xd + 1
+    // 6.  x1n = x1n * B
+    let mut x1n = xd.clone();
+    x1n.add_assign(&Fq::one());
+    x1n.mul_assign(&b);
+
+    // 7.   xd = -A * xd
+    let mut neg_a = a.clone();
+    neg_a.negate();
+    xd.mul_assign(&neg_a);
+
+    // 8.   e1 = xd == 0
+    let e1 = xd.is_zero();
+
+    // 9.   xd = CMOV(xd, Z * A, e1)  # If xd == 0, set xd = Z * A
+    if e1 {
+        xd = z.clone();
+        xd.mul_assign(&a);//todo should we use equivalent of CMOV?
+    }
+
+    // 10. tv2 = xd^2
+    tv2 = xd.clone();
+    tv2.square();
+
+    // 11. gxd = tv2 * xd             # gxd == xd^3
+    let mut gxd = tv2.clone();
+    gxd.mul_assign(&xd);
+
+    // 12. tv2 = A * tv2
+    tv2.mul_assign(&a);
+
+    // 13. gx1 = x1n^2
+    let mut gx1 = x1n.clone();
+    gx1.square();
+
+    // 14. gx1 = gx1 + tv2            # x1n^2 + A * xd^2
+    gx1.add_assign(&tv2);
+
+    // 15. gx1 = gx1 * x1n            # x1n^3 + A * x1n * xd^2
+    gx1.mul_assign(&x1n);
+
+    // 16. tv2 = B * gxd
+    tv2 = b.clone();
+    tv2.mul_assign(&gxd);
+
+    // 17. gx1 = gx1 + tv2            # x1n^3 + A * x1n * xd^2 + B * xd^3
+    gx1.add_assign(&tv2);
+
+    // 18. tv4 = gxd^2
+    let mut tv4 = gxd.clone();
+    tv4.square();
+
+    // 19. tv2 = gx1 * gxd
+    tv2 = gx1.clone();
+    tv2.mul_assign(&gxd);
+
+    // 20. tv4 = tv4 * tv2            # gx1 * gxd^3
+    tv4.mul_assign(&tv2);
+
+    // 21.  y1 = tv4^c1               # (gx1 * gxd^3)^((q - 3) / 4)
+    let mut y1 = tv4.clone();
+    y1.pow(&P_MINUS_3_DIV_4);
+
+    // 22.  y1 = y1 * tv2             # gx1 * gxd * (gx1 * gxd^3)^((q - 3) / 4)
+    y1.mul_assign(&tv2);
+
+    // 23. x2n = tv3 * x1n            # x2 = x2n / xd = Z * u^2 * x1n / xd
+    let mut x2n = tv3.clone();
+    x2n.mul_assign(&x1n);
+
+    // 24.  y2 = y1 * c2              # y2 = y1 * sqrt(-Z^3)
+    let mut y2 = y1.clone();
+    y2.mul_assign(&c2);
+
+    // 25.  y2 = y2 * tv1
+    y2.mul_assign(&tv1);
+
+    // 26.  y2 = y2 * u
+    y2.mul_assign(&u);
+
+    // 27. tv2 = y1^2
+    tv2 = y1.clone();
+    tv2.square();
+
+    // 28. tv2 = tv2 * gxd
+    tv2.mul_assign(&gxd);
+
+    // 29.  e2 = tv2 == gx1
+    tv2.sub_assign(&gx1);
+    let e2 = tv2.is_zero(); 
+
+    let mut xn = x2n.clone();
+    let mut y = y2.clone();
+    // 30.  xn = CMOV(x2n, x1n, e2)   # If e2, x = x1, else x = x2
+    // 31.   y = CMOV(y2, y1, e2)     # If e2, y = y1, else y = y2
+    if e2 {
+        xn = x1n.clone();
+        y = y1.clone();//todo use match or CMOV
+    }
+
+    // 32.  e3 = sgn0(u) == sgn0(y)   # Fix sign of y
+    let e3 = sign(u) == sign(y);
+
+    // 33.   y = CMOV(-y, y, e3)
+    if !e3 {
+        y.negate();
+    }
+
+    // 34. return (xn, xd, y, 1)
+    // i.e. (xn / xd, y) is a point on the target curve
+    xn.mul_assign(&xd.inverse().unwrap()); // xn/xd
+
+    // let mut encoded_point = G1Uncompressed::empty();
+    println!("x: {:x?}", xn);
+    println!("y: {:x?}", y);
+    
+    let (xi, yi, zi) = iso_11(xn, y, Fq::one());
+    println!("xi: {:x?}", xi);
+    println!("yi: {:x?}", yi);
+    println!("zi: {:x?}", zi);
+
+    let q = from_coordinates_unchecked(xi, yi, zi).unwrap();
+    println!("q: {:x?}", q);// has the right x
+    let mut neg_q = q;
+    neg_q.negate();
+    println!("-q: {:x?}", neg_q);// 
+
 }
 
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
@@ -1370,16 +1531,19 @@ mod tests {
             // Q1.y    = 0d8bb2d14e20cf9f6036152ed386d79189415b6d015a20133acb4e019139b94e9c146aaad5817f866c95d609a361735e
     
             // Verify hash to field:
-            let (u_0, u_1) = hash_to_field(msg, dst);
-            assert_eq!(u_0.into_repr().0, [0x6835ad59f29c564f, 0x3ae5438a614fb61d, 0xce7b0d89f17f75cb, 0xeae71f25a4b941ee, 0x16293ee7c2d276b8, 0x0ba14bd907ad64a0]);
-            assert_eq!(u_1.into_repr().0, [0x5fa3b19b3ff25ac9, 0x552f0d96d9f7babe, 0x604436a7f538d231, 0x92b82c177c80e0ec, 0x7976de2884c7cce1, 0x019b9bd7979f1265]);
+            let (u0, u1) = hash_to_field(msg, dst);
+            assert_eq!(u0.into_repr().0, [0x6835ad59f29c564f, 0x3ae5438a614fb61d, 0xce7b0d89f17f75cb, 0xeae71f25a4b941ee, 0x16293ee7c2d276b8, 0x0ba14bd907ad64a0]);
+            assert_eq!(u1.into_repr().0, [0x5fa3b19b3ff25ac9, 0x552f0d96d9f7babe, 0x604436a7f538d231, 0x92b82c177c80e0ec, 0x7976de2884c7cce1, 0x019b9bd7979f1265]);
             
+            // Verify map to curve:
+            sswu_3mod4(u0);
+            // sswu_3mod4(u1);
+
             //Verify hash to curve:
-            let res = hash_to_g1(msg);
-            println!("P: {:x?}", res);
-            println!("P: {:x?}", res.into_affine());
-            // println!("P: {:x?}", res.into_affine().x);
-            // assert_eq!(1,0);
+            // let res = hash_to_g1(msg);
+            // println!("P: {:x?}", res);
+            // println!("P: {:x?}", res.into_affine());
+            assert_eq!(1,0); // fail to println debug
         }
     }
 
