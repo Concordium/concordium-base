@@ -82,7 +82,7 @@ type LogIO = LoggerT IO
 -- | The 'LoggerT' monad transformer equips a monad with logging
 --  functionality.
 newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod m) m a}
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m), MonadThrow, MonadCatch)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m), MonadThrow, MonadCatch, MonadMask)
 
 
 instance MonadTrans LoggerT where
