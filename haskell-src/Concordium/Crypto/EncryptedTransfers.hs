@@ -4,6 +4,7 @@ module Concordium.Crypto.EncryptedTransfers (
   -- * Encrypted amount
   EncryptedAmount(..),
   aggregateAmounts,
+  isZeroEncryptedAmount,
 
   -- * Encrypted indices
   EncryptedAmountAggIndex(..),
@@ -93,6 +94,12 @@ instance Monoid EncryptedAmount where
   mconcat [] = mempty
   mconcat (x:xs) = foldl' aggregateAmounts x xs
 
+foreign import ccall unsafe "is_zero_encrypted_amount"
+   is_zero_encrypted_amount ::
+     Ptr ElgamalCipher -- ^ High chunk of the first amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the first amount.
+     -> IO Word8
+
 -- | Aggregate two encrypted amounts together.
 foreign import ccall unsafe "aggregate_encrypted_amounts"
   aggregate_encrypted_amounts ::
@@ -103,6 +110,14 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
      -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the high chunk of the result.
      -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the low chunk of the result.
      -> IO ()
+
+-- |Check whether the encrypted amount is an encryption of 0 with randomness 0.
+isZeroEncryptedAmount :: EncryptedAmount -> Bool
+isZeroEncryptedAmount EncryptedAmount{..} = unsafeDupablePerformIO $
+  withElgamalCipher encryptionHigh $ \highPtr ->
+    withElgamalCipher encryptionLow $ \lowPtr -> do
+      res <- is_zero_encrypted_amount highPtr lowPtr
+      return (res == 1)
 
 -- |Aggregate two encrypted amounts together. This operation is strict and
 -- associative.

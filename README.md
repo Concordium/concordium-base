@@ -4,6 +4,8 @@ This repository contains core Rust and Haskell libraries used by various
 components of the Concordium blockchain, as well as some tools used for testing
 and development.
 
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.0-4baaaa.svg)](https://github.com/Concordium/.github/blob/main/.github/CODE_OF_CONDUCT.md)
+
 ## Haskell modules
 
 ### [haskell-src](./haskell-src)
@@ -29,7 +31,7 @@ Is a utility for generating authorization keys for different kinds of updates.
 It is used for generating such keys for internal testing. The key generation it
 supports is not very secure.
 
-## [genesis](./haskell-bins/genesis/)
+### [genesis](./haskell-bins/genesis/)
 
 Is a tool that takes all the parameters, accounts, and other data that goes into
 a genesis block, and combines them into a single file that is needed to start
@@ -120,8 +122,7 @@ The CI is configured to check two things
   formatting. Unfortunately the stable version of the tool is quite outdated, so
   we use a nightly version, which is updated a few times a year. Thus in order
   for the CI to pass you will need to install the relevant nightly version (for
-  which see the [.gitlab-ci.yml](.gitlab-ci.yml) file, the `"lint:fmt"`
-  section).
+  which see the [./.github/workflows/rustfmt.yaml](.github/workflows/rustfmt.yaml) file).
 
 ## Overall workflow
 
@@ -129,3 +130,10 @@ The typical workflow should be the following.
 - make changes, commit and push on a separate branch
 - make a merge request to merge your branch into master. Assign somebody else
   with knowledge of the code to review the changes before they are merged.
+
+# Licenses
+
+Most of the sources in this repository are licensed under [MPL-2.0](./LICENSE).
+Some Rust packages are licensed under [APACHE-2.0](./LICENSE-APACHE). The
+`license` field in Cargo.toml package indicates which license the sources in
+that package are under.

@@ -1,12 +1,14 @@
 name:                concordium-base
 version:             0.1.0.0
-license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2018 Author name here"
+license:             MPL-2.0
+license-file:        "LICENSE"
+author:              "Concordium AG"
+maintainer:          "developers@concordium.com"
+copyright:           "Concordium AG"
 
 extra-source-files:
 - README.md
+- LICENSE
 
 custom-setup:
   dependencies:
@@ -43,12 +45,14 @@ dependencies:
 - aeson >= 1.4.2
 - base >= 4.7 && < 5
 - base16-bytestring >= 0.1.1.6
+- base64-bytestring >= 1.1.0.0
 # binary is used by aeson and we need for a couple of instances. cereal should
 # be used for everything else.
 - binary >= 0.8
 - bytestring >= 0.10
 - cereal >= 0.5
 - containers >= 0.6
+- cryptonite >= 0.27
 - deepseq >= 1.4
 - exceptions >= 0.10
 - ghc-prim >= 0.5.3
@@ -90,7 +94,7 @@ library:
     - ffi_helpers
     - id
     - sha_2
-  
+
   when:
     - condition: os(windows)
       extra-libraries:
@@ -109,15 +113,22 @@ executables:
       - -Werror=missing-methods
       - -Wredundant-constraints
       - -fno-ignore-asserts
+    # when:
+    #   - condition: "!os(windows) && !flag(static)"
+    #     ghc-options: -dynamic
     dependencies:
       - aeson-pretty >= 0.8
       - concordium-base
       - filepath >= 1.4
       - optparse-applicative >= 0.15
-  
+
   genesis:
     main: Genesis.hs
     source-dirs: haskell-bins/genesis
+    # when:
+    #   - condition: "!os(windows) && !flag(static)"
+    #     ghc-options: -dynamic
+
     ghc-options:
     - -Wall
     - -Wcompat

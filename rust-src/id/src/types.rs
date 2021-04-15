@@ -978,24 +978,30 @@ impl<C: Curve> HasArPublicKey<C> for ArPublicKey<C> {
 
 /// The commitments sent by the account holder to the chain in order to
 /// deploy credentials
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct CredentialDeploymentCommitments<C: Curve> {
     /// commitment to the prf key
+    #[serde(rename = "cmmPrf")]
     pub cmm_prf: pedersen::Commitment<C>,
     /// commitment to credential counter
+    #[serde(rename = "cmmCredCounter")]
     pub cmm_cred_counter: pedersen::Commitment<C>,
     /// commitment to the max account number.
+    #[serde(rename = "cmmMaxAccounts")]
     pub cmm_max_accounts: pedersen::Commitment<C>,
     /// List of commitments to the attributes that are not revealed.
     /// For the purposes of checking signatures, the commitments to those
     /// that are revealed as part of the policy are going to be computed by the
     /// verifier.
     #[map_size_length = 2]
+    #[serde(rename = "cmmAttributes")]
     pub cmm_attributes: BTreeMap<AttributeTag, pedersen::Commitment<C>>,
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
     /// S + b1 X + b2 X^2...
     /// where S is id_cred_sec
+    #[serde(rename = "cmmIdCredSecSharingCoeff")]
     pub cmm_id_cred_sec_sharing_coeff: Vec<pedersen::Commitment<C>>,
 }
 
@@ -1005,9 +1011,6 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Proof of knowledge of acc secret keys (signing keys corresponding to the
     /// verification keys either on the account already, or the ones which are
     /// part of this credential.
-    /// TODO: This proof can be replaced by a signature if we only allow
-    /// deploying proofs on own account.
-    /// We could consider replacing this proof by just a list of signatures.
     pub proof_acc_sk: AccountOwnershipProof,
 }
 
@@ -1188,7 +1191,7 @@ pub enum VerifyKey {
 
 impl SerdeSerialize for VerifyKey {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let mut map = ser.serialize_map(Some(1))?;
+        let mut map = ser.serialize_map(Some(2))?;
         match self {
             VerifyKey::Ed25519VerifyKey(ref key) => {
                 map.serialize_entry("schemeId", "Ed25519")?;
@@ -1202,7 +1205,7 @@ impl SerdeSerialize for VerifyKey {
 impl<'de> SerdeDeserialize<'de> for VerifyKey {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         // expect a map, but also handle string
-        des.deserialize_map(VerifyKeyVisitor)
+        des.deserialize_any(VerifyKeyVisitor)
     }
 }
 
@@ -1425,6 +1428,30 @@ pub struct CredentialDeploymentInfo<
     pub values: CredentialDeploymentValues<C, AttributeType>,
     #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
     pub proofs: CredDeploymentProofs<P, C>,
+}
+
+/// Account credential with values and commitments, but without proofs.
+/// Serialization must match the serializaiton of `AccountCredential` in
+/// Haskell.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(tag = "type", content = "contents")]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    #[serde(rename = "initial")]
+    Initial {
+        #[serde(flatten)]
+        icdv: InitialCredentialDeploymentValues<C, AttributeType>,
+    },
+    #[serde(rename = "normal")]
+    Normal {
+        #[serde(flatten)]
+        cdv: CredentialDeploymentValues<C, AttributeType>,
+        #[serde(rename = "commitments")]
+        commitments: CredentialDeploymentCommitments<C>,
+    },
 }
 
 /// This is the CredentialDeploymentInfo structure, that instead of containing

@@ -73,7 +73,7 @@ struct KeygenAr {
 #[structopt(
     about = "Tool for generating keys",
     author = "Concordium",
-    version = "0.1"
+    version = "0.2"
 )]
 enum KeygenTool {
     #[structopt(name = "keygen-ip", about = "Generate identity provider keys")]
@@ -118,6 +118,24 @@ macro_rules! succeed_or_die {
     };
 }
 
+fn output_possibly_encrypted<X: SerdeSerialize>(
+    fname: &PathBuf,
+    data: &X,
+) -> Result<(), std::io::Error> {
+    let pass = rpassword::read_password_from_tty(Some(
+        "Enter password to encrypt credentials (leave empty for no encryption): ",
+    ))?;
+    if pass.is_empty() {
+        println!("No password supplied, so output will not be encrypted.");
+        write_json_to_file(fname, data)
+    } else {
+        let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
+        let encrypted =
+            crypto_common::encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
+        write_json_to_file(fname, &encrypted)
+    }
+}
+
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     let bytes_from_file = succeed_or_die!(fs::read(kgar.rand_input), e => "Could not read random input from provided file because {}");
     if bytes_from_file.len() < 64 {
@@ -159,7 +177,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         ar_secret_key,
     };
     let ver_public_ar_info = Versioned::new(VERSION_0, ar_data.public_ar_info.clone());
-    match write_json_to_file(&kgar.out, &ar_data) {
+    match output_possibly_encrypted(&kgar.out, &ar_data) {
         Ok(_) => println!("Wrote private keys to {}.", kgar.out.to_string_lossy()),
         Err(e) => {
             return Err(format!(
@@ -213,7 +231,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
         ip_cdi_secret_key,
     };
     let versioned_ip_info_public = Versioned::new(VERSION_0, full_info.public_ip_info.clone());
-    match write_json_to_file(&kgip.out, &full_info) {
+    match output_possibly_encrypted(&kgip.out, &full_info) {
         Ok(_) => println!("Wrote private to {}.", kgip.out.to_string_lossy()),
         Err(e) => {
             return Err(format!(

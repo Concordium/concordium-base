@@ -1,8 +1,9 @@
 [package]
 name="ecvrf"
-authors = ["Concordium AG <contact@concordium.com>"]
+authors = ["Concordium AG <developers@concordium.com>"]
 version="0.0.1"
 edition = "2018"
+license-file = "../../LICENSE"
 
 [dependencies]
 rand = "=0.7"

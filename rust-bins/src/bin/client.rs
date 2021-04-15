@@ -131,32 +131,37 @@ struct GenerateIps {
     #[structopt(
         long = "num",
         help = "Number of identity providers to generate.",
-        default_value = "10"
+        default_value = "5",
+        env = "NUM_IPS"
     )]
     num: usize,
     #[structopt(
         long = "num-ars",
         help = "Number of anonymity revokers to generate.",
-        default_value = "5"
+        default_value = "5",
+        env = "NUM_ARS"
     )]
     num_ars: u32,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
-        default_value = "database/global.json"
+        default_value = "database/global.json",
+        env = "GLOBAL_FILE"
     )]
     global: PathBuf,
     #[structopt(
         long = "key-capacity",
         help = "Size of the identity provider key. The length of this key limits the number of \
                 attributes the identity provider can sign.",
-        default_value = "30"
+        default_value = "30",
+        env = "KEY_CAPACITY"
     )]
     key_capacity: usize,
     #[structopt(
         long = "out-dir",
         help = "Directory to write the generate identity providers to.",
-        default_value = "database"
+        default_value = "database",
+        env = "OUT_DIR"
     )]
     output_dir: PathBuf,
 }
@@ -166,18 +171,21 @@ struct GenerateGlobal {
     #[structopt(
         long = "out-file",
         help = "File to write the generated global parameters to.",
-        default_value = "database/global.json"
+        default_value = "database/global.json",
+        env = "OUT_FILE"
     )]
     output_file: PathBuf,
     #[structopt(
         long = "string",
         help = "Genesis string to add to the global context.",
-        default_value = "genesis_string"
+        default_value = "genesis_string",
+        env = "GENESIS_STRING"
     )]
     genesis_string: String,
     #[structopt(
         long = "seed",
-        help = "Seed file to use when generating group generators."
+        help = "Seed file to use when generating group generators.",
+        env = "SEED_FILE"
     )]
     seed_file: Option<PathBuf>,
 }
@@ -1086,7 +1094,7 @@ fn handle_start_ip(sip: StartIp) {
     } else if let Ok(threshold) = Select::new()
         .with_prompt("Revocation threshold")
         .items(&(1..=num_ars).collect::<Vec<usize>>())
-        .default(1)
+        .default(0)
         .interact()
     {
         Threshold((threshold + 1) as u8) // +1 because the indexing of the

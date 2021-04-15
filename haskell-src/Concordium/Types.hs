@@ -50,6 +50,7 @@ module Concordium.Types (
   AccountAddress(..),
   AccountEncryptedAmount(..),
   initialAccountEncryptedAmount,
+  isZeroAccountEncryptedAmount,
   incomingEncryptedAmounts,
   getIncomingAmountsList,
   aggregatedAmount,
@@ -71,6 +72,11 @@ module Concordium.Types (
 
   -- * Addresses
   Address(..),
+
+  -- * Registered Data
+  RegisteredData(..),
+  registeredDataFromBSS,
+  maxRegisteredDataSize,
 
   -- * Baking
   ElectionDifficulty(..),
@@ -141,6 +147,7 @@ import Data.Scientific
 import Concordium.Common.Amount
 import Concordium.Common.Time
 import qualified Concordium.Crypto.BlockSignature as Sig
+import qualified Concordium.Crypto.ByteStringHelpers as BSH
 import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
@@ -151,9 +158,11 @@ import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
+import Concordium.Constants
 
 import Control.Exception (assert)
 import Control.Monad
+import Control.Monad.Except
 
 import Data.Hashable (Hashable)
 import Data.Word
@@ -577,6 +586,44 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
+-- |Data type for registering data on chain.
+-- Max length of 'maxRegisteredDataSize' is assumed.
+-- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
+newtype RegisteredData = RegisteredData BSS.ShortByteString
+  deriving Eq
+  deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+
+-- |Maximum size for 'RegisteredData'.
+maxRegisteredDataSize :: Int
+maxRegisteredDataSize = 256
+
+-- |Construct 'RegisteredData' from a 'BSS.ShortByteString'.
+-- Fails if the length exceeds 'maxRegisteredDataSize'.
+registeredDataFromBSS :: MonadError String m => BSS.ShortByteString -> m RegisteredData
+registeredDataFromBSS bss = if len <= maxRegisteredDataSize
+                              then return . RegisteredData $ bss
+                              else throwError $ "Max size for registered data is " ++ show maxRegisteredDataSize
+                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+  where len = BSS.length bss
+
+-- Uses two bytes for length to be more future-proof.
+instance S.Serialize RegisteredData where
+  put (RegisteredData bss) = do
+    S.putWord16be . fromIntegral . BSS.length $ bss
+    S.putShortByteString bss
+
+  get = do
+    l <- fromIntegral <$> S.getWord16be
+    unless (l <= maxRegisteredDataSize) $ fail "Data too long"
+    RegisteredData <$> S.getShortByteString l
+
+instance AE.FromJSON RegisteredData where
+  parseJSON v = do
+    (BSH.ByteStringHex bss) <- AE.parseJSON v
+    case registeredDataFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
+
 -- * Account encrypted amount.
 
 -- | Encrypted amounts stored on an account.
@@ -603,6 +650,15 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   -- 'maxNumIncoming' values.
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount)
 } deriving(Eq, Show)
+
+-- |Check whether the account encrypted amount is zero. This checks that there
+-- are no incoming amounts, and that the self amount is a specific encryption of
+-- 0, with randomness 0.
+isZeroAccountEncryptedAmount :: AccountEncryptedAmount -> Bool
+isZeroAccountEncryptedAmount AccountEncryptedAmount{..} =
+  _aggregatedAmount == Nothing &&
+  null _incomingEncryptedAmounts &&
+  isZeroEncryptedAmount _selfAmount
 
 -- | When serializing to a JSON, we will put the aggregated amount if present at the
 -- beginning of the `"incomingAmounts"` field.
@@ -688,7 +744,10 @@ newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
 -- * @SPEC: <$DOCS/Transactions#transaction-header>
 instance S.Serialize PayloadSize where
   put (PayloadSize n) = S.putWord32be n
-  get = PayloadSize <$> S.getWord32be
+  get = do
+    thePayloadSize <- S.getWord32be
+    when (thePayloadSize > maxPayloadSize) $ fail "Payload size exceeds maximum transaction payload size."
+    return PayloadSize{..}
 
 -- |Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }

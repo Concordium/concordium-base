@@ -5,7 +5,7 @@ use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Value};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{decrypt_from_chunks_given_generator, Message};
-use id::{anonymity_revoker::*, types::*};
+use id::{anonymity_revoker::*, constants::ArCurve, types::*};
 use serde_json::json;
 use std::convert::TryFrom;
 
@@ -39,7 +39,7 @@ struct Decrypt {
     credential: PathBuf,
     #[structopt(
         long = "ar-private",
-        help = "File with anonymity revoker's private and public keys."
+        help = "File with anonymity revoker's private and public keys. As plaintext or encrypted."
     )]
     ar_private: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to")]
@@ -258,6 +258,25 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
     Ok(())
 }
 
+// Try to read ArData, either from encrypted or a plaintext file.
+fn decrypt_ar_data(fname: &PathBuf) -> Result<ArData<ArCurve>, String> {
+    let data = succeed_or_die!(std::fs::read(fname), e => "Could not read anonymity revoker secret keys due to {}");
+    match serde_json::from_slice(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => {
+            // try to decrypt
+            let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
+            let pass = succeed_or_die!(rpassword::read_password_from_tty(Some("Enter password to decrypt AR credentials: ")), e => "Could not read password {}.");
+            let decrypted = succeed_or_die!(crypto_common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt AR credentials. Most likely the password you provided is incorrect {}.");
+            serde_json::from_slice(&decrypted).map_err(|_| {
+                "Could not decrypt AR credentials. Most likely the password you provided is \
+                 incorrect."
+                    .to_owned()
+            })
+        }
+    }
+}
+
 /// Decrypt encIdCredPubShare
 fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
     let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(dcr.credential), e => "Could not read credential from provided file because {}");
@@ -273,7 +292,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
     };
 
     let ar_data = credential.ar_data;
-    let ar: ArData<ExampleCurve> = succeed_or_die!(read_json_from_file(dcr.ar_private), e => "Could not read anonymity revoker secret keys due to {}");
+    let ar: ArData<ExampleCurve> = succeed_or_die!(decrypt_ar_data(&dcr.ar_private), e => "Could not read anonymity revoker secret keys due to {}");
 
     let single_ar_data = succeed_or_die!(
         ar_data.get(&ar.public_ar_info.ar_identity),
@@ -316,7 +335,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
     let global_context = global_context.value;
 
     let ar_data = ar_record.ar_data;
-    let ar: ArData<ExampleCurve> = succeed_or_die!(read_json_from_file(dcr.ar_private), e => "Could not read AR secret keys due to {}");
+    let ar: ArData<ExampleCurve> = succeed_or_die!(decrypt_ar_data(&dcr.ar_private), e => "Could not read AR secret keys due to {}");
 
     let single_ar_data = succeed_or_die!(
         ar_data.get(&ar.public_ar_info.ar_identity),

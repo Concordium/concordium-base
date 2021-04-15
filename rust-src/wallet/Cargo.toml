@@ -1,8 +1,9 @@
 [package]
 name = "wallet"
 version = "0.1.0"
-authors = ["Concordium AG <contact@concordium.com>"]
+authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
+license-file = "../../LICENSE-APACHE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,7 +16,7 @@ serde = "1.0"
 serde_json = "1.0"
 failure = "0.1"
 chrono = "0.4"
-ed25519-dalek = "=1.0.0"
+ed25519-dalek = "=1.0"
 byteorder = "1.3"
 either = "1.6"
 sha2 = "0.9"

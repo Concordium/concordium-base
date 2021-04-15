@@ -1089,15 +1089,21 @@ fn extract_and_validate_request_query(
             info!("Queried for creating an identity");
 
             let id_object_request = match from_str::<serde_json::Value>(&input.state)
-                .ok()
+                .map_err(|e| format!("{:#?}", e))
                 .and_then(|mut v| match v.get_mut("idObjectRequest") {
-                    Some(v) => Some(v.take()),
-                    None => None,
+                    Some(v) => Ok(v.take()),
+                    None => Err(String::from("`idObjectRequest` field does not exist")),
                 })
-                .and_then(|v| serde_json::from_value::<Versioned<_>>(v).ok())
-            {
-                Some(v) => v,
-                None => return Err(warp::reject::custom(IdRequestRejection::Malformed)),
+                .and_then(|v| {
+                    serde_json::from_value::<Versioned<_>>(v).map_err(|e| format!("{:#?}", e))
+                }) {
+                Ok(v) => v,
+                Err(e) => {
+                    return {
+                        warn!("`idObjectRequest` missing or malformed: {}", e);
+                        Err(warp::reject::custom(IdRequestRejection::Malformed))
+                    }
+                }
             };
             match validate_worker(&server_config, IdentityObjectRequest {
                 id_object_request,

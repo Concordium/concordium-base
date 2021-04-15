@@ -132,23 +132,9 @@ import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Types
 import Concordium.Types
+import Concordium.Constants
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
-
---------------------------------------------------------------------------------
-
--- |Maximum length of the parameter to init and receive methods.
-maxParameterLen :: Word16
-maxParameterLen = 1024
-
--- |Maximum module size.
-maxWasmModuleSize :: Word32
-maxWasmModuleSize = 65536 -- 65kB
-
--- |Maximum byte size of function names.
--- Must stay in sync with MAX_FUNC_NAME_SIZE from wasm-transform.
-maxFuncNameSize :: Int
-maxFuncNameSize = 100
 
 --------------------------------------------------------------------------------
 
@@ -172,9 +158,9 @@ moduleSourceLength = fromIntegral . BS.length . moduleSource
 -- |Web assembly module in binary format.
 data WasmModule = WasmModule {
   -- |Version of the Wasm standard and on-chain API this module corresponds to.
-  wasmVersion :: Word32,
+  wasmVersion :: !Word32,
   -- |Source in binary wasm format.
-  wasmSource :: ModuleSource
+  wasmSource :: !ModuleSource
   } deriving(Eq, Show)
 
 getModuleRef :: WasmModule -> ModuleRef
@@ -370,14 +356,10 @@ instance Show ContractState where
 newtype ByteSize = ByteSize { _byteSize :: Word64 }
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
 
--- |It is assumed the type `a` can reliable represent 64-bit unsigned values.
--- It is intended to be used to automatically get the desired output type, using
--- something that is an instance of Num.
-contractStateSize :: forall a . Integral a => ContractState -> a -> Maybe a
-contractStateSize cs bs =
-  if len <= bs then Just len
-  else Nothing
-  where len = fromIntegral (BS.length (contractState cs))
+-- |Get the size of the contract state in bytes.
+{-# INLINE contractStateSize #-}
+contractStateSize :: ContractState -> ByteSize
+contractStateSize = fromIntegral . BS.length . contractState
 
 -- The serialize instance uses Word32 for length. This should be reasonable since
 -- no instance should ever be able to produce a state bigger than 4GB.

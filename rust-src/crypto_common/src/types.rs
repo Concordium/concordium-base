@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
 /// Index of an account key that is to be used.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
 #[repr(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(SerdeSerialize)]
 #[serde(transparent)]
 pub struct KeyIndex(pub u8);
 
