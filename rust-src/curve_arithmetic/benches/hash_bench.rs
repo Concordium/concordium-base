@@ -40,5 +40,5 @@ pub fn bench_hash_to_curve(c: &mut Criterion) {
 // }
 
 // criterion_group!(hash_to_fq, bench_hash_to_fq);
-criterion_group!(hash_to_curve, bench_hash_to_curve);
-criterion_main!(hash_to_curve);
+criterion_group!(hash_to_curve_, bench_hash_to_curve);
+criterion_main!(hash_to_curve_);
