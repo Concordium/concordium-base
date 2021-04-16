@@ -136,13 +136,14 @@ module Concordium.Types (
   makeHashed,
   
   -- * Regenesis
-  GenesisIndex,
+  GenesisIndex(..),
 
   -- * Protocol version
   module Concordium.Types.ProtocolVersion) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
+import Foreign.Storable
 
 import Concordium.Common.Amount
 import Concordium.Common.Time
@@ -845,7 +846,12 @@ transactionTimeToSlot genesis slotDur t
 -- |Type indicating the index of a (re)genesis block.
 -- The initial genesis block has index @0@ and each subsequent regenesis
 -- has an incrementally higher index.
-type GenesisIndex = Word32
+newtype GenesisIndex = GenesisIndex Word32
+  deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON, Storable) via Word32
+
+instance S.Serialize GenesisIndex where
+  put (GenesisIndex gi) = S.putWord32be gi
+  get = GenesisIndex <$> S.getWord32be
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
