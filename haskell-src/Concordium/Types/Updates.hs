@@ -66,6 +66,8 @@ import Concordium.Utils
 import Concordium.Utils.Serialization
 import Concordium.Types
 import Concordium.Types.HashableTo
+import Concordium.ID.AnonymityRevoker (ArInfo)
+import Concordium.ID.IdentityProvider (IpInfo)
 
 ----------------
 -- * Parameter updates
@@ -293,7 +295,11 @@ data Authorizations = Authorizations {
         -- |Parameter keys: GAS rewards
         asParamGASRewards :: !AccessStructure,
         -- |Parameter keys: Baker Minimum Threshold
-        asBakerStakeThreshold :: !AccessStructure
+        asBakerStakeThreshold :: !AccessStructure,
+        -- |Parameter keys: ArIdentity and ArInfo
+        asAddAnonymityRevoker :: !AccessStructure,
+        -- |Parameter keys: IdentityProviderIdentity and IpInfo
+        asAddIdentityProvider :: !AccessStructure
     }
     deriving (Eq, Show)
 
@@ -311,6 +317,8 @@ instance Serialize Authorizations where
         put asParamTransactionFeeDistribution
         put asParamGASRewards
         put asBakerStakeThreshold
+        put asAddAnonymityRevoker
+        put asAddIdentityProvider
     get = label "deserialization update authorizations" $ do
         keyCount <- getWord16be
         asKeys <- Vec.replicateM (fromIntegral keyCount) get
@@ -331,6 +339,8 @@ instance Serialize Authorizations where
         asParamTransactionFeeDistribution <- getChecked
         asParamGASRewards <- getChecked
         asBakerStakeThreshold <- getChecked
+        asAddAnonymityRevoker <- getChecked
+        asAddIdentityProvider <- getChecked
         return Authorizations{..}
 
 instance HashableTo SHA256.Hash Authorizations where
@@ -361,6 +371,8 @@ instance AE.FromJSON Authorizations where
         asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
         asParamGASRewards <- parseAS "paramGASRewards"
         asBakerStakeThreshold <- parseAS "bakerStakeThreshold"
+        asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
+        asAddIdentityProvider <- parseAS "addIdentityProvider"
         return Authorizations{..}
 
 instance AE.ToJSON Authorizations where
@@ -375,7 +387,9 @@ instance AE.ToJSON Authorizations where
                 "mintDistribution" AE..= t asParamMintDistribution,
                 "transactionFeeDistribution" AE..= t asParamTransactionFeeDistribution,
                 "paramGASRewards" AE..= t asParamGASRewards,
-                "bakerStakeThreshold" AE..= t asBakerStakeThreshold
+                "bakerStakeThreshold" AE..= t asBakerStakeThreshold,
+                "addAnonymityRevoker" AE..= t asAddAnonymityRevoker,
+                "addIdentityProvider" AE..= t asAddIdentityProvider
             ]
         where
             t AccessStructure{..} = AE.object [
@@ -670,6 +684,10 @@ data UpdateType
     -- ^Update the level 1 keys with the level 1 keys
     | UpdateLevel2KeysWithLevel1Keys
     -- ^Update the level 2 keys with the level 1 keys
+    | UpdateAddAnonymityRevoker
+    -- ^Add new anonymity revoker
+    | UpdateAddIdentityProvider
+    -- ^Add new identity provider
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -695,6 +713,8 @@ instance Serialize UpdateType where
     put UpdateLevel2KeysWithRootKeys = putWord8 12
     put UpdateLevel1KeysWithLevel1Keys = putWord8 13
     put UpdateLevel2KeysWithLevel1Keys = putWord8 14
+    put UpdateAddAnonymityRevoker = putWord8 15
+    put UpdateAddIdentityProvider = putWord8 16
     get = getWord8 >>= \case
         1 -> return UpdateProtocol
         2 -> return UpdateElectionDifficulty
@@ -710,6 +730,8 @@ instance Serialize UpdateType where
         12 -> return UpdateLevel2KeysWithRootKeys
         13 -> return UpdateLevel1KeysWithLevel1Keys
         14 -> return UpdateLevel2KeysWithLevel1Keys
+        15 -> return UpdateAddAnonymityRevoker
+        16 -> return UpdateAddIdentityProvider
         n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -776,6 +798,8 @@ data UpdatePayload
     -- ^Root level updates
     | Level1UpdatePayload !Level1Update
     -- ^Level 1 update
+    | AddAnonymityRevokerUpdatePayload !ArInfo
+    | AddIdentityProviderUpdatePayload !IpInfo
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
@@ -799,6 +823,8 @@ instance Serialize UpdatePayload where
         Level1KeysLevel1Update _ -> put UpdateLevel1KeysWithLevel1Keys
         Level2KeysLevel1Update _ -> put UpdateLevel2KeysWithLevel1Keys
       put u
+    put (AddAnonymityRevokerUpdatePayload u) = put UpdateAddAnonymityRevoker >> put u
+    put (AddIdentityProviderUpdatePayload u) = put UpdateAddIdentityProvider >> put u
     get = get >>= \case
             UpdateProtocol -> ProtocolUpdatePayload <$> get
             UpdateElectionDifficulty -> ElectionDifficultyUpdatePayload <$> get
@@ -814,6 +840,9 @@ instance Serialize UpdatePayload where
             UpdateLevel2KeysWithRootKeys -> RootUpdatePayload <$> get
             UpdateLevel1KeysWithLevel1Keys -> Level1UpdatePayload <$> get
             UpdateLevel2KeysWithLevel1Keys -> Level1UpdatePayload <$> get
+            UpdateAddAnonymityRevoker -> AddAnonymityRevokerUpdatePayload <$> get
+            UpdateAddIdentityProvider -> AddIdentityProviderUpdatePayload <$> get
+
 
 $(deriveJSON defaultOptions{
     constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
@@ -837,6 +866,8 @@ updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1KeysWithRoot
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2KeysWithRootKeys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1KeysWithLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2KeysWithLevel1Keys
+updateType AddAnonymityRevokerUpdatePayload{} = UpdateAddAnonymityRevoker
+updateType AddIdentityProviderUpdatePayload{} = UpdateAddIdentityProvider
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -853,6 +884,8 @@ extractKeysIndices p =
     BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold
     RootUpdatePayload{} -> g rootKeys
     Level1UpdatePayload{} -> g level1Keys
+    AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
+    AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
   where f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
         g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0..(fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
 
