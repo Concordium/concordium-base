@@ -1137,11 +1137,11 @@ mod tests {
             // msg     =
             // uniform_bytes =
             // 8bcffd1a3cae24cf9cd7ab85628fd111bb17e3739d3b53f89580d217aa79526f
-            //                  
+            //
             // 1708354a76a402d3569d6a9d19ef3de4d0b991e4f54b9f20dcde9b95a66824cb
-            //                  
+            //
             // df6c1a963a1913d43fd7ac443a02fc5d9d8d77e2071b86ab114a9f34150954a7
-            //                  
+            //
             // 531da568a1ea8c760861c0cde2005afc2c114042ee7b5848f5303f0611cf297f
 
             let msg = "".as_bytes();
@@ -1173,11 +1173,11 @@ mod tests {
             // msg     = abc
             // uniform_bytes =
             // fe994ec51bdaa821598047b3121c149b364b178606d5e72bfbb713933acc29c1
-            //                  
+            //
             // 86f316baecf7ea22212f2496ef3f785a27e84a40d8b299cec56032763eceeff4
-            //                  
+            //
             // c61bd1fe65ed81decafff4a31d0198619c0aa0c6c51fca15520789925e813dcf
-            //                  
+            //
             // d318b542f8799441271f4db9ee3b8092a7a2e8d5b75b73e28fb1ab6b4573c192
 
             let msg = "abc".as_bytes();
@@ -1472,6 +1472,15 @@ mod tests {
             36, 80, 23, 114, 200, 20, 39, 135, 0, 238, 214, 209, 228, 232, 207, 98, 217, 192, 157,
             176, 250, 195, 73, 97, 43, 117, 158, 121, 161
         ]);
+        // The point should have (in hex)
+        // P.x     = 052926add2207b76ca4fa57a8734416c8dc95e24501772c8142787
+        //           00eed6d1e4e8cf62d9c09db0fac349612b759e79a1
+        // P.y     = 08ba738453bfed09cb546dbb0783dbb3a5f1f566ed67bb6be0e8c6
+        //           7e2e81a4cc68ee29813bb7994998f3eae0c9c6a265
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("794311575721400831362957049303781044852006323422624111893352859557450008308620925451441746926395141598720928151969").unwrap(),
+            Fq::from_str("1343412193624222137939591894701031123123641958980729764240763391191550653712890272928110356903136085217047453540965").unwrap(), 
+            Fq::one()).unwrap());
         let msg = "abc".as_bytes();
         let p = hash_to_curve(&msg);
         assert_eq!(to_bytes(&p), vec![
@@ -1479,6 +1488,15 @@ mod tests {
             192, 178, 242, 132, 220, 160, 169, 167, 148, 51, 136, 164, 154, 58, 238, 102, 75, 165,
             55, 154, 118, 85, 211, 198, 137, 0, 190, 47, 105, 3
         ]);
+        // The point should have (in hex)
+        // P.x     = 03567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a794
+        //           3388a49a3aee664ba5379a7655d3c68900be2f6903
+        // P.y     = 0b9c15f3fe6e5cf4211f346271d7b01c8f3b28be689c8429c85b67
+        //           af215533311f0b8dfaaa154fa6b88176c229f2885d
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("513738460217615943921285247703448567647875874745567372796164155472383127756567780059136521508428662765965997467907").unwrap(),
+            Fq::from_str("1786897908129645780825838873875416513994655004408749907941296449131605892957529391590865627492442562626458913769565").unwrap(), 
+            Fq::one()).unwrap());
         let msg = "abcdef0123456789".as_bytes();
         let p = hash_to_curve(&msg);
         assert_eq!(to_bytes(&p), vec![
@@ -1486,6 +1504,15 @@ mod tests {
             36, 7, 227, 187, 145, 107, 191, 38, 140, 38, 61, 221, 87, 166, 162, 114, 0, 167, 132,
             203, 194, 72, 232, 79, 53, 124, 232, 45, 152
         ]);
+        // The point should have (in hex)
+        // P.x     = 11e0b079dea29a68f0383ee94fed1b940995272407e3bb916bbf26
+        //           8c263ddd57a6a27200a784cbc248e84f357ce82d98
+        // P.y     = 03a87ae2caf14e8ee52e51fa2ed8eefe80f02457004ba4d486d6aa
+        //           1f517c0889501dc7413753f9599b099ebcbbd2d709
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("2751628761372137084683207295437105268166375184027748372156952770986741873369176463286511518644061904904607431667096").unwrap(),
+            Fq::from_str("563036982304416203921640398061260377444881693369806087719971277317609936727208012968659302318886963927918562170633").unwrap(), 
+            Fq::one()).unwrap());
         let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
         let p = hash_to_curve(&msg);
         assert_eq!(to_bytes(&p), vec![
@@ -1493,6 +1520,15 @@ mod tests {
             98, 159, 112, 174, 238, 13, 15, 103, 124, 242, 34, 133, 231, 191, 88, 215, 203, 134,
             238, 254, 143, 46, 155, 195, 248, 203, 132, 250, 196, 136
         ]);
+        // The point should have (in hex)
+        // P.x     = 15f68eaa693b95ccb85215dc65fa81038d69629f70aeee0d0f677c
+        //           f22285e7bf58d7cb86eefe8f2e9bc3f8cb84fac488
+        // P.y     = 1807a1d50c29f430b8cafc4f8638dfeeadf51211e1602a5f184443
+        //           076715f91bb90a48ba1e370edce6ae1062f5e6dd38
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("3380432694887674439773082418192083720584748080704959172978586229921475315220434165460350679208315690319508336723080").unwrap(),
+            Fq::from_str("3698526739072864408749571082270628561764415577445404115596990919801523793138348254443092179877354467167123794222392").unwrap(), 
+            Fq::one()).unwrap());
         let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
         let p = hash_to_curve(&msg);
         assert_eq!(to_bytes(&p), vec![
@@ -1500,5 +1536,14 @@ mod tests {
             47, 119, 186, 127, 173, 32, 239, 106, 171, 220, 108, 49, 209, 155, 165, 166, 209, 34,
             131, 85, 50, 148, 193, 130, 92, 75, 60, 162, 220, 254
         ]);
+        // The point should have (in hex)
+        // P.x     = 082aabae8b7dedb0e78aeb619ad3bfd9277a2f77ba7fad20ef6aab
+        //           dc6c31d19ba5a6d12283553294c1825c4b3ca2dcfe
+        // P.y     = 05b84ae5a942248eea39e1d91030458c40153f3b654ab7872d779a
+        //           d1e942856a20c438e8d99bc8abfbf74729ce1f7ac8
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("1256967425542823069694513550918025689490036478501181600525944653952846100887848729514132077573887342346961531624702").unwrap(),
+            Fq::from_str("880372082403694543476959909256504267215588055450016885103797700856746532134585942561958795215862304181527267736264").unwrap(), 
+            Fq::one()).unwrap());
     }
 }
