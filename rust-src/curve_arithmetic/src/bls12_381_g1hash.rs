@@ -495,7 +495,7 @@ pub(crate) const K4: [[u64; 6]; 16] = [
 ///    6. return P,
 /// where the choices of hash_to_field, map_to_curve and h_eff are as described in https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-8.8.1.
 pub fn hash_to_curve(msg: &[u8]) -> G1 {
-    let dst = "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_".as_bytes();
+    let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
     let (u0, u1) = hash_to_field(msg, dst);
 
     let q0 = map_to_curve(u0); // This is on E, but not necessarily in G1
@@ -512,10 +512,9 @@ pub fn hash_to_curve(msg: &[u8]) -> G1 {
 /// is a point on E' (written in Jacobian coordinates). Since inversions are
 /// expensive, we use the fact that (xn/xd : y : 1) on E' <=> (xn xd : xd^3y :
 /// xd) on E' when using Jacobian coordinates. It returns iso_11((xn xd : xd^3y
-/// : xd)) which is then guarentied to lie on E (but not necessarily in G1).
+/// : xd)) which is then guarenteed to lie on E (but not necessarily in G1).
 fn map_to_curve(u: Fq) -> G1 {
-    let (xn, xd, mut y, _) = sswu_3mod4(u);
-    let mut x = xn;
+    let (mut x, xd, mut y, _) = sswu_3mod4(u);
     x.mul_assign(&xd);
     y.mul_assign(&xd);
     y.mul_assign(&xd);
@@ -535,15 +534,11 @@ fn hash_to_field(msg: &[u8], dst: &[u8]) -> (Fq, Fq) {
 // Interpret input as integers (big endian)
 // Return (left*2^256 + right) as Fq
 fn fq_from_bytes(left_bytes: &[u8; 32], right_bytes: &[u8; 32]) -> Fq {
-    fn le_u64s_from_be_bytes(bytes: &[u8]) -> Fq {
+    fn le_u64s_from_be_bytes(bytes: &[u8; 32]) -> Fq {
         let mut digits = [0u64; 6];
 
-        for i in 0..4 {
-            digits[3 - i] = u64::from_be_bytes(
-                bytes[i * 8..(i + 1) * 8]
-                    .try_into()
-                    .expect("Chunk Size is always 8."),
-            );
+        for (place, chunk) in digits.iter_mut().zip(bytes.chunks(8).rev()) {
+            *place = u64::from_be_bytes(chunk.try_into().expect("Chunk Sie is always 8"))
         }
 
         Fq::from_repr(FqRepr(digits)).expect("Only the leading 4 u64s are initialized")
@@ -575,7 +570,7 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
     h.update(vec![0; 64]); // z_pad = I2OSP(0, 64), 64 is the input block size of Sha265
     h.update(msg);
     h.update(vec![0, 128]); // l_i_b_str = I2OSP(128, 2)
-    h.update(vec![0]);
+    h.update([0u8]);
     h.update(&dst_prime);
     let mut b_0: [u8; 32] = [0u8; 32];
     b_0.copy_from_slice(h.finalize().as_slice());
@@ -583,7 +578,7 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
     // b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
     let mut h = Sha256::new();
     h.update(b_0);
-    h.update(vec![1]);
+    h.update([1u8]);
     h.update(&dst_prime);
     let mut b_1: [u8; 32] = [0u8; 32];
     b_1.copy_from_slice(h.finalize().as_slice());
@@ -592,7 +587,7 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
     let mut h = Sha256::new();
     let xor: Vec<u8> = b_0.iter().zip(b_1.iter()).map(|(x, y)| x ^ y).collect();
     h.update(xor);
-    h.update(vec![2]);
+    h.update([2u8]);
     h.update(&dst_prime);
     let mut b_2: [u8; 32] = [0u8; 32];
     b_2.copy_from_slice(h.finalize().as_slice());
@@ -601,7 +596,7 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
     let mut h = Sha256::new();
     let xor: Vec<u8> = b_0.iter().zip(b_2.iter()).map(|(x, y)| x ^ y).collect();
     h.update(xor);
-    h.update(vec![3]);
+    h.update([3u8]);
     h.update(&dst_prime);
     let mut b_3: [u8; 32] = [0u8; 32];
     b_3.copy_from_slice(h.finalize().as_slice());
@@ -610,12 +605,10 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
     let mut h = Sha256::new();
     let xor: Vec<u8> = b_0.iter().zip(b_3.iter()).map(|(x, y)| x ^ y).collect();
     h.update(xor);
-    h.update(vec![4]);
+    h.update([4u8]);
     h.update(dst_prime);
     let mut b_4: [u8; 32] = [0u8; 32];
     b_4.copy_from_slice(h.finalize().as_slice());
-
-    // todo use loop
 
     (b_1, b_2, b_3, b_4)
 }
@@ -715,9 +708,10 @@ fn sswu_3mod4(u: Fq) -> (Fq, Fq, Fq, Fq) {
     let e1 = xd.is_zero();
 
     // 9.   xd = CMOV(xd, Z * A, e1)  # If xd == 0, set xd = Z * A
+    // We don't care if this is constant time or not.
     if e1 {
         xd = z;
-        xd.mul_assign(&a); // todo should we use equivalent of CMOV?
+        xd.mul_assign(&a);
     }
 
     // 10. tv2 = xd^2
@@ -797,7 +791,7 @@ fn sswu_3mod4(u: Fq) -> (Fq, Fq, Fq, Fq) {
     // 31.   y = CMOV(y2, y1, e2)     # If e2, y = y1, else y = y2
     if e2 {
         xn = x1n;
-        y = y1; // todo use match or CMOV
+        y = y1;
     }
 
     // 32.  e3 = sgn0(u) == sgn0(y)   # Fix sign of y
@@ -871,7 +865,7 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     (x_jac, y_jac, z_jac)
 }
 
-/// Macro for evaluating polynomials using Horner's rule
+/// Function for evaluating polynomials using Horner's rule
 /// Donald E. Knuth. Seminumerical Algorithms, volume 2 of The Art of Computer
 /// Programming, chapter 4.6.4. Addison-Wesley, 3rd edition, 1997
 ///
