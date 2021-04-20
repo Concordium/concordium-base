@@ -641,6 +641,7 @@ instance AE.ToJSON UpdateKeysCollection where
 -------------------------
 
 -- |Types of updates to the chain. Used to disambiguate to which queue of updates should the value be pushed.
+-- NB: This does not match exactly the update payload. Some update payloads can enqueue in different update queues.
 data UpdateType
     = UpdateProtocol
     -- ^Update the chain protocol
@@ -660,16 +661,11 @@ data UpdateType
     -- ^Update the GAS rewards
     | UpdateBakerStakeThreshold
     -- ^Minimum amount to register as a baker
-    | UpdateRootKeysWithRootKeys
+    | UpdateRootKeys
     -- ^Update the root keys with the root keys
-    | UpdateLevel1KeysWithRootKeys
-    -- ^Update the level 1 keys with the root keys
-    | UpdateLevel2KeysWithRootKeys
-    -- ^Update the level 2 keys with the root keys
-    | UpdateLevel1KeysWithLevel1Keys
-    -- ^Update the level 1 keys with the level 1 keys
-    | UpdateLevel2KeysWithLevel1Keys
-    -- ^Update the level 2 keys with the level 1 keys
+    | UpdateLevel1Keys
+    -- ^Update the level 1 keys
+    | UpdateLevel2Keys
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -690,11 +686,9 @@ instance Serialize UpdateType where
     put UpdateTransactionFeeDistribution = putWord8 7
     put UpdateGASRewards = putWord8 8
     put UpdateBakerStakeThreshold = putWord8 9
-    put UpdateRootKeysWithRootKeys = putWord8 10
-    put UpdateLevel1KeysWithRootKeys = putWord8 11
-    put UpdateLevel2KeysWithRootKeys = putWord8 12
-    put UpdateLevel1KeysWithLevel1Keys = putWord8 13
-    put UpdateLevel2KeysWithLevel1Keys = putWord8 14
+    put UpdateRootKeys = putWord8 10
+    put UpdateLevel1Keys = putWord8 11
+    put UpdateLevel2Keys = putWord8 12
     get = getWord8 >>= \case
         1 -> return UpdateProtocol
         2 -> return UpdateElectionDifficulty
@@ -705,11 +699,9 @@ instance Serialize UpdateType where
         7 -> return UpdateTransactionFeeDistribution
         8 -> return UpdateGASRewards
         9 -> return UpdateBakerStakeThreshold
-        10 -> return UpdateRootKeysWithRootKeys
-        11 -> return UpdateLevel1KeysWithRootKeys
-        12 -> return UpdateLevel2KeysWithRootKeys
-        13 -> return UpdateLevel1KeysWithLevel1Keys
-        14 -> return UpdateLevel2KeysWithLevel1Keys
+        10 -> return UpdateRootKeys
+        11 -> return UpdateLevel1Keys
+        12 -> return UpdateLevel2Keys
         n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -779,41 +771,30 @@ data UpdatePayload
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
-    put (ProtocolUpdatePayload u) = put UpdateProtocol >> put u
-    put (ElectionDifficultyUpdatePayload u) = put UpdateElectionDifficulty >> put u
-    put (EuroPerEnergyUpdatePayload u) = put UpdateEuroPerEnergy >> put u
-    put (MicroGTUPerEuroUpdatePayload u) = put UpdateMicroGTUPerEuro >> put u
-    put (FoundationAccountUpdatePayload u) = put UpdateFoundationAccount >> put u
-    put (MintDistributionUpdatePayload u) = put UpdateMintDistribution >> put u
-    put (TransactionFeeDistributionUpdatePayload u) = put UpdateTransactionFeeDistribution >> put u
-    put (GASRewardsUpdatePayload u) = put UpdateGASRewards >> put u
-    put (BakerStakeThresholdUpdatePayload u) = put UpdateBakerStakeThreshold >> put u
-    put (RootUpdatePayload u) = do
-      case u of
-        RootKeysRootUpdate _ -> put UpdateRootKeysWithRootKeys
-        Level1KeysRootUpdate _ -> put UpdateLevel1KeysWithRootKeys
-        Level2KeysRootUpdate _ -> put UpdateLevel2KeysWithRootKeys
-      put u
-    put (Level1UpdatePayload u) = do
-      case u of
-        Level1KeysLevel1Update _ -> put UpdateLevel1KeysWithLevel1Keys
-        Level2KeysLevel1Update _ -> put UpdateLevel2KeysWithLevel1Keys
-      put u
-    get = get >>= \case
-            UpdateProtocol -> ProtocolUpdatePayload <$> get
-            UpdateElectionDifficulty -> ElectionDifficultyUpdatePayload <$> get
-            UpdateEuroPerEnergy -> EuroPerEnergyUpdatePayload <$> get
-            UpdateMicroGTUPerEuro -> MicroGTUPerEuroUpdatePayload <$> get
-            UpdateFoundationAccount -> FoundationAccountUpdatePayload <$> get
-            UpdateMintDistribution -> MintDistributionUpdatePayload <$> get
-            UpdateTransactionFeeDistribution -> TransactionFeeDistributionUpdatePayload <$> get
-            UpdateGASRewards -> GASRewardsUpdatePayload <$> get
-            UpdateBakerStakeThreshold -> BakerStakeThresholdUpdatePayload <$> get
-            UpdateRootKeysWithRootKeys -> RootUpdatePayload <$> get
-            UpdateLevel1KeysWithRootKeys -> RootUpdatePayload <$> get
-            UpdateLevel2KeysWithRootKeys -> RootUpdatePayload <$> get
-            UpdateLevel1KeysWithLevel1Keys -> Level1UpdatePayload <$> get
-            UpdateLevel2KeysWithLevel1Keys -> Level1UpdatePayload <$> get
+    put (ProtocolUpdatePayload u) = putWord8 1 >> put u
+    put (ElectionDifficultyUpdatePayload u) = putWord8 2 >> put u
+    put (EuroPerEnergyUpdatePayload u) = putWord8 3 >> put u
+    put (MicroGTUPerEuroUpdatePayload u) = putWord8 4 >> put u
+    put (FoundationAccountUpdatePayload u) = putWord8 5 >> put u
+    put (MintDistributionUpdatePayload u) = putWord8 6 >> put u
+    put (TransactionFeeDistributionUpdatePayload u) = putWord8 7 >> put u
+    put (GASRewardsUpdatePayload u) = putWord8 8 >> put u
+    put (BakerStakeThresholdUpdatePayload u) = putWord8 9 >> put u
+    put (RootUpdatePayload u) = putWord8 10 >> put u
+    put (Level1UpdatePayload u) = putWord8 11 >> put u
+    get = getWord8 >>= \case
+            1 -> ProtocolUpdatePayload <$> get
+            2 -> ElectionDifficultyUpdatePayload <$> get
+            3 -> EuroPerEnergyUpdatePayload <$> get
+            4 -> MicroGTUPerEuroUpdatePayload <$> get
+            5 -> FoundationAccountUpdatePayload <$> get
+            6 -> MintDistributionUpdatePayload <$> get
+            7 -> TransactionFeeDistributionUpdatePayload <$> get
+            8 -> GASRewardsUpdatePayload <$> get
+            9 -> BakerStakeThresholdUpdatePayload <$> get
+            10 -> RootUpdatePayload <$> get
+            11 -> Level1UpdatePayload <$> get
+            x -> fail $ "Unknown update payload kind: " ++ show x
 
 $(deriveJSON defaultOptions{
     constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
@@ -832,11 +813,11 @@ updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
 updateType BakerStakeThresholdUpdatePayload{} = UpdateBakerStakeThreshold
-updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeysWithRootKeys
-updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1KeysWithRootKeys
-updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2KeysWithRootKeys
-updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1KeysWithLevel1Keys
-updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2KeysWithLevel1Keys
+updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
+updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
+updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
+updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)

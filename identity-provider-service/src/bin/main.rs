@@ -303,7 +303,7 @@ impl DB {
         &self,
         key: &str,
         obj: &Versioned<IdentityObject<IpPairing, ArCurve, AttributeKind>>,
-        init_credential: &Versioned<AccountCredential<IpPairing, ArCurve, AttributeKind>>,
+        init_credential: &Versioned<AccountCredentialMessage<IpPairing, ArCurve, AttributeKind>>,
     ) -> anyhow::Result<()> {
         let _lock = self
             .pending
@@ -965,24 +965,24 @@ async fn create_signed_identity_object(
             icdi: initial_cdi,
         });
 
+    let submission = AccountCredentialMessage {
+        message_expiry,
+        credential: versioned_credential.value,
+    };
+    // The proxy expects a versioned submission, so that is what we construct.
+    let versioned_submission = Versioned::new(VERSION_0, submission);
+
     // Store the created IdentityObject.
     // This is stored so it can later be retrieved by querying via the idCredPub.
     ok_or_500!(
         db.write_identity_object(
             &base16_encoded_id_cred_pub,
             &versioned_id,
-            &versioned_credential
+            &versioned_submission
         ),
         "Could not write to database."
     );
 
-    let submission = AccountCredentialMessage {
-        message_expiry,
-        credential: versioned_credential.value,
-    };
-
-    // The proxy expects a versioned submission, so that is what we construction.
-    let versioned_submission = Versioned::new(VERSION_0, submission);
     // Submit and wait for the submission ID.
     let submission_value = to_value(versioned_submission).unwrap();
 
