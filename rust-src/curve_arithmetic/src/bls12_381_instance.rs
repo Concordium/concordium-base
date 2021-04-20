@@ -196,7 +196,12 @@ impl Curve for G1 {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(bytes: &[u8]) -> Self { hash_to_curve(bytes, b"CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO") }
+    fn hash_to_group(bytes: &[u8]) -> Self {
+        hash_to_curve(
+            bytes,
+            b"CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO",
+        )
+    }
 }
 
 impl Curve for G1Affine {
@@ -277,7 +282,13 @@ impl Curve for G1Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve(b, b"CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO").into_affine() }
+    fn hash_to_group(b: &[u8]) -> Self {
+        hash_to_curve(
+            b,
+            b"CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO",
+        )
+        .into_affine()
+    }
 }
 
 impl Curve for G2Affine {
