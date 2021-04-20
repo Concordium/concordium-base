@@ -1,4 +1,3 @@
-use crate::curve_arithmetic::CurveDecodingError;
 use ff::{Field, PrimeField};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
@@ -633,20 +632,15 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> G1 {
         let mut uncompress_point = G1Uncompressed::empty();
         let mut cursor = Cursor::new(uncompress_point.as_mut());
 
-        // Since instances G1Uncompressed concist of bytes of first the x-coordinate
-        // and then the y-coordinate, the below is safe.
-
         for digit in p_x.into_repr().as_ref().iter().rev() {
             cursor
-                .write(&digit.to_be_bytes())
-                .map_err(|_| CurveDecodingError::NotOnCurve)
-                .expect("Should not happen.");
+                .write_all(&digit.to_be_bytes())
+                .expect("This write will always succeed.");
         }
         for digit in p_y.into_repr().as_ref().iter().rev() {
             cursor
-                .write(&digit.to_be_bytes())
-                .map_err(|_| CurveDecodingError::NotOnCurve)
-                .expect("Should not happen.");
+                .write_all(&digit.to_be_bytes())
+                .expect("This write will always succeed.");
         }
 
         // The below is safe, since xiso, yiso, z are in Fq.
@@ -658,11 +652,8 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> G1 {
         // and and since 27 * 2^(47*8) > q, the first entry of
         // `uncompress_point` will always be < 27 < 2^5, since this entry
         // represents the number of 2^(47*8)'s.
-        let res = match uncompress_point.into_affine_unchecked() {
-            Ok(p) => Ok(G1::from(p)),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        };
-        res.expect("Should not happen, since input coordinates are in Fq.")
+        let res = uncompress_point.into_affine_unchecked();
+        G1::from(res.expect("Should not happen, since input coordinates are in Fq."))
     }
 }
 
