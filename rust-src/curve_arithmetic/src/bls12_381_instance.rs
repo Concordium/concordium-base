@@ -14,6 +14,8 @@ use pairing::{
 };
 use rand::*;
 
+const HASH_TO_GROUP_DST: &[u8; 55] = b"CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO";
+
 // Helper function for both G1 and G2 instances.
 fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
     // Traverse at most 4 8-byte chunks, for a total of 256 bits.
@@ -196,7 +198,7 @@ impl Curve for G1 {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(bytes: &[u8]) -> Self { hash_to_g1(bytes) }
+    fn hash_to_group(bytes: &[u8]) -> Self { hash_to_curve(bytes, HASH_TO_GROUP_DST) }
 }
 
 impl Curve for G1Affine {
@@ -277,7 +279,7 @@ impl Curve for G1Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(b: &[u8]) -> Self { hash_to_g1(b).into_affine() }
+    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve(b, HASH_TO_GROUP_DST).into_affine() }
 }
 
 impl Curve for G2Affine {
