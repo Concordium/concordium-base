@@ -519,16 +519,7 @@ fn map_to_curve(u: Fq) -> G1 {
     y.mul_assign(&xd);
     y.mul_assign(&xd);
     let (xiso, yiso, z) = iso_11(x, y, xd);
-    // The below is safe, since xiso, yiso, z are in Fq. 
-    // In from_coordinates_unchecked() we construct an instance G1Uncompressed
-    // by taking the bytes from the x and y coordinates. 
-    // The into_affine_unchecked() used in from_coordinates_unchecked() can fail if 
-    // at least one of the bits representing 2^5, 2^6 or 2^7 in the first entry of 
-    // the G1Uncompressed instance are set, but this will not happen. 
-    // The field size q is 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787, and
-    // and since 27 * 2^(47*8) > q, the first entry of the G1Uncompressed instance
-    // will always be < 27 < 2^5, since this entry represents the number of 2^(47*8)'s. 
-    from_coordinates_unchecked(xiso, yiso, z).expect("Should not happen, since input coordinates are in Fq.")
+    from_coordinates_unchecked(xiso, yiso, z)
 }
 
 /// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-3
@@ -626,9 +617,9 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], 
 // To get the point into the correct order subgroup, multiply by 1 +
 // 15132376222941642752
 #[inline]
-fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingError> {
+fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> G1 {
     if z.is_zero() {
-        Ok(G1::zero())
+        G1::zero()
     } else {
         let z_inv = z.inverse().unwrap();
         let mut z_inv2 = z_inv;
@@ -642,21 +633,36 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
         let mut uncompress_point = G1Uncompressed::empty();
         let mut cursor = Cursor::new(uncompress_point.as_mut());
 
+        // Since instances G1Uncompressed concist of bytes of first the x-coordinate
+        // and then the y-coordinate, the below is safe.
+
         for digit in p_x.into_repr().as_ref().iter().rev() {
             cursor
                 .write(&digit.to_be_bytes())
-                .map_err(|_| CurveDecodingError::NotOnCurve)?;
+                .map_err(|_| CurveDecodingError::NotOnCurve)
+                .expect("Should not happen.");
         }
         for digit in p_y.into_repr().as_ref().iter().rev() {
             cursor
                 .write(&digit.to_be_bytes())
-                .map_err(|_| CurveDecodingError::NotOnCurve)?;
+                .map_err(|_| CurveDecodingError::NotOnCurve)
+                .expect("Should not happen.");
         }
 
-        match uncompress_point.into_affine_unchecked() {
+        // The below is safe, since xiso, yiso, z are in Fq.
+        // The into_affine_unchecked() used below can fail if
+        // at least one of the bits representing 2^5, 2^6 or 2^7 in the first entry of
+        // the `uncompress_point` are set, but this will not happen.
+        // The field size q is
+        // 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787,
+        // and and since 27 * 2^(47*8) > q, the first entry of
+        // `uncompress_point` will always be < 27 < 2^5, since this entry
+        // represents the number of 2^(47*8)'s.
+        let res = match uncompress_point.into_affine_unchecked() {
             Ok(p) => Ok(G1::from(p)),
             Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
+        };
+        res.expect("Should not happen, since input coordinates are in Fq.")
     }
 }
 
@@ -909,13 +915,8 @@ mod tests {
     use super::*;
     use byteorder::{BigEndian, ReadBytesExt};
     use crypto_common::to_bytes;
-    use ff::{SqrtField, PrimeFieldRepr};
+    use ff::SqrtField;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
-    use std::{
-        io::{Cursor, Write},
-    };
-    use pairing::bls12_381::{G1Compressed};
-    use crate::curve_arithmetic::CurveDecodingError;
 
     // testing from_coordinates_unchecked for point at infinity
     #[test]
@@ -927,7 +928,7 @@ mod tests {
         for _ in 0..1000 {
             let x = Fq::random(&mut rng);
             let y = Fq::random(&mut rng);
-            let paf = from_coordinates_unchecked(x, y, z).unwrap();
+            let paf = from_coordinates_unchecked(x, y, z);
 
             assert!(paf == expected);
         }
@@ -947,7 +948,7 @@ mod tests {
             y.add_assign(&Fq::from_repr(FqRepr::from(4)).unwrap());
             match y.sqrt() {
                 Some(sqrt) => {
-                    let p = from_coordinates_unchecked(x, sqrt, Fq::one()).unwrap();
+                    let p = from_coordinates_unchecked(x, sqrt, Fq::one());
                     println!("{:?}", p);
 
                     let encodedpoint = G1Uncompressed::from_affine(p.into_affine());
@@ -1488,7 +1489,7 @@ mod tests {
         assert_eq!(p, from_coordinates_unchecked(
             Fq::from_str("794311575721400831362957049303781044852006323422624111893352859557450008308620925451441746926395141598720928151969").unwrap(),
             Fq::from_str("1343412193624222137939591894701031123123641958980729764240763391191550653712890272928110356903136085217047453540965").unwrap(), 
-            Fq::one()).unwrap());
+            Fq::one()));
         let msg = "abc".as_bytes();
         let p = hash_to_curve(&msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
@@ -1504,7 +1505,7 @@ mod tests {
         assert_eq!(p, from_coordinates_unchecked(
             Fq::from_str("513738460217615943921285247703448567647875874745567372796164155472383127756567780059136521508428662765965997467907").unwrap(),
             Fq::from_str("1786897908129645780825838873875416513994655004408749907941296449131605892957529391590865627492442562626458913769565").unwrap(), 
-            Fq::one()).unwrap());
+            Fq::one()));
         let msg = "abcdef0123456789".as_bytes();
         let p = hash_to_curve(&msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
@@ -1520,7 +1521,7 @@ mod tests {
         assert_eq!(p, from_coordinates_unchecked(
             Fq::from_str("2751628761372137084683207295437105268166375184027748372156952770986741873369176463286511518644061904904607431667096").unwrap(),
             Fq::from_str("563036982304416203921640398061260377444881693369806087719971277317609936727208012968659302318886963927918562170633").unwrap(), 
-            Fq::one()).unwrap());
+            Fq::one()));
         let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
         let p = hash_to_curve(&msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
@@ -1536,7 +1537,7 @@ mod tests {
         assert_eq!(p, from_coordinates_unchecked(
             Fq::from_str("3380432694887674439773082418192083720584748080704959172978586229921475315220434165460350679208315690319508336723080").unwrap(),
             Fq::from_str("3698526739072864408749571082270628561764415577445404115596990919801523793138348254443092179877354467167123794222392").unwrap(), 
-            Fq::one()).unwrap());
+            Fq::one()));
         let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
         let p = hash_to_curve(&msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
@@ -1552,6 +1553,6 @@ mod tests {
         assert_eq!(p, from_coordinates_unchecked(
             Fq::from_str("1256967425542823069694513550918025689490036478501181600525944653952846100887848729514132077573887342346961531624702").unwrap(),
             Fq::from_str("880372082403694543476959909256504267215588055450016885103797700856746532134585942561958795215862304181527267736264").unwrap(), 
-            Fq::one()).unwrap());
+            Fq::one()));
     }
 }
