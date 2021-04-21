@@ -1,8 +1,7 @@
-use crate::curve_arithmetic::CurveDecodingError;
 use ff::{Field, PrimeField};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
-use sha2::{Digest, Sha512};
+use sha2::{Digest, Sha256};
 use std::{
     convert::TryInto,
     io::{Cursor, Write},
@@ -19,29 +18,7 @@ pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
     0x680447a8e5ff9a6,
 ];
 
-// (p-1)/2 where p is the prime characteristic of the field Fq (p=q)
-#[allow(clippy::unreadable_literal)]
-pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
-    0xdcff7fffffffd555,
-    0x0f55ffff58a9ffff,
-    0xb39869507b587b12,
-    0xb23ba5c279c2895f,
-    0x258dd3db21a5d66b,
-    0xd0088f51cbff34d,
-];
-
 // The a-coefficient of the 11-isogenous curve to G1
-#[allow(clippy::unreadable_literal)]
-pub(crate) const E11_B: [u64; 6] = [
-    0xd1cc48e98e172be0,
-    0x5a23215a316ceaa5,
-    0xa0b9c14fcef35ef5,
-    0x2016c1f0f24f4070,
-    0x018b12e8753eee3b,
-    0x12e2908d11688030,
-];
-
-// The b-coefficient of the 11-isogenous curve to G1
 #[allow(clippy::unreadable_literal)]
 pub(crate) const E11_A: [u64; 6] = [
     0x5cf428082d584c1d,
@@ -50,6 +27,17 @@ pub(crate) const E11_A: [u64; 6] = [
     0xb0ea985383ee66a8,
     0x3d693a02c96d4982,
     0x00144698a3b8e943,
+];
+
+// The b-coefficient of the 11-isogenous curve to G1
+#[allow(clippy::unreadable_literal)]
+pub(crate) const E11_B: [u64; 6] = [
+    0xd1cc48e98e172be0,
+    0x5a23215a316ceaa5,
+    0xa0b9c14fcef35ef5,
+    0x2016c1f0f24f4070,
+    0x018b12e8753eee3b,
+    0x12e2908d11688030,
 ];
 
 // Coefficients of the 11-isogeny rational maps,
@@ -496,41 +484,131 @@ pub(crate) const K4: [[u64; 6]; 16] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
-pub fn hash_to_g1(bytes: &[u8]) -> G1 {
-    // Concatenate the message with 0u8 and 1u8 respectively
-    // The paper suggests concatenating a single bit - but since the point is to
-    // get two unrelated field elements, concatenating with 0u8 and 1u8 is ok
-    // Instead of forming two new byte arrays we pass a boolean to hash_bytes_to_fq
-    // function below.
+/// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-3
+/// It follows the steps
+///    1. u = hash_to_field(msg, 2)
+///    2. Q0 = map_to_curve(u[0])
+///    3. Q1 = map_to_curve(u[1])
+///    4. R = Q0 + Q1              
+///    5. P = clear_cofactor(R) = h_eff * R   # Clearing cofactor
+///    6. return P,
+/// where the choices of hash_to_field, map_to_curve and h_eff are as described in https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-8.8.1.
+pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> G1 {
+    let (u0, u1) = hash_to_field(msg, dst);
 
-    // Notice, this hashing functions varies from the one used by the paper We
-    // use sha512 iteratively until the first 47 bytes + 5 bits of the resulting
-    // digest represents a field element
-    let t0 = hash_bytes_to_fq(false, bytes);
-    let t1 = hash_bytes_to_fq(true, bytes);
+    let q0 = map_to_curve(u0); // This is on E, but not necessarily in G1
+    let q1 = map_to_curve(u1); // This is on E, but not necessarily in G1
 
-    // compute the two points on E1'(Fq) - the 11 isogenous curve
-    let (x0, y0, z0) = simplified_swu(t0);
-    let (x1, y1, z1) = simplified_swu(t1);
+    let mut r = q0;
+    r.add_assign(&q1); // This is on E, but not necessarily in G1
+    r.mul_assign(15132376222941642753); // Clearing cofactor with h_eff = 15132376222941642753
+    r // This now guarantied to be in G1
+}
 
-    // evaluate the 11-isogeny on the points.
-    // it is faster to add the two points before evaluating the isogeny, but
-    // we omit this for now, since we don't have an efficient implementation
-    // of the curve.
-    let (x0, y0, z0) = iso_11(x0, y0, z0);
-    let (x1, y1, z1) = iso_11(x1, y1, z1);
+/// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-6.6.3
+/// It uses the function sswu_3mod4 to get xn, xd, y such that (xn/xd : y : 1)
+/// is a point on E' (written in Jacobian coordinates). Since inversions are
+/// expensive, we use the fact that (xn/xd : y : 1) on E' <=> (xn xd : xd^3y :
+/// xd) on E' when using Jacobian coordinates. It returns iso_11((xn xd : xd^3y
+/// : xd)) which is then guarenteed to lie on E (but not necessarily in G1).
+fn map_to_curve(u: Fq) -> G1 {
+    let (mut x, xd, mut y, _) = sswu_3mod4(u);
+    x.mul_assign(&xd);
+    y.mul_assign(&xd);
+    y.mul_assign(&xd);
+    y.mul_assign(&xd);
+    let (xiso, yiso, z) = iso_11(x, y, xd);
+    from_coordinates_unchecked(xiso, yiso, z)
+}
 
-    // convert into points on the curve
-    let mut p0 = from_coordinates_unchecked(x0, y0, z0).expect("should not happen");
-    let p1 = from_coordinates_unchecked(x1, y1, z1).expect("should not happen");
+/// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-3
+/// with the choice of expand_message being expand_message_xmd, as specified in https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-8.8.1.
+fn hash_to_field(msg: &[u8], dst: &[u8]) -> (Fq, Fq) {
+    let (u_0, u_1, u_2, u_3) = expand_message_xmd(msg, dst);
 
-    // add the two points on E1: y^2 = x^3 + 4
-    p0.add_assign(&p1);
+    (fq_from_bytes(&u_0, &u_1), fq_from_bytes(&u_2, &u_3))
+}
 
-    // Clear cofactors (ensuring that the point is in the correct order subgroup of
-    // the curve)
-    p0.mul_assign(1 + 15_132_376_222_941_642_752);
-    p0
+// Interpret input as integers (big endian)
+// Return (left*2^256 + right) as Fq
+fn fq_from_bytes(left_bytes: &[u8; 32], right_bytes: &[u8; 32]) -> Fq {
+    fn le_u64s_from_be_bytes(bytes: &[u8; 32]) -> Fq {
+        let mut digits = [0u64; 6];
+
+        for (place, chunk) in digits.iter_mut().zip(bytes.chunks(8).rev()) {
+            *place = u64::from_be_bytes(chunk.try_into().expect("Chunk Sie is always 8"))
+        }
+
+        Fq::from_repr(FqRepr(digits)).expect("Only the leading 4 u64s are initialized")
+    }
+
+    let two_to_256_fqrepr = [0u64, 0, 0, 0, 1, 0]; // 2^256
+    let two_to_256_fq = Fq::from_repr(FqRepr(two_to_256_fqrepr)).expect("2^256 fits in modulus");
+
+    let mut left_fq = le_u64s_from_be_bytes(left_bytes);
+    let right_fq = le_u64s_from_be_bytes(right_bytes);
+    left_fq.mul_assign(&two_to_256_fq); // u_0[..32] * 2^256
+    left_fq.add_assign(&right_fq); // u_0[32..] + u_0[32..] * 2^256 = u_0
+
+    left_fq
+}
+
+/// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-5.4.1
+/// len_in_bytes is fixed to 128
+/// Domain separation string (dst) should be at most 255 bytes
+fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) {
+    // DST_prime = DST || I2OSP(len(DST), 1)
+    let mut dst_prime = dst.to_vec();
+    dst_prime.push(dst.len().try_into().unwrap()); // panics if dst is more than 255 bytes
+                                                   // msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
+
+    // b_0 = H(msg_prime)
+    let mut h = Sha256::new();
+    // todo a possible optimization here would be to save the state of H(Z_pad)
+    h.update(vec![0; 64]); // z_pad = I2OSP(0, 64), 64 is the input block size of Sha265
+    h.update(msg);
+    h.update(vec![0, 128]); // l_i_b_str = I2OSP(128, 2)
+    h.update([0u8]);
+    h.update(&dst_prime);
+    let mut b_0: [u8; 32] = [0u8; 32];
+    b_0.copy_from_slice(h.finalize().as_slice());
+
+    // b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
+    let mut h = Sha256::new();
+    h.update(b_0);
+    h.update([1u8]);
+    h.update(&dst_prime);
+    let mut b_1: [u8; 32] = [0u8; 32];
+    b_1.copy_from_slice(h.finalize().as_slice());
+
+    // b_2 = H(strxor(b_0, b_1)  || I2OSP(2, 1) || DST_prime)
+    let mut h = Sha256::new();
+    let xor: Vec<u8> = b_0.iter().zip(b_1.iter()).map(|(x, y)| x ^ y).collect();
+    h.update(xor);
+    h.update([2u8]);
+    h.update(&dst_prime);
+    let mut b_2: [u8; 32] = [0u8; 32];
+    b_2.copy_from_slice(h.finalize().as_slice());
+
+    // b_3 = H(strxor(b_1, b_2)  || I2OSP(3, 1) || DST_prime)
+    let mut h = Sha256::new();
+    let xor: Vec<u8> = b_0.iter().zip(b_2.iter()).map(|(x, y)| x ^ y).collect();
+    h.update(xor);
+    h.update([3u8]);
+    h.update(&dst_prime);
+    let mut b_3: [u8; 32] = [0u8; 32];
+    b_3.copy_from_slice(h.finalize().as_slice());
+
+    // b_4 = H(strxor(b_2, b_3)  || I2OSP(4, 1) || DST_prime)
+    let mut h = Sha256::new();
+    let xor: Vec<u8> = b_0.iter().zip(b_3.iter()).map(|(x, y)| x ^ y).collect();
+    h.update(xor);
+    h.update([4u8]);
+    h.update(dst_prime);
+    let mut b_4: [u8; 32] = [0u8; 32];
+    b_4.copy_from_slice(h.finalize().as_slice());
+
+    (b_1, b_2, b_3, b_4)
 }
 
 // Returns a point on E1 with coordinates x,y,z.
@@ -538,9 +616,9 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
 // To get the point into the correct order subgroup, multiply by 1 +
 // 15132376222941642752
 #[inline]
-fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingError> {
+fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> G1 {
     if z.is_zero() {
-        Ok(G1::zero())
+        G1::zero()
     } else {
         let z_inv = z.inverse().unwrap();
         let mut z_inv2 = z_inv;
@@ -556,157 +634,187 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
 
         for digit in p_x.into_repr().as_ref().iter().rev() {
             cursor
-                .write(&digit.to_be_bytes())
-                .map_err(|_| CurveDecodingError::NotOnCurve)?;
+                .write_all(&digit.to_be_bytes())
+                .expect("This write will always succeed.");
         }
         for digit in p_y.into_repr().as_ref().iter().rev() {
             cursor
-                .write(&digit.to_be_bytes())
-                .map_err(|_| CurveDecodingError::NotOnCurve)?;
+                .write_all(&digit.to_be_bytes())
+                .expect("This write will always succeed.");
         }
 
-        match uncompress_point.into_affine_unchecked() {
-            Ok(p) => Ok(G1::from(p)),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
+        // The below is safe, since xiso, yiso, z are in Fq.
+        // The into_affine_unchecked() used below can fail if
+        // at least one of the bits representing 2^5, 2^6 or 2^7 in the first entry of
+        // the `uncompress_point` are set, but this will not happen.
+        // The field size q is
+        // 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787,
+        // and and since 27 * 2^(47*8) > q, the first entry of
+        // `uncompress_point` will always be < 27 < 2^5, since this entry
+        // represents the number of 2^(47*8)'s.
+        let res = uncompress_point.into_affine_unchecked();
+        G1::from(res.expect("Should not happen, since input coordinates are in Fq."))
     }
 }
 
-/// Hash to Fq by hashing using Sha512 and decode the first 381 bits as an
-/// unsigned integer in little endian representation. Repeat feeding the
-/// output of the hash into the hash until successful.
-pub fn hash_bytes_to_fq(one: bool, bytes: &[u8]) -> Fq {
-    let mut h = Sha512::new();
-    let mut hash: [u8; 64] = [0u8; 64];
-    h.update(if one { [1u8] } else { [0u8] });
-    h.update(bytes);
-    let mut fqrepr = [0u64; 6];
-    // We need 381 bits to represent the Fq field, so the topmost three bits will
-    // always be unset.
-    let mask: u64 = !(0b111 << 61);
-    loop {
-        hash.copy_from_slice(&h.finalize_reset());
-        for (chunk, f) in hash.chunks_exact(8).zip(fqrepr.iter_mut()) {
-            *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
-        }
-        // Clear the topmost 3 bits.
-        fqrepr[5] &= mask;
-        // keep trying to hash, until we hit an element in Fq
-        if let Ok(fq) = Fq::from_repr(FqRepr(fqrepr)) {
-            return fq;
-        }
-        h.update(&hash[..]);
-    }
-}
-
-// Implements section 4 of https://eprint.iacr.org/2019/403.pdf
-#[allow(clippy::many_single_char_names, clippy::unreadable_literal)]
-fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
-    // this check can be potentially be made faster by replacing the constructions
-    // of one amd zero with constants, as done with B_COEFF in Fq of the pairing
-    // crate
-
-    let one = Fq::one();
-    let zero = Fq::zero();
-    let mut minus_one = Fq::one();
-    minus_one.negate();
-    if t == one || t == zero || t == minus_one {
-        return (zero, one, zero);
-    }
-
-    // compute N
-    let mut t2 = t;
-    t2.square(); // t^2
-    let mut t4 = t2;
-    t4.square(); // t^4
-    let mut t4_t2_1 = t4;
-    t4_t2_1.sub_assign(&t2);
-    t4_t2_1.add_assign(&Fq::one()); // t^4 - t^2 + 1
-    let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
-    let mut n = b;
-    n.mul_assign(&t4_t2_1); // N = b(t^4 - t^2 + 1)
-
-    // compute D
-    let mut t2_t4 = t2;
-    t2_t4.sub_assign(&t4); // t^2 - t^4
+/// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-G.2.1
+/// Input: u, an element of Fq.
+/// Output: (xn, xd, yn, yd) such that (xn / xd, yn / yd) is a
+///         point on E'.
+#[allow(clippy::many_single_char_names)]
+fn sswu_3mod4(u: Fq) -> (Fq, Fq, Fq, Fq) {
     let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
-    let mut d = a;
-    d.mul_assign(&t2_t4); // D = a(t^2 - t^4) = -a(t^4 - t^2)
+    let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+                                                   // Constants:
+                                                   // 1.  c1 = (q - 3) / 4           # Integer arithmetic
+                                                   // 2.  c2 = sqrt(-Z^3)
+                                                   // Z = 11
+    let z = Fq::from_repr(FqRepr::from(11)).unwrap();
+    // c2 = sqrt(-z^3)
+    let c2 = Fq::from_repr(FqRepr([
+        8011268957077696501,
+        9962099387040634336,
+        8623975380491602827,
+        7731696418485440718,
+        18010667617739806336,
+        276559961644294862,
+    ]))
+    .unwrap();
 
-    // if d, the denominator of X0(u), is 0 then we set the denominator to -a
-    // instead, since -b/a is square in Fq
-    if d.is_zero() {
-        println!("d was zero!");
-        d = a;
-        d.negate();
+    // Steps:
+    // 1.  tv1 = u^2
+    let mut tv1 = u;
+    tv1.square();
+
+    // 2.  tv3 = Z * tv1
+    let mut tv3 = z;
+    tv3.mul_assign(&tv1);
+
+    // 3.  tv2 = tv3^2
+    let mut tv2 = tv3;
+    tv2.square();
+
+    // 4.   xd = tv2 + tv3
+    let mut xd = tv2;
+    xd.add_assign(&tv3);
+
+    // 5.  x1n = xd + 1
+    // 6.  x1n = x1n * B
+    let mut x1n = xd;
+    x1n.add_assign(&Fq::one());
+    x1n.mul_assign(&b);
+
+    // 7.   xd = -A * xd
+    let mut neg_a = a;
+    neg_a.negate();
+    xd.mul_assign(&neg_a);
+
+    // 8.   e1 = xd == 0
+    let e1 = xd.is_zero();
+
+    // 9.   xd = CMOV(xd, Z * A, e1)  # If xd == 0, set xd = Z * A
+    // We don't care if this is constant time or not.
+    if e1 {
+        xd = z;
+        xd.mul_assign(&a);
     }
 
-    // compute V and U
-    let mut d2 = d;
-    d2.square(); // D^2
-    let mut v = d2;
-    v.mul_assign(&d); // V = D^3
-    let mut n3 = n;
-    n3.square();
-    n3.mul_assign(&n); // N^3
-    let mut and2 = a;
-    and2.mul_assign(&n);
-    and2.mul_assign(&d2); // aND^2
-    let mut bv = b;
-    bv.mul_assign(&v); // bV = bD^3
-    let mut u = n3;
-    u.add_assign(&and2);
-    u.add_assign(&bv); // U = N^3 + aND^2 + bD^3
+    // 10. tv2 = xd^2
+    tv2 = xd;
+    tv2.square();
 
-    // compute alpha
-    let mut v3 = v;
-    v3.square();
-    v3.mul_assign(&v); // V^3
-    let mut uv3p34 = u;
-    uv3p34.mul_assign(&v3);
-    uv3p34 = uv3p34.pow(&P_MINUS_3_DIV_4); // (UV^3)^((p-3)/4))
-    let mut alpha = u;
-    alpha.mul_assign(&v);
-    alpha.mul_assign(&uv3p34); // alpha = UV(UV^3)^((p-3)/4))
+    // 11. gxd = tv2 * xd             # gxd == xd^3
+    let mut gxd = tv2;
+    gxd.mul_assign(&xd);
 
-    // We use jacobian projective coordinates when computing the isogeny
-    let mut x_proj: Fq;
-    let mut y_proj: Fq;
-    let z_proj = d;
+    // 12. tv2 = A * tv2
+    tv2.mul_assign(&a);
 
-    // compute alpha^2-V to check if g(X_0(t)) is square in Fq
-    // if alpha^2 == V, then g(X_0(t)) is square, so we can pick y = sqrt(g(X_0(t)))
-    let mut alpha2v_u = alpha;
-    alpha2v_u.square();
-    alpha2v_u.mul_assign(&v);
-    alpha2v_u.sub_assign(&u);
-    if alpha2v_u.is_zero() {
-        // g(X_0(t)) is square in Fq
-        x_proj = n;
-        x_proj.mul_assign(&d); // X = ND
-        y_proj = alpha;
-        y_proj.mul_assign(&v); // Y = alpha D^3
-                               // multiply y by sign(t)
-        match sign(t) {
-            Sign::Plus => (),
-            Sign::Minus => y_proj.negate(),
-        }
-    } else {
-        // g(X_1(t)) is square in Fq
-        x_proj = t2;
-        x_proj.mul_assign(&n);
-        x_proj.mul_assign(&d);
-        x_proj.negate(); // X = - t^2 ND
-        y_proj = t2;
-        y_proj.mul_assign(&t);
-        y_proj.mul_assign(&alpha);
-        y_proj.mul_assign(&v); // Y = t^3 alpha D^3
+    // 13. gx1 = x1n^2
+    let mut gx1 = x1n;
+    gx1.square();
+
+    // 14. gx1 = gx1 + tv2            # x1n^2 + A * xd^2
+    gx1.add_assign(&tv2);
+
+    // 15. gx1 = gx1 * x1n            # x1n^3 + A * x1n * xd^2
+    gx1.mul_assign(&x1n);
+
+    // 16. tv2 = B * gxd
+    tv2 = b;
+    tv2.mul_assign(&gxd);
+
+    // 17. gx1 = gx1 + tv2            # x1n^3 + A * x1n * xd^2 + B * xd^3
+    gx1.add_assign(&tv2);
+
+    // 18. tv4 = gxd^2
+    let mut tv4 = gxd;
+    tv4.square();
+
+    // 19. tv2 = gx1 * gxd
+    tv2 = gx1;
+    tv2.mul_assign(&gxd);
+
+    // 20. tv4 = tv4 * tv2            # gx1 * gxd^3
+    tv4.mul_assign(&tv2);
+
+    // 21.  y1 = tv4^c1               # (gx1 * gxd^3)^((q - 3) / 4)
+    let mut y1 = tv4;
+    y1 = y1.pow(&P_MINUS_3_DIV_4);
+
+    // 22.  y1 = y1 * tv2             # gx1 * gxd * (gx1 * gxd^3)^((q - 3) / 4)
+    y1.mul_assign(&tv2);
+
+    // 23. x2n = tv3 * x1n            # x2 = x2n / xd = Z * u^2 * x1n / xd
+    let mut x2n = tv3;
+    x2n.mul_assign(&x1n);
+
+    // 24.  y2 = y1 * c2              # y2 = y1 * sqrt(-Z^3)
+    let mut y2 = y1;
+    y2.mul_assign(&c2);
+
+    // 25.  y2 = y2 * tv1
+    y2.mul_assign(&tv1);
+
+    // 26.  y2 = y2 * u
+    y2.mul_assign(&u);
+
+    // 27. tv2 = y1^2
+    tv2 = y1;
+    tv2.square();
+
+    // 28. tv2 = tv2 * gxd
+    tv2.mul_assign(&gxd);
+
+    // 29.  e2 = tv2 == gx1
+    tv2.sub_assign(&gx1);
+    let e2 = tv2.is_zero();
+
+    let mut xn = x2n;
+    let mut y = y2;
+    // 30.  xn = CMOV(x2n, x1n, e2)   # If e2, x = x1, else x = x2
+    // 31.   y = CMOV(y2, y1, e2)     # If e2, y = y1, else y = y2
+    if e2 {
+        xn = x1n;
+        y = y1;
     }
-    (x_proj, y_proj, z_proj)
+
+    // 32.  e3 = sgn0(u) == sgn0(y)   # Fix sign of y
+    let e3 = sgn0(u) == sgn0(y);
+
+    // 33.   y = CMOV(-y, y, e3)
+    if !e3 {
+        y.negate();
+    }
+
+    // 34. return (xn, xd, y, 1)
+    // i.e. (xn / xd, y) is a point on the target curve
+
+    (xn, xd, y, Fq::one())
 }
 
-// Computes the 11-isogeny E1'(Fq): y^2 = x^3 + E11_A x + E11_B
-// used for hashing
+/// Computes the 11-isogeny E1'(Fq): y^2 = x^3 + E11_A x + E11_B
+/// used for hashing
 fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     // Compute Z^2i for i = 1,...,15
     let mut z_pow_2i: [Fq; 15] = [z; 15];
@@ -762,16 +870,16 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     (x_jac, y_jac, z_jac)
 }
 
-// Macro for evaluating polynomials using Horner's rule
-// Donald E. Knuth. Seminumerical Algorithms, volume 2 of The Art of Computer
-// Programming, chapter 4.6.4. Addison-Wesley, 3rd edition, 1997
-//
-// Evaluates the polynomial with the given coefficients where the i'th
-// coefficient has been multiplied by z^(degree - i) where degree is the degree
-// of the polynomial.
-// z_powers is an array of the even powers of z, ordered [z^2, z^4, ...] The
-// polynomial is evaluated in 'variable'. Note: It's a prerequisite that
-// Fq::from_repr(FqRepr(coefficient[i])) doesn't produce an error!!!
+/// Function for evaluating polynomials using Horner's rule
+/// Donald E. Knuth. Seminumerical Algorithms, volume 2 of The Art of Computer
+/// Programming, chapter 4.6.4. Addison-Wesley, 3rd edition, 1997
+///
+/// Evaluates the polynomial with the given coefficients where the i'th
+/// coefficient has been multiplied by z^(degree - i) where degree is the degree
+/// of the polynomial.
+/// z_powers is an array of the even powers of z, ordered [z^2, z^4, ...] The
+/// polynomial is evaluated in 'variable'. Note: It's a prerequisite that
+/// Fq::from_repr(FqRepr(coefficient[i])) doesn't produce an error!!!
 fn horner(coefficients: &[[u64; 6]], z_powers: &[Fq], variable: &Fq) -> Fq {
     let clen = coefficients.len();
     // unwrapping the Ki constants never fails
@@ -786,24 +894,18 @@ fn horner(coefficients: &[[u64; 6]], z_powers: &[Fq], variable: &Fq) -> Fq {
     res
 }
 
-fn sign(a: Fq) -> Sign {
-    if a.into_repr() > FqRepr(P_MINUS_1_DIV_2) {
-        Sign::Minus
-    } else {
-        Sign::Plus
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum Sign {
-    Minus,
-    Plus,
+/// The function sgn0 given at https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-4.1
+fn sgn0(a: Fq) -> u64 {
+    let repr = a.into_repr();
+    let ones = repr.0[0];
+    ones % 2
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use byteorder::{BigEndian, ReadBytesExt};
+    use crypto_common::to_bytes;
     use ff::SqrtField;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
 
@@ -817,7 +919,7 @@ mod tests {
         for _ in 0..1000 {
             let x = Fq::random(&mut rng);
             let y = Fq::random(&mut rng);
-            let paf = from_coordinates_unchecked(x, y, z).unwrap();
+            let paf = from_coordinates_unchecked(x, y, z);
 
             assert!(paf == expected);
         }
@@ -837,7 +939,7 @@ mod tests {
             y.add_assign(&Fq::from_repr(FqRepr::from(4)).unwrap());
             match y.sqrt() {
                 Some(sqrt) => {
-                    let p = from_coordinates_unchecked(x, sqrt, Fq::one()).unwrap();
+                    let p = from_coordinates_unchecked(x, sqrt, Fq::one());
                     println!("{:?}", p);
 
                     let encodedpoint = G1Uncompressed::from_affine(p.into_affine());
@@ -866,221 +968,6 @@ mod tests {
                 None => (),
             };
         }
-    }
-
-    // See readme for explanation of test cases
-    #[test]
-    fn test_simplified_swu() {
-        fn test_point_at_inf(t: Fq) {
-            let (x, y, z) = simplified_swu(t);
-            assert_eq!(x, Fq::zero());
-            assert_eq!(y, Fq::one());
-            assert_eq!(z, Fq::zero());
-        }
-
-        let t = Fq::one();
-        test_point_at_inf(t);
-        let t = Fq::zero();
-        test_point_at_inf(t);
-        let mut t = Fq::one();
-        t.negate();
-        test_point_at_inf(t);
-
-        fn test(t: Fq, expected_x: Fq, expected_y: Fq) {
-            let (x, y, z) = simplified_swu(t);
-
-            let z_inverse = z.inverse().unwrap();
-            let mut z_inverse2 = z_inverse;
-            z_inverse2.square();
-            let mut z_inverse3 = z_inverse2;
-            z_inverse3.mul_assign(&z_inverse);
-            let mut x = x;
-            x.mul_assign(&z_inverse2);
-            let mut y = y;
-            y.mul_assign(&z_inverse3);
-
-            // println!("t         : {}", t);
-            // println!("x         : {}", x);
-            // println!("expected x: {}", expected_x);
-            // println!("y         : {}", y);
-            // println!("expected y: {}", expected_y);
-
-            assert!(expected_x == x);
-            assert!(expected_y == y);
-        }
-
-        // t0 = 969b9cc7315e4ac2371da3f9c675eed35b6384ca795d17d8dd8e12da6b833c01c1c6afa860d860060020964873e1264
-        // swu(t0) = (
-        //      8968f732dbad02a9b2a0d54346a068e6aaf1de330a9d09e816547444f05b17d0df13adc16356f5cbcd2ceaab47d55c4,
-        //      11ec46738b7631c340bedd967d35f68873eb067edfbfc9bf725a3823e2850722830ea0c294779dff8ad0b1aed441d0a2,
-        //      1,
-        // )
-        // g(X0(t0))^((p-1)/2) == 1
-        // sign(t0) = Plus
-        let t0 = Fq::from_repr(FqRepr([
-            0x60020964873e1264,
-            0x1c1c6afa860d8600,
-            0x8dd8e12da6b833c0,
-            0x35b6384ca795d17d,
-            0x2371da3f9c675eed,
-            0x969b9cc7315e4ac,
-        ]))
-        .unwrap();
-        let expected_x = Fq::from_repr(FqRepr([
-            0xbcd2ceaab47d55c4,
-            0x0df13adc16356f5c,
-            0x816547444f05b17d,
-            0x6aaf1de330a9d09e,
-            0x9b2a0d54346a068e,
-            0x8968f732dbad02a,
-        ]))
-        .unwrap();
-        let expected_y = Fq::from_repr(FqRepr([
-            0x8ad0b1aed441d0a2,
-            0x830ea0c294779dff,
-            0x725a3823e2850722,
-            0x73eb067edfbfc9bf,
-            0x40bedd967d35f688,
-            0x11ec46738b7631c3,
-        ]))
-        .unwrap();
-        test(t0, expected_x, expected_y);
-
-        // t1 = 128ca46d7ba7268dda23e2c7bb0bbb1bb32802e3e19c195ecd9109b45f9ffc633e8f682b456faae4067f6840d661620c
-        // swu(t1) = (
-        //      888d8e87baad9c27bfba7a144a45cb9093da5b2b13be8b430ccb4314efb43a448c4e273b7d14a482e079116e9e85d2d,
-        //      cd6450cd98477ae7ed9889b59a528e2d05182042257d2b41fe00315fce28200ea14b5d50f14b7906da0f00e3a3e3b53,
-        //      1,
-        // )
-        // g(X0(t1))^((p-1)/2) == 1
-        // sign(t1) = Minus
-        let t1 = Fq::from_repr(FqRepr([
-            0x067f6840d661620c,
-            0x3e8f682b456faae4,
-            0xcd9109b45f9ffc63,
-            0xb32802e3e19c195e,
-            0xda23e2c7bb0bbb1b,
-            0x128ca46d7ba7268d,
-        ]))
-        .unwrap();
-        let expected_x = Fq::from_repr(FqRepr([
-            0x2e079116e9e85d2d,
-            0x48c4e273b7d14a48,
-            0x30ccb4314efb43a4,
-            0x093da5b2b13be8b4,
-            0x7bfba7a144a45cb9,
-            0x888d8e87baad9c2,
-        ]))
-        .unwrap();
-        let expected_y = Fq::from_repr(FqRepr([
-            0x6da0f00e3a3e3b53,
-            0xea14b5d50f14b790,
-            0x1fe00315fce28200,
-            0xd05182042257d2b4,
-            0x7ed9889b59a528e2,
-            0xcd6450cd98477ae,
-        ]))
-        .unwrap();
-        test(t1, expected_x, expected_y);
-
-        // t2 = 154ed432ba8d7d846c12f670b2f9ee68703b9270167358189de20ab9ee5fc81c6dd4649aa57b7d28414831e9ea6a1c7c
-        // swu(t2) = (
-        //      537d5f03530d09edfe5627c6c1d90796505cb2ada43ef113c8ca5b097e3ee74b97f4768c2944bba540b426a6cc9b007,
-        //      14e44b5a03cfcc14869b5bbb33801bf4149fa85fe17bcebcac5abeefae61495e1c67182a42ad8600e15bdfb065c828d9,
-        //      1,
-        // )
-        // g(X0(t2))^((p-1)/2) != 1
-        // sign(t2) = Minus
-        let t2 = Fq::from_repr(FqRepr([
-            0x414831e9ea6a1c7c,
-            0x6dd4649aa57b7d28,
-            0x9de20ab9ee5fc81c,
-            0x703b927016735818,
-            0x6c12f670b2f9ee68,
-            0x154ed432ba8d7d84,
-        ]))
-        .unwrap();
-        let expected_x = Fq::from_repr(FqRepr([
-            0x540b426a6cc9b007,
-            0xb97f4768c2944bba,
-            0x3c8ca5b097e3ee74,
-            0x6505cb2ada43ef11,
-            0xdfe5627c6c1d9079,
-            0x537d5f03530d09e,
-        ]))
-        .unwrap();
-        let expected_y = Fq::from_repr(FqRepr([
-            0xe15bdfb065c828d9,
-            0x1c67182a42ad8600,
-            0xac5abeefae61495e,
-            0x149fa85fe17bcebc,
-            0x869b5bbb33801bf4,
-            0x14e44b5a03cfcc14,
-        ]))
-        .unwrap();
-        test(t2, expected_x, expected_y);
-
-        // t3 = bdb5243c7b6b15dbe4a8fd0901af2cf8a297a516eeaa6ed685f682eb98311989bc64f8b0c846a167575ab9f2cdc376
-        // swu(t3) = (
-        //      646144588fd3473b16ee9f40dd57aa542f8d90c54684e6f69fdceaaf9728fd88f8455f1f235b2ceae13df3509345c9b,
-        //      c89264ed2bf4ee21c08615aaa8389683dec01a1567cd3d3cfbb85cc60d0004f3c6441b5575e005964ef53cc0839aa33,
-        //      1,
-        //  )
-        // g(X0(t3))^((p-1)/2) != 1
-        // sign(t3) = Plus
-        let t3 = Fq::from_repr(FqRepr([
-            0x67575ab9f2cdc376,
-            0x89bc64f8b0c846a1,
-            0xd685f682eb983119,
-            0xf8a297a516eeaa6e,
-            0xdbe4a8fd0901af2c,
-            0xbdb5243c7b6b15,
-        ]))
-        .unwrap();
-        let expected_x = Fq::from_repr(FqRepr([
-            0xae13df3509345c9b,
-            0x8f8455f1f235b2ce,
-            0x69fdceaaf9728fd8,
-            0x42f8d90c54684e6f,
-            0xb16ee9f40dd57aa5,
-            0x646144588fd3473,
-        ]))
-        .unwrap();
-        let expected_y = Fq::from_repr(FqRepr([
-            0x64ef53cc0839aa33,
-            0x3c6441b5575e0059,
-            0xcfbb85cc60d0004f,
-            0x3dec01a1567cd3d3,
-            0x1c08615aaa838968,
-            0xc89264ed2bf4ee2,
-        ]))
-        .unwrap();
-        test(t3, expected_x, expected_y);
-    }
-
-    #[test]
-    fn test_sign() {
-        assert_eq!(sign(Fq::from_repr(FqRepr::from(1)).unwrap()), Sign::Plus);
-        assert_eq!(
-            sign(Fq::from_repr(FqRepr(P_MINUS_1_DIV_2)).unwrap()),
-            Sign::Plus
-        );
-
-        assert_eq!(
-            sign(
-                Fq::from_repr(FqRepr([
-                    0xdcff7fffffffd556,
-                    0x0f55ffff58a9ffff,
-                    0xb39869507b587b12,
-                    0xb23ba5c279c2895f,
-                    0x258dd3db21a5d66b,
-                    0xd0088f51cbff34d,
-                ]))
-                .unwrap()
-            ),
-            Sign::Minus,
-            "Sign should be Minus"
-        );
     }
 
     macro_rules! test_isogeny_constants {
@@ -1115,7 +1002,6 @@ mod tests {
     test_const!(test_e11_a, E11_A);
     test_const!(test_e11_b, E11_B);
     test_const!(test_p_minus_3_div_4, P_MINUS_3_DIV_4);
-    test_const!(test_p_minus_1_div_2, P_MINUS_1_DIV_2);
 
     #[test]
     fn test_iso11() {
@@ -1234,5 +1120,430 @@ mod tests {
         .unwrap();
         let z_expected = Fq::from_repr(FqRepr([1, 0, 0, 0, 0, 0])).unwrap();
         test_isogeny_map(x, y, z, x_expected, y_expected, z_expected);
+    }
+
+    // This tests the expand_message_xmd function
+    // Test vectors for expand_message_xmd from
+    // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-K.1
+    // DST          = QUUX-V01-CS02-with-expander
+    // hash         = SHA256
+    // len_in_bytes = 0x80
+    #[test]
+    fn test_expand_message_xmd() {
+        let domain_string = "QUUX-V01-CS02-with-expander";
+        let dst = domain_string.as_bytes();
+        {
+            // msg     =
+            // uniform_bytes =
+            // 8bcffd1a3cae24cf9cd7ab85628fd111bb17e3739d3b53f89580d217aa79526f
+            //
+            // 1708354a76a402d3569d6a9d19ef3de4d0b991e4f54b9f20dcde9b95a66824cb
+            //
+            // df6c1a963a1913d43fd7ac443a02fc5d9d8d77e2071b86ab114a9f34150954a7
+            //
+            // 531da568a1ea8c760861c0cde2005afc2c114042ee7b5848f5303f0611cf297f
+
+            let msg = "".as_bytes();
+            let (a, b, c, d) = expand_message_xmd(msg, dst);
+
+            assert_eq!(a.to_vec(), vec![
+                0x8b, 0xcf, 0xfd, 0x1a, 0x3c, 0xae, 0x24, 0xcf, 0x9c, 0xd7, 0xab, 0x85, 0x62, 0x8f,
+                0xd1, 0x11, 0xbb, 0x17, 0xe3, 0x73, 0x9d, 0x3b, 0x53, 0xf8, 0x95, 0x80, 0xd2, 0x17,
+                0xaa, 0x79, 0x52, 0x6f
+            ]);
+            assert_eq!(b.to_vec(), vec![
+                0x17, 0x08, 0x35, 0x4a, 0x76, 0xa4, 0x02, 0xd3, 0x56, 0x9d, 0x6a, 0x9d, 0x19, 0xef,
+                0x3d, 0xe4, 0xd0, 0xb9, 0x91, 0xe4, 0xf5, 0x4b, 0x9f, 0x20, 0xdc, 0xde, 0x9b, 0x95,
+                0xa6, 0x68, 0x24, 0xcb
+            ]);
+            assert_eq!(c.to_vec(), vec![
+                0xdf, 0x6c, 0x1a, 0x96, 0x3a, 0x19, 0x13, 0xd4, 0x3f, 0xd7, 0xac, 0x44, 0x3a, 0x02,
+                0xfc, 0x5d, 0x9d, 0x8d, 0x77, 0xe2, 0x07, 0x1b, 0x86, 0xab, 0x11, 0x4a, 0x9f, 0x34,
+                0x15, 0x09, 0x54, 0xa7
+            ]);
+            assert_eq!(d.to_vec(), vec![
+                0x53, 0x1d, 0xa5, 0x68, 0xa1, 0xea, 0x8c, 0x76, 0x08, 0x61, 0xc0, 0xcd, 0xe2, 0x00,
+                0x5a, 0xfc, 0x2c, 0x11, 0x40, 0x42, 0xee, 0x7b, 0x58, 0x48, 0xf5, 0x30, 0x3f, 0x06,
+                0x11, 0xcf, 0x29, 0x7f
+            ]);
+        }
+
+        {
+            // msg     = abc
+            // uniform_bytes =
+            // fe994ec51bdaa821598047b3121c149b364b178606d5e72bfbb713933acc29c1
+            //
+            // 86f316baecf7ea22212f2496ef3f785a27e84a40d8b299cec56032763eceeff4
+            //
+            // c61bd1fe65ed81decafff4a31d0198619c0aa0c6c51fca15520789925e813dcf
+            //
+            // d318b542f8799441271f4db9ee3b8092a7a2e8d5b75b73e28fb1ab6b4573c192
+
+            let msg = "abc".as_bytes();
+            let (a, b, c, d) = expand_message_xmd(msg, dst);
+
+            assert_eq!(a.to_vec(), vec![
+                0xfe, 0x99, 0x4e, 0xc5, 0x1b, 0xda, 0xa8, 0x21, 0x59, 0x80, 0x47, 0xb3, 0x12, 0x1c,
+                0x14, 0x9b, 0x36, 0x4b, 0x17, 0x86, 0x06, 0xd5, 0xe7, 0x2b, 0xfb, 0xb7, 0x13, 0x93,
+                0x3a, 0xcc, 0x29, 0xc1
+            ]);
+            assert_eq!(b.to_vec(), vec![
+                0x86, 0xf3, 0x16, 0xba, 0xec, 0xf7, 0xea, 0x22, 0x21, 0x2f, 0x24, 0x96, 0xef, 0x3f,
+                0x78, 0x5a, 0x27, 0xe8, 0x4a, 0x40, 0xd8, 0xb2, 0x99, 0xce, 0xc5, 0x60, 0x32, 0x76,
+                0x3e, 0xce, 0xef, 0xf4
+            ]);
+            assert_eq!(c.to_vec(), vec![
+                0xc6, 0x1b, 0xd1, 0xfe, 0x65, 0xed, 0x81, 0xde, 0xca, 0xff, 0xf4, 0xa3, 0x1d, 0x01,
+                0x98, 0x61, 0x9c, 0x0a, 0xa0, 0xc6, 0xc5, 0x1f, 0xca, 0x15, 0x52, 0x07, 0x89, 0x92,
+                0x5e, 0x81, 0x3d, 0xcf
+            ]);
+            assert_eq!(d.to_vec(), vec![
+                0xd3, 0x18, 0xb5, 0x42, 0xf8, 0x79, 0x94, 0x41, 0x27, 0x1f, 0x4d, 0xb9, 0xee, 0x3b,
+                0x80, 0x92, 0xa7, 0xa2, 0xe8, 0xd5, 0xb7, 0x5b, 0x73, 0xe2, 0x8f, 0xb1, 0xab, 0x6b,
+                0x45, 0x73, 0xc1, 0x92
+            ]);
+        }
+    }
+
+    // For testing that a point is on the curve E: y^2 = x^3 + 4
+    fn is_on_curve(x: Fq, y: Fq) -> bool {
+        let mut y2 = y;
+        y2.square();
+        let mut x3b = x;
+        x3b.square();
+        x3b.mul_assign(&x);
+        x3b.add_assign(&Fq::from_repr(FqRepr::from(4)).unwrap());
+        y2 == x3b
+    }
+
+    // For testing that a point is on the curve E': y^2 = x^3 + E11_A x + E11_B
+    fn is_on_curve_iso(x: Fq, y: Fq) -> bool {
+        let mut y2 = y;
+        y2.square();
+
+        let mut x3axb = x;
+        x3axb.square();
+        x3axb.mul_assign(&x);
+
+        let mut ax = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+        ax.mul_assign(&x);
+        x3axb.add_assign(&ax);
+
+        let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+        x3axb.add_assign(&b);
+        y2 == x3axb
+    }
+
+    // Only for testing the sswu_3mod4 function.
+    fn horners_simple(coefficients: &[[u64; 6]], variable: &Fq) -> Fq {
+        let clen = coefficients.len();
+        // unwrapping the Ki constants never fails
+        let mut res = Fq::from_repr(FqRepr(coefficients[clen - 1])).unwrap();
+        // skip the last coefficient since we already used it
+        for coeff in coefficients.iter().rev().skip(1) {
+            res.mul_assign(variable);
+            let coeff = Fq::from_repr(FqRepr(*coeff)).unwrap(); // unwrapping the Ki constants never fails
+            res.add_assign(&coeff);
+        }
+        res
+    }
+
+    // Only for testing the sswu_3mod4 function.
+    fn iso_map(x: &Fq, y: &Fq) -> (Fq, Fq) {
+        let mut x_num = horners_simple(&K1, x);
+        let x_den = horners_simple(&K2, x);
+        x_num.mul_assign(&x_den.inverse().unwrap());
+        let mut y_num = horners_simple(&K3, x);
+        let y_den = horners_simple(&K4, x);
+        y_num.mul_assign(&y_den.inverse().unwrap());
+        y_num.mul_assign(y);
+
+        (x_num, y_num)
+    }
+
+    // Only for testing the sswu_3mod4 function.
+    fn test_sswu_3mod4_helper(msg: &[u8]) -> (Fq, Fq, Fq, Fq) {
+        let dst = "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_".as_bytes();
+        let (u0, u1) = hash_to_field(msg, dst);
+        let (q0xn, q0xd, q0y, _) = sswu_3mod4(u0);
+        let (q1xn, q1xd, q1y, _) = sswu_3mod4(u1);
+        let mut q0x = q0xn;
+        q0x.mul_assign(&q0xd.inverse().unwrap());
+        let mut q1x = q1xn;
+        q1x.mul_assign(&q1xd.inverse().unwrap());
+        let (q0xiso, q0yiso) = iso_map(&q0x, &q0y);
+        let (q1xiso, q1yiso) = iso_map(&q1x, &q1y);
+        assert!(is_on_curve_iso(q0x, q0y));
+        assert!(is_on_curve_iso(q1x, q1y));
+        assert!(is_on_curve(q0xiso, q0yiso));
+        assert!(is_on_curve(q1xiso, q1yiso));
+        (q0xiso, q0yiso, q1xiso, q1yiso)
+    }
+
+    // This tests the function sswu_3mod4 function according to
+    // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.9.1 with
+    // suite   = BLS12381G1_XMD:SHA-256_SSWU_RO_
+    // dst     = QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_
+    #[test]
+    fn test_sswu_3mod4() {
+        let msg = "".as_bytes();
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        assert_eq!(q0xiso.into_repr().0, [
+            15322189115692639998,
+            15797359889106953011,
+            5653489230086698368,
+            4682126050798829791,
+            11024924806559841173,
+            1271084816147220853
+        ]);
+        assert_eq!(q0yiso.into_repr().0, [
+            17067727968805097911,
+            7418462616903021369,
+            8864403726093601708,
+            14513805319707135942,
+            8131830758927404468,
+            1074942866857687522
+        ]);
+        assert_eq!(q1xiso.into_repr().0, [
+            7808298569491230620,
+            7184018956363952831,
+            13981477771596724781,
+            18443703881190742655,
+            4138169057032534528,
+            1585271101563546387
+        ]);
+        assert_eq!(q1yiso.into_repr().0, [
+            7824395264510227294,
+            11246731451409989510,
+            4236565643110496590,
+            9890286780414566419,
+            6932751967244965777,
+            976070356284526495
+        ]);
+        let msg = "abc".as_bytes();
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        assert_eq!(q0xiso.into_repr().0, [
+            12430049376656784768,
+            16784989396329743852,
+            14149281322662614863,
+            15883688380205406658,
+            2053710085736387474,
+            1320739611337432253
+        ]);
+        assert_eq!(q0yiso.into_repr().0, [
+            16146441685514193906,
+            18107653483902884492,
+            2715374782011144092,
+            13650205344856941821,
+            6439834167788999452,
+            1047131531842720038
+        ]);
+        assert_eq!(q1xiso.into_repr().0, [
+            8910236932580018916,
+            7815904322292209096,
+            7593225441770187758,
+            11255819455150393731,
+            11796170597050860460,
+            1287740558521048781
+        ]);
+        assert_eq!(q1yiso.into_repr().0, [
+            12692728337348062438,
+            17769121624066068114,
+            17879473399542176639,
+            766305063492018676,
+            17280931718342900840,
+            2192215483010290
+        ]);
+        let msg = "abcdef0123456789".as_bytes();
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        assert_eq!(q0xiso.into_repr().0, [
+            9041900009822400511,
+            18050568042394074917,
+            4183240265480474299,
+            215533130473142672,
+            9436959430308611144,
+            613409310252999030
+        ]);
+        assert_eq!(q0yiso.into_repr().0, [
+            4261986790105305230,
+            14836003795461730496,
+            3332638795667425986,
+            15193945174579615310,
+            1081864890664714785,
+            806583583085425754
+        ]);
+        assert_eq!(q1xiso.into_repr().0, [
+            17455435680279498862,
+            15918940529203786130,
+            13517413051990971646,
+            3112484043422443391,
+            11458656200237888898,
+            1550391579706384980
+        ]);
+        assert_eq!(q1yiso.into_repr().0, [
+            438849826323699359,
+            12283480024969580770,
+            4792612028906851749,
+            7222655975100958127,
+            14265215465550907273,
+            1763448765852971514
+        ]);
+        let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        assert_eq!(q0xiso.into_repr().0, [
+            10708545032665212688,
+            17591047437115732803,
+            10257152130940741089,
+            15450987893913966100,
+            4605628236715863395,
+            918030106871241060
+        ]);
+        assert_eq!(q0yiso.into_repr().0, [
+            17515780972724750437,
+            3794819297212639744,
+            14290165729092219587,
+            5566163866753941733,
+            15656906651893164327,
+            372673852399079424
+        ]);
+        assert_eq!(q1xiso.into_repr().0, [
+            10097535120791090553,
+            15551609254877439630,
+            10830478155963611755,
+            12071872099383128523,
+            17333194118490526774,
+            452963290844057914
+        ]);
+        assert_eq!(q1yiso.into_repr().0, [
+            6314778073248787380,
+            940087490787061227,
+            2483122288128477485,
+            13885439155570656426,
+            6916029826893712320,
+            209856280269423280
+        ]);
+        let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        assert_eq!(q0xiso.into_repr().0, [
+            8748476113528902904,
+            7472129550841271360,
+            3674716482422288788,
+            11268616350755635339,
+            9168862108066020144,
+            934917407444125573
+        ]);
+        assert_eq!(q0yiso.into_repr().0, [
+            8223791200044538547,
+            6018860960006646637,
+            1823901729006231578,
+            7060918718893525758,
+            1160335519914892552,
+            1332798162118717528
+        ]);
+        assert_eq!(q1xiso.into_repr().0, [
+            12854496189098119466,
+            5157345485357217551,
+            681098616738014507,
+            13715717402073062672,
+            6378441195789129883,
+            661777149395142137
+        ]);
+        assert_eq!(q1yiso.into_repr().0, [
+            15981086486121135807,
+            2958272527530984821,
+            9419624270969761554,
+            15253123571016032668,
+            15813118937382962177,
+            184204487603727614
+        ]);
+    }
+
+    // This tests the function hash_to_curve function according to
+    // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.9.1 with
+    // suite   = BLS12381G1_XMD:SHA-256_SSWU_RO_
+    // dst     = QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_
+    #[test]
+    fn test_hash_to_curve() {
+        let msg = "".as_bytes();
+        let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
+        let p = hash_to_curve(&msg, &dst[..]);
+        assert_eq!(to_bytes(&p), vec![
+            133, 41, 38, 173, 210, 32, 123, 118, 202, 79, 165, 122, 135, 52, 65, 108, 141, 201, 94,
+            36, 80, 23, 114, 200, 20, 39, 135, 0, 238, 214, 209, 228, 232, 207, 98, 217, 192, 157,
+            176, 250, 195, 73, 97, 43, 117, 158, 121, 161
+        ]);
+        // The point should have (in hex)
+        // P.x     = 052926add2207b76ca4fa57a8734416c8dc95e24501772c8142787
+        //           00eed6d1e4e8cf62d9c09db0fac349612b759e79a1
+        // P.y     = 08ba738453bfed09cb546dbb0783dbb3a5f1f566ed67bb6be0e8c6
+        //           7e2e81a4cc68ee29813bb7994998f3eae0c9c6a265
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("794311575721400831362957049303781044852006323422624111893352859557450008308620925451441746926395141598720928151969").unwrap(),
+            Fq::from_str("1343412193624222137939591894701031123123641958980729764240763391191550653712890272928110356903136085217047453540965").unwrap(), 
+            Fq::one()));
+        let msg = "abc".as_bytes();
+        let p = hash_to_curve(&msg, &dst[..]);
+        assert_eq!(to_bytes(&p), vec![
+            131, 86, 123, 197, 239, 156, 105, 12, 42, 178, 236, 223, 106, 150, 239, 28, 19, 156,
+            192, 178, 242, 132, 220, 160, 169, 167, 148, 51, 136, 164, 154, 58, 238, 102, 75, 165,
+            55, 154, 118, 85, 211, 198, 137, 0, 190, 47, 105, 3
+        ]);
+        // The point should have (in hex)
+        // P.x     = 03567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a794
+        //           3388a49a3aee664ba5379a7655d3c68900be2f6903
+        // P.y     = 0b9c15f3fe6e5cf4211f346271d7b01c8f3b28be689c8429c85b67
+        //           af215533311f0b8dfaaa154fa6b88176c229f2885d
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("513738460217615943921285247703448567647875874745567372796164155472383127756567780059136521508428662765965997467907").unwrap(),
+            Fq::from_str("1786897908129645780825838873875416513994655004408749907941296449131605892957529391590865627492442562626458913769565").unwrap(), 
+            Fq::one()));
+        let msg = "abcdef0123456789".as_bytes();
+        let p = hash_to_curve(&msg, &dst[..]);
+        assert_eq!(to_bytes(&p), vec![
+            145, 224, 176, 121, 222, 162, 154, 104, 240, 56, 62, 233, 79, 237, 27, 148, 9, 149, 39,
+            36, 7, 227, 187, 145, 107, 191, 38, 140, 38, 61, 221, 87, 166, 162, 114, 0, 167, 132,
+            203, 194, 72, 232, 79, 53, 124, 232, 45, 152
+        ]);
+        // The point should have (in hex)
+        // P.x     = 11e0b079dea29a68f0383ee94fed1b940995272407e3bb916bbf26
+        //           8c263ddd57a6a27200a784cbc248e84f357ce82d98
+        // P.y     = 03a87ae2caf14e8ee52e51fa2ed8eefe80f02457004ba4d486d6aa
+        //           1f517c0889501dc7413753f9599b099ebcbbd2d709
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("2751628761372137084683207295437105268166375184027748372156952770986741873369176463286511518644061904904607431667096").unwrap(),
+            Fq::from_str("563036982304416203921640398061260377444881693369806087719971277317609936727208012968659302318886963927918562170633").unwrap(), 
+            Fq::one()));
+        let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
+        let p = hash_to_curve(&msg, &dst[..]);
+        assert_eq!(to_bytes(&p), vec![
+            181, 246, 142, 170, 105, 59, 149, 204, 184, 82, 21, 220, 101, 250, 129, 3, 141, 105,
+            98, 159, 112, 174, 238, 13, 15, 103, 124, 242, 34, 133, 231, 191, 88, 215, 203, 134,
+            238, 254, 143, 46, 155, 195, 248, 203, 132, 250, 196, 136
+        ]);
+        // The point should have (in hex)
+        // P.x     = 15f68eaa693b95ccb85215dc65fa81038d69629f70aeee0d0f677c
+        //           f22285e7bf58d7cb86eefe8f2e9bc3f8cb84fac488
+        // P.y     = 1807a1d50c29f430b8cafc4f8638dfeeadf51211e1602a5f184443
+        //           076715f91bb90a48ba1e370edce6ae1062f5e6dd38
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("3380432694887674439773082418192083720584748080704959172978586229921475315220434165460350679208315690319508336723080").unwrap(),
+            Fq::from_str("3698526739072864408749571082270628561764415577445404115596990919801523793138348254443092179877354467167123794222392").unwrap(), 
+            Fq::one()));
+        let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
+        let p = hash_to_curve(&msg, &dst[..]);
+        assert_eq!(to_bytes(&p), vec![
+            136, 42, 171, 174, 139, 125, 237, 176, 231, 138, 235, 97, 154, 211, 191, 217, 39, 122,
+            47, 119, 186, 127, 173, 32, 239, 106, 171, 220, 108, 49, 209, 155, 165, 166, 209, 34,
+            131, 85, 50, 148, 193, 130, 92, 75, 60, 162, 220, 254
+        ]);
+        // The point should have (in hex)
+        // P.x     = 082aabae8b7dedb0e78aeb619ad3bfd9277a2f77ba7fad20ef6aab
+        //           dc6c31d19ba5a6d12283553294c1825c4b3ca2dcfe
+        // P.y     = 05b84ae5a942248eea39e1d91030458c40153f3b654ab7872d779a
+        //           d1e942856a20c438e8d99bc8abfbf74729ce1f7ac8
+        assert_eq!(p, from_coordinates_unchecked(
+            Fq::from_str("1256967425542823069694513550918025689490036478501181600525944653952846100887848729514132077573887342346961531624702").unwrap(),
+            Fq::from_str("880372082403694543476959909256504267215588055450016885103797700856746532134585942561958795215862304181527267736264").unwrap(), 
+            Fq::one()));
     }
 }
