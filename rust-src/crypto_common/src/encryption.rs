@@ -55,14 +55,14 @@ fn from_base64_array<'de, D: Deserializer<'de>>(des: D) -> Result<[u8; AES_BLOCK
 /// Supported encryption methods.
 pub enum EncryptionMethod {
     #[serde(rename = "AES-256")]
-    AES256,
+    Aes256,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 /// Supported key derivation methods.
 pub enum KeyDerivationMethod {
     #[serde(rename = "PBKDF2WithHmacSHA256")]
-    PBKDF2SHA256,
+    Pbkdf2Sha256,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -142,8 +142,8 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
     };
 
     let metadata = EncryptionMetadata {
-        encryption_method: EncryptionMethod::AES256,
-        key_derivation_method: KeyDerivationMethod::PBKDF2SHA256,
+        encryption_method: EncryptionMethod::Aes256,
+        key_derivation_method: KeyDerivationMethod::Pbkdf2Sha256,
         iterations: NUM_ROUNDS,
         salt: salt.into(),
         initialization_vector,

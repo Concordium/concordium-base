@@ -34,7 +34,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
     initial_account: &impl PublicInitialAccountData,
-) -> Option<PublicInformationForIP<C>> {
+) -> Option<PublicInformationForIp<C>> {
     let id_cred_pub = gc.on_chain_commitment_key.g.mul_by_scalar(id_cred_sec);
 
     // From create_credential:
@@ -56,7 +56,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
 
     let vk_acc = initial_account.get_cred_key_info();
 
-    let pub_info_for_ip = PublicInformationForIP {
+    let pub_info_for_ip = PublicInformationForIp {
         id_cred_pub,
         reg_id,
         vk_acc,
@@ -72,7 +72,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
 /// are to be used.
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // TODO: consider renaming this function
-    context: &IPContext<P, C>,
+    context: &IpContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
     initial_account: &impl InitialAccountDataWithSigning,
@@ -513,7 +513,7 @@ pub fn create_credential<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IPContext<'a, P, C>,
+    context: IpContext<'a, P, C>,
     id_object: &IdentityObject<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
@@ -562,7 +562,7 @@ pub fn create_unsigned_credential<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IPContext<'a, P, C>,
+    context: IpContext<'a, P, C>,
     id_object: &IdentityObject<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,

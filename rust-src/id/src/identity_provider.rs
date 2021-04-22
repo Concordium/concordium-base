@@ -48,7 +48,7 @@ impl std::fmt::Display for Reason {
 /// Validate all the proofs in an identity object request.
 pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     pre_id_obj: &PreIdentityObject<P, C>,
-    context: IPContext<P, C>,
+    context: IpContext<P, C>,
 ) -> Result<(), Reason> {
     // Verify signature:
     let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
@@ -309,7 +309,7 @@ pub fn verify_credentials<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, C>,
-    context: IPContext<P, C>,
+    context: IpContext<P, C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     expiry: TransactionTime,
     ip_secret_key: &ps_sig::SecretKey<P>,
@@ -339,7 +339,7 @@ pub fn create_initial_cdi<
     AttributeType: Attribute<C::Scalar>,
 >(
     ip_info: &IpInfo<P>,
-    pub_info_for_ip: PublicInformationForIP<C>,
+    pub_info_for_ip: PublicInformationForIp<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     expiry: TransactionTime,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,

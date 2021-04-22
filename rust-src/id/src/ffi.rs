@@ -1,5 +1,5 @@
 use crate::{
-    chain::{self, CDIVerificationError},
+    chain::{self, CdiVerificationError},
     types::*,
 };
 use anyhow::bail;
@@ -201,14 +201,14 @@ extern "C" fn verify_cdi_ffi(
                 &new_or_existing,
             ) {
                 Ok(()) => 1, // verification succeeded
-                Err(CDIVerificationError::RegId) => -1,
-                Err(CDIVerificationError::IdCredPub) => -2,
-                Err(CDIVerificationError::Signature) => -3,
-                Err(CDIVerificationError::Dlog) => -4,
-                Err(CDIVerificationError::Policy) => -5,
-                Err(CDIVerificationError::AR) => -6,
-                Err(CDIVerificationError::AccountOwnership) => -7,
-                Err(CDIVerificationError::Proof) => -8,
+                Err(CdiVerificationError::RegId) => -1,
+                Err(CdiVerificationError::IdCredPub) => -2,
+                Err(CdiVerificationError::Signature) => -3,
+                Err(CdiVerificationError::Dlog) => -4,
+                Err(CdiVerificationError::Policy) => -5,
+                Err(CdiVerificationError::Ar) => -6,
+                Err(CdiVerificationError::AccountOwnership) => -7,
+                Err(CdiVerificationError::Proof) => -8,
             }
         }
     }
@@ -361,7 +361,7 @@ mod test {
             &mut csprng,
         );
 
-        let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+        let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);
         let (pio, randomness) = generate_pio(&context, threshold, &aci, &acc_data)
             .expect("Creating the credential should succeed.");

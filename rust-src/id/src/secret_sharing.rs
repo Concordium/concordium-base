@@ -42,12 +42,12 @@ impl Threshold {
     }
 }
 
-impl Into<u8> for Threshold {
-    fn into(self) -> u8 { self.0 }
+impl From<Threshold> for u8 {
+    fn from(x: Threshold) -> Self { x.0 }
 }
 
-impl Into<usize> for Threshold {
-    fn into(self) -> usize { usize::from(self.0) }
+impl From<Threshold> for usize {
+    fn from(x: Threshold) -> Self { x.0.into() }
 }
 
 impl TryFrom<u8> for Threshold {
