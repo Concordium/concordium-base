@@ -704,11 +704,11 @@ instance Serialize UpdateType where
     put UpdateTransactionFeeDistribution = putWord8 7
     put UpdateGASRewards = putWord8 8
     put UpdateBakerStakeThreshold = putWord8 9
-    put UpdateAddAnonymityRevoker = putWord8 10
-    put UpdateAddIdentityProvider = putWord8 11
-    put UpdateRootKeys = putWord8 12
-    put UpdateLevel1Keys = putWord8 13
-    put UpdateLevel2Keys = putWord8 14
+    put UpdateRootKeys = putWord8 10
+    put UpdateLevel1Keys = putWord8 11
+    put UpdateLevel2Keys = putWord8 12
+    put UpdateAddAnonymityRevoker = putWord8 13
+    put UpdateAddIdentityProvider = putWord8 14
     get = getWord8 >>= \case
         1 -> return UpdateProtocol
         2 -> return UpdateElectionDifficulty
@@ -719,11 +719,11 @@ instance Serialize UpdateType where
         7 -> return UpdateTransactionFeeDistribution
         8 -> return UpdateGASRewards
         9 -> return UpdateBakerStakeThreshold
-        10 -> return UpdateAddAnonymityRevoker
-        11 -> return UpdateAddIdentityProvider
-        12 -> return UpdateRootKeys
-        13 -> return UpdateLevel1Keys
-        14 -> return UpdateLevel2Keys
+        10 -> return UpdateRootKeys
+        11 -> return UpdateLevel1Keys
+        12 -> return UpdateLevel2Keys
+        13 -> return UpdateAddAnonymityRevoker
+        14 -> return UpdateAddIdentityProvider
         n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -804,10 +804,10 @@ instance Serialize UpdatePayload where
     put (TransactionFeeDistributionUpdatePayload u) = putWord8 7 >> put u
     put (GASRewardsUpdatePayload u) = putWord8 8 >> put u
     put (BakerStakeThresholdUpdatePayload u) = putWord8 9 >> put u
-    put (AddAnonymityRevokerUpdatePayload u) = putWord8 10>> put u
-    put (AddIdentityProviderUpdatePayload u) = putWord8 11 >> put u
-    put (RootUpdatePayload u) = putWord8 12 >> put u
-    put (Level1UpdatePayload u) = putWord8 13 >> put u
+    put (RootUpdatePayload u) = putWord8 10 >> put u
+    put (Level1UpdatePayload u) = putWord8 11 >> put u
+    put (AddAnonymityRevokerUpdatePayload u) = putWord8 12 >> put u
+    put (AddIdentityProviderUpdatePayload u) = putWord8 13 >> put u
     get = getWord8 >>= \case
             1 -> ProtocolUpdatePayload <$> get
             2 -> ElectionDifficultyUpdatePayload <$> get
@@ -818,10 +818,10 @@ instance Serialize UpdatePayload where
             7 -> TransactionFeeDistributionUpdatePayload <$> get
             8 -> GASRewardsUpdatePayload <$> get
             9 -> BakerStakeThresholdUpdatePayload <$> get
-            10 -> AddAnonymityRevokerUpdatePayload <$> get
-            11 -> AddIdentityProviderUpdatePayload <$> get
-            12 -> RootUpdatePayload <$> get
-            13 -> Level1UpdatePayload <$> get
+            10 -> RootUpdatePayload <$> get
+            11 -> Level1UpdatePayload <$> get
+            12 -> AddAnonymityRevokerUpdatePayload <$> get
+            13 -> AddIdentityProviderUpdatePayload <$> get
             x -> fail $ "Unknown update payload kind: " ++ show x
 
 $(deriveJSON defaultOptions{
