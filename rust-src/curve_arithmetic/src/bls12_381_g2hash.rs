@@ -1,7 +1,6 @@
-use crate::curve_arithmetic::CurveDecodingError;
 use ff::{Field, PrimeField, SqrtField};
 use group::{CurveProjective, EncodedPoint};
-use pairing::bls12_381::{Fq, Fq2, Fr, FqRepr, G2Uncompressed, G2};
+use pairing::bls12_381::{Fq, Fq2, FqRepr, G2Uncompressed, G2};
 use sha2::{Digest, Sha256};
 use std::{
     convert::TryInto,
@@ -25,7 +24,7 @@ pub fn hash_to_curve_g2(msg: &[u8], dst: &[u8]) -> G2 {
 
     let mut r = q0;
     r.add_assign(&q1); // This is on E, but not necessarily in G2
-    // Clearing cofactor with h_eff
+                       // Clearing cofactor with h_eff
     clear_cofactor_g2(r) // This now guaranteed to be in G2
 }
 
@@ -35,7 +34,8 @@ pub fn hash_to_curve_g2(msg: &[u8], dst: &[u8]) -> G2 {
 fn clear_cofactor_g2(p: G2) -> G2 {
     // h_eff = 0xbc69f08f2ee75b3584c6a0ea91b352888e2a8e9145ad7689986ff031508ffe1329c2f178731db956d82bf015d1212b02ec0ec69d7477c1ae954cbc06689f6a359894c0adebbf6b4e8020005aaa95551
     // it is not possible to use the implementation of mul_assign for G2 directly
-    // the implementation of scalar (i.e. Fr) reduces h_eff by |G2|, which gives equivalent results for points in G2, but not general points on the curve
+    // the implementation of scalar (i.e. Fr) reduces h_eff by |G2|, which gives
+    // equivalent results for points in G2, but not general points on the curve
     // |G2| = 0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001
     let h_eff_u64s: [u64; 9] = [
         0x584c6a0ea91b3528,
@@ -46,7 +46,7 @@ fn clear_cofactor_g2(p: G2) -> G2 {
         0x2ec0ec69d7477c1a,
         0xe954cbc06689f6a3,
         0x59894c0adebbf6b4,
-        0xe8020005aaa95551
+        0xe8020005aaa95551,
     ];
     let mut res = p;
     res.mul_assign(0x0bc69f08f2ee75b3);
@@ -70,18 +70,19 @@ fn map_to_curve_g2(u: Fq2) -> G2 {
 
 /// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-6.6.2
 /// This is not the optimized version described in https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-G.2.3
+#[allow(clippy::many_single_char_names)]
 fn sswu(u: Fq2) -> (Fq2, Fq2) {
     let a = Fq2 {
         c0: Fq::zero(),
-        c1: Fq::from_repr(FqRepr::from(240)).unwrap()
+        c1: Fq::from_repr(FqRepr::from(240)).unwrap(),
     };
     let b = Fq2 {
         c0: Fq::from_repr(FqRepr::from(1012)).unwrap(),
-        c1: Fq::from_repr(FqRepr::from(1012)).unwrap()
+        c1: Fq::from_repr(FqRepr::from(1012)).unwrap(),
     };
     let mut z = Fq2 {
         c0: Fq::from_repr(FqRepr::from(2)).unwrap(),
-        c1: Fq::from_repr(FqRepr::from(1)).unwrap()
+        c1: Fq::from_repr(FqRepr::from(1)).unwrap(),
     };
     z.negate();
 
@@ -111,7 +112,7 @@ fn sswu(u: Fq2) -> (Fq2, Fq2) {
     // 4.   x1 = inv0(x1)
     x1 = match x1.inverse() {
         None => Fq2::zero(),
-        Some(x1inv) => x1inv
+        Some(x1inv) => x1inv,
     };
     // 5.   e1 = x1 == 0
     let e1 = x1.is_zero();
@@ -141,10 +142,7 @@ fn sswu(u: Fq2) -> (Fq2, Fq2) {
     let mut gx2 = gx1;
     gx2.mul_assign(&tv2);
     // 16.  e2 = is_square(gx1)
-    let e2 = match gx1.sqrt() {
-        None => false,
-        Some(_) => true
-    };
+    let e2 = gx1.sqrt().is_some();
     // 17.   x = CMOV(x2, x1, e2)    # If is_square(gx1), x = x1, else x = x2
     // 18.  y2 = CMOV(gx2, gx1, e2)  # If is_square(gx1), y2 = gx1, else y2 = gx2
     let mut x = x2;
@@ -181,7 +179,8 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> [[u8; 32]; 8] {
     let mut dst_prime = dst.to_vec();
     dst_prime.push(dst.len().try_into().unwrap()); // panics if dst is more than 255 bytes
 
-    // b_0 = H(msg_prime), msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
+    // b_0 = H(msg_prime), msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) ||
+    // DST_prime
     let mut h = Sha256::new();
     h.update(vec![0; 64]); // z_pad = I2OSP(0, 64), 64 is the input block size of Sha265
     h.update(msg);
@@ -197,16 +196,20 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> [[u8; 32]; 8] {
     h.update([1u8]);
     h.update(&dst_prime);
 
-    let mut b = [[0u8; 32]; 8]; //b[i] corresponds to b_i+1 in specification.
+    let mut b = [[0u8; 32]; 8]; // b[i] corresponds to b_i+1 in specification.
     b[0].copy_from_slice(h.finalize().as_slice());
 
-    //compute remaining uniform bytes
+    // compute remaining uniform bytes
     for i in 1u8..8 {
         // b_i = H(strxor(b_0, b_i-1)  || I2OSP(i, 1) || DST_prime)
         let mut h = Sha256::new();
-        let xor: Vec<u8> = b_0.iter().zip(b[i as usize - 1].iter()).map(|(x, y)| x ^ y).collect();
+        let xor: Vec<u8> = b_0
+            .iter()
+            .zip(b[i as usize - 1].iter())
+            .map(|(x, y)| x ^ y)
+            .collect();
         h.update(xor);
-        h.update([i+1]); // offset as standard drops b_0 and returns index b_1-b_8
+        h.update([i + 1]); // offset as standard drops b_0 and returns index b_1-b_8
         h.update(&dst_prime);
         b[i as usize].copy_from_slice(h.finalize().as_slice());
     }
@@ -215,17 +218,17 @@ fn expand_message_xmd(msg: &[u8], dst: &[u8]) -> [[u8; 32]; 8] {
 }
 
 /// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-3
-/// with the choice of expand_message being expand_message_xmd, as specified in 
+/// with the choice of expand_message being expand_message_xmd, as specified in
 /// https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-8.8.2.
 fn hash_to_field_fq2(msg: &[u8], dst: &[u8]) -> (Fq2, Fq2) {
-    let b = expand_message_xmd(msg, dst); 
+    let b = expand_message_xmd(msg, dst);
     let u0 = Fq2 {
         c0: fq_from_bytes(&b[0], &b[1]),
-        c1: fq_from_bytes(&b[2], &b[3])
+        c1: fq_from_bytes(&b[2], &b[3]),
     };
     let u1 = Fq2 {
         c0: fq_from_bytes(&b[4], &b[5]),
-        c1: fq_from_bytes(&b[6], &b[7])
+        c1: fq_from_bytes(&b[6], &b[7]),
     };
     (u0, u1)
 }
@@ -311,16 +314,16 @@ fn iso_map(x: Fq2, y: Fq2, z: Fq2) -> (Fq2, Fq2, Fq2) {
     (x_jac, y_jac, z_jac)
 }
 
-//Constants for the 3-isogeny map
-const K1: [[[u64;6];2];4] = [
+// Constants for the 3-isogeny map
+const K1: [[[u64; 6]; 2]; 4] = [
     [
-        [ 
+        [
             0x6238aaaaaaaa97d6,
             0x5c2638e343d9c71c,
             0x88b58423c50ae15d,
             0x32c52d39fd3a042a,
             0xbb5b7a9a47d7ed85,
-            0x5c759507e8e333e
+            0x5c759507e8e333e,
         ],
         [
             0x6238aaaaaaaa97d6,
@@ -328,20 +331,17 @@ const K1: [[[u64;6];2];4] = [
             0x88b58423c50ae15d,
             0x32c52d39fd3a042a,
             0xbb5b7a9a47d7ed85,
-            0x5c759507e8e333e
-        ]
+            0x5c759507e8e333e,
+        ],
     ],
-    [
-        [0, 0, 0, 0, 0, 0],
-        [
-            0x26a9ffffffffc71a,
-            0x1472aaa9cb8d5555,
-            0x9a208c6b4f20a418,
-            0x984f87adf7ae0c7f,
-            0x32126fced787c88f,
-            0x11560bf17baa99bc
-        ]
-    ],
+    [[0, 0, 0, 0, 0, 0], [
+        0x26a9ffffffffc71a,
+        0x1472aaa9cb8d5555,
+        0x9a208c6b4f20a418,
+        0x984f87adf7ae0c7f,
+        0x32126fced787c88f,
+        0x11560bf17baa99bc,
+    ]],
     [
         [
             0x26a9ffffffffc71e,
@@ -349,7 +349,7 @@ const K1: [[[u64;6];2];4] = [
             0x9a208c6b4f20a418,
             0x984f87adf7ae0c7f,
             0x32126fced787c88f,
-            0x11560bf17baa99bc
+            0x11560bf17baa99bc,
         ],
         [
             0x9354ffffffffe38d,
@@ -357,8 +357,8 @@ const K1: [[[u64;6];2];4] = [
             0xcd104635a790520c,
             0xcc27c3d6fbd7063f,
             0x190937e76bc3e447,
-            0x8ab05f8bdd54cde
-        ]
+            0x8ab05f8bdd54cde,
+        ],
     ],
     [
         [
@@ -367,50 +367,41 @@ const K1: [[[u64;6];2];4] = [
             0x22d6108f142b8575,
             0xcb14b4e7f4e810aa,
             0xed6dea691f5fb614,
-            0x171d6541fa38ccfa
+            0x171d6541fa38ccfa,
         ],
-        [0, 0, 0, 0, 0, 0]
-    ]
-];
-
-const K2: [[[u64;6];2];3] = [
-    [
         [0, 0, 0, 0, 0, 0],
-        [
-            0xb9feffffffffaa63,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ]
     ],
-    [
-        [0xc,0, 0, 0, 0, 0],
-        [
-            0xb9feffffffffaa9f,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ]
-    ],
-    [
-        [1, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0]
-    ]
 ];
 
-const K3: [[[u64;6];2];4] = [
+const K2: [[[u64; 6]; 2]; 3] = [
+    [[0, 0, 0, 0, 0, 0], [
+        0xb9feffffffffaa63,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a,
+    ]],
+    [[0xc, 0, 0, 0, 0, 0], [
+        0xb9feffffffffaa9f,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a,
+    ]],
+    [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
+];
+
+const K3: [[[u64; 6]; 2]; 4] = [
     [
-        [ 
+        [
             0x12cfc71c71c6d706,
             0xfc8c25ebf8c92f68,
             0xf54439d87d27e500,
             0x0f7da5d4a07f649b,
             0x59a4c18b076d1193,
-            0x1530477c7ab4113b
+            0x1530477c7ab4113b,
         ],
         [
             0x12cfc71c71c6d706,
@@ -418,20 +409,17 @@ const K3: [[[u64;6];2];4] = [
             0xf54439d87d27e500,
             0x0f7da5d4a07f649b,
             0x59a4c18b076d1193,
-            0x1530477c7ab4113b
-        ]
+            0x1530477c7ab4113b,
+        ],
     ],
-    [
-        [0, 0, 0, 0, 0, 0],
-        [
-            0x6238aaaaaaaa97be,
-            0x5c2638e343d9c71c,
-            0x88b58423c50ae15d,
-            0x32c52d39fd3a042a,
-            0xbb5b7a9a47d7ed85,
-            0x5c759507e8e333e
-        ]
-    ],
+    [[0, 0, 0, 0, 0, 0], [
+        0x6238aaaaaaaa97be,
+        0x5c2638e343d9c71c,
+        0x88b58423c50ae15d,
+        0x32c52d39fd3a042a,
+        0xbb5b7a9a47d7ed85,
+        0x5c759507e8e333e,
+    ]],
     [
         [
             0x26a9ffffffffc71c,
@@ -439,7 +427,7 @@ const K3: [[[u64;6];2];4] = [
             0x9a208c6b4f20a418,
             0x984f87adf7ae0c7f,
             0x32126fced787c88f,
-            0x11560bf17baa99bc
+            0x11560bf17baa99bc,
         ],
         [
             0x9354ffffffffe38f,
@@ -447,8 +435,8 @@ const K3: [[[u64;6];2];4] = [
             0xcd104635a790520c,
             0xcc27c3d6fbd7063f,
             0x190937e76bc3e447,
-            0x8ab05f8bdd54cde
-        ]
+            0x8ab05f8bdd54cde,
+        ],
     ],
     [
         [
@@ -457,72 +445,56 @@ const K3: [[[u64;6];2];4] = [
             0xb0e977c69aa27452,
             0x761b0f37a1e26286,
             0xfbf7043de3811ad0,
-            0x124c9ad43b6cf79b
+            0x124c9ad43b6cf79b,
         ],
-        [0, 0, 0, 0, 0, 0]
-    ]
-];
-
-const K4: [[[u64;6];2];4] = [
-    [
-        [ 
-            0xb9feffffffffa8fb,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ],
-        [
-            0xb9feffffffffa8fb,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ]
-    ],
-    [
         [0, 0, 0, 0, 0, 0],
-        [
-            0xb9feffffffffa9d3,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ]
     ],
-    [
-        [
-            0x12,
-            0x0,
-            0x0,
-            0x0,
-            0x0,
-            0x0
-        ],
-        [
-            0xb9feffffffffaa99,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ]
-    ],
-    [
-        [1, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0]
-    ]
 ];
 
-fn horner(coefficients: &[[[u64; 6];2]], z_powers: &[Fq2], variable: &Fq2) -> Fq2 {
-    fn fq2_from_u64s(u64s: [[u64; 6];2]) -> Fq2 {
+const K4: [[[u64; 6]; 2]; 4] = [
+    [
+        [
+            0xb9feffffffffa8fb,
+            0x1eabfffeb153ffff,
+            0x6730d2a0f6b0f624,
+            0x64774b84f38512bf,
+            0x4b1ba7b6434bacd7,
+            0x1a0111ea397fe69a,
+        ],
+        [
+            0xb9feffffffffa8fb,
+            0x1eabfffeb153ffff,
+            0x6730d2a0f6b0f624,
+            0x64774b84f38512bf,
+            0x4b1ba7b6434bacd7,
+            0x1a0111ea397fe69a,
+        ],
+    ],
+    [[0, 0, 0, 0, 0, 0], [
+        0xb9feffffffffa9d3,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a,
+    ]],
+    [[0x12, 0x0, 0x0, 0x0, 0x0, 0x0], [
+        0xb9feffffffffaa99,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a,
+    ]],
+    [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
+];
+
+fn horner(coefficients: &[[[u64; 6]; 2]], z_powers: &[Fq2], variable: &Fq2) -> Fq2 {
+    fn fq2_from_u64s(u64s: [[u64; 6]; 2]) -> Fq2 {
         // unwrapping the Ki constants never fails:
-        Fq2{
+        Fq2 {
             c0: Fq::from_repr(FqRepr(u64s[0])).unwrap(),
-            c1: Fq::from_repr(FqRepr(u64s[1])).unwrap()
+            c1: Fq::from_repr(FqRepr(u64s[1])).unwrap(),
         }
     }
 
@@ -570,8 +542,8 @@ fn from_coordinates_unchecked(x: Fq2, y: Fq2, z: Fq2) -> G2 {
         }
         for digit in p_y.c1.into_repr().as_ref().iter().rev() {
             cursor
-            .write_all(&digit.to_be_bytes())
-            .expect("This write will always succeed.");
+                .write_all(&digit.to_be_bytes())
+                .expect("This write will always succeed.");
         }
         for digit in p_y.c0.into_repr().as_ref().iter().rev() {
             cursor
@@ -600,11 +572,11 @@ mod tests {
     fn assert_on_curve_iso(x: Fq2, y: Fq2) {
         let a = Fq2 {
             c0: Fq::zero(),
-            c1: Fq::from_repr(FqRepr::from(240)).unwrap()
+            c1: Fq::from_repr(FqRepr::from(240)).unwrap(),
         };
         let b = Fq2 {
             c0: Fq::from_repr(FqRepr::from(1012)).unwrap(),
-            c1: Fq::from_repr(FqRepr::from(1012)).unwrap()
+            c1: Fq::from_repr(FqRepr::from(1012)).unwrap(),
         };
         let mut y2 = y;
         y2.square();
@@ -622,7 +594,7 @@ mod tests {
     fn test_hash_to_field_fq2() {
         // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.10.1
         let dst = b"QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-        
+
         {
             //    msg     =
             //    u[0]    = 03dbc2cce174e91ba93cbb08f26b917f98194a2ea08d1cce75b2b9
@@ -675,23 +647,27 @@ mod tests {
             );
         }
     }
-    
+
     #[test]
     fn test_hash_to_curve_g2() {
         // Test vectors are from https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.10.1
         let dst = b"QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
         {
             //    msg     =
-            //    P.x     = 0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a
-            //        + I * 05cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d
-            //    P.y     = 0503921d7f6a12805e72940b963c0cf3471c7b2a524950ca195d11062ee75ec076daf2d4bc358c4b190c0c98064fdd92
-            //        + I * 12424ac32561493f3fe3c260708a12b7c620e7be00099a974e259ddc7d1f6395c3c811cdd19f1e8dbf3e9ecfdcbab8d6
+            //    P.x     =
+            // 0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a
+            //        + I *
+            // 05cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d
+            //    P.y     =
+            // 0503921d7f6a12805e72940b963c0cf3471c7b2a524950ca195d11062ee75ec076daf2d4bc358c4b190c0c98064fdd92
+            //        + I *
+            // 12424ac32561493f3fe3c260708a12b7c620e7be00099a974e259ddc7d1f6395c3c811cdd19f1e8dbf3e9ecfdcbab8d6
             let msg = b"";
             let p_should_be = from_coordinates_unchecked(
                 Fq2{
                     c0: Fq::from_str("193548053368451749411421515628510806626565736652086807419354395577367693778571452628423727082668900187036482254730").unwrap(),
                     c1: Fq::from_str("891930009643099423308102777951250899694559203647724988361022851024990473423938537113948850338098230396747396259901").unwrap()
-                }, 
+                },
                 Fq2{
                     c0: Fq::from_str("771717272055834152378281705972671257005357145478800908373659404991537354153455452961747174765859335819766715637138").unwrap(),
                     c1: Fq::from_str("2810310118582126634041133454180705304393079139103252956502404531123692847658283858246402311867775854528543237781718").unwrap()
@@ -712,7 +688,7 @@ mod tests {
                 Fq2{
                     c0: Fq::from_str("424958340463073975547762735517193206833255107941790909009827635556634414746056077714431786321247871628515967727334").unwrap(),
                     c1: Fq::from_str("3018679803970127877262826393814472528557413504329194740495363852840690589001358162447917674089074634504498585239512").unwrap()
-                }, 
+                },
                 Fq2{
                     c0: Fq::from_str("3621308185128395459888995526527127556614768604472132176060423302734876099689739385100475320409412954617897892887112").unwrap(),
                     c1: Fq::from_str("102447784096837908713257069727879782642075240724579670654226801345708452018676587771714457671432122751958633012502").unwrap()
@@ -720,7 +696,7 @@ mod tests {
                 Fq2::one()
             );
             let p = hash_to_curve_g2(msg, dst);
-            assert_eq!(p, p_should_be);            
+            assert_eq!(p, p_should_be);
         }
         {
             // msg     = abcdef0123456789
@@ -733,7 +709,7 @@ mod tests {
                 Fq2{
                     c0: Fq::from_str("2785790728239146617702443308248535381016035748520698399690132325213972292102741627498014391457605127656937478044880").unwrap(),
                     c1: Fq::from_str("3855709393631831880910167818276435187147963371126198799654803099743427431977934703201153169947378798970358200024876").unwrap()
-                }, 
+                },
                 Fq2{
                     c0: Fq::from_str("821938378705205565995357931232097952117504537366318395539093959918654729488074273868834599496909844419980823111624").unwrap(),
                     c1: Fq::from_str("1802420335575779950982935580421454302087567926385222707947527353462942499437987207287862072369052390195154530059198").unwrap()
@@ -741,7 +717,7 @@ mod tests {
                 Fq2::one()
             );
             let p = hash_to_curve_g2(msg, dst);
-            assert_eq!(p, p_should_be);            
+            assert_eq!(p, p_should_be);
         }
         {
             // msg     = q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
@@ -754,7 +730,7 @@ mod tests {
                 Fq2{
                     c0: Fq::from_str("3949041098513688455491231180749724794697192943196730030853285011755806989731870696216017360514887069032515603535834").unwrap(),
                     c1: Fq::from_str("1416893694506131976809002935212216317132941942570763849323065381335907430566747765697423320407614734575486820936593").unwrap()
-                }, 
+                },
                 Fq2{
                     c0: Fq::from_str("3227453710863835032992962605851449401391399355135442728893790186263669279022343042444878900124369614767241382891922").unwrap(),
                     c1: Fq::from_str("1498738834073759871886466122933996764471889514532827927202777922460876335493588931070034160657995151627624577390178").unwrap()
@@ -762,20 +738,25 @@ mod tests {
                 Fq2::one()
             );
             let p = hash_to_curve_g2(msg, dst);
-            assert_eq!(p, p_should_be);            
+            assert_eq!(p, p_should_be);
         }
         {
-            //   msg     = a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            //   P.x     = 01a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534
-            //       + I * 11fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d01569
-            //   P.y     = 0b6798718c8aed24bc19cb27f866f1c9effcdbf92397ad6448b5c9db90d2b9da6cbabf48adc1adf59a1a28344e79d57e
-            //       + I * 03a47f8e6d1763ba0cad63d6114c0accbef65707825a511b251a660a9b3994249ae4e63fac38b23da0c398689ee2ab52
+            //   msg     =
+            // a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            //   P.x     =
+            // 01a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534
+            //       + I *
+            // 11fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d01569
+            //   P.y     =
+            // 0b6798718c8aed24bc19cb27f866f1c9effcdbf92397ad6448b5c9db90d2b9da6cbabf48adc1adf59a1a28344e79d57e
+            //       + I *
+            // 03a47f8e6d1763ba0cad63d6114c0accbef65707825a511b251a660a9b3994249ae4e63fac38b23da0c398689ee2ab52
             let msg = b"a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
             let p_should_be = from_coordinates_unchecked(
                 Fq2{
                     c0: Fq::from_str("254155017921606149907129844368549510385368618440139550318910532874259603395336903946742408725761795820224536519988").unwrap(),
                     c1: Fq::from_str("2768431459296730426779166218544149791601585986233130583011501727704972362141149700714785450629498506208393873593705").unwrap()
-                }, 
+                },
                 Fq2{
                     c0: Fq::from_str("1755339344744337457318565116062025669984750617937721245220711425551575490663761638802010265668157125441634554205566").unwrap(),
                     c1: Fq::from_str("560643043433789571968941329642646582974304556331567393300563909451776257854214387388500126524984624222885267024722").unwrap()
@@ -783,7 +764,7 @@ mod tests {
                 Fq2::one()
             );
             let p = hash_to_curve_g2(msg, dst);
-            assert_eq!(p, p_should_be);            
+            assert_eq!(p, p_should_be);
         }
     }
 }
