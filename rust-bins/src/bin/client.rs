@@ -19,7 +19,7 @@ use id::{
 };
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
-use serde_json::json;
+use serde_json::{json, to_value};
 use std::{
     cmp::max,
     collections::btree_map::BTreeMap,
@@ -232,6 +232,16 @@ struct IpSignPio {
         required = true
     )]
     expiry: u64,
+    #[structopt(
+        long = "id-object-expiry",
+        help = "Expiry time of the identity object message. As YYYYMM."
+    )]
+    id_expiry: Option<YearMonth>,
+    #[structopt(
+        long = "no-attributes",
+        help = "Do not select any attributes to reveal."
+    )]
+    no_attributes: bool,
 }
 
 #[derive(StructOpt)]
@@ -293,6 +303,8 @@ struct CreateCredential {
         default_value = "database/anonymity_revokers.json"
     )]
     anonymity_revokers: PathBuf,
+    #[structopt(long = "index", help = "Index of the account to be created.")]
+    index: Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -657,7 +669,10 @@ fn handle_create_credential(cc: CreateCredential) {
     };
 
     // We ask what regid index they would like to use.
-    let x = Input::new().with_prompt("Index").interact().unwrap_or(0); // 0 is the default index
+    let x = match cc.index {
+        Some(x) => x,
+        None => Input::new().with_prompt("Index").interact().unwrap_or(0), // 0 is the default index
+    };
 
     // Now we have have everything we need to generate the proofs
     // we have
@@ -723,14 +738,14 @@ fn handle_create_credential(cc: CreateCredential) {
 
     let address = AccountAddress::new(&cdi.values.cred_id);
 
-    let versioned_cdi = Versioned::new(VERSION_0, AccountCredential::Normal { cdi });
-    let cdi_json_value = serde_json::value::to_value(&versioned_cdi)
-        .expect("JSON Serialization of credentials failed.");
+    let cdi = AccountCredential::Normal { cdi };
 
     let versioned_credentials = {
         let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
-        credentials.insert(ki, versioned_cdi.value);
+        // NB: We insert the reference to the credential here so as to avoid cloning
+        // (which is not implemented for the type)
+        credentials.insert(ki, &cdi);
         Versioned::new(VERSION_0, credentials)
     };
 
@@ -779,6 +794,16 @@ fn handle_create_credential(cc: CreateCredential) {
     // accepted by the simple-client for sending transactions.
 
     if let Some(json_file) = cc.out {
+        // if it is an existing account then just write the credential.
+        // otherwise write the credential message that can be sent to the chain.
+        let cdi_json_value = match new_or_existing {
+            Left(tt) => to_value(&Versioned::new(VERSION_0, AccountCredentialMessage {
+                message_expiry: tt,
+                credential:     cdi,
+            }))
+            .expect("Cannot fail."),
+            Right(_) => to_value(&Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
+        };
         match write_json_to_file(json_file, &cdi_json_value) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
             Err(e) => {
@@ -834,12 +859,15 @@ fn handle_act_as_ip(aai: IpSignPio) {
             }
         };
 
-    let valid_to = match read_validto() {
-        Ok(ym) => ym,
-        Err(e) => {
-            eprintln!("Could not read credential expiry because {}", e);
-            return;
-        }
+    let valid_to = match aai.id_expiry {
+        Some(exp) => exp,
+        None => match read_validto() {
+            Ok(ym) => ym,
+            Err(e) => {
+                eprintln!("Could not read credential expiry because {}", e);
+                return;
+            }
+        },
     };
 
     let global_ctx = {
@@ -864,16 +892,20 @@ fn handle_act_as_ip(aai: IpSignPio) {
     let created_at = YearMonth::now();
 
     let tags = {
-        match MultiSelect::new()
-            .with_prompt("Select attributes:")
-            .items(&ATTRIBUTE_NAMES)
-            .interact()
-        {
-            Ok(idxs) => idxs,
-            Err(x) => {
-                eprintln!("You have to choose some attributes. Terminating. {}", x);
-                return;
+        if !aai.no_attributes {
+            match MultiSelect::new()
+                .with_prompt("Select attributes:")
+                .items(&ATTRIBUTE_NAMES)
+                .interact()
+            {
+                Ok(idxs) => idxs,
+                Err(x) => {
+                    eprintln!("You have to choose some attributes. Terminating. {}", x);
+                    return;
+                }
             }
+        } else {
+            Vec::new()
         }
     };
 
