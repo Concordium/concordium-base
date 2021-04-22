@@ -359,7 +359,7 @@ impl Curve for G2Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G1_DST).into_affine() }
+    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G2_DST).into_affine() }
 }
 
 impl Pairing for Bls12 {
