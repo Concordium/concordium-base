@@ -210,7 +210,7 @@ macro_rules! succeed_or_die {
 }
 
 fn output_possibly_encrypted<X: SerdeSerialize>(
-    fname: &std::path::Path,
+    fname: &Path,
     data: &X,
 ) -> Result<(), std::io::Error> {
     let pass = ask_for_password_confirm(

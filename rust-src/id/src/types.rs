@@ -302,12 +302,12 @@ impl fmt::Display for ArIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
-impl Into<u32> for ArIdentity {
-    fn into(self) -> u32 { self.0 }
+impl From<ArIdentity> for u32 {
+    fn from(x: ArIdentity) -> Self { x.0 }
 }
 
-impl Into<u64> for ArIdentity {
-    fn into(self) -> u64 { u64::from(self.0) }
+impl From<ArIdentity> for u64 {
+    fn from(x: ArIdentity) -> Self { x.0.into() }
 }
 
 impl TryFrom<u32> for ArIdentity {
@@ -458,12 +458,12 @@ impl std::str::FromStr for AttributeTag {
     }
 }
 
-impl Into<usize> for AttributeTag {
-    fn into(self) -> usize { self.0.into() }
+impl From<AttributeTag> for usize {
+    fn from(tag: AttributeTag) -> Self { tag.0.into() }
 }
 
 impl From<u8> for AttributeTag {
-    fn from(x: u8) -> Self { AttributeTag(x) }
+    fn from(tag: u8) -> Self { AttributeTag(tag) }
 }
 
 pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
@@ -554,7 +554,7 @@ impl YearMonth {
     /// Construct a new YearMonth object.
     /// This method checks that year and month are in range.
     pub fn new(year: u16, month: u8) -> Option<Self> {
-        if year >= 1000 && year < 10000 && month >= 1 && month <= 12 {
+        if (1000..10000).contains(&year) && (1..=12).contains(&month) {
             Some(YearMonth { year, month })
         } else {
             None
@@ -800,7 +800,7 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public credential of the account holder in the anonymity revoker's
     /// group.
     #[serde(rename = "pubInfoForIp")]
-    pub pub_info_for_ip:       PublicInformationForIP<C>,
+    pub pub_info_for_ip:       PublicInformationForIp<C>,
     /// Anonymity revocation data for the chosen anonymity revokers.
     #[serde(rename = "ipArData")]
     #[map_size_length = 4]
@@ -1503,7 +1503,7 @@ pub struct InitialCredentialDeploymentInfo<
 /// It is part of the preidentity object.
 #[derive(Debug, Serialize, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-pub struct PublicInformationForIP<C: Curve> {
+pub struct PublicInformationForIp<C: Curve> {
     #[serde(
         rename = "idCredPub",
         serialize_with = "base16_encode",
@@ -1525,7 +1525,7 @@ pub struct PublicInformationForIP<C: Curve> {
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
 #[derive(Clone)]
-pub struct IPContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info:        &'a IpInfo<P>,
     /// Public information on the __supported__ anonymity revokers.
@@ -1536,7 +1536,7 @@ pub struct IPContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub global_context: &'a GlobalContext<C>,
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P, C> {}
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
 
 #[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
@@ -1620,13 +1620,13 @@ impl<C: Curve> GlobalContext<C> {
 /// Make a context in which the account holder can produce a pre-identity object
 /// to send to the identity provider. Also requires access to the global context
 /// of parameters, e.g., dlog-proof base point.
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IpContext<'a, P, C> {
     pub fn new(
         ip_info: &'a IpInfo<P>,                         // identity provider keys
         ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>, // keys of anonymity revokers.
         global_context: &'a GlobalContext<C>,
     ) -> Self {
-        IPContext {
+        IpContext {
             ip_info,
             ars_infos,
             global_context,
@@ -1662,7 +1662,7 @@ pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
     /// sign the sha256 hash of the structure's serialization.
     fn sign_public_information_for_ip<C: Curve>(
         &self,
-        info: &PublicInformationForIP<C>,
+        info: &PublicInformationForIp<C>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
@@ -1811,7 +1811,7 @@ impl PublicInitialAccountData for InitialAccountData {
 impl InitialAccountDataWithSigning for InitialAccountData {
     fn sign_public_information_for_ip<C: Curve>(
         &self,
-        pub_info_for_ip: &PublicInformationForIP<C>,
+        pub_info_for_ip: &PublicInformationForIp<C>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
         let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
         self.keys

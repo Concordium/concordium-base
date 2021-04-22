@@ -96,7 +96,7 @@ pub fn validate_request(
         }
     };
 
-    let context = IPContext {
+    let context = IpContext {
         ip_info:        &ip_info,
         ars_infos:      &ars_infos.anonymity_revokers,
         global_context: &global_context,
