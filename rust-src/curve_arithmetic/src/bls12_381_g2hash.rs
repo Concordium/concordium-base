@@ -68,6 +68,8 @@ fn map_to_curve_g2(u: Fq2) -> G2 {
     from_coordinates_unchecked(x, y, z)
 }
 
+/// Implements https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#section-6.6.2
+/// This is not the optimized version described in https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-G.2.3
 fn sswu(u: Fq2) -> (Fq2, Fq2) {
     let a = Fq2 {
         c0: Fq::zero(),
@@ -93,7 +95,7 @@ fn sswu(u: Fq2) -> (Fq2, Fq2) {
     let mut c2 = z.inverse().unwrap();
     c2.negate();
 
-    // todo everything above is a constant
+    // all values above are constants
 
     // Steps:
     // 1.  tv1 = Z * u^2
@@ -252,6 +254,8 @@ fn fq_from_bytes(left_bytes: &[u8; 32], right_bytes: &[u8; 32]) -> Fq {
     left_fq
 }
 
+/// Computes the 3-isogeny map for G2, specified in
+/// https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-E.3
 fn iso_map(x: Fq2, y: Fq2, z: Fq2) -> (Fq2, Fq2, Fq2) {
     // Compute Z^2i for i = 1,...,15
     let mut z_pow_2i: [Fq2; 15] = [z; 15];
@@ -307,20 +311,9 @@ fn iso_map(x: Fq2, y: Fq2, z: Fq2) -> (Fq2, Fq2, Fq2) {
     (x_jac, y_jac, z_jac)
 }
 
-
+//Constants for the 3-isogeny map
 const K1: [[[u64;6];2];4] = [
-    [   
-        //k_(1,0) = 
-        // 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b5842
-        // 3c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6
-        // + 
-        // 0x
-        // 5c759507e8e333e
-        // bb5b7a9a47d7ed85
-        // 32c52d39fd3a042a
-        // 88b58423c50ae15d
-        // 5c2638e343d9c71c
-        // 6238aaaaaaaa97d6 * I
+    [
         [ 
             0x6238aaaaaaaa97d6,
             0x5c2638e343d9c71c,
@@ -339,13 +332,6 @@ const K1: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(1,1) = 0x
-        // 11560bf17baa99bc
-        // 32126fced787c88f
-        // 984f87adf7ae0c7f
-        // 9a208c6b4f20a418
-        // 1472aaa9cb8d5555
-        // 26a9ffffffffc71a * I
         [0, 0, 0, 0, 0, 0],
         [
             0x26a9ffffffffc71a,
@@ -357,21 +343,6 @@ const K1: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(1,2) = 
-        // 0x
-        // 11560bf17baa99bc
-        // 32126fced787c88f
-        // 984f87adf7ae0c7f
-        // 9a208c6b4f20a418
-        // 1472aaa9cb8d5555
-        // 26a9ffffffffc71e + 
-        // 0x
-        // 8ab05f8bdd54cde
-        // 190937e76bc3e447
-        // cc27c3d6fbd7063f
-        // cd104635a790520c
-        // 0a395554e5c6aaaa
-        // 9354ffffffffe38d * I
         [
             0x26a9ffffffffc71e,
             0x1472aaa9cb8d5555,
@@ -390,13 +361,6 @@ const K1: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(1,3) = 0x
-        // 171d6541fa38ccfa
-        // ed6dea691f5fb614
-        // cb14b4e7f4e810aa
-        // 22d6108f142b8575
-        // 7098e38d0f671c71
-        // 88e2aaaaaaaa5ed1
         [
             0x88e2aaaaaaaa5ed1,
             0x7098e38d0f671c71,
@@ -410,14 +374,7 @@ const K1: [[[u64;6];2];4] = [
 ];
 
 const K2: [[[u64;6];2];3] = [
-    [   
-        // k_(2,0) = 0x
-        // 1a0111ea397fe69a
-        // 4b1ba7b6434bacd7
-        // 64774b84f38512bf
-        // 6730d2a0f6b0f624
-        // 1eabfffeb153ffff
-        // b9feffffffffaa63 * I
+    [
         [0, 0, 0, 0, 0, 0],
         [
             0xb9feffffffffaa63,
@@ -429,13 +386,6 @@ const K2: [[[u64;6];2];3] = [
         ]
     ],
     [
-        // k_(2,1) = 0xc + 0x
-        // 1a0111ea397fe69a
-        // 4b1ba7b6434bacd7
-        // 64774b84f38512bf
-        // 6730d2a0f6b0f624
-        // 1eabfffeb153ffff
-        // b9feffffffffaa9f * I
         [0xc,0, 0, 0, 0, 0],
         [
             0xb9feffffffffaa9f,
@@ -447,7 +397,6 @@ const K2: [[[u64;6];2];3] = [
         ]
     ],
     [
-        // k_(2,2) = 1 // todo test
         [1, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0]
     ]
@@ -455,16 +404,6 @@ const K2: [[[u64;6];2];3] = [
 
 const K3: [[[u64;6];2];4] = [
     [
-        // k_(3,0) = 0x1530477c7ab4113b59a4c18b076d11930f7da5d4a07f649bf54439
-        // d87d27e500fc8c25ebf8c92f6812cfc71c71c6d706
-        //  + 
-        // 0x
-        // 1530477c7ab4113b
-        // 59a4c18b076d1193
-        // 0f7da5d4a07f649b
-        // f54439d87d27e500
-        // fc8c25ebf8c92f68
-        // 12cfc71c71c6d706 * I
         [ 
             0x12cfc71c71c6d706,
             0xfc8c25ebf8c92f68,
@@ -483,14 +422,6 @@ const K3: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(3,1) = 
-        // 0x
-        // 5c759507e8e333e
-        // bb5b7a9a47d7ed85
-        // 32c52d39fd3a042a
-        // 88b58423c50ae15d
-        // 5c2638e343d9c71c
-        // 6238aaaaaaaa97be * I
         [0, 0, 0, 0, 0, 0],
         [
             0x6238aaaaaaaa97be,
@@ -502,22 +433,6 @@ const K3: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(3,2) = 
-        // 0x
-        // 11560bf17baa99bc
-        // 32126fced787c88f
-        // 984f87adf7ae0c7f
-        // 9a208c6b4f20a418
-        // 1472aaa9cb8d5555
-        // 26a9ffffffffc71c
-        //  + 
-        // 0x
-        // 8ab05f8bdd54cde
-        // 190937e76bc3e447
-        // cc27c3d6fbd7063f
-        // cd104635a790520c
-        // 0a395554e5c6aaaa
-        // 9354ffffffffe38f * I
         [
             0x26a9ffffffffc71c,
             0x1472aaa9cb8d5555,
@@ -536,14 +451,6 @@ const K3: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(3,3) = 
-        // 0x
-        // 124c9ad43b6cf79b
-        // fbf7043de3811ad0
-        // 761b0f37a1e26286
-        // b0e977c69aa27452
-        // 4e79097a56dc4bd9
-        // e1b371c71c718b10
         [
             0xe1b371c71c718b10,
             0x4e79097a56dc4bd9,
@@ -558,20 +465,6 @@ const K3: [[[u64;6];2];4] = [
 
 const K4: [[[u64;6];2];4] = [
     [
-        // k_(4,0) = 0x
-        // 1a0111ea397fe69a
-        // 4b1ba7b6434bacd7
-        // 64774b84f38512bf
-        // 6730d2a0f6b0f624
-        // 1eabfffeb153ffff
-        // b9feffffffffa8fb
-        //  + 0x
-        // 1a0111ea397fe69a
-        // 4b1ba7b6434bacd7
-        // 64774b84f38512bf
-        // 6730d2a0f6b0f624
-        // 1eabfffeb153ffff
-        // b9feffffffffa8fb * I
         [ 
             0xb9feffffffffa8fb,
             0x1eabfffeb153ffff,
@@ -590,14 +483,6 @@ const K4: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(4,1) = 
-        // 0x
-        // 1a0111ea397fe69a
-        // 4b1ba7b6434bacd7
-        // 64774b84f38512bf
-        // 6730d2a0f6b0f624
-        // 1eabfffeb153ffff
-        // b9feffffffffa9d3 * I
         [0, 0, 0, 0, 0, 0],
         [
             0xb9feffffffffa9d3,
@@ -609,14 +494,6 @@ const K4: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(4,2) = 0x12 + 
-        // 0x
-        // 1a0111ea397fe69a
-        // 4b1ba7b6434bacd7
-        // 64774b84f38512bf
-        // 6730d2a0f6b0f624
-        // 1eabfffeb153ffff
-        // b9feffffffffaa99 * I
         [
             0x12,
             0x0,
@@ -635,7 +512,6 @@ const K4: [[[u64;6];2];4] = [
         ]
     ],
     [
-        // k_(4,3) = 1 todo test
         [1, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0]
     ]
@@ -664,7 +540,7 @@ fn horner(coefficients: &[[[u64; 6];2]], z_powers: &[Fq2], variable: &Fq2) -> Fq
 
 // Returns a point on E1 with coordinates x,y,z.
 // CAREFUL! This point is NOT guaranteed to be in the correct order subgroup
-// To get the point into the correct order subgroup, multiply by  todo fix description
+// To get the point into the correct order subgroup, clear cofactor.
 #[inline]
 fn from_coordinates_unchecked(x: Fq2, y: Fq2, z: Fq2) -> G2 {
     if z.is_zero() {
@@ -744,6 +620,7 @@ mod tests {
 
     #[test]
     fn test_hash_to_field_fq2() {
+        // https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.10.1
         let dst = b"QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
         
         {
@@ -801,24 +678,15 @@ mod tests {
     
     #[test]
     fn test_hash_to_curve_g2() {
+        // Test vectors are from https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10#appendix-J.10.1
         let dst = b"QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-        
         {
-
-
             //    msg     =
             //    P.x     = 0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a
             //        + I * 05cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d
             //    P.y     = 0503921d7f6a12805e72940b963c0cf3471c7b2a524950ca195d11062ee75ec076daf2d4bc358c4b190c0c98064fdd92
             //        + I * 12424ac32561493f3fe3c260708a12b7c620e7be00099a974e259ddc7d1f6395c3c811cdd19f1e8dbf3e9ecfdcbab8d6
-            //    Q0.x    = 019ad3fc9c72425a998d7ab1ea0e646a1f6093444fc6965f1cad5a3195a7b1e099c050d57f45e3fa191cc6d75ed7458c
-            //        + I * 171c88b0b0efb5eb2b88913a9e74fe111a4f68867b59db252ce5868af4d1254bfab77ebde5d61cd1a86fb2fe4a5a1c1d
-            //    Q0.y    = 0ba10604e62bdd9eeeb4156652066167b72c8d743b050fb4c1016c31b505129374f76e03fa127d6a156213576910fef3
-            //        + I * 0eb22c7a543d3d376e9716a49b72e79a89c9bfe9feee8533ed931cbb5373dde1fbcd7411d8052e02693654f71e15410a
-            //    Q1.x    = 113d2b9cd4bd98aee53470b27abc658d91b47a78a51584f3d4b950677cfb8a3e99c24222c406128c91296ef6b45608be
-            //        + I * 13855912321c5cb793e9d1e88f6f8d342d49c0b0dbac613ee9e17e3c0b3c97dfbb5a49cc3fb45102fdbaf65e0efe2632
-            //    Q1.y    = 0fd3def0b7574a1d801be44fde617162aa2e89da47f464317d9bb5abc3a7071763ce74180883ad7ad9a723a9afafcdca
-            //        + I * 056f617902b3c0d0f78a9a8cbda43a26b65f602f8786540b9469b060db7b38417915b413ca65f875c130bebfaa59790c
+            let msg = b"";
             let p_should_be = from_coordinates_unchecked(
                 Fq2{
                     c0: Fq::from_str("193548053368451749411421515628510806626565736652086807419354395577367693778571452628423727082668900187036482254730").unwrap(),
@@ -827,78 +695,95 @@ mod tests {
                 Fq2{
                     c0: Fq::from_str("771717272055834152378281705972671257005357145478800908373659404991537354153455452961747174765859335819766715637138").unwrap(),
                     c1: Fq::from_str("2810310118582126634041133454180705304393079139103252956502404531123692847658283858246402311867775854528543237781718").unwrap()
-                }, 
+                },
                 Fq2::one()
             );
-            let q0_should_be = from_coordinates_unchecked(Fq2{
-                c0: Fq::from_str("247000889425909073323253760662594248478519539052718751429094202182751397921429811614953873291195197910072700650892").unwrap(),
-                c1: Fq::from_str("3557179370195599083109501581838000826052321867195478666908439992121263526125384222649169667449608345548902519938077").unwrap()
-            }, Fq2{
-                c0: Fq::from_str("1789866621042807238102907475382506332034840965291028464945081245097279248221497616806901995510849528127582528143091").unwrap(),
-                c1: Fq::from_str("2261920060396917200558995605865363952988463533408187402812091326590595155556733986360256617149524560595567798206730").unwrap()
-            }, Fq2::one());
-            let q1_should_be = from_coordinates_unchecked(Fq2{
-                c0: Fq::from_str("2653316741049867356846339142779301820246227038474367602164293991028731662252487887055483099994673757855056102033598").unwrap(),
-                c1: Fq::from_str("3004540012464469496149443751502035824386563338581531881619960946487251912156763500062348703680303970725657264924210").unwrap()
-            }, Fq2{
-                c0: Fq::from_str("2436093761503339277710533452184041720241350573820092656898129088132931367043020801076222585008031239228777997258186").unwrap(),
-                c1: Fq::from_str("836535538336124528574557550904612322806859485510882466665227695209180661987073534533776044142505491651567017359628").unwrap()
-            }, Fq2::one());
-
-            let msg = b"";
-            let (u0, u1) = hash_to_field_fq2(msg, dst);
-            
-            let q0 = map_to_curve_g2(u0);
-            assert_eq!(q0, q0_should_be);
-            let q1 = map_to_curve_g2(u1);
-            assert_eq!(q1, q1_should_be);
-
-            let mut q0_q1 = q0;
-            q0_q1.add_assign(&q1);
-            
-            let q0_q1_should_be = from_coordinates_unchecked(
-                Fq2{
-                    c0: Fq::from_str("3576151885263021554666466360124354942140430658677050297214825249193929326276001232684016772595994851360561464135332").unwrap(),
-                    c1: Fq::from_str("2821452142455083490153570410796418148166760451804282889064881665228653104709356527572157380768479422686350616979303").unwrap()
-                }, 
-                Fq2{
-                    c0: Fq::from_str("204426238800908771326099593274793100995261862686675333490147960949472289586605085902183772562124346335379785706955").unwrap(),
-                    c1: Fq::from_str("1180254684154351301219628970830457422655647890399642891246036584787950247155784104616427391263848867277680278603847").unwrap()
-                }, 
-                Fq2::one()
-            ); // from Sage
-            assert_eq!(q0_q1, q0_q1_should_be);
-
-            let h_eff = Fr::from_str("209869847837335686905080341498658477663839067235703451875306851526599783796572738804459333109033834234622528588876978987822447936461846631641690358257586228683615991308971558879306463436166481").unwrap();
-            let mut q0_q1_h_eff = q0_q1;
-            q0_q1_h_eff.mul_assign(h_eff);
-
-            let q0_q1_h_eff_should_be = from_coordinates_unchecked(
-                Fq2{
-                    c0: Fq::from_str("193548053368451749411421515628510806626565736652086807419354395577367693778571452628423727082668900187036482254730").unwrap(),
-                    c1: Fq::from_str("891930009643099423308102777951250899694559203647724988361022851024990473423938537113948850338098230396747396259901").unwrap()
-                }, 
-                Fq2{
-                    c0: Fq::from_str("771717272055834152378281705972671257005357145478800908373659404991537354153455452961747174765859335819766715637138").unwrap(),
-                    c1: Fq::from_str("2810310118582126634041133454180705304393079139103252956502404531123692847658283858246402311867775854528543237781718").unwrap()
-                }, 
-                Fq2::one()
-            ); // from Sage
-            assert_eq!(p_should_be, q0_q1_h_eff_should_be);
-            // assert_eq!(q0_q1_h_eff, q0_q1_h_eff_should_be);// fails
-
-            let mut p_2 = p_should_be;
-            p_2.double();
-            println!(":  {:#?}", p_2.into_affine());
-            println!(":  {:#?}", h_eff);
-            println!(":  {:#?}", h_eff.into_repr()); // the scalar gets reduced by 52435875175126190479447740508185965837690552500527637822603658699938581184513
-
-
-            assert_eq!(clear_cofactor_g2(q0_q1), p_should_be);       
             let p = hash_to_curve_g2(msg, dst);
-
             assert_eq!(p, p_should_be);
-
+        }
+        {
+            // msg     = abc
+            // P.x     = 02c2d18e033b960562aae3cab37a27ce00d80ccd5ba4b7fe0e7a210245129dbec7780ccc7954725f4168aff2787776e6
+            //     + I * 139cddbccdc5e91b9623efd38c49f81a6f83f175e80b06fc374de9eb4b41dfe4ca3a230ed250fbe3a2acf73a41177fd8
+            // P.y     = 1787327b68159716a37440985269cf584bcb1e621d3a7202be6ea05c4cfe244aeb197642555a0645fb87bf7466b2ba48
+            //     + I * 00aa65dae3c8d732d10ecd2c50f8a1baf3001578f71c694e03866e9f3d49ac1e1ce70dd94a733534f106d4cec0eddd16
+            let msg = b"abc";
+            let p_should_be = from_coordinates_unchecked(
+                Fq2{
+                    c0: Fq::from_str("424958340463073975547762735517193206833255107941790909009827635556634414746056077714431786321247871628515967727334").unwrap(),
+                    c1: Fq::from_str("3018679803970127877262826393814472528557413504329194740495363852840690589001358162447917674089074634504498585239512").unwrap()
+                }, 
+                Fq2{
+                    c0: Fq::from_str("3621308185128395459888995526527127556614768604472132176060423302734876099689739385100475320409412954617897892887112").unwrap(),
+                    c1: Fq::from_str("102447784096837908713257069727879782642075240724579670654226801345708452018676587771714457671432122751958633012502").unwrap()
+                },
+                Fq2::one()
+            );
+            let p = hash_to_curve_g2(msg, dst);
+            assert_eq!(p, p_should_be);            
+        }
+        {
+            // msg     = abcdef0123456789
+            // P.x     = 121982811d2491fde9ba7ed31ef9ca474f0e1501297f68c298e9f4c0028add35aea8bb83d53c08cfc007c1e005723cd0
+            //     + I * 190d119345b94fbd15497bcba94ecf7db2cbfd1e1fe7da034d26cbba169fb3968288b3fafb265f9ebd380512a71c3f2c
+            // P.y     = 05571a0f8d3c08d094576981f4a3b8eda0a8e771fcdcc8ecceaf1356a6acf17574518acb506e435b639353c2e14827c8
+            //     + I * 0bb5e7572275c567462d91807de765611490205a941a5a6af3b1691bfe596c31225d3aabdf15faff860cb4ef17c7c3be
+            let msg = b"abcdef0123456789";
+            let p_should_be = from_coordinates_unchecked(
+                Fq2{
+                    c0: Fq::from_str("2785790728239146617702443308248535381016035748520698399690132325213972292102741627498014391457605127656937478044880").unwrap(),
+                    c1: Fq::from_str("3855709393631831880910167818276435187147963371126198799654803099743427431977934703201153169947378798970358200024876").unwrap()
+                }, 
+                Fq2{
+                    c0: Fq::from_str("821938378705205565995357931232097952117504537366318395539093959918654729488074273868834599496909844419980823111624").unwrap(),
+                    c1: Fq::from_str("1802420335575779950982935580421454302087567926385222707947527353462942499437987207287862072369052390195154530059198").unwrap()
+                },
+                Fq2::one()
+            );
+            let p = hash_to_curve_g2(msg, dst);
+            assert_eq!(p, p_should_be);            
+        }
+        {
+            // msg     = q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+            // P.x     = 19a84dd7248a1066f737cc34502ee5555bd3c19f2ecdb3c7d9e24dc65d4e25e50d83f0f77105e955d78f4762d33c17da
+            //     + I * 0934aba516a52d8ae479939a91998299c76d39cc0c035cd18813bec433f587e2d7a4fef038260eef0cef4d02aae3eb91
+            // P.y     = 14f81cd421617428bc3b9fe25afbb751d934a00493524bc4e065635b0555084dd54679df1536101b2c979c0152d09192
+            //     + I * 09bcccfa036b4847c9950780733633f13619994394c23ff0b32fa6b795844f4a0673e20282d07bc69641cee04f5e5662
+            let msg = b"q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+            let p_should_be = from_coordinates_unchecked(
+                Fq2{
+                    c0: Fq::from_str("3949041098513688455491231180749724794697192943196730030853285011755806989731870696216017360514887069032515603535834").unwrap(),
+                    c1: Fq::from_str("1416893694506131976809002935212216317132941942570763849323065381335907430566747765697423320407614734575486820936593").unwrap()
+                }, 
+                Fq2{
+                    c0: Fq::from_str("3227453710863835032992962605851449401391399355135442728893790186263669279022343042444878900124369614767241382891922").unwrap(),
+                    c1: Fq::from_str("1498738834073759871886466122933996764471889514532827927202777922460876335493588931070034160657995151627624577390178").unwrap()
+                },
+                Fq2::one()
+            );
+            let p = hash_to_curve_g2(msg, dst);
+            assert_eq!(p, p_should_be);            
+        }
+        {
+            //   msg     = a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            //   P.x     = 01a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534
+            //       + I * 11fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d01569
+            //   P.y     = 0b6798718c8aed24bc19cb27f866f1c9effcdbf92397ad6448b5c9db90d2b9da6cbabf48adc1adf59a1a28344e79d57e
+            //       + I * 03a47f8e6d1763ba0cad63d6114c0accbef65707825a511b251a660a9b3994249ae4e63fac38b23da0c398689ee2ab52
+            let msg = b"a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+            let p_should_be = from_coordinates_unchecked(
+                Fq2{
+                    c0: Fq::from_str("254155017921606149907129844368549510385368618440139550318910532874259603395336903946742408725761795820224536519988").unwrap(),
+                    c1: Fq::from_str("2768431459296730426779166218544149791601585986233130583011501727704972362141149700714785450629498506208393873593705").unwrap()
+                }, 
+                Fq2{
+                    c0: Fq::from_str("1755339344744337457318565116062025669984750617937721245220711425551575490663761638802010265668157125441634554205566").unwrap(),
+                    c1: Fq::from_str("560643043433789571968941329642646582974304556331567393300563909451776257854214387388500126524984624222885267024722").unwrap()
+                },
+                Fq2::one()
+            );
+            let p = hash_to_curve_g2(msg, dst);
+            assert_eq!(p, p_should_be);            
         }
     }
 }
