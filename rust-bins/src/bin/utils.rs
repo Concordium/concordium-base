@@ -54,12 +54,19 @@ fn main() -> failure::Fallible<()> {
 
 fn handle_encrypt(cfg: ConfigEncrypt) -> failure::Fallible<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
-    let pass = rpassword::read_password_from_tty(Some("Enter password to encrypt with: "))?;
-    let encrypted =
-        crypto_common::encryption::encrypt(&pass.into(), &data, &mut rand::thread_rng());
-    eprintln!("Writing output to {}", cfg.output.to_string_lossy());
-    write_json_to_file(&cfg.output, &encrypted)?;
-    Ok(())
+    loop {
+        let pass = rpassword::read_password_from_tty(Some("Enter password to encrypt with: "))?;
+        let pass2 = rpassword::read_password_from_tty(Some("Re-enter password: "))?;
+        if pass != pass2 {
+            println!("The passwords were not equal. Try again.");
+        } else {
+            let encrypted =
+                crypto_common::encryption::encrypt(&pass.into(), &data, &mut rand::thread_rng());
+            eprintln!("Writing output to {}", cfg.output.to_string_lossy());
+            write_json_to_file(&cfg.output, &encrypted)?;
+            return Ok(());
+        }
+    }
 }
 
 fn handle_decrypt(cfg: ConfigDecrypt) -> failure::Fallible<()> {

@@ -27,7 +27,7 @@ struct DecryptPrf {
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to.")]
-    out: Option<PathBuf>,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -43,7 +43,7 @@ struct Decrypt {
     )]
     ar_private: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to")]
-    out: Option<PathBuf>,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -59,7 +59,7 @@ struct CombinePrf {
     )]
     shares: Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the decryption to.")]
-    out: Option<PathBuf>,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -75,7 +75,7 @@ struct Combine {
     )]
     shares: Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the decryption to.")]
-    out: Option<PathBuf>,
+    out: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -87,7 +87,7 @@ struct ComputeRegIds {
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(long = "out", help = "File to output the RegIds to")]
-    out: Option<PathBuf>,
+    out: PathBuf,
     #[structopt(
         long = "no-secret",
         help = "Do __not__ output the decryption key together with the RegId."
@@ -243,17 +243,12 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
         }
     }
 
-    if let Some(json_file) = rid.out {
-        match write_json_to_file(&json_file, &regids) {
-            Ok(_) => eprintln!("Wrote regIds to {}.", json_file.to_string_lossy()),
-            Err(e) => {
-                eprintln!("Could not JSON write to file because {}", e);
-                eprintln!("Here are the potential accounts.");
-                output_json(&regids);
-            }
+    match write_json_to_file(&rid.out, &regids) {
+        Ok(_) => eprintln!("Wrote regIds to {}.", rid.out.to_string_lossy()),
+        Err(e) => {
+            eprintln!("Could not JSON write to file because {}", e);
+            eprintln!("Here are the potential accounts.");
         }
-    } else {
-        output_json(&regids);
     }
     Ok(())
 }
@@ -305,16 +300,11 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
         ar_identity:       ar.public_ar_info.ar_identity,
         id_cred_pub_share: m,
     };
-    if let Some(json_file) = dcr.out {
-        match write_json_to_file(&json_file, &share) {
-            Ok(_) => println!("Wrote decryption to {}", json_file.to_string_lossy()),
-            Err(e) => {
-                eprintln!("Could not write JSON to file due to {}", e);
-                output_json(&share);
-            }
+    match write_json_to_file(&dcr.out, &share) {
+        Ok(_) => println!("Wrote decryption to {}", dcr.out.to_string_lossy()),
+        Err(e) => {
+            eprintln!("Could not write JSON to file due to {}", e);
         }
-    } else {
-        output_json(&share);
     }
     Ok(())
 }
@@ -352,16 +342,11 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
         ar_identity:   ar.public_ar_info.ar_identity,
         prf_key_share: m,
     };
-    if let Some(json_file) = dcr.out {
-        match write_json_to_file(&json_file, &share) {
-            Ok(_) => println!("Wrote decryption to {}.", json_file.to_string_lossy()),
-            Err(e) => {
-                eprintln!("Could not write JSON to file because {}", e);
-                output_json(&share);
-            }
+    match write_json_to_file(&dcr.out, &share) {
+        Ok(_) => println!("Wrote decryption to {}.", dcr.out.to_string_lossy()),
+        Err(e) => {
+            eprintln!("Could not write JSON to file because {}", e);
         }
-    } else {
-        output_json(&share);
     }
     Ok(())
 }
@@ -426,23 +411,12 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 
     let id_cred_pub = reveal_id_cred_pub(&shares);
     let id_cred_pub_string = base16_encode_string(&id_cred_pub);
-    println!(
-        "IdCredPub of the credential owner is:\n {}",
-        id_cred_pub_string
-    );
-    println!(
-        "Contact the identity provider with this information to get the real-life identity of the \
-         user."
-    );
 
-    if let Some(json_file) = cmb.out {
-        let json = json!({ "idCredPub": id_cred_pub_string });
-        match write_json_to_file(&json_file, &json) {
-            Ok(_) => println!("Wrote idCredPub to {}.", json_file.to_string_lossy()),
-            Err(e) => {
-                eprintln!("Could not JSON write to file because {}", e);
-                output_json(&json);
-            }
+    let json = json!({ "idCredPub": id_cred_pub_string });
+    match write_json_to_file(&cmb.out, &json) {
+        Ok(_) => println!("Wrote idCredPub to {}.", cmb.out.to_string_lossy()),
+        Err(e) => {
+            eprintln!("Could not JSON write to file because {}", e);
         }
     }
     Ok(())
@@ -510,16 +484,11 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
 
     let prf_key = reveal_prf_key(&shares);
     let prf_key_string = base16_encode_string(&prf_key);
-    println!("PRF key is:\n {}", prf_key_string);
-
-    if let Some(json_file) = cmb.out {
-        let json = json!({ "prfKey": prf_key_string });
-        match write_json_to_file(&json_file, &json) {
-            Ok(_) => println!("Wrote PRF key to {}.", json_file.to_string_lossy()),
-            Err(e) => {
-                println!("Could not JSON write to file because {}", e);
-                output_json(&json);
-            }
+    let json = json!({ "prfKey": prf_key_string });
+    match write_json_to_file(&cmb.out, &json) {
+        Ok(_) => println!("Wrote PRF key to {}.", cmb.out.to_string_lossy()),
+        Err(e) => {
+            println!("Could not JSON write to file because {}", e);
         }
     }
     Ok(())
