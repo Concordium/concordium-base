@@ -14,6 +14,8 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Binary.Builder as BB
 import Concordium.ID.Types
+import Concordium.Types.HashableTo (HashableTo, getHash, MHashableTo)
+import qualified Concordium.Crypto.SHA256 as H
 import Data.Serialize
 import System.IO.Unsafe
 import Control.DeepSeq
@@ -60,6 +62,11 @@ instance Eq IpInfo where
 -- Show instance uses the JSON instance to pretty print the structure.
 instance Show IpInfo where
   show = BS8.unpack . ipInfoToJSON
+
+instance HashableTo H.Hash IpInfo where
+  getHash = H.hash . encode
+
+instance Monad m => MHashableTo m H.Hash IpInfo
 
 jsonToIpInfo :: BS.ByteString -> Maybe IpInfo
 jsonToIpInfo bs = IpInfo <$> fromJSONHelper freeIpInfo ipInfoFromJSONFFI bs
