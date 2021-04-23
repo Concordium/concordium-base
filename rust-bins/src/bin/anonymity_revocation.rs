@@ -488,7 +488,7 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
     match write_json_to_file(&cmb.out, &json) {
         Ok(_) => println!("Wrote PRF key to {}.", cmb.out.to_string_lossy()),
         Err(e) => {
-            println!("Could not JSON write to file because {}", e);
+            println!("Could not write to file because {}", e);
         }
     }
     Ok(())
