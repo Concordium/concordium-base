@@ -18,6 +18,8 @@ import Control.DeepSeq
 import System.IO.Unsafe
 
 import Concordium.ID.Types
+import Concordium.Types.HashableTo (HashableTo, getHash, MHashableTo)
+import qualified Concordium.Crypto.SHA256 as H
 
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Encoding as AE
@@ -61,6 +63,11 @@ instance Eq ArInfo where
 -- Show instance uses the JSON instance to pretty print the structure.
 instance Show ArInfo where
   show = BS8.unpack . arInfoToJSON
+
+instance HashableTo H.Hash ArInfo where
+  getHash = H.hash . encode
+
+instance Monad m => MHashableTo m H.Hash ArInfo
 
 jsonToArInfo :: BS.ByteString -> Maybe ArInfo
 jsonToArInfo bs = ArInfo <$> fromJSONHelper freeArInfo arInfoFromJSONFFI bs

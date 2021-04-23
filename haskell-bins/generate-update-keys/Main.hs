@@ -67,7 +67,9 @@ data GenerateUpdateKeys
         gukMintDistribution :: AuthDetails,
         gukTransactionFeeDistribution :: AuthDetails,
         gukGASRewards :: AuthDetails,
-        gukBakerStakeThreshold :: AuthDetails
+        gukBakerStakeThreshold :: AuthDetails,
+        gukAddAnonymityRevoker :: AuthDetails,
+        gukAddIdentityProvider :: AuthDetails
     } deriving (Show)
 
 readKeyList :: ReadM [Word16]
@@ -92,6 +94,8 @@ parameters = GenerateUpdateKeys
     <*> option readAuthDetails (metavar "ACSTR" <> long "fee-distribution" <> help "Transaction fee distribution update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "gas-rewards" <> help "GAS rewards update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "baker-minimum-threshold" <> help "Baker minimum threshold access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "add-anonymity-revoker" <> help "Add anonymity revoker access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "add-identity-provider" <> help "Add identity provider access structure")
 
 main :: IO ()
 main = customExecParser p opts >>= generateKeys
@@ -123,6 +127,8 @@ generateKeys GenerateUpdateKeys{..} = do
         asParamTransactionFeeDistribution <- makeAS gukTransactionFeeDistribution "Transaction fee distribution update access structure"
         asParamGASRewards <- makeAS gukGASRewards "GAS rewards update access structure"
         asBakerStakeThreshold <- makeAS gukBakerStakeThreshold "Baker minimum threshold access structure"
+        asAddAnonymityRevoker <- makeAS gukAddAnonymityRevoker "Add anonymity revoker access structure"
+        asAddIdentityProvider <- makeAS gukAddIdentityProvider "Add identity provider access structure"
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..gukKeyCount-1]]
         rootKeys <- makeHAS gukRootKeys "root-key" "Root key structure"

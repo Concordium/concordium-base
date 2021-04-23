@@ -47,6 +47,8 @@ genAuthorizations = do
     asParamTransactionFeeDistribution <- genAccessStructure
     asParamGASRewards <- genAccessStructure
     asBakerStakeThreshold <- genAccessStructure
+    asAddAnonymityRevoker <- genAccessStructure
+    asAddIdentityProvider <- genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -173,6 +175,8 @@ genAuthorizationsAndKeys thr = do
         asParamTransactionFeeDistribution <- genAccessStructure
         asParamGASRewards <- genAccessStructure
         asBakerStakeThreshold <- genAccessStructure
+        asAddAnonymityRevoker <- genAccessStructure
+        asAddIdentityProvider <- genAccessStructure
         return (Authorizations{..}, kps)
 
 genLevel1Keys ::
