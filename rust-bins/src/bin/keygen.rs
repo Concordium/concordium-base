@@ -122,28 +122,18 @@ fn output_possibly_encrypted<X: SerdeSerialize>(
     fname: &PathBuf,
     data: &X,
 ) -> Result<(), std::io::Error> {
-    loop {
-        let pass = rpassword::read_password_from_tty(Some(
-            "Enter password to encrypt credentials (leave empty for no encryption): ",
-        ))?;
-        if pass.is_empty() {
-            println!("No password supplied, so output will not be encrypted.");
-            return write_json_to_file(fname, data);
-        } else {
-            let pass2 = rpassword::read_password_from_tty(Some("Re-enter password: "))?;
-            if pass != pass2 {
-                println!("Passwords were not equal. Try again.");
-            } else {
-                let plaintext =
-                    serde_json::to_vec(data).expect("JSON serialization does not fail.");
-                let encrypted = crypto_common::encryption::encrypt(
-                    &pass.into(),
-                    &plaintext,
-                    &mut rand::thread_rng(),
-                );
-                return write_json_to_file(fname, &encrypted);
-            }
-        }
+    let pass = ask_for_password_confirm(
+        "Enter password to encrypt credentials (leave empty for no encryption): ",
+        true,
+    )?;
+    if pass.is_empty() {
+        println!("No password supplied, so output will not be encrypted.");
+        write_json_to_file(fname, data)
+    } else {
+        let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
+        let encrypted =
+            crypto_common::encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
+        write_json_to_file(fname, &encrypted)
     }
 }
 
