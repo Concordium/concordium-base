@@ -416,7 +416,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
     match write_json_to_file(&cmb.out, &json) {
         Ok(_) => println!("Wrote idCredPub to {}.", cmb.out.to_string_lossy()),
         Err(e) => {
-            eprintln!("Could not JSON write to file because {}", e);
+            eprintln!("Could not write to file because {}", e);
         }
     }
     Ok(())
