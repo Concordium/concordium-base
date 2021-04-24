@@ -122,9 +122,10 @@ fn output_possibly_encrypted<X: SerdeSerialize>(
     fname: &PathBuf,
     data: &X,
 ) -> Result<(), std::io::Error> {
-    let pass = rpassword::read_password_from_tty(Some(
+    let pass = ask_for_password_confirm(
         "Enter password to encrypt credentials (leave empty for no encryption): ",
-    ))?;
+        true,
+    )?;
     if pass.is_empty() {
         println!("No password supplied, so output will not be encrypted.");
         write_json_to_file(fname, data)

@@ -167,3 +167,23 @@ where
     let u = serde_json::from_reader(reader)?;
     Ok(u)
 }
+
+/// Ask for a password and a confirmation
+/// It doesn't ask for a confirmation if `skip_if_empty` is `true` and the
+/// password is empty
+pub fn ask_for_password_confirm(
+    prompt: &str,
+    skip_if_empty: bool,
+) -> Result<String, std::io::Error> {
+    loop {
+        let pass = rpassword::read_password_from_tty(Some(prompt))?;
+        if !(skip_if_empty && pass.is_empty()) {
+            let pass2 = rpassword::read_password_from_tty(Some("Re-enter password: "))?;
+            if pass != pass2 {
+                println!("Passwords were not equal. Try again.");
+                continue;
+            }
+        }
+        return Ok(pass);
+    }
+}
