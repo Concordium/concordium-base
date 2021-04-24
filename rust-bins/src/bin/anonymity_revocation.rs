@@ -246,8 +246,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
     match write_json_to_file(&rid.out, &regids) {
         Ok(_) => eprintln!("Wrote regIds to {}.", rid.out.to_string_lossy()),
         Err(e) => {
-            eprintln!("Could not JSON write to file because {}", e);
-            eprintln!("Here are the potential accounts.");
+            eprintln!("Could not JSON write to file due to {}", e);
         }
     }
     Ok(())
