@@ -54,7 +54,7 @@ fn main() -> failure::Fallible<()> {
 
 fn handle_encrypt(cfg: ConfigEncrypt) -> failure::Fallible<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
-    let pass = rpassword::read_password_from_tty(Some("Enter password to encrypt with: "))?;
+    let pass = ask_for_password_confirm("Enter password to encrypt with: ", false)?;
     let encrypted =
         crypto_common::encryption::encrypt(&pass.into(), &data, &mut rand::thread_rng());
     eprintln!("Writing output to {}", cfg.output.to_string_lossy());
