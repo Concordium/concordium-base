@@ -556,7 +556,7 @@ fn from_coordinates_unchecked(x: Fq2, y: Fq2, z: Fq2) -> G2 {
         // at least one of the bits representing 2^5, 2^6 or 2^7 in the first entry of
         // the `uncompress_point` are set, but this will not happen.
         // c1 lies in Fq, where
-        // w = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787,
+        // q = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787,
         // and since 27 * 2^(47*8) > q, the first entry of
         // `uncompress_point` will always be < 27 < 2^5, since this entry
         // represents the number of 2^(47*8)'s.
