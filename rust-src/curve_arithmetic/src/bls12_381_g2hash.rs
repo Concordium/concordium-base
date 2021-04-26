@@ -555,40 +555,19 @@ fn from_coordinates_unchecked(x: Fq2, y: Fq2, z: Fq2) -> G2 {
         // The into_affine_unchecked() used below can fail if
         // at least one of the bits representing 2^5, 2^6 or 2^7 in the first entry of
         // the `uncompress_point` are set, but this will not happen.
-        // The field size q is
-        // 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787,
-        // and and since 27 * 2^(47*8) > q, the first entry of
+        // c1 lies in Fq, where
+        // w = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787,
+        // and since 27 * 2^(47*8) > q, the first entry of
         // `uncompress_point` will always be < 27 < 2^5, since this entry
         // represents the number of 2^(47*8)'s.
         let res = uncompress_point.into_affine_unchecked();
-        G2::from(res.expect("Should not happen, since input coordinates are in Fq."))
+        G2::from(res.expect("Should not happen, since input coordinates are in Fq2."))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn assert_on_curve_iso(x: Fq2, y: Fq2) {
-        let a = Fq2 {
-            c0: Fq::zero(),
-            c1: Fq::from_repr(FqRepr::from(240)).unwrap(),
-        };
-        let b = Fq2 {
-            c0: Fq::from_repr(FqRepr::from(1012)).unwrap(),
-            c1: Fq::from_repr(FqRepr::from(1012)).unwrap(),
-        };
-        let mut y2 = y;
-        y2.square();
-
-        let mut x3axb = x;
-        x3axb.square();
-        x3axb.add_assign(&a);
-        x3axb.mul_assign(&x);
-        x3axb.add_assign(&b);
-
-        assert_eq!(y2, x3axb);
-    }
 
     #[test]
     fn test_hash_to_field_fq2() {
