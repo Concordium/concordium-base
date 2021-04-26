@@ -1,4 +1,5 @@
 pub(crate) mod bls12_381_g1hash;
+pub(crate) mod bls12_381_g2hash;
 mod bls12_381_instance;
 mod curve_arithmetic;
 pub use crate::curve_arithmetic::*;
