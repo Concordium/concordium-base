@@ -32,7 +32,6 @@ Generate keys for the identity provider. The following options are supported
 - `--ip-identity` is the integer identifying the identity provider on the chain. This needs to be unique among
   identity providers. It has no special meaning
 - `--description` string, a free-form description containing information that users will want to see about the identity provider
-- `--global` a filename, containing cryptographic parameters of the chain anonymity revokers will be a part of.
 - `--name` a string, a simple identifier of the identity provider. Chosen by themselves.
 - `--url` a URL with the website of the identity provider
 - `--rand-input`, a filename with the randomness input. It must contain at least 64 bytes.
@@ -84,7 +83,7 @@ while the content of ar_keys_pub.json will be
 ### Generating identity provider signature keys
 Run
 ```console
-./keygen keygen-ip --rand-input bytes.txt --ip-identity 1 --name "Some name" --description "Some description" --url "Some url" --global cryptographic-parameters.json --out ip_keys.json --out-pub  "ip_keys_pub.json"
+./keygen keygen-ip --rand-input bytes.txt --ip-identity 1 --name "Some name" --description "Some description" --url "Some url" --out ip_keys.json --out-pub  "ip_keys_pub.json"
 Wrote private to ip_keys.json.
 Wrote public keys to ip_keys_pub.json.
 ```
