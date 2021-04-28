@@ -13,8 +13,8 @@ use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct KeygenIp {
-    #[structopt(long = "rand-input", help = "File with seed.")]
-    rand_input: PathBuf,
+    #[structopt(long = "seed", help = "File with seed.")]
+    seed: PathBuf,
     #[structopt(
         long = "ip-identity",
         help = "The integer identifying the identity provider"
@@ -38,8 +38,8 @@ struct KeygenIp {
 
 #[derive(StructOpt)]
 struct KeygenAr {
-    #[structopt(long = "rand-input", help = "File with seed.")]
-    rand_input: PathBuf,
+    #[structopt(long = "seed", help = "File with seed.")]
+    seed: PathBuf,
     #[structopt(
         long = "ar-identity",
         help = "The integer identifying the anonymity revoker"
@@ -105,7 +105,7 @@ macro_rules! succeed_or_die {
 }
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
-    let bytes_from_file = succeed_or_die!(fs::read(kgar.rand_input), e => "Could not read random input from provided file because {}");
+    let bytes_from_file = succeed_or_die!(fs::read(kgar.seed), e => "Could not read random input from provided file because {}");
     let generator = G1::hash_to_group(&bytes_from_file);
     let key = G1::hash_to_group(&to_bytes(&generator));
     let ar_public_key = PublicKey { generator, key };
@@ -136,7 +136,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 }
 
 fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
-    let bytes_from_file = succeed_or_die!(fs::read(kgip.rand_input), e => "Could not read random input from provided file because {}");
+    let bytes_from_file = succeed_or_die!(fs::read(kgip.seed), e => "Could not read random input from provided file because {}");
     let ip_public_key = generate_ps_pk(kgip.bound, &bytes_from_file);
 
     let ip_cdi_verify_key = hash_to_ed25519(&bytes_from_file).unwrap();
