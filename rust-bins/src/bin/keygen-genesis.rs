@@ -1,15 +1,15 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
+use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve_arithmetic::Curve;
+use ed25519_dalek::*;
 use elgamal::PublicKey;
 use id::types::*;
+use pairing::bls12_381::{Bls12, G1, G2};
 use sha2::Sha512;
 use std::{fs, path::PathBuf};
 use structopt::StructOpt;
-use curve25519_dalek::edwards::CompressedEdwardsY;
-use ed25519_dalek::*;
-use pairing::bls12_381::{Bls12, G1, G2};
 
 #[derive(StructOpt)]
 struct KeygenIp {
@@ -108,10 +108,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     let bytes_from_file = succeed_or_die!(fs::read(kgar.rand_input), e => "Could not read random input from provided file because {}");
     let generator = G1::hash_to_group(&bytes_from_file);
     let key = G1::hash_to_group(&to_bytes(&generator));
-    let ar_public_key = PublicKey {
-        generator,
-        key
-    };
+    let ar_public_key = PublicKey { generator, key };
     let ar_identity = kgar.ar_identity;
     let name = kgar.name;
     let url = kgar.url;
