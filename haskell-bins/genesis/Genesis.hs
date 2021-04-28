@@ -5,8 +5,10 @@ module Main where
 import System.Exit
 import System.Console.CmdArgs
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Char8 as LBS8
 import qualified Data.Map.Strict as OrdMap
 import Data.Aeson
+import Data.Aeson.Encode.Pretty
 import qualified Data.Serialize as S
 import Control.Monad
 import Text.Printf
@@ -15,6 +17,7 @@ import Lens.Micro.Platform
 import qualified Data.Vector as Vec
 import Data.Foldable
 import Data.Maybe
+import Data.Ratio
 import System.FilePath
 
 import Data.Text(Text)
@@ -191,10 +194,10 @@ main = cmdArgsRun mode >>=
               putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
               putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
               putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-              putStrLn $ "  - skip shrink factor: " ++ show finalizationSkipShrinkFactor
-              putStrLn $ "  - skip grow factor: " ++ show finalizationSkipGrowFactor
-              putStrLn $ "  - delay shrink factor: " ++ show finalizationDelayShrinkFactor
-              putStrLn $ "  - delay grow factor: " ++ show finalizationDelayGrowFactor
+              putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
+              putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
+              putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
+              putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
               putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
 
               putStrLn ""
@@ -207,13 +210,13 @@ main = cmdArgsRun mode >>=
               putStrLn "Genesis data."
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
-              putStrLn $ "Genesis nonce: " ++ show genesisLeadershipElectionNonce
+              putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
               putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
 
               let totalGTU = sum (gaBalance <$> genesisAccounts)
 
               putStrLn ""
-              putStrLn $ "Genesis total GTU: " ++ show totalGTU
+              putStrLn $ "Genesis total GTU: " ++ amountToString totalGTU
               putStrLn $ "Maximum block energy: " ++ show genesisMaxBlockEnergy
 
               putStrLn ""
@@ -222,18 +225,18 @@ main = cmdArgsRun mode >>=
               putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
               putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
               putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-              putStrLn $ "  - skip shrink factor: " ++ show finalizationSkipShrinkFactor
-              putStrLn $ "  - skip grow factor: " ++ show finalizationSkipGrowFactor
-              putStrLn $ "  - delay shrink factor: " ++ show finalizationDelayShrinkFactor
-              putStrLn $ "  - delay grow factor: " ++ show finalizationDelayGrowFactor
+              putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
+              putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
+              putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
+              putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
               putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
 
               let ChainParameters{..} = genesisChainParameters
               putStrLn ""
               putStrLn "Chain parameters: "
               putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
-              putStrLn $ "  - Euro per Energy rate: " ++ show _cpEuroPerEnergy
-              putStrLn $ "  - microGTU per Euro rate: " ++ show _cpMicroGTUPerEuro
+              putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate _cpEuroPerEnergy
+              putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate _cpMicroGTUPerEuro
               putStrLn $ "  - baker extra cooldown epochs: " ++ show _cpBakerExtraCooldownEpochs
               putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
               putStrLn "  - reward parameters:"
@@ -252,25 +255,31 @@ main = cmdArgsRun mode >>=
 
               let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
                     Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
-                    Just acc -> show (gaAddress acc) ++ " (" ++ show _cpFoundationAccount ++ ")"
+                    Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
               putStrLn $ "  - foundation account: " ++ foundAcc
 
               putStrLn ""
-              putStrLn $ "Cryptographic parameters: " ++ show genesisCryptographicParameters
+              putStrLn $ "Cryptographic parameters: "
+              putStrLn $ "  - " ++ showAsJSON 3 genesisCryptographicParameters
 
               putStrLn ""
-              putStrLn $ "There are " ++ show (OrdMap.size (idProviders genesisIdentityProviders)) ++ " identity providers in genesis."
+              putStrLn "Identity providers: "
+              forM_ (OrdMap.toAscList (idProviders genesisIdentityProviders)) $ \(ipId, ipData) ->
+                putStrLn $ "  - " ++ show ipId ++ ": " ++ showAsJSON (6 + length (show ipId)) ipData
 
               putStrLn ""
-              putStrLn $ "There are " ++ show (OrdMap.size (arRevokers genesisAnonymityRevokers)) ++ " anonymity revokers in genesis."
+              putStrLn "Anonymity revokers: "
+              forM_ (OrdMap.toAscList (arRevokers genesisAnonymityRevokers)) $ \(arId, arData) ->
+                putStrLn $ "  - " ++ show arId ++ ": " ++ showAsJSON (6 + length (show arId)) arData
 
+              putStrLn ""
               let bkrs = catMaybes (gaBaker <$> toList genesisAccounts)
               let bkrTotalStake = foldl' (+) 0 (gbStake <$> bkrs)
               putStrLn $ "\nThere are " ++ show (length bkrs) ++ " bakers with total stake: " ++ showBalance totalGTU bkrTotalStake
 
               putStrLn ""
               putStrLn "Genesis accounts:"
-              forM_ genesisAccounts (showAccount totalGTU)
+              forM_ genesisAccounts (showAccount bkrTotalStake totalGTU)
 
               let UpdateKeysCollection{level2Keys = Authorizations{..}, ..} = genesisUpdateKeys
               putStrLn ""
@@ -298,19 +307,34 @@ main = cmdArgsRun mode >>=
   where showTime t = formatTime defaultTimeLocale rfc822DateFormat (timestampToUTCTime t)
         showBalance totalGTU balance =
             printf "%s (= %.4f%%)" (amountToString balance) (100 * (fromIntegral balance / fromIntegral totalGTU) :: Double)
-        showAccount totalGTU GenesisAccount{..} = do
+        showAccount bkrTotalStake totalGTU GenesisAccount{..} = do
           putStrLn $ "  - " ++ show gaAddress
           putStrLn $ "     * balance: " ++ showBalance totalGTU gaBalance
           putStrLn $ "     * threshold: " ++ show (gaThreshold)
-          -- putStrLn $ "     * keys: "
-          -- forM_ (OrdMap.toList (akKeys gaVerifyKeys)) $ \(idx, k) ->
-          --   putStrLn $ "       - " ++ show idx ++ ": " ++ show k
+          putStrLn $ "     * credentials: "
+          forM_ (OrdMap.toAscList gaCredentials) $ \(idx, k) ->
+            putStrLn $ "       - " ++ show idx ++ ": " ++ showAsJSON (11 + length (show idx)) k
           forM_ gaBaker $ \GenesisBaker{..} -> do
             putStrLn $ "     * baker:"
             putStrLn $ "       + id: " ++ show gbBakerId
-            putStrLn $ "       + stake: " ++ showBalance totalGTU gbStake
+            putStrLn $ "       + stake: " ++ showBalance bkrTotalStake gbStake
             putStrLn $ "       + election key: " ++ show gbElectionVerifyKey
             putStrLn $ "       + signature key: " ++ show gbSignatureVerifyKey
             putStrLn $ "       + aggregation key: " ++ show gbAggregationVerifyKey
             putStrLn $ "       + earnings are " ++ (if gbRestakeEarnings then "" else "not ") ++ "restaked"
+        -- Use the JSON instance and pretty print it, indenting everything but the first line by the stated amount.
+        showAsJSON :: ToJSON a => Int -> a -> String
+        showAsJSON indent v =
+          let bs = encodePretty v
+              offset = replicate indent ' '
+              indentLine :: Int -> LBS8.ByteString -> LBS8.ByteString
+              indentLine idx line = if idx > 0 then LBS8.pack offset <> line else line
+          in LBS8.unpack . LBS8.unlines . zipWith indentLine [0..] $ (LBS8.lines bs)
         printAccessStructure n AccessStructure{..} = putStrLn $ "  - " ++ n ++ " update: " ++ show accessThreshold ++ " of " ++ show (toList accessPublicKeys)
+
+        showRatio r =
+          let num = numerator r
+              den = denominator r
+          in show num ++ " / " ++ show den ++ " (approx " ++ show (realToFrac r :: Double) ++ ")"
+
+        showExchangeRate (ExchangeRate r) = showRatio r

@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7eaa7403793b3e5ab92a451a158a922442f53c3399265692e643144111450e6c
+-- hash: bee12c1a1aa1edcfaed5a30df0cb5d539332b071c1d34ad598ee6edfcc35b64b
 
 name:           concordium-base
 version:        0.1.0.0
@@ -193,6 +193,7 @@ executable genesis
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , aeson-pretty >=0.8
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0

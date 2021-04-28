@@ -236,7 +236,7 @@ type UpdateKeyIndex = Word16
 -- |A wrapper over Word16 to ensure on Serialize.get and Aeson.parseJSON that it
 -- is not zero and it doesn't exceed the max value.
 newtype UpdateKeysThreshold = UpdateKeysThreshold { uktTheThreshold :: Word16 }
- deriving (Show, Eq, Enum, Num, Real, Ord, Integral, AE.ToJSON, AE.FromJSON)
+ deriving newtype (Show, Eq, Enum, Num, Real, Ord, Integral, AE.ToJSON, AE.FromJSON)
 
 instance Serialize UpdateKeysThreshold where
   put = putWord16be . uktTheThreshold
