@@ -4,20 +4,16 @@ use crypto_common::*;
 use curve_arithmetic::Curve;
 use elgamal::PublicKey;
 use id::types::*;
-use std::convert::TryFrom;
-
-use pairing::bls12_381::Bls12;
 use sha2::Sha512;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use structopt::StructOpt;
-
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use ed25519_dalek::*;
-use pairing::bls12_381::{G1, G2};
-use std::fs;
+use pairing::bls12_381::{Bls12, G1, G2};
+
 #[derive(StructOpt)]
 struct KeygenIp {
-    #[structopt(long = "rand-input", help = "File with randomness.")]
+    #[structopt(long = "rand-input", help = "File with seed.")]
     rand_input: PathBuf,
     #[structopt(
         long = "ip-identity",
@@ -42,13 +38,13 @@ struct KeygenIp {
 
 #[derive(StructOpt)]
 struct KeygenAr {
-    #[structopt(long = "rand-input", help = "File with randomness.")]
+    #[structopt(long = "rand-input", help = "File with seed.")]
     rand_input: PathBuf,
     #[structopt(
         long = "ar-identity",
         help = "The integer identifying the anonymity revoker"
     )]
-    ar_identity: u32,
+    ar_identity: ArIdentity,
     #[structopt(long = "name", help = "Name of the anonymity revoker")]
     name: String,
     #[structopt(long = "url", help = "url to anonymity revoker")]
@@ -61,9 +57,9 @@ struct KeygenAr {
 
 #[derive(StructOpt)]
 #[structopt(
-    about = "Tool for generating keys for genesis",
+    about = "Keys for identity providers and anonymity revokers for genesis",
     author = "Concordium",
-    version = "0.2"
+    version = "1"
 )]
 enum KeygenTool {
     #[structopt(name = "keygen-ip", about = "Generate identity provider keys")]
@@ -110,19 +106,13 @@ macro_rules! succeed_or_die {
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     let bytes_from_file = succeed_or_die!(fs::read(kgar.rand_input), e => "Could not read random input from provided file because {}");
-    if bytes_from_file.len() < 64 {
-        return Err("Provided randomness should be of size at least 64 bytes".to_string());
-    }
-    let mut bytes = bytes_from_file;
-    bytes.extend_from_slice(b"concordium_generator");
-    let generator = G1::hash_to_group(&bytes);
-    bytes.extend_from_slice(b"concordium_ar_public_key");
+    let generator = G1::hash_to_group(&bytes_from_file);
+    let key = G1::hash_to_group(&to_bytes(&generator));
     let ar_public_key = PublicKey {
         generator,
-        key: G1::hash_to_group(&bytes),
+        key
     };
-    let id = kgar.ar_identity;
-    let ar_identity = ArIdentity::try_from(id).unwrap();
+    let ar_identity = kgar.ar_identity;
     let name = kgar.name;
     let url = kgar.url;
     let description = kgar.description;
@@ -150,9 +140,6 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 
 fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     let bytes_from_file = succeed_or_die!(fs::read(kgip.rand_input), e => "Could not read random input from provided file because {}");
-    if bytes_from_file.len() < 64 {
-        return Err("Provided randomness should be of size at least 64 bytes".to_string());
-    }
     let ip_public_key = generate_ps_pk(kgip.bound, &bytes_from_file);
 
     let ip_cdi_verify_key = hash_to_ed25519(&bytes_from_file).unwrap();
