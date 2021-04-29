@@ -206,8 +206,8 @@ main = cmdArgsRun mode >>=
               putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
               putStrLn $ "State hash: " ++ show genesisStateHash
 
-            Right (GDP1 P1.GDP1Initial{genesisCore = P1.CoreGenesisParameters{..}, genesisInitialState = P1.GenesisState{..}}) -> do
-              putStrLn "Genesis data."
+            Right gd@(GDP1 P1.GDP1Initial{genesisCore = P1.CoreGenesisParameters{..}, genesisInitialState = P1.GenesisState{..}}) -> do
+              putStrLn $ "Genesis data for genesis block with hash " ++ show (genesisBlockHash gd)
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
               putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
