@@ -1,13 +1,11 @@
-# Key generation tool
-The key generation tool can generate encryption keys for anonymity revokers and signature keys for identity providers. The tool can be found in [../src/bin/keygen.rs](../src/bin/keygen.rs).
+# Key generation tool for genesis
+The key generation tool for genesis can generate public encryption keys for anonymity revokers and public signature keys for identity providers needed for genesis. The tool can be found in [../src/bin/keygen-genesis.rs](../src/bin/keygen-genesis.rs).
 
 The keygen tool can
-- generate keys for anonymity revokers via the subcommand `keygen-ar`
-- generate keys for identity providers via the subcommand `keygen-ip`
+- generate public keys for anonymity revokers via the subcommand `keygen-ar`
+- generate public keys for identity providers via the subcommand `keygen-ip`
 
-Both in a format that can be used to include the public keys in genesis, and used by other tools.
-Private keys can be emitted either as plaintext or password encrypted.
-The too ask for a password before emitting private keys. If the empty password is used then the keys are not going to be encrypted, otherwise they will be.
+This tool only outputs the public keys to be used in genesis.
 
 To see all the options use the `--help` option at different levels.
 
