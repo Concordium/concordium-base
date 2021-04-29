@@ -9,7 +9,7 @@ This tool only outputs the public keys to be used in genesis.
 
 To see all the options use the `--help` option at different levels.
 
-The tool generates keys deterministically from the given randomness file.
+The tool generates keys deterministically from the given seed file.
 
 ## keygen-ar
 
