@@ -304,6 +304,9 @@ main = cmdArgsRun mode >>=
               printAccessStructure "mint distribution" asParamMintDistribution
               printAccessStructure "transaction fee distribution" asParamTransactionFeeDistribution
               printAccessStructure "gas reward parameters" asParamGASRewards
+              printAccessStructure "baker stake threshold" asBakerStakeThreshold
+              printAccessStructure "add anonymity revokers" asAddAnonymityRevoker
+              printAccessStructure "add identity providers" asAddIdentityProvider
 
   where showTime t = formatTime defaultTimeLocale rfc822DateFormat (timestampToUTCTime t)
         showBalance totalGTU balance =
