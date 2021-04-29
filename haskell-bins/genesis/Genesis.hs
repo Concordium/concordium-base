@@ -239,6 +239,7 @@ main = cmdArgsRun mode >>=
               putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate _cpMicroGTUPerEuro
               putStrLn $ "  - baker extra cooldown epochs: " ++ show _cpBakerExtraCooldownEpochs
               putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+              putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU _cpBakerStakeThreshold
               putStrLn "  - reward parameters:"
               putStrLn "    + mint distribution:"
               putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
