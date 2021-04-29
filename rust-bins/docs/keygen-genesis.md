@@ -35,7 +35,7 @@ Generate keys for the identity provider. The following options are supported
 - `--bound`, upper bound on the number of length of vectors the identity provider's key. See the Pointcheval-Sanders signatures scheme for details of what this means. This defaults to 30 which is sufficient for the current numbers.
 
 # Examples
-In the following it is assumed that this file is called bytes.txt and has the content `12345678901234567890123456789012345678904989849123456789012345678901231`.
+In the following it is assumed that the seed file is called bytes.txt and has the content `12345678901234567890123456789012345678904989849123456789012345678901231`.
 
 ## Generating anonymity revoker public encryption keys
 Run
