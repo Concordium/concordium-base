@@ -76,7 +76,7 @@ struct KeygenAr {
 }
 
 #[derive(StructOpt)]
-struct KeygenRand {
+struct GenRand {
     #[structopt(
         long = "in",
         help = "File containing input words. If not provided, words are read from stdin."
@@ -111,8 +111,8 @@ enum KeygenTool {
     KeygenIp(KeygenIp),
     #[structopt(name = "keygen-ar", about = "Generate anonymity revoker keys")]
     KeygenAr(KeygenAr),
-    #[structopt(name = "keygen-rand", about = "Generate randomness file")]
-    KeygenRand(KeygenRand),
+    #[structopt(name = "gen-rand", about = "Generate randomness file")]
+    GenRand(GenRand),
 }
 
 fn main() {
@@ -133,8 +133,8 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        KeygenRand(kgrand) => {
-            if let Err(e) = handle_generate_randomness(kgrand) {
+        GenRand(grand) => {
+            if let Err(e) = handle_generate_randomness(grand) {
                 eprintln!("{}", e)
             }
         }
@@ -293,7 +293,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     Ok(())
 }
 
-fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
+fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
     // Read word list and make sure it contains 2048 words.
     let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt").split_whitespace().collect();
     if bip39_vec.len() != 2048 {
@@ -308,15 +308,15 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
     }
 
      // Ensure that input length is in allowed set if verification is enabled.
-     if !kgrand.no_verification {
-        match kgrand.in_len {
+     if !grand.no_verification {
+        match grand.in_len {
             12 | 15 | 18 | 21 | 24 => (),
             _ => return Err("The input length for a valid BIP39 sentence must be in {12, 15, 18, 21, 24}.".to_string()),
         };
     }
 
     // get vector of input words from file or stdin
-    let input_words: Vec<_> = match kgrand.input_path {
+    let input_words: Vec<_> = match grand.input_path {
         // if input_path is provided, read file
         Some(path) => {
             let word_string = succeed_or_die!(
@@ -324,11 +324,11 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
                 e => "Could not read input from provided file because {}"
             );
             let word_list: Vec<String> = word_string.split_whitespace().map(str::to_owned).collect();
-            if word_list.len() != kgrand.in_len as usize {
+            if word_list.len() != grand.in_len as usize {
                 return Err(format!(
                     "The provided input file contains {} words, but it should contain {} words.",
                     word_list.len(),
-                    kgrand.in_len
+                    grand.in_len
                 ));
             }
             word_list
@@ -336,11 +336,11 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
         // if input_path is not provided, read words from stdin
         None => {
             let mut word_list = Vec::<String>::new();
-            for i in 1..=kgrand.in_len {
+            for i in 1..=grand.in_len {
                 // read the ith word from stdin,
                 // using BIP39 verification if no_verification is not set
                 let word = succeed_or_die!(
-                    match kgrand.no_verification {
+                    match grand.no_verification {
                         true => read_word(i),
                         false => read_bip39_word(i, &bip39_map),
                     },
@@ -353,7 +353,7 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
     };
 
     // verify whether input_words is a valid BIP39 sentence if check is not disabled
-    if !kgrand.no_verification {
+    if !grand.no_verification {
         if !verify_bib39(&input_words, &bip39_map) {
             return Err("The input does not constitute a valid BIP39 sentence.".to_string());
         }
@@ -387,7 +387,7 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
     let output_words = bytes_to_bip39(&prk, &bip39_vec)?;
     let output_str = output_words.join("\n"); // one word per line
     let mut file = succeed_or_die!(
-        File::create(kgrand.output_path),
+        File::create(grand.output_path),
         e => "Could not write output because {}"
     );    
     succeed_or_die!(
