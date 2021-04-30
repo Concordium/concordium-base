@@ -88,7 +88,7 @@ struct KeygenRand {
 
     #[structopt(
         long = "in-len",
-        help = "Number of words provided as input. Must be in {12, 15, 18, 21, 24}.",
+        help = "Number of words provided as input. Must be in {12, 15, 18, 21, 24} to constitute a valid BIP39 sentences. If --no-verification is used, arbitrary values are allowed.",
         default_value = "24"
     )]
     in_len: u8,
@@ -307,12 +307,14 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
         bip39_map.insert(bip39_vec[i], i);
     }
 
-    // Ensure that length parameters are in allowed set.
-    match kgrand.in_len {
-        12 | 15 | 18 | 21 | 24 => (),
-        _ => return Err("The input length must be in {12, 15, 18, 21, 24}.".to_string()),
-    };
-    
+     // Ensure that input length is in allowed set if verification is enabled.
+     if !kgrand.no_verification {
+        match kgrand.in_len {
+            12 | 15 | 18 | 21 | 24 => (),
+            _ => return Err("The input length for a valid BIP39 sentence must be in {12, 15, 18, 21, 24}.".to_string()),
+        };
+    }
+
     // get vector of input words from file or stdin
     let input_words: Vec<_> = match kgrand.input_path {
         // if input_path is provided, read file
@@ -352,7 +354,7 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
 
     // verify whether input_words is a valid BIP39 sentence if check is not disabled
     if !kgrand.no_verification {
-        if !verify_bib39(&input_words) {
+        if !verify_bib39(&input_words, &bip39_map) {
             return Err("The input does not constitute a valid BIP39 sentence.".to_string());
         }
     }
@@ -360,7 +362,7 @@ fn handle_generate_randomness(kgrand: KeygenRand) -> Result<(), String> {
     // Get additional randomness from system.
     // Fill array with 256 random bytes, corresponding to 2048 bits.
     let mut system_randomness = [0u8; 256];
-    rand::thread_rng().fill(&mut system_randomness[..]); // why the [..]?
+    rand::thread_rng().fill(&mut system_randomness[..]);
 
     // Combine both sources of randomness using HKDF extractor.
     // Using random salt for added security.
@@ -468,8 +470,43 @@ pub fn read_bip39_word(number: u8, bip39_map: &HashMap<&str, usize>
 }
 
 /// Verify whether the given vector of words constitutes a valid BIP39 sentence.
-pub fn verify_bib39(words: &Vec<String>) -> bool {
-    true
+pub fn verify_bib39(word_vec: &Vec<String>, bip_word_map: &HashMap<&str, usize>) -> bool {
+    // check that word_vec contains allowed number of words
+    match word_vec.len() {
+        12 | 15 | 18 | 21 | 24 => (),
+        _ => return false,
+    };
+    
+    // convert word vector to bits
+    let mut bit_vec = BitVec::<Msb0, u8>::new();
+    for word in word_vec {
+        match bip_word_map.get(&**word) {
+            Some(idx) => {
+                let word_bits = BitVec::<Msb0, u16>::from_slice(&[*idx as u16]).unwrap();
+                // ignore first 5 bits and add last 11 to bit_vec
+                bit_vec.extend_from_bitslice(&word_bits[5..]);
+            },
+            None => return false, // not valid if it contains invalid word
+        };
+    }
+
+    // Valid sentence consists of initial entropy of length ent_len plus checksum of length ent_len/32.
+    // Hence, ent_len * 33/32 = bit_vec.len().
+    let ent_len = 32 * bit_vec.len() / 33;
+
+    // split bits after ent_len off. These correspond to the checksum.
+    let checksum = bit_vec.split_off(ent_len);
+
+    // checksum is supposed to be first cs_len bits of SHA256(entropy)
+    let mut sha = Sha256::new();
+    sha.update(bit_vec.into_vec());
+    let hash = sha.finalize();
+    
+    // convert hash from byte vector to bit vector
+    let hash_bits = BitVec::<Msb0, u8>::from_slice(&hash).unwrap();
+    
+    // sentence is valid if checksum equals fist ent_len/32 bits of hash
+    checksum == hash_bits[0..ent_len/32]
 }
 
 /// Convert given byte array to valid BIP39 sentence.
