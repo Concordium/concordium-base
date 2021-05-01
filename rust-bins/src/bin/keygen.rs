@@ -349,6 +349,9 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
         }
         // if input_path is not provided, read words from stdin
         None => {
+            println!(
+                "Please generate a seed phrase using a hardware wallet and input the words below."
+            );
             let mut word_list = Vec::<String>::new();
             for i in 1..=grand.in_len {
                 // read the ith word from stdin,
@@ -399,12 +402,17 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
     let output_words = bytes_to_bip39(&prk, &bip39_vec)?;
     let output_str = output_words.join("\n"); // one word per line
     let mut file = succeed_or_die!(
-        File::create(grand.output_path),
+        File::create(&grand.output_path),
         e => "Could not write output because {}"
     );
     succeed_or_die!(
         file.write_all(output_str.as_bytes()),
         e => "Could not write output because {}"
+    );
+
+    println!(
+        "Random words have successfully been written to file {}.",
+        grand.output_path.display()
     );
 
     Ok(())
@@ -503,8 +511,8 @@ pub fn verify_bib39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
         };
     }
 
-    // Valid sentence consists of initial entropy of length ent_len plus checksum of
-    // length ent_len/32. Hence, ent_len * 33/32 = bit_vec.len().
+    // Valid sentence consists of initial entropy of length ent_len plus
+    // checksum of length ent_len/32. Hence, ent_len * 33/32 = bit_vec.len().
     let ent_len = 32 * bit_vec.len() / 33;
 
     // split bits after ent_len off. These correspond to the checksum.
@@ -523,7 +531,7 @@ pub fn verify_bib39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
 }
 
 /// Convert given byte array to valid BIP39 sentence.
-/// bytes must contain {16, 20, 24, 28, 32} bytes corresponding to
+/// Bytes must contain {16, 20, 24, 28, 32} bytes corresponding to
 /// {128, 160, 192, 224, 256} bits.
 /// This uses the method described at https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
 pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String>, String> {
