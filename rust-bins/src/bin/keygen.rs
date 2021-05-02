@@ -219,16 +219,15 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 
     let words_str = if kgar.recover {
         println!("Please enter recovery phrase below.");
-        let input_words =
-            read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+        let input_words = read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
 
         input_words.join(" ")
     } else {
         println!(
-            "Please generate a seed phrase using a hardware wallet and input the words below."
+            "Please generate a seed phrase, e.g., using a hardware wallet, and input the words \
+             below."
         );
-        let input_words =
-            read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+        let input_words = read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
 
         // rerandomize input words using system randomness
         let randomized_words = rerandomize_bip39(&input_words, &bip39_vec)?;
@@ -528,10 +527,11 @@ pub fn read_words_from_terminal(
         match num {
             12 | 15 | 18 | 21 | 24 => (),
             _ => {
-                return Err(
-                    "The input length for a valid BIP39 sentence must be in {12, 15, 18, 21, 24}."
-                        .to_string(),
-                )
+                return Err(format!(
+                    "The input length was set to {}, but it must be in {{12, 15, 18, 21, 24}} for \
+                     a valid BIP39 sentence.",
+                    num
+                ))
             }
         };
     }
