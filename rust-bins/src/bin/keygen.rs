@@ -497,7 +497,7 @@ pub fn read_bip39_word(
 /// Read vector of words from file.
 pub fn read_words_from_file(
     path: PathBuf,
-    verify_bip39: bool,
+    verify_bip: bool,
     bip39_map: &HashMap<&str, usize>,
 ) -> Result<Vec<String>, String> {
     let word_string = succeed_or_die!(
@@ -508,7 +508,7 @@ pub fn read_words_from_file(
     let word_list: Vec<String> = word_string.split_whitespace().map(str::to_owned).collect();
 
     // verify whether input_words is a valid BIP39 sentence if check is enabled
-    if verify_bip39 && !verify_bib39(&word_list, &bip39_map) {
+    if verify_bip && !verify_bip39(&word_list, &bip39_map) {
         return Err("The input does not constitute a valid BIP39 sentence.".to_string());
     }
 
@@ -519,11 +519,11 @@ pub fn read_words_from_file(
 /// If verify_bip39 is true, output is verified to be valid BIP39 sentence.
 pub fn read_words_from_terminal(
     num: u8,
-    verify_bip39: bool,
+    verify_bip: bool,
     bip39_map: &HashMap<&str, usize>,
 ) -> Result<Vec<String>, String> {
     // Ensure that input length is in allowed set if verification is enabled.
-    if verify_bip39 {
+    if verify_bip {
         match num {
             12 | 15 | 18 | 21 | 24 => (),
             _ => {
@@ -539,7 +539,7 @@ pub fn read_words_from_terminal(
     let mut word_list = Vec::<String>::new();
     for i in 1..=num {
         // read the ith word from stdin
-        let word = if verify_bip39 {
+        let word = if verify_bip {
             succeed_or_die!(
                 read_bip39_word(i, &bip39_map),
                 e => "Could not read input from user because {}"
@@ -554,7 +554,7 @@ pub fn read_words_from_terminal(
     }
 
     // verify whether input_words is a valid BIP39 sentence if check is enabled
-    if verify_bip39 && !verify_bib39(&word_list, &bip39_map) {
+    if verify_bip && !verify_bip39(&word_list, &bip39_map) {
         return Err("The input does not constitute a valid BIP39 sentence.".to_string());
     }
 
@@ -562,7 +562,7 @@ pub fn read_words_from_terminal(
 }
 
 /// Verify whether the given vector of words constitutes a valid BIP39 sentence.
-pub fn verify_bib39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) -> bool {
+pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) -> bool {
     // check that word_vec contains allowed number of words
     match word_vec.len() {
         12 | 15 | 18 | 21 | 24 => (),
@@ -574,8 +574,10 @@ pub fn verify_bib39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     for word in word_vec {
         match bip_word_map.get(&**word) {
             Some(idx) => {
-                let word_bits = BitVec::<Msb0, u16>::from_slice(&[*idx as u16]).unwrap();
-                // ignore first 5 bits and add last 11 to bit_vec
+                let word_bits = BitVec::<Msb0, u16>::from_element(*idx as u16);
+                // There are 2048 words in the BIP39 list, which can be represented using 11
+                // bits. Thus, the first 5 bits of word_bits are 0. Remove those leading zeros
+                // and add the remaining ones to bit_bec.
                 bit_vec.extend_from_bitslice(&word_bits[5..]);
             }
             None => return false, // not valid if it contains invalid word
@@ -584,6 +586,8 @@ pub fn verify_bib39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
 
     // Valid sentence consists of initial entropy of length ent_len plus
     // checksum of length ent_len/32. Hence, ent_len * 33/32 = bit_vec.len().
+    // Note that bit_vec.len() is always a multiple of 33 because 11 bits
+    // are added for each word and all allowed word counts are multiples of 3.
     let ent_len = 32 * bit_vec.len() / 33;
 
     // split bits after ent_len off. These correspond to the checksum.
@@ -839,7 +843,7 @@ mod tests {
             "abandon".to_string(),
         ];
 
-        assert_eq!(verify_bib39(&valid_list, &bip39_map), true);
-        assert_eq!(verify_bib39(&invalid_list, &bip39_map), false);
+        assert_eq!(verify_bip39(&valid_list, &bip39_map), true);
+        assert_eq!(verify_bip39(&invalid_list, &bip39_map), false);
     }
 }
