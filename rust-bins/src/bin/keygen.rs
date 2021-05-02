@@ -15,12 +15,13 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 use bitvec::prelude::*;
+use dialoguer::{Confirm, Input};
 use pairing::bls12_381::{Fr, G1, G2};
 use rand::Rng;
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{self, prelude::*, Write},
+    io::Write,
 };
 
 #[derive(StructOpt)]
@@ -239,8 +240,18 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         for (i, word) in randomized_words.iter().enumerate() {
             println!("Word {}: {}", i + 1, word);
         }
-        println!("Press enter when ready.");
-        io::stdin().read_exact(&mut [0u8]).unwrap();
+
+        loop {
+            if Confirm::new()
+                .with_prompt("Have you written down all words?")
+                .interact()
+                .expect("Failed to read input.")
+            {
+                break;
+            } else {
+                println!("Please write down all words.");
+            }
+        }
 
         if !kgar.no_confirmation {
             // clear screen
@@ -469,29 +480,26 @@ pub fn generate_ed_sk(
 }
 
 /// Asks user to input word with given number and reads it from stdin.
-pub fn read_word(number: u8) -> Result<String, std::io::Error> {
-    print!("Word {}: ", number);
-    io::stdout().flush()?; // actually print before reading
-    let mut line = String::new();
-    io::stdin().read_line(&mut line)?;
-    let word = line.trim().to_string(); // remove trailing newline
-    Ok(word)
-}
-
-/// Asks user to input word with given number and reads it from stdin.
-/// Then checks whether the word is in valid_words and starts over if not.
+/// Checks whether the word is in valid_words if verify is true.
 pub fn read_bip39_word(
     number: u8,
+    verify: bool,
     bip39_map: &HashMap<&str, usize>,
 ) -> Result<String, std::io::Error> {
-    loop {
-        let word = read_word(number)?;
-        if bip39_map.contains_key(&*word) {
-            return Ok(word);
-        } else {
-            println!("The word you have entered is not in the BIP39 word list. Please try again.");
-        }
-    }
+    Input::new()
+        .with_prompt(format!("Word {}", number))
+        .validate_with(|input: &String| -> Result<(), String> {
+            // input is always valid if !verify. Otherwise must be in bip39_map
+            if !verify || bip39_map.contains_key(&*input.to_owned()) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "The word \"{}\" is not in the BIP39 word list. Please try again.",
+                    input
+                ))
+            }
+        })
+        .interact_text()
 }
 
 /// Read vector of words from file.
@@ -539,17 +547,10 @@ pub fn read_words_from_terminal(
     let mut word_list = Vec::<String>::new();
     for i in 1..=num {
         // read the ith word from stdin
-        let word = if verify_bip {
-            succeed_or_die!(
-                read_bip39_word(i, &bip39_map),
-                e => "Could not read input from user because {}"
-            )
-        } else {
-            succeed_or_die!(
-                read_word(i),
-                e => "Could not read input from user because {}"
-            )
-        };
+        let word = succeed_or_die!(
+            read_bip39_word(i, verify_bip, &bip39_map),
+            e => "Could not read input from user because {}"
+        );
         word_list.push(word);
     }
 
