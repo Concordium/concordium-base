@@ -46,7 +46,7 @@ Generate keys for the identity provider. The following options are supported
 ## gen-rand
 
 Generates random words that can be used as a randomness file for keygen-ip. The following options are supported
-- `--in-len` an integer determining how many words to user is asked to enter. Value is ignored if input file is provided.
+- `--in-len` an integer determining how many words the user is asked to enter. Value is ignored if input file is provided.
 - `--in` a filename from which inputs words are read. If not provided, words are read from stdin.
 - `--out`, a filename where the private keys will be emitted
 - `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
