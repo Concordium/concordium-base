@@ -20,7 +20,7 @@ use rand::Rng;
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{self, Write, prelude::*},
+    io::{self, prelude::*, Write},
 };
 
 #[derive(StructOpt)]
@@ -711,5 +711,137 @@ mod tests {
             Ok(keygen_ed(&seed2).to_vec()),
             hex::decode("171cb88b1b3c1db25add599712e36245d75bc65a1a5c9e18d76f9f2b1eab4012")
         );
+    }
+
+    /// Test correct generation of BIP39 sentences.
+    /// Values are taken from https://github.com/trezor/python-mnemonic/blob/master/vectors.json
+    #[test]
+    pub fn test_bip39_generation() {
+        let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
+            .split_whitespace()
+            .collect();
+        assert_eq!(bip39_vec.len(), 2048);
+
+        assert_eq!(
+            bytes_to_bip39(
+                &hex::decode("00000000000000000000000000000000").unwrap(),
+                &bip39_vec
+            )
+            .unwrap()
+            .join(" "),
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+             abandon about",
+        );
+        assert_eq!(
+            bytes_to_bip39(
+                &hex::decode("7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f").unwrap(),
+                &bip39_vec
+            )
+            .unwrap()
+            .join(" "),
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        );
+        assert_eq!(
+            bytes_to_bip39(
+                &hex::decode("000000000000000000000000000000000000000000000000").unwrap(),
+                &bip39_vec
+            )
+            .unwrap()
+            .join(" "),
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+             abandon abandon abandon abandon abandon abandon abandon agent",
+        );
+        assert_eq!(
+            bytes_to_bip39(
+                &hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+                    .unwrap(),
+                &bip39_vec
+            )
+            .unwrap()
+            .join(" "),
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+             abandon abandon abandon art",
+        );
+        assert_eq!(
+            bytes_to_bip39(
+                &hex::decode("f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f")
+                    .unwrap(),
+                &bip39_vec
+            )
+            .unwrap()
+            .join(" "),
+            "void come effort suffer camp survey warrior heavy shoot primary clutch crush open \
+             amazing screen patrol group space point ten exist slush involve unfold",
+        );
+    }
+
+    /// Test BIP39 verification.
+    #[test]
+    pub fn test_bip39_verification() {
+        let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
+            .split_whitespace()
+            .collect();
+        assert_eq!(bip39_vec.len(), 2048);
+        let mut bip39_map = HashMap::new();
+        for (i, word) in bip39_vec.iter().enumerate() {
+            bip39_map.insert(*word, i);
+        }
+
+        let valid_list = vec![
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "art".to_string(),
+        ];
+        let invalid_list = vec![
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+            "abandon".to_string(),
+        ];
+
+        assert_eq!(verify_bib39(&valid_list, &bip39_map), true);
+        assert_eq!(verify_bib39(&invalid_list, &bip39_map), false);
     }
 }
