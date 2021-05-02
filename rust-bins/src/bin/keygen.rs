@@ -672,7 +672,7 @@ pub fn rerandomize_bip39(
     rand::thread_rng().fill(&mut system_randomness[..]);
 
     // Combine both sources of randomness using HKDF extractor.
-    // Using random salt for added security.
+    // Using salt with randomness from random.org for added security.
     let salt = b"keygen-rand-wEtIBpTIyzPRpZxNUIherQh14uPlDIdiqngFSo1qrqE1UrXl5DcUfV4xddYNDnOMIumlkqS9HNshATaFxAwqiUtLj5rxeBJIOsav";
     let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(salt));
 
