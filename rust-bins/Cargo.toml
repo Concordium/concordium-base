@@ -12,7 +12,7 @@ vendored-ssl = ["openssl-sys/vendored"]
 
 [dependencies]
 clap = "2.33"
-dialoguer = "0.6"
+dialoguer = "0.8"
 pairing = "0.15"
 rand = "=0.7"
 serde = "1.0"
