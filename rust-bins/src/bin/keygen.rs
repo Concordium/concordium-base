@@ -212,7 +212,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 
     // Create hashmap mapping word to its index in the list.
     // This allows to quickly test membership and convert words to their index
-    let mut bip39_map = HashMap::new();
+    let mut bip39_map = HashMap::with_capacity(bip39_vec.len());
     for (i, word) in bip39_vec.iter().enumerate() {
         bip39_map.insert(*word, i);
     }
@@ -675,7 +675,7 @@ pub fn rerandomize_bip39(
     let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(salt));
 
     // First add all words separated by " " in input_words to key material.
-    // Separation ensures word boundaries are persevered
+    // Separation ensures word boundaries are preserved
     // to prevent different word lists from resulting in same string.
     for word in input_words {
         extract_ctx.input_ikm(word.as_bytes());
