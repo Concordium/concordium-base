@@ -594,9 +594,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     let checksum = bit_vec.split_off(ent_len);
 
     // checksum is supposed to be first cs_len bits of SHA256(entropy)
-    let mut sha = Sha256::new();
-    sha.update(bit_vec.into_vec());
-    let hash = sha.finalize();
+    let hash = Sha256::digest(&bit_vec.into_vec());
 
     // convert hash from byte vector to bit vector
     let hash_bits = BitVec::<Msb0, u8>::from_slice(&hash).unwrap();
@@ -627,9 +625,7 @@ pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String
 
     // checksum is first cs_len bits of SHA256(bytes)
     // first compute hash of bytes
-    let mut sha = Sha256::new();
-    sha.update(bytes);
-    let hash = sha.finalize();
+    let hash = Sha256::digest(bytes);
 
     // convert hash from byte vector to bit vector
     let hash_bits = succeed_or_die!(
