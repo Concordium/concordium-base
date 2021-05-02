@@ -90,9 +90,9 @@ struct GenRand {
 
     #[structopt(
         long = "in-len",
-        help = "Number of words provided as input. Must be in {12, 15, 18, 21, 24} to constitute \
-                a valid BIP39 sentences. If --no-verification is used, arbitrary values are \
-                allowed.",
+        help = "Number of words read from use. Must be in {12, 15, 18, 21, 24} to constitute a \
+                valid BIP39 sentences. If --no-verification is used, arbitrary values are \
+                allowed. Value is ignored if input file is provided.",
         default_value = "24"
     )]
     in_len: u8,
@@ -307,65 +307,25 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
         return Err("The BIP39 word list must contain 2048 words.".to_string());
     }
 
-    // Create hashmap mapping word to its index in the list
-    // this allows us to quickly test for membership and convert words to their
-    // index
+    // Create hashmap mapping word to its index in the list.
+    // This allows to quickly test membership and convert words to their index
     let mut bip39_map = HashMap::new();
     for (i, word) in bip39_vec.iter().enumerate() {
         bip39_map.insert(*word, i);
-    }
-
-    // Ensure that input length is in allowed set if verification is enabled.
-    if !grand.no_verification {
-        match grand.in_len {
-            12 | 15 | 18 | 21 | 24 => (),
-            _ => {
-                return Err(
-                    "The input length for a valid BIP39 sentence must be in {12, 15, 18, 21, 24}."
-                        .to_string(),
-                )
-            }
-        };
     }
 
     // get vector of input words from file or stdin
     let input_words: Vec<_> = match grand.input_path {
         // if input_path is provided, read file
         Some(path) => {
-            let word_string = succeed_or_die!(
-                fs::read_to_string(path),
+            succeed_or_die!(
+                read_words_from_file(path),
                 e => "Could not read input from provided file because {}"
-            );
-            let word_list: Vec<String> =
-                word_string.split_whitespace().map(str::to_owned).collect();
-            if word_list.len() != grand.in_len as usize {
-                return Err(format!(
-                    "The provided input file contains {} words, but it should contain {} words.",
-                    word_list.len(),
-                    grand.in_len
-                ));
-            }
-            word_list
+            )
         }
         // if input_path is not provided, read words from stdin
         None => {
-            println!(
-                "Please generate a seed phrase using a hardware wallet and input the words below."
-            );
-            let mut word_list = Vec::<String>::new();
-            for i in 1..=grand.in_len {
-                // read the ith word from stdin,
-                // using BIP39 verification if no_verification is not set
-                let word = succeed_or_die!(
-                    match grand.no_verification {
-                        true => read_word(i),
-                        false => read_bip39_word(i, &bip39_map),
-                    },
-                    e => "Could not read input from provided file because {}"
-                );
-                word_list.push(word);
-            }
-            word_list
+            read_words_from_terminal(grand.in_len, !grand.no_verification, &bip39_map)?
         }
     };
 
@@ -374,32 +334,8 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
         return Err("The input does not constitute a valid BIP39 sentence.".to_string());
     }
 
-    // Get additional randomness from system.
-    // Fill array with 256 random bytes, corresponding to 2048 bits.
-    let mut system_randomness = [0u8; 256];
-    rand::thread_rng().fill(&mut system_randomness[..]);
-
-    // Combine both sources of randomness using HKDF extractor.
-    // Using random salt for added security.
-    let salt = b"keygen-rand-wEtIBpTIyzPRpZxNUIherQh14uPlDIdiqngFSo1qrqE1UrXl5DcUfV4xddYNDnOMIumlkqS9HNshATaFxAwqiUtLj5rxeBJIOsav";
-    let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(salt));
-
-    // First add all words separated by " " in input_words to key material.
-    // Separation ensures word boundaries are persevered
-    // to prevent different word lists from resulting in same string.
-    for word in input_words {
-        extract_ctx.input_ikm(word.as_bytes());
-        extract_ctx.input_ikm(b" ");
-    }
-
-    // Now add system randomness to key material
-    extract_ctx.input_ikm(&system_randomness);
-
-    // Finally extract random key
-    let (prk, _) = extract_ctx.finalize();
-
-    // convert raw randomness to BIP39 word sentence and write to file
-    let output_words = bytes_to_bip39(&prk, &bip39_vec)?;
+    // rerandomize input words and write result to file
+    let output_words = rerandomize_bip39(&input_words, &bip39_vec)?;
     let output_str = output_words.join("\n"); // one word per line
     let mut file = succeed_or_die!(
         File::create(&grand.output_path),
@@ -464,6 +400,7 @@ pub fn generate_ed_sk(
     Ok(sk)
 }
 
+
 /// Asks user to input word with given number and reads it from stdin.
 pub fn read_word(number: u8) -> Result<String, std::io::Error> {
     print!("Word {}: ", number);
@@ -488,6 +425,55 @@ pub fn read_bip39_word(
             println!("The word you have entered is not in the BIP39 word list. Please try again.");
         }
     }
+}
+
+/// Read vector of words from file.
+pub fn read_words_from_file(path: PathBuf) -> Result<Vec<String>, std::io::Error> {
+    let word_string = fs::read_to_string(path)?;
+    let word_list: Vec<String> = word_string.split_whitespace().map(str::to_owned).collect();
+
+    Ok(word_list)
+}
+
+/// Ask user to input num words.
+/// If only_bip39 is true, only words in bip39_map are accepted and
+/// num must be in {12, 15, 18, 21, 24}.
+pub fn read_words_from_terminal(
+    num: u8,
+    only_bip39: bool,
+    bip39_map: &HashMap<&str, usize>,
+) -> Result<Vec<String>, String> {
+    // Ensure that input length is in allowed set if verification is enabled.
+    if only_bip39 {
+        match num {
+            12 | 15 | 18 | 21 | 24 => (),
+            _ => {
+                return Err(
+                    "The input length for a valid BIP39 sentence must be in {12, 15, 18, 21, 24}."
+                        .to_string(),
+                )
+            }
+        };
+    }
+
+    println!("Please generate a seed phrase using a hardware wallet and input the words below.");
+    let mut word_list = Vec::<String>::new();
+    for i in 1..=num {
+        // read the ith word from stdin
+        let word = match only_bip39 {
+            false => succeed_or_die!(
+                read_word(i),
+                e => "Could not read input from user because {}"
+            ),
+            true => succeed_or_die!(
+                read_bip39_word(i, &bip39_map),
+                e => "Could not read input from user because {}"
+            ),
+        };
+        word_list.push(word);
+    }
+
+    Ok(word_list)
 }
 
 /// Verify whether the given vector of words constitutes a valid BIP39 sentence.
@@ -582,6 +568,43 @@ pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String
     }
 
     Ok(vec)
+}
+
+/// Rerandomize given list of words using system randomness and HKDF extractor.
+/// The input can be an arbitrary slice of strings.
+/// The output is a valid BIP39 sentence with 24 words.
+pub fn rerandomize_bip39(
+    input_words: &[String],
+    bip_word_list: &[&str],
+) -> Result<Vec<String>, String> {
+    // Get randomness from system.
+    // Fill array with 256 random bytes, corresponding to 2048 bits.
+    let mut system_randomness = [0u8; 256];
+    rand::thread_rng().fill(&mut system_randomness[..]);
+
+    // Combine both sources of randomness using HKDF extractor.
+    // Using random salt for added security.
+    let salt = b"keygen-rand-wEtIBpTIyzPRpZxNUIherQh14uPlDIdiqngFSo1qrqE1UrXl5DcUfV4xddYNDnOMIumlkqS9HNshATaFxAwqiUtLj5rxeBJIOsav";
+    let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(salt));
+
+    // First add all words separated by " " in input_words to key material.
+    // Separation ensures word boundaries are persevered
+    // to prevent different word lists from resulting in same string.
+    for word in input_words {
+        extract_ctx.input_ikm(word.as_bytes());
+        extract_ctx.input_ikm(b" ");
+    }
+
+    // Now add system randomness to key material
+    extract_ctx.input_ikm(&system_randomness);
+
+    // Finally extract random key
+    let (prk, _) = extract_ctx.finalize();
+
+    // convert raw randomness to BIP39 word sentence
+    let output_words = bytes_to_bip39(&prk, &bip_word_list)?;
+
+    Ok(output_words)
 }
 
 #[cfg(test)]
