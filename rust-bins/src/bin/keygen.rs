@@ -20,7 +20,7 @@ use rand::Rng;
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{self, Write},
+    io::{self, Write, prelude::*},
 };
 
 #[derive(StructOpt)]
@@ -52,8 +52,11 @@ struct KeygenIp {
 
 #[derive(StructOpt)]
 struct KeygenAr {
-    #[structopt(long = "rand-input", help = "File with randomness.")]
-    rand_input: PathBuf,
+    #[structopt(
+        long = "recover-from-phrase",
+        help = "Recover keys from backup phrase. Otherwise, fresh keys are generated."
+    )]
+    recover: bool,
     #[structopt(
         long = "ar-identity",
         help = "The integer identifying the anonymity revoker"
@@ -75,6 +78,24 @@ struct KeygenAr {
     out: PathBuf,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
     out_pub: PathBuf,
+    #[structopt(
+        long = "in-len",
+        help = "Number of words read from user. Must be in {12, 15, 18, 21, 24} to constitute a \
+                valid BIP39 sentences. If --no-verification is used, arbitrary values are allowed.",
+        default_value = "24"
+    )]
+    in_len: u8,
+    #[structopt(
+        long = "no-verification",
+        help = "Do not verify the validity of the input. Otherwise the input is verified to be a \
+                valid BIP39 sentence."
+    )]
+    no_verification: bool,
+    #[structopt(
+        long = "no-confirmation",
+        help = "Do not ask user to re-enter generated recovery phrase."
+    )]
+    no_confirmation: bool,
 }
 
 #[derive(StructOpt)]
@@ -90,7 +111,7 @@ struct GenRand {
 
     #[structopt(
         long = "in-len",
-        help = "Number of words read from use. Must be in {12, 15, 18, 21, 24} to constitute a \
+        help = "Number of words read from user. Must be in {12, 15, 18, 21, 24} to constitute a \
                 valid BIP39 sentences. If --no-verification is used, arbitrary values are \
                 allowed. Value is ignored if input file is provided.",
         default_value = "24"
@@ -181,10 +202,68 @@ fn output_possibly_encrypted<X: SerdeSerialize>(
 }
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
-    let bytes_from_file = succeed_or_die!(fs::read(kgar.rand_input), e => "Could not read random input from provided file because {}");
-    if bytes_from_file.len() < 64 {
-        return Err("Provided randomness should be of size at least 64 bytes".to_string());
+    // Read word list and make sure it contains 2048 words.
+    let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
+        .split_whitespace()
+        .collect();
+    if bip39_vec.len() != 2048 {
+        return Err("The BIP39 word list must contain 2048 words.".to_string());
     }
+
+    // Create hashmap mapping word to its index in the list.
+    // This allows to quickly test membership and convert words to their index
+    let mut bip39_map = HashMap::new();
+    for (i, word) in bip39_vec.iter().enumerate() {
+        bip39_map.insert(*word, i);
+    }
+
+    let words_str = match kgar.recover {
+        true => {
+            println!("Please enter recovery phrase below.");
+            let input_words =
+                read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+
+            input_words.join(" ")
+        }
+        false => {
+            println!(
+                "Please generate a seed phrase using a hardware wallet and input the words below."
+            );
+            let input_words =
+                read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+
+            // rerandomize input words using system randomness
+            let randomized_words = rerandomize_bip39(&input_words, &bip39_vec)?;
+
+            // print randomized words and ask user to re-enter
+            // clear screen
+            print!("\x1B[2J");
+            println!("Please write down your recovery phrase on paper.");
+            for (i, word) in randomized_words.iter().enumerate() {
+                println!("Word {}: {}", i + 1, word);
+            }
+            println!("Press enter when ready.");
+            io::stdin().read_exact(&mut [0u8]).unwrap();
+
+            if !kgar.no_confirmation {
+                // clear screen
+                print!("\x1B[2J");
+                println!("Please enter recovery phrase again to confirm.");
+
+                let confirmation_words = read_words_from_terminal(kgar.in_len, true, &bip39_map)?;
+
+                if confirmation_words != randomized_words {
+                    return Err("Recovery phrases do not match.".to_string());
+                }
+            }
+
+            randomized_words.join(" ")
+        }
+    };
+
+    // use input words separated by spaces as randomness
+    let random_bytes = words_str.as_bytes();
+
     let global_ctx = {
         if let Some(gc) = read_global_context(kgar.global) {
             gc
@@ -196,7 +275,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     };
     let ar_base = global_ctx.on_chain_commitment_key.g;
     let key_info = b"elgamal_keys".as_ref();
-    let scalar = succeed_or_die!(keygen_bls(&bytes_from_file, &key_info), e => "Could not generate key because {}");
+    let scalar = succeed_or_die!(keygen_bls(&random_bytes, &key_info), e => "Could not generate key because {}");
     let ar_secret_key = SecretKey {
         generator: ar_base,
         scalar,
@@ -317,22 +396,15 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
     // get vector of input words from file or stdin
     let input_words: Vec<_> = match grand.input_path {
         // if input_path is provided, read file
-        Some(path) => {
-            succeed_or_die!(
-                read_words_from_file(path),
-                e => "Could not read input from provided file because {}"
-            )
-        }
+        Some(path) => read_words_from_file(path, !grand.no_verification, &bip39_map)?,
         // if input_path is not provided, read words from stdin
         None => {
+            println!(
+                "Please generate a seed phrase using a hardware wallet and input the words below."
+            );
             read_words_from_terminal(grand.in_len, !grand.no_verification, &bip39_map)?
         }
     };
-
-    // verify whether input_words is a valid BIP39 sentence if check is not disabled
-    if !grand.no_verification && !verify_bib39(&input_words, &bip39_map) {
-        return Err("The input does not constitute a valid BIP39 sentence.".to_string());
-    }
 
     // rerandomize input words and write result to file
     let output_words = rerandomize_bip39(&input_words, &bip39_vec)?;
@@ -400,7 +472,6 @@ pub fn generate_ed_sk(
     Ok(sk)
 }
 
-
 /// Asks user to input word with given number and reads it from stdin.
 pub fn read_word(number: u8) -> Result<String, std::io::Error> {
     print!("Word {}: ", number);
@@ -428,23 +499,35 @@ pub fn read_bip39_word(
 }
 
 /// Read vector of words from file.
-pub fn read_words_from_file(path: PathBuf) -> Result<Vec<String>, std::io::Error> {
-    let word_string = fs::read_to_string(path)?;
+pub fn read_words_from_file(
+    path: PathBuf,
+    verify_bip39: bool,
+    bip39_map: &HashMap<&str, usize>,
+) -> Result<Vec<String>, String> {
+    let word_string = succeed_or_die!(
+        fs::read_to_string(path),
+        e => "Could not read input from provided file because {}"
+    );
+
     let word_list: Vec<String> = word_string.split_whitespace().map(str::to_owned).collect();
+
+    // verify whether input_words is a valid BIP39 sentence if check is enabled
+    if verify_bip39 && !verify_bib39(&word_list, &bip39_map) {
+        return Err("The input does not constitute a valid BIP39 sentence.".to_string());
+    }
 
     Ok(word_list)
 }
 
 /// Ask user to input num words.
-/// If only_bip39 is true, only words in bip39_map are accepted and
-/// num must be in {12, 15, 18, 21, 24}.
+/// If verify_bip39 is true, output is verified to be valid BIP39 sentence.
 pub fn read_words_from_terminal(
     num: u8,
-    only_bip39: bool,
+    verify_bip39: bool,
     bip39_map: &HashMap<&str, usize>,
 ) -> Result<Vec<String>, String> {
     // Ensure that input length is in allowed set if verification is enabled.
-    if only_bip39 {
+    if verify_bip39 {
         match num {
             12 | 15 | 18 | 21 | 24 => (),
             _ => {
@@ -456,11 +539,10 @@ pub fn read_words_from_terminal(
         };
     }
 
-    println!("Please generate a seed phrase using a hardware wallet and input the words below.");
     let mut word_list = Vec::<String>::new();
     for i in 1..=num {
         // read the ith word from stdin
-        let word = match only_bip39 {
+        let word = match verify_bip39 {
             false => succeed_or_die!(
                 read_word(i),
                 e => "Could not read input from user because {}"
@@ -471,6 +553,11 @@ pub fn read_words_from_terminal(
             ),
         };
         word_list.push(word);
+    }
+
+    // verify whether input_words is a valid BIP39 sentence if check is enabled
+    if verify_bip39 && !verify_bib39(&word_list, &bip39_map) {
+        return Err("The input does not constitute a valid BIP39 sentence.".to_string());
     }
 
     Ok(word_list)
