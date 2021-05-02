@@ -843,7 +843,7 @@ mod tests {
             "abandon".to_string(),
         ];
 
-        assert_eq!(verify_bip39(&valid_list, &bip39_map), true);
-        assert_eq!(verify_bip39(&invalid_list, &bip39_map), false);
+        assert!(verify_bip39(&valid_list, &bip39_map));
+        assert!(!verify_bip39(&invalid_list, &bip39_map));
     }
 }
