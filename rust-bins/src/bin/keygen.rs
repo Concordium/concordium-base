@@ -217,48 +217,45 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         bip39_map.insert(*word, i);
     }
 
-    let words_str = match kgar.recover {
-        true => {
-            println!("Please enter recovery phrase below.");
-            let input_words =
-                read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+    let words_str = if kgar.recover {
+        println!("Please enter recovery phrase below.");
+        let input_words =
+            read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
 
-            input_words.join(" ")
+        input_words.join(" ")
+    } else {
+        println!(
+            "Please generate a seed phrase using a hardware wallet and input the words below."
+        );
+        let input_words =
+            read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+
+        // rerandomize input words using system randomness
+        let randomized_words = rerandomize_bip39(&input_words, &bip39_vec)?;
+
+        // print randomized words and ask user to re-enter
+        // clear screen
+        print!("\x1B[2J");
+        println!("Please write down your recovery phrase on paper.");
+        for (i, word) in randomized_words.iter().enumerate() {
+            println!("Word {}: {}", i + 1, word);
         }
-        false => {
-            println!(
-                "Please generate a seed phrase using a hardware wallet and input the words below."
-            );
-            let input_words =
-                read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+        println!("Press enter when ready.");
+        io::stdin().read_exact(&mut [0u8]).unwrap();
 
-            // rerandomize input words using system randomness
-            let randomized_words = rerandomize_bip39(&input_words, &bip39_vec)?;
-
-            // print randomized words and ask user to re-enter
+        if !kgar.no_confirmation {
             // clear screen
             print!("\x1B[2J");
-            println!("Please write down your recovery phrase on paper.");
-            for (i, word) in randomized_words.iter().enumerate() {
-                println!("Word {}: {}", i + 1, word);
+            println!("Please enter recovery phrase again to confirm.");
+
+            let confirmation_words = read_words_from_terminal(kgar.in_len, true, &bip39_map)?;
+
+            if confirmation_words != randomized_words {
+                return Err("Recovery phrases do not match.".to_string());
             }
-            println!("Press enter when ready.");
-            io::stdin().read_exact(&mut [0u8]).unwrap();
-
-            if !kgar.no_confirmation {
-                // clear screen
-                print!("\x1B[2J");
-                println!("Please enter recovery phrase again to confirm.");
-
-                let confirmation_words = read_words_from_terminal(kgar.in_len, true, &bip39_map)?;
-
-                if confirmation_words != randomized_words {
-                    return Err("Recovery phrases do not match.".to_string());
-                }
-            }
-
-            randomized_words.join(" ")
         }
+
+        randomized_words.join(" ")
     };
 
     // use input words separated by spaces as randomness
@@ -542,15 +539,16 @@ pub fn read_words_from_terminal(
     let mut word_list = Vec::<String>::new();
     for i in 1..=num {
         // read the ith word from stdin
-        let word = match verify_bip39 {
-            false => succeed_or_die!(
-                read_word(i),
-                e => "Could not read input from user because {}"
-            ),
-            true => succeed_or_die!(
+        let word = if verify_bip39 {
+            succeed_or_die!(
                 read_bip39_word(i, &bip39_map),
                 e => "Could not read input from user because {}"
-            ),
+            )
+        } else {
+            succeed_or_die!(
+                read_word(i),
+                e => "Could not read input from user because {}"
+            )
         };
         word_list.push(word);
     }
