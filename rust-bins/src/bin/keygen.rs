@@ -1,6 +1,10 @@
 use bitvec::prelude::*;
 use clap::AppSettings;
 use client_server_helpers::*;
+use crossterm::{
+    execute,
+    terminal::{Clear, ClearType},
+};
 use crypto_common::*;
 use curve_arithmetic::Curve;
 use dialoguer::{Confirm, Input};
@@ -231,27 +235,25 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 
         // print randomized words and ask user to re-enter
         // clear screen
-        print!("\x1B[2J");
+        execute!(std::io::stdout(), Clear(ClearType::All))
+            .map_err(|_| "Could not clear screen.".to_owned())?;
         println!("Please write down your recovery phrase on paper.");
         for (i, word) in randomized_words.iter().enumerate() {
             println!("Word {}: {}", i + 1, word);
         }
 
-        loop {
-            if Confirm::new()
-                .with_prompt("Have you written down all words?")
-                .interact()
-                .expect("Failed to read input.")
-            {
-                break;
-            } else {
-                println!("Please write down all words.");
-            }
+        while !Confirm::new()
+            .with_prompt("Have you written down all words?")
+            .interact()
+            .unwrap_or(false)
+        {
+            println!("Please write down all words.");
         }
 
         if !kgar.no_confirmation {
             // clear screen
-            print!("\x1B[2J");
+            execute!(std::io::stdout(), Clear(ClearType::All))
+                .map_err(|_| "Could not clear screen.".to_owned())?;
             println!("Please enter recovery phrase again to confirm.");
 
             let confirmation_words = read_words_from_terminal(kgar.in_len, true, &bip39_map)?;
@@ -401,15 +403,16 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
 
     // rerandomize input words and write result to file
     let output_words = rerandomize_bip39(&input_words, &bip39_vec)?;
-    let output_str = output_words.join("\n"); // one word per line
     let mut file = succeed_or_die!(
         File::create(&grand.output_path),
         e => "Could not write output because {}"
     );
-    succeed_or_die!(
-        file.write_all(output_str.as_bytes()),
+    for s in output_words {
+        succeed_or_die!(
+        writeln!(file, "{}", s),
         e => "Could not write output because {}"
-    );
+            );
+    }
 
     println!(
         "Random words have successfully been written to file {}.",
