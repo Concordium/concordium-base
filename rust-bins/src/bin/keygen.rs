@@ -137,15 +137,28 @@ struct GenRand {
 #[derive(StructOpt)]
 #[structopt(
     about = "Tool for generating keys",
+    name = "keygen",
     author = "Concordium",
-    version = "1"
+    version = "1.0"
 )]
 enum KeygenTool {
-    #[structopt(name = "keygen-ip", about = "Generate identity provider keys")]
+    #[structopt(
+        name = "keygen-ip",
+        about = "Generate identity provider keys.",
+        version = "1.0"
+    )]
     KeygenIp(KeygenIp),
-    #[structopt(name = "keygen-ar", about = "Generate anonymity revoker keys")]
+    #[structopt(
+        name = "keygen-ar",
+        about = "Generate anonymity revoker keys.",
+        version = "1.0"
+    )]
     KeygenAr(KeygenAr),
-    #[structopt(name = "gen-rand", about = "Generate randomness file")]
+    #[structopt(
+        name = "gen-rand",
+        about = "Generate randomness file.",
+        version = "1.0"
+    )]
     GenRand(GenRand),
 }
 
@@ -304,13 +317,12 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         scalar,
     };
     let ar_public_key = PublicKey::from(&ar_secret_key);
-    let ar_identity = match kgar.ar_identity {
-        Some(x) => x,
-        None => Input::new()
+    let ar_identity = kgar.ar_identity.unwrap_or_else(|| {
+        Input::new()
             .with_prompt("Enter AR identity")
             .interact()
-            .expect("AR identity not provided"),
-    };
+            .expect("AR identity not provided")
+    });
     let name = kgar.name.unwrap_or_else(|| {
         Input::new()
             .with_prompt("Enter the name of the AR")
