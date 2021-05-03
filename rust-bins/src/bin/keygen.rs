@@ -658,9 +658,9 @@ pub fn rerandomize_bip39(
     rand::thread_rng().fill(&mut system_randomness[..]);
 
     // Combine both sources of randomness using HKDF extractor.
-    // Using salt with randomness from random.org for added security.
-    let salt = b"keygen-rand-wEtIBpTIyzPRpZxNUIherQh14uPlDIdiqngFSo1qrqE1UrXl5DcUfV4xddYNDnOMIumlkqS9HNshATaFxAwqiUtLj5rxeBJIOsav";
-    let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(salt));
+    // For added security, use pseudorandom salt.
+    let salt = Sha256::digest(b"concordium-key-generation-tool-version-1");
+    let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(&salt));
 
     // First add all words separated by " " in input_words to key material.
     // Separation ensures word boundaries are preserved
