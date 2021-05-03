@@ -1,28 +1,36 @@
+use bitvec::prelude::*;
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
 use curve_arithmetic::Curve;
+use dialoguer::{Confirm, Input};
 use elgamal::{PublicKey, SecretKey};
-use id::types::*;
-use keygen_bls::keygen_bls;
-use std::convert::TryFrom;
-
 use hkdf::HkdfExtract;
 use hmac::{Hmac, Mac, NewMac};
-use pairing::bls12_381::Bls12;
-use sha2::{Digest, Sha256, Sha512};
-use std::path::PathBuf;
-use structopt::StructOpt;
-
-use bitvec::prelude::*;
-use dialoguer::{Confirm, Input};
-use pairing::bls12_381::{Fr, G1, G2};
+use id::types::*;
+use keygen_bls::keygen_bls;
+use pairing::bls12_381::{Bls12, Fr, G1, G2};
 use rand::Rng;
+use sha2::{Digest, Sha256, Sha512};
 use std::{
     collections::HashMap,
+    convert::TryFrom,
     fs::{self, File},
     io::Write,
+    path::PathBuf,
 };
+use structopt::StructOpt;
+
+const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
+
+/// List of BIP39 words. There is a test that checks that this list has correct
+/// length, so there is no need to check when using this in the tool.
+fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
+
+/// Inverse mapping to the implicit mapping in bip39_words. Maps word to its
+/// index in the list. This allows to quickly test membership and convert words
+/// to their index.
+fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
 
 #[derive(StructOpt)]
 struct KeygenIp {
@@ -203,20 +211,8 @@ fn output_possibly_encrypted<X: SerdeSerialize>(
 }
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
-    // Read word list and make sure it contains 2048 words.
-    let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
-        .split_whitespace()
-        .collect();
-    if bip39_vec.len() != 2048 {
-        return Err("The BIP39 word list must contain 2048 words.".to_string());
-    }
-
-    // Create hashmap mapping word to its index in the list.
-    // This allows to quickly test membership and convert words to their index
-    let mut bip39_map = HashMap::with_capacity(bip39_vec.len());
-    for (i, word) in bip39_vec.iter().enumerate() {
-        bip39_map.insert(*word, i);
-    }
+    let bip39_vec = bip39_words().collect::<Vec<_>>();
+    let bip39_map = bip39_map();
 
     let words_str = if kgar.recover {
         println!("Please enter recovery phrase below.");
@@ -386,19 +382,9 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
 
 fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
     // Read word list and make sure it contains 2048 words.
-    let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
-        .split_whitespace()
-        .collect();
-    if bip39_vec.len() != 2048 {
-        return Err("The BIP39 word list must contain 2048 words.".to_string());
-    }
+    let bip39_vec = bip39_words().collect::<Vec<_>>();
 
-    // Create hashmap mapping word to its index in the list.
-    // This allows to quickly test membership and convert words to their index
-    let mut bip39_map = HashMap::new();
-    for (i, word) in bip39_vec.iter().enumerate() {
-        bip39_map.insert(*word, i);
-    }
+    let bip39_map = bip39_map();
 
     // get vector of input words from file or stdin
     let input_words: Vec<_> = match grand.input_path {
@@ -716,9 +702,7 @@ mod tests {
     /// Values are taken from https://github.com/trezor/python-mnemonic/blob/master/vectors.json
     #[test]
     pub fn test_bip39_generation() {
-        let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
-            .split_whitespace()
-            .collect();
+        let bip39_vec: Vec<_> = bip39_words().collect();
         assert_eq!(bip39_vec.len(), 2048);
 
         assert_eq!(
@@ -778,9 +762,7 @@ mod tests {
     /// Test BIP39 verification.
     #[test]
     pub fn test_bip39_verification() {
-        let bip39_vec: Vec<_> = include_str!("data/BIP39English.txt")
-            .split_whitespace()
-            .collect();
+        let bip39_vec: Vec<_> = bip39_words().collect();
         assert_eq!(bip39_vec.len(), 2048);
         let mut bip39_map = HashMap::new();
         for (i, word) in bip39_vec.iter().enumerate() {
