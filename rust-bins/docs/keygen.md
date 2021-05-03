@@ -30,6 +30,10 @@ Generate keys for an anonymity revoker. The following options are supported
 - `--no-confirmation` if set, do not ask user to re-enter generated recovery phrase.
 - `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
 
+No arguments are required. If the arguments `ar-identity`, `description`,
+`global`, `name`, `url`, `out`, or `out-pub` are not supplied they are queried
+by the tool.
+
 ## keygen-ip
 
 Generate keys for the identity provider. The following options are supported

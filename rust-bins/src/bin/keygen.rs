@@ -18,7 +18,6 @@ use rand::Rng;
 use sha2::{Digest, Sha256, Sha512};
 use std::{
     collections::HashMap,
-    convert::TryFrom,
     fs::{self, File},
     io::Write,
     path::PathBuf,
@@ -74,23 +73,19 @@ struct KeygenAr {
         long = "ar-identity",
         help = "The integer identifying the anonymity revoker"
     )]
-    ar_identity: u32,
+    ar_identity: Option<ArIdentity>,
     #[structopt(long = "name", help = "Name of the anonymity revoker")]
-    name: String,
+    name: Option<String>,
     #[structopt(long = "url", help = "url to anonymity revoker")]
-    url: String,
+    url: Option<String>,
     #[structopt(long = "description", help = "Description of anonymity revoker")]
-    description: String,
-    #[structopt(
-        long = "global",
-        help = "File with global parameters.",
-        default_value = "database/global.json"
-    )]
-    global: PathBuf,
+    description: Option<String>,
+    #[structopt(long = "global", help = "File with cryptographic parameters.")]
+    global: Option<PathBuf>,
     #[structopt(long = "out", help = "File to output the secret keys to.")]
-    out: PathBuf,
+    out: Option<PathBuf>,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
-    out_pub: PathBuf,
+    out_pub: Option<PathBuf>,
     #[structopt(
         long = "in-len",
         help = "Number of words read from user. Must be in {12, 15, 18, 21, 24} to constitute a \
@@ -143,7 +138,7 @@ struct GenRand {
 #[structopt(
     about = "Tool for generating keys",
     author = "Concordium",
-    version = "0.2"
+    version = "1"
 )]
 enum KeygenTool {
     #[structopt(name = "keygen-ip", about = "Generate identity provider keys")]
@@ -269,13 +264,36 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     // use input words separated by spaces as randomness
     let random_bytes = words_str.as_bytes();
 
+    let global_file = kgar.global.unwrap_or_else(|| {
+        // read a file from the user, checking that the file they input actually exists.
+        let validator = |candidate: &String| -> Result<(), String> {
+            if std::path::Path::new(candidate).exists() {
+                Ok(())
+            } else {
+                Err(format!("File {} does not exist. Try again.", candidate))
+            }
+        };
+
+        let mut input = Input::new();
+        input.with_prompt("Enter the path to the cryptographic parameters file");
+        // offer a default option if the file exists.
+        if std::path::Path::new("cryptographic-parameters.json").exists() {
+            input.default("cryptographic-parameters.json".to_string());
+        };
+        input.validate_with(validator);
+        loop {
+            match input.interact() {
+                Ok(x) => return PathBuf::from(x),
+                Err(e) => println!("{}", e),
+            }
+        }
+    });
+
     let global_ctx = {
-        if let Some(gc) = read_global_context(kgar.global) {
+        if let Some(gc) = read_global_context(global_file) {
             gc
         } else {
-            return Err(
-                "Cannot read global context information database. Terminating.".to_string(),
-            );
+            return Err("Cannot read cryptographic parameters. Terminating.".to_string());
         }
     };
     let ar_base = global_ctx.on_chain_commitment_key.g;
@@ -286,11 +304,31 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         scalar,
     };
     let ar_public_key = PublicKey::from(&ar_secret_key);
-    let id = kgar.ar_identity;
-    let ar_identity = ArIdentity::try_from(id).unwrap();
-    let name = kgar.name;
-    let url = kgar.url;
-    let description = kgar.description;
+    let ar_identity = match kgar.ar_identity {
+        Some(x) => x,
+        None => Input::new()
+            .with_prompt("Enter AR identity")
+            .interact()
+            .expect("AR identity not provided"),
+    };
+    let name = kgar.name.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Enter the name of the AR")
+            .interact()
+            .expect("AR name not provided.")
+    });
+    let url = kgar.url.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Enter URL of the AR")
+            .interact()
+            .expect("AR URL not provided.")
+    });
+    let description = kgar.description.unwrap_or_else(|| {
+        Input::new()
+            .with_prompt("Enter description of the AR")
+            .interact()
+            .expect("AR description not provided.")
+    });
     let public_ar_info = ArInfo {
         ar_identity,
         ar_description: Description {
@@ -305,8 +343,26 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         ar_secret_key,
     };
     let ver_public_ar_info = Versioned::new(VERSION_0, ar_data.public_ar_info.clone());
-    match output_possibly_encrypted(&kgar.out, &ar_data) {
-        Ok(_) => println!("Wrote private keys to {}.", kgar.out.to_string_lossy()),
+    let out_file = kgar.out.unwrap_or_else(|| {
+        PathBuf::from(
+            Input::new()
+                .with_prompt("Output file name")
+                .default(format!("ar-data-{}.json", ar_identity))
+                .interact()
+                .expect("Output file not provided."),
+        )
+    });
+    let out_pub_file = kgar.out_pub.unwrap_or_else(|| {
+        PathBuf::from(
+            Input::new()
+                .with_prompt("Output file for public data")
+                .default(format!("ar-info-{}.pub.json", ar_identity))
+                .interact()
+                .expect("Output file not provided."),
+        )
+    });
+    match output_possibly_encrypted(&out_file, &ar_data) {
+        Ok(_) => println!("Wrote private keys to {}.", out_file.display()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write private keys to file because {}",
@@ -314,8 +370,8 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
             ));
         }
     }
-    match write_json_to_file(&kgar.out_pub, &ver_public_ar_info) {
-        Ok(_) => println!("Wrote public keys to {}.", kgar.out_pub.to_string_lossy()),
+    match write_json_to_file(&out_pub_file, &ver_public_ar_info) {
+        Ok(_) => println!("Wrote public keys to {}.", out_pub_file.display()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write public keys to file because {}",
@@ -360,7 +416,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     };
     let versioned_ip_info_public = Versioned::new(VERSION_0, full_info.public_ip_info.clone());
     match output_possibly_encrypted(&kgip.out, &full_info) {
-        Ok(_) => println!("Wrote private to {}.", kgip.out.to_string_lossy()),
+        Ok(_) => println!("Wrote private to {}.", kgip.out.display()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON private keys write to file because {}",
@@ -370,7 +426,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     }
 
     match write_json_to_file(&kgip.out_pub, &versioned_ip_info_public) {
-        Ok(_) => println!("Wrote public keys to {}.", kgip.out_pub.to_string_lossy()),
+        Ok(_) => println!("Wrote public keys to {}.", kgip.out_pub.display()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write public keys to file because {}",
