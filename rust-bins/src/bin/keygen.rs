@@ -573,7 +573,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     // convert word vector to bits
     let mut bit_vec = BitVec::<Msb0, u8>::new();
     for word in word_vec {
-        match bip_word_map.get(&**word) {
+        match bip_word_map.get(word.as_str()) {
             Some(idx) => {
                 let word_bits = BitVec::<Msb0, u16>::from_element(*idx as u16);
                 // There are 2048 words in the BIP39 list, which can be represented using 11
