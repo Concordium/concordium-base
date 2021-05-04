@@ -104,6 +104,12 @@ struct KeygenAr {
         help = "Do not ask user to re-enter generated recovery phrase."
     )]
     no_confirmation: bool,
+    #[structopt(
+        long = "only-system-randomness",
+        help = "Do not ask for a list of words from the user. Generate keys only using the system \
+                randomness."
+    )]
+    only_system_randomness: bool,
 }
 
 #[derive(StructOpt)]
@@ -232,11 +238,15 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
 
         input_words.join(" ")
     } else {
-        println!(
-            "Please generate a seed phrase, e.g., using a hardware wallet, and input the words \
-             below."
-        );
-        let input_words = read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?;
+        let input_words = if kgar.only_system_randomness {
+            Vec::new()
+        } else {
+            println!(
+                "Please generate a seed phrase, e.g., using a hardware wallet, and input the \
+                 words below."
+            );
+            read_words_from_terminal(kgar.in_len, !kgar.no_verification, &bip39_map)?
+        };
 
         // rerandomize input words using system randomness
         let randomized_words = rerandomize_bip39(&input_words, &bip39_vec)?;
