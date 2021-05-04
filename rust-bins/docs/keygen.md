@@ -29,6 +29,7 @@ Generate keys for an anonymity revoker. The following options are supported
 - `--recover-from-phrase` if set, recover keys from backup phrase. Otherwise, fresh keys are generated.
 - `--no-confirmation` if set, do not ask user to re-enter generated recovery phrase.
 - `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
+- `--only-system-randomness` if set, do not ask the user for a list of words to add to randomness, instead only relying on system randomness.
 
 No arguments are required. If the arguments `ar-identity`, `description`,
 `global`, `name`, `url`, `out`, or `out-pub` are not supplied they are queried
