@@ -259,15 +259,23 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         }
 
         if !kgar.no_confirmation {
-            // clear screen
-            execute!(std::io::stdout(), Clear(ClearType::All))
-                .map_err(|_| "Could not clear screen.".to_owned())?;
-            println!("Please enter recovery phrase again to confirm.");
+            let mut first = true;
+            loop {
+                // clear screen
+                execute!(std::io::stdout(), Clear(ClearType::All))
+                    .map_err(|_| "Could not clear screen.".to_owned())?;
+                if first {
+                    println!("Please enter recovery phrase again to confirm.");
+                } else {
+                    println!("Recovery phrases do not match. Try again.")
+                }
 
-            let confirmation_words = read_words_from_terminal(kgar.in_len, true, &bip39_map)?;
+                let confirmation_words = read_words_from_terminal(kgar.in_len, true, &bip39_map)?;
 
-            if confirmation_words != randomized_words {
-                return Err("Recovery phrases do not match.".to_string());
+                if confirmation_words == randomized_words {
+                    break;
+                }
+                first = false;
             }
         }
 
