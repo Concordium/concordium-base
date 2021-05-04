@@ -355,7 +355,6 @@ fn main() -> std::io::Result<()> {
                     });
 
                     let public_account_data = json!({
-                        "schemeId": "Ed25519",
                         "address": address_json,
                         "balance": balance,
                         "accountThreshold": 1, // only a single credential
