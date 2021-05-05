@@ -88,7 +88,7 @@ pub fn verify_cdi<
     // since we cannot check proofs independently.
 
     let verifier_reg_id = com_mult::ComMult {
-        cmms:    [
+        cmms: [
             commitments.cmm_prf.combine(&commitments.cmm_cred_counter),
             Commitment(cdi.values.cred_id),
             Commitment(on_chain_commitment_key.g),
@@ -131,7 +131,7 @@ pub fn verify_cdi<
     )?;
 
     let verifier = AndAdapter {
-        first:  verifier_reg_id,
+        first: verifier_reg_id,
         second: verifier_sig,
     };
     let verifier = verifier.add_prover(id_cred_pub_verifier);
@@ -243,9 +243,10 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
         provers.push(item_prover);
         witnesses.push(witness.clone());
     }
-    Ok((ReplicateAdapter { protocols: provers }, ReplicateWitness {
-        witnesses,
-    }))
+    Ok((
+        ReplicateAdapter { protocols: provers },
+        ReplicateWitness { witnesses },
+    ))
 }
 
 /// Verify a policy. This currently does not do anything since
@@ -395,7 +396,7 @@ fn pok_sig_verifier<
         commitments: comm_vec,
         // FIXME: Figure out how to restructure to get rid of this clone.
         ps_pub_key: ip_pub_key.clone(),
-        comm_key:   *commitment_key,
+        comm_key: *commitment_key,
     })
 }
 
@@ -431,7 +432,7 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let initial_acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
@@ -480,7 +481,7 @@ mod tests {
             _phantom: Default::default(),
         };
         let cred_data = CredentialData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
@@ -506,7 +507,7 @@ mod tests {
         // Testing with an existing RegId (i.e. an existing account)
         let existing_reg_id = AccountAddress::new(&cdi.values.cred_id);
         let cred_data = CredentialData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
@@ -552,7 +553,7 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));

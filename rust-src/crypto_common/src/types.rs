@@ -4,12 +4,11 @@
 //! is moved to the bottom of the dependency hierarchy.
 
 use crate::{
-    deserial_vector_no_length, serial_vector_no_length, Buffer, Deserial, Get, SerdeDeserialize,
-    SerdeSerialize, Serial,
+    deserial_vector_no_length, serial_vector_no_length, Buffer, Deserial, Get, ParseResult,
+    SerdeDeserialize, SerdeSerialize, Serial,
 };
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
-use failure::Fallible;
 use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
 
 /// Index of an account key that is to be used.
@@ -26,19 +25,25 @@ pub struct Amount {
 }
 
 impl From<Amount> for u64 {
-    fn from(x: Amount) -> Self { x.microgtu }
+    fn from(x: Amount) -> Self {
+        x.microgtu
+    }
 }
 
 impl From<u64> for Amount {
-    fn from(microgtu: u64) -> Self { Amount { microgtu } }
+    fn from(microgtu: u64) -> Self {
+        Amount { microgtu }
+    }
 }
 
 impl Serial for Amount {
-    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.microgtu.serial(out) }
+    fn serial<B: crate::Buffer>(&self, out: &mut B) {
+        self.microgtu.serial(out)
+    }
 }
 
 impl Deserial for Amount {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> failure::Fallible<Self> {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let microgtu = source.get()?;
         Ok(Amount { microgtu })
     }
@@ -99,7 +104,7 @@ impl std::fmt::Display for AmountParseError {
 impl std::str::FromStr for Amount {
     type Err = AmountParseError;
 
-    fn from_str(v: &str) -> Result<Self, Self::Err> {
+    fn from_str(v: &str) -> ParseResult<Self, Self::Err> {
         let mut microgtu: u64 = 0;
         let mut after_dot = 0;
         let mut state = 0;
@@ -182,13 +187,13 @@ impl std::fmt::Display for Amount {
 
 /// JSON instance serializes and deserializes in microgtu units.
 impl SerdeSerialize for Amount {
-    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> ParseResult<S::Ok, S::Error> {
         ser.serialize_str(&self.microgtu.to_string())
     }
 }
 
 impl<'de> SerdeDeserialize<'de> for Amount {
-    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> ParseResult<Self, D::Error> {
         let s = String::deserialize(des)?;
         let microgtu = s
             .parse::<u64>()
@@ -207,17 +212,19 @@ pub struct Signature {
 }
 
 impl SerdeSerialize for Signature {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> ParseResult<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         serializer.serialize_str(&hex::encode(&self.sig))
     }
 }
 
 impl<'de> SerdeDeserialize<'de> for Signature {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> ParseResult<Self, D::Error>
     where
-        D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         let s = String::deserialize(deserializer)?;
         let sig = hex::decode(s).map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
         if sig.len() <= 65535 {
@@ -246,13 +253,15 @@ pub struct TransactionTime {
 }
 
 impl From<u64> for TransactionTime {
-    fn from(seconds: u64) -> Self { Self { seconds } }
+    fn from(seconds: u64) -> Self {
+        Self { seconds }
+    }
 }
 
 impl FromStr for TransactionTime {
     type Err = ParseIntError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> ParseResult<Self, Self::Err> {
         let seconds = u64::from_str(s)?;
         Ok(Self { seconds })
     }

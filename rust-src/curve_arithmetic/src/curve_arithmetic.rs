@@ -1,26 +1,23 @@
+use anyhow::Result;
 use byteorder::ReadBytesExt;
 use crypto_common::{Serial, Serialize};
-use failure::{Fail, Fallible};
 use ff::{Field, PrimeField};
 use rand::*;
 use std::{
     borrow::Borrow,
-    fmt::{Debug, Display, Formatter},
+    fmt::{Debug, Display},
 };
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum CurveDecodingError {
+    #[error("Not a point on the curve.")]
     NotOnCurve,
 }
 
-impl Display for CurveDecodingError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a point on the curve.") }
-}
-
-impl Fail for CurveDecodingError {}
-
 pub trait Curve:
-    Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
+    Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static
+{
     type Scalar: PrimeField + Field + Serialize;
     type Base: Field;
     type Compressed;
@@ -43,7 +40,7 @@ pub trait Curve:
     fn compress(&self) -> Self::Compressed;
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> Fallible<Self>;
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> Result<Self>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     /// Generate a non-zero scalar. The default implementation does repeated

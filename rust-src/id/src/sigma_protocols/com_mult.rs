@@ -11,7 +11,7 @@ use random_oracle::{Challenge, RandomOracle};
 
 pub struct ComMultSecret<T: Curve> {
     pub values: [Value<T>; 2],
-    pub rands:  [Randomness<T>; 3],
+    pub rands: [Randomness<T>; 3],
 }
 
 /// The ComMult sigma proof instance.
@@ -20,7 +20,7 @@ pub struct ComMultSecret<T: Curve> {
 /// * `cmm_key` - The commitment key with which all the commitments are
 ///   generated.
 pub struct ComMult<C: Curve> {
-    pub cmms:    [Commitment<C>; 3],
+    pub cmms: [Commitment<C>; 3],
     pub cmm_key: CommitmentKey<C>,
 }
 
@@ -86,12 +86,12 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let cR = state.2;
         for i in 0..2 {
             ss[i].mul_assign(&secret.values[i]); // c * x_i
-            ss[i].negate(); // 
+            ss[i].negate(); //
                             // - c * x_i
             ss[i].add_assign(&alphas[i]); // alpha - c * x_i
 
             ts[i].mul_assign(&secret.rands[i]); // c * r_i
-            ts[i].negate(); // 
+            ts[i].negate(); //
                             // - c * r_i
             ts[i].add_assign(&rands[i]); // rTilde_i - c * r_i
         }
@@ -158,7 +158,7 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
 
         let secret = ComMultSecret {
             values: [a_1, a_2],
-            rands:  [r_1, r_2, r_3],
+            rands: [r_1, r_2, r_3],
         };
 
         let com_mult = ComMult {

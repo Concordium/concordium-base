@@ -52,8 +52,8 @@ pub fn test_create_ars<T: Rng>(
         let ar_info = ArInfo::<ArCurve> {
             ar_identity: ar_id,
             ar_description: Description {
-                name:        format!("AnonymityRevoker{}", i),
-                url:         format!("AnonymityRevoker{}.com", i),
+                name: format!("AnonymityRevoker{}", i),
+                url: format!("AnonymityRevoker{}.com", i),
                 description: format!("AnonymityRevoker{}", i),
             },
             ar_public_key,
@@ -84,8 +84,8 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
         public_ip_info: IpInfo {
             ip_identity: IpIdentity(0),
             ip_description: Description {
-                name:        "IP0".to_owned(),
-                url:         "IP0.com".to_owned(),
+                name: "IP0".to_owned(),
+                url: "IP0.com".to_owned(),
                 description: "IP0".to_owned(),
             },
             ip_verify_key,
@@ -172,7 +172,7 @@ pub fn test_pipeline() {
 
     let aci = test_create_aci(&mut csprng);
     let acc_data = InitialAccountData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
             keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
@@ -230,7 +230,7 @@ pub fn test_pipeline() {
         _phantom: Default::default(),
     };
     let acc_data = CredentialData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
             keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
@@ -344,7 +344,11 @@ pub fn test_pipeline() {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
-pub fn run_pipeline_wasm() { test_pipeline(); }
+pub fn run_pipeline_wasm() {
+    test_pipeline();
+}
 
 #[test]
-pub fn run_pipeline() { test_pipeline(); }
+pub fn run_pipeline() {
+    test_pipeline();
+}

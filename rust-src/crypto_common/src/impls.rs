@@ -1,5 +1,5 @@
+use anyhow::bail;
 use byteorder::ReadBytesExt;
-use failure::Fallible;
 
 use ff::PrimeField;
 use group::{CurveAffine, CurveProjective, EncodedPoint};
@@ -10,7 +10,7 @@ use pairing::bls12_381::{
 use crate::serialize::*;
 
 impl Deserial for Fr {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Fr> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {
         let mut frrepr: FrRepr = FrRepr([0u64; 4]);
         // Read the scalar in big endian.
         for digit in frrepr.as_mut().iter_mut().rev() {
@@ -30,7 +30,7 @@ impl Serial for Fr {
 }
 
 impl Deserial for G1 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<G1> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G1> {
         let mut g = G1Compressed::empty();
         source.read_exact(g.as_mut())?;
         Ok(g.into_affine()?.into_projective())
@@ -51,7 +51,7 @@ impl Serial for G1 {
 }
 
 impl Deserial for G1Affine {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<G1Affine> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G1Affine> {
         let mut g = G1Compressed::empty();
         source.read_exact(g.as_mut())?;
         Ok(g.into_affine()?)
@@ -72,7 +72,7 @@ impl Serial for G1Affine {
 }
 
 impl Deserial for G2 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<G2> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G2> {
         let mut g = G2Compressed::empty();
         source.read_exact(g.as_mut())?;
         Ok(g.into_affine()?.into_projective())
@@ -93,7 +93,7 @@ impl Serial for G2 {
 }
 
 impl Deserial for G2Affine {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<G2Affine> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G2Affine> {
         let mut g = G2Compressed::empty();
         source.read_exact(g.as_mut())?;
         Ok(g.into_affine()?)
@@ -146,7 +146,7 @@ impl Serial for Fq12 {
 use ed25519_dalek::*;
 
 impl Deserial for PublicKey {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; PUBLIC_KEY_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(PublicKey::from_bytes(&buf)?)
@@ -161,7 +161,7 @@ impl Serial for PublicKey {
 }
 
 impl Deserial for SecretKey {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; SECRET_KEY_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(SecretKey::from_bytes(&buf)?)
@@ -176,7 +176,7 @@ impl Serial for SecretKey {
 }
 
 impl Deserial for Keypair {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; KEYPAIR_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(Keypair::from_bytes(&buf)?)
@@ -191,7 +191,7 @@ impl Serial for Keypair {
 }
 
 impl Deserial for Signature {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; SIGNATURE_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(Signature::new(buf))
@@ -209,7 +209,7 @@ impl Serial for Signature {
 use either::*;
 
 impl<L: Deserial, R: Deserial> Deserial for Either<L, R> {
-    fn deserial<X: ReadBytesExt>(source: &mut X) -> Fallible<Self> {
+    fn deserial<X: ReadBytesExt>(source: &mut X) -> ParseResult<Self> {
         let l: u8 = source.get()?;
         if l == 0 {
             Ok(Either::Left(source.get()?))
@@ -239,18 +239,22 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
 use std::rc::Rc;
 /// Use the underlying type's instance.
 impl<T: Serial> Serial for Rc<T> {
-    fn serial<B: Buffer>(&self, out: &mut B) { out.put(self.as_ref()) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(self.as_ref())
+    }
 }
 
 /// Use the underlying type's instance. Note that serial + deserial does not
 /// preserve sharing. It will allocate a new copy of the structure.
 impl<T: Deserial> Deserial for Rc<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> { Ok(Rc::new(source.get()?)) }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        Ok(Rc::new(source.get()?))
+    }
 }
 
 /// Deserialization is strict. It only accepts `0` or `1` tags.
 impl<T: Deserial> Deserial for Option<T> {
-    fn deserial<X: ReadBytesExt>(source: &mut X) -> Fallible<Self> {
+    fn deserial<X: ReadBytesExt>(source: &mut X) -> ParseResult<Self> {
         let l: u8 = source.get()?;
         if l == 0 {
             Ok(None)

@@ -1,3 +1,4 @@
+use anyhow::bail;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve25519_dalek::{
@@ -5,20 +6,16 @@ use curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::*,
 };
-use random_oracle::RandomOracle;
-
 use ed25519_dalek::*;
-use failure::Fallible;
 use rand::*;
+use random_oracle::RandomOracle;
 use sha2::{Digest, Sha512};
-
-use failure::Fail;
-use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, SerdeBase16Serialize)]
 pub struct Ed25519DlogProof {
     challenge: Scalar,
-    witness:   Scalar,
+    witness: Scalar,
 }
 
 impl Serial for Ed25519DlogProof {
@@ -31,7 +28,7 @@ impl Serial for Ed25519DlogProof {
 }
 
 impl Deserial for Ed25519DlogProof {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0; 32];
         source.read_exact(&mut buf)?;
         if let Some(challenge) = Scalar::from_canonical_bytes(buf) {
@@ -49,22 +46,13 @@ impl Deserial for Ed25519DlogProof {
 
 pub static PROOF_LENGTH: usize = 2 * 32;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum PointDecodingError {
+    #[error("Not a valid edwards point.")]
     NotOnCurve,
+    #[error("Not a scalar.")]
     NotAScalar,
 }
-
-impl Display for PointDecodingError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            PointDecodingError::NotOnCurve => write!(f, "Not a valid edwards point."),
-            PointDecodingError::NotAScalar => write!(f, "Not a scalar."),
-        }
-    }
-}
-
-impl Fail for PointDecodingError {}
 
 /// FIXME: This is a temporary hack due to library incompatibilites
 /// (dependencies on rand require two different versions.

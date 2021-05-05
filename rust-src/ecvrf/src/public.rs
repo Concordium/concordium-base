@@ -1,17 +1,15 @@
 //! ed25519 public keys.
 
+use anyhow::Result;
 use core::fmt::Debug;
-
+use crypto_common::*;
 use curve25519_dalek::{
     constants,
     digest::Digest,
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,
 };
-
 pub use sha2::{Sha256, Sha512};
-
-use crypto_common::*;
 
 use crate::{constants::*, errors::*, proof::*, secret::*};
 /// An ed25519 public key.
@@ -37,7 +35,7 @@ impl Serial for PublicKey {
 /// small order (and hence also not a point at infinity).
 impl Deserial for PublicKey {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
         let mut buf = [0u8; PUBLIC_KEY_LENGTH];
         source.read_exact(&mut buf)?;
 
@@ -56,7 +54,9 @@ impl Deserial for PublicKey {
 }
 
 impl AsRef<[u8]> for PublicKey {
-    fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
 }
 
 impl<'a> From<&'a SecretKey> for PublicKey {
@@ -88,7 +88,9 @@ impl<'a> From<&'a ExpandedSecretKey> for PublicKey {
 impl PublicKey {
     /// View this public key as a byte array.
     #[inline]
-    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
+    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] {
+        &(self.0).0
+    }
 
     /// Internal utility function for mangling the bits of a (formerly
     /// mathematically well-defined) "scalar" and multiplying it to produce a
@@ -137,7 +139,9 @@ impl PublicKey {
         None
     }
 
-    pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
+    pub fn verify_key(&self) -> bool {
+        !self.1.is_small_order()
+    }
 
     /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.3
     #[allow(clippy::many_single_char_names)]

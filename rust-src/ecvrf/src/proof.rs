@@ -1,17 +1,14 @@
 //! An VRF Proof.
 
+use crate::{constants::*, errors::*};
+use anyhow::Result;
 use core::fmt::Debug;
-
+use crypto_common::*;
 use curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,
 };
-
-use crate::{constants::*, errors::*};
-
 use sha2::*;
-
-use crypto_common::*;
 
 /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.3
 pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
@@ -53,7 +50,7 @@ impl Serial for Proof {
 /// results in a valid proof object.
 impl Deserial for Proof {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
         let mut point_bytes: [u8; 32] = [0u8; 32];
         source.read_exact(&mut point_bytes)?;
         let mut scalar_bytes1: [u8; 32] = [0u8; 32];

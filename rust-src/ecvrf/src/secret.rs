@@ -1,25 +1,22 @@
 //! ed25519 secret key types.
 
-use core::fmt::Debug;
-
-use zeroize::Zeroize;
-
-use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
-
-use rand::{CryptoRng, Rng};
-
-use sha2::Sha512;
-
-use subtle::{Choice, ConstantTimeEq};
-
 use crate::{constants::*, errors::*, public::*};
+use anyhow::Result;
+use core::fmt::Debug;
 use crypto_common::*;
+use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
+use rand::{CryptoRng, Rng};
+use sha2::Sha512;
+use subtle::{Choice, ConstantTimeEq};
+use zeroize::Zeroize;
 
 /// An EdDSA secret key.
 pub struct SecretKey(pub(crate) [u8; SECRET_KEY_LENGTH]);
 
 impl ConstantTimeEq for SecretKey {
-    fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
 }
 
 impl Serial for SecretKey {
@@ -33,7 +30,7 @@ impl Serial for SecretKey {
 /// Construct a `SecretKey` from a slice of bytes.
 impl Deserial for SecretKey {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
         let mut buf = [0u8; SECRET_KEY_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(SecretKey(buf))
@@ -48,21 +45,29 @@ impl Debug for SecretKey {
 
 /// Overwrite secret key material with null bytes when it goes out of scope.
 impl Drop for SecretKey {
-    fn drop(&mut self) { self.0.zeroize(); }
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
 }
 
 impl AsRef<[u8]> for SecretKey {
-    fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
 }
 
 impl SecretKey {
     /// Convert this secret key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { Box::new(self.0) }
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        Box::new(self.0)
+    }
 
     /// View this secret key as a byte array.
     #[inline]
-    pub fn as_bytes(&self) -> &'_ [u8; SECRET_KEY_LENGTH] { &self.0 }
+    pub fn as_bytes(&self) -> &'_ [u8; SECRET_KEY_LENGTH] {
+        &self.0
+    }
 
     /// Construct a `SecretKey` from a slice of bytes.
     ///
@@ -72,7 +77,7 @@ impl SecretKey {
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, ProofError> {
         if bytes.len() != SECRET_KEY_LENGTH {
             return Err(ProofError(InternalError::BytesLength {
-                name:   "SecretKey",
+                name: "SecretKey",
                 length: SECRET_KEY_LENGTH,
             }));
         }
@@ -90,7 +95,8 @@ impl SecretKey {
     /// Generate a `SecretKey` from a `csprng`.
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
-        T: CryptoRng + Rng, {
+        T: CryptoRng + Rng,
+    {
         let mut sk: SecretKey = SecretKey([0u8; 32]);
 
         csprng.fill_bytes(&mut sk.0);
@@ -103,7 +109,8 @@ impl SecretKey {
 impl Serialize for SecretKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer, {
+        S: Serializer,
+    {
         serializer.serialize_bytes(self.as_bytes())
     }
 }
@@ -112,7 +119,8 @@ impl Serialize for SecretKey {
 impl<'d> Deserialize<'d> for SecretKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>, {
+        D: Deserializer<'d>,
+    {
         struct SecretKeyVisitor;
 
         impl<'d> Visitor<'d> for SecretKeyVisitor {
@@ -124,7 +132,8 @@ impl<'d> Deserialize<'d> for SecretKey {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<SecretKey, E>
             where
-                E: SerdeError, {
+                E: SerdeError,
+            {
                 SecretKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }
@@ -168,7 +177,7 @@ impl<'d> Deserialize<'d> for SecretKey {
 // better-designed, Schnorr-based signature scheme, see Trevor Perrin's work on
 // "generalised EdDSA" and "VXEdDSA".
 pub struct ExpandedSecretKey {
-    pub(crate) key:   Scalar,
+    pub(crate) key: Scalar,
     pub(crate) nonce: [u8; 32],
 }
 
@@ -200,7 +209,7 @@ impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
         lower[31] |= 0b_0100_0000;
 
         ExpandedSecretKey {
-            key:   Scalar::from_bits(lower),
+            key: Scalar::from_bits(lower),
             nonce: upper,
         }
     }
@@ -229,7 +238,7 @@ impl ExpandedSecretKey {
     pub fn from_bytes(bytes: &[u8]) -> Result<ExpandedSecretKey, ProofError> {
         if bytes.len() != EXPANDED_SECRET_KEY_LENGTH {
             return Err(ProofError(InternalError::BytesLength {
-                name:   "ExpandedSecretKey",
+                name: "ExpandedSecretKey",
                 length: EXPANDED_SECRET_KEY_LENGTH,
             }));
         }
@@ -240,7 +249,7 @@ impl ExpandedSecretKey {
         upper.copy_from_slice(&bytes[32..64]);
 
         Ok(ExpandedSecretKey {
-            key:   Scalar::from_bits(lower),
+            key: Scalar::from_bits(lower),
             nonce: upper,
         })
     }

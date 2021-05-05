@@ -22,7 +22,8 @@ impl Keypair {
     /// Generate an ed25519 keypair.
     pub fn generate<R>(csprng: &mut R) -> Keypair
     where
-        R: CryptoRng + Rng, {
+        R: CryptoRng + Rng,
+    {
         let sk = SecretKey::generate(csprng);
         let pk = PublicKey::from(&sk);
 

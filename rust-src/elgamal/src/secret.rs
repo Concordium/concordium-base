@@ -2,9 +2,9 @@
 
 //! Elgamal secret key types
 use crate::{cipher::*, message::*};
+use anyhow::{bail, Result};
 use crypto_common::*;
 use curve_arithmetic::{Curve, Value};
-use failure::bail;
 use ff::Field;
 use rand::*;
 use std::collections::HashMap;
@@ -52,7 +52,7 @@ impl<C: Curve> Serial for BabyStepGiantStep<C> {
 }
 
 impl<C: Curve> Deserial for BabyStepGiantStep<C> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
         let m: u64 = source.get()?;
         let inverse_point = source.get()?;
         let mut table = HashMap::with_capacity(std::cmp::min(1 << 16, m as usize));
@@ -149,7 +149,7 @@ impl<C: Curve> SecretKey<C> {
     pub fn generate<T: Rng>(generator: &C, csprng: &mut T) -> Self {
         SecretKey {
             generator: *generator,
-            scalar:    C::generate_scalar(csprng),
+            scalar: C::generate_scalar(csprng),
         }
     }
 
@@ -158,7 +158,7 @@ impl<C: Curve> SecretKey<C> {
         let x = C::generate_non_zero_scalar(csprng);
         SecretKey {
             generator: C::one_point().mul_by_scalar(&x),
-            scalar:    C::generate_scalar(csprng),
+            scalar: C::generate_scalar(csprng),
         }
     }
 }

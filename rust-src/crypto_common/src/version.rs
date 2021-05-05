@@ -15,15 +15,21 @@ pub struct Version {
 }
 
 impl From<u32> for Version {
-    fn from(value: u32) -> Version { Version { value } }
+    fn from(value: u32) -> Version {
+        Version { value }
+    }
 }
 
 impl From<Version> for u32 {
-    fn from(val: Version) -> u32 { val.value }
+    fn from(val: Version) -> u32 {
+        val.value
+    }
 }
 
 impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "{}", self.value) }
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 impl Serial for Version {
@@ -52,7 +58,7 @@ impl Serial for Version {
 }
 
 impl Deserial for Version {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut acc: u64 = 0;
         for _ in 0..5 {
             let byte = u64::from(source.read_u8()?);
@@ -83,7 +89,9 @@ pub struct Versioned<T> {
 }
 
 impl<T> Versioned<T> {
-    pub fn new(version: Version, value: T) -> Versioned<T> { Versioned { version, value } }
+    pub fn new(version: Version, value: T) -> Versioned<T> {
+        Versioned { version, value }
+    }
 }
 
 impl<T: Serial> Serial for Versioned<T> {
@@ -94,7 +102,7 @@ impl<T: Serial> Serial for Versioned<T> {
 }
 
 impl<T: Deserial> Deserial for Versioned<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let version: Version = source.get()?;
         let value: T = source.get()?;
         Ok(Versioned { version, value })
@@ -133,7 +141,7 @@ mod tests {
     fn test_version_serialization_overflow() {
         let data: Vec<u8> = vec![0x9F, 0xFF, 0xFF, 0xFF, 0x7F];
         let mut cursor = std::io::Cursor::new(data);
-        let version: Fallible<Version> = cursor.get();
+        let version: ParseResult<Version> = cursor.get();
         assert!(version.is_err());
     }
 

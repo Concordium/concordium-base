@@ -2,47 +2,31 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-
-use core::fmt::{self, Display};
+use thiserror::Error;
 // use pairing::{GroupDecodingError, PrimeFieldDecodingError};
 
 /// Internal errors.  
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 #[allow(dead_code)]
 pub(crate) enum InternalError {
     // GDecodingError(GroupDecodingError),
     // FDecodingError(PrimeFieldDecodingError),
+    #[error("Not on curve.")]
     CurveDecodingError,
+    #[error("Not a field element.")]
     FieldDecodingError,
+    #[error("Wrong length of commitment key bytes.")]
     CommitmentKeyLengthError,
+    #[error("Wrong length of commitment bytes.")]
     ValueVecLengthError,
+    #[error("Wrong length of value vec bytes.")]
     CommitmentLengthError,
+    #[error("Wrong value vec length or key length or both.")]
     KeyValueLengthMismatch,
 }
 
-impl Display for InternalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            // InternalError::GDecodingError(ref p) => write!(f, "{}", p),
-            // InternalError::FDecodingError(ref p) => write!(f, "{}", p),
-            InternalError::CurveDecodingError => write!(f, "Not on Curve"),
-            InternalError::FieldDecodingError => write!(f, "Not a Field element"),
-            InternalError::CommitmentKeyLengthError => {
-                write!(f, "wrong length of commitment key bytes")
-            }
-            InternalError::CommitmentLengthError => write!(f, "wrong length of commitment bytes "),
-            InternalError::ValueVecLengthError => write!(f, "wrong length of value vec bytes "),
-            InternalError::KeyValueLengthMismatch => {
-                write!(f, "wrong value vec length or key length or both")
-            }
-        }
-    }
-}
-
-impl ::failure::Fail for InternalError {}
-
-/// Errors which may occur druing execution
+/// Errors which may occur during execution
 ///
 /// This error may arise due to:
 ///
@@ -50,13 +34,6 @@ impl ::failure::Fail for InternalError {}
 ///
 /// * A problem decompressing to a scalar or group element,
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
+#[error("{0}")]
 pub struct CommitmentError(pub(crate) InternalError);
-
-impl Display for CommitmentError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
-}
-
-impl ::failure::Fail for CommitmentError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
-}
