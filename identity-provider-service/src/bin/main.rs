@@ -99,7 +99,7 @@ struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
     id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
     #[serde(rename = "redirectURI")]
-    redirect_uri: String,
+    redirect_uri:      String,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -121,7 +121,7 @@ struct IdentityTokenContainer {
     /// The status of the submission.
     status: IdentityStatus,
     /// The response, if available, otherwise Null.
-    token: serde_json::Value,
+    token:  serde_json::Value,
     /// Details of the response in the form of a free-form text.
     detail: String,
 }
@@ -146,7 +146,7 @@ struct ServerConfig {
 #[derive(Clone)]
 struct DB {
     /// Root directory where all the data is stored.
-    root: std::path::PathBuf,
+    root:        std::path::PathBuf,
     /// Root of the backup directory where we store "deleted" files.
     backup_root: std::path::PathBuf,
     /// And a hashmap of pending entries. Pending entries are also stored in the
@@ -154,7 +154,7 @@ struct DB {
     /// often. We put it behind a mutex to sync all accesses, to the hashmap
     /// as well as to the filesystem, which is implicit. In a real database
     /// this would be done differently.
-    pending: Arc<Mutex<HashMap<String, PendingEntry>>>,
+    pending:     Arc<Mutex<HashMap<String, PendingEntry>>>,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
@@ -432,7 +432,7 @@ struct SubmissionStatusResponse {
 #[derive(SerdeDeserialize)]
 struct GetParameters {
     #[serde(rename = "state")]
-    state: String,
+    state:        String,
     #[serde(rename = "redirect_uri")]
     redirect_uri: String,
 }

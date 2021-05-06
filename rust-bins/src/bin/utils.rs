@@ -11,7 +11,7 @@ use structopt::StructOpt;
 #[derive(StructOpt)]
 struct ConfigEncrypt {
     #[structopt(long = "in", help = "File to encrypt.")]
-    input: PathBuf,
+    input:  PathBuf,
     #[structopt(long = "out", help = "Name of the output file.")]
     output: PathBuf,
 }
@@ -19,7 +19,7 @@ struct ConfigEncrypt {
 #[derive(StructOpt)]
 struct ConfigDecrypt {
     #[structopt(long = "in", help = "File to decrypt.")]
-    input: PathBuf,
+    input:  PathBuf,
     #[structopt(
         long = "out",
         help = "Place to output the decryption. Defaults to standard output."

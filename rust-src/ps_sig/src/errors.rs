@@ -1,10 +1,4 @@
-// rustc seems to think the typenames in match statements (e.g. in
-// Display) should be snake cased, for some reason.
-#![allow(non_snake_case)]
-
 use thiserror::Error;
-// use pairing::{GroupDecodingError, PrimeFieldDecodingError};
-// use curve_arithmetic::*;
 
 /// Internal errors.  
 

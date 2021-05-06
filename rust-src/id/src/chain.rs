@@ -394,8 +394,8 @@ fn pok_sig_verifier<
         blinded_sig: blinded_sig.clone(),
         commitments: comm_vec,
         // FIXME: Figure out how to restructure to get rid of this clone.
-        ps_pub_key: ip_pub_key.clone(),
-        comm_key:   *commitment_key,
+        ps_pub_key:  ip_pub_key.clone(),
+        comm_key:    *commitment_key,
     })
 }
 
