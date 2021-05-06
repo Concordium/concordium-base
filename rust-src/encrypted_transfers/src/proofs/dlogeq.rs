@@ -94,11 +94,11 @@ mod test {
         let g2x = g2.mul_by_scalar(&x);
         let dlog1 = Dlog {
             public: g1x,
-            coeff:  g1,
+            coeff: g1,
         };
         let dlog2 = Dlog {
             public: g2x,
-            coeff:  g2,
+            coeff: g2,
         };
         let equal = DlogEqual { dlog1, dlog2 };
         let secret = DlogSecret { secret: x_secret };

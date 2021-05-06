@@ -21,11 +21,15 @@ pub struct EncryptedAmountNoSplit<C: Curve> {
 }
 
 impl<C: Curve> AsRef<[Cipher<C>; 2]> for EncryptedAmount<C> {
-    fn as_ref(&self) -> &[Cipher<C>; 2] { &self.encryptions }
+    fn as_ref(&self) -> &[Cipher<C>; 2] {
+        &self.encryptions
+    }
 }
 
 impl<C: Curve> AsRef<[Cipher<C>]> for EncryptedAmount<C> {
-    fn as_ref(&self) -> &[Cipher<C>] { &self.encryptions.as_ref() }
+    fn as_ref(&self) -> &[Cipher<C>] {
+        &self.encryptions.as_ref()
+    }
 }
 
 /// Randomness used when producing an encrypted amount.

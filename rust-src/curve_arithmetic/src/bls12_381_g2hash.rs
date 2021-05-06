@@ -334,14 +334,17 @@ const K1: [[[u64; 6]; 2]; 4] = [
             0x5c759507e8e333e,
         ],
     ],
-    [[0, 0, 0, 0, 0, 0], [
-        0x26a9ffffffffc71a,
-        0x1472aaa9cb8d5555,
-        0x9a208c6b4f20a418,
-        0x984f87adf7ae0c7f,
-        0x32126fced787c88f,
-        0x11560bf17baa99bc,
-    ]],
+    [
+        [0, 0, 0, 0, 0, 0],
+        [
+            0x26a9ffffffffc71a,
+            0x1472aaa9cb8d5555,
+            0x9a208c6b4f20a418,
+            0x984f87adf7ae0c7f,
+            0x32126fced787c88f,
+            0x11560bf17baa99bc,
+        ],
+    ],
     [
         [
             0x26a9ffffffffc71e,
@@ -374,22 +377,28 @@ const K1: [[[u64; 6]; 2]; 4] = [
 ];
 
 const K2: [[[u64; 6]; 2]; 3] = [
-    [[0, 0, 0, 0, 0, 0], [
-        0xb9feffffffffaa63,
-        0x1eabfffeb153ffff,
-        0x6730d2a0f6b0f624,
-        0x64774b84f38512bf,
-        0x4b1ba7b6434bacd7,
-        0x1a0111ea397fe69a,
-    ]],
-    [[0xc, 0, 0, 0, 0, 0], [
-        0xb9feffffffffaa9f,
-        0x1eabfffeb153ffff,
-        0x6730d2a0f6b0f624,
-        0x64774b84f38512bf,
-        0x4b1ba7b6434bacd7,
-        0x1a0111ea397fe69a,
-    ]],
+    [
+        [0, 0, 0, 0, 0, 0],
+        [
+            0xb9feffffffffaa63,
+            0x1eabfffeb153ffff,
+            0x6730d2a0f6b0f624,
+            0x64774b84f38512bf,
+            0x4b1ba7b6434bacd7,
+            0x1a0111ea397fe69a,
+        ],
+    ],
+    [
+        [0xc, 0, 0, 0, 0, 0],
+        [
+            0xb9feffffffffaa9f,
+            0x1eabfffeb153ffff,
+            0x6730d2a0f6b0f624,
+            0x64774b84f38512bf,
+            0x4b1ba7b6434bacd7,
+            0x1a0111ea397fe69a,
+        ],
+    ],
     [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
 ];
 
@@ -412,14 +421,17 @@ const K3: [[[u64; 6]; 2]; 4] = [
             0x1530477c7ab4113b,
         ],
     ],
-    [[0, 0, 0, 0, 0, 0], [
-        0x6238aaaaaaaa97be,
-        0x5c2638e343d9c71c,
-        0x88b58423c50ae15d,
-        0x32c52d39fd3a042a,
-        0xbb5b7a9a47d7ed85,
-        0x5c759507e8e333e,
-    ]],
+    [
+        [0, 0, 0, 0, 0, 0],
+        [
+            0x6238aaaaaaaa97be,
+            0x5c2638e343d9c71c,
+            0x88b58423c50ae15d,
+            0x32c52d39fd3a042a,
+            0xbb5b7a9a47d7ed85,
+            0x5c759507e8e333e,
+        ],
+    ],
     [
         [
             0x26a9ffffffffc71c,
@@ -470,22 +482,28 @@ const K4: [[[u64; 6]; 2]; 4] = [
             0x1a0111ea397fe69a,
         ],
     ],
-    [[0, 0, 0, 0, 0, 0], [
-        0xb9feffffffffa9d3,
-        0x1eabfffeb153ffff,
-        0x6730d2a0f6b0f624,
-        0x64774b84f38512bf,
-        0x4b1ba7b6434bacd7,
-        0x1a0111ea397fe69a,
-    ]],
-    [[0x12, 0x0, 0x0, 0x0, 0x0, 0x0], [
-        0xb9feffffffffaa99,
-        0x1eabfffeb153ffff,
-        0x6730d2a0f6b0f624,
-        0x64774b84f38512bf,
-        0x4b1ba7b6434bacd7,
-        0x1a0111ea397fe69a,
-    ]],
+    [
+        [0, 0, 0, 0, 0, 0],
+        [
+            0xb9feffffffffa9d3,
+            0x1eabfffeb153ffff,
+            0x6730d2a0f6b0f624,
+            0x64774b84f38512bf,
+            0x4b1ba7b6434bacd7,
+            0x1a0111ea397fe69a,
+        ],
+    ],
+    [
+        [0x12, 0x0, 0x0, 0x0, 0x0, 0x0],
+        [
+            0xb9feffffffffaa99,
+            0x1eabfffeb153ffff,
+            0x6730d2a0f6b0f624,
+            0x64774b84f38512bf,
+            0x4b1ba7b6434bacd7,
+            0x1a0111ea397fe69a,
+        ],
+    ],
     [[1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
 ];
 

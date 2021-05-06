@@ -447,7 +447,7 @@ unsafe extern "C" fn derive_public_key(
 ) -> *mut elgamal::PublicKey<Group> {
     let pk = elgamal::PublicKey {
         generator: *from_ptr!(gc_ptr).elgamal_generator(),
-        key:       from_ptr!(group_ptr).0,
+        key: from_ptr!(group_ptr).0,
     };
     Box::into_raw(Box::new(pk))
 }

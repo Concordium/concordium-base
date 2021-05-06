@@ -48,41 +48,41 @@ fn bench_parts(c: &mut Criterion) {
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar_id1 = ArIdentity::try_from(1).unwrap();
     let ar1_info = ArInfo::<G1> {
-        ar_identity:    ar_id1,
+        ar_identity: ar_id1,
         ar_description: mk_dummy_description("A good AR".to_string()),
-        ar_public_key:  ar1_public_key,
+        ar_public_key: ar1_public_key,
     };
 
     let ar2_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar_id2 = ArIdentity::try_from(2).unwrap();
     let ar2_info = ArInfo::<G1> {
-        ar_identity:    ar_id2,
+        ar_identity: ar_id2,
         ar_description: mk_dummy_description("A nice AR".to_string()),
-        ar_public_key:  ar2_public_key,
+        ar_public_key: ar2_public_key,
     };
     let ar3_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar_id3 = ArIdentity::try_from(3).unwrap();
     let ar3_info = ArInfo::<G1> {
-        ar_identity:    ar_id3,
+        ar_identity: ar_id3,
         ar_description: mk_dummy_description("Weird AR".to_string()),
-        ar_public_key:  ar3_public_key,
+        ar_public_key: ar3_public_key,
     };
 
     let ar4_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar_id4 = ArIdentity::try_from(4).unwrap();
     let ar4_info = ArInfo::<G1> {
-        ar_identity:    ar_id4,
+        ar_identity: ar_id4,
         ar_description: mk_dummy_description("Ok AR".to_string()),
-        ar_public_key:  ar4_public_key,
+        ar_public_key: ar4_public_key,
     };
 
     let ip_info = IpInfo {
-        ip_identity:       IpIdentity(88),
-        ip_description:    mk_dummy_description("IP88".to_string()),
-        ip_verify_key:     ip_public_key,
+        ip_identity: IpIdentity(88),
+        ip_description: mk_dummy_description("IP88".to_string()),
+        ip_verify_key: ip_public_key,
         ip_cdi_verify_key: keypair.public,
     };
 
@@ -122,7 +122,7 @@ fn bench_parts(c: &mut Criterion) {
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
 
     let initial_acc_data = InitialAccountData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
             keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));

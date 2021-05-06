@@ -11,19 +11,21 @@ use std::iter::once;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
-    A:        C,
-    S:        C,
-    T_1:      C,
-    T_2:      C,
-    tx:       C::Scalar,
+    A: C,
+    S: C,
+    T_1: C,
+    T_2: C,
+    tx: C::Scalar,
     tx_tilde: C::Scalar,
-    e_tilde:  C::Scalar,
+    e_tilde: C::Scalar,
     ip_proof: InnerProductProof<C>,
 }
 
 /// Determine whether the i-th bit (counting from least significant) is set in
 /// the given u64 value.
-fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
+fn ith_bit_bool(v: u64, i: u8) -> bool {
+    v & (1 << i) != 0
+}
 
 #[allow(non_snake_case)]
 fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
@@ -635,10 +637,16 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
 ) -> Option<RangeProof<C>> {
     let mut randomness = **randomness_b;
     randomness.sub_assign(&randomness_a);
-    prove(transcript, csprng, n, 2, &[b - a, a], gens, key, &[
-        Randomness::new(randomness),
-        Randomness::new(**randomness_a),
-    ])
+    prove(
+        transcript,
+        csprng,
+        n,
+        2,
+        &[b - a, a],
+        gens,
+        key,
+        &[Randomness::new(randomness), Randomness::new(**randomness_a)],
+    )
 }
 
 /// Given commitments to a and b, verify that a <= b
