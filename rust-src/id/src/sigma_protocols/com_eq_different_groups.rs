@@ -13,7 +13,7 @@ use random_oracle::RandomOracle;
 
 #[derive(Debug)]
 pub struct ComEqDiffGroupsSecret<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
-    pub value: Value<C2>,
+    pub value:      Value<C2>,
     pub rand_cmm_1: Randomness<C1>,
     pub rand_cmm_2: Randomness<C2>,
 }
@@ -150,7 +150,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
             commitment_2: v,
         };
         let secret = ComEqDiffGroupsSecret {
-            value: a_1,
+            value:      a_1,
             rand_cmm_1: a_2,
             rand_cmm_2: r,
         };

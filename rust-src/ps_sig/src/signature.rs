@@ -11,9 +11,7 @@ pub struct BlindingRandomness<P: Pairing>(pub Secret<P::ScalarField>, pub Secret
 /// Manual implementation to relax the requirements on `P`. The derived
 /// instance would have required P to have `PartialEq`.
 impl<P: Pairing> PartialEq for BlindingRandomness<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }
 }
 
 #[repr(transparent)]
@@ -28,9 +26,7 @@ pub struct BlindedSignature<P: Pairing> {
 pub struct Signature<C: Pairing>(pub C::G1, pub C::G1);
 
 impl<C: Pairing> PartialEq for Signature<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }
 }
 
 impl<C: Pairing> Eq for Signature<C> {}

@@ -3,8 +3,7 @@ pub use crate::impls::*;
 use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
-use std::collections::btree_map::BTreeMap;
-use std::{convert::TryFrom, marker::PhantomData};
+use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomData};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
@@ -40,9 +39,7 @@ impl Deserial for u16 {
 }
 
 impl Deserial for u8 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> {
-        Ok(source.read_u8()?)
-    }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> { Ok(source.read_u8()?) }
 }
 
 impl Deserial for i64 {
@@ -64,9 +61,7 @@ impl Deserial for i16 {
 }
 
 impl Deserial for i8 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> {
-        Ok(source.read_i8()?)
-    }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> { Ok(source.read_i8()?) }
 }
 
 /// Read a vector where the first 8 bytes are taken as length in big endian.
@@ -126,9 +121,7 @@ pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<
 
 impl<T> Deserial for PhantomData<T> {
     #[inline]
-    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> {
-        Ok(Default::default())
-    }
+    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { Ok(Default::default()) }
 }
 
 /// Trait for writers which will not fail in normal operation with
@@ -138,26 +131,18 @@ impl<T> Deserial for PhantomData<T> {
 pub trait Buffer: Sized + WriteBytesExt {
     type Result;
     fn start() -> Self;
-    fn start_hint(_l: usize) -> Self {
-        Self::start()
-    }
+    fn start_hint(_l: usize) -> Self { Self::start() }
     fn result(self) -> Self::Result;
 }
 
 impl Buffer for Vec<u8> {
     type Result = Vec<u8>;
 
-    fn start() -> Vec<u8> {
-        Vec::new()
-    }
+    fn start() -> Vec<u8> { Vec::new() }
 
-    fn start_hint(l: usize) -> Vec<u8> {
-        Vec::with_capacity(l)
-    }
+    fn start_hint(l: usize) -> Vec<u8> { Vec::with_capacity(l) }
 
-    fn result(self) -> Self::Result {
-        self
-    }
+    fn result(self) -> Self::Result { self }
 }
 
 pub trait Serial {
@@ -349,9 +334,7 @@ pub trait Get<A> {
 
 impl<R: ReadBytesExt, A: Deserial> Get<A> for R {
     #[inline]
-    fn get(&mut self) -> ParseResult<A> {
-        A::deserial(self)
-    }
+    fn get(&mut self) -> ParseResult<A> { A::deserial(self) }
 }
 
 /// Conventient wrappers.
@@ -361,9 +344,7 @@ pub trait Put<A> {
 
 impl<R: Buffer, A: Serial> Put<A> for R {
     #[inline]
-    fn put(&mut self, v: &A) {
-        v.serial(self)
-    }
+    fn put(&mut self, v: &A) { v.serial(self) }
 }
 
 /// A convenient way to refer to both put and get together.
@@ -547,9 +528,7 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
 }
 
 impl<'a, T: Serial> Serial for &'a T {
-    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
-        (*self).serial(target)
-    }
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { (*self).serial(target) }
 }
 
 // Helpers for json serialization
@@ -569,9 +548,7 @@ pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> ParseRes
     des.deserialize_str(Base16Visitor(Default::default()))
 }
 
-pub fn base16_encode_string<S: Serial>(x: &S) -> String {
-    encode(&to_bytes(x))
-}
+pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(&to_bytes(x)) }
 
 pub fn base16_decode_string<S: Deserial>(x: &str) -> ParseResult<S> {
     let d = decode(x)?;

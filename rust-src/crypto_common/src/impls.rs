@@ -239,17 +239,13 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
 use std::rc::Rc;
 /// Use the underlying type's instance.
 impl<T: Serial> Serial for Rc<T> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(self.as_ref())
-    }
+    fn serial<B: Buffer>(&self, out: &mut B) { out.put(self.as_ref()) }
 }
 
 /// Use the underlying type's instance. Note that serial + deserial does not
 /// preserve sharing. It will allocate a new copy of the structure.
 impl<T: Deserial> Deserial for Rc<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        Ok(Rc::new(source.get()?))
-    }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> { Ok(Rc::new(source.get()?)) }
 }
 
 /// Deserialization is strict. It only accepts `0` or `1` tags.

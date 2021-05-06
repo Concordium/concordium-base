@@ -30,18 +30,14 @@ impl<C: Curve> Commitment<C> {
 impl<C: Curve> Deref for Commitment<C> {
     type Target = C;
 
-    fn deref(&self) -> &C {
-        &self.0
-    }
+    fn deref(&self) -> &C { &self.0 }
 }
 
 /// This trait allows automatic conversion of &Commitment<C> to &C. In
 /// particular this means that we can simply write `c.mul_by_scalar`, for
 /// example.
 impl<C: Curve> std::borrow::Borrow<C> for Commitment<C> {
-    fn borrow(&self) -> &C {
-        &self.0
-    }
+    fn borrow(&self) -> &C { &self.0 }
 }
 
 #[cfg(test)]
@@ -50,9 +46,7 @@ mod tests {
     use pairing::bls12_381::{G1, G2};
     use rand::*;
     impl<C: Curve> Commitment<C> {
-        pub fn generate<T: Rng>(csprng: &mut T) -> Commitment<C> {
-            Commitment(C::generate(csprng))
-        }
+        pub fn generate<T: Rng>(csprng: &mut T) -> Commitment<C> { Commitment(C::generate(csprng)) }
     }
 
     macro_rules! macro_test_commitment_to_byte_conversion {

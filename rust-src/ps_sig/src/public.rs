@@ -44,9 +44,7 @@ impl<C: Pairing> Eq for PublicKey<C> {}
 #[allow(clippy::len_without_is_empty)]
 impl<C: Pairing> PublicKey<C> {
     /// Return the number of commitments that can be signed with this key.
-    pub fn len(&self) -> usize {
-        self.ys.len()
-    }
+    pub fn len(&self) -> usize { self.ys.len() }
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
         let ys = &self.y_tildas;
@@ -69,8 +67,7 @@ impl<C: Pairing> PublicKey<C> {
     /// Generate a public key  from a `csprng`.
     pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         let mut ys: Vec<C::G1> = Vec::with_capacity(n);
         for _i in 0..n {
             ys.push(C::G1::generate(csprng));

@@ -129,7 +129,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // First the proof that we know id_cred_sec.
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
-        coeff: context.global_context.on_chain_commitment_key.g,
+        coeff:  context.global_context.on_chain_commitment_key.g,
     };
     let secret = dlog::DlogSecret {
         secret: id_cred_sec.clone(),
@@ -138,21 +138,18 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Next the proof that id_cred_sec is the same both in id_cred_pub
     // and in the commitment to id_cred_sec (cmm_sc).
     let prover = AndAdapter {
-        first: prover,
+        first:  prover,
         second: com_eq::ComEq {
             commitment: cmm_sc,
-            y: id_cred_pub,
-            cmm_key: sc_ck,
-            g: context.global_context.on_chain_commitment_key.g,
+            y:          id_cred_pub,
+            cmm_key:    sc_ck,
+            g:          context.global_context.on_chain_commitment_key.g,
         },
     };
-    let secret = (
-        secret,
-        com_eq::ComEqSecret::<P::G1> {
-            r: cmm_sc_rand.clone(),
-            a: id_cred_sec.view(),
-        },
-    );
+    let secret = (secret, com_eq::ComEqSecret::<P::G1> {
+        r: cmm_sc_rand.clone(),
+        a: id_cred_sec.view(),
+    });
 
     // Commit to the PRF key for the IP and prove equality for the secret-shared PRF
     // key
@@ -169,17 +166,14 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let prover = prover.add_prover(com_eq_different_groups::ComEqDiffGroups {
         commitment_1: cmm_prf,
         commitment_2: *snd_cmm_prf,
-        cmm_key_1: commitment_key_prf,
-        cmm_key_2: *ar_commitment_key,
+        cmm_key_1:    commitment_key_prf,
+        cmm_key_2:    *ar_commitment_key,
     });
-    let secret = (
-        secret,
-        com_eq_different_groups::ComEqDiffGroupsSecret {
-            value: prf_key.to_value(),
-            rand_cmm_1: rand_cmm_prf.clone(),
-            rand_cmm_2: rand_snd_cmm_prf,
-        },
-    );
+    let secret = (secret, com_eq_different_groups::ComEqDiffGroupsSecret {
+        value:      prf_key.to_value(),
+        rand_cmm_1: rand_cmm_prf.clone(),
+        rand_cmm_2: rand_snd_cmm_prf,
+    });
 
     // Now we produce a list of proofs relating to the encryption to the anonymity
     // revoker of all the shares.
@@ -223,8 +217,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let combined_rands = inner_product::<C::Scalar>(&rands_as_scalars, &scalars);
         let combined_encryption_randomness = elgamal::Randomness::new(combined_rands);
         let secret = com_enc_eq::ComEncEqSecret {
-            value: item.share.clone(),
-            elgamal_rand: combined_encryption_randomness,
+            value:         item.share.clone(),
+            elgamal_rand:  combined_encryption_randomness,
             pedersen_rand: item.randomness_cmm_to_share.clone(),
         };
         // FIXME: Need some context in the challenge computation.
@@ -269,9 +263,9 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Proof that RegID_ACC = PRF(AHI.key_PRF ,0):
     let prover_prf_regid = com_eq::ComEq {
         commitment: cmm_prf,
-        y: context.global_context.on_chain_commitment_key.g,
-        g: reg_id,
-        cmm_key: commitment_key_prf,
+        y:          context.global_context.on_chain_commitment_key.g,
+        g:          reg_id,
+        cmm_key:    commitment_key_prf,
     };
 
     let secret_prf_regid = com_eq::ComEqSecret {
@@ -528,8 +522,7 @@ pub fn create_credential<
     new_or_existing: &either::Either<TransactionTime, AccountAddress>,
 ) -> anyhow::Result<CredentialDeploymentInfo<P, C, AttributeType>>
 where
-    AttributeType: Clone,
-{
+    AttributeType: Clone, {
     let unsigned_credential_info = create_unsigned_credential(
         context,
         id_object,
@@ -578,8 +571,7 @@ pub fn create_unsigned_credential<
     addr: Option<&AccountAddress>,
 ) -> anyhow::Result<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
-    AttributeType: Clone,
-{
+    AttributeType: Clone, {
     let mut csprng = thread_rng();
 
     let ip_sig = &id_object.signature;
@@ -646,12 +638,9 @@ where
     let ar_data = id_cred_data
         .iter()
         .map(|item| {
-            (
-                item.ar.ar_identity,
-                ChainArData {
-                    enc_id_cred_pub_share: item.encrypted_share,
-                },
-            )
+            (item.ar.ar_identity, ChainArData {
+                enc_id_cred_pub_share: item.encrypted_share,
+            })
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -702,8 +691,8 @@ where
     // create provers for knowledge of id_cred_sec.
     for item in id_cred_data.iter() {
         let secret = com_enc_eq::ComEncEqSecret {
-            value: item.share.clone(),
-            elgamal_rand: item.encryption_randomness.clone(),
+            value:         item.share.clone(),
+            elgamal_rand:  item.encryption_randomness.clone(),
             pedersen_rand: item.randomness_cmm_to_share.clone(),
         };
 
@@ -757,7 +746,7 @@ where
     )?;
 
     let prover = AndAdapter {
-        first: prover_reg_id,
+        first:  prover_reg_id,
         second: prover_sig,
     };
     let prover = prover.add_prover(ReplicateAdapter {
@@ -949,17 +938,17 @@ fn compute_pok_sig<
         commitments: comm_vec,
         // FIXME: Figure out how to get rid of the clone
         ps_pub_key: ip_pub_key.clone(),
-        comm_key: *commitment_key,
+        comm_key:   *commitment_key,
     };
     Ok((prover, secret))
 }
 
 pub struct CommitmentsRandomness<C: Curve> {
-    id_cred_sec_rand: PedersenRandomness<C>,
-    prf_rand: PedersenRandomness<C>,
+    id_cred_sec_rand:  PedersenRandomness<C>,
+    prf_rand:          PedersenRandomness<C>,
     cred_counter_rand: PedersenRandomness<C>,
     max_accounts_rand: PedersenRandomness<C>,
-    attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
+    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -1081,7 +1070,7 @@ fn compute_pok_reg_id<C: Curve>(
     let secret = com_mult::ComMultSecret { values, rands };
 
     let prover = com_mult::ComMult {
-        cmms: public,
+        cmms:    public,
         cmm_key: *on_chain_commitment_key,
     };
     (prover, secret)
@@ -1226,7 +1215,7 @@ mod tests {
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let aci = test_create_aci(&mut csprng);
         let acc_data = InitialAccountData {
-            keys: {
+            keys:      {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));

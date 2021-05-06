@@ -57,9 +57,7 @@ pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl std::fmt::Display for AccountAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.to_base58check(1).fmt(f)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
 }
 
 // Parse from string assuming base58 check encoding.
@@ -190,15 +188,11 @@ pub struct IpCdiSignature(ed25519::Signature);
 impl std::ops::Deref for IpCdiSignature {
     type Target = ed25519::Signature;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl From<ed25519::Signature> for IpCdiSignature {
-    fn from(sig: ed25519::Signature) -> Self {
-        IpCdiSignature(sig)
-    }
+    fn from(sig: ed25519::Signature) -> Self { IpCdiSignature(sig) }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
@@ -207,15 +201,11 @@ pub struct AccountOwnershipSignature(ed25519::Signature);
 impl std::ops::Deref for AccountOwnershipSignature {
     type Target = ed25519::Signature;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl From<ed25519::Signature> for AccountOwnershipSignature {
-    fn from(sig: ed25519::Signature) -> Self {
-        AccountOwnershipSignature(sig)
-    }
+    fn from(sig: ed25519::Signature) -> Self { AccountOwnershipSignature(sig) }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -255,9 +245,7 @@ impl AccountOwnershipProof {
     /// Number of individual signatures in this proof.
     /// NB: This method relies on the invariant that signatures should not
     /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold {
-        SignatureThreshold(self.sigs.len() as u8)
-    }
+    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
 }
 
 #[derive(
@@ -278,9 +266,7 @@ impl AccountOwnershipProof {
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[derive(
@@ -313,21 +299,15 @@ impl Deserial for ArIdentity {
 }
 
 impl fmt::Display for ArIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl Into<u32> for ArIdentity {
-    fn into(self) -> u32 {
-        self.0
-    }
+    fn into(self) -> u32 { self.0 }
 }
 
 impl Into<u64> for ArIdentity {
-    fn into(self) -> u64 {
-        u64::from(self.0)
-    }
+    fn into(self) -> u64 { u64::from(self.0) }
 }
 
 impl TryFrom<u32> for ArIdentity {
@@ -354,9 +334,7 @@ impl FromStr for ArIdentity {
 impl ArIdentity {
     /// Curve scalars must be big enough to accommodate all 32 bit unsigned
     /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar {
-        C::scalar_from_u64(u64::from(self.0))
-    }
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 
     #[cfg(test)]
     // This is unchecked, and only used in tests.
@@ -379,8 +357,7 @@ pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mu
 where
     I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
     I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
-    F: FnMut(Either<&'a V1, &'a V2>),
-{
+    F: FnMut(Either<&'a V1, &'a V2>), {
     let mut iter_1 = i1.into_iter().peekable();
     let mut iter_2 = i2.into_iter().peekable();
     while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {
@@ -428,9 +405,7 @@ pub const ATTRIBUTE_NAMES: [&str; 13] = [
 pub struct AttributeStringTag(String);
 
 impl<'a> fmt::Display for AttributeStringTag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 // NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
@@ -484,15 +459,11 @@ impl std::str::FromStr for AttributeTag {
 }
 
 impl Into<usize> for AttributeTag {
-    fn into(self) -> usize {
-        self.0.into()
-    }
+    fn into(self) -> usize { self.0.into() }
 }
 
 impl From<u8> for AttributeTag {
-    fn from(x: u8) -> Self {
-        AttributeTag(x)
-    }
+    fn from(x: u8) -> Self { AttributeTag(x) }
 }
 
 pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
@@ -506,15 +477,14 @@ pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Seri
 /// Year must be a 4 digit year, i.e., between 1000 and 9999.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct YearMonth {
-    pub year: u16,
+    pub year:  u16,
     pub month: u8,
 }
 
 impl SerdeSerialize for YearMonth {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         let s = format!("{}{:0>2}", self.year, self.month);
         serializer.serialize_str(&s)
     }
@@ -523,8 +493,7 @@ impl SerdeSerialize for YearMonth {
 impl<'de> SerdeDeserialize<'de> for YearMonth {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
-    {
+        D: Deserializer<'de>, {
         deserializer.deserialize_str(YearMonthVisitor)
     }
 }
@@ -540,8 +509,7 @@ impl<'de> Visitor<'de> for YearMonthVisitor {
 
     fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
     where
-        E: de::Error,
-    {
+        E: de::Error, {
         YearMonth::from_str(s).map_err(de::Error::custom)
     }
 }
@@ -597,7 +565,7 @@ impl YearMonth {
         use chrono::Datelike;
         let now = chrono::Utc::now();
         YearMonth {
-            year: now.year() as u16,
+            year:  now.year() as u16,
             month: now.month() as u8,
         }
     }
@@ -618,33 +586,25 @@ impl TryFrom<u64> for YearMonth {
 impl From<YearMonth> for u64 {
     /// Convert expiry (year and month) to unsigned 64-bit integer.
     /// Least significant byte is month, following two bytes are year
-    fn from(v: YearMonth) -> Self {
-        u64::from(v.month) | (u64::from(v.year) << 8)
-    }
+    fn from(v: YearMonth) -> Self { u64::from(v.month) | (u64::from(v.year) << 8) }
 }
 
 impl From<&YearMonth> for u64 {
     /// Convert expiry (year and month) to unsigned 64-bit integer.
     /// Least significant byte is month, following two bytes are year
-    fn from(v: &YearMonth) -> Self {
-        u64::from(v.month) | (u64::from(v.year) << 8)
-    }
+    fn from(v: &YearMonth) -> Self { u64::from(v.month) | (u64::from(v.year) << 8) }
 }
 
 impl From<&YearMonth> for u32 {
     /// Convert expiry (year and month) to unsigned 32-bit integer.
     /// Least significant byte is month, following two bytes are year
-    fn from(v: &YearMonth) -> Self {
-        u32::from(v.month) | (u32::from(v.year) << 8)
-    }
+    fn from(v: &YearMonth) -> Self { u32::from(v.month) | (u32::from(v.year) << 8) }
 }
 
 impl From<YearMonth> for u32 {
     /// Convert expiry (year and month) to unsigned 32-bit integer.
     /// Least significant byte is month, following two bytes are year
-    fn from(v: YearMonth) -> Self {
-        u32::from(v.month) | (u32::from(v.year) << 8)
-    }
+    fn from(v: YearMonth) -> Self { u32::from(v.month) | (u32::from(v.year) << 8) }
 }
 
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -1010,15 +970,11 @@ pub trait HasArPublicKey<C: Curve> {
 }
 
 impl<C: Curve> HasArPublicKey<C> for ArInfo<C> {
-    fn get_public_key(&self) -> &ArPublicKey<C> {
-        &self.ar_public_key
-    }
+    fn get_public_key(&self) -> &ArPublicKey<C> { &self.ar_public_key }
 }
 
 impl<C: Curve> HasArPublicKey<C> for ArPublicKey<C> {
-    fn get_public_key(&self) -> &ArPublicKey<C> {
-        self
-    }
+    fn get_public_key(&self) -> &ArPublicKey<C> { self }
 }
 
 /// The commitments sent by the account holder to the chain in order to
@@ -1303,21 +1259,15 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
 }
 
 impl From<ed25519::PublicKey> for VerifyKey {
-    fn from(pk: ed25519::PublicKey) -> Self {
-        VerifyKey::Ed25519VerifyKey(pk)
-    }
+    fn from(pk: ed25519::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
 }
 
 impl From<&ed25519::Keypair> for VerifyKey {
-    fn from(kp: &ed25519::Keypair) -> Self {
-        VerifyKey::Ed25519VerifyKey(kp.public)
-    }
+    fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
 impl From<&KeyPairDef> for VerifyKey {
-    fn from(kp: &KeyPairDef) -> Self {
-        VerifyKey::Ed25519VerifyKey(kp.public)
-    }
+    fn from(kp: &KeyPairDef) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
 /// Compare byte representation.
@@ -1330,15 +1280,11 @@ impl Ord for VerifyKey {
 }
 
 impl PartialOrd for VerifyKey {
-    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
 impl PartialEq for VerifyKey {
-    fn eq(&self, other: &VerifyKey) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
+    fn eq(&self, other: &VerifyKey) -> bool { self.cmp(other) == Ordering::Equal }
 }
 
 impl Serial for VerifyKey {
@@ -1452,8 +1398,7 @@ fn deserialize_ar_data<'de, D: de::Deserializer<'de>, C: Curve>(
 
         fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
         where
-            A: de::MapAccess<'de>,
-        {
+            A: de::MapAccess<'de>, {
             let mut map = map;
             let mut res = BTreeMap::new();
             while let Some((k, v)) = map.next_entry::<String, _>()? {
@@ -1662,20 +1607,14 @@ impl<C: Curve> GlobalContext<C> {
 
     /// The generator for encryption in the exponent is the second component of
     /// the commitment key, the 'h'.
-    pub fn encryption_in_exponent_generator(&self) -> &C {
-        &self.on_chain_commitment_key.h
-    }
+    pub fn encryption_in_exponent_generator(&self) -> &C { &self.on_chain_commitment_key.h }
 
     /// The generator used as the base for elgamal public keys.
-    pub fn elgamal_generator(&self) -> &C {
-        &self.on_chain_commitment_key.g
-    }
+    pub fn elgamal_generator(&self) -> &C { &self.on_chain_commitment_key.g }
 
     /// A wrapper function to support changes in internal structure of the
     /// context in the future, e.g., lazy generation of generators.
-    pub fn bulletproof_generators(&self) -> &Generators<C> {
-        &self.bulletproof_generators
-    }
+    pub fn bulletproof_generators(&self) -> &Generators<C> { &self.bulletproof_generators }
 }
 
 /// Make a context in which the account holder can produce a pre-identity object
@@ -1708,7 +1647,7 @@ pub trait PublicInitialAccountData {
     /// Get the CredentialPublicKeys struct directly
     fn get_cred_key_info(&self) -> CredentialPublicKeys {
         CredentialPublicKeys {
-            keys: self.get_public_keys(),
+            keys:      self.get_public_keys(),
             threshold: self.get_threshold(),
         }
     }
@@ -1740,7 +1679,7 @@ pub trait PublicCredentialData {
     /// Get the CredentialPublicKeys struct directly
     fn get_cred_key_info(&self) -> CredentialPublicKeys {
         CredentialPublicKeys {
-            keys: self.get_public_keys(),
+            keys:      self.get_public_keys(),
             threshold: self.get_threshold(),
         }
     }
@@ -1775,9 +1714,7 @@ pub struct AccountKeys {
 
 /// Create account keys with a single credential at index 0
 impl From<CredentialData> for AccountKeys {
-    fn from(cd: CredentialData) -> Self {
-        Self::from((KeyIndex(0), cd))
-    }
+    fn from(cd: CredentialData) -> Self { Self::from((KeyIndex(0), cd)) }
 }
 
 /// Create account keys with a single credential at the given index
@@ -1796,13 +1733,10 @@ impl From<(KeyIndex, CredentialData)> for AccountKeys {
 impl From<InitialAccountData> for AccountKeys {
     fn from(cd: InitialAccountData) -> Self {
         let mut keys = BTreeMap::new();
-        keys.insert(
-            KeyIndex(0),
-            CredentialData {
-                keys: cd.keys,
-                threshold: cd.threshold,
-            },
-        );
+        keys.insert(KeyIndex(0), CredentialData {
+            keys:      cd.keys,
+            threshold: cd.threshold,
+        });
         Self {
             keys,
             threshold: SignatureThreshold(1),
@@ -1823,9 +1757,7 @@ pub struct CredentialData {
 }
 
 impl PublicCredentialData for CredentialData {
-    fn get_threshold(&self) -> SignatureThreshold {
-        self.threshold
-    }
+    fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
@@ -1866,9 +1798,7 @@ pub struct InitialAccountData {
 }
 
 impl PublicInitialAccountData for InitialAccountData {
-    fn get_threshold(&self) -> SignatureThreshold {
-        self.threshold
-    }
+    fn get_threshold(&self) -> SignatureThreshold { self.threshold }
 
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
@@ -1926,9 +1856,7 @@ impl Deserial for CredentialPublicKeys {
 }
 
 impl CredentialPublicKeys {
-    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> {
-        self.keys.get(&idx)
-    }
+    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
 }
 
 /// Serialization of relevant types.

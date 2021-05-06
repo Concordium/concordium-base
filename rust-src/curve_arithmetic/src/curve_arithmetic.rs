@@ -16,8 +16,7 @@ pub enum CurveDecodingError {
 }
 
 pub trait Curve:
-    Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static
-{
+    Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
     type Scalar: PrimeField + Field + Serialize;
     type Base: Field;
     type Compressed;

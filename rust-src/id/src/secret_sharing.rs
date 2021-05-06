@@ -28,13 +28,9 @@ impl Deserial for Threshold {
 impl Threshold {
     /// Curve scalars must be big enough to accommodate all 8 bit unsigned
     /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar {
-        C::scalar_from_u64(u64::from(self.0))
-    }
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 
-    pub fn to_json(self) -> Value {
-        json!(self.0)
-    }
+    pub fn to_json(self) -> Value { json!(self.0) }
 
     pub fn from_json(v: &Value) -> Option<Self> {
         let v = u8::try_from(v.as_u64()?).ok()?;
@@ -47,15 +43,11 @@ impl Threshold {
 }
 
 impl Into<u8> for Threshold {
-    fn into(self) -> u8 {
-        self.0
-    }
+    fn into(self) -> u8 { self.0 }
 }
 
 impl Into<usize> for Threshold {
-    fn into(self) -> usize {
-        usize::from(self.0)
-    }
+    fn into(self) -> usize { usize::from(self.0) }
 }
 
 impl TryFrom<u8> for Threshold {
@@ -83,9 +75,7 @@ impl TryFrom<usize> for Threshold {
 }
 
 impl std::fmt::Display for Threshold {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.0.fmt(f) }
 }
 
 pub struct SharingData<C: Curve> {

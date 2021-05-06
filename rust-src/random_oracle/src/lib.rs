@@ -19,9 +19,7 @@ pub struct Challenge {
 }
 
 impl AsRef<[u8]> for Challenge {
-    fn as_ref(&self) -> &[u8] {
-        &self.challenge
-    }
+    fn as_ref(&self) -> &[u8] { &self.challenge }
 }
 
 impl Write for RandomOracle {
@@ -38,9 +36,7 @@ impl Write for RandomOracle {
     }
 
     #[inline(always)]
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 impl Buffer for RandomOracle {
@@ -50,41 +46,27 @@ impl Buffer for RandomOracle {
     >;
 
     #[inline(always)]
-    fn start() -> Self {
-        RandomOracle::empty()
-    }
+    fn start() -> Self { RandomOracle::empty() }
 
     // Compute the result in the given state, consuming the state.
-    fn result(self) -> Self::Result {
-        self.0.finalize()
-    }
+    fn result(self) -> Self::Result { self.0.finalize() }
 }
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
-    pub fn empty() -> Self {
-        RandomOracle(Sha3_256::new())
-    }
+    pub fn empty() -> Self { RandomOracle(Sha3_256::new()) }
 
     /// Start with the initial domain string.
-    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
-        RandomOracle(Sha3_256::new().chain(data))
-    }
+    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_256::new().chain(data)) }
 
     /// Duplicate the random oracle, creating a fresh copy of it.
     /// Further updates are independent.
-    pub fn split(&self) -> Self {
-        RandomOracle(self.0.clone())
-    }
+    pub fn split(&self) -> Self { RandomOracle(self.0.clone()) }
 
     /// Append the input to the state of the oracle.
-    pub fn add<B: Serial>(&mut self, data: &B) {
-        self.put(data)
-    }
+    pub fn add<B: Serial>(&mut self, data: &B) { self.put(data) }
 
-    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) {
-        self.0.update(data)
-    }
+    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) { self.0.update(data) }
 
     /// Append the input to the state of the oracle, using `label` as domain
     /// separation.
@@ -99,8 +81,7 @@ impl RandomOracle {
     pub fn extend_from<'a, I, S: 'a, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
         S: Serial,
-        I: IntoIterator<Item = &'a S>,
-    {
+        I: IntoIterator<Item = &'a S>, {
         self.add_bytes(label);
         for i in iter.into_iter() {
             self.add(i)
@@ -110,9 +91,7 @@ impl RandomOracle {
     /// Try to convert the computed result into a field element. This interprets
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
-    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar {
-        C::scalar_from_bytes(self.result())
-    }
+    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes(self.result()) }
 
     /// Get a challenge from the current state, consuming the state.
     pub fn get_challenge(self) -> Challenge {

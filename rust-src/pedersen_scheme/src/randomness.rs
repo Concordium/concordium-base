@@ -25,15 +25,11 @@ pub struct Randomness<C: Curve> {
 impl<C: Curve> Deref for Randomness<C> {
     type Target = C::Scalar;
 
-    fn deref(&self) -> &C::Scalar {
-        &self.randomness
-    }
+    fn deref(&self) -> &C::Scalar { &self.randomness }
 }
 
 impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
-    fn as_ref(&self) -> &C::Scalar {
-        &self.randomness
-    }
+    fn as_ref(&self) -> &C::Scalar { &self.randomness }
 }
 
 impl<C: Curve> Randomness<C> {
@@ -55,29 +51,23 @@ impl<C: Curve> Randomness<C> {
         }
     }
 
-    pub fn from_u64(x: u64) -> Self {
-        Self::new(C::scalar_from_u64(x))
-    }
+    pub fn from_u64(x: u64) -> Self { Self::new(C::scalar_from_u64(x)) }
 
     /// Zero randomness.
     #[inline]
-    pub fn zero() -> Self {
-        Randomness::new(C::Scalar::zero())
-    }
+    pub fn zero() -> Self { Randomness::new(C::Scalar::zero()) }
 
     /// Generate a scalar as randomness.
     pub fn generate<T>(csprng: &mut T) -> Randomness<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         Randomness::new(C::generate_scalar(csprng))
     }
 
     /// Generate a non-zero scalar as randomness.
     pub fn generate_non_zero<T>(csprng: &mut T) -> Randomness<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         Randomness::new(C::generate_non_zero_scalar(csprng))
     }
 }

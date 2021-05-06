@@ -17,24 +17,19 @@ pub struct Password {
 }
 
 impl From<String> for Password {
-    fn from(password: String) -> Self {
-        Password { password }
-    }
+    fn from(password: String) -> Self { Password { password } }
 }
 
 impl FromStr for Password {
     type Err = <String as FromStr>::Err;
 
-    fn from_str(s: &str) -> ParseResult<Self, Self::Err> {
-        Ok(Password { password: s.into() })
-    }
+    fn from_str(s: &str) -> ParseResult<Self, Self::Err> { Ok(Password { password: s.into() }) }
 }
 
 // Helpers for JSON serialization in base64 standard format.
 fn as_base64<A: AsRef<[u8]>, S>(key: &A, serializer: S) -> ParseResult<S::Ok, S::Error>
 where
-    S: Serializer,
-{
+    S: Serializer, {
     serializer.serialize_str(&base64::encode(key.as_ref()))
 }
 

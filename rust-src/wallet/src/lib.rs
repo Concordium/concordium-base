@@ -35,11 +35,11 @@ type ExampleCurve = G1;
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransferContext {
-    pub from: AccountAddress,
-    pub to: Option<AccountAddress>,
+    pub from:   AccountAddress,
+    pub to:     Option<AccountAddress>,
     pub expiry: u64,
-    pub nonce: u64,
-    pub keys: AccountKeys,
+    pub nonce:  u64,
+    pub keys:   AccountKeys,
     pub energy: u64,
 }
 
@@ -58,12 +58,9 @@ fn make_signatures<H: AsRef<[u8]>>(
             let public = kp.public;
             let secret = kp.secret;
             let signature = ed25519_dalek::Keypair { public, secret }.sign(hash.as_ref());
-            cred_sigs.insert(
-                key_index,
-                Signature {
-                    sig: signature.to_bytes().to_vec(),
-                },
-            );
+            cred_sigs.insert(key_index, Signature {
+                sig: signature.to_bytes().to_vec(),
+            });
         }
         out.insert(cred_index, cred_sigs);
     }
@@ -263,9 +260,7 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
-fn check_account_address_aux(input: &str) -> bool {
-    input.parse::<AccountAddress>().is_ok()
-}
+fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
 
 /// Aggregate two encrypted amounts together into one.
 fn combine_encrypted_amounts_aux(left: &str, right: &str) -> anyhow::Result<String> {
@@ -439,12 +434,12 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
-        scalar: enc_key,
+        scalar:    enc_key,
     };
 
     let credential_message = AccountCredentialMessage {
         message_expiry: expiry,
-        credential: AccountCredential::Normal { cdi },
+        credential:     AccountCredential::Normal { cdi },
     };
 
     let response = json!({
@@ -480,7 +475,7 @@ fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
             let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
             let secret_key = elgamal::SecretKey {
                 generator: *global_context.elgamal_generator(),
-                scalar: enc_key,
+                scalar:    enc_key,
             };
             let address = AccountAddress::new(&reg_id);
             response.push(json!({

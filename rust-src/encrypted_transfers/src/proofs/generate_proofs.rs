@@ -101,7 +101,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     // pk_sender = g^sk
     let sigma_1 = Dlog {
         public: pk_sender.key,
-        coeff: pk_sender.generator,
+        coeff:  pk_sender.generator,
     };
 
     // ElgDec is used to prove knowledge of sk and s such that
@@ -109,7 +109,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     let (e1, e2) = (S.0, S.1);
     let elg_dec = ElgDec {
         public: e2,
-        coeff: [e1, *h],
+        coeff:  [e1, *h],
     };
     let sigma_2 = elg_dec;
     let cmm_key = CommitmentKey {
@@ -132,7 +132,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     // is equal to \sum_{j=1}^t 2^{(chunk_size)*(j-1)} a_j
     //            +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j'
     EncTrans {
-        dlog: sigma_1,
+        dlog:    sigma_1,
         elg_dec: sigma_2,
         encexp1: sigma_3_protocols,
         encexp2: sigma_4_protocols,
@@ -234,7 +234,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .collect();
     let protocol = gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
     let secret = EncTransSecret {
-        dlog_secret: Rc::new(sk_sender.scalar),
+        dlog_secret:     Rc::new(sk_sender.scalar),
         encexp1_secrets: a_secrets,
         encexp2_secrets: s_prime_secrets,
     };
@@ -397,7 +397,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         })
         .collect();
     let secret = EncTransSecret {
-        dlog_secret: Rc::new(sk.scalar),
+        dlog_secret:     Rc::new(sk.scalar),
         encexp1_secrets: vec![ComEqSecret::<C> {
             r: PedersenRandomness::from_u64(u64::from(a)),
             a: Value::from(0u64),

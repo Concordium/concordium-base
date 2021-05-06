@@ -21,9 +21,7 @@ pub const SIGNATURE_SIZE: usize = 48;
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
 impl<P: Pairing> SecretKey<P> {
-    pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> {
-        SecretKey(P::generate_scalar(rng))
-    }
+    pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> { SecretKey(P::generate_scalar(rng)) }
 
     // Sign a message using the SecretKey
     pub fn sign(&self, m: &[u8]) -> Signature<P> {
@@ -35,7 +33,7 @@ impl<P: Pairing> SecretKey<P> {
     pub fn prove<R: Rng>(&self, csprng: &mut R, ro: &mut RandomOracle) -> Proof<P> {
         let prover = Dlog {
             public: P::G2::one_point().mul_by_scalar(&self.0),
-            coeff: P::G2::one_point(),
+            coeff:  P::G2::one_point(),
         };
         let secret = DlogSecret {
             secret: Value::new(self.0),
@@ -46,9 +44,7 @@ impl<P: Pairing> SecretKey<P> {
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
-    fn clone(&self) -> Self {
-        SecretKey(self.0)
-    }
+    fn clone(&self) -> Self { SecretKey(self.0) }
 }
 
 impl<P: Pairing> Copy for SecretKey<P> {}
@@ -56,9 +52,7 @@ impl<P: Pairing> Copy for SecretKey<P> {}
 // NOT CONSTANT TIME!!!
 // USE ONLY FOR TESTING!!!
 impl<P: Pairing> PartialEq for SecretKey<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 // A Public Key is a point on the second curve of the pairing
@@ -89,24 +83,20 @@ impl<P: Pairing> PublicKey<P> {
     pub fn check_proof(&self, ro: &mut RandomOracle, proof: &Proof<P>) -> bool {
         let verifier = Dlog {
             public: self.0,
-            coeff: P::G2::one_point(),
+            coeff:  P::G2::one_point(),
         };
         verify(ro, &verifier, proof)
     }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
-    fn clone(&self) -> Self {
-        PublicKey(self.0)
-    }
+    fn clone(&self) -> Self { PublicKey(self.0) }
 }
 
 impl<P: Pairing> Copy for PublicKey<P> {}
 
 impl<P: Pairing> PartialEq for PublicKey<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 #[derive(Debug, Eq, Serialize)]
@@ -120,23 +110,17 @@ impl<P: Pairing> Signature<P> {
 
     // The empty signature is the unit with respect to aggregation,
     // and can be used as a dummy signature.
-    pub(crate) fn empty() -> Self {
-        Signature(P::G1::zero_point())
-    }
+    pub(crate) fn empty() -> Self { Signature(P::G1::zero_point()) }
 }
 
 impl<P: Pairing> Clone for Signature<P> {
-    fn clone(&self) -> Self {
-        Signature(self.0)
-    }
+    fn clone(&self) -> Self { Signature(self.0) }
 }
 
 impl<P: Pairing> Copy for Signature<P> {}
 
 impl<P: Pairing> PartialEq for Signature<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 // A proof of knowledge of a secretkey
@@ -230,9 +214,7 @@ fn has_duplicates<T>(messages: &[(&[u8], T)]) -> bool {
 }
 
 // hashes a message using Sha512
-fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> {
-    Sha512::digest(m)
-}
+fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> { Sha512::digest(m) }
 
 #[cfg(test)]
 mod test {

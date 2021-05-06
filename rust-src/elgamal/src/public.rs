@@ -13,7 +13,7 @@ use curve_arithmetic::{multiexp, Curve, Value};
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct PublicKey<C: Curve> {
     pub generator: C,
-    pub key: C,
+    pub key:       C,
 }
 
 impl<C: Curve> Debug for PublicKey<C> {
@@ -36,8 +36,7 @@ impl<C: Curve> PublicKey<C> {
     /// private.
     pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, Randomness<C>)
     where
-        T: Rng,
-    {
+        T: Rng, {
         let k = Randomness::generate(csprng);
         let g = self.generator.mul_by_scalar(&k.randomness);
         // FIXME: Could use multiexponentiation when we are calling from
@@ -50,8 +49,7 @@ impl<C: Curve> PublicKey<C> {
     /// Wrapper around `encrypt_rand` that forgets the randomness.
     pub fn encrypt<T>(&self, csprng: &mut T, m: &Message<C>) -> Cipher<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         self.encrypt_rand(csprng, m).0
     }
 
@@ -70,8 +68,7 @@ impl<C: Curve> PublicKey<C> {
         e: &Value<C>,
     ) -> (Cipher<C>, Randomness<C>)
     where
-        T: Rng,
-    {
+        T: Rng, {
         self.encrypt_exponent_rand_given_generator(e, &self.generator, csprng)
     }
 
@@ -86,8 +83,7 @@ impl<C: Curve> PublicKey<C> {
         csprng: &mut T,
     ) -> (Cipher<C>, Randomness<C>)
     where
-        T: Rng,
-    {
+        T: Rng, {
         let randomness = C::generate_scalar(csprng);
         let g = self.generator.mul_by_scalar(&randomness);
         let s = multiexp(&[self.key, *h], &[randomness, *e.as_ref()]);
@@ -98,8 +94,7 @@ impl<C: Curve> PublicKey<C> {
     /// Wrapper around `encrypt_exponent_rand` that forgets the randomness.
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Value<C>) -> Cipher<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         self.encrypt_exponent_rand(csprng, e).0
     }
 
@@ -112,8 +107,7 @@ impl<C: Curve> PublicKey<C> {
         csprng: &mut T,
     ) -> Cipher<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         self.encrypt_exponent_rand_given_generator(e, h, csprng).0
     }
 
@@ -126,8 +120,7 @@ impl<C: Curve> PublicKey<C> {
     ) -> Vec<(Cipher<C>, Randomness<C>)>
     where
         T: Rng,
-        I: IntoIterator<Item = &'a Value<C>>,
-    {
+        I: IntoIterator<Item = &'a Value<C>>, {
         self.encrypt_exponent_vec_given_generator(es, &self.generator, csprng)
     }
 
@@ -144,8 +137,7 @@ impl<C: Curve> PublicKey<C> {
     ) -> Vec<(Cipher<C>, Randomness<C>)>
     where
         T: Rng,
-        I: IntoIterator<Item = &'a Value<C>>,
-    {
+        I: IntoIterator<Item = &'a Value<C>>, {
         let f = move |x: &'a Value<C>| -> (Cipher<C>, Randomness<C>) {
             self.encrypt_exponent_rand_given_generator(x, h, csprng)
         };

@@ -11,9 +11,7 @@ use std::rc::Rc;
 pub struct UnknownMessage<C: Pairing>(pub C::G1);
 
 impl<C: Pairing> PartialEq for UnknownMessage<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 impl<C: Pairing> Eq for UnknownMessage<C> {}
@@ -22,15 +20,11 @@ impl<C: Pairing> Eq for UnknownMessage<C> {}
 impl<P: Pairing> Deref for UnknownMessage<P> {
     type Target = P::G1;
 
-    fn deref(&self) -> &P::G1 {
-        &self.0
-    }
+    fn deref(&self) -> &P::G1 { &self.0 }
 }
 
 impl<P: Pairing> From<Commitment<P::G1>> for UnknownMessage<P> {
-    fn from(cmm: Commitment<P::G1>) -> Self {
-        UnknownMessage(cmm.0)
-    }
+    fn from(cmm: Commitment<P::G1>) -> Self { UnknownMessage(cmm.0) }
 }
 
 /// Randomness used to retrieve signature on the message from signature on an
@@ -46,15 +40,11 @@ pub struct SigRetrievalRandomness<P: Pairing> {
 impl<C: Pairing> std::ops::Deref for SigRetrievalRandomness<C> {
     type Target = C::ScalarField;
 
-    fn deref(&self) -> &C::ScalarField {
-        &self.randomness
-    }
+    fn deref(&self) -> &C::ScalarField { &self.randomness }
 }
 
 impl<C: Pairing> AsRef<C::ScalarField> for SigRetrievalRandomness<C> {
-    fn as_ref(&self) -> &C::ScalarField {
-        &self.randomness
-    }
+    fn as_ref(&self) -> &C::ScalarField { &self.randomness }
 }
 
 impl<C: Pairing> SigRetrievalRandomness<C> {

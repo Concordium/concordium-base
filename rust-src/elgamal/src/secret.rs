@@ -149,7 +149,7 @@ impl<C: Curve> SecretKey<C> {
     pub fn generate<T: Rng>(generator: &C, csprng: &mut T) -> Self {
         SecretKey {
             generator: *generator,
-            scalar: C::generate_scalar(csprng),
+            scalar:    C::generate_scalar(csprng),
         }
     }
 
@@ -158,7 +158,7 @@ impl<C: Curve> SecretKey<C> {
         let x = C::generate_non_zero_scalar(csprng);
         SecretKey {
             generator: C::one_point().mul_by_scalar(&x),
-            scalar: C::generate_scalar(csprng),
+            scalar:    C::generate_scalar(csprng),
         }
     }
 }

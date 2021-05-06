@@ -15,21 +15,15 @@ pub struct Version {
 }
 
 impl From<u32> for Version {
-    fn from(value: u32) -> Version {
-        Version { value }
-    }
+    fn from(value: u32) -> Version { Version { value } }
 }
 
 impl From<Version> for u32 {
-    fn from(val: Version) -> u32 {
-        val.value
-    }
+    fn from(val: Version) -> u32 { val.value }
 }
 
 impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "{}", self.value) }
 }
 
 impl Serial for Version {
@@ -89,9 +83,7 @@ pub struct Versioned<T> {
 }
 
 impl<T> Versioned<T> {
-    pub fn new(version: Version, value: T) -> Versioned<T> {
-        Versioned { version, value }
-    }
+    pub fn new(version: Version, value: T) -> Versioned<T> { Versioned { version, value } }
 }
 
 impl<T: Serial> Serial for Versioned<T> {

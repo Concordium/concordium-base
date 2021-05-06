@@ -226,14 +226,10 @@ mod tests {
     }
 
     #[test]
-    fn encrypt_decrypt_success_g1() {
-        test_encrypt_decrypt_success_generic::<G1>()
-    }
+    fn encrypt_decrypt_success_g1() { test_encrypt_decrypt_success_generic::<G1>() }
 
     #[test]
-    fn encrypt_decrypt_success_g2() {
-        test_encrypt_decrypt_success_generic::<G2>()
-    }
+    fn encrypt_decrypt_success_g2() { test_encrypt_decrypt_success_generic::<G2>() }
 
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
@@ -287,9 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn chunking_test_g1() {
-        test_chunking_generic::<G1>()
-    }
+    fn chunking_test_g1() { test_chunking_generic::<G1>() }
 
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
@@ -318,7 +312,5 @@ mod tests {
     }
 
     #[test]
-    fn chunked_encrypt_decrypt_test_g1() {
-        test_chunked_encrypt_decrypt_generic::<G1>()
-    }
+    fn chunked_encrypt_decrypt_test_g1() { test_chunked_encrypt_decrypt_generic::<G1>() }
 }

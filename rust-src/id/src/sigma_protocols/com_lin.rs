@@ -295,9 +295,7 @@ mod tests {
         impl ToChunks for u64 {
             type Integer = u64;
 
-            fn to_chunks(bytes: [u8; 8]) -> Vec<Self::Integer> {
-                vec![u64::from_le_bytes(bytes)]
-            }
+            fn to_chunks(bytes: [u8; 8]) -> Vec<Self::Integer> { vec![u64::from_le_bytes(bytes)] }
         }
 
         impl ToChunks for u32 {

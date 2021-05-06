@@ -99,15 +99,11 @@ impl FromStr for AttributeKind {
 }
 
 impl fmt::Display for AttributeKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl From<u64> for AttributeKind {
-    fn from(x: u64) -> Self {
-        AttributeKind(x.to_string())
-    }
+    fn from(x: u64) -> Self { AttributeKind(x.to_string()) }
 }
 
 impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
@@ -337,7 +333,7 @@ mod test {
             prf_key,
         };
         let acc_data = InitialAccountData {
-            keys: {
+            keys:      {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));

@@ -10,9 +10,7 @@ use curve_arithmetic::*;
 pub struct KnownMessage<C: Pairing>(#[size_length = 4] pub Vec<C::ScalarField>);
 
 impl<C: Pairing> PartialEq for KnownMessage<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 impl<C: Pairing> Eq for KnownMessage<C> {}
@@ -21,8 +19,7 @@ impl<C: Pairing> KnownMessage<C> {
     /// Generate a valid `Message` from a `csprng`.
     pub fn generate<T>(n: usize, csprng: &mut T) -> KnownMessage<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         let mut vs: Vec<C::ScalarField> = Vec::with_capacity(n);
         for _i in 0..n {
             vs.push(C::generate_scalar(csprng));

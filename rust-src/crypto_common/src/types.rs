@@ -25,21 +25,15 @@ pub struct Amount {
 }
 
 impl From<Amount> for u64 {
-    fn from(x: Amount) -> Self {
-        x.microgtu
-    }
+    fn from(x: Amount) -> Self { x.microgtu }
 }
 
 impl From<u64> for Amount {
-    fn from(microgtu: u64) -> Self {
-        Amount { microgtu }
-    }
+    fn from(microgtu: u64) -> Self { Amount { microgtu } }
 }
 
 impl Serial for Amount {
-    fn serial<B: crate::Buffer>(&self, out: &mut B) {
-        self.microgtu.serial(out)
-    }
+    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.microgtu.serial(out) }
 }
 
 impl Deserial for Amount {
@@ -214,8 +208,7 @@ pub struct Signature {
 impl SerdeSerialize for Signature {
     fn serialize<S>(&self, serializer: S) -> ParseResult<S::Ok, S::Error>
     where
-        S: serde::Serializer,
-    {
+        S: serde::Serializer, {
         serializer.serialize_str(&hex::encode(&self.sig))
     }
 }
@@ -223,8 +216,7 @@ impl SerdeSerialize for Signature {
 impl<'de> SerdeDeserialize<'de> for Signature {
     fn deserialize<D>(deserializer: D) -> ParseResult<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
-    {
+        D: serde::Deserializer<'de>, {
         let s = String::deserialize(deserializer)?;
         let sig = hex::decode(s).map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
         if sig.len() <= 65535 {
@@ -253,9 +245,7 @@ pub struct TransactionTime {
 }
 
 impl From<u64> for TransactionTime {
-    fn from(seconds: u64) -> Self {
-        Self { seconds }
-    }
+    fn from(seconds: u64) -> Self { Self { seconds } }
 }
 
 impl FromStr for TransactionTime {

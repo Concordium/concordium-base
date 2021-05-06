@@ -17,21 +17,15 @@ pub struct SecretKey<C: Curve>(pub Rc<Secret<C::Scalar>>);
 impl<C: Curve> std::ops::Deref for SecretKey<C> {
     type Target = C::Scalar;
 
-    fn deref(&self) -> &C::Scalar {
-        &self.0
-    }
+    fn deref(&self) -> &C::Scalar { &self.0 }
 }
 
 impl<C: Curve> AsRef<C::Scalar> for SecretKey<C> {
-    fn as_ref(&self) -> &C::Scalar {
-        &self.0
-    }
+    fn as_ref(&self) -> &C::Scalar { &self.0 }
 }
 
 impl<C: Curve> SecretKey<C> {
-    pub fn new(secret: C::Scalar) -> Self {
-        SecretKey(Rc::new(Secret::new(secret)))
-    }
+    pub fn new(secret: C::Scalar) -> Self { SecretKey(Rc::new(Secret::new(secret))) }
 
     /// Generate a non-zero SecretKey `SecretKey` from a `csprng`.
     pub fn generate_non_zero<T: Rng>(csprng: &mut T) -> SecretKey<C> {
@@ -41,9 +35,7 @@ impl<C: Curve> SecretKey<C> {
     /// View the SecretKey as a SecretKey in another group. This does not
     /// copy the secret SecretKey.
     #[inline]
-    pub fn view<T: Curve<Scalar = C::Scalar>>(&self) -> SecretKey<T> {
-        SecretKey(self.0.clone())
-    }
+    pub fn view<T: Curve<Scalar = C::Scalar>>(&self) -> SecretKey<T> { SecretKey(self.0.clone()) }
 
     /// View the SecretKey as a generic secret value. This does not
     /// copy the secret value.
@@ -71,8 +63,7 @@ impl<C: Curve> SecretKey<C> {
     /// Generate a `SecretKey` from a `csprng`.
     pub fn generate<T>(csprng: &mut T) -> SecretKey<C>
     where
-        T: Rng,
-    {
+        T: Rng, {
         SecretKey::new(C::generate_scalar(csprng))
     }
 }

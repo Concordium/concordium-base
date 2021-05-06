@@ -16,8 +16,8 @@ use random_oracle::RandomOracle;
 
 #[derive(Debug)]
 pub struct ComEncEqSecret<T: Curve> {
-    pub value: Value<T>,
-    pub elgamal_rand: ElgamalRandomness<T>,
+    pub value:         Value<T>,
+    pub elgamal_rand:  ElgamalRandomness<T>,
     pub pedersen_rand: PedersenRandomness<T>,
 }
 
@@ -178,8 +178,8 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
             public_key.encrypt_exponent_rand_given_generator(&x, &h_in_exponent, csprng);
         let (commitment, randomness) = comm_key.commit(&x, csprng);
         let secret = ComEncEqSecret {
-            value: x,
-            elgamal_rand: elgamal_randomness,
+            value:         x,
+            elgamal_rand:  elgamal_randomness,
             pedersen_rand: randomness,
         };
         let com_enc_eq = ComEncEq {

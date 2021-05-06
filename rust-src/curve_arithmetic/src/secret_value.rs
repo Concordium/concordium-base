@@ -25,23 +25,17 @@ pub struct Secret<T: Field + Serialize> {
 }
 
 impl<F: Field + Serialize> Secret<F> {
-    pub fn new(secret: F) -> Self {
-        Secret { secret }
-    }
+    pub fn new(secret: F) -> Self { Secret { secret } }
 }
 
 impl<F: Field + Serialize> AsRef<F> for Secret<F> {
-    fn as_ref(&self) -> &F {
-        &self.secret
-    }
+    fn as_ref(&self) -> &F { &self.secret }
 }
 
 impl<F: Field + Serialize> Deref for Secret<F> {
     type Target = F;
 
-    fn deref(&self) -> &Self::Target {
-        &self.secret
-    }
+    fn deref(&self) -> &Self::Target { &self.secret }
 }
 
 // This works for our current fields since they are arrays
@@ -69,22 +63,16 @@ pub struct Value<C: Curve> {
 impl<C: Curve> Deref for Value<C> {
     type Target = C::Scalar;
 
-    fn deref(&self) -> &C::Scalar {
-        &self.value
-    }
+    fn deref(&self) -> &C::Scalar { &self.value }
 }
 
 impl<C: Curve> AsRef<C::Scalar> for Value<C> {
-    fn as_ref(&self) -> &C::Scalar {
-        &self.value
-    }
+    fn as_ref(&self) -> &C::Scalar { &self.value }
 }
 
 /// Any 64-bit value can be converted (by-value) to a scalar.
 impl<C: Curve> From<u64> for Value<C> {
-    fn from(secret: u64) -> Self {
-        Self::new(C::scalar_from_u64(secret))
-    }
+    fn from(secret: u64) -> Self { Self::new(C::scalar_from_u64(secret)) }
 }
 
 impl<C: Curve> Value<C> {
@@ -95,9 +83,7 @@ impl<C: Curve> Value<C> {
     }
 
     /// Generate a single `Value` from a `csprng`.
-    pub fn generate<T: Rng>(csprng: &mut T) -> Value<C> {
-        Value::new(C::generate_scalar(csprng))
-    }
+    pub fn generate<T: Rng>(csprng: &mut T) -> Value<C> { Value::new(C::generate_scalar(csprng)) }
 
     /// Generate a non-zero value `Value` from a `csprng`.
     pub fn generate_non_zero<T: Rng>(csprng: &mut T) -> Value<C> {

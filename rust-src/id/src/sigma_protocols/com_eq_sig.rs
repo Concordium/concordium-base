@@ -39,12 +39,12 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 pub type ValuesAndRands<C> = (Value<C>, Randomness<C>);
 
 pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub blind_rand: BlindingRandomness<P>,
+    pub blind_rand:       BlindingRandomness<P>,
     pub values_and_rands: Vec<ValuesAndRands<C>>,
 }
 
 pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub rho_prime: P::ScalarField,
+    pub rho_prime:  P::ScalarField,
     pub mus_and_rs: Vec<(Value<C>, Randomness<C>)>,
 }
 
@@ -124,13 +124,10 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         // let v_2_pre_pair = cX_tilda.plus_point(&point);
         // let v_2_pair = P::pair(a_hat, v_2_pre_pair);
         let paired = P::pair(&a_hat, &point);
-        Some((
-            (paired, commitments),
-            ComEqSigState {
-                rho_prime,
-                mus_and_rs: mus_cRs,
-            },
-        ))
+        Some(((paired, commitments), ComEqSigState {
+            rho_prime,
+            mus_and_rs: mus_cRs,
+        }))
     }
 
     #[inline]
@@ -169,7 +166,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
             wit_messages_randoms.push((wit_m, wit_r));
         }
         Some(Witness {
-            witness_rho: wit_r_prime,
+            witness_rho:    wit_r_prime,
             witness_commit: wit_messages_randoms,
         })
     }
