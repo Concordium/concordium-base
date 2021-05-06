@@ -2,7 +2,7 @@ use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
     serde_impls::KeyPairDef,
-    types::{KeyIndex, TransactionTime},
+    types::{Amount, KeyIndex, TransactionTime},
     *,
 };
 use dialoguer::{Input, MultiSelect, Select};
@@ -378,6 +378,55 @@ struct ExtendIpList {
 }
 
 #[derive(StructOpt)]
+/// Construct a genesis account from a multitude of files. In the main genesis
+/// process the credentials will be created by the desktop wallet, and baker
+/// keys by another tool. These all need to be combined into a single account.
+struct MakeAccount {
+    #[structopt(
+        long = "credential",
+        help = "List of credentials that make the account. The order is significant. Indices will \
+                be assigned according to it."
+    )]
+    credentials: Vec<PathBuf>,
+    #[structopt(long = "amount", help = "Balance of the account. Specified in GTU.")]
+    balance: Amount,
+    #[structopt(name = "threshold", long = "threshold", help = "Account threshold.")]
+    threshold: u8,
+    #[structopt(
+        name = "baker-keys",
+        long = "baker-keys",
+        help = "If the account is a baker, its baker keys and baker id.",
+        requires_all = &["stake"]
+    )]
+    baker_keys: Option<PathBuf>,
+    #[structopt(
+        name = "stake",
+        long = "stake",
+        help = "If a baker, its initial stake in GTU.",
+        requires_all = &["baker-keys"]
+    )]
+    stake: Option<Amount>,
+    #[structopt(
+        name = "no-restake",
+        long = "no-restake",
+        help = "If a baker, do not restake earnings automatically.",
+        requires_all = &["baker-keys", "stake"]
+    )]
+    no_restake: bool,
+    #[structopt(long = "out", help = "The file to output the account data into.")]
+    out: PathBuf,
+}
+
+// This is the type of credentials that is output by the desktop wallet for
+// genesis creation.
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct GenesisCredentialInput {
+    credential:        AccountCredentialWithoutProofs<ArCurve, ExampleAttribute>,
+    generated_address: AccountAddress,
+}
+
+#[derive(StructOpt)]
 #[structopt(
     about = "Prototype client showcasing ID layer interactions.",
     author = "Concordium",
@@ -420,6 +469,11 @@ enum IdClient {
         about = "Extend the list of identity providers as served by the wallet-proxy."
     )]
     ExtendIpList(ExtendIpList),
+    #[structopt(
+        name = "create-genesis-account",
+        about = "Create a genesis account from credentials and possibly baker information."
+    )]
+    MakeAccount(MakeAccount),
 }
 
 fn main() {
@@ -438,6 +492,70 @@ fn main() {
         CreateCredential(cc) => handle_create_credential(cc),
         ExtendIpList(eil) => handle_extend_ip_list(eil),
         VerifyCredential(vcred) => handle_verify_credential(vcred),
+        MakeAccount(macc) => handle_make_account(macc),
+    }
+}
+
+/// Construct an account out of multiple credentials and possibly baker keys.
+/// This is used to construct the accounts that must go into the genesis block
+/// from individual credentials.
+fn handle_make_account(macc: MakeAccount) {
+    if macc.credentials.is_empty() {
+        eprintln!("No credentials specified. Terminating.");
+        return;
+    }
+    let mut credentials: Vec<GenesisCredentialInput> = Vec::with_capacity(macc.credentials.len());
+    for cred_file in macc.credentials.iter() {
+        match read_json_from_file(cred_file) {
+            Ok(c) => credentials.push(c),
+            Err(e) => eprintln!("Could not parse credential: {}. Terminating.", e),
+        }
+    }
+    let addr = credentials[0].generated_address;
+    // the credentials will be given indices 0..
+    let versioned_credentials = Versioned::new(
+        VERSION_0,
+        (0..)
+            .zip(credentials.into_iter().map(|x| x.credential))
+            .collect::<BTreeMap<u8, _>>(),
+    );
+    // if the baker keys are specified the account will be a baker, so we construct
+    // the baker structure suitable for inclusion in genesis.
+    let out = match macc.baker_keys {
+        Some(keys_file) => {
+            let mut keys = match read_json_from_file(keys_file) {
+                Ok(serde_json::Value::Object(mp)) => mp,
+                Ok(_) => {
+                    eprintln!(
+                        "The baker key file does not have the correct format. Expected an object."
+                    );
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("Could not read baker keys: {}", e);
+                    return;
+                }
+            };
+            keys.insert("stake".to_string(), json!(macc.stake.unwrap())); // unwrap is safe because of `required_all` directive
+            keys.insert("restakeEarnings".to_string(), json!(!macc.no_restake));
+            json!({
+                "address": addr,
+                "balance": macc.balance,
+                "accountThreshold": macc.threshold,
+                "credentials": versioned_credentials,
+                "baker": keys,
+            })
+        } // and if no baker keys are given we simply combine the credentials.
+        None => json!({
+            "address": addr,
+            "balance": macc.balance,
+            "accountThreshold": macc.threshold,
+            "credentials": versioned_credentials,
+        }),
+    };
+    if let Err(e) = write_json_to_file(&macc.out, &out) {
+        eprintln!("Could not output credentials: {}", e);
+        return;
     }
 }
 
