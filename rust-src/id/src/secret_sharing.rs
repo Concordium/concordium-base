@@ -83,7 +83,7 @@ pub struct SharingData<C: Curve> {
     pub coefficients: Vec<PedersenValue<C>>,
     /// Shares, i.e., points y which are the evaluations of the polynomial at
     /// the specified points.
-    pub shares: Vec<PedersenValue<C>>,
+    pub shares:       Vec<PedersenValue<C>>,
 }
 
 /// Revealing Threshold must be at least 1.

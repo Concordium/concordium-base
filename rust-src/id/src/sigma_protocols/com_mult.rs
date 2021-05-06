@@ -29,7 +29,7 @@ pub struct Witness<C: Curve> {
     /// The witness, expanded using the same notation as in the specification.
     ss: [C::Scalar; 2],
     ts: [C::Scalar; 2],
-    t: C::Scalar,
+    t:  C::Scalar,
 }
 
 #[allow(non_snake_case)]

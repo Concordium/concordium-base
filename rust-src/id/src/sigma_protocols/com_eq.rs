@@ -34,12 +34,12 @@ pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {
     /// The list of commitments.
     pub commitment: Commitment<D>,
     /// The evaluation $y$ (see above for notation).
-    pub y: C,
+    pub y:          C,
     /// The commitment key with which all the commitments are
     /// generated
-    pub cmm_key: CommitmentKey<D>,
+    pub cmm_key:    CommitmentKey<D>,
     /// The generator for discrete log.
-    pub g: C,
+    pub g:          C,
 }
 
 pub struct ComEqSecret<C: Curve> {

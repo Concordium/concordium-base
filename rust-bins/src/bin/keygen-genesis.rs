@@ -14,16 +14,16 @@ use structopt::StructOpt;
 #[derive(StructOpt)]
 struct KeygenIp {
     #[structopt(long = "seed", help = "File with seed.")]
-    seed: PathBuf,
+    seed:        PathBuf,
     #[structopt(
         long = "ip-identity",
         help = "The integer identifying the identity provider"
     )]
     ip_identity: u32,
     #[structopt(long = "name", help = "Name of the identity provider")]
-    name: String,
+    name:        String,
     #[structopt(long = "url", help = "url to identity provider")]
-    url: String,
+    url:         String,
     #[structopt(long = "description", help = "Description of identity provider")]
     description: String,
     #[structopt(
@@ -31,28 +31,28 @@ struct KeygenIp {
         help = "Upper bound on messages signed by the IP",
         default_value = "30"
     )]
-    bound: u32,
+    bound:       u32,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
-    out_pub: PathBuf,
+    out_pub:     PathBuf,
 }
 
 #[derive(StructOpt)]
 struct KeygenAr {
     #[structopt(long = "seed", help = "File with seed.")]
-    seed: PathBuf,
+    seed:        PathBuf,
     #[structopt(
         long = "ar-identity",
         help = "The integer identifying the anonymity revoker"
     )]
     ar_identity: ArIdentity,
     #[structopt(long = "name", help = "Name of the anonymity revoker")]
-    name: String,
+    name:        String,
     #[structopt(long = "url", help = "url to anonymity revoker")]
-    url: String,
+    url:         String,
     #[structopt(long = "description", help = "Description of anonymity revoker")]
     description: String,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
-    out_pub: PathBuf,
+    out_pub:     PathBuf,
 }
 
 #[derive(StructOpt)]

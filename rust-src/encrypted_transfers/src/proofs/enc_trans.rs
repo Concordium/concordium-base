@@ -63,7 +63,7 @@ pub struct ElgDec<C: Curve> {
     /// S_2 above
     pub public: C,
     /// The points S_1 and h.
-    pub coeff: [C; 2],
+    pub coeff:  [C; 2],
 }
 
 impl<C: Curve> ElgDec<C> {
@@ -74,7 +74,7 @@ impl<C: Curve> ElgDec<C> {
 }
 
 pub struct EncTrans<C: Curve> {
-    pub dlog: Dlog<C>,
+    pub dlog:    Dlog<C>,
     /// elg_dec contains the publicly known values S_1, S_2 and h
     pub elg_dec: ElgDec<C>,
     /// encexp1 contains the publicly known values a_{i,j}'s, g, h, pk_receiver
@@ -92,7 +92,7 @@ pub struct EncTrans<C: Curve> {
 #[derive(Debug, Serialize)]
 pub struct Witness<C: Curve> {
     /// The common witness for both dlog and elc-dec
-    witness_common: C::Scalar,
+    witness_common:  C::Scalar,
     /// For EncExp/ComEq's involving a_i
     #[size_length = 4]
     witness_encexp1: Vec<ComEqWitness<C>>,
@@ -103,7 +103,7 @@ pub struct Witness<C: Curve> {
 
 pub struct EncTransSecret<C: Curve> {
     /// dlog_secret contains the secret key `sk`
-    pub dlog_secret: Rc<C::Scalar>,
+    pub dlog_secret:     Rc<C::Scalar>,
     // ComEq secrets for encexp1
     pub encexp1_secrets: Vec<ComEqSecret<C>>,
     // ComeEq secrets for encexp2
@@ -113,7 +113,7 @@ pub struct EncTransSecret<C: Curve> {
 #[derive(Debug, Serialize)]
 pub struct EncTransCommit<C: Curve> {
     /// Commitmessage for dlog
-    dlog: C,
+    dlog:    C,
     /// Commitmessage for elg_dec
     elg_dec: C,
     /// Commitmessages for EncExp/ComEq's involving a_i
@@ -128,7 +128,7 @@ pub struct EncTransCommit<C: Curve> {
 #[derive(Debug, Serialize)]
 pub struct EncTransState<C: Curve> {
     /// Randomness used for dlog
-    dlog: C::Scalar,
+    dlog:    C::Scalar,
     /// Randomness used for EncExp/ComEq's involving a_i
     #[size_length = 4]
     encexp1: Vec<(Value<C>, PedersenRandomness<C>)>,

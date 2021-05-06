@@ -74,19 +74,19 @@ pub enum KeyDerivationMethod {
 // A better modelling would be for this to be an enumeration.
 pub struct EncryptionMetadata {
     #[serde(rename = "encryptionMethod")]
-    encryption_method: EncryptionMethod,
+    encryption_method:     EncryptionMethod,
     #[serde(rename = "keyDerivationMethod")]
     key_derivation_method: KeyDerivationMethod,
     #[serde(rename = "iterations")]
     /// Number of iterations for the key derivation function.
-    iterations: u32,
+    iterations:            u32,
     #[serde(
         rename = "salt",
         serialize_with = "as_base64",
         deserialize_with = "from_base64"
     )]
     /// Salt used for the key derivation process.
-    salt: Vec<u8>,
+    salt:                  Vec<u8>,
     #[serde(
         rename = "initializationVector",
         serialize_with = "as_base64",
@@ -106,7 +106,7 @@ pub struct CipherText {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct EncryptedData {
     #[serde(rename = "metadata")]
-    metadata: EncryptionMetadata,
+    metadata:    EncryptionMetadata,
     #[serde(rename = "cipherText")]
     cipher_text: CipherText,
 }

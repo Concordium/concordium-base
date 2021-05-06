@@ -15,7 +15,7 @@ pub struct SecretKey<C: Curve> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,
     /// Secret key.
-    pub scalar: C::Scalar,
+    pub scalar:    C::Scalar,
 }
 
 // THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION
@@ -33,11 +33,11 @@ pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
 #[derive(Eq, PartialEq, Debug)]
 pub struct BabyStepGiantStep<C: Curve> {
     /// Precomputed table of powers.
-    table: BabyStepGiantStepTable,
+    table:         BabyStepGiantStepTable,
     /// Point base^{-m}
     inverse_point: C,
     /// Size of the table.
-    m: u64,
+    m:             u64,
 }
 
 impl<C: Curve> Serial for BabyStepGiantStep<C> {

@@ -83,7 +83,7 @@ struct CreateChi {
 #[derive(StructOpt)]
 struct StartIp {
     #[structopt(long = "chi", help = "File with input credential holder information.")]
-    chi: PathBuf,
+    chi:                PathBuf,
     #[structopt(long = "ips", help = "File with a list of identity providers.", default_value = IDENTITY_PROVIDERS)]
     identity_providers: PathBuf,
     #[structopt(
@@ -91,7 +91,7 @@ struct StartIp {
         help = "Which identity provider to choose. If not given an interactive choice will be \
                 provided."
     )]
-    identity_provider: Option<u32>,
+    identity_provider:  Option<u32>,
     #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers..",
@@ -99,31 +99,31 @@ struct StartIp {
     )]
     anonymity_revokers: PathBuf,
     #[structopt(long = "private", help = "File to write the private ACI data to.")]
-    private: Option<PathBuf>,
+    private:            Option<PathBuf>,
     #[structopt(
         long = "public",
         help = "File to write the public data to be sent to the identity provider."
     )]
-    public: Option<PathBuf>,
+    public:             Option<PathBuf>,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json"
     )]
-    global: PathBuf,
+    global:             PathBuf,
     #[structopt(
         name = "ar-threshold",
         long = "ar-threshold",
         help = "Anonymity revocation threshold.",
         requires = "selected-ars"
     )]
-    threshold: Option<u8>,
+    threshold:          Option<u8>,
     #[structopt(
         long = "selected-ars",
         help = "Indices of selected ars. If none are provided an interactive choice will be given.",
         requires = "ar-threshold"
     )]
-    selected_ars: Vec<u32>,
+    selected_ars:       Vec<u32>,
 }
 
 #[derive(StructOpt)]
@@ -134,21 +134,21 @@ struct GenerateIps {
         default_value = "5",
         env = "NUM_IPS"
     )]
-    num: usize,
+    num:          usize,
     #[structopt(
         long = "num-ars",
         help = "Number of anonymity revokers to generate.",
         default_value = "5",
         env = "NUM_ARS"
     )]
-    num_ars: u32,
+    num_ars:      u32,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json",
         env = "GLOBAL_FILE"
     )]
-    global: PathBuf,
+    global:       PathBuf,
     #[structopt(
         long = "key-capacity",
         help = "Size of the identity provider key. The length of this key limits the number of \
@@ -163,7 +163,7 @@ struct GenerateIps {
         default_value = "database",
         env = "OUT_DIR"
     )]
-    output_dir: PathBuf,
+    output_dir:   PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -174,7 +174,7 @@ struct GenerateGlobal {
         default_value = "database/global.json",
         env = "OUT_FILE"
     )]
-    output_file: PathBuf,
+    output_file:    PathBuf,
     #[structopt(
         long = "string",
         help = "Genesis string to add to the global context.",
@@ -187,7 +187,7 @@ struct GenerateGlobal {
         help = "Seed file to use when generating group generators.",
         env = "SEED_FILE"
     )]
-    seed_file: Option<PathBuf>,
+    seed_file:      Option<PathBuf>,
 }
 
 #[derive(StructOpt)]
@@ -196,30 +196,30 @@ struct IpSignPio {
         long = "pio",
         help = "File with input pre-identity object information."
     )]
-    pio: PathBuf,
+    pio:                PathBuf,
     #[structopt(
         long = "ip-data",
         help = "File with all information about the identity provider (public and private)."
     )]
-    ip_data: PathBuf,
+    ip_data:            PathBuf,
     #[structopt(long = "out", help = "File to write the signed identity object to.")]
-    out_file: Option<PathBuf>,
+    out_file:           Option<PathBuf>,
     #[structopt(
         long = "bin-out",
         help = "File to output the binary transaction payload to (regarding the initial account)."
     )]
-    bin_out: Option<PathBuf>,
+    bin_out:            Option<PathBuf>,
     #[structopt(
         long = "initial-cdi-out",
         help = "File to output the JSON transaction payload to (regarding the initial account)."
     )]
-    out_icdi: Option<PathBuf>,
+    out_icdi:           Option<PathBuf>,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json"
     )]
-    global: PathBuf,
+    global:             PathBuf,
     #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers..",
@@ -231,17 +231,17 @@ struct IpSignPio {
         help = "Expiry time of the initial credential message. In seconds from __now__.",
         required = true
     )]
-    expiry: u64,
+    expiry:             u64,
     #[structopt(
         long = "id-object-expiry",
         help = "Expiry time of the identity object message. As YYYYMM."
     )]
-    id_expiry: Option<YearMonth>,
+    id_expiry:          Option<YearMonth>,
     #[structopt(
         long = "no-attributes",
         help = "Do not select any attributes to reveal."
     )]
-    no_attributes: bool,
+    no_attributes:      bool,
 }
 
 #[derive(StructOpt)]
@@ -250,37 +250,37 @@ struct CreateCredential {
         long = "id-object",
         help = "File with the JSON encoded identity object."
     )]
-    id_object: PathBuf,
+    id_object:          PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json"
     )]
-    global: PathBuf,
+    global:             PathBuf,
     #[structopt(
         long = "ip-info",
         help = "File with the JSON encoded information about the identity provider."
     )]
-    ip_info: PathBuf,
+    ip_info:            PathBuf,
     #[structopt(
         long = "private",
         help = "File with private credential holder information used to generate the identity \
                 object."
     )]
-    private: PathBuf,
+    private:            PathBuf,
     #[structopt(
         long = "account",
         help = "Account address onto which the credential should be deployed.",
         requires = "key-index"
     )]
-    account: Option<AccountAddress>,
+    account:            Option<AccountAddress>,
     #[structopt(
         long = "expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
         required_unless = "account",
         conflicts_with = "account"
     )]
-    expiry: Option<u64>,
+    expiry:             Option<u64>,
     #[structopt(
         name = "key-index",
         long = "key-index",
@@ -288,15 +288,15 @@ struct CreateCredential {
         requires = "account",
         conflicts_with = "expiry"
     )]
-    key_index: Option<u8>,
+    key_index:          Option<u8>,
     #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
-    out: Option<PathBuf>,
+    out:                Option<PathBuf>,
     #[structopt(
         long = "keys-out",
         help = "File to output account keys.",
         default_value = "account_keys.json"
     )]
-    keys_out: PathBuf,
+    keys_out:           PathBuf,
     #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers.",
@@ -304,7 +304,7 @@ struct CreateCredential {
     )]
     anonymity_revokers: PathBuf,
     #[structopt(long = "index", help = "Index of the account to be created.")]
-    index: Option<u8>,
+    index:              Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -313,18 +313,18 @@ struct VerifyCredential {
         long = "credential",
         help = "File with the JSON encoded credential object."
     )]
-    credential: PathBuf,
+    credential:         PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json"
     )]
-    global: PathBuf,
+    global:             PathBuf,
     #[structopt(
         long = "ip-info",
         help = "File with the JSON encoded information about the identity provider."
     )]
-    ip_info: PathBuf,
+    ip_info:            PathBuf,
     #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers.",
@@ -337,12 +337,12 @@ struct VerifyCredential {
         required_unless = "account",
         conflicts_with = "account"
     )]
-    expiry: Option<TransactionTime>,
+    expiry:             Option<TransactionTime>,
     #[structopt(
         long = "account",
         help = "Address of the account onto which the credential will be deployed."
     )]
-    account: Option<AccountAddress>,
+    account:            Option<AccountAddress>,
 }
 
 #[derive(StructOpt)]
@@ -352,17 +352,17 @@ struct ExtendIpList {
         help = "File with identity providers with metadata.",
         default_value = "identity-providers-with-metadata.json"
     )]
-    ips_with_metadata: PathBuf,
+    ips_with_metadata:  PathBuf,
     #[structopt(
         long = "ip",
         help = "File with public information about the new identity provider"
     )]
-    ip: PathBuf,
+    ip:                 PathBuf,
     #[structopt(
         long = "metadata",
         help = "File with metadata that should be included with the identity provider."
     )]
-    metadata: PathBuf,
+    metadata:           PathBuf,
     #[structopt(
         long = "ars",
         help = "File with a list of all known anonymity revokers.",
@@ -374,7 +374,7 @@ struct ExtendIpList {
         help = "List of identifiers for anonymity revokers that should be included with the \
                 identity provider."
     )]
-    selected_ars: Vec<u32>,
+    selected_ars:       Vec<u32>,
 }
 
 #[derive(StructOpt)]
@@ -389,32 +389,32 @@ struct MakeAccount {
     )]
     credentials: Vec<PathBuf>,
     #[structopt(long = "amount", help = "Balance of the account. Specified in GTU.")]
-    balance: Amount,
+    balance:     Amount,
     #[structopt(name = "threshold", long = "threshold", help = "Account threshold.")]
-    threshold: u8,
+    threshold:   u8,
     #[structopt(
         name = "baker-keys",
         long = "baker-keys",
         help = "If the account is a baker, its baker keys and baker id.",
         requires_all = &["stake"]
     )]
-    baker_keys: Option<PathBuf>,
+    baker_keys:  Option<PathBuf>,
     #[structopt(
         name = "stake",
         long = "stake",
         help = "If a baker, its initial stake in GTU.",
         requires_all = &["baker-keys"]
     )]
-    stake: Option<Amount>,
+    stake:       Option<Amount>,
     #[structopt(
         name = "no-restake",
         long = "no-restake",
         help = "If a baker, do not restake earnings automatically.",
         requires_all = &["baker-keys", "stake"]
     )]
-    no_restake: bool,
+    no_restake:  bool,
     #[structopt(long = "out", help = "The file to output the account data into.")]
-    out: PathBuf,
+    out:         PathBuf,
 }
 
 // This is the type of credentials that is output by the desktop wallet for
@@ -618,9 +618,9 @@ fn handle_verify_credential(vcred: VerifyCredential) {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 struct IpsWithMetadata {
     #[serde(rename = "metadata")]
-    metadata: IpMetadata,
+    metadata:  IpMetadata,
     #[serde(rename = "ipInfo")]
-    ip_info: IpInfo<Bls12>,
+    ip_info:   IpInfo<Bls12>,
     #[serde(rename = "arsInfos")]
     ars_infos: BTreeMap<ArIdentity, ArInfo<G1>>,
 }

@@ -38,16 +38,16 @@ fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect(
 #[derive(StructOpt)]
 struct KeygenIp {
     #[structopt(long = "rand-input", help = "File with randomness.")]
-    rand_input: PathBuf,
+    rand_input:  PathBuf,
     #[structopt(
         long = "ip-identity",
         help = "The integer identifying the identity provider"
     )]
     ip_identity: u32,
     #[structopt(long = "name", help = "Name of the identity provider")]
-    name: String,
+    name:        String,
     #[structopt(long = "url", help = "url to identity provider")]
-    url: String,
+    url:         String,
     #[structopt(long = "description", help = "Description of identity provider")]
     description: String,
     #[structopt(
@@ -55,11 +55,11 @@ struct KeygenIp {
         help = "Upper bound on messages signed by the IP",
         default_value = "30"
     )]
-    bound: u32,
+    bound:       u32,
     #[structopt(long = "out", help = "File to output the secret keys to.")]
-    out: PathBuf,
+    out:         PathBuf,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
-    out_pub: PathBuf,
+    out_pub:     PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -68,42 +68,42 @@ struct KeygenAr {
         long = "recover-from-phrase",
         help = "Recover keys from backup phrase. Otherwise, fresh keys are generated."
     )]
-    recover: bool,
+    recover:                bool,
     #[structopt(
         long = "ar-identity",
         help = "The integer identifying the anonymity revoker"
     )]
-    ar_identity: Option<ArIdentity>,
+    ar_identity:            Option<ArIdentity>,
     #[structopt(long = "name", help = "Name of the anonymity revoker")]
-    name: Option<String>,
+    name:                   Option<String>,
     #[structopt(long = "url", help = "url to anonymity revoker")]
-    url: Option<String>,
+    url:                    Option<String>,
     #[structopt(long = "description", help = "Description of anonymity revoker")]
-    description: Option<String>,
+    description:            Option<String>,
     #[structopt(long = "global", help = "File with cryptographic parameters.")]
-    global: Option<PathBuf>,
+    global:                 Option<PathBuf>,
     #[structopt(long = "out", help = "File to output the secret keys to.")]
-    out: Option<PathBuf>,
+    out:                    Option<PathBuf>,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
-    out_pub: Option<PathBuf>,
+    out_pub:                Option<PathBuf>,
     #[structopt(
         long = "in-len",
         help = "Number of words read from user. Must be in {12, 15, 18, 21, 24} to constitute a \
                 valid BIP39 sentences. If --no-verification is used, arbitrary values are allowed.",
         default_value = "24"
     )]
-    in_len: u8,
+    in_len:                 u8,
     #[structopt(
         long = "no-verification",
         help = "Do not verify the validity of the input. Otherwise the input is verified to be a \
                 valid BIP39 sentence."
     )]
-    no_verification: bool,
+    no_verification:        bool,
     #[structopt(
         long = "no-confirmation",
         help = "Do not ask user to re-enter generated recovery phrase."
     )]
-    no_confirmation: bool,
+    no_confirmation:        bool,
     #[structopt(
         long = "only-system-randomness",
         help = "Do not ask for a list of words from the user. Generate keys only using the system \

@@ -341,7 +341,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
         // the unwrap is safe since we've generated the RegID successfully above.
-        scalar: id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
+        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
     };
 
     let response = json!({

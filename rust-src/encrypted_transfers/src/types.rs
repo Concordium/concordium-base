@@ -41,7 +41,7 @@ pub struct IndexedEncryptedAmount<C: Curve> {
     /// The actual encrypted amount.
     pub encrypted_chunks: EncryptedAmount<C>,
     /// Index of the amount on the account.
-    pub index: u64,
+    pub index:            u64,
 }
 
 /// Size of the chunk for encrypted amounts.
@@ -55,14 +55,14 @@ pub struct EncryptedAmountTransferData<C: Curve> {
     /// Encryption of the remaining amount.
     pub remaining_amount: EncryptedAmount<C>,
     /// Amount that will be sent.
-    pub transfer_amount: EncryptedAmount<C>,
+    pub transfer_amount:  EncryptedAmount<C>,
     /// The index such that the encrypted amount used in the transfer represents
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
     /// indices.
-    pub index: u64,
+    pub index:            u64,
     /// A collection of all the proofs.
-    pub proof: EncryptedAmountTransferProof<C>,
+    pub proof:            EncryptedAmountTransferProof<C>,
 }
 
 /// Data that will go onto a secret to public amount transfer.
@@ -73,14 +73,14 @@ pub struct SecToPubAmountTransferData<C: Curve> {
     /// Encryption of the remaining amount.
     pub remaining_amount: EncryptedAmount<C>,
     /// Amount that will be sent.
-    pub transfer_amount: Amount,
+    pub transfer_amount:  Amount,
     /// The index such that the encrypted amount used in the transfer represents
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
     /// indices.
-    pub index: u64,
+    pub index:            u64,
     /// A collection of all the proofs.
-    pub proof: SecToPubAmountTransferProof<C>,
+    pub proof:            SecToPubAmountTransferProof<C>,
 }
 
 /// An aggregated encrypted amount with a decrypted plaintext, collecting
@@ -93,11 +93,11 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
     /// The aggregated encrypted amount.
     pub agg_encrypted_amount: EncryptedAmount<C>,
     /// The plaintext corresponding to the aggregated encrypted amount.
-    pub agg_amount: Amount,
+    pub agg_amount:           Amount,
     /// Index such that the `agg_amount` is the sum of all encrypted amounts
     /// on an account with indices strictly below `agg_index`.
     #[serde(default)]
-    pub agg_index: u64,
+    pub agg_index:            u64,
 }
 
 /// # Proof datatypes

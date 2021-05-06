@@ -937,8 +937,8 @@ fn compute_pok_sig<
         blinded_sig: blinded_sig.clone(),
         commitments: comm_vec,
         // FIXME: Figure out how to get rid of the clone
-        ps_pub_key: ip_pub_key.clone(),
-        comm_key:   *commitment_key,
+        ps_pub_key:  ip_pub_key.clone(),
+        comm_key:    *commitment_key,
     };
     Ok((prover, secret))
 }

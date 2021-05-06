@@ -8,8 +8,8 @@ use random_oracle::RandomOracle;
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
     pub lr_vec: Vec<(C, C)>,
-    pub a: C::Scalar,
-    pub b: C::Scalar,
+    pub a:      C::Scalar,
+    pub b:      C::Scalar,
 }
 
 /// This function computes an inner product proof,

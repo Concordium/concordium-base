@@ -18,16 +18,16 @@ pub struct ComLinSecret<C: Curve> {
     rs: Vec<Randomness<C>>,
     /// The randomness used in commitment to the linear combination
     /// of s_i's.
-    r: Randomness<C>,
+    r:  Randomness<C>,
 }
 
 pub struct ComLin<C: Curve> {
     /// The coefficients u_i.
-    pub us: Vec<C::Scalar>,
+    pub us:      Vec<C::Scalar>,
     /// The commitments to s_i's.
-    pub cmms: Vec<Commitment<C>>,
+    pub cmms:    Vec<Commitment<C>>,
     /// The commitment to the linear combination.
-    pub cmm: Commitment<C>,
+    pub cmm:     Commitment<C>,
     /// The commitment key used to generate all the commitments.
     pub cmm_key: CommitmentKey<C>,
 }
@@ -43,7 +43,7 @@ pub struct Witness<C: Curve> {
     #[size_length = 4]
     ss: Vec<C::Scalar>,
     /// Randomized commitment randomness r.
-    s: C::Scalar,
+    s:  C::Scalar,
 }
 
 impl<C: Curve> SigmaProtocol for ComLin<C> {

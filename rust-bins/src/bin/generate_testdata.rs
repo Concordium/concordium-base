@@ -36,13 +36,13 @@ struct GenerateTestData {
         long = "ip-data",
         help = "File with all information about the identity provider (public and private)."
     )]
-    ip_data: PathBuf,
+    ip_data:            PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = GLOBAL_CONTEXT
     )]
-    global: PathBuf,
+    global:             PathBuf,
     #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers..",

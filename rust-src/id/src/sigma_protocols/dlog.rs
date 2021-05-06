@@ -12,7 +12,7 @@ pub struct Dlog<C: Curve> {
     /// Evaluated point.
     pub public: C,
     /// The base point.
-    pub coeff: C,
+    pub coeff:  C,
 }
 
 pub struct DlogSecret<C: Curve> {
