@@ -1,4 +1,3 @@
-use anyhow::Result;
 use byteorder::ReadBytesExt;
 use crypto_common::{Serial, Serialize};
 use ff::{Field, PrimeField};
@@ -39,7 +38,7 @@ pub trait Curve:
     fn compress(&self) -> Self::Compressed;
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> Result<Self>;
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> anyhow::Result<Self>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     /// Generate a non-zero scalar. The default implementation does repeated

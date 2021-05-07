@@ -7,7 +7,7 @@ use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomDat
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
-pub type ParseResult<T, E = anyhow::Error> = anyhow::Result<T, E>;
+pub type ParseResult<T> = anyhow::Result<T>;
 
 /// As Vec::with_capacity, but only allocate maximum MAX_PREALLOCATED_CAPACITY
 /// elements.
@@ -539,12 +539,12 @@ use std::{fmt, io::Cursor};
 
 struct Base16Visitor<D>(std::marker::PhantomData<D>);
 
-pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> ParseResult<S::Ok, S::Error> {
+pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> Result<S::Ok, S::Error> {
     let b16_str = encode(&to_bytes(v));
     ser.serialize_str(&b16_str)
 }
 
-pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> ParseResult<T, D::Error> {
+pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T, D::Error> {
     des.deserialize_str(Base16Visitor(Default::default()))
 }
 
@@ -562,7 +562,7 @@ impl<'de, D: Deserial> Visitor<'de> for Base16Visitor<D> {
         write!(formatter, "A base 16 string.")
     }
 
-    fn visit_str<E: de::Error>(self, v: &str) -> ParseResult<Self::Value, E> {
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
         let bytes = decode(v).map_err(de::Error::custom)?;
         D::deserial(&mut Cursor::new(&bytes)).map_err(de::Error::custom)
     }
@@ -576,14 +576,14 @@ struct Base16IgnoreLengthVisitor<D>(std::marker::PhantomData<D>);
 pub fn base16_ignore_length_encode<S: Serializer, T: Serial>(
     v: &T,
     ser: S,
-) -> ParseResult<S::Ok, S::Error> {
+) -> Result<S::Ok, S::Error> {
     let b16_str = encode(&to_bytes(v)[4..]);
     ser.serialize_str(&b16_str)
 }
 
 pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     des: D,
-) -> ParseResult<T, D::Error> {
+) -> Result<T, D::Error> {
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
 }
 
@@ -594,7 +594,7 @@ impl<'de, D: Deserial> Visitor<'de> for Base16IgnoreLengthVisitor<D> {
         write!(formatter, "A base 16 string.")
     }
 
-    fn visit_str<E: de::Error>(self, v: &str) -> ParseResult<Self::Value, E> {
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
         let bytes = decode(v).map_err(de::Error::custom)?;
         let mut all_bytes = Vec::with_capacity(bytes.len() + 4);
         all_bytes.extend_from_slice(&(bytes.len() as u32).to_be_bytes());

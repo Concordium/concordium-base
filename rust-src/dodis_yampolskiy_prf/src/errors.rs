@@ -18,5 +18,5 @@ pub(crate) enum InternalError {
 /// * A problem with the format of `s`, a scalar,
 
 #[derive(Debug, Error)]
-#[error("{0}")]
+#[error(transparent)] // Forwards the Display and Source implementations of the wrapped InternalError
 pub struct PrfError(pub(crate) InternalError);

@@ -1,7 +1,6 @@
 //! ed25519 secret key types.
 
 use crate::{constants::*, errors::*, public::*};
-use anyhow::Result;
 use core::fmt::Debug;
 use crypto_common::*;
 use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
@@ -28,7 +27,7 @@ impl Serial for SecretKey {
 /// Construct a `SecretKey` from a slice of bytes.
 impl Deserial for SecretKey {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; SECRET_KEY_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(SecretKey(buf))

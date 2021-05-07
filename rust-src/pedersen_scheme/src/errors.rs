@@ -35,5 +35,5 @@ pub(crate) enum InternalError {
 /// * A problem decompressing to a scalar or group element,
 
 #[derive(Error, Debug)]
-#[error("{0}")]
+#[error("CommitmentError: {0}")]
 pub struct CommitmentError(pub(crate) InternalError);

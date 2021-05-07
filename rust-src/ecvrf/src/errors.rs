@@ -16,7 +16,7 @@ pub(crate) enum InternalError {
     /// To use this, pass a string specifying the `name` of the type which is
     /// returning the error, and the `length` in bytes which its constructor
     /// expects.
-    #[error("{name} must be {length} bytes in length")]
+    #[error("{name} must be {length} bytes in length.")]
     BytesLength { name: &'static str, length: usize },
     /// The verification equation wasn't satisfied
     #[error("Verification equation was not satisfied.")]
@@ -37,5 +37,5 @@ pub(crate) enum InternalError {
 ///
 /// * Failure of a proof to satisfy the verification equation.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Error)]
-#[error("{0}")]
+#[error("ProofError: {0}")]
 pub struct ProofError(pub(crate) InternalError);

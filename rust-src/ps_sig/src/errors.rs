@@ -40,5 +40,5 @@ pub(crate) enum InternalError {
 /// * A problem decompressing to a scalar or group element,
 
 #[derive(Debug, Error)]
-#[error("{0}")]
+#[error("SignatureError: {0}")]
 pub struct SignatureError(pub(crate) InternalError);

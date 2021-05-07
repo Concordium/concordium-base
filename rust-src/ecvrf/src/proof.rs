@@ -1,7 +1,6 @@
 //! An VRF Proof.
 
 use crate::{constants::*, errors::*};
-use anyhow::Result;
 use core::fmt::Debug;
 use crypto_common::*;
 use curve25519_dalek::{
@@ -50,7 +49,7 @@ impl Serial for Proof {
 /// results in a valid proof object.
 impl Deserial for Proof {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut point_bytes: [u8; 32] = [0u8; 32];
         source.read_exact(&mut point_bytes)?;
         let mut scalar_bytes1: [u8; 32] = [0u8; 32];

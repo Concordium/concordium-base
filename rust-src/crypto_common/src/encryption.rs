@@ -5,6 +5,7 @@ use hmac::Hmac;
 use rand::Rng;
 use serde::{Deserializer, Serializer};
 use std::{convert::TryInto, str::FromStr};
+use thiserror::Error;
 
 type Cipher = Cbc<Aes256, Pkcs7>;
 
@@ -23,17 +24,17 @@ impl From<String> for Password {
 impl FromStr for Password {
     type Err = <String as FromStr>::Err;
 
-    fn from_str(s: &str) -> ParseResult<Self, Self::Err> { Ok(Password { password: s.into() }) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Ok(Password { password: s.into() }) }
 }
 
 // Helpers for JSON serialization in base64 standard format.
-fn as_base64<A: AsRef<[u8]>, S>(key: &A, serializer: S) -> ParseResult<S::Ok, S::Error>
+fn as_base64<A: AsRef<[u8]>, S>(key: &A, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer, {
     serializer.serialize_str(&base64::encode(key.as_ref()))
 }
 
-fn from_base64<'de, D: Deserializer<'de>, X: From<Vec<u8>>>(des: D) -> ParseResult<X, D::Error> {
+fn from_base64<'de, D: Deserializer<'de>, X: From<Vec<u8>>>(des: D) -> Result<X, D::Error> {
     use serde::de::Error;
     let data = String::deserialize(des)?;
     let decoded = base64::decode(&data).map_err(|err| Error::custom(err.to_string()))?;
@@ -41,9 +42,7 @@ fn from_base64<'de, D: Deserializer<'de>, X: From<Vec<u8>>>(des: D) -> ParseResu
 }
 
 /// This is needed before Rust 1.48 due to lacking TryFrom instances for Vec.
-fn from_base64_array<'de, D: Deserializer<'de>>(
-    des: D,
-) -> ParseResult<[u8; AES_BLOCK_SIZE], D::Error> {
+fn from_base64_array<'de, D: Deserializer<'de>>(des: D) -> Result<[u8; AES_BLOCK_SIZE], D::Error> {
     use serde::de::Error;
     let data: Box<[u8]> = from_base64(des)?;
     let arr: Box<[u8; AES_BLOCK_SIZE]> = data
@@ -155,22 +154,15 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum DecryptionError {
     /// Error during AES decryption.
+    #[error("Decryption error.")]
     BlockMode,
 }
 
-impl std::fmt::Display for DecryptionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DecryptionError::BlockMode => write!(f, "Decryption error"),
-        }
-    }
-}
-
 /// Dual to the `encrypt` method.
-pub fn decrypt(pass: &Password, et: &EncryptedData) -> ParseResult<Vec<u8>, DecryptionError> {
+pub fn decrypt(pass: &Password, et: &EncryptedData) -> Result<Vec<u8>, DecryptionError> {
     // Derive the key for AES.
     // The key will be 256 bits, we are using sha256.
     let mut key = [0u8; 32];

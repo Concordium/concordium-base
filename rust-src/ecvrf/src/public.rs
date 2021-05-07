@@ -1,6 +1,5 @@
 //! ed25519 public keys.
 
-use anyhow::Result;
 use core::fmt::Debug;
 use crypto_common::*;
 use curve25519_dalek::{
@@ -35,7 +34,7 @@ impl Serial for PublicKey {
 /// small order (and hence also not a point at infinity).
 impl Deserial for PublicKey {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; PUBLIC_KEY_LENGTH];
         source.read_exact(&mut buf)?;
 
