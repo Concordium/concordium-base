@@ -1,4 +1,4 @@
-use crate::{ParseResult, SerdeDeserialize, SerdeSerialize};
+use crate::{SerdeDeserialize, SerdeSerialize};
 use aes::Aes256;
 use block_modes::{block_padding::Pkcs7, BlockMode, Cbc};
 use hmac::Hmac;
