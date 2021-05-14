@@ -37,6 +37,7 @@ import           Foreign.C.Types
 import Data.Data(Typeable, Data)
 import           Data.Bits
 import           System.Random
+import           Control.Monad
 import           Test.QuickCheck (Arbitrary(..))
 import qualified Data.Aeson as AE
 import Data.Int
@@ -202,12 +203,17 @@ instance NFData KeyPair
 
 instance Serialize KeyPair where
     put (KeyPair priv pub) = put priv <> put pub
-    get = KeyPair <$> get <*> get
+    get = do
+      privateKey <- get
+      publicKey <- get
+      when (publicKey /= pubKey privateKey) $ fail "Private key does not correspond to the public key."
+      return KeyPair{..}
 
 instance AE.FromJSON KeyPair where
     parseJSON = AE.withObject "Baker block signature key" $ \obj -> do
       privateKey <- obj AE..: "electionPrivateKey"
       publicKey <- obj AE..: "electionVerifyKey"
+      when (publicKey /= pubKey privateKey) $ fail "Private key does not correspond to the public key."
       return KeyPair{..}
 
 -- |A SHA512 hash.  64 bytes.
