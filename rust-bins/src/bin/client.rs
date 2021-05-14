@@ -1175,8 +1175,10 @@ fn handle_start_ip(sip: StartIp) {
             .interact()
         {
             ips.identity_providers
-                .get(&IpIdentity(ip_info_idx as u32))
+                .iter()
+                .nth(ip_info_idx)
                 .unwrap()
+                .1
                 .clone()
         } else {
             eprintln!("You have to choose an identity provider. Terminating.");
