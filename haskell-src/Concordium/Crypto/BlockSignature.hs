@@ -8,6 +8,7 @@ import qualified Concordium.Crypto.Ed25519Signature as Ed25519
 import           Data.ByteString
 import qualified Data.ByteString.Short as BSS
 import Concordium.Crypto.ByteStringHelpers
+import Control.Monad
 import Data.Serialize
 import Data.Aeson
 
@@ -23,12 +24,14 @@ instance Serialize KeyPair where
   get = do
     signKey <- get
     verifyKey <- get
+    when (verifyKey /= Ed25519.deriveVerifyKey signKey) $ fail "Signing key does not correspond to the verification key."
     return KeyPair{..}
 
 instance FromJSON KeyPair where
     parseJSON = withObject "Baker block signature key" $ \obj -> do
       signKey <- obj .: "signatureSignKey"
       verifyKey <- obj .: "signatureVerifyKey"
+      when (verifyKey /= Ed25519.deriveVerifyKey signKey) $ fail "Signing key does not correspond to the verification key."
       return KeyPair{..}
 
 newtype Signature = Signature BSS.ShortByteString
