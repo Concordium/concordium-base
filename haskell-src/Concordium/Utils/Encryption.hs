@@ -271,13 +271,14 @@ encryptJSON encryptionMethod keyDerivationMethod value pwd =
 decodeMaybeEncrypted :: (AE.FromJSON a)
   => IO Password -- ^ Password action to use if data is encrypted.
   -> ByteString  -- ^ JSON to decode.
-  -> IO (Either String a)
+  -> IO (Either String (a, Bool))
+  -- ^ Return a pair of a result and whether it was decoded from an encrypted file.
 decodeMaybeEncrypted getPwd json = do
   case AE.eitherDecodeStrict json of
-    Left _ -> return $ AE.eitherDecodeStrict json `embedErr` (\err -> "Error decoding JSON: " ++ err)
+    Left _ -> return $ (, False) <$> AE.eitherDecodeStrict json `embedErr` (\err -> "Error decoding JSON: " ++ err)
     Right encryptedJSON -> do
       pwd <- getPwd
-      return $ decryptJSON encryptedJSON pwd `embedErr` (("Error decoding encrypted JSON: " ++) . displayException)
+      return $ (, True) <$> decryptJSON encryptedJSON pwd `embedErr` (("Error decoding encrypted JSON: " ++) . displayException)
 
 -- | Encrypt a file as 'EncryptedJSON' with AES256 and PBKDF2SHA256.
 --   Prompts for a password to encrypt with.

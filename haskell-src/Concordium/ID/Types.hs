@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -501,10 +502,10 @@ type AccountVerificationKey = VerifyKey
 -- |The number of keys required to sign the message.
 -- The value is at least 1 and at most 255.
 newtype SignatureThreshold = SignatureThreshold Word8
-    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving newtype (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 newtype AccountThreshold = AccountThreshold Word8
-    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving newtype (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 instance Serialize SignatureThreshold where
   get = do

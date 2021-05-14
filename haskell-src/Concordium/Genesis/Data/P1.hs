@@ -5,6 +5,7 @@ import Control.Monad
 import qualified Data.ByteString.Lazy as LBS
 import Data.Serialize
 import qualified Data.Vector as Vec
+import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
 
 import Concordium.Common.Version
@@ -230,8 +231,14 @@ parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainPara
     genesisAccounts = Vec.fromList gpInitialAccounts
     genesisFinalizationParameters = gpFinalizationParameters
     genesisCryptographicParameters = gpCryptographicParameters
-    genesisIdentityProviders = gpIdentityProviders
-    genesisAnonymityRevokers = gpAnonymityRevokers
+    genesisIdentityProviders =
+      case filter (\(k, v) -> k /= ipIdentity v) (Map.toList (idProviders gpIdentityProviders)) of
+        [] -> gpIdentityProviders
+        ips -> error $ "Inconsistent identity provider ids: " ++ show ips
+    genesisAnonymityRevokers =
+      case filter (\(k, v) -> k /= arIdentity v) (Map.toList (arRevokers gpAnonymityRevokers)) of
+        [] -> gpAnonymityRevokers
+        ars -> error $ "Inconsistent anonymity revoker ids: " ++ show ars
     genesisMaxBlockEnergy = gpMaxBlockEnergy
     genesisUpdateKeys = gpUpdateKeys
     genesisChainParameters =

@@ -425,7 +425,7 @@ encodeReceiveContext ReceiveContext{..} = runPut encoder
           putWord64le (_contractIndex ind) <>
           putWord64le (_contractSubindex subind)
         encodeAddress (AddressContract addr) = putWord8 1 <> encodeContractAddress addr
-        encodeAddress accAddr = putWord8 0 <> put accAddr
+        encodeAddress (AddressAccount accAddr) = putWord8 0 <> put accAddr
 
 data SenderPolicy = SenderPolicy {
   -- |Identity of the identity provider who signed the identity object

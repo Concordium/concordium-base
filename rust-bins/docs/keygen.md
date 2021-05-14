@@ -4,14 +4,15 @@ The key generation tool can generate encryption keys for anonymity revokers and 
 The keygen tool can
 - generate keys for anonymity revokers via the subcommand `keygen-ar`
 - generate keys for identity providers via the subcommand `keygen-ip`
+- generate a randomness file via the subcommand `gen-rand`
 
-Both in a format that can be used to include the public keys in genesis, and used by other tools.
+Generated keys are in a format that can be used to include the public keys in genesis, and used by other tools.
 Private keys can be emitted either as plaintext or password encrypted.
-The too ask for a password before emitting private keys. If the empty password is used then the keys are not going to be encrypted, otherwise they will be.
+The user is asked for a password before emitting private keys. If the empty password is used then the keys are not going to be encrypted, otherwise they will be.
 
 To see all the options use the `--help` option at different levels.
 
-The tool generates keys deterministically from the given randomness file.
+The keygen-ip tool generates keys deterministically from the given randomness file. The keygen-ar tool uses the same method as gen-rand to generate randomness.
 
 ## keygen-ar
 
@@ -20,11 +21,19 @@ Generate keys for an anonymity revoker. The following options are supported
   anonymity revokers. It has meaning in cryptographic protocols (it is used as the evaluation point of the sharing polynomial) and so it must be non-zero.
 - `--description` string, a free-form description containing information that users will want to see about the anonymity revoker
 - `--global` a filename, containing cryptographic parameters of the chain anonymity revokers will be a part of.
+- `--in-len` an integer determining how many words to user is asked to enter.
 - `--name` a string, a simple identifier of the anonymity revoker. Chosen by themselves.
 - `--url` a URL with the website of the anonymity revoker
-- `--rand-input`, a filename with the randomness input. It must contain at least 64 bytes.
 - `--out`, a filename where the private keys will be emitted
 - `--out-pub`, a filename where the public data will be emitted. This is the data that must go to the chain.
+- `--recover-from-phrase` if set, recover keys from backup phrase. Otherwise, fresh keys are generated.
+- `--no-confirmation` if set, do not ask user to re-enter generated recovery phrase.
+- `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
+- `--only-system-randomness` if set, do not ask the user for a list of words to add to randomness, instead only relying on system randomness.
+
+No arguments are required. If the arguments `ar-identity`, `description`,
+`global`, `name`, `url`, `out`, or `out-pub` are not supplied they are queried
+by the tool.
 
 ## keygen-ip
 
@@ -32,7 +41,6 @@ Generate keys for the identity provider. The following options are supported
 - `--ip-identity` is the integer identifying the identity provider on the chain. This needs to be unique among
   identity providers. It has no special meaning
 - `--description` string, a free-form description containing information that users will want to see about the identity provider
-- `--global` a filename, containing cryptographic parameters of the chain anonymity revokers will be a part of.
 - `--name` a string, a simple identifier of the identity provider. Chosen by themselves.
 - `--url` a URL with the website of the identity provider
 - `--rand-input`, a filename with the randomness input. It must contain at least 64 bytes.
@@ -40,13 +48,21 @@ Generate keys for the identity provider. The following options are supported
 - `--out-pub`, a filename where the public data will be emitted. This is the data that must go to the chain.
 - `--bound`, upper bound on the number of messages signed by the identity provider's key. See the Pointcheval-Sanders signatures scheme for details of what this means. This defaults to 30 which is sufficient for the current numbers.
 
+## gen-rand
+
+Generates random words that can be used as a randomness file for keygen-ip. The following options are supported
+- `--in-len` an integer determining how many words the user is asked to enter. Value is ignored if input file is provided.
+- `--in` a filename from which inputs words are read. If not provided, words are read from stdin.
+- `--out`, a filename where the private keys will be emitted
+- `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
+
 # Examples
-As mentioned above, one has to provide a file containing at least 64 random bytes. In the following it is assumed that this file is called bytes.txt and has the content `12345678901234567890123456789012345678904989849123456789012345678901231`.
+As mentioned above, one has to provide a file containing at least 64 random bytes to keygen-ip. In the following it is assumed that this file is called bytes.txt and has the content `12345678901234567890123456789012345678904989849123456789012345678901231`.
 
 ## Generating anonymity revoker encryption keys
 Run
 ```console
-./keygen keygen-ar --rand-input bytes.txt --ar-identity 1 --name "Some name" --description "Some description" --url "Some url" --global cryptographic-parameters.json --out ar_keys.json --out-pub ar_keys_pub.json
+./keygen keygen-ar --ar-identity 1 --name "Some name" --description "Some description" --url "Some url" --global cryptographic-parameters.json --out ar_keys.json --out-pub ar_keys_pub.json
 Wrote private keys to ar_keys.json.
 Wrote public keys to ar_keys_pub.json.
 ```
@@ -84,7 +100,7 @@ while the content of ar_keys_pub.json will be
 ### Generating identity provider signature keys
 Run
 ```console
-./keygen keygen-ip --rand-input bytes.txt --ip-identity 1 --name "Some name" --description "Some description" --url "Some url" --global cryptographic-parameters.json --out ip_keys.json --out-pub  "ip_keys_pub.json"
+./keygen keygen-ip --rand-input bytes.txt --ip-identity 1 --name "Some name" --description "Some description" --url "Some url" --out ip_keys.json --out-pub  "ip_keys_pub.json"
 Wrote private to ip_keys.json.
 Wrote public keys to ip_keys_pub.json.
 ```

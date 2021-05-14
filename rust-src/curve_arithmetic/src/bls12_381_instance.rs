@@ -1,6 +1,6 @@
 // Authors:
 
-use crate::{bls12_381_g1hash::*, curve_arithmetic::*};
+use crate::{bls12_381_g1hash::*, bls12_381_g2hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
 use failure::Fallible;
 use ff::{Field, PrimeField};
@@ -13,6 +13,9 @@ use pairing::{
     Engine, PairingCurveAffine,
 };
 use rand::*;
+
+const HASH_TO_GROUP_G1_DST: &[u8; 55] = b"CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO";
+const HASH_TO_GROUP_G2_DST: &[u8; 55] = b"CONCORDIUM-hashtoG2-with-BLS12381G2_XMD:SHA-256_SSWU_RO";
 
 // Helper function for both G1 and G2 instances.
 fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
@@ -110,9 +113,7 @@ impl Curve for G2 {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(_b: &[u8]) -> Self {
-        unimplemented!("hash_to_group_element for G2 of Bls12_381 is not implemented")
-    }
+    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G2_DST) }
 }
 
 impl Curve for G1 {
@@ -196,7 +197,7 @@ impl Curve for G1 {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(bytes: &[u8]) -> Self { hash_to_g1(bytes) }
+    fn hash_to_group(bytes: &[u8]) -> Self { hash_to_curve(bytes, HASH_TO_GROUP_G1_DST) }
 }
 
 impl Curve for G1Affine {
@@ -277,7 +278,7 @@ impl Curve for G1Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(b: &[u8]) -> Self { hash_to_g1(b).into_affine() }
+    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve(b, HASH_TO_GROUP_G1_DST).into_affine() }
 }
 
 impl Curve for G2Affine {
@@ -358,9 +359,7 @@ impl Curve for G2Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
-    fn hash_to_group(_b: &[u8]) -> Self {
-        unimplemented!("hash_to_group_element for G2Affine of Bls12_381 is not implemented")
-    }
+    fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G2_DST).into_affine() }
 }
 
 impl Pairing for Bls12 {

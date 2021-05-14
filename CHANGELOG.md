@@ -45,3 +45,5 @@
   transaction to update keys of a specific credential.
 
 - New transaction/payload type `RegisterData`. And a corresponding event `DataRegistered`.
+
+- Two new update types for adding identity providers and anonymity revokers.
