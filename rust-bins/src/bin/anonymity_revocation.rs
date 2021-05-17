@@ -5,7 +5,7 @@ use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Value};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{decrypt_from_chunks_given_generator, Message};
-use id::{anonymity_revoker::*, constants::ArCurve, types::*};
+use id::{anonymity_revoker::*, constants::ArCurve, secret_sharing::*, types::*};
 use serde_json::json;
 use std::convert::TryFrom;
 
@@ -52,7 +52,7 @@ struct CombinePrf {
         long = "credential",
         help = "File with the JSON encoded credential or credential values."
     )]
-    credential: PathBuf,
+    credential: Option<PathBuf>,
     #[structopt(
         long = "shares",
         help = "Files with the JSON encoded decrypted shares."
@@ -60,6 +60,13 @@ struct CombinePrf {
     shares: Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the decryption to.")]
     out: PathBuf,
+    #[structopt(
+        long = "threshold",
+        help = "Anonymity revocation threshold.",
+        required_unless = "credential",
+        conflicts_with = "credential"
+    )]
+    threshold: Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -422,18 +429,28 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 }
 
 fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
-    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential from provided file because {}");
-
-    if credential.version != VERSION_0 {
-        return Err("The version of the credential should be 0".to_owned());
-    }
-    let credential = match credential.value {
-        AccountCredentialValues::Initial { .. } => {
-            return Err("Cannot use the initial account credential.".to_owned())
+    let revocation_threshold = match (cmb.credential, cmb.threshold) {
+        (None, None) => panic!("One of (credential, threshold) is required."),
+        (None, Some(thr)) => Threshold(thr),
+        (Some(path), None) => {
+            let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(path), e => "Could not read credential from provided file because {}");
+            if credential.version != VERSION_0 {
+                return Err("The version of the credential should be 0".to_owned());
+            }
+            let credential = match credential.value {
+                AccountCredentialValues::Initial { .. } => {
+                    return Err(
+                        "Cannot use the initial account credential. Use --threshold to provide \
+                         revocation threshol."
+                            .to_owned(),
+                    )
+                }
+                AccountCredentialValues::Normal { cdi } => cdi,
+            };
+            credential.threshold
         }
-        AccountCredentialValues::Normal { cdi } => cdi,
+        (Some(_), Some(_)) => panic!("Exactly one of (credential, threshold) is required."),
     };
-    let revocation_threshold = credential.threshold;
 
     let shares_values: Vec<_> = cmb.shares;
 
