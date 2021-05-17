@@ -5,7 +5,7 @@ use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Value};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{decrypt_from_chunks_given_generator, Message};
-use id::{anonymity_revoker::*, constants::ArCurve, secret_sharing::*, types::*};
+use id::{anonymity_revoker::*, constants::ArCurve, types::*};
 use serde_json::json;
 use std::convert::TryFrom;
 
@@ -60,13 +60,6 @@ struct CombinePrf {
     shares: Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the decryption to.")]
     out: PathBuf,
-    #[structopt(
-        long = "threshold",
-        help = "Anonymity revocation threshold.",
-        required_unless = "credential",
-        conflicts_with = "credential"
-    )]
-    threshold: Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -429,27 +422,30 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 }
 
 fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
-    let revocation_threshold = match (cmb.credential, cmb.threshold) {
-        (None, None) => panic!("One of (credential, threshold) is required."),
-        (None, Some(thr)) => Threshold(thr),
-        (Some(path), None) => {
+    let revocation_threshold = match cmb.credential {
+        Some(path) => {
             let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(path), e => "Could not read credential from provided file because {}");
             if credential.version != VERSION_0 {
                 return Err("The version of the credential should be 0".to_owned());
             }
-            let credential = match credential.value {
+            match credential.value {
                 AccountCredentialValues::Initial { .. } => {
-                    return Err(
-                        "Cannot use the initial account credential. Use --threshold to provide \
-                         revocation threshold."
-                            .to_owned(),
-                    )
+                    println!(
+                        "Initial credentials do not contain the anonymity revocation threshold. \
+                         Assuming threshold is less than or equal to the number of given shares."
+                    );
+                    None
                 }
-                AccountCredentialValues::Normal { cdi } => cdi,
-            };
-            credential.threshold
+                AccountCredentialValues::Normal { cdi } => Some(cdi.threshold),
+            }
         }
-        (Some(_), Some(_)) => panic!("Exactly one of (credential, threshold) is required."),
+        _ => {
+            println!(
+                "No credential provided. Assuming threshold is less than or equal to the number \
+                 of given shares."
+            );
+            None
+        }
     };
 
     let shares_values: Vec<_> = cmb.shares;
@@ -457,11 +453,13 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
     let number_of_ars = shares_values.len();
     let number_of_ars =
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
-    if number_of_ars < revocation_threshold.into() {
-        return Err(format!(
-            "Insufficient number of anonymity revokers ({}). Threshold is {}.",
-            number_of_ars, revocation_threshold
-        ));
+    if let Some(t) = revocation_threshold {
+        if number_of_ars < t.into() {
+            return Err(format!(
+                "Insufficient number of anonymity revokers ({}). Threshold is {}.",
+                number_of_ars, t
+            ));
+        }
     }
 
     let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ExampleCurve>> =
