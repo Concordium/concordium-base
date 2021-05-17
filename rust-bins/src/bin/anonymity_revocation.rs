@@ -441,7 +441,7 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
                 AccountCredentialValues::Initial { .. } => {
                     return Err(
                         "Cannot use the initial account credential. Use --threshold to provide \
-                         revocation threshol."
+                         revocation threshold."
                             .to_owned(),
                     )
                 }
