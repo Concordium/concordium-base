@@ -154,6 +154,7 @@ pub fn create_identity_object(
         id_cred_pub:  request.value.pub_info_for_ip.id_cred_pub,
         ar_data:      request.value.ip_ar_data.clone(),
         max_accounts: alist.max_accounts,
+        threshold:    request.value.choice_ar_parameters.threshold,
     });
 
     let icdi = create_initial_cdi(

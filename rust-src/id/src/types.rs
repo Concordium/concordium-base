@@ -1960,6 +1960,8 @@ pub struct AnonymityRevocationRecord<C: Curve> {
     pub ar_data: BTreeMap<ArIdentity, IpArData<C>>,
     #[serde(rename = "maxAccounts")]
     pub max_accounts: u8,
+    #[serde(rename = "revocationThreshold")]
+    pub threshold: Threshold,
 }
 
 /// A type encapsulating both types of credentials.
