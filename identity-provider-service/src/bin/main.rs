@@ -1133,6 +1133,7 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
         id_cred_pub:  pre_identity_object.pub_info_for_ip.id_cred_pub,
         ar_data:      pre_identity_object.ip_ar_data.clone(),
         max_accounts: alist.max_accounts,
+        threshold:    pre_identity_object.choice_ar_parameters.threshold,
     };
     let base16_id_cred_pub = base16_encode_string(&ar_record.id_cred_pub);
     db.write_revocation_record(&base16_id_cred_pub, ar_record)

@@ -16,7 +16,7 @@ use structopt::StructOpt;
 struct DecryptPrf {
     #[structopt(
         long = "ar-record",
-        help = "File with the JSON encoded (pre) identity object."
+        help = "File with the JSON encoded anonymity revocation record."
     )]
     ar_record: PathBuf,
     #[structopt(
@@ -49,10 +49,10 @@ struct Decrypt {
 #[derive(StructOpt)]
 struct CombinePrf {
     #[structopt(
-        long = "credential",
-        help = "File with the JSON encoded credential or credential values."
+        long = "ar-record",
+        help = "File with the JSON encoded anonymity revocation record."
     )]
-    credential: Option<PathBuf>,
+    ar_record: PathBuf,
     #[structopt(
         long = "shares",
         help = "Files with the JSON encoded decrypted shares."
@@ -99,7 +99,7 @@ struct ComputeRegIds {
 #[structopt(
     about = "Prototype tool showcasing anonymity revoker (inter)actions.",
     author = "Concordium",
-    version = "0.36787944117"
+    version = "0.5"
 )]
 enum AnonymityRevocation {
     #[structopt(
@@ -244,7 +244,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
     }
 
     match write_json_to_file(&rid.out, &regids) {
-        Ok(_) => eprintln!("Wrote regIds to {}.", rid.out.to_string_lossy()),
+        Ok(_) => eprintln!("Wrote regIds to {}.", rid.out.display()),
         Err(e) => {
             eprintln!("Could not JSON write to file due to {}", e);
         }
@@ -300,7 +300,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
         id_cred_pub_share: m,
     };
     match write_json_to_file(&dcr.out, &share) {
-        Ok(_) => println!("Wrote decryption to {}", dcr.out.to_string_lossy()),
+        Ok(_) => println!("Wrote decryption to {}", dcr.out.display()),
         Err(e) => {
             eprintln!("Could not write JSON to file due to {}", e);
         }
@@ -342,7 +342,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
         prf_key_share: m,
     };
     match write_json_to_file(&dcr.out, &share) {
-        Ok(_) => println!("Wrote decryption to {}.", dcr.out.to_string_lossy()),
+        Ok(_) => println!("Wrote decryption to {}.", dcr.out.display()),
         Err(e) => {
             eprintln!("Could not write JSON to file because {}", e);
         }
@@ -385,7 +385,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
         let decrypted = read_json_from_file(&share_value).map_err(|e| {
             format!(
                 "Could not read from ar file {}, error: {}",
-                share_value.to_string_lossy(),
+                share_value.display(),
                 e
             )
         })?;
@@ -413,7 +413,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 
     let json = json!({ "idCredPub": id_cred_pub_string });
     match write_json_to_file(&cmb.out, &json) {
-        Ok(_) => println!("Wrote idCredPub to {}.", cmb.out.to_string_lossy()),
+        Ok(_) => println!("Wrote idCredPub to {}.", cmb.out.display()),
         Err(e) => {
             eprintln!("Could not write to file because {}", e);
         }
@@ -422,52 +422,24 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 }
 
 fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
-    // We check if a normal credential has been provided so that we can read the
-    // anonymity revocation threshold. Before we introduced the initial
-    // accounts, it made sense to make the --credential option mandatory.
-    // Since initial credentias do not contain the anonymity revocation threshold,
-    // we made the --credential option optional, and in case of revoking the
-    // anonymity of the identity behind an initial account, we will in this case
-    // assume that enough shares have been given and will therefore not compare the
-    // number of shares with any threshold.
-    let revocation_threshold = match cmb.credential {
-        Some(path) => {
-            let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(path), e => "Could not read credential from provided file because {}");
-            if credential.version != VERSION_0 {
-                return Err("The version of the credential should be 0".to_owned());
-            }
-            match credential.value {
-                AccountCredentialValues::Initial { .. } => {
-                    println!(
-                        "Initial credentials do not contain the anonymity revocation threshold. \
-                         Assuming threshold is less than or equal to the number of given shares."
-                    );
-                    None
-                }
-                AccountCredentialValues::Normal { cdi } => Some(cdi.threshold),
-            }
-        }
-        _ => {
-            println!(
-                "No credential provided. Assuming threshold is less than or equal to the number \
-                 of given shares."
-            );
-            None
-        }
-    };
+    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(cmb.ar_record), e => "Could not read ArRecord due to {}");
+
+    if ar_record.version != VERSION_0 {
+        return Err("The version of the ArRecord should be 0.".to_owned());
+    }
+
+    let revocation_threshold = ar_record.value.threshold;
 
     let shares_values: Vec<_> = cmb.shares;
 
     let number_of_ars = shares_values.len();
     let number_of_ars =
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
-    if let Some(t) = revocation_threshold {
-        if number_of_ars < t.into() {
-            return Err(format!(
-                "Insufficient number of anonymity revokers ({}). Threshold is {}.",
-                number_of_ars, t
-            ));
-        }
+    if number_of_ars < revocation_threshold.into() {
+        return Err(format!(
+            "Insufficient number of anonymity revokers ({}). Threshold is {}.",
+            number_of_ars, revocation_threshold
+        ));
     }
 
     let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ExampleCurve>> =
@@ -480,7 +452,7 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
             Err(y) => {
                 return Err(format!(
                     "Could not read from ar file {}, error: {}",
-                    share_value.to_string_lossy(),
+                    share_value.display(),
                     y
                 ));
             }
@@ -508,7 +480,7 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
     let prf_key_string = base16_encode_string(&prf_key);
     let json = json!({ "prfKey": prf_key_string });
     match write_json_to_file(&cmb.out, &json) {
-        Ok(_) => println!("Wrote PRF key to {}.", cmb.out.to_string_lossy()),
+        Ok(_) => println!("Wrote PRF key to {}.", cmb.out.display()),
         Err(e) => {
             println!("Could not write to file because {}", e);
         }
