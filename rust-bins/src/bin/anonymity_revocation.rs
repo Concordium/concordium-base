@@ -52,7 +52,7 @@ struct CombinePrf {
         long = "credential",
         help = "File with the JSON encoded credential or credential values."
     )]
-    credential: PathBuf,
+    credential: Option<PathBuf>,
     #[structopt(
         long = "shares",
         help = "Files with the JSON encoded decrypted shares."
@@ -422,29 +422,52 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 }
 
 fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
-    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential from provided file because {}");
-
-    if credential.version != VERSION_0 {
-        return Err("The version of the credential should be 0".to_owned());
-    }
-    let credential = match credential.value {
-        AccountCredentialValues::Initial { .. } => {
-            return Err("Cannot use the initial account credential.".to_owned())
+    // We check if a normal credential has been provided so that we can read the
+    // anonymity revocation threshold. Before we introduced the initial
+    // accounts, it made sense to make the --credential option mandatory.
+    // Since initial credentias do not contain the anonymity revocation threshold,
+    // we made the --credential option optional, and in case of revoking the
+    // anonymity of the identity behind an initial account, we will in this case
+    // assume that enough shares have been given and will therefore not compare the
+    // number of shares with any threshold.
+    let revocation_threshold = match cmb.credential {
+        Some(path) => {
+            let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(path), e => "Could not read credential from provided file because {}");
+            if credential.version != VERSION_0 {
+                return Err("The version of the credential should be 0".to_owned());
+            }
+            match credential.value {
+                AccountCredentialValues::Initial { .. } => {
+                    println!(
+                        "Initial credentials do not contain the anonymity revocation threshold. \
+                         Assuming threshold is less than or equal to the number of given shares."
+                    );
+                    None
+                }
+                AccountCredentialValues::Normal { cdi } => Some(cdi.threshold),
+            }
         }
-        AccountCredentialValues::Normal { cdi } => cdi,
+        _ => {
+            println!(
+                "No credential provided. Assuming threshold is less than or equal to the number \
+                 of given shares."
+            );
+            None
+        }
     };
-    let revocation_threshold = credential.threshold;
 
     let shares_values: Vec<_> = cmb.shares;
 
     let number_of_ars = shares_values.len();
     let number_of_ars =
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
-    if number_of_ars < revocation_threshold.into() {
-        return Err(format!(
-            "Insufficient number of anonymity revokers ({}). Threshold is {}.",
-            number_of_ars, revocation_threshold
-        ));
+    if let Some(t) = revocation_threshold {
+        if number_of_ars < t.into() {
+            return Err(format!(
+                "Insufficient number of anonymity revokers ({}). Threshold is {}.",
+                number_of_ars, t
+            ));
+        }
     }
 
     let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ExampleCurve>> =
