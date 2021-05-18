@@ -422,6 +422,14 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 }
 
 fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
+    // We check if a normal credential has been provided so that we can read the
+    // anonymity revocation threshold. Before we introduced the initial
+    // accounts, it made sense to make the --credential option mandatory.
+    // Since initial credentias do not contain the anonymity revocation threshold,
+    // we made the --credential option optional, and in case of revoking the
+    // anonymity of the identity behind an initial account, we will in this case
+    // assume that enough shares have been given and will therefore not compare the
+    // number of shares with any threshold.
     let revocation_threshold = match cmb.credential {
         Some(path) => {
             let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(path), e => "Could not read credential from provided file because {}");
