@@ -1,19 +1,13 @@
 //! ed25519 secret key types.
 
-use core::fmt::Debug;
-
-use zeroize::Zeroize;
-
-use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
-
-use rand::{CryptoRng, Rng};
-
-use sha2::Sha512;
-
-use subtle::{Choice, ConstantTimeEq};
-
 use crate::{constants::*, errors::*, public::*};
+use core::fmt::Debug;
 use crypto_common::*;
+use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
+use rand::{CryptoRng, Rng};
+use sha2::Sha512;
+use subtle::{Choice, ConstantTimeEq};
+use zeroize::Zeroize;
 
 /// An EdDSA secret key.
 pub struct SecretKey(pub(crate) [u8; SECRET_KEY_LENGTH]);
@@ -33,7 +27,7 @@ impl Serial for SecretKey {
 /// Construct a `SecretKey` from a slice of bytes.
 impl Deserial for SecretKey {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; SECRET_KEY_LENGTH];
         source.read_exact(&mut buf)?;
         Ok(SecretKey(buf))

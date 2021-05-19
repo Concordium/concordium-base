@@ -168,7 +168,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 quote! {
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
                         #[allow(non_snake_case)]
-                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
+                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
                             use std::convert::TryFrom;
                             #tokens
                             Ok(#name{#names})
@@ -183,7 +183,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
-                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
+                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
                             use std::convert::TryFrom;
                             #tokens
                             Ok(#name(#names))

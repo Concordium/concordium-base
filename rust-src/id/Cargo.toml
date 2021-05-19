@@ -9,8 +9,7 @@ license-file = "../../LICENSE"
 ff = "0.5"
 sha3 = "0.9"
 sha2 = "0.9"
-failure = "0.1"
-
+anyhow = "1.0"
 rand_core = "=0.5"
 clear_on_drop = "0.2"
 serde = {version = "1.0", features = ["derive"]}

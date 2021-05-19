@@ -5,6 +5,7 @@ use hmac::Hmac;
 use rand::Rng;
 use serde::{Deserializer, Serializer};
 use std::{convert::TryInto, str::FromStr};
+use thiserror::Error;
 
 type Cipher = Cbc<Aes256, Pkcs7>;
 
@@ -153,18 +154,11 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum DecryptionError {
     /// Error during AES decryption.
+    #[error("Decryption error.")]
     BlockMode,
-}
-
-impl std::fmt::Display for DecryptionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DecryptionError::BlockMode => write!(f, "Decryption error"),
-        }
-    }
 }
 
 /// Dual to the `encrypt` method.

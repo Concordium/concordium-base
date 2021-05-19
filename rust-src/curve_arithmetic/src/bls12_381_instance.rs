@@ -2,7 +2,6 @@
 
 use crate::{bls12_381_g1hash::*, bls12_381_g2hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
-use failure::Fallible;
 use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
@@ -103,7 +102,7 @@ impl Curve for G2 {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
         let mut g = G2Compressed::empty();
         bytes.read_exact(g.as_mut())?;
         Ok(g.into_affine_unchecked()?.into_projective())
@@ -187,7 +186,7 @@ impl Curve for G1 {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
         let mut g = G1Compressed::empty();
         bytes.read_exact(g.as_mut())?;
         Ok(g.into_affine_unchecked()?.into_projective())
@@ -268,7 +267,7 @@ impl Curve for G1Affine {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
         let mut g = G1Compressed::empty();
         bytes.read_exact(g.as_mut())?;
         Ok(g.into_affine_unchecked()?)
@@ -349,7 +348,7 @@ impl Curve for G2Affine {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
         let mut g = G2Compressed::empty();
         bytes.read_exact(g.as_mut())?;
         Ok(g.into_affine_unchecked()?)

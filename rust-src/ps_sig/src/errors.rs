@@ -2,48 +2,34 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-
-use core::fmt::{self, Display};
+use thiserror::Error;
 // use pairing::{GroupDecodingError, PrimeFieldDecodingError};
 // use curve_arithmetic::*;
 
 /// Internal errors.  
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 #[allow(dead_code)]
 pub(crate) enum InternalError {
+    #[error("Not on Curve.")]
     CurveDecodingError,
+    #[error("Not a Field element.")]
     FieldDecodingError,
+    #[error("wrong length of signature key bytes")]
     SignatureKeyLengthError,
+    #[error("Wrong length of signature.")]
     SignatureLengthError,
+    #[error("Wrong length of secret key.")]
     SecretKeyLengthError,
+    #[error("Wrong length of public key.")]
     PublicKeyLengthError,
+    #[error("Wrong length of message vec bytes.")]
     MessageVecLengthError,
+    #[error("Wrong length of message.")]
     MessageLengthError,
+    #[error("Wrong message vec length or key length or both.")]
     KeyMessageLengthMismatch,
 }
-
-impl Display for InternalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            InternalError::CurveDecodingError => write!(f, "Not on Curve"),
-            InternalError::SecretKeyLengthError => write!(f, "wrong length of secret key"),
-            InternalError::PublicKeyLengthError => write!(f, "wrong length of public key"),
-            InternalError::FieldDecodingError => write!(f, "Not a Field element"),
-            InternalError::SignatureLengthError => write!(f, "wrong length of signature"),
-            InternalError::MessageLengthError => write!(f, "wrong length of message"),
-            InternalError::SignatureKeyLengthError => {
-                write!(f, "wrong length of signature key bytes")
-            }
-            InternalError::MessageVecLengthError => write!(f, "wrong length of message vec bytes "),
-            InternalError::KeyMessageLengthMismatch => {
-                write!(f, "wrong message vec length or key length or both")
-            }
-        }
-    }
-}
-
-impl ::failure::Fail for InternalError {}
 
 /// Errors which may occur druing execution
 ///
@@ -53,13 +39,6 @@ impl ::failure::Fail for InternalError {}
 ///
 /// * A problem decompressing to a scalar or group element,
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("SignatureError: {0}")]
 pub struct SignatureError(pub(crate) InternalError);
-
-impl Display for SignatureError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
-}
-
-impl ::failure::Fail for SignatureError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
-}

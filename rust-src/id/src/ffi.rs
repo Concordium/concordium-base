@@ -2,6 +2,7 @@ use crate::{
     chain::{self, CDIVerificationError},
     types::*,
 };
+use anyhow::bail;
 use byteorder::ReadBytesExt;
 use crypto_common::{size_t, types::TransactionTime, *};
 use curve_arithmetic::*;
@@ -52,7 +53,7 @@ impl<'de> Visitor<'de> for AttributeKindVisitor {
 }
 
 impl Deserial for AttributeKind {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u8 = source.get()?;
         if len <= 31 {
             let mut buf = vec![0u8; len as usize];

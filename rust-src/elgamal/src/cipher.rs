@@ -58,7 +58,7 @@ impl<C: Curve> Cipher<C> {
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Cipher<C>> {
+    pub fn from_bytes_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Cipher<C>> {
         let g = C::bytes_to_curve_unchecked(bytes)?;
         let h = C::bytes_to_curve_unchecked(bytes)?;
         Ok(Cipher(g, h))
