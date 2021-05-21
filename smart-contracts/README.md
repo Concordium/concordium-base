@@ -249,12 +249,16 @@ So far the fuzzer discovered three [bugs](wasm-chain-integration/fuzz/fixed_arti
 
 ## Software requirements
 - [cargo-fuzz](https://crates.io/crates/cargo-fuzz) 
-- [libfuzzer](https://llvm.org/docs/LibFuzzer.html)
-- for generating coverage information: `cargo-cov` and `cargo-profdata`
+- for generating coverage information:
+  * [cargo-cov](https://crates.io/crates/cargo-cov) (`cargo install cargo-cov`)
+  * [cargo-profdata](https://crates.io/crates/cargo-profdata) (`cargo install cargo-profdata`)
+  * [rustfilt](https://crates.io/crates/rustfilt) (`cargo instlal rustfilt`)
+  * [python3](https://www.python.org/downloads/)
+  * [tqdm](https://pypi.org/project/tqdm/) (`pip3 install tqdm`)
 
 ## Running the fuzzer
 - `$ cd wasm-chain-integration` 
-- `$ cargo fuzz run interpreter -- -max-len=1200000`
+- `$ cargo +nightly fuzz run interpreter -- -max-len=1200000`
 
 This will fuzz the smart-contract interpreter on randomly generated but valid Wasm programs, until the fuzzer finds
 a crash.
@@ -262,7 +266,7 @@ a crash.
 ## Visualizing code coverage
 
 After the fuzzer runs for some time it will be discovering new execution paths slower and slower.
-When that happens it can be useful to see how many times it executed each of the instructions in the interpreter
+When that happens, it can be useful to see how many times it executed each of the instructions in the interpreter
 source code. To generate source code that is annotated with the number of times that each line of code was executed, run
 
 - `cd wasm-chain-integration`

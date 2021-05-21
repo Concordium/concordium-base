@@ -7,8 +7,8 @@ import os
 import sys
 
 cargo_names = [
-               "wasm_chain_integration",
-               "wasm_transform",
+               "wasm-chain-integration",
+               "wasm-transform",
                "interpreter"
               ]
 
