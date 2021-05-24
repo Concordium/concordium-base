@@ -1,6 +1,6 @@
 # Build binaries in builder image.
 ARG development_image_tag
-FROM 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/development:${development_image_tag} as builder
+FROM concordium/base:${development_image_tag} as builder
 COPY . /build
 WORKDIR /build/identity-provider-service
 RUN cargo build --release
