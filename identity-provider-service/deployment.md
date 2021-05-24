@@ -53,6 +53,12 @@ This has the following parameters
   identity verifier can be reached, example `http://localhost:8101/api/verify`.
   The server will make POST requests to the URL.
 
+- `--id-verification-query-url` (envar `ID_VERIFICATION_QUERY_URL`), the Url where the
+  identity verifier can be reached for GET queries for attributes, example `http://localhost:8101/api/verify`.
+  The server will make GET requests to the URL. This can be private. If not
+  given it defaults to `--id-verification-url`.
+
+
 - `--wallet-proxy-base` (envar `WALLET_PROXY_BASE`), the base Url of the wallet
   proxy. Example https://wallet-proxy.eu.staging.concordium.com.
   This cannot have a path component, the way it is currently set-up. If that is

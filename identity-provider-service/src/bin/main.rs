@@ -67,11 +67,22 @@ struct IdentityProviderServiceConfiguration {
     retrieve_url: url::Url,
     #[structopt(
         long = "id-verification-url",
-        help = "URL of the identity verifier.",
+        help = "URL of the identity verifier. This is the URL where the user will be redirected \
+                to.",
         default_value = "http://localhost:8101/api/verify",
         env = "ID_VERIFICATION_URL"
     )]
     id_verification_url: url::Url,
+    #[structopt(
+        long = "id-verification-query-url",
+        help = "URL of the identity verifier. This is where the provider will query for the \
+                result of verification. If not given it defaults to `id-verification-url`. This \
+                is intended to use in situations where the identity provider has a private \
+                connection to the verifier to retrieve data, e.g., where the verifier and the \
+                provider run in different docker containers on the same machine.",
+        env = "ID_VERIFICATION_QUERY_URL"
+    )]
+    id_verification_query_url: Option<url::Url>,
     #[structopt(
         long = "wallet-proxy-base",
         help = "URL of the wallet-proxy.",
@@ -119,11 +130,12 @@ struct IdentityTokenContainer {
 /// the resolved configuration. In particular in this prototype the private keys
 /// are maintain in-memory.
 struct ServerConfig {
-    ip_data:               IpData<IpPairing>,
-    global:                GlobalContext<ArCurve>,
-    ars:                   ArInfos<ArCurve>,
-    id_verification_url:   url::Url,
-    retrieve_url:          url::Url,
+    ip_data: IpData<IpPairing>,
+    global: GlobalContext<ArCurve>,
+    ars: ArInfos<ArCurve>,
+    id_verification_url: url::Url,
+    id_verification_query_url: url::Url,
+    retrieve_url: url::Url,
     submit_credential_url: url::Url,
 }
 
@@ -201,6 +213,11 @@ impl ServerConfig {
             global: versioned_global.value,
             ars: versioned_ar_infos.value,
             id_verification_url: config.id_verification_url.clone(),
+            id_verification_query_url: config
+                .id_verification_query_url
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| config.id_verification_url.clone()),
             retrieve_url: config.retrieve_url.clone(),
             submit_credential_url,
         })
@@ -865,7 +882,7 @@ async fn create_signed_identity_object(
     // been verified, and the request will fail.
     let attribute_list_url = format!(
         "{}{}{}",
-        server_config.id_verification_url.clone(),
+        server_config.id_verification_query_url.clone(),
         "/attributes/",
         base16_encoded_id_cred_pub
     );
@@ -1163,11 +1180,13 @@ mod tests {
         assert_eq!(global_context.version, VERSION_0);
         let global = global_context.value;
 
+        let id_url = url::Url::parse("http://localhost/verify").unwrap();
         let server_config = Arc::new(ServerConfig {
             ip_data,
             global,
             ars,
-            id_verification_url: url::Url::parse("http://localhost/verify").unwrap(),
+            id_verification_url: id_url.clone(),
+            id_verification_query_url: id_url,
             retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
         });
@@ -1203,11 +1222,13 @@ mod tests {
         assert_eq!(global_context.version, VERSION_0);
         let global = global_context.value;
 
+        let id_url = url::Url::parse("http://localhost/verify").unwrap();
         let server_config = Arc::new(ServerConfig {
             ip_data,
             global,
             ars,
-            id_verification_url: url::Url::parse("http://localhost/verify").unwrap(),
+            id_verification_url: id_url.clone(),
+            id_verification_query_url: id_url,
             retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
         });
