@@ -1,7 +1,7 @@
 pipeline {
     agent { label 'windows' }
     environment {
-        BASE_OUTFILE = 's3://client-distribution.concordium.com/windows/cargo-concordium'
+        BASE_OUTFILE = 's3://distribution.concordium.software/tools/windows/cargo-concordium'
     }
     stages {
         stage('build') {

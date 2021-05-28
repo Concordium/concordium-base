@@ -9,7 +9,7 @@ pipeline {
                 echo -n "$VERSION"
             '''.stripIndent()
         )
-        OUTFILE = "s3://client-distribution.concordium.com/macos/cargo-concordium_${VERSION}"
+        OUTFILE = "s3://distribution.concordium.software/tools/macos/cargo-concordium_${VERSION}"
     }
     stages {
         stage('precheck') {
