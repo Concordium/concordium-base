@@ -75,7 +75,7 @@ pipeline {
                 unstash 'release'
                 sh '''\
                     # Push to s3
-                    aws s3 cp "out/cargo-concordium" "${OUTFILE}"
+                    aws s3 cp "out/cargo-concordium" "${OUTFILE}" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
                 '''.stripIndent()
             }
         }

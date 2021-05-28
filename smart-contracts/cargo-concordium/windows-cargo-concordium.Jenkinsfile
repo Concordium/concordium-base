@@ -29,7 +29,7 @@ pipeline {
 
 
                     # Push
-                    aws s3 cp ./target/release/cargo-concordium.exe ${OUTFILE}
+                    aws s3 cp ./target/release/cargo-concordium.exe ${OUTFILE} --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
                 '''.stripIndent()
             }
         }
