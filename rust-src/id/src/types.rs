@@ -6,6 +6,7 @@ use crate::{
         dlog,
     },
 };
+use anyhow::{anyhow, bail};
 use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
@@ -115,7 +116,7 @@ impl Serial for AccountAddress {
 
 impl Deserial for AccountAddress {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
         source.read_exact(&mut buf)?;
         Ok(AccountAddress(buf))
@@ -141,7 +142,7 @@ impl AccountAddress {
 pub struct SignatureThreshold(pub u8);
 
 impl Deserial for SignatureThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let w = source.get()?;
         if w > 0 {
             Ok(SignatureThreshold(w))
@@ -230,7 +231,7 @@ impl Serial for AccountOwnershipProof {
 }
 
 impl Deserial for AccountOwnershipProof {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u8 = source.get()?;
         if len == 0 {
             bail!("Need at least one proof.")
@@ -287,7 +288,7 @@ impl fmt::Display for IpIdentity {
 pub struct ArIdentity(u32);
 
 impl Deserial for ArIdentity {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x = source.get()?;
         if x == 0 {
             bail!("ArIdentity must be non-zero.")
@@ -411,13 +412,13 @@ impl<'a> fmt::Display for AttributeStringTag {
 // FIXME: This method's complexity is linear in the size of the set of
 // attributes.
 impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn try_from(v: AttributeStringTag) -> Result<Self, Self::Error> {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == v.0) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(format_err!("{} tag unknown.", v.0))
+            Err(anyhow!("{} tag unknown.", v.0))
         }
     }
 }
@@ -446,13 +447,13 @@ impl fmt::Display for AttributeTag {
 }
 
 impl std::str::FromStr for AttributeTag {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == s) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(format_err!("{} tag unknown.", s))
+            Err(anyhow!("{} tag unknown.", s))
         }
     }
 }
@@ -521,17 +522,17 @@ impl Serial for YearMonth {
 }
 
 impl Deserial for YearMonth {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let year = source.get()?;
         let month = source.get()?;
-        YearMonth::new(year, month).ok_or_else(|| format_err!("Invalid year/month."))
+        YearMonth::new(year, month).ok_or_else(|| anyhow!("Invalid year/month."))
     }
 }
 
 impl std::str::FromStr for YearMonth {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Fallible<Self> {
+    fn from_str(s: &str) -> ParseResult<Self> {
         if !s.chars().all(|c| c.is_ascii() && c.is_numeric()) {
             bail!("Unsupported date in format YYYYMM")
         }
@@ -1040,7 +1041,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentProofs<P, C> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         // Make sure to respect the length.
         let mut limited = source.take(u64::from(len));
@@ -1165,7 +1166,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, AttributeType> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let valid_to = source.get()?;
         let created_at = source.get()?;
         let len: u16 = source.get()?;
@@ -1299,7 +1300,7 @@ impl Serial for VerifyKey {
 }
 
 impl Deserial for VerifyKey {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         use VerifyKey::*;
         match source.get()? {
             SchemeId::Ed25519 => {
@@ -1843,10 +1844,10 @@ impl Serial for CredentialPublicKeys {
 }
 
 impl Deserial for CredentialPublicKeys {
-    fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(cur: &mut R) -> ParseResult<Self> {
         let len = cur.read_u8()?;
         if len == 0 {
-            bail!(format_err!("At least one key must be present."));
+            bail!(anyhow!("At least one key must be present."));
         }
         let keys = deserial_map_no_length(cur, usize::from(len))?;
         let threshold = cur.get()?;
@@ -1868,7 +1869,7 @@ impl Serial for SchemeId {
 }
 
 impl Deserial for SchemeId {
-    fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(cur: &mut R) -> ParseResult<Self> {
         match cur.read_u8()? {
             0 => Ok(SchemeId::Ed25519),
             _ => bail!("Only Ed25519 signature scheme supported."),
@@ -2011,7 +2012,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Deserial
     for AccountCredential<P, C, AttributeType>
 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match source.get()? {
             0u8 => {
                 let icdi = source.get()?;

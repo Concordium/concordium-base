@@ -1,3 +1,4 @@
+use anyhow::bail;
 use crypto_common::*;
 use curve_arithmetic::*;
 use ff::Field;
@@ -14,7 +15,7 @@ use std::convert::TryFrom;
 pub struct Threshold(pub u8);
 
 impl Deserial for Threshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x: u8 = source.get()?;
         if x >= 1 {
             Ok(Threshold(x))

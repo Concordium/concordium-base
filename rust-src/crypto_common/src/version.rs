@@ -52,7 +52,7 @@ impl Serial for Version {
 }
 
 impl Deserial for Version {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut acc: u64 = 0;
         for _ in 0..5 {
             let byte = u64::from(source.read_u8()?);
@@ -94,7 +94,7 @@ impl<T: Serial> Serial for Versioned<T> {
 }
 
 impl<T: Deserial> Deserial for Versioned<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let version: Version = source.get()?;
         let value: T = source.get()?;
         Ok(Versioned { version, value })
@@ -133,7 +133,7 @@ mod tests {
     fn test_version_serialization_overflow() {
         let data: Vec<u8> = vec![0x9F, 0xFF, 0xFF, 0xFF, 0x7F];
         let mut cursor = std::io::Cursor::new(data);
-        let version: Fallible<Version> = cursor.get();
+        let version: ParseResult<Version> = cursor.get();
         assert!(version.is_err());
     }
 

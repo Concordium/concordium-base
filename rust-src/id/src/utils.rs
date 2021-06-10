@@ -1,13 +1,14 @@
 use crate::{secret_sharing::Threshold, types::*};
+use anyhow::bail;
 use crypto_common::{
     to_bytes,
     types::{KeyIndex, TransactionTime},
+    ParseResult,
 };
 use curve_arithmetic::{Curve, Pairing, Value};
 use ed25519_dalek::Verifier;
 use either::Either;
 use elgamal::*;
-use failure::Fallible;
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
 use rand::*;
@@ -117,7 +118,7 @@ pub fn encrypt_prf_share<C: Curve, R: Rng>(
 /// - there are tags in the list which do not fit into the field capacity
 pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a AttributeTag>>(
     i: I,
-) -> Fallible<F> {
+) -> ParseResult<F> {
     // Since F is supposed to be a field, its capacity must be at least 1, hence the
     // next line is safe. Maximum tag that can be stored.
     let max_tag = F::CAPACITY - 1;
@@ -201,7 +202,7 @@ pub fn encode_public_credential_values<F: PrimeField>(
     created_at: YearMonth,
     valid_to: YearMonth,
     threshold: Threshold,
-) -> Fallible<F> {
+) -> ParseResult<F> {
     let mut f = F::zero().into_repr();
     let ca: u32 = created_at.into();
     let vt: u32 = valid_to.into();

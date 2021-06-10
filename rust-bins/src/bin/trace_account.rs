@@ -9,6 +9,7 @@
 //! failures gracefully, typically just aborting execution entirely if something
 //! unexpected happens.
 
+use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap::AppSettings;
 use client_server_helpers::read_json_from_file;
@@ -310,7 +311,7 @@ fn main() {
             let input = match decryption_key {
                 Some(decryption_key) => {
                     let encryption_secret_key = match hex::decode(&decryption_key)
-                        .map_err(|e| failure::format_err!("Hex decoding error {}", e))
+                        .context("Hex decoding error")
                         .and_then(|bs| from_bytes(&mut std::io::Cursor::new(bs)))
                     {
                         Ok(v) => Some(v),

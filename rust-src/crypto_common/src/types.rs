@@ -4,12 +4,11 @@
 //! is moved to the bottom of the dependency hierarchy.
 
 use crate::{
-    deserial_vector_no_length, serial_vector_no_length, Buffer, Deserial, Get, SerdeDeserialize,
-    SerdeSerialize, Serial,
+    deserial_vector_no_length, serial_vector_no_length, Buffer, Deserial, Get, ParseResult,
+    SerdeDeserialize, SerdeSerialize, Serial,
 };
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
-use failure::Fallible;
 use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
 
 /// Index of an account key that is to be used.
@@ -38,7 +37,7 @@ impl Serial for Amount {
 }
 
 impl Deserial for Amount {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> failure::Fallible<Self> {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let microgtu = source.get()?;
         Ok(Amount { microgtu })
     }

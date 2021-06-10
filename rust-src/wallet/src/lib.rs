@@ -1,7 +1,6 @@
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate serde_json;
+use anyhow::{bail, ensure};
 use crypto_common::{
     types::{Amount, KeyIndex, Signature, TransactionSignature},
     *,
@@ -11,7 +10,6 @@ use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
-use failure::Fallible;
 use id::{
     account_holder::{create_credential, generate_pio},
     ffi::AttributeKind,
@@ -46,7 +44,10 @@ struct TransferContext {
 }
 
 /// Sign the given hash.
-fn make_signatures<H: AsRef<[u8]>>(keys: AccountKeys, hash: &H) -> Fallible<TransactionSignature> {
+fn make_signatures<H: AsRef<[u8]>>(
+    keys: AccountKeys,
+    hash: &H,
+) -> anyhow::Result<TransactionSignature> {
     // we'll just sign with all the keys we are given, disregarding the threshold.
     // It is not our job here to decide and in any case the wallet is meant to
     // support only single key accounts.
@@ -67,7 +68,7 @@ fn make_signatures<H: AsRef<[u8]>>(keys: AccountKeys, hash: &H) -> Fallible<Tran
 }
 
 /// Create a JSON encoding of an encrypted transfer transaction.
-fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
+fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let ctx: TransferContext = from_value(v.clone())?;
     let ctx_to = match ctx.to {
@@ -144,7 +145,7 @@ fn make_transaction_bytes(
     (hasher.finalize(), body)
 }
 
-fn create_transfer_aux(input: &str) -> Fallible<String> {
+fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
     let ctx: TransferContext = from_value(v.clone())?;
@@ -177,7 +178,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
-fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
+fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
     let ctx: TransferContext = from_value(v.clone())?;
@@ -210,7 +211,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
 }
 
 /// Create a JSON encoding of a secret to public amount transaction.
-fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
+fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let ctx: TransferContext = from_value(v.clone())?;
 
@@ -262,7 +263,7 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
 fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
 
 /// Aggregate two encrypted amounts together into one.
-fn combine_encrypted_amounts_aux(left: &str, right: &str) -> Fallible<String> {
+fn combine_encrypted_amounts_aux(left: &str, right: &str) -> anyhow::Result<String> {
     let left = from_str(left)?;
     let right = from_str(right)?;
     Ok(to_string(&encrypted_transfers::aggregate::<ExampleCurve>(
@@ -271,7 +272,7 @@ fn combine_encrypted_amounts_aux(left: &str, right: &str) -> Fallible<String> {
 }
 
 /// Try to extract a field with a given name from the JSON value.
-fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A> {
+fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> anyhow::Result<A> {
     match v.get(fname) {
         Some(v) => Ok(from_value(v.clone())?),
         None => bail!(format!("Field {} not present, but should be.", fname)),
@@ -279,7 +280,7 @@ fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A
 }
 
 /// This function creates the identity object request
-fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
+fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
@@ -357,7 +358,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
-fn create_credential_aux(input: &str) -> Fallible<String> {
+fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let expiry = try_get(&v, "expiry")?;
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
@@ -451,7 +452,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
-fn generate_accounts_aux(input: &str) -> Fallible<String> {
+fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
     let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
@@ -493,7 +494,7 @@ fn generate_accounts_aux(input: &str) -> Fallible<String> {
 /// const.
 static TABLE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/table_bytes.bin"));
 
-fn decrypt_encrypted_amount_aux(input: &str) -> Fallible<Amount> {
+fn decrypt_encrypted_amount_aux(input: &str) -> anyhow::Result<Amount> {
     let v: Value = from_str(input)?;
     let encrypted_amount = try_get(&v, "encryptedAmount")?;
     let secret = try_get(&v, "encryptionSecretKey")?;
@@ -520,7 +521,7 @@ unsafe fn signal_error(flag: *mut u8, err_msg: String) -> *mut c_char {
         .into_raw()
 }
 
-unsafe fn encode_response(response: Fallible<String>, success: *mut u8) -> *mut c_char {
+unsafe fn encode_response(response: anyhow::Result<String>, success: *mut u8) -> *mut c_char {
     match response {
         Ok(s) => {
             let cstr: CString = {
