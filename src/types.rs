@@ -615,12 +615,7 @@ impl<'a> ContractName<'a> {
     /// "init_<contract_name>".
     #[inline(always)]
     pub fn new(name: &'a str) -> Result<Self, NewContractNameError> {
-        if !name.starts_with("init_") {
-            return Err(NewContractNameError::MissingInitPrefix);
-        }
-        if name.len() > constants::MAX_FUNC_NAME_SIZE {
-            return Err(NewContractNameError::TooLong);
-        }
+        ContractName::is_valid_contract_name(name)?;
         Ok(ContractName(name))
     }
 
@@ -632,6 +627,23 @@ impl<'a> ContractName<'a> {
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
     pub fn get_chain_name(&self) -> &str { self.0 }
+
+    /// Check whether a given contract name is valid.
+    pub fn is_valid_contract_name(name: &str) -> Result<(), NewContractNameError> {
+        if !name.starts_with("init_") {
+            return Err(NewContractNameError::MissingInitPrefix);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewContractNameError::TooLong);
+        }
+        if name.contains('.') {
+            return Err(NewContractNameError::ContainsDot);
+        }
+        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+            return Err(NewContractNameError::InvalidCharacters);
+        }
+        Ok(())
+    }
 }
 
 /// A contract name (owned version). Expected format: "init_<contract_name>".
@@ -643,12 +655,7 @@ impl OwnedContractName {
     /// "init_<contract_name>".
     #[inline(always)]
     pub fn new(name: String) -> Result<Self, NewContractNameError> {
-        if !name.starts_with("init_") {
-            return Err(NewContractNameError::MissingInitPrefix);
-        }
-        if name.len() > constants::MAX_FUNC_NAME_SIZE {
-            return Err(NewContractNameError::TooLong);
-        }
+        ContractName::is_valid_contract_name(&name)?;
         Ok(OwnedContractName(name))
     }
 
@@ -674,6 +681,8 @@ impl OwnedContractName {
 pub enum NewContractNameError {
     MissingInitPrefix,
     TooLong,
+    ContainsDot,
+    InvalidCharacters,
 }
 
 impl fmt::Display for NewContractNameError {
@@ -684,6 +693,11 @@ impl fmt::Display for NewContractNameError {
             TooLong => {
                 write!(f, "Contract names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
             }
+            ContainsDot => write!(f, "Contract names cannot contain a '.'"),
+            InvalidCharacters => write!(
+                f,
+                "Contract names can only contain ascii alphanumeric or punctuation characters"
+            ),
         }
     }
 }
@@ -696,12 +710,7 @@ impl<'a> ReceiveName<'a> {
     /// Create a new ReceiveName and check the format. Expected format:
     /// "<contract_name>.<func_name>".
     pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
-        if !name.contains('.') {
-            return Err(NewReceiveNameError::MissingDotSeparator);
-        }
-        if name.len() > constants::MAX_FUNC_NAME_SIZE {
-            return Err(NewReceiveNameError::TooLong);
-        }
+        ReceiveName::is_valid_receive_name(name)?;
         Ok(ReceiveName(name))
     }
 
@@ -715,6 +724,20 @@ impl<'a> ReceiveName<'a> {
     /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
     pub fn to_owned(&self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
+
+    /// Check whether a receive name is valid.
+    pub fn is_valid_receive_name(name: &str) -> Result<(), NewReceiveNameError> {
+        if !name.contains('.') {
+            return Err(NewReceiveNameError::MissingDotSeparator);
+        }
+        if name.len() > constants::MAX_FUNC_NAME_SIZE {
+            return Err(NewReceiveNameError::TooLong);
+        }
+        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+            return Err(NewReceiveNameError::InvalidCharacters);
+        }
+        Ok(())
+    }
 }
 
 /// A receive name (owned version). Expected format:
@@ -726,12 +749,7 @@ impl OwnedReceiveName {
     /// Create a new OwnedReceiveName and check the format. Expected format:
     /// "<contract_name>.<func_name>".
     pub fn new(name: String) -> Result<Self, NewReceiveNameError> {
-        if !name.contains('.') {
-            return Err(NewReceiveNameError::MissingDotSeparator);
-        }
-        if name.len() > constants::MAX_FUNC_NAME_SIZE {
-            return Err(NewReceiveNameError::TooLong);
-        }
+        ReceiveName::is_valid_receive_name(&name)?;
         Ok(OwnedReceiveName(name))
     }
 
@@ -764,6 +782,7 @@ impl OwnedReceiveName {
 pub enum NewReceiveNameError {
     MissingDotSeparator,
     TooLong,
+    InvalidCharacters,
 }
 
 impl fmt::Display for NewReceiveNameError {
@@ -771,11 +790,15 @@ impl fmt::Display for NewReceiveNameError {
         use NewReceiveNameError::*;
         match self {
             MissingDotSeparator => {
-                f.write_str("Receive names have the format '<contract_name>.<func_name>'.")
+                write!(f, "Receive names have the format '<contract_name>.<func_name>'.")
             }
             TooLong => {
                 write!(f, "Receive names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
             }
+            InvalidCharacters => write!(
+                f,
+                "Receive names can only contain ascii alphanumeric or punctuation characters"
+            ),
         }
     }
 }
