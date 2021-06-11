@@ -181,7 +181,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Map (Map)
 import qualified Data.Map as Map
-
+import Data.Function
 
 import Data.Aeson as AE
 import Data.Aeson.TH
