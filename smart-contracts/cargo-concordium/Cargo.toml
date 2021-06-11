@@ -32,5 +32,5 @@ criterion = "0.3"
 [dependencies.concordium-contracts-common]
 version = "0.4"
 git = "https://github.com/Concordium/concordium-contracts-common.git"
-branch = "main"
+branch = "validate-contract-and-receive-names"
 features = ["derive-serde", "std"]
