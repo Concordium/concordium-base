@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, BangPatterns, DeriveFunctor, OverloadedStrings #-}
 -- |Implementation of the chain update mechanism: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
-module Concordium.Types.BSUpdates where
+module Concordium.Types.UpdateQueues where
 
 import Control.Monad
 import Data.Aeson as AE

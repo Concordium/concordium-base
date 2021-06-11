@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 965a934e372e7c255f95ae2dfbf6e321fd5b5e1fac7fbe1ee2d3178eae28084a
+-- hash: 6d2ea93d0cd5dd84a28f57992ceb48fd5192a7015195deb0c0b16d83188ebe82
 
 name:           concordium-base
 version:        0.1.0.0
@@ -66,7 +66,6 @@ library
       Concordium.Types
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
-      Concordium.Types.BSUpdates
       Concordium.Types.DummyData
       Concordium.Types.Execution
       Concordium.Types.Execution.TH
@@ -79,6 +78,7 @@ library
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions
+      Concordium.Types.UpdateQueues
       Concordium.Types.Updates
       Concordium.Utils
       Concordium.Utils.Encryption

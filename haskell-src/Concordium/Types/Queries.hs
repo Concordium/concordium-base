@@ -15,7 +15,7 @@ import qualified Data.Vector as Vec
 -- import Concordium.GlobalState.Account
 -- import Concordium.GlobalState.Basic.BlockState.AccountReleaseSchedule (AccountReleaseSchedule (..))
 -- import Concordium.GlobalState.Basic.BlockState.Updates (Updates)
-import Concordium.Types.BSUpdates (Updates)
+import Concordium.Types.UpdateQueues (Updates)
 -- import Concordium.GlobalState.Finalization
 -- import Concordium.ID.Types
 import Concordium.Types
@@ -179,51 +179,51 @@ data BlockSummary = BlockSummary
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockSummary)
 
--- data AccountInfo = AccountInfo
---     { -- |The next nonce for the account
---       aiAccountNonce :: Nonce,
---       -- |The total non-encrypted balance on the account
---       aiAccountAmount :: Amount,
---       -- |The release schedule for locked amounts on the account
---       aiAccountReleaseSchedule :: AccountReleaseSchedule,
---       -- |The credentials on the account
---       aiAccountCredentials :: Map.Map CredentialIndex (Versioned AccountCredential),
---       -- |Number of credentials required to sign a valid transaction
---       aiAccountThreshold :: AccountThreshold,
---       -- |The encrypted amount on the account
---       aiAccountEncryptedAmount :: AccountEncryptedAmount,
---       -- |The encryption key for the account
---       aiAccountEncryptionKey :: AccountEncryptionKey,
---       -- |The account index
---       aiAccountIndex :: AccountIndex,
---       -- |The baker associated with the account (if any)
---       aiBaker :: Maybe AccountBaker
---     }
+data AccountInfo = AccountInfo
+    { -- |The next nonce for the account
+      aiAccountNonce :: Nonce,
+      -- |The total non-encrypted balance on the account
+      aiAccountAmount :: Amount,
+      -- |The release schedule for locked amounts on the account
+      aiAccountReleaseSchedule :: AccountReleaseSchedule,
+      -- |The credentials on the account
+      aiAccountCredentials :: Map.Map CredentialIndex (Versioned AccountCredential),
+      -- |Number of credentials required to sign a valid transaction
+      aiAccountThreshold :: AccountThreshold,
+      -- |The encrypted amount on the account
+      aiAccountEncryptedAmount :: AccountEncryptedAmount,
+      -- |The encryption key for the account
+      aiAccountEncryptionKey :: AccountEncryptionKey,
+      -- |The account index
+      aiAccountIndex :: AccountIndex,
+      -- |The baker associated with the account (if any)
+      aiBaker :: Maybe AccountBaker
+    }
 
--- instance ToJSON AccountInfo where
---     toJSON AccountInfo{..} =
---         object $
---             [ "accountNonce" .= aiAccountNonce,
---               "accountAmount" .= aiAccountAmount,
---               "accountReleaseSchedule" .= aiAccountReleaseSchedule,
---               "accountCredentials" .= aiAccountCredentials,
---               "accountThreshold" .= aiAccountThreshold,
---               "accountEncryptedAmount" .= aiAccountEncryptedAmount,
---               "accountEncryptionKey" .= aiAccountEncryptionKey,
---               "accountIndex" .= aiAccountIndex
---             ]
---                 <> maybe [] (\b -> ["accountBaker" .= b]) aiBaker
---     toEncoding AccountInfo{..} =
---         pairs $
---             "accountNonce" .= aiAccountNonce
---                 <> "accountAmount" .= aiAccountAmount
---                 <> "accountReleaseSchedule" .= aiAccountReleaseSchedule
---                 <> "accountCredentials" .= aiAccountCredentials
---                 <> "accountThreshold" .= aiAccountThreshold
---                 <> "accountEncryptedAmount" .= aiAccountEncryptedAmount
---                 <> "accountEncryptionKey" .= aiAccountEncryptionKey
---                 <> "accountIndex" .= aiAccountIndex
---                 <> maybe mempty ("accountBaker" .=) aiBaker
+instance ToJSON AccountInfo where
+    toJSON AccountInfo{..} =
+        object $
+            [ "accountNonce" .= aiAccountNonce,
+              "accountAmount" .= aiAccountAmount,
+              "accountReleaseSchedule" .= aiAccountReleaseSchedule,
+              "accountCredentials" .= aiAccountCredentials,
+              "accountThreshold" .= aiAccountThreshold,
+              "accountEncryptedAmount" .= aiAccountEncryptedAmount,
+              "accountEncryptionKey" .= aiAccountEncryptionKey,
+              "accountIndex" .= aiAccountIndex
+            ]
+                <> maybe [] (\b -> ["accountBaker" .= b]) aiBaker
+    toEncoding AccountInfo{..} =
+        pairs $
+            "accountNonce" .= aiAccountNonce
+                <> "accountAmount" .= aiAccountAmount
+                <> "accountReleaseSchedule" .= aiAccountReleaseSchedule
+                <> "accountCredentials" .= aiAccountCredentials
+                <> "accountThreshold" .= aiAccountThreshold
+                <> "accountEncryptedAmount" .= aiAccountEncryptedAmount
+                <> "accountEncryptionKey" .= aiAccountEncryptionKey
+                <> "accountIndex" .= aiAccountIndex
+                <> maybe mempty ("accountBaker" .=) aiBaker
 
 data RewardStatus = RewardStatus
     { -- |The total GTU in existence
