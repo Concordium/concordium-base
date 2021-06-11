@@ -13,7 +13,7 @@ import qualified Data.Serialize as S
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot {theSlot :: Word64} deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize)
+newtype Slot = Slot {theSlot :: Word64} deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
