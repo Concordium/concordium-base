@@ -329,7 +329,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         // for now.
         ensure!(start as usize >= self.imports.len(), RuntimeError::DirectlyCallImport);
         let outer_function = &self.code[start as usize - self.imports.len()]; // safe because the artifact should be well-formed.
-        let num_args = args.len().try_into()?;
+        let num_args: u32 = args.len().try_into()?;
         ensure!(
             outer_function.num_params() == num_args,
             "The number of arguments does not match the number of parameters {} != {}.",

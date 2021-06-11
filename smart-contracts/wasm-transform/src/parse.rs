@@ -670,7 +670,10 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Export {
             ..
         } = description
         {
-            ensure!(name.name.len() <= MAX_FUNC_NAME_SIZE, ParseError::FuncNameTooLong);
+            ensure!(
+                name.name.len() <= concordium_contracts_common::constants::MAX_FUNC_NAME_SIZE,
+                ParseError::FuncNameTooLong
+            );
         }
 
         Ok(Export {
@@ -857,9 +860,11 @@ impl std::fmt::Display for ParseError {
             ParseError::OnlySingleReturn => write!(f, "Only single return value is supported."),
             ParseError::OnlyASCIINames => write!(f, "Only ASCII names are allowed."),
             ParseError::NameTooLong => write!(f, "Names are limited to {} bytes.", MAX_NAME_SIZE),
-            ParseError::FuncNameTooLong => {
-                write!(f, "Names of functions are limited to {} bytes.", MAX_FUNC_NAME_SIZE)
-            }
+            ParseError::FuncNameTooLong => write!(
+                f,
+                "Names of functions are limited to {} bytes.",
+                concordium_contracts_common::constants::MAX_FUNC_NAME_SIZE
+            ),
             ParseError::StartFunctionsNotSupported => {
                 write!(f, "Start functions are not supported.")
             }

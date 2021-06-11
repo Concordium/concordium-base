@@ -49,13 +49,10 @@ pub const MAX_NUM_EXPORTS: usize = 100;
 
 /// Maximum size of names.
 /// NB: Function names are restricted further. See
-/// [MAX_FUNC_NAME_SIZE](./constant.MAX_FUNC_NAME_SIZE.html).
+/// [concordium-contracts-common::constants::MAX_FUNC_NAME_SIZE][m]
+///
+/// [m]: https://docs.rs/concordium-contracts-common/*/concordium_contracts_common/constant.MAX_FUNC_NAME_SIZE.html
 pub const MAX_NAME_SIZE: usize = 512;
-
-/// Maximum size of function names.
-/// A contract name is defined by its init name, so this also limits the size
-/// of contract names.
-pub const MAX_FUNC_NAME_SIZE: usize = 100;
 
 /// The Wasm binary format magic hash.
 pub const MAGIC_HASH: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
