@@ -87,7 +87,7 @@ extern crate alloc;
 mod traits;
 #[macro_use]
 mod impls;
-mod constants;
+pub mod constants;
 pub mod schema;
 mod types;
 pub use impls::*;

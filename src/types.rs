@@ -628,7 +628,14 @@ impl<'a> ContractName<'a> {
     #[inline(always)]
     pub fn get_chain_name(&self) -> &str { self.0 }
 
-    /// Check whether a given contract name is valid.
+    /// Check whether the given string is a valid contract initialization
+    /// function name. This is the case if and only if
+    /// - the string is no more than [constants::MAX_FUNC_NAME_SIZE][m] bytes
+    /// - the string starts with `init_`
+    /// - the string __does not__ contain a `.`
+    /// - all characters are ascii alphanumeric or punctuation characters.
+    ///
+    /// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
     pub fn is_valid_contract_name(name: &str) -> Result<(), NewContractNameError> {
         if !name.starts_with("init_") {
             return Err(NewContractNameError::MissingInitPrefix);
@@ -725,7 +732,13 @@ impl<'a> ReceiveName<'a> {
     /// operation that requires memory allocation.
     pub fn to_owned(&self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 
-    /// Check whether a receive name is valid.
+    /// Check whether the given string is a valid contract receive function
+    /// name. This is the case if and only if
+    /// - the string is no more than [constants::MAX_FUNC_NAME_SIZE][m] bytes
+    /// - the string __contains__ a `.`
+    /// - all characters are ascii alphanumeric or punctuation characters.
+    ///
+    /// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
     pub fn is_valid_receive_name(name: &str) -> Result<(), NewReceiveNameError> {
         if !name.contains('.') {
             return Err(NewReceiveNameError::MissingDotSeparator);
