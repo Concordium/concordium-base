@@ -27,10 +27,8 @@ path = "../wasm-transform"
 version = "0"
 
 [dependencies.concordium-contracts-common]
-# version = "0.4"
-git = "https://github.com/Concordium/concordium-contracts-common.git"
-branch = "validate-contract-and-receive-names"
-# path = "../../concordium-rust-smart-contracts/concordium-contracts-common"
+version = "0.4.1"
+path = "../concordium-contracts-common"
 features = ["derive-serde"]
 
 [lib]

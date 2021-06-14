@@ -146,8 +146,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "0.4.0"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=validate-contract-and-receive-names#d11f71ef1e5c206503d4c65ee81425bb31cdb45b"
+version = "0.4.1"
 dependencies = [
  "base58check",
  "chrono",
