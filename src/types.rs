@@ -803,7 +803,7 @@ impl fmt::Display for NewReceiveNameError {
         use NewReceiveNameError::*;
         match self {
             MissingDotSeparator => {
-                write!(f, "Receive names have the format '<contract_name>.<func_name>'.")
+                f.write_str("Receive names have the format '<contract_name>.<func_name>'.")
             }
             TooLong => {
                 write!(f, "Receive names have a max length of {}", constants::MAX_FUNC_NAME_SIZE)
