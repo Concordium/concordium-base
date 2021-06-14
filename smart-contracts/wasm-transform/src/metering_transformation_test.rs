@@ -139,8 +139,8 @@ fn test_body_ctx(
     // below) TODO Add function with index 0 and type 1 (this is used in
     // testing below)
     let f = Code {
-        locals: mk_locals(&[I32, I64]),
-        ty_idx: 0,
+        locals:     mk_locals(&[I32, I64]),
+        ty_idx:     0,
         /* For testing the transformation of the body, we always use these exemplary locals. */
         expr:       Expression {
             instrs: body_orig,

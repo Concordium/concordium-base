@@ -123,15 +123,15 @@ impl ControlStack {
 /// with reference to the ControlStack
 pub(crate) struct ControlFrame {
     /// Whether the current control frame is started by an if.
-    pub(crate) is_if: bool,
+    pub(crate) is_if:       bool,
     /// Label type of the block, this is the type that is used when
     /// jumping to the label of the block.
-    pub(crate) label_type: BlockType,
+    pub(crate) label_type:  BlockType,
     /// end type of the block, this is the type that is used when
     /// ending the block in a normal way.
-    pub(crate) end_type: BlockType,
+    pub(crate) end_type:    BlockType,
     /// height of the stack at the entry of this block.
-    pub(crate) height: usize,
+    pub(crate) height:      usize,
     /// whether we are in the unreachable part of this block or not.
     /// the unreachable part is any part after an unconditional jump or
     /// a trap instruction.
@@ -143,8 +143,8 @@ pub(crate) struct ControlFrame {
 /// this is the same state as described by the validation algorithm of the wasm
 /// specification appendix.
 pub struct ValidationState {
-    pub(crate) opds: OperandStack,
-    pub(crate) ctrls: ControlStack,
+    pub(crate) opds:                 OperandStack,
+    pub(crate) ctrls:                ControlStack,
     /// Maximum reachable stack height.
     pub(crate) max_reachable_height: usize,
 }
@@ -308,9 +308,9 @@ pub(crate) struct FunctionContext<'a> {
     pub(crate) types:       &'a [Rc<FunctionType>],
     pub(crate) locals:      Vec<LocalsRange>,
     // Whether memory exists or not.
-    pub(crate) memory: bool,
+    pub(crate) memory:      bool,
     // Whether the table exists or not.
-    pub(crate) table: bool,
+    pub(crate) table:       bool,
 }
 
 /// Make a locals structure used to validate a function body.

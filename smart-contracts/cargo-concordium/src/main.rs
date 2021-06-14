@@ -48,19 +48,19 @@ enum Command {
             short = "s",
             help = "Builds the contract schema and writes it to file at specified location."
         )]
-        schema_out: Option<PathBuf>,
+        schema_out:   Option<PathBuf>,
         #[structopt(
             name = "out",
             long = "out",
             short = "o",
             help = "Writes the resulting module to file at specified location."
         )]
-        out: Option<PathBuf>,
+        out:          Option<PathBuf>,
         #[structopt(
             raw = true,
             help = "Extra arguments passed to `cargo build` when building Wasm module."
         )]
-        cargo_args: Vec<String>,
+        cargo_args:   Vec<String>,
     },
 }
 
@@ -68,20 +68,20 @@ enum Command {
 #[structopt(name = "runner")]
 struct Runner {
     #[structopt(name = "module", long = "module", help = "Binary module source.")]
-    module: PathBuf,
+    module:              PathBuf,
     #[structopt(
         name = "out-bin",
         long = "out-bin",
         help = "Where to write the new contract state to in binary format."
     )]
-    out_bin: Option<PathBuf>,
+    out_bin:             Option<PathBuf>,
     #[structopt(
         name = "out-json",
         long = "out-json",
         help = "Where to write the new contract state to in JSON format, requiring the module to \
                 have an appropriate schema embedded or otherwise provided by --schema."
     )]
-    out_json: Option<PathBuf>,
+    out_json:            Option<PathBuf>,
     #[structopt(
         name = "ignore-state-schema",
         long = "ignore-state-schema",
@@ -94,20 +94,20 @@ struct Runner {
         help = "The amount of GTU to invoke the method with.",
         default_value = "0"
     )]
-    amount: Amount,
+    amount:              Amount,
     #[structopt(
         name = "schema",
         long = "schema",
         help = "Path to a file with a schema for parsing parameter or state in JSON"
     )]
-    schema_path: Option<PathBuf>,
+    schema_path:         Option<PathBuf>,
     #[structopt(
         name = "parameter-bin",
         long = "parameter-bin",
         help = "Path to a binary file with a parameter to invoke the method with. Parameter \
                 defaults to an empty array if this is not given."
     )]
-    parameter_bin_path: Option<PathBuf>,
+    parameter_bin_path:  Option<PathBuf>,
     #[structopt(
         name = "parameter-json",
         long = "parameter-json",
@@ -122,7 +122,7 @@ struct Runner {
         help = "Initial amount of energy to invoke the contract call with.",
         default_value = "1000000"
     )]
-    energy: u64,
+    energy:              u64,
 }
 
 #[derive(Debug, StructOpt, Clone)]
@@ -143,9 +143,9 @@ enum RunCommand {
             default_value = "./init-context.json",
             help = "Path to the init context file."
         )]
-        context: PathBuf,
+        context:       PathBuf,
         #[structopt(flatten)]
-        runner: Runner,
+        runner:        Runner,
     },
     #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
@@ -162,7 +162,7 @@ enum RunCommand {
             short = "f",
             help = "Name of the receive-function to receive message."
         )]
-        func: String,
+        func:          String,
 
         #[structopt(
             name = "state-json",
@@ -176,23 +176,23 @@ enum RunCommand {
             long = "state-bin",
             help = "File with existing state of the contract in binary."
         )]
-        state_bin_path: Option<PathBuf>,
+        state_bin_path:  Option<PathBuf>,
         #[structopt(
             name = "balance",
             long = "balance",
             help = "Balance on the contract at the time it is invoked. Overrides the balance in \
                     the receive context."
         )]
-        balance: Option<u64>,
+        balance:         Option<u64>,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the receive context file."
         )]
-        context: PathBuf,
+        context:         PathBuf,
         #[structopt(flatten)]
-        runner: Runner,
+        runner:          Runner,
     },
 }
 

@@ -341,15 +341,15 @@ use cost::Energy;
 ///Metadata needed for transformation.
 struct InstrSeqTransformer<'a, C> {
     /// Reference to the original module to get the right context.
-    module: &'a C,
+    module:               &'a C,
     /// Current label stack (in the form of the labels' arities).
     /// The last item in the vector is the innermost block label.
-    labels: Vec<BlockType>,
+    labels:               Vec<BlockType>,
     /// The transformed sequence with accounting instructions inserded.
-    new_seq: InstrSeq,
+    new_seq:              InstrSeq,
     /// Accumulator for energy to be charged for the pending (and currently to
     /// be added) instructions.
-    energy: Energy,
+    energy:               Energy,
     /// Pending instructions that are going to be inserted after the energy
     /// charging instruction. This is a temporary cache.
     pending_instructions: InstrSeq,

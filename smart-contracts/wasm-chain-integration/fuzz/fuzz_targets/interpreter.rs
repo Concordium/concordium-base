@@ -26,15 +26,15 @@ const ENERGY: u64 = 10_000_000;
 const CONFIG: PrintConfig = PrintConfig {
     /// Report when a module was successfully compiled and finished executing
     /// without errors.
-    print_success: false,
+    print_success:                    false,
     /// Report when a module compilation or execution resulted in an error.
-    print_failure: false,
+    print_failure:                    false,
     /// Always print out a module in .wat format before it is passed to the
     /// interpreter.
     print_module_before_interpreting: false,
     /// Print out a module in .wat format, but only if it resulted in a
     /// compilation or runtime error.
-    print_failing_module: false,
+    print_failing_module:             false,
 };
 
 // Creates a random, but type-correct Wasm module, along with a random

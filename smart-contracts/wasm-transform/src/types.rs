@@ -56,9 +56,9 @@ pub enum ImportDescription {
 /// Import of an item from another module.
 pub struct Import {
     /// The name of the module the item is imported from.
-    pub mod_name: Name,
+    pub mod_name:    Name,
     /// The name of the item that is to be imported.
-    pub item_name: Name,
+    pub item_name:   Name,
     /// And the description of the item.
     pub description: ImportDescription,
 }
@@ -125,7 +125,7 @@ pub enum ExportDescription {
 /// An exported item.
 pub struct Export {
     /// Name of the exported item.
-    pub name: Name,
+    pub name:        Name,
     /// And its type.
     pub description: ExportDescription,
 }
@@ -149,7 +149,7 @@ pub struct Element {
     /// The offset to start the initialization.
     pub offset: i32,
     /// Functions to define in the table, starting at the offset.
-    pub inits: Vec<FuncIndex>,
+    pub inits:  Vec<FuncIndex>,
 }
 
 #[derive(Debug, Default)]
@@ -200,7 +200,7 @@ impl GlobalInit {
 /// A single Global declaration, with initial value.
 pub struct Global {
     /// The type of the value with the initial value.
-    pub init: GlobalInit,
+    pub init:    GlobalInit,
     pub mutable: bool,
 }
 
@@ -220,7 +220,7 @@ pub struct Local {
     /// The number of variables of this type.
     pub multiplicity: u32,
     /// The type of the local.
-    pub ty: ValueType,
+    pub ty:           ValueType,
 }
 
 #[derive(Debug)]
@@ -229,17 +229,17 @@ pub struct Code {
     /// Type of the function, this is added here to avoid more error cases.
     /// in processing (e.g., after validation we know that the number of code
     /// and function sections match).
-    pub ty: Rc<FunctionType>,
+    pub ty:         Rc<FunctionType>,
     /// Type index carried over from the source. This should match the ty type
     /// above.
-    pub ty_idx: TypeIndex,
+    pub ty_idx:     TypeIndex,
     /// The number of locals of a function. NB: This includes parameters and
     /// locals declared inside the function.
     pub num_locals: u32,
     /// Declaration of the locals. This does not include parameters.
-    pub locals: Vec<Local>,
+    pub locals:     Vec<Local>,
     /// And a sequence of instructions.
-    pub expr: Expression,
+    pub expr:       Expression,
 }
 
 #[derive(Debug, Default)]
@@ -254,7 +254,7 @@ pub struct Data {
     /// Where to start initializing.
     pub offset: i32,
     /// The bytes to initialize with.
-    pub init: Vec<u8>,
+    pub init:   Vec<u8>,
 }
 
 #[derive(Debug, Default)]
@@ -403,7 +403,7 @@ pub struct MemArg {
     pub offset: u32,
     /// Alignment. This is ignored by the Wasm semantics, but may be used as a
     /// hint. We will simply ignore it.
-    pub align: u32,
+    pub align:  u32,
 }
 
 #[derive(Debug, Copy, Clone)]

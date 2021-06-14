@@ -273,36 +273,36 @@ impl State {
 
 pub struct InitHost<'a> {
     /// Remaining energy for execution.
-    pub energy: Energy,
+    pub energy:            Energy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames: u32,
     /// Logs produced during execution.
-    pub logs: Logs,
+    pub logs:              Logs,
     /// The contract's state.
-    pub state: State,
+    pub state:             State,
     /// The parameter to the init method.
-    pub param: &'a [u8],
+    pub param:             &'a [u8],
     /// The init context for this invocation.
-    pub init_ctx: &'a InitContext<&'a [u8]>,
+    pub init_ctx:          &'a InitContext<&'a [u8]>,
 }
 
 pub struct ReceiveHost<'a> {
     /// Remaining energy for execution.
-    pub energy: Energy,
+    pub energy:            Energy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames: u32,
     /// Logs produced during execution.
-    pub logs: Logs,
+    pub logs:              Logs,
     /// The contract's state.
-    pub state: State,
+    pub state:             State,
     /// The parameter to the init method.
-    pub param: &'a [u8],
+    pub param:             &'a [u8],
     /// Outcomes of the execution, i.e., the actions tree.
-    pub outcomes: Outcome,
+    pub outcomes:          Outcome,
     /// The receive context for this call.
-    pub receive_ctx: &'a ReceiveContext<&'a [u8]>,
+    pub receive_ctx:       &'a ReceiveContext<&'a [u8]>,
 }
 
 pub trait HasCommon {

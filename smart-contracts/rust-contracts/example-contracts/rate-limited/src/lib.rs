@@ -26,7 +26,7 @@ use concordium_std::*;
 #[derive(Clone, Serialize, SchemaType)]
 struct TransferRequest {
     /// The amount of GTU to transfer from the contract to the target_account
-    amount: Amount,
+    amount:         Amount,
     /// The account to transfer to
     target_account: AccountAddress,
 }
@@ -45,14 +45,14 @@ struct InitParams {
     /// The amount of GTU allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
     /// The duration in which recently accepted recent_transfers are checked
-    time_limit: Duration,
+    time_limit:           Duration,
 }
 
 #[contract_state(contract = "rate-limited")]
 #[derive(Serialize, SchemaType)]
 pub struct State {
     /// The initiating parameters
-    init_params: InitParams,
+    init_params:      InitParams,
     /// The recently accepted transfers.
     /// Used to check whether a new transfer request should be accepted
     /// according to the time_limit and timed_withdraw_limit.

@@ -15,7 +15,7 @@ use wast::{parser, AssertExpression, Expression, Span, Wast, WastExecute};
 #[structopt(bin_name = "wasm-test")]
 struct TestCommand {
     #[structopt(name = "dir", long = "dir", help = "Directory with .wast files")]
-    dir: PathBuf,
+    dir:     PathBuf,
     #[structopt(name = "out", long = "out", help = "Directory where to output .wasm modules")]
     out_dir: Option<PathBuf>,
 }

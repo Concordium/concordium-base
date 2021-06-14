@@ -18,11 +18,11 @@ type U999 = u64; // spec says u256 but we only have u64 at most
 #[derive(Serialize, SchemaType)]
 struct InitParams {
     /// Name of the token, encoded as UTF8
-    name: Vec<u8>,
+    name:         Vec<u8>,
     /// Symbol of the token, encoded as UTF8
-    symbol: Vec<u8>,
+    symbol:       Vec<u8>,
     /// Number of decimals to show when displayed
-    decimals: u32,
+    decimals:     u32,
     /// Total supply of tokens created
     total_supply: U999,
 }
@@ -33,7 +33,7 @@ pub struct State {
     init_params: InitParams,
     balances:    BTreeMap<AccountAddress, U999>,
     // (owner, spender) => amount --- Owner allows spender to send the amount
-    allowed: BTreeMap<(AccountAddress, AccountAddress), U999>,
+    allowed:     BTreeMap<(AccountAddress, AccountAddress), U999>,
 }
 
 #[derive(Serialize)]

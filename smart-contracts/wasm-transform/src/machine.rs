@@ -26,13 +26,13 @@ pub type RunResult<A> = anyhow::Result<A>;
 
 struct FunctionState<'a> {
     /// The program counter.
-    pc: usize,
+    pc:           usize,
     /// Instructions
     instructions: &'a [u8],
     /// Stack height
-    height: usize,
-    locals_base: usize,
-    return_type: BlockType,
+    height:       usize,
+    locals_base:  usize,
+    return_type:  BlockType,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -70,7 +70,7 @@ pub struct RuntimeStack {
     stack: Vec<StackValue>,
     /// The first free position. Pushing an element will
     /// insert it at this position.
-    pos: usize,
+    pos:   usize,
 }
 
 #[derive(Debug)]

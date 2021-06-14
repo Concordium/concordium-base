@@ -59,29 +59,29 @@ pub enum SectionId {
 /// processed.
 pub struct Skeleton<'a> {
     /// Type section.
-    pub ty: Option<UnparsedSection<'a>>,
+    pub ty:      Option<UnparsedSection<'a>>,
     /// Import section.
-    pub import: Option<UnparsedSection<'a>>,
+    pub import:  Option<UnparsedSection<'a>>,
     /// Function section.
-    pub func: Option<UnparsedSection<'a>>,
+    pub func:    Option<UnparsedSection<'a>>,
     /// Table section.
-    pub table: Option<UnparsedSection<'a>>,
+    pub table:   Option<UnparsedSection<'a>>,
     /// Memory section.
-    pub memory: Option<UnparsedSection<'a>>,
+    pub memory:  Option<UnparsedSection<'a>>,
     /// Global section.
-    pub global: Option<UnparsedSection<'a>>,
+    pub global:  Option<UnparsedSection<'a>>,
     /// Export section.
-    pub export: Option<UnparsedSection<'a>>,
+    pub export:  Option<UnparsedSection<'a>>,
     /// Start section.
-    pub start: Option<UnparsedSection<'a>>,
+    pub start:   Option<UnparsedSection<'a>>,
     /// Element section.
     pub element: Option<UnparsedSection<'a>>,
     /// Code section.
-    pub code: Option<UnparsedSection<'a>>,
+    pub code:    Option<UnparsedSection<'a>>,
     /// Data section.
-    pub data: Option<UnparsedSection<'a>>,
+    pub data:    Option<UnparsedSection<'a>>,
     /// A list of custom sections in the order they appeared in the input.
-    pub custom: Vec<UnparsedSection<'a>>,
+    pub custom:  Vec<UnparsedSection<'a>>,
 }
 
 /// Auxiliary type alias used by all the parsing functions.
@@ -1133,7 +1133,7 @@ impl<'a> Iterator for OpCodeIterator<'a> {
 /// The body of a function.
 pub struct CodeSkeleton<'a> {
     /// Declaration of the locals.
-    pub locals: Vec<Local>,
+    pub locals:     Vec<Local>,
     /// And uninterpreted instructions.
     pub expr_bytes: &'a [u8],
 }

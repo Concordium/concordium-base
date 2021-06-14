@@ -53,14 +53,14 @@ struct State {
     /// the same person contributes multiple times.
     num_contributions: u32,
     /// Expiry after which point contributors can be rewarded.
-    expiry: Timestamp,
+    expiry:            Timestamp,
     /// The prefix the initializer chose. It is part of the input to every hash
     /// that is computed.
-    prefix: Prefix,
+    prefix:            Prefix,
     /// Stored contributions. The Hash is the lowest per account, and the amount
     /// is the total amount contributed by this account.
     #[concordium(map_size_length = 4)]
-    contributions: collections::BTreeMap<AccountAddress, (Amount, Hash)>,
+    contributions:     collections::BTreeMap<AccountAddress, (Amount, Hash)>,
 }
 
 #[derive(Serialize, SchemaType)]

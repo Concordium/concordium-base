@@ -107,7 +107,7 @@ pub struct ArtifactData {
     /// Where to start initializing.
     pub offset: i32,
     /// The bytes to initialize with.
-    pub init: Vec<u8>,
+    pub init:   Vec<u8>,
 }
 
 impl From<Data> for ArtifactData {
@@ -162,17 +162,17 @@ impl TryFrom<Local> for ArtifactLocal {
 #[derive(Debug, Clone)]
 /// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
-    type_idx: TypeIndex,
+    type_idx:    TypeIndex,
     return_type: BlockType,
     /// Parameters of the function.
-    params: Vec<ValueType>,
+    params:      Vec<ValueType>,
     /// Number of locals, cached, but should match what is in the
     /// locals vector below.
-    num_locals: u32,
+    num_locals:  u32,
     /// Vector of types of locals. This __does not__ include function
     /// parameters.
-    locals: Vec<ArtifactLocal>,
-    code: Instructions,
+    locals:      Vec<ArtifactLocal>,
+    code:        Instructions,
 }
 
 #[derive(Debug)]
@@ -180,16 +180,16 @@ pub struct CompiledFunction {
 /// that does not own the body and locals. This is used to make deserialization
 /// of artifacts cheaper.
 pub struct CompiledFunctionBytes<'a> {
-    pub(crate) type_idx: TypeIndex,
+    pub(crate) type_idx:    TypeIndex,
     pub(crate) return_type: BlockType,
-    pub(crate) params: &'a [ValueType],
+    pub(crate) params:      &'a [ValueType],
     /// Vector of types of locals. This __does not__ include
     /// parameters.
     /// FIXME: It would be ideal to have this as a zero-copy structure,
     /// but it likely does not matter, and it would be more error-prone.
-    pub(crate) num_locals: u32,
-    pub(crate) locals: Vec<ArtifactLocal>,
-    pub(crate) code: &'a [u8],
+    pub(crate) num_locals:  u32,
+    pub(crate) locals:      Vec<ArtifactLocal>,
+    pub(crate) code:        &'a [u8],
 }
 
 /// Try to process an import into something that is perhaps more suitable for
@@ -244,10 +244,10 @@ impl TryFromImport for ArtifactNamedImport {
 
 pub struct LocalsIterator<'a> {
     /// Number of locals that are still going to be yielded from the iterator.
-    remaining_items: u32,
-    pub(crate) locals: &'a [ArtifactLocal],
+    remaining_items:      u32,
+    pub(crate) locals:    &'a [ArtifactLocal],
     /// Current position in the locals list.
-    current_item: usize,
+    current_item:         usize,
     /// Current multiplicity of the current_item.
     current_multiplicity: u16,
 }
@@ -355,19 +355,19 @@ pub struct Artifact<ImportFunc, CompiledCode> {
     pub imports: Vec<ImportFunc>,
     /// Types of the module. These are needed for dynamic dispatch, i.e.,
     /// call-indirect.
-    pub ty: Vec<FunctionType>,
+    pub ty:      Vec<FunctionType>,
     /// A fully instantiated table.
-    pub table: InstantiatedTable,
+    pub table:   InstantiatedTable,
     /// The memory of the artifact.
-    pub memory: Option<ArtifactMemory>,
+    pub memory:  Option<ArtifactMemory>,
     /// Globals initialized with initial values.
-    pub global: InstantiatedGlobals,
+    pub global:  InstantiatedGlobals,
     /// The exported functions.
     /// Validation should ensure that an exported function is a defined one,
     /// and not one of the imported ones.
     /// Thus the index refers to the index in the code section.
-    pub export: BTreeMap<Name, FuncIndex>,
-    pub code: Vec<CompiledCode>,
+    pub export:  BTreeMap<Name, FuncIndex>,
+    pub code:    Vec<CompiledCode>,
 }
 
 /// Internal opcode. This is mostly the same as OpCode, but with control
