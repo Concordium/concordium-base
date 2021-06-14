@@ -862,11 +862,11 @@ pub struct Policy<Attributes> {
     /// they have created with accounts that users created on the chain.
     /// as a timestamp (which has millisecond granularity) in order to make it
     /// easier to compare with, e.g., `slot_time`.
-    pub created_at: Timestamp,
+    pub created_at:        Timestamp,
     /// Beginning of the month where the identity is __no longer valid__.
-    pub valid_to: Timestamp,
+    pub valid_to:          Timestamp,
     /// List of attributes, in ascending order of the tag.
-    pub items: Attributes,
+    pub items:             Attributes,
 }
 
 /// This implementation of deserialize is only useful when used
