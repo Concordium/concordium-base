@@ -50,6 +50,7 @@ must be a valid JSON object with fields
 - `"global"` ... is a JSON object that can describes global cryptographic parameters.
    This data is obtained from the server by making a GET request to /global.
 
+In addition the field `"arThreshold"` can be added to specify an anonymity revocation threshold different from the default value, as a JSON encoded byte value.
 
 The output of this function is a JSON object with two keys
 - "idObjectRequest" - this is the identity object request that should be sent to
