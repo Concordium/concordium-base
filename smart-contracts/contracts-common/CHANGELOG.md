@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased changes
+- Add public validation functions to contract and receive names
+- Add new cases for NewContractNameError and NewReceiveNameError
 
 ## concordium-contracts-common 0.4.0 (2021-05-12)
 
