@@ -30,7 +30,6 @@ path = "../wasm-chain-integration/"
 criterion = "0.3"
 
 [dependencies.concordium-contracts-common]
-version = "0.4"
-git = "https://github.com/Concordium/concordium-contracts-common.git"
-branch = "main"
+version = "0.4.1"
+path = "../concordium-contracts-common"
 features = ["derive-serde", "std"]

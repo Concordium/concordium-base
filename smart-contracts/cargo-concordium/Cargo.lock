@@ -187,8 +187,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "0.4.0"
-source = "git+https://github.com/Concordium/concordium-contracts-common.git?branch=main#81e8be24984b7c6f1753c2e1a732a6eaf2fa604b"
+version = "0.4.1"
 dependencies = [
  "base58check",
  "chrono",
@@ -937,6 +936,7 @@ name = "wasm-transform"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "concordium-contracts-common",
  "leb128",
  "num_enum",
 ]

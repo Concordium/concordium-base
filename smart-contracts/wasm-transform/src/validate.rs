@@ -39,41 +39,6 @@ impl std::fmt::Display for ValidationError {
     }
 }
 
-/// Check whether the given string is a valid contract initialization function
-/// name. This is the case if and only if
-/// - the string is no more than
-///   [constants::MAX_FUNC_NAME_SIZE](../constants/constant.MAX_FUNC_NAME_SIZE.
-///   html) bytes
-/// - the string starts with `init_`
-/// - the string __does not__ contain a `.`
-/// - all characters are ascii alphanumeric or punctuation characters.
-pub fn is_valid_init_name(bs: &str) -> bool {
-    if bs.as_bytes().len() > MAX_FUNC_NAME_SIZE {
-        return false;
-    }
-    let valid_characters =
-        bs.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
-    let starts_with = bs.starts_with("init_");
-    let has_dot = bs.contains('.');
-    valid_characters && starts_with && !has_dot
-}
-
-/// Check whether the given string is a valid contract receive function name.
-/// This is the case if and only if
-/// - the string is no more than
-///   [constants::MAX_FUNC_NAME_SIZE](../constants/constant.MAX_FUNC_NAME_SIZE.
-///   html) bytes
-/// - the string __contains__ a `.`
-/// - all characters are ascii alphanumeric or punctuation characters.
-pub fn is_valid_receive_name(bs: &str) -> bool {
-    if bs.as_bytes().len() > MAX_FUNC_NAME_SIZE {
-        return false;
-    }
-    let valid_characters =
-        bs.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
-    valid_characters && bs.contains('.')
-}
-
 /// Result type of validation.
 pub type ValidateResult<A> = anyhow::Result<A>;
 

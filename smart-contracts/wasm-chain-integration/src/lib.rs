@@ -168,7 +168,7 @@ impl Outcome {
         let response = self.cur_state.len();
 
         let name_str = std::str::from_utf8(receive_name_bytes)?;
-        ensure!(validate::is_valid_receive_name(name_str), "Not a valid receive name.");
+        ensure!(ReceiveName::is_valid_receive_name(name_str).is_ok(), "Not a valid receive name.");
         let name = receive_name_bytes.to_vec();
 
         ensure!(parameter_bytes.len() <= MAX_PARAMETER_SIZE, "Parameter exceeds max size.");
