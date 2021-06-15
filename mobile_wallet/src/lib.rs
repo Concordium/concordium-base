@@ -280,11 +280,19 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
 
     let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
 
-    // FIXME: IP defined threshold
-    let threshold = {
-        let l = ars_infos.len();
-        ensure!(l > 0, "ArInfos should have at least 1 anonymity revoker.");
-        Threshold(max((l - 1).try_into().unwrap_or(255), 1))
+    let num_of_ars = ars_infos.len();
+    let threshold = match v.get("arThreshold") {
+        Some(v) => {
+            let threshold : u8 = from_value(v.clone())?;
+            ensure!(threshold > 0, "arThreshold must be at least 1.");
+            ensure!(num_of_ars >= usize::from(threshold), "Number of anonymity revokers in arsInfos should be at least arThreshold.");
+            Threshold(threshold)
+        }
+        None => {
+            // arThreshold not specified, use `number of anonymity revokers` - 1 or 1 in the case of only a single anonymity revoker.
+            ensure!(num_of_ars > 0, "arsInfos should have at least 1 anonymity revoker.");
+            Threshold(max((num_of_ars - 1).try_into().unwrap_or(255), 1)) 
+        }
     };
 
     // Should be safe on iOS and Android, by calling SecRandomCopyBytes/getrandom,
