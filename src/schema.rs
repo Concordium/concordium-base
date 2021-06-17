@@ -11,8 +11,7 @@ use alloc::{collections::*, string::String, vec::Vec};
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::collections::*;
-#[cfg(feature = "derive-serde")]
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
@@ -495,6 +494,36 @@ impl Deserial for Type {
     }
 }
 
+impl From<std::num::TryFromIntError> for ParseError {
+    fn from(_: std::num::TryFromIntError) -> Self { ParseError::default() }
+}
+
+/// Try to convert the `len` to the provided size and serialize it.
+pub fn serial_length<W: Write>(
+    len: usize,
+    size_len: &SizeLength,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    match size_len {
+        SizeLength::U8 => u8::try_from(len).unwrap_or_default().serial(out)?,
+        SizeLength::U16 => u16::try_from(len).unwrap_or_default().serial(out)?,
+        SizeLength::U32 => u32::try_from(len).unwrap_or_default().serial(out)?,
+        SizeLength::U64 => u64::try_from(len).unwrap_or_default().serial(out)?,
+    }
+    Ok(())
+}
+
+/// Deserialize a length of provided size.
+pub fn deserial_length(source: &mut impl Read, size_len: &SizeLength) -> ParseResult<usize> {
+    let len: usize = match size_len {
+        SizeLength::U8 => u8::deserial(source)?.into(),
+        SizeLength::U16 => u16::deserial(source)?.into(),
+        SizeLength::U32 => u32::deserial(source)?.try_into()?,
+        SizeLength::U64 => u64::deserial(source)?.try_into()?,
+    };
+    Ok(len)
+}
+
 #[cfg(feature = "derive-serde")]
 mod impls {
     use super::*;
@@ -524,22 +553,8 @@ mod impls {
         }
     }
 
-    impl From<std::num::TryFromIntError> for ParseError {
-        fn from(_: std::num::TryFromIntError) -> Self { ParseError::default() }
-    }
-
     impl From<std::string::FromUtf8Error> for ParseError {
         fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
-    }
-
-    fn deserial_length(source: &mut impl Read, size_len: &SizeLength) -> ParseResult<usize> {
-        let len: usize = match size_len {
-            SizeLength::U8 => u8::deserial(source)?.into(),
-            SizeLength::U16 => u16::deserial(source)?.into(),
-            SizeLength::U32 => u32::deserial(source)?.try_into()?,
-            SizeLength::U64 => u64::deserial(source)?.try_into()?,
-        };
-        Ok(len)
     }
 
     fn item_list_to_json<R: Read>(
