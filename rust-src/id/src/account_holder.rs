@@ -6,6 +6,7 @@ use crate::{
     types::*,
     utils,
 };
+use anyhow::{bail, ensure};
 use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
@@ -14,7 +15,6 @@ use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{multicombine, Cipher};
-use failure::Fallible;
 use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
@@ -34,7 +34,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
     initial_account: &impl PublicInitialAccountData,
-) -> Option<PublicInformationForIP<C>> {
+) -> Option<PublicInformationForIp<C>> {
     let id_cred_pub = gc.on_chain_commitment_key.g.mul_by_scalar(id_cred_sec);
 
     // From create_credential:
@@ -56,7 +56,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
 
     let vk_acc = initial_account.get_cred_key_info();
 
-    let pub_info_for_ip = PublicInformationForIP {
+    let pub_info_for_ip = PublicInformationForIp {
         id_cred_pub,
         reg_id,
         vk_acc,
@@ -72,7 +72,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
 /// are to be used.
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // TODO: consider renaming this function
-    context: &IPContext<P, C>,
+    context: &IpContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
     initial_account: &impl InitialAccountDataWithSigning,
@@ -513,14 +513,14 @@ pub fn create_credential<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IPContext<'a, P, C>,
+    context: IpContext<'a, P, C>,
     id_object: &IdentityObject<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_data: &impl CredentialDataWithSigning,
     new_or_existing: &either::Either<TransactionTime, AccountAddress>,
-) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
+) -> anyhow::Result<CredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let unsigned_credential_info = create_unsigned_credential(
@@ -562,14 +562,14 @@ pub fn create_unsigned_credential<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IPContext<'a, P, C>,
+    context: IpContext<'a, P, C>,
     id_object: &IdentityObject<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
     addr: Option<&AccountAddress>,
-) -> Fallible<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
+) -> anyhow::Result<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -820,7 +820,7 @@ fn compute_pok_sig<
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::BlindedSignature<P>,
     blind_rand: ps_sig::BlindingRandomness<P>,
-) -> Fallible<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
+) -> anyhow::Result<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
     let att_vec = &alist.alist;
     // number of user chosen attributes (+4 is for tags, valid_to, created_at,
     // max_accounts)
@@ -937,8 +937,8 @@ fn compute_pok_sig<
         blinded_sig: blinded_sig.clone(),
         commitments: comm_vec,
         // FIXME: Figure out how to get rid of the clone
-        ps_pub_key: ip_pub_key.clone(),
-        comm_key:   *commitment_key,
+        ps_pub_key:  ip_pub_key.clone(),
+        comm_key:    *commitment_key,
     };
     Ok((prover, secret))
 }
@@ -965,7 +965,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
     policy: &Policy<C, AttributeType>,
     csprng: &mut R,
-) -> Fallible<(CredentialDeploymentCommitments<C>, CommitmentsRandomness<C>)> {
+) -> anyhow::Result<(CredentialDeploymentCommitments<C>, CommitmentsRandomness<C>)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
     } else {

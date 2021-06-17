@@ -9,6 +9,7 @@
 //! failures gracefully, typically just aborting execution entirely if something
 //! unexpected happens.
 
+use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap::AppSettings;
 use client_server_helpers::read_json_from_file;
@@ -64,7 +65,7 @@ impl<'de> SerdeDeserialize<'de> for AmountDelta {
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct RetrievalInput {
-    account_address: AccountAddress,
+    account_address:       AccountAddress,
     /// An optional secret key. If present amounts will be decrypted, otherwise
     /// they will not.
     encryption_secret_key: Option<elgamal::SecretKey<id::constants::ArCurve>>,
@@ -99,7 +100,7 @@ enum OriginType {
 struct Origin {
     #[serde(rename = "type")]
     origin_type: OriginType,
-    address: Option<AccountAddress>,
+    address:     Option<AccountAddress>,
 }
 
 /// Interesting parts of the response for a single transaction.
@@ -128,7 +129,7 @@ enum Outcome {
 /// specific, and are thus handled by the enumeration `AdditionalDetails`.
 #[derive(SerdeDeserialize)]
 struct Details {
-    outcome: Option<Outcome>,
+    outcome:            Option<Outcome>,
     #[serde(flatten)]
     additional_details: AdditionalDetails,
 }
@@ -229,7 +230,7 @@ enum Mode {
     #[structopt(about = "Trace a single account.", name = "single")]
     Single {
         #[structopt(help = "Account address to trace.", long = "address")]
-        address: AccountAddress,
+        address:        AccountAddress,
         #[structopt(
             help = "Optionally a decryption key to decrypt encrypted transfers.",
             long = "decryption-key"
@@ -251,7 +252,7 @@ struct Trace {
         help = "File to output the account trace to. If not provided the data is printed to \
                 stdout."
     )]
-    out: Option<PathBuf>,
+    out:    Option<PathBuf>,
     #[structopt(
         long = "source",
         help = "URL to the wallet-proxy instance.",
@@ -259,7 +260,7 @@ struct Trace {
     )]
     source: url::Url,
     #[structopt(subcommand)]
-    mode: Mode,
+    mode:   Mode,
 }
 
 fn main() {
@@ -310,7 +311,7 @@ fn main() {
             let input = match decryption_key {
                 Some(decryption_key) => {
                     let encryption_secret_key = match hex::decode(&decryption_key)
-                        .map_err(|e| failure::format_err!("Hex decoding error {}", e))
+                        .context("Hex decoding error")
                         .and_then(|bs| from_bytes(&mut std::io::Cursor::new(bs)))
                     {
                         Ok(v) => Some(v),

@@ -1,14 +1,13 @@
 pub use crate::impls::*;
 
-use core::cmp;
-
-use std::{convert::TryFrom, marker::PhantomData};
-
+use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use failure::Fallible;
-use std::collections::btree_map::BTreeMap;
+use core::cmp;
+use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomData};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
+
+pub type ParseResult<T> = anyhow::Result<T>;
 
 /// As Vec::with_capacity, but only allocate maximum MAX_PREALLOCATED_CAPACITY
 /// elements.
@@ -18,56 +17,56 @@ pub fn safe_with_capacity<T>(capacity: usize) -> Vec<T> {
 }
 
 pub trait Deserial: Sized {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self>;
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self>;
 }
 
 impl Deserial for u64 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<u64> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u64> {
         Ok(source.read_u64::<BigEndian>()?)
     }
 }
 
 impl Deserial for u32 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<u32> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u32> {
         Ok(source.read_u32::<BigEndian>()?)
     }
 }
 
 impl Deserial for u16 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<u16> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u16> {
         Ok(source.read_u16::<BigEndian>()?)
     }
 }
 
 impl Deserial for u8 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<u8> { Ok(source.read_u8()?) }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> { Ok(source.read_u8()?) }
 }
 
 impl Deserial for i64 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<i64> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i64> {
         Ok(source.read_i64::<BigEndian>()?)
     }
 }
 
 impl Deserial for i32 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<i32> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i32> {
         Ok(source.read_i32::<BigEndian>()?)
     }
 }
 
 impl Deserial for i16 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<i16> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i16> {
         Ok(source.read_i16::<BigEndian>()?)
     }
 }
 
 impl Deserial for i8 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<i8> { Ok(source.read_i8()?) }
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> { Ok(source.read_i8()?) }
 }
 
 /// Read a vector where the first 8 bytes are taken as length in big endian.
 impl<T: Deserial> Deserial for Vec<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u64 = u64::deserial(source)?;
         deserial_vector_no_length(source, usize::try_from(len)?)
     }
@@ -75,7 +74,7 @@ impl<T: Deserial> Deserial for Vec<T> {
 
 impl<T: Deserial, U: Deserial> Deserial for (T, U) {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x = T::deserial(source)?;
         let y = U::deserial(source)?;
         Ok((x, y))
@@ -84,7 +83,7 @@ impl<T: Deserial, U: Deserial> Deserial for (T, U) {
 
 impl<T: Deserial, S: Deserial, U: Deserial> Deserial for (T, S, U) {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x = T::deserial(source)?;
         let y = S::deserial(source)?;
         let z = U::deserial(source)?;
@@ -92,7 +91,7 @@ impl<T: Deserial, S: Deserial, U: Deserial> Deserial for (T, S, U) {
     }
 }
 
-pub fn deserial_string<R: ReadBytesExt>(reader: &mut R, l: usize) -> Fallible<String> {
+pub fn deserial_string<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<String> {
     let mut svec = vec![0; l];
     reader.read_exact(&mut svec)?;
     Ok(String::from_utf8(svec)?)
@@ -106,7 +105,7 @@ pub fn serial_string<R: Buffer>(s: &str, out: &mut R) {
 pub fn deserial_vector_no_length<R: ReadBytesExt, T: Deserial>(
     reader: &mut R,
     len: usize,
-) -> Fallible<Vec<T>> {
+) -> ParseResult<Vec<T>> {
     let mut vec = safe_with_capacity(len);
     for _ in 0..len {
         vec.push(T::deserial(reader)?);
@@ -114,7 +113,7 @@ pub fn deserial_vector_no_length<R: ReadBytesExt, T: Deserial>(
     Ok(vec)
 }
 
-pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> Fallible<Vec<u8>> {
+pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<Vec<u8>> {
     let mut svec = vec![0; l];
     reader.read_exact(&mut svec)?;
     Ok(svec)
@@ -122,7 +121,7 @@ pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> Fallible<Vec
 
 impl<T> Deserial for PhantomData<T> {
     #[inline]
-    fn deserial<R: ReadBytesExt>(_source: &mut R) -> Fallible<Self> { Ok(Default::default()) }
+    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { Ok(Default::default()) }
 }
 
 /// Trait for writers which will not fail in normal operation with
@@ -243,7 +242,7 @@ pub fn serial_map_no_length<'a, B: Buffer, K: Serial + 'a, V: Serial + 'a>(
 pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Deserial>(
     source: &mut R,
     len: usize,
-) -> Fallible<BTreeMap<K, V>> {
+) -> ParseResult<BTreeMap<K, V>> {
     let mut out = BTreeMap::new();
     let mut x = None;
     for _ in 0..len {
@@ -277,7 +276,7 @@ pub fn serial_set_no_length<'a, B: Buffer, K: Serial + 'a>(map: &BTreeSet<K>, ou
 pub fn deserial_set_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy>(
     source: &mut R,
     len: usize,
-) -> Fallible<BTreeSet<K>> {
+) -> ParseResult<BTreeSet<K>> {
     let mut out = BTreeSet::new();
     let mut x = None;
     for _ in 0..len {
@@ -330,12 +329,12 @@ impl Serial for [u8] {
 
 /// Conventient wrappers.
 pub trait Get<A> {
-    fn get(&mut self) -> Fallible<A>;
+    fn get(&mut self) -> ParseResult<A>;
 }
 
 impl<R: ReadBytesExt, A: Deserial> Get<A> for R {
     #[inline]
-    fn get(&mut self) -> Fallible<A> { A::deserial(self) }
+    fn get(&mut self) -> ParseResult<A> { A::deserial(self) }
 }
 
 /// Conventient wrappers.
@@ -364,7 +363,7 @@ pub fn to_bytes<A: Serial>(x: &A) -> Vec<u8> {
 }
 
 #[inline]
-pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> Fallible<A> {
+pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A> {
     A::deserial(source)
 }
 
@@ -379,7 +378,7 @@ impl<T: Serial> Serial for [T; 2] {
 
 // Some more generic implementations
 impl<T: Deserial> Deserial for [T; 2] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         // This is a bit stupid, but I can't figure out how to avoid a
         // Default constraint otherwise (if I allow it, we can preallocate
         // with let mut out: [T; 2] = Default::default();
@@ -399,7 +398,7 @@ impl<T: Serial> Serial for [T; 8] {
 }
 
 impl<T: Deserial> Deserial for [T; 8] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x_1 = T::deserial(source)?;
         let x_2 = T::deserial(source)?;
         let x_3 = T::deserial(source)?;
@@ -422,7 +421,7 @@ impl<T: Serial + Default> Serial for [T; 32] {
 }
 
 impl Deserial for [u8; 32] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut out: [u8; 32] = Default::default();
         source.read_exact(&mut out)?;
         Ok(out)
@@ -442,7 +441,7 @@ impl Serial for Ipv4Addr {
 }
 
 impl Deserial for Ipv4Addr {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut octects = [0u8; 4];
         source.read_exact(&mut octects)?;
         Ok(Ipv4Addr::from(octects))
@@ -459,7 +458,7 @@ impl Serial for Ipv6Addr {
 }
 
 impl Deserial for Ipv6Addr {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut octets = [0u8; 16];
         source.read_exact(&mut octets)?;
         Ok(Ipv6Addr::from(octets))
@@ -476,7 +475,7 @@ impl Serial for IpAddr {
 }
 
 impl Deserial for IpAddr {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match source.read_u8()? {
             4 => Ok(IpAddr::V4(Ipv4Addr::deserial(source)?)),
             6 => Ok(IpAddr::V6(Ipv6Addr::deserial(source)?)),
@@ -493,7 +492,7 @@ impl Serial for SocketAddr {
 }
 
 impl Deserial for SocketAddr {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         Ok(SocketAddr::new(
             IpAddr::deserial(source)?,
             u16::deserial(source)?,
@@ -514,7 +513,7 @@ impl<T: Serial + Eq + Hash, S: BuildHasher + Default> Serial for HashSet<T, S> {
 }
 
 impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, S> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len = u32::deserial(source)?;
         let mut out = HashSet::with_capacity_and_hasher(
             std::cmp::min(len as usize, MAX_PREALLOCATED_CAPACITY),
@@ -551,7 +550,7 @@ pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T
 
 pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(&to_bytes(x)) }
 
-pub fn base16_decode_string<S: Deserial>(x: &str) -> Fallible<S> {
+pub fn base16_decode_string<S: Deserial>(x: &str) -> ParseResult<S> {
     let d = decode(x)?;
     from_bytes(&mut Cursor::new(&d))
 }

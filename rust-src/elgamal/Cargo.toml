@@ -6,7 +6,6 @@ edition = "2018"
 license-file = "../../LICENSE"
 
 [dependencies]
-failure = "0.1"
 pairing = "0.15"
 ff = "0.5"
 rand = "=0.7"
@@ -14,6 +13,8 @@ rand_core = "=0.5"
 clear_on_drop = "0.2"
 serde = "1.0"
 libc = "0.2"
+thiserror = "1.0"
+anyhow = "1.0"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"

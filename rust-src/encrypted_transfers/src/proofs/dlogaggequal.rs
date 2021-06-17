@@ -22,7 +22,7 @@ pub struct DlogAndAggregateDlogsEqual<C: Curve> {
 #[derive(Debug, Serialize)]
 pub struct Witness<C: Curve> {
     #[size_length = 4]
-    witnesses: Vec<Vec<C::Scalar>>,
+    witnesses:      Vec<Vec<C::Scalar>>,
     witness_common: C::Scalar, // For equality
 }
 

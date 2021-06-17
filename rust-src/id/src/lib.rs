@@ -15,8 +15,5 @@ pub mod utils;
 #[macro_use]
 extern crate crypto_common_derive;
 
-#[macro_use]
-extern crate failure;
-
 #[cfg(any(test, bench))]
 pub mod test;

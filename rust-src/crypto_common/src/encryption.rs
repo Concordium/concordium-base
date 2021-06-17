@@ -5,6 +5,7 @@ use hmac::Hmac;
 use rand::Rng;
 use serde::{Deserializer, Serializer};
 use std::{convert::TryInto, str::FromStr};
+use thiserror::Error;
 
 type Cipher = Cbc<Aes256, Pkcs7>;
 
@@ -54,14 +55,14 @@ fn from_base64_array<'de, D: Deserializer<'de>>(des: D) -> Result<[u8; AES_BLOCK
 /// Supported encryption methods.
 pub enum EncryptionMethod {
     #[serde(rename = "AES-256")]
-    AES256,
+    Aes256,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 /// Supported key derivation methods.
 pub enum KeyDerivationMethod {
     #[serde(rename = "PBKDF2WithHmacSHA256")]
-    PBKDF2SHA256,
+    Pbkdf2Sha256,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -73,19 +74,19 @@ pub enum KeyDerivationMethod {
 // A better modelling would be for this to be an enumeration.
 pub struct EncryptionMetadata {
     #[serde(rename = "encryptionMethod")]
-    encryption_method: EncryptionMethod,
+    encryption_method:     EncryptionMethod,
     #[serde(rename = "keyDerivationMethod")]
     key_derivation_method: KeyDerivationMethod,
     #[serde(rename = "iterations")]
     /// Number of iterations for the key derivation function.
-    iterations: u32,
+    iterations:            u32,
     #[serde(
         rename = "salt",
         serialize_with = "as_base64",
         deserialize_with = "from_base64"
     )]
     /// Salt used for the key derivation process.
-    salt: Vec<u8>,
+    salt:                  Vec<u8>,
     #[serde(
         rename = "initializationVector",
         serialize_with = "as_base64",
@@ -105,7 +106,7 @@ pub struct CipherText {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct EncryptedData {
     #[serde(rename = "metadata")]
-    metadata: EncryptionMetadata,
+    metadata:    EncryptionMetadata,
     #[serde(rename = "cipherText")]
     cipher_text: CipherText,
 }
@@ -141,8 +142,8 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
     };
 
     let metadata = EncryptionMetadata {
-        encryption_method: EncryptionMethod::AES256,
-        key_derivation_method: KeyDerivationMethod::PBKDF2SHA256,
+        encryption_method: EncryptionMethod::Aes256,
+        key_derivation_method: KeyDerivationMethod::Pbkdf2Sha256,
         iterations: NUM_ROUNDS,
         salt: salt.into(),
         initialization_vector,
@@ -153,18 +154,11 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum DecryptionError {
     /// Error during AES decryption.
+    #[error("Decryption error.")]
     BlockMode,
-}
-
-impl std::fmt::Display for DecryptionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DecryptionError::BlockMode => write!(f, "Decryption error"),
-        }
-    }
 }
 
 /// Dual to the `encrypt` method.

@@ -6,6 +6,7 @@ use crate::{
         dlog,
     },
 };
+use anyhow::{anyhow, bail};
 use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
@@ -115,7 +116,7 @@ impl Serial for AccountAddress {
 
 impl Deserial for AccountAddress {
     #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
         source.read_exact(&mut buf)?;
         Ok(AccountAddress(buf))
@@ -141,7 +142,7 @@ impl AccountAddress {
 pub struct SignatureThreshold(pub u8);
 
 impl Deserial for SignatureThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let w = source.get()?;
         if w > 0 {
             Ok(SignatureThreshold(w))
@@ -230,7 +231,7 @@ impl Serial for AccountOwnershipProof {
 }
 
 impl Deserial for AccountOwnershipProof {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u8 = source.get()?;
         if len == 0 {
             bail!("Need at least one proof.")
@@ -287,7 +288,7 @@ impl fmt::Display for IpIdentity {
 pub struct ArIdentity(u32);
 
 impl Deserial for ArIdentity {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x = source.get()?;
         if x == 0 {
             bail!("ArIdentity must be non-zero.")
@@ -301,12 +302,12 @@ impl fmt::Display for ArIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
-impl Into<u32> for ArIdentity {
-    fn into(self) -> u32 { self.0 }
+impl From<ArIdentity> for u32 {
+    fn from(x: ArIdentity) -> Self { x.0 }
 }
 
-impl Into<u64> for ArIdentity {
-    fn into(self) -> u64 { u64::from(self.0) }
+impl From<ArIdentity> for u64 {
+    fn from(x: ArIdentity) -> Self { x.0.into() }
 }
 
 impl TryFrom<u32> for ArIdentity {
@@ -411,13 +412,13 @@ impl<'a> fmt::Display for AttributeStringTag {
 // FIXME: This method's complexity is linear in the size of the set of
 // attributes.
 impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn try_from(v: AttributeStringTag) -> Result<Self, Self::Error> {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == v.0) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(format_err!("{} tag unknown.", v.0))
+            Err(anyhow!("{} tag unknown.", v.0))
         }
     }
 }
@@ -446,23 +447,23 @@ impl fmt::Display for AttributeTag {
 }
 
 impl std::str::FromStr for AttributeTag {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == s) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(format_err!("{} tag unknown.", s))
+            Err(anyhow!("{} tag unknown.", s))
         }
     }
 }
 
-impl Into<usize> for AttributeTag {
-    fn into(self) -> usize { self.0.into() }
+impl From<AttributeTag> for usize {
+    fn from(tag: AttributeTag) -> Self { tag.0.into() }
 }
 
 impl From<u8> for AttributeTag {
-    fn from(x: u8) -> Self { AttributeTag(x) }
+    fn from(tag: u8) -> Self { AttributeTag(tag) }
 }
 
 pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
@@ -521,17 +522,17 @@ impl Serial for YearMonth {
 }
 
 impl Deserial for YearMonth {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let year = source.get()?;
         let month = source.get()?;
-        YearMonth::new(year, month).ok_or_else(|| format_err!("Invalid year/month."))
+        YearMonth::new(year, month).ok_or_else(|| anyhow!("Invalid year/month."))
     }
 }
 
 impl std::str::FromStr for YearMonth {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Fallible<Self> {
+    fn from_str(s: &str) -> ParseResult<Self> {
         if !s.chars().all(|c| c.is_ascii() && c.is_numeric()) {
             bail!("Unsupported date in format YYYYMM")
         }
@@ -553,7 +554,7 @@ impl YearMonth {
     /// Construct a new YearMonth object.
     /// This method checks that year and month are in range.
     pub fn new(year: u16, month: u8) -> Option<Self> {
-        if year >= 1000 && year < 10000 && month >= 1 && month <= 12 {
+        if (1000..10000).contains(&year) && (1..=12).contains(&month) {
             Some(YearMonth { year, month })
         } else {
             None
@@ -613,9 +614,9 @@ impl From<YearMonth> for u32 {
 ))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     #[serde(rename = "validTo")]
-    pub valid_to: YearMonth,
+    pub valid_to:     YearMonth,
     #[serde(rename = "createdAt")]
-    pub created_at: YearMonth,
+    pub created_at:   YearMonth,
     /// Maximum number of accounts that can be created from the owning identity
     /// object.
     #[serde(rename = "maxAccounts")]
@@ -624,9 +625,9 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     /// of bits that fit into a field element.
     #[serde(rename = "chosenAttributes")]
     #[map_size_length = 2]
-    pub alist: BTreeMap<AttributeTag, AttributeType>,
+    pub alist:        BTreeMap<AttributeTag, AttributeType>,
     #[serde(skip)]
-    pub _phantom: std::marker::PhantomData<F>,
+    pub _phantom:     std::marker::PhantomData<F>,
 }
 
 #[derive(Debug, Serialize)]
@@ -674,7 +675,7 @@ pub struct AccCredentialInfo<C: Curve> {
     pub cred_holder_info: CredentialHolderInfo<C>,
     /// Chosen prf key of the credential holder.
     #[serde(rename = "prfKey")]
-    pub prf_key: prf::SecretKey<C>,
+    pub prf_key:          prf::SecretKey<C>,
 }
 
 /// The data relating to a single anonymity revoker
@@ -695,7 +696,7 @@ pub struct IpArData<C: Curve> {
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofComEncEq")]
-    pub proof_com_enc_eq: com_enc_eq::Witness<C>,
+    pub proof_com_enc_eq:  com_enc_eq::Witness<C>,
 }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
@@ -705,7 +706,7 @@ pub struct IpArData<C: Curve> {
 pub struct IpArDecryptedData<C: Curve> {
     /// identity of the anonymity revoker
     #[serde(rename = "arIdentity")]
-    pub ar_identity: ArIdentity,
+    pub ar_identity:   ArIdentity,
     /// share of prf key
     #[serde(rename = "prfKeyShare")]
     pub prf_key_share: Value<C>,
@@ -735,7 +736,7 @@ pub struct ChainArData<C: Curve> {
 pub struct ChainArDecryptedData<C: Curve> {
     /// identity of the anonymity revoker
     #[serde(rename = "arIdentity")]
-    pub ar_identity: ArIdentity,
+    pub ar_identity:       ArIdentity,
     /// share of id cred pub
     #[serde(rename = "idCredPubShare")]
     pub id_cred_pub_share: Message<C>,
@@ -751,7 +752,7 @@ pub struct ChoiceArParameters {
     #[set_size_length = 2]
     pub ar_identities: BTreeSet<ArIdentity>,
     #[serde(rename = "threshold")]
-    pub threshold: Threshold,
+    pub threshold:     Threshold,
 }
 
 /// Proof that the data sent to the identity provider
@@ -760,23 +761,23 @@ pub struct ChoiceArParameters {
 pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
     /// and additionally also the proofs in IpArData.
-    pub challenge: Challenge,
+    pub challenge:              Challenge,
     /// Witness to the proof of konwledge of IdCredSec.
-    pub id_cred_sec_witness: dlog::Witness<C>,
+    pub id_cred_sec_witness:    dlog::Witness<C>,
     /// Witness to the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
     pub commitments_same_proof: com_eq::Witness<C>,
     /// Witness to the proof that cmm_prf and the
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
-    pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
+    pub commitments_prf_same:   com_eq_different_groups::Witness<P::G1, C>,
     /// Witness to the proof that reg_id = PRF(prf_key, 0)
-    pub prf_regid_proof: com_eq::Witness<C>,
+    pub prf_regid_proof:        com_eq::Witness<C>,
     /// Signature on the public information for the IP from the account holder
-    pub proof_acc_sk: AccountOwnershipProof,
+    pub proof_acc_sk:           AccountOwnershipProof,
     /// Bulletproofs for showing that chunks are small so that encryption
     /// of the prf key can be decrypted
-    pub bulletproofs: Vec<RangeProof<C>>,
+    pub bulletproofs:           Vec<RangeProof<C>>,
 }
 
 /// A type alias for the combined proofs relating to the shared encryption of
@@ -799,24 +800,24 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public credential of the account holder in the anonymity revoker's
     /// group.
     #[serde(rename = "pubInfoForIp")]
-    pub pub_info_for_ip: PublicInformationForIP<C>,
+    pub pub_info_for_ip:       PublicInformationForIp<C>,
     /// Anonymity revocation data for the chosen anonymity revokers.
     #[serde(rename = "ipArData")]
     #[map_size_length = 4]
-    pub ip_ar_data: BTreeMap<ArIdentity, IpArData<C>>,
+    pub ip_ar_data:            BTreeMap<ArIdentity, IpArData<C>>,
     /// Choice of anonyimity revocation parameters.
     /// NB:IP needs to check that they make sense in the context of the public
     /// keys they are allowed to use.
     #[serde(rename = "choiceArData")]
-    pub choice_ar_parameters: ChoiceArParameters,
+    pub choice_ar_parameters:  ChoiceArParameters,
     /// Commitment to id cred sec using the commitment key of IP derived from
     /// the PS public key. This is used to compute the message that the IP
     /// signs.
     #[serde(rename = "idCredSecCommitment")]
-    pub cmm_sc: pedersen::Commitment<P::G1>,
+    pub cmm_sc:                pedersen::Commitment<P::G1>,
     /// Commitment to the prf key in group G1.
     #[serde(rename = "prfKeyCommitmentWithIP")]
-    pub cmm_prf: pedersen::Commitment<P::G1>,
+    pub cmm_prf:               pedersen::Commitment<P::G1>,
     /// commitments to the coefficients of the polynomial
     /// used to share the prf key
     /// K + b1 X + b2 X^2...
@@ -830,7 +831,7 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub poks: PreIdentityProof<P, C>,
+    pub poks:                  PreIdentityProof<P, C>,
 }
 
 /// The data we get back from the identity provider.
@@ -850,13 +851,13 @@ pub struct IdentityObject<
     pub pre_identity_object: PreIdentityObject<P, C>,
     /// Chosen attribute list.
     #[serde(rename = "attributeList")]
-    pub alist: AttributeList<C::Scalar, AttributeType>,
+    pub alist:               AttributeList<C::Scalar, AttributeType>,
     #[serde(
         rename = "signature",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub signature: Signature<P>,
+    pub signature:           Signature<P>,
 }
 
 /// Anonymity revokers associated with a single identity provider
@@ -864,7 +865,7 @@ pub struct IdentityObject<
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpAnonymityRevokers<C: Curve> {
     #[serde(rename = "anonymityRevokers")]
-    pub ars: Vec<ArInfo<C>>,
+    pub ars:        Vec<ArInfo<C>>,
     /// List of approved anonymity revokers along with a shared commitment key.
     /// TODO: How is this shared commitment key generated??
     #[serde(rename = "arCommitmentKey")]
@@ -875,7 +876,7 @@ pub struct IpAnonymityRevokers<C: Curve> {
     #[serde(serialize_with = "base16_encode")]
     #[serde(deserialize_with = "base16_decode")]
     #[serde(rename = "arBase")]
-    pub ar_base: C,
+    pub ar_base:    C,
 }
 
 /// Description either of an anonymity revoker or identity provider.
@@ -884,10 +885,10 @@ pub struct IpAnonymityRevokers<C: Curve> {
 pub struct Description {
     #[string_size_length = 4]
     #[serde(rename = "name")]
-    pub name: String,
+    pub name:        String,
     #[string_size_length = 4]
     #[serde(rename = "url")]
-    pub url: String,
+    pub url:         String,
     #[string_size_length = 4]
     #[serde(rename = "description")]
     pub description: String,
@@ -908,13 +909,13 @@ pub fn mk_dummy_description(name: String) -> Description {
 pub struct IpInfo<P: Pairing> {
     /// Unique identifier of the identity provider.
     #[serde(rename = "ipIdentity")]
-    pub ip_identity: IpIdentity,
+    pub ip_identity:       IpIdentity,
     /// Free form description, e.g., how to contact them off-chain
     #[serde(rename = "ipDescription")]
-    pub ip_description: Description,
+    pub ip_description:    Description,
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
-    pub ip_verify_key: pssig::PublicKey<P>,
+    pub ip_verify_key:     pssig::PublicKey<P>,
     /// Ed public key of the IP
     #[serde(
         rename = "ipCdiVerifyKey",
@@ -943,13 +944,13 @@ pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 pub struct ArInfo<C: Curve> {
     /// unique identifier of the anonymity revoker
     #[serde(rename = "arIdentity")]
-    pub ar_identity: ArIdentity,
+    pub ar_identity:    ArIdentity,
     /// description of the anonymity revoker (e.g. name, contact number)
     #[serde(rename = "arDescription")]
     pub ar_description: Description,
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
-    pub ar_public_key: ArPublicKey<C>,
+    pub ar_public_key:  ArPublicKey<C>,
 }
 
 /// Collection of anonymity revokers.
@@ -1007,7 +1008,7 @@ pub struct CredentialDeploymentCommitments<C: Curve> {
 
 #[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub id_proofs: IdOwnershipProofs<P, C>,
+    pub id_proofs:    IdOwnershipProofs<P, C>,
     /// Proof of knowledge of acc secret keys (signing keys corresponding to the
     /// verification keys either on the account already, or the ones which are
     /// part of this credential.
@@ -1040,7 +1041,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentProofs<P, C> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         // Make sure to respect the length.
         let mut limited = source.take(u64::from(len));
@@ -1144,7 +1145,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 ))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     #[serde(rename = "validTo")]
-    pub valid_to: YearMonth,
+    pub valid_to:   YearMonth,
     #[serde(rename = "createdAt")]
     pub created_at: YearMonth,
     /// Revealed attributes for now. In the future we might have
@@ -1152,7 +1153,7 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     #[serde(rename = "revealedAttributes")]
     pub policy_vec: BTreeMap<AttributeTag, AttributeType>,
     #[serde(skip)]
-    pub _phantom: std::marker::PhantomData<C>,
+    pub _phantom:   std::marker::PhantomData<C>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
@@ -1165,7 +1166,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, AttributeType> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let valid_to = source.get()?;
         let created_at = source.get()?;
         let len: u16 = source.get()?;
@@ -1299,7 +1300,7 @@ impl Serial for VerifyKey {
 }
 
 impl Deserial for VerifyKey {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         use VerifyKey::*;
         match source.get()? {
             SchemeId::Ed25519 => {
@@ -1313,7 +1314,7 @@ impl Deserial for VerifyKey {
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct NewAccount {
     #[size_length = 1]
-    pub keys: Vec<VerifyKey>,
+    pub keys:      Vec<VerifyKey>,
     pub threshold: SignatureThreshold,
 }
 
@@ -1333,24 +1334,24 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub cred_id: C,
+    pub cred_id:       C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
-    pub ip_identity: IpIdentity,
+    pub ip_identity:   IpIdentity,
     /// Anonymity revocation threshold. Must be <= length of ar_data.
     #[serde(rename = "revocationThreshold")]
-    pub threshold: Threshold,
+    pub threshold:     Threshold,
     /// Anonymity revocation data. List of anonymity revokers which can revoke
     /// identity. NB: The order is important since it is the same order as that
     /// signed by the identity provider, and permuting the list will invalidate
     /// the signature from the identity provider.
     #[map_size_length = 2]
     #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
-    pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+    pub ar_data:       BTreeMap<ArIdentity, ChainArData<C>>,
     /// Policy of this credential object.
     #[serde(rename = "policy")]
-    pub policy: Policy<C, AttributeType>,
+    pub policy:        Policy<C, AttributeType>,
 }
 
 /// Values in initial credential deployment.
@@ -1369,14 +1370,14 @@ pub struct InitialCredentialDeploymentValues<C: Curve, AttributeType: Attribute<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id: C,
+    pub reg_id:       C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
-    pub ip_identity: IpIdentity,
+    pub ip_identity:  IpIdentity,
     /// Policy of this credential object.
     #[serde(rename = "policy")]
-    pub policy: Policy<C, AttributeType>,
+    pub policy:       Policy<C, AttributeType>,
 }
 
 fn deserialize_ar_data<'de, D: de::Deserializer<'de>, C: Curve>(
@@ -1448,7 +1449,7 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
     #[serde(rename = "normal")]
     Normal {
         #[serde(flatten)]
-        cdv: CredentialDeploymentValues<C, AttributeType>,
+        cdv:         CredentialDeploymentValues<C, AttributeType>,
         #[serde(rename = "commitments")]
         commitments: CredentialDeploymentCommitments<C>,
     },
@@ -1493,7 +1494,7 @@ pub struct InitialCredentialDeploymentInfo<
     #[serde(flatten)]
     pub values: InitialCredentialDeploymentValues<C, AttributeType>,
     #[serde(rename = "sig")]
-    pub sig: IpCdiSignature,
+    pub sig:    IpCdiSignature,
 }
 
 /// This struct contains information from the account holder that the identity
@@ -1502,7 +1503,7 @@ pub struct InitialCredentialDeploymentInfo<
 /// It is part of the preidentity object.
 #[derive(Debug, Serialize, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-pub struct PublicInformationForIP<C: Curve> {
+pub struct PublicInformationForIp<C: Curve> {
     #[serde(
         rename = "idCredPub",
         serialize_with = "base16_encode",
@@ -1514,9 +1515,9 @@ pub struct PublicInformationForIP<C: Curve> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id: C,
+    pub reg_id:      C,
     #[serde(rename = "publicKeys")]
-    pub vk_acc: CredentialPublicKeys,
+    pub vk_acc:      CredentialPublicKeys,
 }
 
 /// Context needed to generate pre-identity object as well as to check it.
@@ -1524,18 +1525,18 @@ pub struct PublicInformationForIP<C: Curve> {
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
 #[derive(Clone)]
-pub struct IPContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
-    pub ip_info: &'a IpInfo<P>,
+    pub ip_info:        &'a IpInfo<P>,
     /// Public information on the __supported__ anonymity revokers.
     /// This is used by the identity provider and the chain to
     /// validate the identity object requests, to validate credentials,
     /// as well as by the account holder to create a credential.
-    pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
+    pub ars_infos:      &'a BTreeMap<ArIdentity, ArInfo<C>>,
     pub global_context: &'a GlobalContext<C>,
 }
 
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P, C> {}
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
 
 #[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
@@ -1549,11 +1550,11 @@ pub struct GlobalContext<C: Curve> {
     /// It is unclear what length we will require here, or whether we'll allow
     /// dynamic generation.
     #[serde(rename = "bulletproofGenerators")]
-    bulletproof_generators: Generators<C>,
+    bulletproof_generators:      Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
     /// A free-form string used to distinguish between different chains.
-    pub genesis_string: String,
+    pub genesis_string:          String,
 }
 
 impl<C: Curve> GlobalContext<C> {
@@ -1619,13 +1620,13 @@ impl<C: Curve> GlobalContext<C> {
 /// Make a context in which the account holder can produce a pre-identity object
 /// to send to the identity provider. Also requires access to the global context
 /// of parameters, e.g., dlog-proof base point.
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IpContext<'a, P, C> {
     pub fn new(
         ip_info: &'a IpInfo<P>,                         // identity provider keys
         ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>, // keys of anonymity revokers.
         global_context: &'a GlobalContext<C>,
     ) -> Self {
-        IPContext {
+        IpContext {
             ip_info,
             ars_infos,
             global_context,
@@ -1661,7 +1662,7 @@ pub trait InitialAccountDataWithSigning: PublicInitialAccountData {
     /// sign the sha256 hash of the structure's serialization.
     fn sign_public_information_for_ip<C: Curve>(
         &self,
-        info: &PublicInformationForIP<C>,
+        info: &PublicInformationForIp<C>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature>;
 }
 
@@ -1705,7 +1706,7 @@ pub trait CredentialDataWithSigning: PublicCredentialData {
 pub struct AccountKeys {
     /// All keys per credential
     #[serde(rename = "keys")]
-    pub keys: BTreeMap<KeyIndex, CredentialData>,
+    pub keys:      BTreeMap<KeyIndex, CredentialData>,
     /// The account threshold.
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
@@ -1750,7 +1751,7 @@ impl From<InitialAccountData> for AccountKeys {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialData {
     #[serde(rename = "keys")]
-    pub keys: BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    pub keys:      BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
@@ -1791,7 +1792,7 @@ impl CredentialDataWithSigning for CredentialData {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct InitialAccountData {
     #[serde(rename = "keys")]
-    pub keys: BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    pub keys:      BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
@@ -1810,7 +1811,7 @@ impl PublicInitialAccountData for InitialAccountData {
 impl InitialAccountDataWithSigning for InitialAccountData {
     fn sign_public_information_for_ip<C: Curve>(
         &self,
-        pub_info_for_ip: &PublicInformationForIP<C>,
+        pub_info_for_ip: &PublicInformationForIp<C>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
         let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
         self.keys
@@ -1828,7 +1829,7 @@ impl InitialAccountDataWithSigning for InitialAccountData {
 #[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct CredentialPublicKeys {
     #[serde(rename = "keys")]
-    pub keys: BTreeMap<KeyIndex, VerifyKey>,
+    pub keys:      BTreeMap<KeyIndex, VerifyKey>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
@@ -1843,10 +1844,10 @@ impl Serial for CredentialPublicKeys {
 }
 
 impl Deserial for CredentialPublicKeys {
-    fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(cur: &mut R) -> ParseResult<Self> {
         let len = cur.read_u8()?;
         if len == 0 {
-            bail!(format_err!("At least one key must be present."));
+            bail!(anyhow!("At least one key must be present."));
         }
         let keys = deserial_map_no_length(cur, usize::from(len))?;
         let threshold = cur.get()?;
@@ -1868,7 +1869,7 @@ impl Serial for SchemeId {
 }
 
 impl Deserial for SchemeId {
-    fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(cur: &mut R) -> ParseResult<Self> {
         match cur.read_u8()? {
             0 => Ok(SchemeId::Ed25519),
             _ => bail!("Only Ed25519 signature scheme supported."),
@@ -1885,7 +1886,7 @@ pub struct IpMetadata {
     pub issuance_start: String,
     #[string_size_length = 4]
     #[serde(rename = "icon")]
-    pub icon: String,
+    pub icon:           String,
 }
 
 /// Private and public data on an identity provider.
@@ -1894,13 +1895,13 @@ pub struct IpMetadata {
 #[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
 pub struct IpData<P: Pairing> {
     #[serde(rename = "ipInfo")]
-    pub public_ip_info: IpInfo<P>,
+    pub public_ip_info:    IpInfo<P>,
     #[serde(
         rename = "ipSecretKey",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ip_secret_key: ps_sig::SecretKey<P>,
+    pub ip_secret_key:     ps_sig::SecretKey<P>,
     #[serde(
         rename = "ipCdiSecretKey",
         serialize_with = "base16_encode",
@@ -1921,7 +1922,7 @@ pub struct ArData<C: Curve> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ar_secret_key: ElgamalSecretKey<C>,
+    pub ar_secret_key:  ElgamalSecretKey<C>,
 }
 
 /// Data needed to use the retrieved identity object to generate credentials.
@@ -1932,7 +1933,7 @@ pub struct ArData<C: Curve> {
 ))]
 pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     #[serde(rename = "aci")]
-    pub aci: AccCredentialInfo<C>,
+    pub aci:        AccCredentialInfo<C>,
     /// Randomness needed to retrieve the signature on the attribute list.
     #[serde(
         rename = "randomness",
@@ -1953,15 +1954,15 @@ pub struct AnonymityRevocationRecord<C: Curve> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub id_cred_pub: C,
+    pub id_cred_pub:  C,
     /// Data that contains encryptions of the prf key that supports additional
     /// anonymity revocation.
     #[serde(rename = "arData")]
-    pub ar_data: BTreeMap<ArIdentity, IpArData<C>>,
+    pub ar_data:      BTreeMap<ArIdentity, IpArData<C>>,
     #[serde(rename = "maxAccounts")]
     pub max_accounts: u8,
     #[serde(rename = "revocationThreshold")]
-    pub threshold: Threshold,
+    pub threshold:    Threshold,
 }
 
 /// A type encapsulating both types of credentials.
@@ -2011,7 +2012,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>> Deserial
     for AccountCredential<P, C, AttributeType>
 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match source.get()? {
             0u8 => {
                 let icdi = source.get()?;
@@ -2041,7 +2042,7 @@ pub struct AccountCredentialMessage<
     #[serde(rename = "messageExpiry")]
     pub message_expiry: types::TransactionTime,
     #[serde(rename = "credential")]
-    pub credential: AccountCredential<P, C, AttributeType>,
+    pub credential:     AccountCredential<P, C, AttributeType>,
 }
 
 /// A type encapsulating both types of credential values, analogous to

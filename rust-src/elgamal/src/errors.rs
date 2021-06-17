@@ -2,28 +2,19 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-use core::fmt::{self, Display};
+use thiserror::Error;
 /// Internal errors.  
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 #[allow(dead_code)]
 pub(crate) enum InternalError {
+    #[error("wrong publickey length")]
     PublicKey,
+    #[error("wrong message length")]
     Message,
+    #[error("wrong cipher length")]
     Cipher,
 }
-
-impl Display for InternalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            InternalError::PublicKey => write!(f, "Wrong PublicKey length"),
-            InternalError::Message => write!(f, "Wrong message length"),
-            InternalError::Cipher => write!(f, "Wrong cipher length"),
-        }
-    }
-}
-
-impl ::failure::Fail for InternalError {}
 
 /// Errors which may occur while processing keys, encryption and decryptoin.
 ///
@@ -35,13 +26,6 @@ impl ::failure::Fail for InternalError {}
 ///
 /// * A problem  decoding to a group element
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
+#[error("{0}")]
 pub struct ElgamalError(pub(crate) InternalError);
-
-impl Display for ElgamalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
-}
-
-impl ::failure::Fail for ElgamalError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
-}

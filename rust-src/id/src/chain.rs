@@ -18,28 +18,28 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CDIVerificationError {
+pub enum CdiVerificationError {
     RegId,
     IdCredPub,
     Signature,
     Dlog,
     AccountOwnership,
     Policy,
-    AR,
+    Ar,
     Proof,
 }
 
-impl Display for CDIVerificationError {
+impl Display for CdiVerificationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            CDIVerificationError::RegId => write!(f, "RegIdVerificationError"),
-            CDIVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
-            CDIVerificationError::Signature => write!(f, "SignatureVerificationError"),
-            CDIVerificationError::Dlog => write!(f, "DlogVerificationError"),
-            CDIVerificationError::AccountOwnership => write!(f, "AccountOwnership"),
-            CDIVerificationError::Policy => write!(f, "PolicyVerificationError"),
-            CDIVerificationError::AR => write!(f, "AnonymityRevokerVerificationError"),
-            CDIVerificationError::Proof => write!(f, "ProofVerificationError"),
+            CdiVerificationError::RegId => write!(f, "RegIdVerificationError"),
+            CdiVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
+            CdiVerificationError::Signature => write!(f, "SignatureVerificationError"),
+            CdiVerificationError::Dlog => write!(f, "DlogVerificationError"),
+            CdiVerificationError::AccountOwnership => write!(f, "AccountOwnership"),
+            CdiVerificationError::Policy => write!(f, "PolicyVerificationError"),
+            CdiVerificationError::Ar => write!(f, "AnonymityRevokerVerificationError"),
+            CdiVerificationError::Proof => write!(f, "ProofVerificationError"),
         }
     }
 }
@@ -57,7 +57,7 @@ pub fn verify_cdi<
     known_ars: &BTreeMap<ArIdentity, A>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
     new_or_existing: &Either<TransactionTime, AccountAddress>,
-) -> Result<(), CDIVerificationError> {
+) -> Result<(), CdiVerificationError> {
     // We need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
@@ -71,7 +71,7 @@ pub fn verify_cdi<
             .cmm_id_cred_sec_sharing_coeff
             .len()
     {
-        return Err(CDIVerificationError::AR);
+        return Err(CdiVerificationError::Ar);
     }
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let gens = global_context.bulletproof_generators();
@@ -117,7 +117,7 @@ pub fn verify_cdi<
     let verifier_sig = if let Some(v) = verifier_sig {
         v
     } else {
-        return Err(CDIVerificationError::Signature);
+        return Err(CdiVerificationError::Signature);
     };
 
     let witness_sig = cdi.proofs.id_proofs.proof_ip_sig.clone();
@@ -148,7 +148,7 @@ pub fn verify_cdi<
     };
 
     if !verify(&mut ro, &verifier, &proof) {
-        return Err(CDIVerificationError::Proof);
+        return Err(CdiVerificationError::Proof);
     }
 
     if !verify_less_than_or_equal(
@@ -160,7 +160,7 @@ pub fn verify_cdi<
         &gens,
         &on_chain_commitment_key,
     ) {
-        return Err(CDIVerificationError::Proof);
+        return Err(CdiVerificationError::Proof);
     }
     let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, new_or_existing);
     // Notice that here we provide all the verification keys, and the
@@ -172,13 +172,13 @@ pub fn verify_cdi<
         &proofs.proof_acc_sk,
         signed.as_ref(),
     ) {
-        return Err(CDIVerificationError::AccountOwnership);
+        return Err(CdiVerificationError::AccountOwnership);
     }
 
     let check_policy = verify_policy(&on_chain_commitment_key, &commitments, &cdi.values.policy);
 
     if !check_policy {
-        return Err(CDIVerificationError::Policy);
+        return Err(CdiVerificationError::Policy);
     }
 
     Ok(())
@@ -193,13 +193,13 @@ pub fn verify_initial_cdi<
     ip_info: &IpInfo<P>,
     cdi: &InitialCredentialDeploymentInfo<C, AttributeType>,
     expiry: TransactionTime,
-) -> Result<(), CDIVerificationError> {
+) -> Result<(), CdiVerificationError> {
     let mut hasher = Sha256::new();
     hasher.update(&to_bytes(&expiry));
     hasher.update(&to_bytes(&cdi.values));
     let signed = hasher.finalize();
     match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
-        Err(_) => Err(CDIVerificationError::Signature),
+        Err(_) => Err(CdiVerificationError::Signature),
         _ => Ok(()),
     }
 }
@@ -211,13 +211,13 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
     chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
     cmm_sharing_coeff: &[Commitment<C>],
     proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
-) -> Result<IdCredPubVerifiers<C>, CDIVerificationError> {
+) -> Result<IdCredPubVerifiers<C>, CdiVerificationError> {
     let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
     let mut witnesses = Vec::with_capacity(proof_id_cred_pub.len());
 
     // The encryptions and the proofs have to match.
     if chain_ar_data.len() != proof_id_cred_pub.len() {
-        return Err(CDIVerificationError::IdCredPub);
+        return Err(CdiVerificationError::IdCredPub);
     }
 
     // The following relies on the fact that iterators over BTreeMap are
@@ -225,14 +225,14 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
     for ((ar_id, ar_data), (ar_id_1, witness)) in chain_ar_data.iter().zip(proof_id_cred_pub.iter())
     {
         if ar_id != ar_id_1 {
-            return Err(CDIVerificationError::IdCredPub);
+            return Err(CdiVerificationError::IdCredPub);
         }
         let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
 
         // finding the correct AR data.
         let ar_info = known_ars
             .get(ar_id)
-            .ok_or(CDIVerificationError::IdCredPub)?;
+            .ok_or(CdiVerificationError::IdCredPub)?;
         let item_prover = com_enc_eq::ComEncEq {
             cipher: ar_data.enc_id_cred_pub_share,
             commitment: cmm_share,
@@ -394,8 +394,8 @@ fn pok_sig_verifier<
         blinded_sig: blinded_sig.clone(),
         commitments: comm_vec,
         // FIXME: Figure out how to restructure to get rid of this clone.
-        ps_pub_key: ip_pub_key.clone(),
-        comm_key:   *commitment_key,
+        ps_pub_key:  ip_pub_key.clone(),
+        comm_key:    *commitment_key,
     })
 }
 
@@ -489,7 +489,7 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+        let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
         let cdi = create_credential(
             context,
             &id_object,

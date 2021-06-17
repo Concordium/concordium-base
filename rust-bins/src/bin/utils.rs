@@ -2,16 +2,16 @@
 //! At the moment we have encryption and decryption in the formats used by other
 //! parts of the Concordium project.
 
+use anyhow::Context;
 use clap::AppSettings;
 use client_server_helpers::*;
-use failure::ResultExt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct ConfigEncrypt {
     #[structopt(long = "in", help = "File to encrypt.")]
-    input: PathBuf,
+    input:  PathBuf,
     #[structopt(long = "out", help = "Name of the output file.")]
     output: PathBuf,
 }
@@ -19,7 +19,7 @@ struct ConfigEncrypt {
 #[derive(StructOpt)]
 struct ConfigDecrypt {
     #[structopt(long = "in", help = "File to decrypt.")]
-    input: PathBuf,
+    input:  PathBuf,
     #[structopt(
         long = "out",
         help = "Place to output the decryption. Defaults to standard output."
@@ -40,7 +40,7 @@ enum Utils {
     Decrypt(ConfigDecrypt),
 }
 
-fn main() -> failure::Fallible<()> {
+fn main() -> anyhow::Result<()> {
     let app = Utils::clap()
         .setting(AppSettings::ArgRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp);
@@ -52,7 +52,7 @@ fn main() -> failure::Fallible<()> {
     }
 }
 
-fn handle_encrypt(cfg: ConfigEncrypt) -> failure::Fallible<()> {
+fn handle_encrypt(cfg: ConfigEncrypt) -> anyhow::Result<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
     let pass = ask_for_password_confirm("Enter password to encrypt with: ", false)?;
     let encrypted =
@@ -62,13 +62,13 @@ fn handle_encrypt(cfg: ConfigEncrypt) -> failure::Fallible<()> {
     Ok(())
 }
 
-fn handle_decrypt(cfg: ConfigDecrypt) -> failure::Fallible<()> {
+fn handle_decrypt(cfg: ConfigDecrypt) -> anyhow::Result<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
     let parsed_data = serde_json::from_slice(&data)?;
     let pass = rpassword::read_password_from_tty(Some("Enter password to decrypt with: "))?;
     let plaintext = match crypto_common::encryption::decrypt(&pass.into(), &parsed_data) {
         Ok(pt) => pt,
-        Err(_) => failure::bail!("Could not decrypt."),
+        Err(_) => anyhow::bail!("Could not decrypt."),
     };
     match cfg.output {
         Some(fname) => {

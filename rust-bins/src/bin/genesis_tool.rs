@@ -34,7 +34,7 @@ enum GenesisTool {
     #[structopt(name = "create-accounts", about = "Create new accounts.")]
     CreateAccounts {
         #[structopt(long = "num", help = "Number of accounts to generate.")]
-        num: usize,
+        num:                 usize,
         #[structopt(
             long = "template",
             help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
@@ -42,27 +42,27 @@ enum GenesisTool {
             default_value = "account",
             env = "TEMPLATE"
         )]
-        template: String,
+        template:            String,
         #[structopt(
             long = "balance",
             help = "Initial balance on each of the accounts, in GTU.",
             default_value = "1000000",
             env = "INITIAL_BALANCE"
         )]
-        balance: Amount,
+        balance:             Amount,
         #[structopt(
             long = "stake",
             help = "Initial stake of the bakers, in GTU. If this is set then all accounts will be \
                     bakers.",
             env = "INITIAL_STAKE"
         )]
-        stake: Option<Amount>,
+        stake:               Option<Amount>,
         #[structopt(
             long = "restake",
             help = "Restake earnings automatically. This only has effect if 'stake' is set.",
             env = "RESTAKE_EARNINGS"
         )]
-        restake: bool,
+        restake:             bool,
         #[structopt(
             long = "baker-credentials-password",
             help = "Output bakers keys with the provided password. Only has effect if 'stake' is \
@@ -71,7 +71,7 @@ enum GenesisTool {
         )]
         baker_keys_password: Option<Password>,
         #[structopt(flatten)]
-        common: CommonOptions,
+        common:              CommonOptions,
     },
 }
 
@@ -82,21 +82,21 @@ struct CommonOptions {
         help = "File with (versioned) public information about the identity provider.",
         env = "IP_INFO_FILE"
     )]
-    ip_info: PathBuf,
+    ip_info:  PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json",
         env = "GLOBAL_FILE"
     )]
-    global: PathBuf,
+    global:   PathBuf,
     #[structopt(
         long = "ar-info",
         help = "File with the (versioned) public keys of the anonymity revoker.",
         default_value = "database/anonymity_revoker-0.pub.json",
         env = "AR_INFO_FILE"
     )]
-    ar_info: PathBuf,
+    ar_info:  PathBuf,
     #[structopt(
         long = "num-keys",
         help = "The number of keys each account should have. Threshold is set to max(1, K-1).",
@@ -110,7 +110,7 @@ struct CommonOptions {
         default_value = ".",
         env = "OUT_DIR"
     )]
-    out_dir: PathBuf,
+    out_dir:  PathBuf,
 }
 
 fn main() -> std::io::Result<()> {

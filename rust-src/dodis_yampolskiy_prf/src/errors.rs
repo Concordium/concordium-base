@@ -1,24 +1,15 @@
 // rustc seems to think the typenames in match statements (e.g. in
 // Display) should be snake cased, for some reason.
 
-use core::fmt::{self, Display};
+use thiserror::Error;
 
 /// Internal errors.  
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub(crate) enum InternalError {
+    #[error("Division by zero.")]
     DivisionByZero,
 }
-
-impl Display for InternalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            InternalError::DivisionByZero => write!(f, "Division By Zero"),
-        }
-    }
-}
-
-impl ::failure::Fail for InternalError {}
 
 /// Errors which may occur while processing proofs and keys.
 ///
@@ -26,13 +17,6 @@ impl ::failure::Fail for InternalError {}
 ///
 /// * A problem with the format of `s`, a scalar,
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error(transparent)] // Forwards the Display and Source implementations of the wrapped InternalError
 pub struct PrfError(pub(crate) InternalError);
-
-impl Display for PrfError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
-}
-
-impl ::failure::Fail for PrfError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
-}

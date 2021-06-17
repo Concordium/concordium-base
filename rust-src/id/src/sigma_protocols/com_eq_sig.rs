@@ -16,7 +16,7 @@ use random_oracle::RandomOracle;
 #[derive(Clone, Debug, Serialize)]
 pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The witness that the prover knows $r'$ (see specification)
-    witness_rho: P::ScalarField,
+    witness_rho:    P::ScalarField,
     /// List of witnesses $(w_i, R_i)$ that the user knows the messages m_i and
     /// randomness R_i that combine to commitments and the public randomized
     /// signature.
@@ -31,9 +31,9 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub commitments: Vec<Commitment<C>>,
     /// The Pointcheval-Sanders public key with which the signature was
     /// generated
-    pub ps_pub_key: PsSigPublicKey<P>,
+    pub ps_pub_key:  PsSigPublicKey<P>,
     /// A commitment key with which the commitments were generated.
-    pub comm_key: CommitmentKey<C>,
+    pub comm_key:    CommitmentKey<C>,
 }
 
 pub type ValuesAndRands<C> = (Value<C>, Randomness<C>);
