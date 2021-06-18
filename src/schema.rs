@@ -8,10 +8,18 @@ use crate::{impls::*, traits::*, types::*};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections::*, string::String, vec::Vec};
+#[cfg(not(feature = "std"))]
+use core::{
+    convert::{TryFrom, TryInto},
+    num::TryFromIntError,
+};
 /// Contract schema related types
 #[cfg(feature = "std")]
-use std::collections::*;
-use std::convert::{TryFrom, TryInto};
+use std::{
+    collections::*,
+    convert::{TryFrom, TryInto},
+    num::TryFromIntError,
+};
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
@@ -494,8 +502,8 @@ impl Deserial for Type {
     }
 }
 
-impl From<std::num::TryFromIntError> for ParseError {
-    fn from(_: std::num::TryFromIntError) -> Self { ParseError::default() }
+impl From<TryFromIntError> for ParseError {
+    fn from(_: TryFromIntError) -> Self { ParseError::default() }
 }
 
 /// Try to convert the `len` to the provided size and serialize it.
