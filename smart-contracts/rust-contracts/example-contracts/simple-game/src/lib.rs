@@ -59,7 +59,7 @@ struct State {
     prefix:            Prefix,
     /// Stored contributions. The Hash is the lowest per account, and the amount
     /// is the total amount contributed by this account.
-    #[concordium(map_size_length = 4)]
+    #[concordium(size_length = 4)]
     contributions:     collections::BTreeMap<AccountAddress, (Amount, Hash)>,
 }
 
