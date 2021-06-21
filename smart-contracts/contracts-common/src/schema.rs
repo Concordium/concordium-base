@@ -512,11 +512,12 @@ pub fn serial_length<W: Write>(
     size_len: &SizeLength,
     out: &mut W,
 ) -> Result<(), W::Err> {
+    let to_w_err = |_| W::Err::default();
     match size_len {
-        SizeLength::U8 => u8::try_from(len).unwrap_or_default().serial(out)?,
-        SizeLength::U16 => u16::try_from(len).unwrap_or_default().serial(out)?,
-        SizeLength::U32 => u32::try_from(len).unwrap_or_default().serial(out)?,
-        SizeLength::U64 => u64::try_from(len).unwrap_or_default().serial(out)?,
+        SizeLength::U8 => u8::try_from(len).map_err(to_w_err)?.serial(out)?,
+        SizeLength::U16 => u16::try_from(len).map_err(to_w_err)?.serial(out)?,
+        SizeLength::U32 => u32::try_from(len).map_err(to_w_err)?.serial(out)?,
+        SizeLength::U64 => u64::try_from(len).map_err(to_w_err)?.serial(out)?,
     }
     Ok(())
 }
