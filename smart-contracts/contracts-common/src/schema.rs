@@ -8,11 +8,18 @@ use crate::{impls::*, traits::*, types::*};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections::*, string::String, vec::Vec};
+#[cfg(not(feature = "std"))]
+use core::{
+    convert::{TryFrom, TryInto},
+    num::TryFromIntError,
+};
 /// Contract schema related types
 #[cfg(feature = "std")]
-use std::collections::*;
-#[cfg(feature = "derive-serde")]
-use std::convert::TryInto;
+use std::{
+    collections::*,
+    convert::{TryFrom, TryInto},
+    num::TryFromIntError,
+};
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
@@ -66,7 +73,7 @@ pub enum Fields {
 
 // TODO: Extend with LEB128
 /// Type of the variable used to encode the length of Sets, List, Maps
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum SizeLength {
     U8,
@@ -495,6 +502,37 @@ impl Deserial for Type {
     }
 }
 
+impl From<TryFromIntError> for ParseError {
+    fn from(_: TryFromIntError) -> Self { ParseError::default() }
+}
+
+/// Try to convert the `len` to the provided size and serialize it.
+pub fn serial_length<W: Write>(
+    len: usize,
+    size_len: SizeLength,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    let to_w_err = |_| W::Err::default();
+    match size_len {
+        SizeLength::U8 => u8::try_from(len).map_err(to_w_err)?.serial(out)?,
+        SizeLength::U16 => u16::try_from(len).map_err(to_w_err)?.serial(out)?,
+        SizeLength::U32 => u32::try_from(len).map_err(to_w_err)?.serial(out)?,
+        SizeLength::U64 => u64::try_from(len).map_err(to_w_err)?.serial(out)?,
+    }
+    Ok(())
+}
+
+/// Deserialize a length of provided size.
+pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseResult<usize> {
+    let len: usize = match size_len {
+        SizeLength::U8 => u8::deserial(source)?.into(),
+        SizeLength::U16 => u16::deserial(source)?.into(),
+        SizeLength::U32 => u32::deserial(source)?.try_into()?,
+        SizeLength::U64 => u64::deserial(source)?.try_into()?,
+    };
+    Ok(len)
+}
+
 #[cfg(feature = "derive-serde")]
 mod impls {
     use super::*;
@@ -524,27 +562,13 @@ mod impls {
         }
     }
 
-    impl From<std::num::TryFromIntError> for ParseError {
-        fn from(_: std::num::TryFromIntError) -> Self { ParseError::default() }
-    }
-
     impl From<std::string::FromUtf8Error> for ParseError {
         fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
     }
 
-    fn deserial_length(source: &mut impl Read, size_len: &SizeLength) -> ParseResult<usize> {
-        let len: usize = match size_len {
-            SizeLength::U8 => u8::deserial(source)?.into(),
-            SizeLength::U16 => u16::deserial(source)?.into(),
-            SizeLength::U32 => u32::deserial(source)?.try_into()?,
-            SizeLength::U64 => u64::deserial(source)?.try_into()?,
-        };
-        Ok(len)
-    }
-
     fn item_list_to_json<R: Read>(
         source: &mut R,
-        size_len: &SizeLength,
+        size_len: SizeLength,
         item_to_json: impl Fn(&mut R) -> ParseResult<serde_json::Value>,
     ) -> ParseResult<Vec<serde_json::Value>> {
         let len = deserial_length(source, size_len)?;
@@ -556,7 +580,7 @@ mod impls {
         Ok(values)
     }
 
-    fn deserial_string<R: Read>(source: &mut R, size_len: &SizeLength) -> ParseResult<String> {
+    fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult<String> {
         let len = deserial_length(source, size_len)?;
         // we are doing this case analysis so that we have a fast path for safe,
         // most common, lengths, and a slower one longer ones.
@@ -669,15 +693,15 @@ mod impls {
                     Ok(Value::Array(vec![left, right]))
                 }
                 Type::List(size_len, ty) => {
-                    let values = item_list_to_json(source, size_len, |s| ty.to_json(s))?;
+                    let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
                     Ok(Value::Array(values))
                 }
                 Type::Set(size_len, ty) => {
-                    let values = item_list_to_json(source, size_len, |s| ty.to_json(s))?;
+                    let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
                     Ok(Value::Array(values))
                 }
                 Type::Map(size_len, key_type, value_type) => {
-                    let values = item_list_to_json(source, size_len, |s| {
+                    let values = item_list_to_json(source, *size_len, |s| {
                         let key = key_type.to_json(s)?;
                         let value = value_type.to_json(s)?;
                         Ok(Value::Array(vec![key, value]))
@@ -709,18 +733,18 @@ mod impls {
                     Ok(json!({ name: fields }))
                 }
                 Type::String(size_len) => {
-                    let string = deserial_string(source, size_len)?;
+                    let string = deserial_string(source, *size_len)?;
                     Ok(Value::String(string))
                 }
                 Type::ContractName(size_len) => {
-                    let contract_name = OwnedContractName::new(deserial_string(source, size_len)?)
+                    let contract_name = OwnedContractName::new(deserial_string(source, *size_len)?)
                         .map_err(|_| ParseError::default())?;
                     let name_without_init =
                         contract_name.contract_name().ok_or_else(ParseError::default)?;
                     Ok(json!({ "contract": name_without_init }))
                 }
                 Type::ReceiveName(size_len) => {
-                    let receive_name = OwnedReceiveName::new(deserial_string(source, size_len)?)
+                    let receive_name = OwnedReceiveName::new(deserial_string(source, *size_len)?)
                         .map_err(|_| ParseError::default())?;
                     let contract_name =
                         receive_name.contract_name().ok_or_else(ParseError::default)?;
