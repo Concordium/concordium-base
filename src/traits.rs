@@ -201,8 +201,8 @@ pub trait Serial {
     fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err>;
 }
 
-/// The `Deserial` trait provides a means of reading structures from byte-sinks
-/// (`Read`).
+/// The `Deserial` trait provides a means of reading structures from
+/// byte-sources (`Read`).
 ///
 /// Can be derived using `#[derive(Deserial)]` for most cases.
 pub trait Deserial: Sized {
