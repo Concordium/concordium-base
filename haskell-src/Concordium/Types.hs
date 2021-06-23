@@ -505,8 +505,7 @@ data Address = AddressAccount !AccountAddress
 
 instance S.Serialize Address where
   get = do
-    h <- G.getWord8 -- FIXME: this is inefficient but ok for testing. The size
-                    -- of the data should already tell what address it is.
+    h <- G.getWord8
     case h of
       0 -> AddressAccount <$> S.get
       1 -> AddressContract <$> S.get

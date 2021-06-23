@@ -630,8 +630,6 @@ data TransactionSummary' a = TransactionSummary {
   tsHash :: !TransactionHash,
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
-  -- FIXME: transaction type should be changed to differentiate parameter updates from credential deployments.
-  -- Currently, these are both represented by 'Nothing'.
   tsType :: !TransactionSummaryType,
   tsResult :: !a,
   tsIndex :: !TransactionIndex
