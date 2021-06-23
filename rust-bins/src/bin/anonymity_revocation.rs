@@ -7,9 +7,10 @@ use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{decrypt_from_chunks_given_generator, Message};
 use id::{anonymity_revoker::*, constants::ArCurve, types::*};
 use serde_json::json;
-use std::convert::TryFrom;
-
-use std::path::PathBuf;
+use std::{
+    convert::TryFrom,
+    path::{Path, PathBuf},
+};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -18,16 +19,16 @@ struct DecryptPrf {
         long = "ar-record",
         help = "File with the JSON encoded anonymity revocation record."
     )]
-    ar_record: PathBuf,
+    ar_record:      PathBuf,
     #[structopt(
         long = "ar-private",
         help = "File with anonymity revoker's private and public keys."
     )]
-    ar_private: PathBuf,
+    ar_private:     PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to.")]
-    out: PathBuf,
+    out:            PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -43,7 +44,7 @@ struct Decrypt {
     )]
     ar_private: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to")]
-    out: PathBuf,
+    out:        PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -57,9 +58,9 @@ struct CombinePrf {
         long = "shares",
         help = "Files with the JSON encoded decrypted shares."
     )]
-    shares: Vec<PathBuf>,
+    shares:    Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the decryption to.")]
-    out: PathBuf,
+    out:       PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -73,26 +74,26 @@ struct Combine {
         long = "shares",
         help = "Files with the JSON encoded decrypted shares."
     )]
-    shares: Vec<PathBuf>,
+    shares:     Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the decryption to.")]
-    out: PathBuf,
+    out:        PathBuf,
 }
 
 #[derive(StructOpt)]
 struct ComputeRegIds {
     #[structopt(long = "ar-record", help = "The anonymity revocation record.")]
-    ar_record: PathBuf,
+    ar_record:      PathBuf,
     #[structopt(long = "prf-key", help = "File containing the PRF key.")]
-    prf_key: PathBuf,
+    prf_key:        PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(long = "out", help = "File to output the RegIds to")]
-    out: PathBuf,
+    out:            PathBuf,
     #[structopt(
         long = "no-secret",
         help = "Do __not__ output the decryption key together with the RegId."
     )]
-    no_secret: bool,
+    no_secret:      bool,
 }
 
 #[derive(StructOpt)]
@@ -253,7 +254,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
 }
 
 // Try to read ArData, either from encrypted or a plaintext file.
-fn decrypt_ar_data(fname: &PathBuf) -> Result<ArData<ArCurve>, String> {
+fn decrypt_ar_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
     let data = succeed_or_die!(std::fs::read(fname), e => "Could not read anonymity revoker secret keys due to {}");
     match serde_json::from_slice(&data) {
         Ok(v) => Ok(v),

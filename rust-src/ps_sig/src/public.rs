@@ -16,17 +16,17 @@ use crate::secret::*;
 #[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
 pub struct PublicKey<C: Pairing> {
     /// Generator of G1
-    pub g: C::G1,
+    pub g:        C::G1,
     /// Generator of G2
-    pub g_tilda: C::G2,
+    pub g_tilda:  C::G2,
     /// Generator $g_1$ raised to the powers $y_i$
     #[size_length = 4]
-    pub ys: Vec<C::G1>,
+    pub ys:       Vec<C::G1>,
     /// Generator $g_2$ raised to the powers $y_i$
     #[size_length = 4]
     pub y_tildas: Vec<C::G2>,
     /// Generator $g_2$ raised to the power $x$.
-    pub x_tilda: C::G2,
+    pub x_tilda:  C::G2,
 }
 
 impl<C: Pairing> PartialEq for PublicKey<C> {

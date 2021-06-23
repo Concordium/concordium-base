@@ -79,7 +79,7 @@ pub struct Versioned<T> {
     #[serde(rename = "v")]
     pub version: Version,
     #[serde(rename = "value")]
-    pub value: T,
+    pub value:   T,
 }
 
 impl<T> Versioned<T> {

@@ -26,6 +26,9 @@
   There is a new field `credentialPublicKeys` and the old field `account` is removed.
 - there is a new field inside the `credential` object in the response from `create_credential`.
   The field is `messageExpiry`, it is mandatory and has type `u64`.
+- the input object of `create_id_request_and_private_data` has an additional optional field `arThreshold`.
+  When used it must be at least 1 and no more than the number of anonymity revokers.
+  When not used, the functionality is unaffected by this change.
 
 ## Other
 

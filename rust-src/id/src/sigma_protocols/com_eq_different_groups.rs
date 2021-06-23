@@ -31,8 +31,8 @@ pub struct ComEqDiffGroups<C1: Curve, C2: Curve> {
     pub commitment_2: Commitment<C2>,
     /// A pair of commitment keys (for the first and second
     /// commitment, respectively)
-    pub cmm_key_1: CommitmentKey<C1>,
-    pub cmm_key_2: CommitmentKey<C2>,
+    pub cmm_key_1:    CommitmentKey<C1>,
+    pub cmm_key_2:    CommitmentKey<C2>,
 }
 
 #[allow(non_snake_case)]

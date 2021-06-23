@@ -20,13 +20,13 @@ use rand::*;
 pub struct SecretKey<C: Pairing> {
     /// Generator of the first pairing group. Not secret, but needed for various
     /// operations.
-    pub g: C::G1,
+    pub g:       C::G1,
     /// Generator of the second pairing group. Not secret, but needed for
     /// various operations.
     pub g_tilda: C::G2,
     #[size_length = 4]
-    pub ys: Vec<C::ScalarField>,
-    pub x: C::ScalarField,
+    pub ys:      Vec<C::ScalarField>,
+    pub x:       C::ScalarField,
 }
 
 impl<C: Pairing> PartialEq for SecretKey<C> {

@@ -42,12 +42,12 @@ impl Threshold {
     }
 }
 
-impl Into<u8> for Threshold {
-    fn into(self) -> u8 { self.0 }
+impl From<Threshold> for u8 {
+    fn from(x: Threshold) -> Self { x.0 }
 }
 
-impl Into<usize> for Threshold {
-    fn into(self) -> usize { usize::from(self.0) }
+impl From<Threshold> for usize {
+    fn from(x: Threshold) -> Self { x.0.into() }
 }
 
 impl TryFrom<u8> for Threshold {
@@ -83,7 +83,7 @@ pub struct SharingData<C: Curve> {
     pub coefficients: Vec<PedersenValue<C>>,
     /// Shares, i.e., points y which are the evaluations of the polynomial at
     /// the specified points.
-    pub shares: Vec<PedersenValue<C>>,
+    pub shares:       Vec<PedersenValue<C>>,
 }
 
 /// Revealing Threshold must be at least 1.
