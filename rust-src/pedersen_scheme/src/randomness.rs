@@ -16,7 +16,7 @@ use std::rc::Rc;
 /// Randomness used in the commitment.
 /// Secret by default.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
 pub struct Randomness<C: Curve> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }

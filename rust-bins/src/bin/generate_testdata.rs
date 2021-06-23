@@ -192,7 +192,7 @@ fn main() {
             threshold: SignatureThreshold(2),
         };
 
-        let cdi_1 = create_credential(
+        let (cdi_1, _) = create_credential(
             context,
             &id_object,
             &id_object_use_data,
@@ -216,7 +216,7 @@ fn main() {
 
         let addr = AccountAddress::new(&cdi_1.values.cred_id);
 
-        let cdi_2 = create_credential(
+        let (cdi_2, _) = create_credential(
             context,
             &id_object,
             &id_object_use_data,
@@ -341,7 +341,7 @@ fn main() {
             }
         };
 
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_object_use_data,

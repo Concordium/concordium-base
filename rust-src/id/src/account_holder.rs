@@ -22,6 +22,7 @@ use pedersen_scheme::{
 };
 use rand::*;
 use random_oracle::RandomOracle;
+use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
 /// Build the PublicInformationForIP used to generate an PreIdentityObject, out
@@ -949,11 +950,18 @@ fn compute_pok_sig<
     Ok((prover, secret))
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct CommitmentsRandomness<C: Curve> {
+    #[serde(rename = "idCredSecRand")]
     id_cred_sec_rand:  PedersenRandomness<C>,
+    #[serde(rename = "prfRand")]
     prf_rand:          PedersenRandomness<C>,
+    #[serde(rename = "credCounterRand")]
     cred_counter_rand: PedersenRandomness<C>,
+    #[serde(rename = "maxAccountsRand")]
     max_accounts_rand: PedersenRandomness<C>,
+    #[serde(rename = "attributesRand")]
     attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
