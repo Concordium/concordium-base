@@ -167,11 +167,9 @@ import Data.Word
 import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Short as BSS
-import qualified Data.ByteString as BS
 import Data.Bits
 import Data.Ratio
 import Data.Foldable
-import Data.List (group, groupBy, sort, sortOn)
 
 import Data.Aeson as AE
 import Data.Aeson.TH

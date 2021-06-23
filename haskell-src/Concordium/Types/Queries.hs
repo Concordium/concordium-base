@@ -15,21 +15,8 @@ import qualified Data.Vector as Vec
 -- import Concordium.GlobalState.Basic.BlockState.Updates (Updates)
 import Concordium.Types.UpdateQueues (Updates)
 -- import Concordium.GlobalState.Finalization
-import Concordium.ID.Types ( AccountAddress )
 -- import Concordium.Types.Accounts
 import Concordium.Types
-    ( BlockHeight,
-      Slot,
-      Duration,
-      Amount,
-      Nonce,
-      Energy,
-      FinalizationIndex,
-      ElectionDifficulty,
-      LeadershipElectionNonce,
-      BakerId,
-      StateHash,
-      BlockHash )
 import Concordium.Types.Execution ( TransactionSummary )
 import Concordium.Types.Transactions ( SpecialTransactionOutcome )
 import Concordium.Utils
@@ -281,11 +268,11 @@ instance ToJSON BlockTransactionStatus where
 -- |Result of a baker status query.
 data BakerStatus
     = -- |The baker is a member of the current committee
-      ActiveBaker !BakerId
+      ActiveBaker 
     | -- |The account has a baker, but it is not yet in the committee
-      InactiveBaker !BakerId
+      InactiveBaker 
     | -- |The baker id does not correspond with a current baker
       NoBaker
     | -- |The baker may exist, but the keys do not match
-      BadKeys !BakerId
+      BadKeys 
     deriving (Eq, Ord, Show)
