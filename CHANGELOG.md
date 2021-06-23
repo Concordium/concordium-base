@@ -33,7 +33,8 @@
 
 ## Other
 - the `create_credential` also outputs the randomness from the commitments used 
-  in the proofs for credential deployment. 
+  in the proofs for credential deployment. The client tool will also output the randomness 
+  using it to create credentials. 
 - the account holder signature is now on the hash of the entire credential, not
   just on the challenge. See `credential_hash_to_sign` for what exactly is being
   hashed and signed.
