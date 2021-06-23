@@ -504,7 +504,8 @@ pub fn commitment_to_share_and_rand<C: Curve>(
     (cmm, rnd)
 }
 
-/// Generates a credential deployment info.
+/// Generates a credential deployment info and outputs the randomness used in commitments. 
+/// The randomness should be stored for later use, e.g. to open commitments later on. 
 /// The information is meant to be valid in the context of a given identity
 /// provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
@@ -554,7 +555,7 @@ where
     Ok((info, commitments_randomness))
 }
 
-/// Generates an unsigned credential deployment info.
+/// Generates an unsigned credential deployment info and outputs the randomness used in commitments.
 /// The information is meant to be valid in the context of a given identity
 /// provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
