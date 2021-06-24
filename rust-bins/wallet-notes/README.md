@@ -331,41 +331,41 @@ With meaning that can be discerned from their names.
 The [Example C program](example.c) that uses the library is available. This
 program reads a JSON file and passes it to the library, retrieving and printing
 the result. On a linux system the program can be compiled and run like so.
-  - First compile the libraries in [../rust-src](../rust-src) by running
+  - First compile the libraries in [../mobile_wallet](../mobile-wallet) by running
     ```cargo build --release```.
   - Next from this directory run
-    ```gcc example.c -lwallet -L ../../rust-src/target/release/ -o example```
+    ```gcc example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
     or
-    ```clang example.c -lwallet -L ../../rust-src/target/release/ -o example```
+    ```clang example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
     depending on what C compiler is preffered.
 
 The binary can then be run with the following inputs:
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_transfer-input.json`:
-   calls `create_transfer_ext` with the contents of `create_transfer-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example create_transfer-input.json`:
+   calls `create_transfer` with the contents of `create_transfer-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_id_request_and_private_data-input.json`:
-   calls `create_id_request_and_private_data_ext` with the contents of `create_id_request_and_private_data-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example create_id_request_and_private_data-input.json`:
+   calls `create_id_request_and_private_data` with the contents of `create_id_request_and_private_data-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_credential-input.json`:
-   calls `create_credential_ext` with the contents of `create_credential-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example create_credential-input.json`:
+   calls `create_credential` with the contents of `create_credential-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_encrypted_transfer-input.json`:
-   calls `create_encrypted_transfer_ext` with with the contents of `create_encrypted_transfer-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example create_encrypted_transfer-input.json`:
+   calls `create_encrypted_transfer` with with the contents of `create_encrypted_transfer-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example combine-amounts <encryptedAmount1> <encryptedAmount2>`:
-   calls `combine_encrypted_amounts_ext` with the two amounts.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example combine-amounts <encryptedAmount1> <encryptedAmount2>`:
+   calls `combine_encrypted_amounts` with the two amounts.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example decrypt_encrypted_amount-input.json`:
-   calls `decrypt_encrypted_amount_ext` with the contents of `decrypt_encrypted_amount-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example decrypt_encrypted_amount-input.json`:
+   calls `decrypt_encrypted_amount` with the contents of `decrypt_encrypted_amount-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_sec_to_pub-input.json`:
-   calls `create_sec_to_pub_ext` with the contents of `create_sec_to_pub-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example create_sec_to_pub-input.json`:
+   calls `create_sec_to_pub` with the contents of `create_sec_to_pub-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_pub_to_sec-input.json`:
-   calls `create_pub_to_sec_ext` with the contents of `create_pub_to_sec-input.json`.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example create_pub_to_sec-input.json`:
+   calls `create_pub_to_sec` with the contents of `create_pub_to_sec-input.json`.
 
-- `LD_LIBRARY_PATH=../../rust-src/target/release ./example check-address <address>`:
-   calls `check_account_address_ext` with the given address.
+- `LD_LIBRARY_PATH=../../mobile_wallet/target/release ./example check-address <address>`:
+   calls `check_account_address` with the given address.
 
 # Example JSON input/output files mapping.
 

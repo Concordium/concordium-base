@@ -421,7 +421,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
 
     let context = IpContext::new(&ip_info, &ars_infos, &global_context);
 
-    let cdi = account_holder::create_credential(
+    let (cdi, randomness) = account_holder::create_credential(
         context,
         &id_object,
         &id_use_data,
@@ -451,6 +451,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
 
     let response = json!({
         "credential": Versioned::new(VERSION_0, credential_message),
+        "commitmentsRandomness": randomness,
         "accountKeys": AccountKeys::from(cred_data),
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),

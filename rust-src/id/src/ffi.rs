@@ -431,7 +431,7 @@ mod test {
             signature: ip_sig,
         };
 
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_use_data,
@@ -442,7 +442,7 @@ mod test {
         )
         .expect("Should generate the credential successfully.");
 
-        let wrong_cdi = create_credential(
+        let (wrong_cdi, _) = create_credential(
             context,
             &id_object,
             &id_use_data,

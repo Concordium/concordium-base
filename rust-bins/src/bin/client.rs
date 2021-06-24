@@ -846,7 +846,7 @@ fn handle_create_credential(cc: CreateCredential) {
         &new_or_existing,
     );
 
-    let cdi = match cdi {
+    let (cdi, commitments_randomness) = match cdi {
         Ok(cdi) => cdi,
         Err(x) => {
             eprintln!("Could not generate the credential because {}", x);
@@ -858,13 +858,15 @@ fn handle_create_credential(cc: CreateCredential) {
 
     let cdi = AccountCredential::Normal { cdi };
 
-    let versioned_credentials = {
+    let (versioned_credentials, randomness_map) = {
         let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
+        let mut randomness = BTreeMap::new();
         // NB: We insert the reference to the credential here so as to avoid cloning
         // (which is not implemented for the type)
         credentials.insert(ki, &cdi);
-        Versioned::new(VERSION_0, credentials)
+        randomness.insert(ki, &commitments_randomness);
+        (Versioned::new(VERSION_0, credentials), randomness)
     };
 
     let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
@@ -879,7 +881,8 @@ fn handle_create_credential(cc: CreateCredential) {
         let js = json!({
             "address": addr,
             "accountKeys": AccountKeys::from((KeyIndex(cc.key_index.unwrap()), acc_data)),
-            "credentials": versioned_credentials
+            "credentials": versioned_credentials,
+            "commitmentsRandomness": randomness_map,
         });
         write_json_to_file(&cc.keys_out, &js).ok();
     } else {
@@ -889,6 +892,7 @@ fn handle_create_credential(cc: CreateCredential) {
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
             "accountKeys": AccountKeys::from(acc_data),
             "credentials": versioned_credentials,
+            "commitmentsRandomness": randomness_map,
             "aci": id_use_data.aci,
         });
         println!(

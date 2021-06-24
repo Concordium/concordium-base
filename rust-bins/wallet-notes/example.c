@@ -4,43 +4,43 @@
 #include <string.h>
 #include <inttypes.h>
 
-char* create_id_request_and_private_data_ext(char*, uint8_t*);
-char* create_credential_ext(char*, uint8_t*);
-char* generate_accounts_ext(char*, uint8_t*);
-uint8_t check_account_address_ext(char*);
+char* create_id_request_and_private_data(char*, uint8_t*);
+char* create_credential(char*, uint8_t*);
+char* generate_accounts(char*, uint8_t*);
+uint8_t check_account_address(char*);
 
-char* create_transfer_ext(char*, uint8_t*);
+char* create_transfer(char*, uint8_t*);
 
-char* create_encrypted_transfer_ext(char*, uint8_t*); //
-char* combine_encrypted_amounts_ext(char*, char*, uint8_t*);
-uint64_t decrypt_encrypted_amount_ext(char*, uint8_t*);
+char* create_encrypted_transfer(char*, uint8_t*); //
+char* combine_encrypted_amounts(char*, char*, uint8_t*);
+uint64_t decrypt_encrypted_amount(char*, uint8_t*);
 
-char* create_pub_to_sec_transfer_ext(char*, uint8_t*);
-char* create_sec_to_pub_transfer_ext(char*, uint8_t*);
+char* create_pub_to_sec_transfer(char*, uint8_t*);
+char* create_sec_to_pub_transfer(char*, uint8_t*);
 
-void free_response_string_ext(char*);
+void free_response_string(char*);
 
 /*
 $ ./example create_transfer-input.json
-  calls create_transfer_ext with the contents of create_transfer-input.json
+  calls create_transfer with the contents of create_transfer-input.json
 
 $ ./example create_id_request_and_private_data-input.json
-  calls create_id_request_and_private_data_ext with the contents of create_id_request_and_private_data-input.json.
+  calls create_id_request_and_private_data with the contents of create_id_request_and_private_data-input.json.
 
 $ ./example create_credential-input.json
-  calls create_credential_ext with the contents of create_credential-input.json.
+  calls create_credential with the contents of create_credential-input.json.
 
 $ ./example create_encrypted_transfer-input.json
-  calls create_encrypted_transfer_ext with with the contents of create_encrypted_transfer-input.json
+  calls create_encrypted_transfer with with the contents of create_encrypted_transfer-input.json
 
 $ ./example combine-amounts <encryptedAmount1> <encryptedAmount2>
-  calls combine_encrypted_amounts_ext with the two amounts
+  calls combine_encrypted_amounts with the two amounts
 
 $ ./example decrypt_encrypted_amount-input.json
-  calls decrypt_encrypted_amount_ext with the contents of decrypt_encrypted_amount-input.json
+  calls decrypt_encrypted_amount with the contents of decrypt_encrypted_amount-input.json
 
 $ ./example check-address <address>
-  calls check_account_address_ext with the given address
+  calls check_account_address with the given address
 */
 
 int printStr(char *out, uint8_t flag) {
@@ -52,7 +52,7 @@ int printStr(char *out, uint8_t flag) {
     fprintf(stderr, "%s\n", out);
     r = 1;
   }
-  free_response_string_ext(out);
+  free_response_string(out);
   return r;
 }
 
@@ -91,28 +91,28 @@ int main(int argc, char *argv[]) {
       char *out;
       uint64_t decrypted;
       if (ends_with(argv[1], "create_transfer-input.json")) {
-        out = create_transfer_ext(buffer, &flag);
+        out = create_transfer(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_id_request_and_private_data-input.json")) {
-        out = create_id_request_and_private_data_ext(buffer, &flag);
+        out = create_id_request_and_private_data(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_credential-input.json")) {
-        out = create_credential_ext(buffer, &flag);
+        out = create_credential(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "generate-accounts-input.json")) {
-        out = generate_accounts_ext(buffer, &flag);
+        out = generate_accounts(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_encrypted_transfer-input.json")) {
-        out = create_encrypted_transfer_ext(buffer, &flag);
+        out = create_encrypted_transfer(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_pub_to_sec_transfer-input.json")) {
-        out = create_pub_to_sec_transfer_ext(buffer, &flag);
+        out = create_pub_to_sec_transfer(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_sec_to_pub_transfer-input.json")) {
-        out = create_sec_to_pub_transfer_ext(buffer, &flag);
+        out = create_sec_to_pub_transfer(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "decrypt_encrypted_amount-input.json")) {
-        decrypted = decrypt_encrypted_amount_ext(buffer, &flag);
+        decrypted = decrypt_encrypted_amount(buffer, &flag);
         if (flag) {
           printf("Decrypted amount: %" PRIu64 "\n", decrypted);
           return 0;
@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
     }
   } else {
     if (strcmp(argv[1], "check-address") == 0) {
-      if (check_account_address_ext(argv[2])) {
+      if (check_account_address(argv[2])) {
         printf("Account address valid.\n");
       } else {
         printf("Account address invalid.\n");
@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
     } else if (strcmp(argv[1], "combine-amounts") == 0) {
       uint8_t flag = 1;
       char *out;
-      out = combine_encrypted_amounts_ext(argv[2], argv[3], &flag);
+      out = combine_encrypted_amounts(argv[2], argv[3], &flag);
       printf("%s\n", out);
       return (int)flag;
     }

@@ -239,7 +239,7 @@ pub fn test_pipeline() {
         },
         threshold: SignatureThreshold(2),
     };
-    let cdi = create_credential(
+    let (cdi, _) = create_credential(
         context,
         &id_object,
         &id_use_data,
@@ -306,7 +306,7 @@ pub fn test_pipeline() {
     // generate a new cdi from a modified pre-identity object in which we swapped
     // two anonymity revokers. Verification of this credential should fail the
     // signature at the very least.
-    let mut cdi = create_credential(
+    let (mut cdi, _) = create_credential(
         context,
         &id_object,
         &id_use_data,

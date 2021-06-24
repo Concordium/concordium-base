@@ -12,7 +12,8 @@
   changed format, with the addition of the `messageExpiry` field.
 
 ## Mobile wallet
-
+- in the response `create_credential` the field `commitmentsRandomness` is added and
+  contains the randomness from commitments used in proofs.
 - in the response from `create_credential` the field `accountData` is renamed to
   `accountKeys` and its structure is changed. It is now a dictionary of
   dictionaries to reflect the two-level indexing of keys.
@@ -31,7 +32,9 @@
   When not used, the functionality is unaffected by this change.
 
 ## Other
-
+- the `create_credential` also outputs the randomness from the commitments used 
+  in the proofs for credential deployment. The client tool will also output the randomness 
+  using it to create credentials. 
 - the account holder signature is now on the hash of the entire credential, not
   just on the challenge. See `credential_hash_to_sign` for what exactly is being
   hashed and signed.
