@@ -20,7 +20,8 @@ use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
-    commitment as pedersen, key::CommitmentKey as PedersenKey, Value as PedersenValue,
+    commitment as pedersen, key::CommitmentKey as PedersenKey,
+    randomness::Randomness as PedersenRandomness, Value as PedersenValue,
 };
 use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
 use random_oracle::Challenge;
@@ -31,7 +32,7 @@ use serde::{
 use sha2::{Digest, Sha256};
 use std::{
     cmp::Ordering,
-    collections::{btree_map::BTreeMap, BTreeSet},
+    collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet},
     convert::TryFrom,
     fmt,
     io::{Cursor, Read},
@@ -1004,6 +1005,21 @@ pub struct CredentialDeploymentCommitments<C: Curve> {
     /// where S is id_cred_sec
     #[serde(rename = "cmmIdCredSecSharingCoeff")]
     pub cmm_id_cred_sec_sharing_coeff: Vec<pedersen::Commitment<C>>,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct CommitmentsRandomness<C: Curve> {
+    #[serde(rename = "idCredSecRand")]
+    pub id_cred_sec_rand:  PedersenRandomness<C>,
+    #[serde(rename = "prfRand")]
+    pub prf_rand:          PedersenRandomness<C>,
+    #[serde(rename = "credCounterRand")]
+    pub cred_counter_rand: PedersenRandomness<C>,
+    #[serde(rename = "maxAccountsRand")]
+    pub max_accounts_rand: PedersenRandomness<C>,
+    #[serde(rename = "attributesRand")]
+    pub attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 #[derive(Debug, SerdeBase16IgnoreLengthSerialize)]

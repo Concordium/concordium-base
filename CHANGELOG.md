@@ -12,8 +12,8 @@
   changed format, with the addition of the `messageExpiry` field.
 
 ## Mobile wallet
-- the randomness output by `create_credential` is now also output by `create_credential_aux`
-  so that the randomness can be stored. 
+- in the response `create_credential` the field `commitmentsRandomness` is added and
+  contains the randomness from commitments used in proofs.
 - in the response from `create_credential` the field `accountData` is renamed to
   `accountKeys` and its structure is changed. It is now a dictionary of
   dictionaries to reflect the two-level indexing of keys.
