@@ -599,8 +599,8 @@ pub struct ContractAddress {
     derive(SerdeSerialize, SerdeDeserialize),
     serde(tag = "type", content = "address", rename_all = "lowercase")
 )]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug))]
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Address {
     Account(AccountAddress),
     Contract(ContractAddress),
