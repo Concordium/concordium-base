@@ -10,12 +10,7 @@ import Data.Char (isLower)
 import qualified Data.Map as Map
 import Data.Time ( UTCTime )
 import qualified Data.Vector as Vec
--- import Concordium.GlobalState.Account
--- import Concordium.GlobalState.Basic.BlockState.AccountReleaseSchedule (AccountReleaseSchedule (..))
--- import Concordium.GlobalState.Basic.BlockState.Updates (Updates)
 import Concordium.Types.UpdateQueues (Updates)
--- import Concordium.GlobalState.Finalization
--- import Concordium.Types.Accounts
 import Concordium.Types
 import Concordium.Types.Execution ( TransactionSummary )
 import Concordium.Types.Transactions ( SpecialTransactionOutcome )

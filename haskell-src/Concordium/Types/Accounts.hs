@@ -10,10 +10,6 @@ import qualified Data.Map as Map
 import qualified Lens.Micro.Platform as Lens
 import Concordium.Common.Version
 import Concordium.Types.Accounts.Releases
--- import Concordium.GlobalState.Account
--- import Concordium.GlobalState.Basic.BlockState.AccountReleaseSchedule (AccountReleaseSchedule (..))
--- import Concordium.GlobalState.Basic.BlockState.Updates (Updates)
--- import Concordium.GlobalState.Finalization
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.HashableTo
