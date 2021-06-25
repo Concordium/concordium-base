@@ -81,9 +81,9 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Result type for @getBranches@ query.
 data Branch = Branch
     { -- |Block hash
-      branchBlockHash :: BlockHash,
+      branchBlockHash :: !BlockHash,
       -- |Child branches
-      branchChildren :: [Branch]
+      branchChildren :: ![Branch]
     }
     deriving (Eq, Ord, Show)
 
@@ -92,9 +92,9 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Result type for @getNextAccountNonce@ query.
 data NextAccountNonce = NextAccountNonce
     { -- |The next account nonce
-      nanNonce :: Nonce,
+      nanNonce :: !Nonce,
       -- |True if all transactions on the account are finalized
-      nanAllFinal :: Bool
+      nanAllFinal :: !Bool
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''NextAccountNonce)
@@ -102,34 +102,34 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Result type for @getBlockInfo@ query.
 data BlockInfo = BlockInfo
     { -- |The block hash
-      biBlockHash :: BlockHash,
+      biBlockHash :: !BlockHash,
       -- |The parent block hash
-      biBlockParent :: BlockHash,
+      biBlockParent :: !BlockHash,
       -- |The last finalized block when this block was baked
-      biBlockLastFinalized :: BlockHash,
+      biBlockLastFinalized :: !BlockHash,
       -- |The height of this block
-      biBlockHeight :: BlockHeight,
+      biBlockHeight :: !BlockHeight,
       -- |The time the block was received
-      biBlockReceiveTime :: UTCTime,
+      biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified
-      biBlockArriveTime :: UTCTime,
+      biBlockArriveTime :: !UTCTime,
       -- |The slot number in which the block was baked
-      biBlockSlot :: Slot,
+      biBlockSlot :: !Slot,
       -- |The time of the slot in which the block was baked
-      biBlockSlotTime :: UTCTime,
+      biBlockSlotTime :: !UTCTime,
       -- |The identifier of the block baker, or @Nothing@ for a
       -- genesis block.
-      biBlockBaker :: Maybe BakerId,
+      biBlockBaker :: !(Maybe BakerId),
       -- |Whether the block is finalized
-      biFinalized :: Bool,
+      biFinalized :: !Bool,
       -- |The number of transactions in the block
-      biTransactionCount :: Int,
+      biTransactionCount :: !Int,
       -- |The energy cost of the transaction in the block
-      biTransactionEnergyCost :: Energy,
+      biTransactionEnergyCost :: !Energy,
       -- |The size of the transactions
-      biTransactionsSize :: Int,
+      biTransactionsSize :: !Int,
       -- |The hash of the block state
-      biBlockStateHash :: StateHash
+      biBlockStateHash :: !StateHash
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockInfo)
@@ -137,11 +137,11 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Details of a party in a finalization.
 data FinalizationSummaryParty = FinalizationSummaryParty
     { -- |The identity of the baker
-      fspBakerId :: BakerId,
+      fspBakerId :: !BakerId,
       -- |The party's relative weight in the committee
-      fspWeight :: Integer,
+      fspWeight :: !Integer,
       -- |Whether the party's signature is present
-      fspSigned :: Bool
+      fspSigned :: !Bool
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummaryParty)
@@ -149,13 +149,13 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Details of a finalization record.
 data FinalizationSummary = FinalizationSummary
     { -- |Hash of the finalized block
-      fsFinalizationBlockPointer :: BlockHash,
+      fsFinalizationBlockPointer :: !BlockHash,
       -- |Index of the finalization
-      fsFinalizationIndex :: FinalizationIndex,
+      fsFinalizationIndex :: !FinalizationIndex,
       -- |Finalization delay value
-      fsFinalizationDelay :: BlockHeight,
+      fsFinalizationDelay :: !BlockHeight,
       -- |The finalization committee
-      fsFinalizers :: Vec.Vector FinalizationSummaryParty
+      fsFinalizers :: !(Vec.Vector FinalizationSummaryParty)
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
@@ -163,28 +163,28 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Detailed information about a block.
 data BlockSummary = BlockSummary
     { -- |Details of transactions in the block
-      bsTransactionSummaries :: Vec.Vector TransactionSummary,
+      bsTransactionSummaries :: !(Vec.Vector TransactionSummary),
       -- |Details of special events in the block
-      bsSpecialEvents :: Seq.Seq SpecialTransactionOutcome,
+      bsSpecialEvents :: !(Seq.Seq SpecialTransactionOutcome),
       -- |Details of the finalization record in the block (if any)
-      bsFinalizationData :: Maybe FinalizationSummary,
+      bsFinalizationData :: !(Maybe FinalizationSummary),
       -- |Details of the update queues and chain parameters as of the block
-      bsUpdates :: Updates
+      bsUpdates :: !Updates
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockSummary)
 
 data RewardStatus = RewardStatus
     { -- |The total GTU in existence
-      rsTotalAmount :: Amount,
+      rsTotalAmount :: !Amount,
       -- |The total GTU in encrypted balances
-      rsTotalEncryptedAmount :: Amount,
+      rsTotalEncryptedAmount :: !Amount,
       -- |The amount in the baking reward account
-      rsBakingRewardAccount :: Amount,
+      rsBakingRewardAccount :: !Amount,
       -- |The amount in the finalization reward account
-      rsFinalizationRewardAccount :: Amount,
+      rsFinalizationRewardAccount :: !Amount,
       -- |The amount in the GAS account
-      rsGasAccount :: Amount
+      rsGasAccount :: !Amount
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''RewardStatus)
@@ -192,11 +192,11 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Summary of a baker.
 data BakerSummary = BakerSummary
     { -- |Baker ID
-      bsBakerId :: BakerId,
+      bsBakerId :: !BakerId,
       -- |(Approximate) lottery power
-      bsBakerLotteryPower :: Double,
+      bsBakerLotteryPower :: !Double,
       -- |Baker account (should never be @Nothing@)
-      bsBakerAccount :: Maybe AccountAddress
+      bsBakerAccount :: !(Maybe AccountAddress)
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BakerSummary)
@@ -204,11 +204,11 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Summary of the birk parameters applicable to a particular block.
 data BlockBirkParameters = BlockBirkParameters
     { -- |Baking lottery election difficulty
-      bbpElectionDifficulty :: ElectionDifficulty,
+      bbpElectionDifficulty :: !ElectionDifficulty,
       -- |Current leadership election nonce for the lottery
-      bbpElectionNonce :: LeadershipElectionNonce,
+      bbpElectionNonce :: !LeadershipElectionNonce,
       -- |List of the currently eligible bakers
-      bbpBakers :: Vec.Vector BakerSummary
+      bbpBakers :: !(Vec.Vector BakerSummary)
     }
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
