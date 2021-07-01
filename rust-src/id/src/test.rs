@@ -119,12 +119,12 @@ pub fn test_create_pio<'a>(
     num_ars: u8, // should be at least 1
     initial_account_data: &InitialAccountData,
 ) -> (
-    IPContext<'a, IpPairing, ArCurve>,
+    IpContext<'a, IpPairing, ArCurve>,
     PreIdentityObject<IpPairing, ArCurve>,
     ps_sig::SigRetrievalRandomness<IpPairing>,
 ) {
     // Create context with all anonymity revokers
-    let context = IPContext::new(ip_info, ars_infos, global_ctx);
+    let context = IpContext::new(ip_info, ars_infos, global_ctx);
 
     // Select all ARs except last one
     let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));

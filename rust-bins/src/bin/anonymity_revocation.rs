@@ -7,9 +7,10 @@ use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{decrypt_from_chunks_given_generator, Message};
 use id::{anonymity_revoker::*, constants::ArCurve, types::*};
 use serde_json::json;
-use std::convert::TryFrom;
-
-use std::path::PathBuf;
+use std::{
+    convert::TryFrom,
+    path::{Path, PathBuf},
+};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -253,7 +254,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
 }
 
 // Try to read ArData, either from encrypted or a plaintext file.
-fn decrypt_ar_data(fname: &PathBuf) -> Result<ArData<ArCurve>, String> {
+fn decrypt_ar_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
     let data = succeed_or_die!(std::fs::read(fname), e => "Could not read anonymity revoker secret keys due to {}");
     match serde_json::from_slice(&data) {
         Ok(v) => Ok(v),

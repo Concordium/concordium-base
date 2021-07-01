@@ -811,7 +811,7 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     };
 
-    let context = IPContext::new(&ip_info, &ars, &global_ctx);
+    let context = IpContext::new(&ip_info, &ars, &global_ctx);
 
     // We now generate or read account verification/signature key pair.
     let acc_data = {
@@ -1050,7 +1050,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
         alist,
         _phantom: Default::default(),
     };
-    let context = IPContext::new(&ip_info, &ars, &global_ctx);
+    let context = IpContext::new(&ip_info, &ars, &global_ctx);
     let message_expiry = TransactionTime {
         seconds: chrono::Utc::now().timestamp() as u64 + aai.expiry,
     };
@@ -1269,7 +1269,7 @@ fn handle_start_ip(sip: StartIp) {
         }
     };
 
-    let context = IPContext::new(&ip_info, &choice_ars, &global_ctx);
+    let context = IpContext::new(&ip_info, &choice_ars, &global_ctx);
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used

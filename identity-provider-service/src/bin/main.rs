@@ -1045,7 +1045,7 @@ fn validate_worker(
         return Err(IdRequestRejection::UnsupportedVersion);
     }
     let request = &input.id_object_request.value;
-    let context = IPContext {
+    let context = IpContext {
         ip_info:        &server_config.ip_data.public_ip_info,
         ars_infos:      &server_config.ars.anonymity_revokers,
         global_context: &server_config.global,

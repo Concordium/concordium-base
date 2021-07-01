@@ -119,7 +119,7 @@ fn bench_parts(c: &mut Criterion) {
     .cloned()
     .collect::<BTreeMap<_, _>>();
 
-    let context = IPContext::new(&ip_info, &ars_infos, &global_context);
+    let context = IpContext::new(&ip_info, &ars_infos, &global_context);
 
     let initial_acc_data = InitialAccountData {
         keys:      {
@@ -138,7 +138,7 @@ fn bench_parts(c: &mut Criterion) {
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
     let ip_info_des: IpInfo<Bls12> = from_bytes(&mut Cursor::new(&ip_info_ser)).unwrap();
-    let des_context = IPContext::new(&ip_info_des, &ars_infos, &global_context);
+    let des_context = IpContext::new(&ip_info_des, &ars_infos, &global_context);
     let ver_ok = verify_credentials::<_, _, ArCurve>(
         &pio_des,
         des_context,

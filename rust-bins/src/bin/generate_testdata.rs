@@ -127,7 +127,7 @@ fn main() {
         _phantom: Default::default(),
     };
 
-    let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
+    let context = IpContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
     let initial_acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
