@@ -1,11 +1,14 @@
 use crate::{constants::*, traits::*, types::*};
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, collections::*, string::String, vec::Vec};
+use alloc::{boxed::Box, collections, string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
-use core::{marker, mem::MaybeUninit, slice};
+use core::{hash, marker, mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
-use std::{collections::*, marker, mem::MaybeUninit, slice};
+use std::{collections, hash, marker, mem::MaybeUninit, slice};
+
+use collections::{BTreeMap, BTreeSet};
+use hash::Hash;
 
 /// Apply the given macro to each of the elements in the list
 /// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
@@ -565,6 +568,44 @@ impl<K: Deserial + Ord, V: Deserial> Deserial for BTreeMap<K, V> {
     }
 }
 
+/// The serialization of maps encodes their size as a u32. This should be
+/// sufficient for all realistic use cases in smart contracts.
+/// They are serialized in no particular order.
+impl<K: Serial, V: Serial> Serial for HashMap<K, V> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        for (k, v) in self.iter() {
+            k.serial(out)?;
+            v.serial(out)?;
+        }
+        Ok(())
+    }
+}
+
+/// The deserialization of maps assumes their size as a u32.
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization only ensures that
+/// there are no duplicates. Serializing a `HashMap` via its `Serial` instance
+/// will not lay out elements in a particular order. As a consequence
+/// deserializing, and serializing back is in general not the identity. This
+/// could have consequences if the data is hashed, or the byte representation
+/// is used in some other way directly. In those cases use a `BTreeMap` instead.
+impl<K: Deserial + Hash + Eq, V: Deserial> Deserial for HashMap<K, V> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let mut out = HashMap::default();
+        for _ in 0..len {
+            let k = source.get()?;
+            let v = source.get()?;
+            if out.insert(k, v).is_some() {
+                return Err(ParseError::default());
+            }
+        }
+        Ok(out)
+    }
+}
+
 /// The serialization of sets encodes their size as a u32. This should be
 /// sufficient for all realistic use cases in smart contracts.
 /// They are serialized in canonical order (increasing)
@@ -584,13 +625,49 @@ impl<K: Serial + Ord> Serial for BTreeSet<K> {
 /// by the increasing order. As a consequence deserializing, and
 /// serializing back is in general not the identity. This could have
 /// consequences if the data is hashed, or the byte representation
-/// is used in some other way directly. In those cases the a canonical
+/// is used in some other way directly. In those cases a canonical
 /// order should be ensured to avoid subtle, difficult to diagnose,
 /// bugs.
 impl<K: Deserial + Ord> Deserial for BTreeSet<K> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         deserial_set_no_length_no_order_check(source, len as usize)
+    }
+}
+
+// The serialization of sets encodes their size as a u32. This should be
+/// sufficient for all realistic use cases in smart contracts.
+/// They are serialized in no particular order.
+impl<K: Serial> Serial for HashSet<K> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        for v in self.iter() {
+            v.serial(out)?;
+        }
+        Ok(())
+    }
+}
+
+/// The deserialization of sets assumes their size as a u32.
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization only ensures that
+/// there are no duplicates. Serializing a `HashSet` via its `Serial` instance
+/// will not lay out elements in any particular order. As a consequence
+/// deserializing, and serializing back is in general not the identity. This
+/// could have consequences if the data is hashed, or the byte representation
+/// is used in some other way directly. In those cases use a `BTreeSet` instead.
+impl<K: Deserial + Hash + Eq> Deserial for HashSet<K> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let mut out = HashSet::default();
+        for _ in 0..len {
+            let k = source.get()?;
+            if !out.insert(k) {
+                return Err(ParseError::default());
+            }
+        }
+        Ok(out)
     }
 }
 
