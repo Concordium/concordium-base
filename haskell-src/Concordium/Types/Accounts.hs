@@ -162,6 +162,7 @@ data AccountInfo = AccountInfo
       -- |The baker associated with the account (if any)
       aiBaker :: Maybe AccountBaker
     }
+    deriving (Eq, Show)
 
 instance ToJSON AccountInfo where
     toJSON AccountInfo{..} =

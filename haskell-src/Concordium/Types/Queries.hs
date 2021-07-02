@@ -8,16 +8,15 @@ import Data.Aeson
 import Data.Aeson.TH
 import Data.Char (isLower)
 import qualified Data.Map as Map
-import Data.Time ( UTCTime )
-import qualified Data.Vector as Vec
-import Concordium.Types.UpdateQueues (Updates)
-import Concordium.Types
-import Concordium.Types.Execution ( TransactionSummary )
-import Concordium.Types.Transactions ( SpecialTransactionOutcome )
-import Concordium.Utils
 import qualified Data.Sequence as Seq
+import Data.Time (UTCTime)
+import qualified Data.Vector as Vec
 
-
+import Concordium.Types
+import Concordium.Types.Execution (TransactionSummary)
+import Concordium.Types.Transactions (SpecialTransactionOutcome)
+import Concordium.Types.UpdateQueues (Updates)
+import Concordium.Utils
 
 -- |Result type for @getConsensusStatus@ queries.
 data ConsensusStatus = ConsensusStatus
@@ -96,6 +95,7 @@ data NextAccountNonce = NextAccountNonce
       -- |True if all transactions on the account are finalized
       nanAllFinal :: !Bool
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''NextAccountNonce)
 
@@ -131,6 +131,7 @@ data BlockInfo = BlockInfo
       -- |The hash of the block state
       biBlockStateHash :: !StateHash
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockInfo)
 
@@ -143,6 +144,7 @@ data FinalizationSummaryParty = FinalizationSummaryParty
       -- |Whether the party's signature is present
       fspSigned :: !Bool
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummaryParty)
 
@@ -157,6 +159,7 @@ data FinalizationSummary = FinalizationSummary
       -- |The finalization committee
       fsFinalizers :: !(Vec.Vector FinalizationSummaryParty)
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
 
@@ -171,6 +174,7 @@ data BlockSummary = BlockSummary
       -- |Details of the update queues and chain parameters as of the block
       bsUpdates :: !Updates
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockSummary)
 
@@ -186,6 +190,7 @@ data RewardStatus = RewardStatus
       -- |The amount in the GAS account
       rsGasAccount :: !Amount
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''RewardStatus)
 
@@ -198,6 +203,7 @@ data BakerSummary = BakerSummary
       -- |Baker account (should never be @Nothing@)
       bsBakerAccount :: !(Maybe AccountAddress)
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BakerSummary)
 
@@ -210,6 +216,7 @@ data BlockBirkParameters = BlockBirkParameters
       -- |List of the currently eligible bakers
       bbpBakers :: !(Vec.Vector BakerSummary)
     }
+    deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
@@ -221,6 +228,7 @@ data TransactionStatus
       Committed (Map.Map BlockHash (Maybe TransactionSummary))
     | -- |Transaction has been finalized in a block
       Finalized BlockHash (Maybe TransactionSummary)
+    deriving (Show)
 
 instance ToJSON TransactionStatus where
     toJSON Received = object ["status" .= String "received"]
@@ -245,6 +253,7 @@ data BlockTransactionStatus
       BTSCommitted (Maybe TransactionSummary)
     | -- |The transaction is in that (finalized) block
       BTSFinalized (Maybe TransactionSummary)
+    deriving (Show)
 
 instance ToJSON BlockTransactionStatus where
     toJSON BTSNotInBlock = Null
@@ -263,11 +272,11 @@ instance ToJSON BlockTransactionStatus where
 -- |Result of a baker status query.
 data BakerStatus
     = -- |The baker is a member of the current committee
-      ActiveBaker 
+      ActiveBaker
     | -- |The account has a baker, but it is not yet in the committee
-      InactiveBaker 
+      InactiveBaker
     | -- |The baker id does not correspond with a current baker
       NoBaker
     | -- |The baker may exist, but the keys do not match
-      BadKeys 
+      BadKeys
     deriving (Eq, Ord, Show)
