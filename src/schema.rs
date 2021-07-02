@@ -7,7 +7,7 @@ use crate::{impls::*, traits::*, types::*};
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
-use alloc::{collections::*, string::String, vec::Vec};
+use alloc::{collections, string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
 use core::{
     convert::{TryFrom, TryInto},
@@ -16,10 +16,12 @@ use core::{
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::{
-    collections::*,
+    collections,
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
+
+use collections::{BTreeMap, BTreeSet};
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
@@ -208,6 +210,14 @@ impl<T: SchemaType> SchemaType for BTreeSet<T> {
     fn get_type() -> Type { Type::Set(SizeLength::U32, Box::new(T::get_type())) }
 }
 impl<K: SchemaType, V: SchemaType> SchemaType for BTreeMap<K, V> {
+    fn get_type() -> Type {
+        Type::Map(SizeLength::U32, Box::new(K::get_type()), Box::new(V::get_type()))
+    }
+}
+impl<T: SchemaType> SchemaType for HashSet<T> {
+    fn get_type() -> Type { Type::Set(SizeLength::U32, Box::new(T::get_type())) }
+}
+impl<K: SchemaType, V: SchemaType> SchemaType for HashMap<K, V> {
     fn get_type() -> Type {
         Type::Map(SizeLength::U32, Box::new(K::get_type()), Box::new(V::get_type()))
     }
