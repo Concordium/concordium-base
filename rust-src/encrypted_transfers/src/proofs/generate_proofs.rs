@@ -182,7 +182,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     pk_sender: &PublicKey<C>,
     sk_sender: &SecretKey<C>,
     pk_receiver: &PublicKey<C>,
-    index: u64,
+    index: EncryptedAmountAggIndex,
     S: &Cipher<C>,
     s: Amount,
     a: Amount,
@@ -363,10 +363,11 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     ro: &mut RandomOracle,
     pk: &PublicKey<C>, // sender and receiver are the same person
     sk: &SecretKey<C>,
-    index: u64,    // indicates which amounts were used
-    S: &Cipher<C>, // encryption of the input amount up to the index, combined into one encryption
-    s: Amount,     // input amount
-    a: Amount,     // amount to send
+    index: EncryptedAmountAggIndex, // indicates which amounts were used
+    S: &Cipher<C>,                  /* encryption of the input amount up to the index, combined
+                                     * into one encryption */
+    s: Amount, // input amount
+    a: Amount, // amount to send
     csprng: &mut R,
 ) -> Option<SecToPubAmountTransferData<C>> {
     if s < a {
@@ -685,7 +686,7 @@ mod test {
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let mut ro = RandomOracle::domain(&challenge_prefix);
 
-        let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
+        let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_enc_trans(
             &context,
             &mut ro.split(),
@@ -735,7 +736,7 @@ mod test {
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
 
         let mut ro = RandomOracle::domain(&challenge_prefix);
-        let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
+        let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_sec_to_pub_trans(
             &context,
             &mut ro.split(),

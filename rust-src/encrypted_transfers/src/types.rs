@@ -1,11 +1,35 @@
 //! This module provides common types and constants for encrypted transfers.
 
+use std::u64;
+
 use crate::proofs::*;
 use bulletproofs::range_proof::*;
 use crypto_common::{types::Amount, *};
 use curve_arithmetic::*;
 use elgamal::*;
 use id::sigma_protocols::common::*;
+
+#[derive(Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize, Debug, Default)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct EncryptedAmountIndex {
+    pub index: u64,
+}
+
+#[derive(Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize, Debug, Default)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct EncryptedAmountAggIndex {
+    pub index: u64,
+}
+
+impl From<u64> for EncryptedAmountAggIndex {
+    fn from(index: u64) -> Self { EncryptedAmountAggIndex { index } }
+}
+
+impl From<u64> for EncryptedAmountIndex {
+    fn from(index: u64) -> Self { EncryptedAmountIndex { index } }
+}
 
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 /// An encrypted amount, in two chunks. The JSON serialization of this is just
@@ -41,7 +65,7 @@ pub struct IndexedEncryptedAmount<C: Curve> {
     /// The actual encrypted amount.
     pub encrypted_chunks: EncryptedAmount<C>,
     /// Index of the amount on the account.
-    pub index:            u64,
+    pub index:            EncryptedAmountIndex,
 }
 
 /// Size of the chunk for encrypted amounts.
@@ -60,7 +84,7 @@ pub struct EncryptedAmountTransferData<C: Curve> {
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
     /// indices.
-    pub index:            u64,
+    pub index:            EncryptedAmountAggIndex,
     /// A collection of all the proofs.
     pub proof:            EncryptedAmountTransferProof<C>,
 }
@@ -78,7 +102,7 @@ pub struct SecToPubAmountTransferData<C: Curve> {
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
     /// indices.
-    pub index:            u64,
+    pub index:            EncryptedAmountAggIndex,
     /// A collection of all the proofs.
     pub proof:            SecToPubAmountTransferProof<C>,
 }
@@ -97,7 +121,7 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
     /// Index such that the `agg_amount` is the sum of all encrypted amounts
     /// on an account with indices strictly below `agg_index`.
     #[serde(default)]
-    pub agg_index:            u64,
+    pub agg_index:            EncryptedAmountAggIndex,
 }
 
 /// # Proof datatypes
