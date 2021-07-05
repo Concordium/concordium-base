@@ -24,7 +24,7 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
     Scalar::from_bytes_mod_order(c_bytes)
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
 /// Implements step 8 of https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1

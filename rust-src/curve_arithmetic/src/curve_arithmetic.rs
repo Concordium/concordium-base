@@ -207,12 +207,11 @@ pub fn multiexp_worker_given_table<C: Curve>(
             if limb & 1 == 1 {
                 let u = limb & mask;
                 // check if window_size'th bit is set.
+                c.sub_assign(&C::scalar_from_u64(u));
                 if u & (1 << window_size) != 0 {
-                    c.sub_assign(&C::scalar_from_u64(u));
                     c.add_assign(&two_to_wp1_scalar);
                     v.push((u as i64) - (two_to_wp1 as i64));
                 } else {
-                    c.sub_assign(&C::scalar_from_u64(u));
                     v.push(u as i64);
                 }
             } else {
