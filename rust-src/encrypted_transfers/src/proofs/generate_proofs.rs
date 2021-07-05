@@ -297,8 +297,8 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     };
 
     Some(EncryptedAmountTransferData {
-        transfer_amount,
         remaining_amount,
+        transfer_amount,
         index,
         proof,
     })
@@ -442,8 +442,8 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     };
 
     Some(SecToPubAmountTransferData {
-        transfer_amount,
         remaining_amount,
+        transfer_amount,
         index,
         proof,
     })
