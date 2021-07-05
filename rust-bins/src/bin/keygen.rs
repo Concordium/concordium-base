@@ -536,7 +536,7 @@ pub fn generate_ps_sk(
 /// the ed25519_dalek.
 pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
     let mut mac =
-        Hmac::<Sha512>::new_varkey(b"ed25519 seed").expect("HMAC can take key of any size");
+        Hmac::<Sha512>::new_from_slice(b"ed25519 seed").expect("HMAC can take key of any size");
     mac.update(&seed);
     let result = mac.finalize();
     let code_bytes = result.into_bytes();
