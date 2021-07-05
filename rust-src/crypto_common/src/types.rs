@@ -257,6 +257,29 @@ impl FromStr for TransactionTime {
     }
 }
 
+/// Datatype used to indicate a timestamp in milliseconds.
+#[derive(
+    SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
+)]
+#[serde(transparent)]
+pub struct Timestamp {
+    /// Milliseconds since the unix epoch.
+    pub millis: u64,
+}
+
+impl From<u64> for Timestamp {
+    fn from(millis: u64) -> Self { Self { millis } }
+}
+
+impl FromStr for Timestamp {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let millis = u64::from_str(s)?;
+        Ok(Self { millis })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
