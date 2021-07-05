@@ -22,9 +22,9 @@ libc = "0.2"
 block-modes = { version = "0.7", optional = true }
 aes = { version = "0.6", optional = true }
 base64 = { version = "0.13", optional = true }
-pbkdf2 = { version  = "0.6", optional = true } # 0.7 is currently the latest, but is not supported on 1.45.2
+pbkdf2 = { version  = "0.8", optional = true }
 sha2 = { version  = "0.9", optional = true }
-hmac = { version  = "0.10", optional = true }
+hmac = { version  = "0.11", optional = true }
 anyhow = "1.0"
 thiserror = "1.0"
 

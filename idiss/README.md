@@ -66,7 +66,7 @@ It does not contain contact information for the user. It is the responsibility o
 
 In order to build you need the following
 - the rust compiler, stable toolchain, a recent version. We've tested with
-  1.45.2 and 1.46.
+  1.53.
 - clang development libraries. On ubuntu these can be installed with 
   ```
   apt install libclang-dev
