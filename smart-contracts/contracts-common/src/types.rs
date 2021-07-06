@@ -626,7 +626,7 @@ impl<'a> ContractName<'a> {
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
-    pub fn get_chain_name(&self) -> &str { self.0 }
+    pub fn get_chain_name(self) -> &'a str { self.0 }
 
     /// Check whether the given string is a valid contract initialization
     /// function name. This is the case if and only if
@@ -726,11 +726,11 @@ impl<'a> ReceiveName<'a> {
     pub fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
-    pub fn get_chain_name(&self) -> &str { self.0 }
+    pub fn get_chain_name(self) -> &'a str { self.0 }
 
     /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
-    pub fn to_owned(&self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
+    pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 
     /// Check whether the given string is a valid contract receive function
     /// name. This is the case if and only if
