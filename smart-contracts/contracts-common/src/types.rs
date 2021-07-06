@@ -3,10 +3,9 @@ use crate::constants;
 use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(not(feature = "std"))]
 use core::{convert, fmt, hash, iter, ops, str};
+use hash::Hash;
 #[cfg(feature = "std")]
 use std::{convert, fmt, hash, iter, ops, str};
-
-use hash::Hash;
 
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.

@@ -181,8 +181,8 @@ impl SchemaType for ContractAddress {
 impl SchemaType for Address {
     fn get_type() -> Type {
         Type::Enum(Vec::from([
-            (String::from("account"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
-            (String::from("contract"), Fields::Unnamed(Vec::from([Type::ContractAddress]))),
+            (String::from("Account"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
+            (String::from("Contract"), Fields::Unnamed(Vec::from([Type::ContractAddress]))),
         ]))
     }
 }
