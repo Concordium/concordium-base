@@ -105,7 +105,7 @@ jobs:
         working-directory: ${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --color=always --tests -- -Dclippy::all
+          cargo clippy --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
     name: ${{ matrix.example-contract }} lint:clippy

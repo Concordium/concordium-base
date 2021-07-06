@@ -1,12 +1,13 @@
-use crate::{build::*, schema_json::*};
+use crate::{build::*, context::*, schema_json::*};
 use anyhow::{bail, ensure, Context};
 use clap::AppSettings;
-use concordium_contracts_common::{from_bytes, to_bytes, Amount, OwnedPolicy};
+use concordium_contracts_common::{from_bytes, to_bytes, Amount};
 use std::{fs, fs::File, io::Read, path::PathBuf};
 use structopt::StructOpt;
 use wasm_chain_integration::*;
 
 mod build;
+mod context;
 mod schema_json;
 
 #[derive(Debug, StructOpt)]
@@ -140,10 +141,9 @@ enum RunCommand {
             name = "context",
             long = "context",
             short = "t",
-            default_value = "./init-context.json",
             help = "Path to the init context file."
         )]
-        context:       PathBuf,
+        context:       Option<PathBuf>,
         #[structopt(flatten)]
         runner:        Runner,
     },
@@ -190,7 +190,7 @@ enum RunCommand {
             short = "t",
             help = "Path to the receive context file."
         )]
-        context:         PathBuf,
+        context:         Option<PathBuf>,
         #[structopt(flatten)]
         runner:          Runner,
     },
@@ -346,10 +346,14 @@ pub fn main() -> anyhow::Result<()> {
                     ref context,
                     ..
                 } => {
-                    let init_ctx: InitContext = {
-                        let ctx_file = fs::read(context).context("Could not open context file.")?;
-                        serde_json::from_slice(&ctx_file)
-                            .context("Could not parse the init context JSON.")?
+                    let init_ctx: InitContextOpt = match context {
+                        Some(context_file) => {
+                            let ctx_content = fs::read(context_file)
+                                .context("Could not read init context file.")?;
+                            serde_json::from_slice(&ctx_content)
+                                .context("Could not parse init context.")?
+                        }
+                        None => InitContextOpt::default(),
                     };
                     let name = format!("init_{}", contract_name);
                     let res = invoke_init_with_metering_from_source(
@@ -392,14 +396,18 @@ pub fn main() -> anyhow::Result<()> {
                     ref context,
                     ..
                 } => {
-                    let mut receive_ctx: ReceiveContext<Vec<OwnedPolicy>> = {
-                        let ctx_file = fs::read(context).context("Could not open context file.")?;
-                        serde_json::from_slice::<ReceiveContext<Vec<OwnedPolicy>>>(&ctx_file)
-                            .context("Could not parse receive context")?
+                    let mut receive_ctx: ReceiveContextOpt = match context {
+                        Some(context_file) => {
+                            let ctx_content = fs::read(context_file)
+                                .context("Could not read receive context file.")?;
+                            serde_json::from_slice(&ctx_content)
+                                .context("Could not parse receive context.")?
+                        }
+                        None => ReceiveContextOpt::default(),
                     };
                     if let Some(balance) = balance {
                         receive_ctx.self_balance =
-                            concordium_contracts_common::Amount::from_micro_gtu(balance);
+                            Some(concordium_contracts_common::Amount::from_micro_gtu(balance));
                     }
 
                     // initial state of the smart contract, read from either a binary or json file.

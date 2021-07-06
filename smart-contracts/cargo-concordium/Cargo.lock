@@ -125,6 +125,7 @@ dependencies = [
  "concordium-contracts-common",
  "criterion",
  "hex",
+ "serde",
  "serde_json",
  "structopt",
  "wasm-chain-integration",

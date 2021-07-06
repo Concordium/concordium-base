@@ -521,7 +521,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             sender_policies: &[],
         };
 
-        let setup_init_host = || -> InitHost {
+        let setup_init_host = || -> InitHost<InitContext<&[u8]>> {
             InitHost {
                 energy:            Energy {
                     energy: nrg * 1000,
@@ -534,7 +534,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             }
         };
 
-        let setup_receive_host = |state, param| -> ReceiveHost {
+        let setup_receive_host = |state, param| -> ReceiveHost<ReceiveContext<&[u8]>> {
             ReceiveHost {
                 energy: Energy {
                     energy: nrg * 1000,
