@@ -380,15 +380,13 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         // If there is nothing to account for, do not insert accounting instructions.
         // This case can occur for example with nested loop instructions, or nested
         // blocks followed by a loop.
-        if self.energy == 0 {
-            self.new_seq.append(&mut self.pending_instructions);
-        } else {
+        if self.energy > 0 {
             self.account_energy(self.energy);
             self.energy = 0;
-            // Move the pending instructions for which we just accounted to new_seq.
-            // NB: This leaves pending_instructions empty, and correctness relies on it.
-            self.new_seq.append(&mut self.pending_instructions);
         }
+        // Move the pending instructions for which we just accounted to new_seq.
+        // NB: This leaves pending_instructions empty, and correctness relies on it.
+        self.new_seq.append(&mut self.pending_instructions);
     }
 
     /// Account for all the pending energy, and push the given OpCode to the

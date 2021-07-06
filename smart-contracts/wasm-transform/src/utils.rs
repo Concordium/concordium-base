@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Strip the custom sections from the module.
-pub fn strip<'a>(skeleton: &mut Skeleton<'a>) { skeleton.custom = Vec::new(); }
+pub fn strip(skeleton: &mut Skeleton<'_>) { skeleton.custom = Vec::new(); }
 
 /// Parse, validate, and compile to a runnable artifact.
 pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(

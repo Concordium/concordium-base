@@ -126,7 +126,7 @@ pub const DISALLOWED_INSTRUCTIONS: &[u8] = &[
     0x2A, 0x2B, 0xC0, 0xC2, 0xC3,
 ];
 
-fn mk_values<'a>(exprs: &[Expression<'a>]) -> anyhow::Result<Vec<Value>> {
+fn mk_values(exprs: &[Expression<'_>]) -> anyhow::Result<Vec<Value>> {
     let mut out = Vec::new();
     for e in exprs.iter() {
         if e.instrs.len() == 1 {
@@ -142,7 +142,7 @@ fn mk_values<'a>(exprs: &[Expression<'a>]) -> anyhow::Result<Vec<Value>> {
     Ok(out)
 }
 
-fn mk_results<'a>(exprs: &[AssertExpression<'a>]) -> anyhow::Result<Option<Value>> {
+fn mk_results(exprs: &[AssertExpression<'_>]) -> anyhow::Result<Option<Value>> {
     if let Some(x) = exprs.first() {
         if exprs.len() <= 1 {
             match x {

@@ -128,12 +128,16 @@ pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
-    let mut cargo_args = Vec::new();
-    cargo_args.push("build");
-    cargo_args.extend_from_slice(&["--release"]);
-    cargo_args.extend_from_slice(&["--target", "wasm32-unknown-unknown"]);
-    cargo_args.extend_from_slice(&["--features", "concordium-std/wasm-test"]);
-    cargo_args.extend_from_slice(&["--target-dir", "target/concordium"]);
+    let cargo_args = [
+        "build",
+        "--release",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--features",
+        "concordium-std/wasm-test",
+        "--target-dir",
+        "target/concordium",
+    ];
 
     // Output what we are doing so that it is easier to debug if the user
     // has their own features or options.

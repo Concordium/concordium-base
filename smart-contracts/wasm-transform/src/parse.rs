@@ -285,7 +285,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for UnparsedSection<'a> {
 /// - version is correct
 /// - sections are in the correct order
 /// - all input is consumed.
-pub fn parse_skeleton<'a>(input: &'a [u8]) -> ParseResult<Skeleton<'a>> {
+pub fn parse_skeleton(input: &[u8]) -> ParseResult<Skeleton<'_>> {
     let cursor = &mut Cursor::new(input);
     {
         // check magic hash and version
@@ -434,7 +434,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Limits {
 
 /// Read a single byte and compare it to the given one, failing if they do not
 /// match.
-fn expect_byte<'a>(cursor: &mut Cursor<&'a [u8]>, byte: Byte) -> ParseResult<()> {
+fn expect_byte(cursor: &mut Cursor<&[u8]>, byte: Byte) -> ParseResult<()> {
     let b = Byte::parse(EMPTY_CTX, cursor)?;
     ensure!(b == byte, "Unexpected byte {:#04x}. Expected {:#04x}", b, byte);
     Ok(())
@@ -873,7 +873,7 @@ impl std::fmt::Display for ParseError {
 }
 
 /// Decode the next opcode directly from the cursor.
-pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
+pub fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
     match Byte::parse(EMPTY_CTX, cursor)? {
         END => Ok(OpCode::End),
         0x00 => Ok(OpCode::Unreachable),

@@ -16,7 +16,7 @@ on:
 env:
   # from concordium/rustfmt:0.17
   RUST_FMT: nightly-2021-06-09-x86_64-unknown-linux-gnu
-  RUST_CLIPPY: 1.45.2
+  RUST_CLIPPY: 1.53
   TARGET: wasm32-unknown-unknown
 
 jobs:
