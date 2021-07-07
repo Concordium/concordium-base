@@ -503,9 +503,10 @@ pub fn commitment_to_share_and_rand<C: Curve>(
     (cmm, rnd)
 }
 
-/// Generates a credential deployment info.
-/// The information is meant to be valid in the context of a given identity
-/// provider, and global parameter.
+/// Generates a credential deployment info and outputs the randomness used in
+/// commitments. The randomness should be stored for later use, e.g. to open
+/// commitments later on. The information is meant to be valid in the context of
+/// a given identity provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 pub fn create_credential<
     'a,
@@ -520,10 +521,13 @@ pub fn create_credential<
     policy: Policy<C, AttributeType>,
     cred_data: &impl CredentialDataWithSigning,
     new_or_existing: &either::Either<TransactionTime, AccountAddress>,
-) -> anyhow::Result<CredentialDeploymentInfo<P, C, AttributeType>>
+) -> anyhow::Result<(
+    CredentialDeploymentInfo<P, C, AttributeType>,
+    CommitmentsRandomness<C>,
+)>
 where
     AttributeType: Clone, {
-    let unsigned_credential_info = create_unsigned_credential(
+    let (unsigned_credential_info, commitments_randomness) = create_unsigned_credential(
         context,
         id_object,
         id_object_use_data,
@@ -547,12 +551,12 @@ where
         proofs: cdp,
     };
 
-    Ok(info)
+    Ok((info, commitments_randomness))
 }
 
-/// Generates an unsigned credential deployment info.
-/// The information is meant to be valid in the context of a given identity
-/// provider, and global parameter.
+/// Generates an unsigned credential deployment info and outputs the randomness
+/// used in commitments. The information is meant to be valid in the context of
+/// a given identity provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 /// It should be the case that using the output, one can construct an actual
 /// credential deployment info, by signing the unsigned challenge.
@@ -569,7 +573,10 @@ pub fn create_unsigned_credential<
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
     addr: Option<&AccountAddress>,
-) -> anyhow::Result<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
+) -> anyhow::Result<(
+    UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
+    CommitmentsRandomness<C>,
+)>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -800,7 +807,7 @@ where
         values: cred_values,
         proofs: id_proofs,
     };
-    Ok(info)
+    Ok((info, commitment_rands))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -941,14 +948,6 @@ fn compute_pok_sig<
         comm_key:    *commitment_key,
     };
     Ok((prover, secret))
-}
-
-pub struct CommitmentsRandomness<C: Curve> {
-    id_cred_sec_rand:  PedersenRandomness<C>,
-    prf_rand:          PedersenRandomness<C>,
-    cred_counter_rand: PedersenRandomness<C>,
-    max_accounts_rand: PedersenRandomness<C>,
-    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -1271,7 +1270,7 @@ mod tests {
         };
 
         let cred_ctr = 42;
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_use_data,

@@ -117,19 +117,28 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return Err(Reason::WrongArParameters);
     }
 
+    // Check that the set of ArIdentities and the encryptions in ip_ar_data are
+    // actually the same. This is awkward, and choice_ar_handles is no longer
+    // necessary, but removing it would break backwards compatibility. So we
+    // instead have to check that the set is equal to some other given set.
+    // Later on we check whether all the listed ARs actually exist in the context.
+    if number_of_ars != pre_id_obj.ip_ar_data.len() {
+        return Err(Reason::WrongArParameters);
+    }
+    if pre_id_obj
+        .ip_ar_data
+        .keys()
+        .zip(pre_id_obj.choice_ar_parameters.ar_identities.iter())
+        .any(|(k1, k2)| k1 != k2)
+    {
+        return Err(Reason::WrongArParameters);
+    }
+
     // We also need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
     if rt_usize != pre_id_obj.cmm_prf_sharing_coeff.len() {
         return Err(Reason::WrongArParameters);
-    }
-
-    let mut choice_ars = Vec::with_capacity(number_of_ars);
-    for ar in choice_ar_handles.iter() {
-        match context.ars_infos.get(ar) {
-            None => return Err(Reason::WrongArParameters),
-            Some(ar_info) => choice_ars.push(ar_info.clone()),
-        }
     }
 
     // ar commitment key

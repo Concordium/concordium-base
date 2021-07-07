@@ -1,3 +1,5 @@
+use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
 use generic_array::GenericArray;
@@ -6,8 +8,6 @@ use rand::Rng;
 use random_oracle::RandomOracle;
 use rayon::iter::*;
 use sha2::{Digest, Sha512};
-
-use crypto_common::*;
 
 pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
@@ -56,7 +56,7 @@ impl<P: Pairing> PartialEq for SecretKey<P> {
 }
 
 // A Public Key is a point on the second curve of the pairing
-#[derive(Debug, Eq, Serialize)]
+#[derive(Debug, Eq, Serialize, SerdeBase16Serialize)]
 pub struct PublicKey<P: Pairing>(P::G2);
 
 impl<P: Pairing> PublicKey<P> {

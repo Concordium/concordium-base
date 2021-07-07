@@ -27,3 +27,6 @@ pub use std::os::raw::c_char;
 /// Module that provides a simple API for symmetric encryption in the output
 /// formats compatible used by Concordium.
 pub mod encryption;
+
+/// Reexport for ease of use.
+pub use crypto_common_derive as derive;

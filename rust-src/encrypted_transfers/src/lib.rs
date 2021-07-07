@@ -371,7 +371,7 @@ mod tests {
         let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
 
-        let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
+        let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let input_amount = AggregatedDecryptedAmount {
             agg_amount:           Amount::from(s),
             agg_encrypted_amount: S_in_chunks.0.clone(),
@@ -416,7 +416,7 @@ mod tests {
         let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
 
-        let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
+        let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let input_amount = AggregatedDecryptedAmount {
             agg_amount:           Amount::from(s),
             agg_encrypted_amount: S_in_chunks.0.clone(),

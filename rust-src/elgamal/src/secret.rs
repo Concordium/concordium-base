@@ -65,9 +65,9 @@ impl<C: Curve> Deserial for BabyStepGiantStep<C> {
             }
         }
         Ok(Self {
-            m,
-            inverse_point,
             table,
+            inverse_point,
+            m,
         })
     }
 }

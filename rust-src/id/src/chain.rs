@@ -490,7 +490,7 @@ mod tests {
             threshold: SignatureThreshold(2),
         };
         let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_use_data,
@@ -515,7 +515,7 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_use_data,

@@ -179,7 +179,7 @@ fn bench_parts(c: &mut Criterion) {
         signature: ip_sig,
     };
 
-    let cdi = create_credential(
+    let (cdi, _) = create_credential(
         context,
         &id_object,
         &id_use_data,

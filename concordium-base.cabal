@@ -4,7 +4,7 @@ cabal-version: 1.24
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: dd9e84fbef0edb7530c4f9f7793f559053ace763108104e52cc967db1d38655c
+-- hash: df981d0b53eaf25f809878e4f4a629ade3503268311dad43dcd0e0045a69a94f
 
 name:           concordium-base
 version:        0.1.0.0

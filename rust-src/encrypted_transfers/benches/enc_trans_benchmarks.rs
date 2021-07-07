@@ -47,7 +47,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
 
-    let index = csprng.gen();
+    let index = csprng.gen::<u64>().into();
 
     let context_clone = context.clone();
     let sk_clone = sk_sender.clone();
@@ -73,7 +73,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let ro = RandomOracle::domain(&challenge_prefix);
     let mut ro_copy = ro.split();
 
-    let index = csprng.gen();
+    let index = csprng.gen::<u64>().into();
     let transaction = gen_enc_trans(
         &context,
         &mut ro_copy,
@@ -127,7 +127,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
 
-    let index = csprng.gen();
+    let index = csprng.gen::<u64>().into();
 
     let context_clone = context.clone();
     let sk_clone = sk.clone();
@@ -152,7 +152,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let ro = RandomOracle::domain(&challenge_prefix);
     let mut ro_copy = ro.split();
 
-    let index = csprng.gen();
+    let index = csprng.gen::<u64>().into();
     let transaction = gen_sec_to_pub_trans(
         &context,
         &mut ro_copy,
