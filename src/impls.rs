@@ -2,13 +2,12 @@ use crate::{constants::*, traits::*, types::*};
 
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections, string::String, vec::Vec};
+use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use core::{hash, marker, mem::MaybeUninit, slice};
+use hash::Hash;
 #[cfg(feature = "std")]
 use std::{collections, hash, marker, mem::MaybeUninit, slice};
-
-use collections::{BTreeMap, BTreeSet};
-use hash::Hash;
 
 /// Apply the given macro to each of the elements in the list
 /// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
