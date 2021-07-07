@@ -3,6 +3,7 @@
 ## Unreleased changes
 - Add public validation functions to contract and receive names.
 - Add new cases for NewContractNameError and NewReceiveNameError.
+- Remove the needless reference in `to_owned` and `get_chain_name` methods.
 - Implement `SchemaType` for `Address`.
 - Derive `PartialOrd` and `Ord` for `ContractAddress` and `Address`.
 - Derive `Hash` for `Amount`, `Timestamp`, `Duration`, `AccountAddress`, `ContractAddress`, `Address`, `ContractName`, `OwnedContractName`, `ReceiveName` and `OwnedReceiveName`.
