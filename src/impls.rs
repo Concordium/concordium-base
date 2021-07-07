@@ -470,6 +470,35 @@ pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord, V: Dese
     Ok(out)
 }
 
+/// Write a HashMap as a list of key-value pairs in to particular order, without
+/// the length information.
+pub fn serial_hashmap_no_length<'a, W: Write, K: Serial + 'a, V: Serial + 'a>(
+    map: &HashMap<K, V>,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    for (k, v) in map.iter() {
+        k.serial(out)?;
+        v.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a [HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html) as a list of key-value pairs given some length.
+pub fn deserial_hashmap_no_length<R: Read, K: Deserial + Eq + Hash, V: Deserial>(
+    source: &mut R,
+    len: usize,
+) -> ParseResult<HashMap<K, V>> {
+    let mut out = HashMap::default();
+    for _ in 0..len {
+        let k = source.get()?;
+        let v = source.get()?;
+        if out.insert(k, v).is_some() {
+            return Err(ParseError::default());
+        }
+    }
+    Ok(out)
+}
+
 /// Write a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an ascending list of keys, without the length information.
 pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
     map: &BTreeSet<K>,
@@ -481,7 +510,7 @@ pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
     Ok(())
 }
 
-/// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an list of keys, given some length.
+/// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as a list of keys, given some length.
 /// NB: This ensures there are no duplicates, hence the specialized type.
 /// Moreover this will only succeed if keys are listed in order.
 pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
@@ -498,6 +527,33 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
         }
         out.insert(key);
         prev = next;
+    }
+    Ok(out)
+}
+
+/// Write a [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html) as a list of keys in no particular order, without the length information.
+pub fn serial_hashset_no_length<'a, W: Write, K: Serial + 'a>(
+    map: &HashSet<K>,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    for k in map.iter() {
+        k.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html) as a list of keys, given some length.
+/// NB: This ensures there are no duplicates.
+pub fn deserial_hashset_no_length<R: Read, K: Deserial + Eq + Hash>(
+    source: &mut R,
+    len: usize,
+) -> ParseResult<HashSet<K>> {
+    let mut out = HashSet::default();
+    for _ in 0..len {
+        let key = source.get()?;
+        if !out.insert(key) {
+            return Err(ParseError::default());
+        }
     }
     Ok(out)
 }
@@ -575,11 +631,7 @@ impl<K: Serial, V: Serial> Serial for HashMap<K, V> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
-        for (k, v) in self.iter() {
-            k.serial(out)?;
-            v.serial(out)?;
-        }
-        Ok(())
+        serial_hashmap_no_length(self, out)
     }
 }
 
@@ -594,15 +646,7 @@ impl<K: Serial, V: Serial> Serial for HashMap<K, V> {
 impl<K: Deserial + Hash + Eq, V: Deserial> Deserial for HashMap<K, V> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
-        let mut out = HashMap::default();
-        for _ in 0..len {
-            let k = source.get()?;
-            let v = source.get()?;
-            if out.insert(k, v).is_some() {
-                return Err(ParseError::default());
-            }
-        }
-        Ok(out)
+        deserial_hashmap_no_length(source, len as usize)
     }
 }
 
@@ -642,10 +686,7 @@ impl<K: Serial> Serial for HashSet<K> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
-        for v in self.iter() {
-            v.serial(out)?;
-        }
-        Ok(())
+        serial_hashset_no_length(self, out)
     }
 }
 
@@ -660,14 +701,7 @@ impl<K: Serial> Serial for HashSet<K> {
 impl<K: Deserial + Hash + Eq> Deserial for HashSet<K> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
-        let mut out = HashSet::default();
-        for _ in 0..len {
-            let k = source.get()?;
-            if !out.insert(k) {
-                return Err(ParseError::default());
-            }
-        }
-        Ok(out)
+        deserial_hashset_no_length(source, len as usize)
     }
 }
 
