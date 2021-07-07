@@ -8,6 +8,7 @@ use crate::{impls::*, traits::*, types::*};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections, string::String, vec::Vec};
+use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use core::{
     convert::{TryFrom, TryInto},
@@ -20,8 +21,6 @@ use std::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
-
-use collections::{BTreeMap, BTreeSet};
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing

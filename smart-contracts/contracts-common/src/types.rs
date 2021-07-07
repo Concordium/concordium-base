@@ -1,11 +1,16 @@
 use crate::constants;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, string::ToString, vec::Vec};
+#[cfg(feature = "fuzz")]
+use arbitrary::Arbitrary;
+use cmp::Ordering;
 #[cfg(not(feature = "std"))]
-use core::{convert, fmt, hash, iter, ops, str};
+use core::{cmp, convert, fmt, hash, iter, ops, str};
 use hash::Hash;
+#[cfg(feature = "derive-serde")]
+use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "std")]
-use std::{convert, fmt, hash, iter, ops, str};
+use std::{cmp, convert, fmt, hash, iter, ops, str};
 
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
@@ -14,11 +19,6 @@ pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
 /// Reexport of the `HashSet` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
 pub type HashSet<K, S = fnv::FnvBuildHasher> = hashbrown::HashSet<K, S>;
-
-#[cfg(feature = "fuzz")]
-use arbitrary::Arbitrary;
-#[cfg(feature = "derive-serde")]
-use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
 /// Size of an account address when serialized in binary.
 /// NB: This is different from the Base58 representation.
@@ -609,10 +609,54 @@ pub struct ContractAddress {
     serde(tag = "type", content = "address", rename_all = "lowercase")
 )]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
-#[derive(PartialEq, Eq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
+#[derive(Eq, Copy, Clone, Debug)]
 pub enum Address {
     Account(AccountAddress),
     Contract(ContractAddress),
+}
+
+// This trait is implemented manually to save bytes
+impl PartialEq for Address {
+    fn eq(&self, other: &Address) -> bool {
+        match (self, other) {
+            (Address::Account(s), Address::Account(o)) => s == o,
+            (Address::Contract(s), Address::Contract(o)) => s == o,
+            _ => false,
+        }
+    }
+}
+
+// This trait is implemented manually to save bytes
+impl Hash for Address {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Address::Account(address) => {
+                0u8.hash(state);
+                address.hash(state);
+            }
+            Address::Contract(address) => {
+                1u8.hash(state);
+                address.hash(state);
+            }
+        }
+    }
+}
+
+// This trait is implemented manually to save bytes
+impl PartialOrd for Address {
+    fn partial_cmp(&self, other: &Address) -> Option<Ordering> { Some(self.cmp(other)) }
+}
+
+// This trait is implemented manually to save bytes
+impl Ord for Address {
+    fn cmp(&self, other: &Address) -> Ordering {
+        match (self, other) {
+            (Address::Account(s), Address::Account(o)) => s.cmp(o),
+            (Address::Contract(s), Address::Contract(o)) => s.cmp(o),
+            (Address::Account(_), _) => Ordering::Less,
+            _ => Ordering::Greater,
+        }
+    }
 }
 
 /// A contract name. Expected format: "init_<contract_name>".
