@@ -3,20 +3,42 @@
 //! FIXME: This should be moved into a concordium-common at some point when that
 //! is moved to the bottom of the dependency hierarchy.
 
-use crate::{
-    deserial_vector_no_length, serial_vector_no_length, Buffer, Deserial, Get, ParseResult,
-    SerdeDeserialize, SerdeSerialize, Serial,
-};
+use crate::{Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial};
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
+use derive_more::*;
 use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
 
 /// Index of an account key that is to be used.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Display, From, Into,
+)]
 #[repr(transparent)]
 #[derive(SerdeSerialize)]
 #[serde(transparent)]
 pub struct KeyIndex(pub u8);
+
+#[derive(
+    SerdeSerialize,
+    SerdeDeserialize,
+    Serialize,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    FromStr,
+    Display,
+    From,
+    Into,
+)]
+#[serde(transparent)]
+/// Index of the credential that is to be used.
+pub struct CredentialIndex {
+    pub index: u8,
+}
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -196,13 +218,30 @@ impl<'de> SerdeDeserialize<'de> for Amount {
     }
 }
 
-#[derive(Serialize, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 /// A single signature. Using the same binary and JSON serialization as the
 /// Haskell counterpart. In particular this means encoding the length as 2
 /// bytes, and thus the largest size is 65535 bytes.
 pub struct Signature {
-    #[size_length = 2]
     pub sig: Vec<u8>,
+}
+
+impl Serial for Signature {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.sig.len() as u16).serial(out);
+        out.write(&self.sig)
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+impl Deserial for Signature {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        // allocating is safe because len is a u16
+        let mut sig = vec![0; len as usize];
+        source.read_exact(&mut sig)?;
+        Ok(Signature { sig })
+    }
 }
 
 impl SerdeSerialize for Signature {
@@ -228,10 +267,47 @@ impl<'de> SerdeDeserialize<'de> for Signature {
 }
 
 /// Transaction signature structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug)]
+#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
 #[serde(transparent)]
 pub struct TransactionSignature {
-    pub signatures: BTreeMap<KeyIndex, BTreeMap<KeyIndex, Signature>>,
+    pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+}
+
+impl Serial for TransactionSignature {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let l = self.signatures.len() as u8;
+        l.serial(out);
+        for (idx, map) in self.signatures.iter() {
+            idx.serial(out);
+            (map.len() as u8).serial(out);
+            crate::serial_map_no_length(map, out);
+        }
+    }
+}
+
+impl Deserial for TransactionSignature {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let num_creds: u8 = source.get()?;
+        anyhow::ensure!(num_creds > 0, "Number of signatures must not be 0.");
+        let mut out = BTreeMap::new();
+        let mut last = None;
+        for _ in 0..num_creds {
+            let idx = source.get()?;
+            anyhow::ensure!(
+                last < Some(idx),
+                "Credential indices must be strictly increasing."
+            );
+            last = Some(idx);
+            let inner_len: u8 = source.get()?;
+            anyhow::ensure!(
+                inner_len > 0,
+                "Each credential must have at least one signature."
+            );
+            let inner_map = crate::deserial_map_no_length(source, inner_len.into())?;
+            out.insert(idx, inner_map);
+        }
+        Ok(TransactionSignature { signatures: out })
+    }
 }
 
 /// Datatype used to indicate transaction expiry.
@@ -242,6 +318,10 @@ pub struct TransactionSignature {
 pub struct TransactionTime {
     /// Seconds since the unix epoch.
     pub seconds: u64,
+}
+
+impl TransactionTime {
+    pub fn from_seconds(seconds: u64) -> Self { Self { seconds } }
 }
 
 impl From<u64> for TransactionTime {
@@ -307,7 +387,7 @@ mod tests {
                     };
                     cred_sigs.insert(KeyIndex(rng.gen()), sig);
                 }
-                signatures.insert(KeyIndex(rng.gen()), cred_sigs);
+                signatures.insert(CredentialIndex { index: rng.gen() }, cred_sigs);
             }
             let signatures = TransactionSignature { signatures };
             let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");

@@ -176,7 +176,7 @@ impl Drop for ExpandedSecretKey {
 
 impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
     /// Construct an `ExpandedSecretKey` from a `SecretKey`.
-    /// Implements https://tools.ietf.org/html/rfc8032#section-5.1.5
+    /// Implements <https://tools.ietf.org/html/rfc8032#section-5.1.5>
     fn from(secret_key: &'a SecretKey) -> ExpandedSecretKey {
         let mut h: Sha512 = Sha512::new();
         let mut hash: [u8; 64] = [0u8; 64];
@@ -240,7 +240,7 @@ impl ExpandedSecretKey {
     }
 
     /// VRF proof with expanded secret key
-    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1
+    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1>
     pub fn prove(&self, public_key: &PublicKey, alpha: &[u8]) -> Proof {
         let x = self.key;
         let h = public_key
@@ -263,7 +263,7 @@ impl ExpandedSecretKey {
         Proof(gamma, c, k_plus_cx)
     }
 
-    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2
+    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2>
     fn nonce_generation(&self, h_string: &[u8]) -> Scalar {
         let h: Sha512 = Sha512::new().chain(self.nonce).chain(h_string);
         Scalar::from_hash(h)

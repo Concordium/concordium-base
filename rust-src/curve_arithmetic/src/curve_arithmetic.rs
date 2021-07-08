@@ -147,7 +147,7 @@ pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
 }
 
 /// This implements the WNAF method from
-/// https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
+/// <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf>
 /// Assumes:
 /// - the lengths of inputs are the same
 /// - window size at least 1
@@ -173,7 +173,7 @@ pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
 /// `multiexp_worker`, as well as the fact that the table corresponds to the
 /// window-size and the given inputs.
 ///
-/// See https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf for what it means
+/// See <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf> for what it means
 /// for the table to be computed correctly.
 pub fn multiexp_worker_given_table<C: Curve>(
     exps: &[C::Scalar],

@@ -72,7 +72,7 @@ pub struct IndexedEncryptedAmount<C: Curve> {
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 /// Data that will go onto an encrypted amount transfer.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize, Clone, Debug)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedAmountTransferData<C: Curve> {
@@ -90,7 +90,7 @@ pub struct EncryptedAmountTransferData<C: Curve> {
 }
 
 /// Data that will go onto a secret to public amount transfer.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(rename_all = "camelCase")]
 pub struct SecToPubAmountTransferData<C: Curve> {
@@ -127,7 +127,7 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
 /// # Proof datatypes
 
 /// Proof that an encrypted transfer data is well-formed
-#[derive(Serialize, SerdeBase16Serialize)]
+#[derive(Serialize, SerdeBase16Serialize, Clone, Debug)]
 pub struct EncryptedAmountTransferProof<C: Curve> {
     /// Proof that accounting is done correctly, i.e., remaining + transfer is
     /// the original amount.
@@ -141,7 +141,7 @@ pub struct EncryptedAmountTransferProof<C: Curve> {
 }
 
 /// Proof that an encrypted transfer data is well-formed
-#[derive(Serialize, SerdeBase16Serialize)]
+#[derive(Serialize, SerdeBase16Serialize, Clone, Debug)]
 pub struct SecToPubAmountTransferProof<C: Curve> {
     /// Proof that accounting is done correctly, i.e., remaining + transfer is
     /// the original amount.
