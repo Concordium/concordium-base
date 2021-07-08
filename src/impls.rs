@@ -213,6 +213,7 @@ impl<T: Serial> Serial for Box<T> {
 }
 
 impl<T: Deserial> Deserial for Box<T> {
+    #[inline]
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let t = T::deserial(source)?;
         Ok(Box::new(t))
@@ -220,10 +221,12 @@ impl<T: Deserial> Deserial for Box<T> {
 }
 
 impl<C: ?Sized> Serial for marker::PhantomData<C> {
+    #[inline(always)]
     fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
 }
 
 impl<C: ?Sized> Deserial for marker::PhantomData<C> {
+    #[inline(always)]
     fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> {
         Ok(marker::PhantomData::default())
     }
@@ -288,6 +291,7 @@ impl Serial for ContractAddress {
 }
 
 impl Deserial for ContractAddress {
+    #[inline]
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let index = source.get()?;
         let subindex = source.get()?;
@@ -789,6 +793,7 @@ pub fn to_bytes<S: Serial>(x: &S) -> Vec<u8> {
 }
 
 /// Dual to `to_bytes`.
+#[inline]
 pub fn from_bytes<S: Deserial>(source: &[u8]) -> ParseResult<S> {
     let mut cursor = Cursor::new(source);
     cursor.get()
