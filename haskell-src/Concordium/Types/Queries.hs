@@ -18,7 +18,11 @@ import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import Concordium.Types.UpdateQueues (Updates)
 import Concordium.Utils
 
--- |Result type for @getConsensusStatus@ queries.
+-- |Result type for @getConsensusStatus@ queries.  A number of fields are not defined when no blocks
+-- have so far been received, verified or finalized. In such cases, the values will be 'Nothing'.
+--
+-- The JSON serialization of this structure is as an object, with fields named as in the record,
+-- but without the "cs" prefix, and the first letter in lowercase.
 data ConsensusStatus = ConsensusStatus
     { -- |Hash of the current best block
       csBestBlock :: !BlockHash,
@@ -77,7 +81,8 @@ data ConsensusStatus = ConsensusStatus
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''ConsensusStatus)
 
--- |Result type for @getBranches@ query.
+-- |Result type for @getBranches@ query. A 'Branch' consists of the hash of a block and 'Branch'es
+-- for each child of the block.
 data Branch = Branch
     { -- |Block hash
       branchBlockHash :: !BlockHash,
@@ -89,6 +94,9 @@ data Branch = Branch
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''Branch)
 
 -- |Result type for @getNextAccountNonce@ query.
+-- If all account transactions are finalized then this information is reliable.
+-- Otherwise this is the best guess, assuming all other transactions will be
+-- committed to blocks and eventually finalized.
 data NextAccountNonce = NextAccountNonce
     { -- |The next account nonce
       nanNonce :: !Nonce,

@@ -314,7 +314,12 @@ makeElectionDifficultyUnchecked = ElectionDifficulty . PartsPerHundredThousands
 getDoubleFromElectionDifficulty :: ElectionDifficulty -> Double
 getDoubleFromElectionDifficulty = (/ 100000) . fromIntegral
 
-newtype FinalizationIndex = FinalizationIndex {theFinalizationIndex :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, ToJSON, FromJSON)
+-- |A sequential index of each finalization on a chain.
+-- The genesis block has finalization index 0.
+-- Note that this is not comparable with block height, since finalization does not occur at every
+-- level of the chain.
+newtype FinalizationIndex = FinalizationIndex {theFinalizationIndex :: Word64}
+    deriving (Eq, Ord, Num, Real, Enum, Integral, Show, ToJSON, FromJSON) via Word64
 
 instance S.Serialize FinalizationIndex where
   put (FinalizationIndex w) = S.putWord64be w
