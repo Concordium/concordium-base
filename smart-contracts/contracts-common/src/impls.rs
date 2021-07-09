@@ -1,11 +1,13 @@
 use crate::{constants::*, traits::*, types::*};
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, collections::*, string::String, vec::Vec};
+use alloc::{boxed::Box, collections, string::String, vec::Vec};
+use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
-use core::{marker, mem::MaybeUninit, slice};
+use core::{hash, marker, mem::MaybeUninit, slice};
+use hash::Hash;
 #[cfg(feature = "std")]
-use std::{collections::*, marker, mem::MaybeUninit, slice};
+use std::{collections, hash, marker, mem::MaybeUninit, slice};
 
 /// Apply the given macro to each of the elements in the list
 /// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
@@ -413,7 +415,7 @@ pub fn deserial_vector_no_length<R: Read, T: Deserial>(
 
 /// Write a Map as a list of key-value pairs ordered by the key, without the
 /// length information.
-pub fn serial_map_no_length<'a, W: Write, K: Serial + 'a, V: Serial + 'a>(
+pub fn serial_map_no_length<W: Write, K: Serial, V: Serial>(
     map: &BTreeMap<K, V>,
     out: &mut W,
 ) -> Result<(), W::Err> {
@@ -471,8 +473,37 @@ pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord, V: Dese
     Ok(out)
 }
 
+/// Write a HashMap as a list of key-value pairs in to particular order, without
+/// the length information.
+pub fn serial_hashmap_no_length<W: Write, K: Serial, V: Serial>(
+    map: &HashMap<K, V>,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    for (k, v) in map.iter() {
+        k.serial(out)?;
+        v.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a [HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html) as a list of key-value pairs given some length.
+pub fn deserial_hashmap_no_length<R: Read, K: Deserial + Eq + Hash, V: Deserial>(
+    source: &mut R,
+    len: usize,
+) -> ParseResult<HashMap<K, V>> {
+    let mut out = HashMap::default();
+    for _ in 0..len {
+        let k = source.get()?;
+        let v = source.get()?;
+        if out.insert(k, v).is_some() {
+            return Err(ParseError::default());
+        }
+    }
+    Ok(out)
+}
+
 /// Write a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an ascending list of keys, without the length information.
-pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
+pub fn serial_set_no_length<W: Write, K: Serial>(
     map: &BTreeSet<K>,
     out: &mut W,
 ) -> Result<(), W::Err> {
@@ -482,7 +513,7 @@ pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
     Ok(())
 }
 
-/// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an list of keys, given some length.
+/// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as a list of keys, given some length.
 /// NB: This ensures there are no duplicates, hence the specialized type.
 /// Moreover this will only succeed if keys are listed in order.
 pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
@@ -499,6 +530,33 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
         }
         out.insert(key);
         prev = next;
+    }
+    Ok(out)
+}
+
+/// Write a [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html) as a list of keys in no particular order, without the length information.
+pub fn serial_hashset_no_length<W: Write, K: Serial>(
+    map: &HashSet<K>,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    for k in map.iter() {
+        k.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html) as a list of keys, given some length.
+/// NB: This ensures there are no duplicates.
+pub fn deserial_hashset_no_length<R: Read, K: Deserial + Eq + Hash>(
+    source: &mut R,
+    len: usize,
+) -> ParseResult<HashSet<K>> {
+    let mut out = HashSet::default();
+    for _ in 0..len {
+        let key = source.get()?;
+        if !out.insert(key) {
+            return Err(ParseError::default());
+        }
     }
     Ok(out)
 }
@@ -551,7 +609,7 @@ impl<K: Serial + Ord, V: Serial> Serial for BTreeMap<K, V> {
     }
 }
 
-/// The deserialization of maps assumes their size as a u32.
+/// The deserialization of maps assumes their size is a u32.
 ///
 /// <b style="color: darkred">WARNING</b>: Deserialization **does not** ensure
 /// the ordering of the keys, it only ensures that there are no duplicates.
@@ -569,6 +627,32 @@ impl<K: Deserial + Ord, V: Deserial> Deserial for BTreeMap<K, V> {
     }
 }
 
+/// The serialization of maps encodes their size as a u32. This should be
+/// sufficient for all realistic use cases in smart contracts.
+/// They are serialized in no particular order.
+impl<K: Serial, V: Serial> Serial for HashMap<K, V> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        serial_hashmap_no_length(self, out)
+    }
+}
+
+/// The deserialization of maps assumes their size is a u32.
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization only ensures that
+/// there are no duplicates. Serializing a `HashMap` via its `Serial` instance
+/// will not lay out elements in a particular order. As a consequence
+/// deserializing, and serializing back is in general not the identity. This
+/// could have consequences if the data is hashed, or the byte representation
+/// is used in some other way directly. In those cases use a `BTreeMap` instead.
+impl<K: Deserial + Hash + Eq, V: Deserial> Deserial for HashMap<K, V> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        deserial_hashmap_no_length(source, len as usize)
+    }
+}
+
 /// The serialization of sets encodes their size as a u32. This should be
 /// sufficient for all realistic use cases in smart contracts.
 /// They are serialized in canonical order (increasing)
@@ -580,7 +664,7 @@ impl<K: Serial + Ord> Serial for BTreeSet<K> {
     }
 }
 
-/// The deserialization of sets assumes their size as a u32.
+/// The deserialization of sets assumes their size is a u32.
 ///
 /// <b style="color: darkred">WARNING</b>: Deserialization **does not** ensure
 /// the ordering of the keys, it only ensures that there are no duplicates.
@@ -588,13 +672,39 @@ impl<K: Serial + Ord> Serial for BTreeSet<K> {
 /// by the increasing order. As a consequence deserializing, and
 /// serializing back is in general not the identity. This could have
 /// consequences if the data is hashed, or the byte representation
-/// is used in some other way directly. In those cases the a canonical
+/// is used in some other way directly. In those cases a canonical
 /// order should be ensured to avoid subtle, difficult to diagnose,
 /// bugs.
 impl<K: Deserial + Ord> Deserial for BTreeSet<K> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         deserial_set_no_length_no_order_check(source, len as usize)
+    }
+}
+
+// The serialization of sets encodes their size as a u32. This should be
+/// sufficient for all realistic use cases in smart contracts.
+/// They are serialized in no particular order.
+impl<K: Serial> Serial for HashSet<K> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        serial_hashset_no_length(self, out)
+    }
+}
+
+/// The deserialization of sets assumes their size is a u32.
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization only ensures that
+/// there are no duplicates. Serializing a `HashSet` via its `Serial` instance
+/// will not lay out elements in any particular order. As a consequence
+/// deserializing, and serializing back is in general not the identity. This
+/// could have consequences if the data is hashed, or the byte representation
+/// is used in some other way directly. In those cases use a `BTreeSet` instead.
+impl<K: Deserial + Hash + Eq> Deserial for HashSet<K> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        deserial_hashset_no_length(source, len as usize)
     }
 }
 

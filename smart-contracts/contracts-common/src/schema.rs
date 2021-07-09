@@ -7,7 +7,8 @@ use crate::{impls::*, traits::*, types::*};
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
-use alloc::{collections::*, string::String, vec::Vec};
+use alloc::{collections, string::String, vec::Vec};
+use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use core::{
     convert::{TryFrom, TryInto},
@@ -16,7 +17,7 @@ use core::{
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::{
-    collections::*,
+    collections,
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
@@ -176,6 +177,14 @@ impl SchemaType for AccountAddress {
 impl SchemaType for ContractAddress {
     fn get_type() -> Type { Type::ContractAddress }
 }
+impl SchemaType for Address {
+    fn get_type() -> Type {
+        Type::Enum(Vec::from([
+            (String::from("Account"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
+            (String::from("Contract"), Fields::Unnamed(Vec::from([Type::ContractAddress]))),
+        ]))
+    }
+}
 impl SchemaType for Timestamp {
     fn get_type() -> Type { Type::Timestamp }
 }
@@ -200,6 +209,14 @@ impl<T: SchemaType> SchemaType for BTreeSet<T> {
     fn get_type() -> Type { Type::Set(SizeLength::U32, Box::new(T::get_type())) }
 }
 impl<K: SchemaType, V: SchemaType> SchemaType for BTreeMap<K, V> {
+    fn get_type() -> Type {
+        Type::Map(SizeLength::U32, Box::new(K::get_type()), Box::new(V::get_type()))
+    }
+}
+impl<T: SchemaType> SchemaType for HashSet<T> {
+    fn get_type() -> Type { Type::Set(SizeLength::U32, Box::new(T::get_type())) }
+}
+impl<K: SchemaType, V: SchemaType> SchemaType for HashMap<K, V> {
     fn get_type() -> Type {
         Type::Map(SizeLength::U32, Box::new(K::get_type()), Box::new(V::get_type()))
     }

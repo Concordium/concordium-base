@@ -1,15 +1,24 @@
 use crate::constants;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, string::ToString, vec::Vec};
-#[cfg(not(feature = "std"))]
-use core::{convert, fmt, iter, ops, str};
-#[cfg(feature = "std")]
-use std::{convert, fmt, iter, ops, str};
-
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
+use cmp::Ordering;
+#[cfg(not(feature = "std"))]
+use core::{cmp, convert, fmt, hash, iter, ops, str};
+use hash::Hash;
 #[cfg(feature = "derive-serde")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
+#[cfg(feature = "std")]
+use std::{cmp, convert, fmt, hash, iter, ops, str};
+
+/// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
+/// the `fnv` hash function.
+pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
+
+/// Reexport of the `HashSet` from `hashbrown` with the default hasher set to
+/// the `fnv` hash function.
+pub type HashSet<K, S = fnv::FnvBuildHasher> = hashbrown::HashSet<K, S>;
 
 /// Size of an account address when serialized in binary.
 /// NB: This is different from the Base58 representation.
@@ -17,7 +26,7 @@ pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 /// The type of amounts on the chain
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Amount {
     pub micro_gtu: u64,
@@ -310,7 +319,7 @@ impl ops::RemAssign<u64> for Amount {
 ///
 /// Timestamps from before January 1st 1970 at 00:00 are not supported.
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Timestamp {
     /// Milliseconds since unix epoch.
@@ -436,7 +445,7 @@ impl<'de> SerdeDeserialize<'de> for Timestamp {
 ///
 /// Negative durations are not allowed.
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Duration {
     pub(crate) milliseconds: u64,
 }
@@ -572,7 +581,7 @@ impl fmt::Display for Duration {
 }
 
 /// Address of an account, as raw bytes.
-#[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
 
@@ -585,7 +594,7 @@ impl convert::AsRef<[u8]> for AccountAddress {
 }
 
 /// Address of a contract.
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct ContractAddress {
@@ -600,14 +609,62 @@ pub struct ContractAddress {
     serde(tag = "type", content = "address", rename_all = "lowercase")
 )]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Eq, Copy, Clone, Debug)]
 pub enum Address {
     Account(AccountAddress),
     Contract(ContractAddress),
 }
 
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
+impl PartialEq for Address {
+    fn eq(&self, other: &Address) -> bool {
+        match (self, other) {
+            (Address::Account(s), Address::Account(o)) => s == o,
+            (Address::Contract(s), Address::Contract(o)) => s == o,
+            _ => false,
+        }
+    }
+}
+
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
+impl Hash for Address {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Address::Account(address) => {
+                0u8.hash(state);
+                address.hash(state);
+            }
+            Address::Contract(address) => {
+                1u8.hash(state);
+                address.hash(state);
+            }
+        }
+    }
+}
+
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
+impl PartialOrd for Address {
+    fn partial_cmp(&self, other: &Address) -> Option<Ordering> { Some(self.cmp(other)) }
+}
+
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
+impl Ord for Address {
+    fn cmp(&self, other: &Address) -> Ordering {
+        match (self, other) {
+            (Address::Account(s), Address::Account(o)) => s.cmp(o),
+            (Address::Contract(s), Address::Contract(o)) => s.cmp(o),
+            (Address::Account(_), _) => Ordering::Less,
+            _ => Ordering::Greater,
+        }
+    }
+}
+
 /// A contract name. Expected format: "init_<contract_name>".
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub struct ContractName<'a>(&'a str);
 
 impl<'a> ContractName<'a> {
@@ -654,7 +711,7 @@ impl<'a> ContractName<'a> {
 }
 
 /// A contract name (owned version). Expected format: "init_<contract_name>".
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Hash)]
 pub struct OwnedContractName(String);
 
 impl OwnedContractName {
@@ -710,7 +767,7 @@ impl fmt::Display for NewContractNameError {
 }
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub struct ReceiveName<'a>(&'a str);
 
 impl<'a> ReceiveName<'a> {
@@ -755,7 +812,7 @@ impl<'a> ReceiveName<'a> {
 
 /// A receive name (owned version). Expected format:
 /// "<contract_name>.<func_name>".
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct OwnedReceiveName(String);
 
 impl OwnedReceiveName {
