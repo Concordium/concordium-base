@@ -615,7 +615,8 @@ pub enum Address {
     Contract(ContractAddress),
 }
 
-// This trait is implemented manually to produce fewer bytes in the generated WASM.
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
 impl PartialEq for Address {
     fn eq(&self, other: &Address) -> bool {
         match (self, other) {
@@ -626,7 +627,8 @@ impl PartialEq for Address {
     }
 }
 
-// This trait is implemented manually to produce fewer bytes in the generated WASM.
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
 impl Hash for Address {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         match self {
@@ -642,12 +644,14 @@ impl Hash for Address {
     }
 }
 
-// This trait is implemented manually to produce fewer bytes in the generated WASM.
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
 impl PartialOrd for Address {
     fn partial_cmp(&self, other: &Address) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
-// This trait is implemented manually to produce fewer bytes in the generated WASM.
+// This trait is implemented manually to produce fewer bytes in the generated
+// WASM.
 impl Ord for Address {
     fn cmp(&self, other: &Address) -> Ordering {
         match (self, other) {
