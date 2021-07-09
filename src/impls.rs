@@ -411,7 +411,7 @@ pub fn deserial_vector_no_length<R: Read, T: Deserial>(
 
 /// Write a Map as a list of key-value pairs ordered by the key, without the
 /// length information.
-pub fn serial_map_no_length<'a, W: Write, K: Serial + 'a, V: Serial + 'a>(
+pub fn serial_map_no_length<W: Write, K: Serial, V: Serial>(
     map: &BTreeMap<K, V>,
     out: &mut W,
 ) -> Result<(), W::Err> {
@@ -471,7 +471,7 @@ pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord, V: Dese
 
 /// Write a HashMap as a list of key-value pairs in to particular order, without
 /// the length information.
-pub fn serial_hashmap_no_length<'a, W: Write, K: Serial + 'a, V: Serial + 'a>(
+pub fn serial_hashmap_no_length<W: Write, K: Serial, V: Serial>(
     map: &HashMap<K, V>,
     out: &mut W,
 ) -> Result<(), W::Err> {
@@ -499,7 +499,7 @@ pub fn deserial_hashmap_no_length<R: Read, K: Deserial + Eq + Hash, V: Deserial>
 }
 
 /// Write a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as an ascending list of keys, without the length information.
-pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
+pub fn serial_set_no_length<W: Write, K: Serial>(
     map: &BTreeSet<K>,
     out: &mut W,
 ) -> Result<(), W::Err> {
@@ -531,7 +531,7 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
 }
 
 /// Write a [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html) as a list of keys in no particular order, without the length information.
-pub fn serial_hashset_no_length<'a, W: Write, K: Serial + 'a>(
+pub fn serial_hashset_no_length<W: Write, K: Serial>(
     map: &HashSet<K>,
     out: &mut W,
 ) -> Result<(), W::Err> {
@@ -605,7 +605,7 @@ impl<K: Serial + Ord, V: Serial> Serial for BTreeMap<K, V> {
     }
 }
 
-/// The deserialization of maps assumes their size as a u32.
+/// The deserialization of maps assumes their size is a u32.
 ///
 /// <b style="color: darkred">WARNING</b>: Deserialization **does not** ensure
 /// the ordering of the keys, it only ensures that there are no duplicates.
@@ -634,7 +634,7 @@ impl<K: Serial, V: Serial> Serial for HashMap<K, V> {
     }
 }
 
-/// The deserialization of maps assumes their size as a u32.
+/// The deserialization of maps assumes their size is a u32.
 ///
 /// <b style="color: darkred">WARNING</b>: Deserialization only ensures that
 /// there are no duplicates. Serializing a `HashMap` via its `Serial` instance
@@ -660,7 +660,7 @@ impl<K: Serial + Ord> Serial for BTreeSet<K> {
     }
 }
 
-/// The deserialization of sets assumes their size as a u32.
+/// The deserialization of sets assumes their size is a u32.
 ///
 /// <b style="color: darkred">WARNING</b>: Deserialization **does not** ensure
 /// the ordering of the keys, it only ensures that there are no duplicates.
@@ -689,7 +689,7 @@ impl<K: Serial> Serial for HashSet<K> {
     }
 }
 
-/// The deserialization of sets assumes their size as a u32.
+/// The deserialization of sets assumes their size is a u32.
 ///
 /// <b style="color: darkred">WARNING</b>: Deserialization only ensures that
 /// there are no duplicates. Serializing a `HashSet` via its `Serial` instance
