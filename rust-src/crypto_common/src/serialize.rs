@@ -3,6 +3,7 @@ pub use crate::impls::*;
 use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
+use sha2::Digest;
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomData};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
@@ -35,6 +36,17 @@ impl Deserial for u32 {
 impl Deserial for u16 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u16> {
         Ok(source.read_u16::<BigEndian>()?)
+    }
+}
+
+impl Deserial for bool {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let x: u8 = source.read_u8()?;
+        match x {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => anyhow::bail!("Unrecognized boolean value {}", x),
+        }
     }
 }
 
@@ -124,6 +136,13 @@ impl<T> Deserial for PhantomData<T> {
     fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { Ok(Default::default()) }
 }
 
+impl<T: Deserial> Deserial for Box<T> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let x = T::deserial(source)?;
+        Ok(Box::new(x))
+    }
+}
+
 /// Trait for writers which will not fail in normal operation with
 /// small amounts of data, e.g., Vec<u8>.
 /// Moreover having a special trait allows us to implement it for
@@ -143,6 +162,14 @@ impl Buffer for Vec<u8> {
     fn start_hint(l: usize) -> Vec<u8> { Vec::with_capacity(l) }
 
     fn result(self) -> Self::Result { self }
+}
+
+impl Buffer for sha2::Sha256 {
+    type Result = [u8; 32];
+
+    fn start() -> Self { sha2::Sha256::new() }
+
+    fn result(self) -> Self::Result { self.finalize().into() }
 }
 
 pub trait Serial {
@@ -167,6 +194,17 @@ impl Serial for u16 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_u16::<BigEndian>(*self)
             .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for bool {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (if *self {
+            out.write_u8(1)
+        } else {
+            out.write_u8(0)
+        })
+        .expect("Writing to a buffer should not fail.");
     }
 }
 
@@ -318,6 +356,11 @@ impl<T: Serial, S: Serial, U: Serial> Serial for (T, S, U) {
 impl<T> Serial for PhantomData<T> {
     #[inline]
     fn serial<B: Buffer>(&self, _out: &mut B) {}
+}
+
+impl<T: Serial> Serial for Box<T> {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) { self.as_ref().serial(out) }
 }
 
 impl Serial for [u8] {

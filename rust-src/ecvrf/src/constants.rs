@@ -24,11 +24,11 @@ const EXPANDED_SECRET_KEY_NONCE_LENGTH: usize = 32;
 pub const EXPANDED_SECRET_KEY_LENGTH: usize =
     EXPANDED_SECRET_KEY_KEY_LENGTH + EXPANDED_SECRET_KEY_NONCE_LENGTH;
 
-/// Suite string as defined by https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#suites
+/// Suite string as defined by <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#suites>
 pub const SUITE_STRING: [u8; 1] = [3u8];
 
 /// Strings combined with inputs to the hash function for domain separation, as
-/// discussed in https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.7.7
+/// discussed in <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.7.7>
 pub const ZERO_STRING: [u8; 1] = [0u8];
 pub const ONE_STRING: [u8; 1] = [1u8];
 pub const TWO_STRING: [u8; 1] = [2u8];

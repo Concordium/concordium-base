@@ -10,7 +10,11 @@ use anyhow::{anyhow, bail};
 use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
-use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex, *};
+use crypto_common::{
+    serde_impls::KeyPairDef,
+    types::{CredentialIndex, KeyIndex},
+    *,
+};
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
@@ -215,7 +219,7 @@ impl From<ed25519::Signature> for AccountOwnershipSignature {
 /// The list should be non-empty and at most 255 elements long, and have no
 /// duplicates. The current choice of data structure disallows duplicates by
 /// design.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(transparent)]
 pub struct AccountOwnershipProof {
     pub sigs: BTreeMap<KeyIndex, AccountOwnershipSignature>,
@@ -1022,7 +1026,7 @@ pub struct CommitmentsRandomness<C: Curve> {
     pub attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
-#[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
+#[derive(Debug, SerdeBase16IgnoreLengthSerialize, Clone)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub id_proofs:    IdOwnershipProofs<P, C>,
     /// Proof of knowledge of acc secret keys (signing keys corresponding to the
@@ -1092,7 +1096,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
 
 /// This structure contains all proofs, which are required to prove ownership of
 /// an identity, in a credential deployment.
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
@@ -1335,7 +1339,7 @@ pub struct NewAccount {
 }
 
 /// Values (as opposed to proofs) in credential deployment.
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -1371,7 +1375,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
 }
 
 /// Values in initial credential deployment.
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -1429,7 +1433,7 @@ fn deserialize_ar_data<'de, D: de::Deserializer<'de>, C: Curve>(
     des.deserialize_map(ArIdentityVisitor(std::default::Default::default()))
 }
 
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
                  Attribute<C::Scalar> + SerdeSerialize",
@@ -1491,7 +1495,7 @@ pub struct UnsignedCredentialDeploymentInfo<
     pub proofs: IdOwnershipProofs<P, C>,
 }
 
-#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 // #[serde(bound(
 //     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
 //                  Attribute<C::Scalar> + SerdeSerialize",
@@ -1722,7 +1726,7 @@ pub trait CredentialDataWithSigning: PublicCredentialData {
 pub struct AccountKeys {
     /// All keys per credential
     #[serde(rename = "keys")]
-    pub keys:      BTreeMap<KeyIndex, CredentialData>,
+    pub keys:      BTreeMap<CredentialIndex, CredentialData>,
     /// The account threshold.
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
@@ -1730,12 +1734,12 @@ pub struct AccountKeys {
 
 /// Create account keys with a single credential at index 0
 impl From<CredentialData> for AccountKeys {
-    fn from(cd: CredentialData) -> Self { Self::from((KeyIndex(0), cd)) }
+    fn from(cd: CredentialData) -> Self { Self::from((CredentialIndex { index: 0 }, cd)) }
 }
 
 /// Create account keys with a single credential at the given index
-impl From<(KeyIndex, CredentialData)> for AccountKeys {
-    fn from((ki, cd): (KeyIndex, CredentialData)) -> Self {
+impl From<(CredentialIndex, CredentialData)> for AccountKeys {
+    fn from((ki, cd): (CredentialIndex, CredentialData)) -> Self {
         let mut keys = BTreeMap::new();
         keys.insert(ki, cd);
         Self {
@@ -1749,7 +1753,7 @@ impl From<(KeyIndex, CredentialData)> for AccountKeys {
 impl From<InitialAccountData> for AccountKeys {
     fn from(cd: InitialAccountData) -> Self {
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), CredentialData {
+        keys.insert(CredentialIndex { index: 0 }, CredentialData {
             keys:      cd.keys,
             threshold: cd.threshold,
         });
@@ -1983,7 +1987,7 @@ pub struct AnonymityRevocationRecord<C: Curve> {
 
 /// A type encapsulating both types of credentials.
 /// Serialization must match the one in Haskell.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(tag = "type", content = "contents")]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
