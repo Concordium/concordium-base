@@ -49,7 +49,7 @@ fn make_signatures<H: AsRef<[u8]>>(keys: AccountKeys, hash: &H) -> TransactionSi
         for (key_index, kp) in map.keys.into_iter() {
             let public = kp.public;
             let secret = kp.secret;
-            let signature = ed25519_dalek::Keypair { public, secret }.sign(hash.as_ref());
+            let signature = ed25519_dalek::Keypair { secret, public }.sign(hash.as_ref());
             cred_sigs.insert(key_index, Signature {
                 sig: signature.to_bytes().to_vec(),
             });

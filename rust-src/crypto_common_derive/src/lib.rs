@@ -26,13 +26,13 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let gen = quote! {
         impl #impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
             fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
-                base16_encode(self, #ident_serializer)
+                crypto_common::base16_encode(self, #ident_serializer)
             }
         }
 
         impl #impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
             fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
-                base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
+                crypto_common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
         }
     };

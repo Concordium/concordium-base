@@ -22,6 +22,7 @@ import Data.Serialize
 -- |An enumeration of the supported versions of the consensus protocol.
 data ProtocolVersion
     = P1
+    deriving (Eq, Show)
 
 -- |The singleton type associated with 'ProtocolVersion'.
 -- There is a unique constructor of 'SProtocolVersion' for
@@ -45,3 +46,16 @@ class IsProtocolVersion (pv :: ProtocolVersion) where
 instance IsProtocolVersion 'P1 where
     protocolVersion = SP1
     {-# INLINE protocolVersion #-}
+
+-- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
+demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
+demoteProtocolVersion SP1 = P1
+
+-- |An existentially quantified protocol version.
+data SomeProtocolVersion where
+    SomeProtocolVersion :: (IsProtocolVersion pv) => SProtocolVersion pv -> SomeProtocolVersion
+
+-- |Promote a 'ProtocolVersion' to an 'SProtocolVersion'. This is wrapped in the existential
+-- type 'SomeProtocolVersion'.
+promoteProtocolVersion :: ProtocolVersion -> SomeProtocolVersion
+promoteProtocolVersion P1 = SomeProtocolVersion SP1

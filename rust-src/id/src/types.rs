@@ -54,7 +54,7 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl std::fmt::Display for AccountAddress {
@@ -1450,7 +1450,7 @@ pub struct CredentialDeploymentInfo<
 /// Account credential with values and commitments, but without proofs.
 /// Serialization must match the serializaiton of `AccountCredential` in
 /// Haskell.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug)]
 #[serde(tag = "type", content = "contents")]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
