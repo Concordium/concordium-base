@@ -11,6 +11,8 @@ pub mod secret_sharing;
 pub mod sigma_protocols;
 pub mod types;
 pub mod utils;
+pub mod id_prover;
+pub mod id_verifier;
 
 #[macro_use]
 extern crate crypto_common_derive;

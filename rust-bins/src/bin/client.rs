@@ -15,9 +15,11 @@ use id::{
     constants::{ArCurve, IpPairing},
     identity_provider::*,
     secret_sharing::*,
+    id_prover::*,
+    id_verifier::*,
     types::*,
 };
-use pairing::bls12_381::{Bls12, G1};
+use pairing::bls12_381::{Bls12, G1, Fr};
 use rand::*;
 use serde_json::{json, to_value};
 use std::{
@@ -29,6 +31,12 @@ use std::{
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
+use pedersen_scheme::{
+    commitment::Commitment, key::CommitmentKey as PedersenKey,
+    randomness::Randomness as PedersenRandomness, value::Value,
+};
+
+use bulletproofs::range_proof::RangeProof;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
@@ -378,6 +386,136 @@ struct ExtendIpList {
 }
 
 #[derive(StructOpt)]
+struct ProveOwnership {
+    #[structopt(
+        long = "private-keys",
+        help = "File containing private credential keys."
+    )]
+    private_keys: PathBuf,
+    #[structopt(
+        long = "account",
+        help = "Account address-"
+    )]
+    account: AccountAddress,
+    #[structopt(
+        long = "challenge",
+        help = "File containing verifier's challenge."
+    )]
+    challenge: PathBuf,
+    #[structopt(
+        long = "out",
+        help = "Path to output the proof to."
+    )]
+    out: PathBuf,
+}
+
+#[derive(StructOpt)]
+struct VerifyOwnership {
+    #[structopt(
+        long = "public-keys",
+        help = "File containing public credential keys. They must match those on chain when looking up the account."
+    )]
+    public_keys: PathBuf,
+    #[structopt(
+        long = "account",
+        help = "Account address."
+    )]
+    account: AccountAddress,
+    #[structopt(
+        long = "challenge-out",
+        help = "File to output challenge to."
+    )]
+    challenge: PathBuf
+}
+
+#[derive(StructOpt)]
+struct VerifyAttribute {
+    #[structopt(
+        long = "attribute",
+        help = "The attribute claimed to be inside the commitment."
+    )]
+    attribute: ExampleAttribute,
+    #[structopt(
+        long = "randomness",
+        help = "Path to file containing randomness used to produce to commitment."
+    )]
+    randomness: PathBuf,
+    #[structopt(
+        long = "commitment",
+        help = "Path to file with commitment claimed to contain given attribute."
+    )]
+    commitment: PathBuf,
+    #[structopt(
+        long = "keys",
+        help = "Path to file with commitment keys."
+    )]
+    keys: PathBuf
+}
+
+#[derive(StructOpt)]
+struct ProveAttributeInRange {
+    #[structopt(
+        long = "attribute",
+        help = "The attribute value inside the commitment."
+    )]
+    attribute: ExampleAttribute,
+    #[structopt(
+        long = "upper",
+        help = "The upper bound of the value inside the commitment."
+    )]
+    upper: ExampleAttribute,
+    #[structopt(
+        long = "lower",
+        help = "The lower bound of the value inside the commitment."
+    )]
+    lower: ExampleAttribute,
+    #[structopt(
+        long = "randomness",
+        help = "Path to file containing randomness used to produce to commitment."
+    )]
+    randomness: PathBuf,
+    #[structopt(
+        long = "global",
+        help = "Path to file with global context."
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "proof-out",
+        help = "Path to output proof to."
+    )]
+    out: PathBuf
+}
+
+#[derive(StructOpt)]
+struct VerifyAttributeInRange {
+    #[structopt(
+        long = "upper",
+        help = "The upper bound of the value inside the commitment."
+    )]
+    upper: ExampleAttribute,
+    #[structopt(
+        long = "lower",
+        help = "The lower bound of the value inside the commitment."
+    )]
+    lower: ExampleAttribute,
+    #[structopt(
+        long = "commitment",
+        help = "Path to file with commitment claimed to contain given attribute."
+    )]
+    commitment: PathBuf,
+    #[structopt(
+        long = "global",
+        help = "Path to file with global context."
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "proof",
+        help = "Path to file with proof."
+    )]
+    proof: PathBuf
+}
+
+#[derive(StructOpt)]
 /// Construct a genesis account from a multitude of files. In the main genesis
 /// process the credentials will be created by the desktop wallet, and baker
 /// keys by another tool. These all need to be combined into a single account.
@@ -474,6 +612,23 @@ enum IdClient {
         about = "Create a genesis account from credentials and possibly baker information."
     )]
     MakeAccount(MakeAccount),
+    #[structopt(
+        name = "prove-ownership",
+        about = "Prove ownership of an account."
+    )]
+    ProveOwnership(ProveOwnership),
+    #[structopt(
+        name = "verify-ownership",
+        about = "Verify ownership of an account."
+    )]
+    VerifyOwnership(VerifyOwnership),
+    #[structopt(
+        name = "verify-attribute",
+        about = "Verify an attribute inside a commitment."
+    )]
+    VerifyAttribute(VerifyAttribute),
+    ProveAttributeInRange(ProveAttributeInRange),
+    VerifyAttributeInRange(VerifyAttributeInRange),
 }
 
 fn main() {
@@ -493,6 +648,180 @@ fn main() {
         ExtendIpList(eil) => handle_extend_ip_list(eil),
         VerifyCredential(vcred) => handle_verify_credential(vcred),
         MakeAccount(macc) => handle_make_account(macc),
+        ProveOwnership(po) => handle_prove_ownership(po),
+        VerifyOwnership(vo) => handle_verify_ownership(vo),
+        VerifyAttribute(va) => handle_verify_attribute(va),
+        VerifyAttributeInRange(vair) => handle_verify_attribute_in_range(vair),
+        ProveAttributeInRange(pair) => handle_prove_attribute_in_range(pair),
+    }
+}
+
+fn handle_prove_attribute_in_range(pair: ProveAttributeInRange){
+    let randomness : PedersenRandomness<ExampleCurve> = match read_json_from_file(pair.randomness) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Could not parse randomness: {}. Terminating.", e);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(pair.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+    let proof = prove_attribute_in_range(&global_ctx.bulletproof_generators(), &global_ctx.on_chain_commitment_key, &pair.attribute, &pair.lower, &pair.upper, &randomness);
+    if let Some(proof) = proof {   
+        if let Err(e) = write_json_to_file(&pair.out, &proof) {
+            eprintln!("Could not output proof: {}", e);
+            return;
+        }
+    }
+}
+
+fn handle_verify_attribute_in_range(vair: VerifyAttributeInRange){
+    let commitment : Commitment<ExampleCurve> = match read_json_from_file(vair.commitment) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Could not parse commitment: {}. Terminating.", e);
+            return;
+        }
+    };
+
+    let proof : RangeProof<ExampleCurve> = match read_json_from_file(vair.proof) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Could not parse commitment: {}. Terminating.", e);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(vair.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    if verify_attribute_range(&global_ctx.on_chain_commitment_key, &global_ctx.bulletproof_generators(), &vair.lower, &vair.upper, &commitment, &proof){
+        println!("Range proof is correct.");
+    } else {
+        println!("Range proof is invalid.");
+    }
+}
+
+fn handle_verify_attribute(va: VerifyAttribute){
+    let randomness : PedersenRandomness<ExampleCurve> = match read_json_from_file(va.randomness) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Could not parse randomness: {}. Terminating.", e);
+            return;
+        }
+    };
+    
+    let commitment : Commitment<ExampleCurve> = match read_json_from_file(va.commitment) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Could not parse randomness: {}. Terminating.", e);
+            return;
+        }
+    };
+
+    let keys : PedersenKey<ExampleCurve> = match read_json_from_file(va.keys) {
+        Ok(keys) => keys,
+        Err(e) => {
+            eprintln!("Could not parse randomness: {}. Terminating.", e);
+            return;
+        }
+    };
+
+    if verify_attribute(&keys, &va.attribute, &randomness, &commitment) {
+        println!("Value inside commitment is {}", va.attribute);
+    } else {
+        println!("Value inside commitment is not {}", va.attribute);
+    }
+}
+
+fn handle_verify_ownership(vo: VerifyOwnership){
+    let public_keys : CredentialPublicKeys = match read_json_from_file(vo.public_keys) {
+        Ok(keys) => keys,
+        Err(e) => {
+            eprintln!("Could not parse public keys: {}. Terminating.", e);
+            return;
+        }
+    };
+    let mut challenge = [0u8; 32]; 
+    rand::thread_rng().fill(&mut challenge[..]);
+    
+    if let Err(e) = write_json_to_file(&vo.challenge, &challenge) {
+        eprintln!("Could not output challenge: {}", e);
+        return;
+    }
+    println!("Wrote challenge to file. Give challenge to prover.");
+    
+    let path_to_proof : Option<PathBuf> = {
+        let validator = |candidate: &String| -> Result<(), String> {
+            if std::path::Path::new(candidate).exists() {
+                Ok(())
+            } else {
+                Err(format!("File {} does not exist. Try again.", candidate))
+            }
+        };
+
+        let mut input = Input::new();
+        input.with_prompt("Enter the path to the proof");
+        // offer a default option if the file exists.
+        if std::path::Path::new("ownership-proof.json").exists() {
+            input.default("ownership-proof.json".to_string());
+        };
+        input.validate_with(validator);
+        match input.interact() {
+            Ok(x) => Some(PathBuf::from(x)),
+            Err(e) => {eprintln!("{}", e); None},
+        }
+    }; 
+    if let Some(path) = path_to_proof {
+        let proof : AccountOwnershipProof = match read_json_from_file(path) {
+            Ok(keys) => keys,
+            Err(e) => {
+                eprintln!("Could not parse proof: {}. Terminating.", e);
+                return;
+            }
+        };
+        if verify_account_ownership(&public_keys, vo.account, &challenge, &proof) {
+            println!("Proof of ownership is correct.");
+        } else {
+            println!("Proof of ownership is invalid.");
+        }
+    }
+}
+
+fn handle_prove_ownership(po: ProveOwnership){
+    let cred_data : CredentialData = match read_json_from_file(po.private_keys) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Could not parse credential data: {}. Terminating.", e);
+            return;
+        }
+    };
+    let challenge : [u8; 32] = match read_json_from_file(po.challenge) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Could not parse challenge: {}. Terminating.", e);
+            return;
+        }
+    };
+    
+    let proof = prove_ownership_of_account(cred_data, po.account, &challenge);
+
+    if let Err(e) = write_json_to_file(&po.out, &proof) {
+        eprintln!("Could not output proof: {}", e);
+        return;
     }
 }
 
