@@ -83,6 +83,10 @@ impl std::str::FromStr for AccountAddress {
     }
 }
 
+impl AsRef<[u8; 32]> for AccountAddress {
+    fn as_ref(&self) -> &[u8; 32] { &self.0 }
+}
+
 impl SerdeSerialize for AccountAddress {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         let b58_str = self.to_string();
