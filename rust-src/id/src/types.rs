@@ -437,10 +437,9 @@ impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
 
 impl fmt::Display for AttributeTag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        assert!(self.0 > 0);
         let l: usize = (*self).into();
-        if l > 0 && l <= ATTRIBUTE_NAMES.len() {
-            write!(f, "{}", ATTRIBUTE_NAMES[l - 1])
+        if l < ATTRIBUTE_NAMES.len() {
+            write!(f, "{}", ATTRIBUTE_NAMES[l])
         } else {
             Err(fmt::Error)
         }
