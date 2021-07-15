@@ -17,8 +17,10 @@ use crypto_common::{
 };
 use crypto_common_derive::*;
 use curve_arithmetic::*;
+use derive_more::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use ed25519_dalek::Verifier;
 use either::Either;
 use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
@@ -37,7 +39,7 @@ use sha2::{Digest, Sha256};
 use std::{
     cmp::Ordering,
     collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet},
-    convert::TryFrom,
+    convert::{TryFrom, TryInto},
     fmt,
     io::{Cursor, Read},
     str::FromStr,
@@ -143,7 +145,7 @@ impl AccountAddress {
 }
 
 /// Threshold for the number of signatures required.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, Into)]
 #[repr(transparent)]
 /// The values of this type must maintain the property that they are not 0.
 #[derive(SerdeSerialize)]
@@ -1330,6 +1332,25 @@ impl Deserial for VerifyKey {
             SchemeId::Ed25519 => {
                 let key = source.get()?;
                 Ok(Ed25519VerifyKey(key))
+            }
+        }
+    }
+}
+
+/// FIXME: This should be unified with eddsa_verify so that we only have one
+/// implementation of signature checks.
+impl VerifyKey {
+    pub fn verify(&self, msg: impl AsRef<[u8]>, sig: &crypto_common::types::Signature) -> bool {
+        match self {
+            VerifyKey::Ed25519VerifyKey(pk) => {
+                let sig: ed25519_dalek::Signature = {
+                    if let Ok(x) = sig.as_ref().try_into() {
+                        x
+                    } else {
+                        return false;
+                    }
+                };
+                pk.verify(msg.as_ref(), &sig).is_ok()
             }
         }
     }

@@ -266,6 +266,10 @@ impl<'de> SerdeDeserialize<'de> for Signature {
     }
 }
 
+impl AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] { &self.sig }
+}
+
 /// Transaction signature structure, to match the one on the Haskell side.
 #[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
 #[serde(transparent)]
