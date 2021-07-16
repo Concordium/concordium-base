@@ -229,7 +229,11 @@ pub struct Signature {
 impl Serial for Signature {
     fn serial<B: Buffer>(&self, out: &mut B) {
         (self.sig.len() as u16).serial(out);
+<<<<<<< HEAD
         out.write(&self.sig)
+=======
+        out.write_all(&self.sig)
+>>>>>>> main
             .expect("Writing to buffer should succeed.");
     }
 }
@@ -266,6 +270,10 @@ impl<'de> SerdeDeserialize<'de> for Signature {
     }
 }
 
+impl AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] { &self.sig }
+}
+
 /// Transaction signature structure, to match the one on the Haskell side.
 #[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
 #[serde(transparent)]
@@ -273,6 +281,19 @@ pub struct TransactionSignature {
     pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
 }
 
+<<<<<<< HEAD
+=======
+impl TransactionSignature {
+    /// The total number of signatures.
+    pub fn num_signatures(&self) -> u32 {
+        // Since there are at most 256 credential indices, and at most 256 key indices
+        // using `as` is safe.
+        let x: usize = self.signatures.values().map(|sigs| sigs.len()).sum();
+        x as u32
+    }
+}
+
+>>>>>>> main
 impl Serial for TransactionSignature {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let l = self.signatures.len() as u8;
@@ -395,6 +416,13 @@ mod tests {
                 Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
                 Err(e) => assert!(false, "{}", e),
             }
+
+            let binary_result = crate::serialize_deserialize(&signatures)
+                .expect("Binary signature serialization is not invertible.");
+            assert_eq!(
+                binary_result, signatures,
+                "Binary signature parses incorrectly."
+            );
         }
     }
 
