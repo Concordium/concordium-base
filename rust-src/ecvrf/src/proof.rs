@@ -9,7 +9,7 @@ use curve25519_dalek::{
 };
 use sha2::*;
 
-/// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.3
+/// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.3>
 pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
     let mut hash: Sha512 = Sha512::new();
     hash.update(SUITE_STRING);
@@ -27,7 +27,7 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
-/// Implements step 8 of https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1
+/// Implements step 8 of <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1>
 /// i.e. transforms a proof to a byte string
 impl Serial for Proof {
     #[inline]
@@ -44,7 +44,7 @@ impl Serial for Proof {
     }
 }
 
-/// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.4
+/// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.4>
 /// Construct a `Proof` from a slice of bytes. This function always
 /// results in a valid proof object.
 impl Deserial for Proof {
@@ -76,7 +76,7 @@ impl Debug for Proof {
     }
 }
 
-/// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.2
+/// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.2>
 impl Proof {
     pub fn to_hash(&self) -> [u8; 64] {
         let p = self.0.mul_by_cofactor();

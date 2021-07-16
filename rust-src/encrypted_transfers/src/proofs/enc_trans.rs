@@ -89,7 +89,7 @@ pub struct EncTrans<C: Curve> {
 /// we calculate the same linear combination, but of the witnesses, in
 /// the extract_point function. We do therefore not need to transfer/send
 /// those witnesses, since they are determined by the ones below.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct Witness<C: Curve> {
     /// The common witness for both dlog and elc-dec
     witness_common:  C::Scalar,

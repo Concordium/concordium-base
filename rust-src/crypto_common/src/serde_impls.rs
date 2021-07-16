@@ -34,6 +34,17 @@ impl From<ed25519_dalek::Keypair> for KeyPairDef {
     }
 }
 
+impl KeyPairDef {
+    /// Sign the given message with the keypair.
+    pub fn sign(&self, msg: &[u8]) -> types::Signature {
+        let expanded = ed25519_dalek::ExpandedSecretKey::from(&self.secret);
+        let sig = expanded.sign(msg, &self.public);
+        types::Signature {
+            sig: sig.to_bytes().to_vec(),
+        }
+    }
+}
+
 impl From<KeyPairDef> for ed25519_dalek::Keypair {
     fn from(kp: KeyPairDef) -> ed25519_dalek::Keypair {
         ed25519_dalek::Keypair {

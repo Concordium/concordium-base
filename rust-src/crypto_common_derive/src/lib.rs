@@ -124,7 +124,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        deserial_vector_no_length(#source, usize::try_from(len)?)?
+                        crypto_common::deserial_vector_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
@@ -132,7 +132,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        deserial_map_no_length(#source, usize::try_from(len)?)?
+                        crypto_common::deserial_map_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
@@ -140,7 +140,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        deserial_set_no_length(#source, usize::try_from(len)?)?
+                        crypto_common::deserial_set_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
@@ -148,7 +148,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        deserial_string(#source, usize::try_from(len)?)?
+                        crypto_common::deserial_string(#source, usize::try_from(len)?)?
                     };
                 });
             } else {
@@ -229,28 +229,28 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            serial_vector_no_length(&self.#ident, #out);
+                            crypto_common::serial_vector_no_length(&self.#ident, #out);
                         });
                     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            serial_map_no_length(&self.#ident, #out);
+                            crypto_common::serial_map_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            serial_set_no_length(&self.#ident, #out);
+                            crypto_common::serial_set_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            serial_string(self.#ident.as_str(), #out);
+                            crypto_common::serial_string(self.#ident.as_str(), #out);
                         })
                     } else {
                         body.extend(quote! {

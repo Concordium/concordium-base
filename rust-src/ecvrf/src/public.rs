@@ -58,7 +58,7 @@ impl AsRef<[u8]> for PublicKey {
 
 impl<'a> From<&'a SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
-    /// Implements https://tools.ietf.org/html/rfc8032#section-5.1.5
+    /// Implements <https://tools.ietf.org/html/rfc8032#section-5.1.5>
     fn from(secret_key: &SecretKey) -> PublicKey {
         let mut h: Sha512 = Sha512::new();
         let mut hash: [u8; 64] = [0u8; 64];
@@ -103,7 +103,7 @@ impl PublicKey {
         PublicKey(compressed, point)
     }
 
-    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1
+    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1>
     /// The failure should not happen in practice, expected number of iterations
     /// is 2.
     pub fn hash_to_curve(&self, message: &[u8]) -> Option<EdwardsPoint> {
@@ -136,7 +136,7 @@ impl PublicKey {
 
     pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
 
-    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.3
+    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.3>
     #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: &Proof, message: &[u8]) -> bool {
         if let Some(h) = self.hash_to_curve(message) {
