@@ -32,6 +32,7 @@
   When not used, the functionality is unaffected by this change.
 
 ## Other
+- the Display implementation of AttrubuteTag has been fixed. It was off by one.
 - the `create_credential` also outputs the randomness from the commitments used 
   in the proofs for credential deployment. The client tool will also output the randomness 
   using it to create credentials. 
