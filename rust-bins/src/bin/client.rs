@@ -2,7 +2,7 @@ use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
     serde_impls::KeyPairDef,
-    types::{Amount, KeyIndex, TransactionTime},
+    types::{Amount, CredentialIndex, KeyIndex, TransactionTime},
     *,
 };
 use dialoguer::{Input, MultiSelect, Select};
@@ -880,7 +880,7 @@ fn handle_create_credential(cc: CreateCredential) {
         println!("Generated additional keys for the account.");
         let js = json!({
             "address": addr,
-            "accountKeys": AccountKeys::from((KeyIndex(cc.key_index.unwrap()), acc_data)),
+            "accountKeys": AccountKeys::from((CredentialIndex{index: cc.key_index.unwrap()}, acc_data)),
             "credentials": versioned_credentials,
             "commitmentsRandomness": randomness_map,
         });

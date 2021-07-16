@@ -1337,9 +1337,11 @@ impl Deserial for VerifyKey {
     }
 }
 
-/// FIXME: This should be unified with eddsa_verify so that we only have one
-/// implementation of signature checks.
 impl VerifyKey {
+    /// Verify a signature on the given message.
+    /// This checks
+    /// - the proposed signature can be parsed as a valid signature
+    /// - the signature validates with respect to the public key.
     pub fn verify(&self, msg: impl AsRef<[u8]>, sig: &crypto_common::types::Signature) -> bool {
         match self {
             VerifyKey::Ed25519VerifyKey(pk) => {
