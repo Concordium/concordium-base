@@ -2,12 +2,11 @@ use crate::types::*;
 use sha2::{Digest, Sha256};
 use ed25519_dalek as ed25519;
 use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, value::Value,
+    key::CommitmentKey as PedersenKey,
+    randomness::Randomness as PedersenRandomness,
 };
 use curve_arithmetic::Curve;
 use bulletproofs::range_proof::{prove_given_scalars, Generators, RangeProof};
-use rand::*;
 use ff::Field;
 use random_oracle::RandomOracle;
 
