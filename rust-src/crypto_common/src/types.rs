@@ -229,11 +229,7 @@ pub struct Signature {
 impl Serial for Signature {
     fn serial<B: Buffer>(&self, out: &mut B) {
         (self.sig.len() as u16).serial(out);
-<<<<<<< HEAD
-        out.write(&self.sig)
-=======
         out.write_all(&self.sig)
->>>>>>> main
             .expect("Writing to buffer should succeed.");
     }
 }
@@ -281,8 +277,6 @@ pub struct TransactionSignature {
     pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
 }
 
-<<<<<<< HEAD
-=======
 impl TransactionSignature {
     /// The total number of signatures.
     pub fn num_signatures(&self) -> u32 {
@@ -293,7 +287,6 @@ impl TransactionSignature {
     }
 }
 
->>>>>>> main
 impl Serial for TransactionSignature {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let l = self.signatures.len() as u8;
