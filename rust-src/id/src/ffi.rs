@@ -1,121 +1,15 @@
 use crate::{
     chain::{self, CdiVerificationError},
+    constants::*,
     types::*,
 };
-use anyhow::bail;
-use byteorder::ReadBytesExt;
 use crypto_common::{size_t, types::TransactionTime, *};
-use curve_arithmetic::*;
 use either::Either::{Left, Right};
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
 use rand::thread_rng;
-use serde::{
-    de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
-    Serializer,
-};
-use std::{collections::BTreeMap, convert::TryInto, fmt, io::Cursor, str::FromStr};
-
-/// Concrete attribute kinds
-#[derive(Clone, PartialEq, Eq, Debug)]
-// All currently supported attributes are string values.
-pub struct AttributeKind(pub String);
-
-impl SerdeSerialize for AttributeKind {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&self.0)
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for AttributeKind {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        des.deserialize_str(AttributeKindVisitor)
-    }
-}
-
-pub struct AttributeKindVisitor;
-
-impl<'de> Visitor<'de> for AttributeKindVisitor {
-    type Value = AttributeKind;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "A string less than 31 bytes when decoded.")
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        if v.as_bytes().len() > 31 {
-            Err(de::Error::custom("Value too big."))
-        } else {
-            Ok(AttributeKind(v.to_string()))
-        }
-    }
-}
-
-impl Deserial for AttributeKind {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let len: u8 = source.get()?;
-        if len <= 31 {
-            let mut buf = vec![0u8; len as usize];
-            source.read_exact(&mut buf)?;
-            Ok(AttributeKind(String::from_utf8(buf)?))
-        } else {
-            bail!("Attributes can be at most 31 bytes.")
-        }
-    }
-}
-
-impl Serial for AttributeKind {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(&(self.0.as_bytes().len() as u8));
-        out.write_all(self.0.as_bytes())
-            .expect("Writing to buffer should succeed.");
-    }
-}
-
-#[derive(Debug)]
-pub enum ParseAttributeError {
-    ValueTooLarge,
-}
-
-impl fmt::Display for ParseAttributeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ParseAttributeError::ValueTooLarge => "Value out of range.".fmt(f),
-        }
-    }
-}
-
-impl FromStr for AttributeKind {
-    type Err = ParseAttributeError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.as_bytes().len() <= 31 {
-            Ok(AttributeKind(s.to_string()))
-        } else {
-            Err(ParseAttributeError::ValueTooLarge)
-        }
-    }
-}
-
-impl fmt::Display for AttributeKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
-}
-
-impl From<u64> for AttributeKind {
-    fn from(x: u64) -> Self { AttributeKind(x.to_string()) }
-}
-
-impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
-    fn to_field_element(&self) -> <G1 as Curve>::Scalar {
-        let mut buf = [0u8; 32];
-        let len = self.0.as_bytes().len();
-        buf[1 + (31 - len)..].copy_from_slice(self.0.as_bytes());
-        buf[0] = len as u8; // this should be valid because len <= 31 so the first two bits will be unset
-        <<G1 as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))
-            .expect("31 bytes + length fits into a scalar.")
-    }
-}
+use std::{collections::BTreeMap, convert::TryInto, io::Cursor};
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

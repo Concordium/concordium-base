@@ -1,8 +1,7 @@
 use crypto_common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0};
 use curve_arithmetic::*;
 use id::{
-    constants::ArCurve,
-    ffi::AttributeKind,
+    constants::{ArCurve, AttributeKind},
     identity_provider::{
         create_initial_cdi, sign_identity_object, validate_request as ip_validate_request,
     },

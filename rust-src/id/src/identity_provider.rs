@@ -1,3 +1,5 @@
+//! Functionality needed by the identity provider. This gathers togehter the
+//! primitives from the rest of the library into a convenient package.
 use crate::{
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
@@ -16,6 +18,9 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Reason for rejecting an identity object request.
+/// This is for cryptographic reasons only, real-world identity verification is
+/// not handled in this library.
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyIdCredSecEquality,
@@ -241,6 +246,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 }
 
+/// Sign the given pre-identity-object to produce an identity object.
 pub fn sign_identity_object<
     P: Pairing,
     AttributeType: Attribute<P::ScalarField>,
@@ -342,6 +348,8 @@ pub fn verify_credentials<
     Ok((sig, initial_cdi))
 }
 
+/// Produce a signature on the initial account data to make a message that is
+/// submitted to the chain to create an initial account.
 pub fn create_initial_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -374,7 +382,7 @@ pub fn create_initial_cdi<
     }
 }
 
-pub fn sign_initial_cred_values<
+fn sign_initial_cred_values<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,

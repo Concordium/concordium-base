@@ -9,8 +9,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use either::{Left, Right};
 use id::{
     account_holder::*,
-    constants::{ArCurve, IpPairing},
-    ffi::*,
+    constants::{ArCurve, IpPairing, *},
     identity_provider::*,
     secret_sharing::Threshold,
     types::*,

@@ -1,7 +1,7 @@
 use criterion::*;
 use crypto_common::{
-    types::{KeyIndex, TransactionTime},
-    KeyPair, *,
+    types::{KeyIndex, KeyPair, TransactionTime},
+    *,
 };
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -11,8 +11,7 @@ use id::{
     account_holder::*,
     anonymity_revoker::*,
     chain::*,
-    constants::{ArCurve, BaseField},
-    ffi::*,
+    constants::{ArCurve, BaseField, *},
     identity_provider::*,
     secret_sharing::Threshold,
     types::*,

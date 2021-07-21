@@ -1,3 +1,5 @@
+//! Functionality needed by the account holder, either when interacting with the
+//! identity provider, or when interacting with the chain.
 use crate::{
     secret_sharing::*,
     sigma_protocols::{
@@ -1079,7 +1081,7 @@ fn compute_pok_reg_id<C: Curve>(
 mod tests {
     use super::*;
 
-    use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crate::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use crypto_common::types::{KeyIndex, KeyPair};
     use curve_arithmetic::Curve;
     use either::Either::Left;

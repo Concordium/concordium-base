@@ -1,3 +1,5 @@
+//! Main types used in the identity layer, and their serialization
+//! implementations.
 use crate::{
     secret_sharing::Threshold,
     sigma_protocols::{
@@ -46,10 +48,9 @@ use std::{
 
 /// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
-/// Note that this file currently consists of 999 digits, followed by the
-/// LF character (0x0a).
 pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.dat");
 
+/// Size in bytes of an account address in binary encoding.
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 /// This is currently the number required, since the only
@@ -60,6 +61,8 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
+/// Address of an account. Textual representation uses base58check encoding with
+/// version byte 1.
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl std::fmt::Display for AccountAddress {
@@ -166,33 +169,34 @@ impl Deserial for SignatureThreshold {
 // non-zero.
 impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        // expect a map, but also handle string
+        struct SignatureThresholdVisitor;
+
+        impl<'de> Visitor<'de> for SignatureThresholdVisitor {
+            type Value = SignatureThreshold;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(formatter, "A non-zero u8.")
+            }
+
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                if v > 0 && v <= 255 {
+                    Ok(SignatureThreshold(v as u8))
+                } else {
+                    Err(de::Error::custom(format!(
+                        "Signature threshold out of range {}",
+                        v
+                    )))
+                }
+            }
+        }
         des.deserialize_u8(SignatureThresholdVisitor)
     }
 }
 
-pub struct SignatureThresholdVisitor;
-
-impl<'de> Visitor<'de> for SignatureThresholdVisitor {
-    type Value = SignatureThreshold;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "A non-zero u8.")
-    }
-
-    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-        if v > 0 && v <= 255 {
-            Ok(SignatureThreshold(v as u8))
-        } else {
-            Err(de::Error::custom(format!(
-                "Signature threshold out of range {}",
-                v
-            )))
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
+/// Signature by the identity provider on the initial account creation. This is
+/// an ordinary ed25519 signature for performance reasons, and not the complex
+/// BLS signature that the identity provider signs normal credentials with.
 pub struct IpCdiSignature(ed25519::Signature);
 
 impl std::ops::Deref for IpCdiSignature {
@@ -206,6 +210,9 @@ impl From<ed25519::Signature> for IpCdiSignature {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
+/// Signature produced by the account holder when deploying a credential that
+/// ensures that they are the owner of the account keys that are part of the
+/// credential.
 pub struct AccountOwnershipSignature(ed25519::Signature);
 
 impl std::ops::Deref for AccountOwnershipSignature {
@@ -273,6 +280,9 @@ impl AccountOwnershipProof {
 )]
 #[repr(transparent)]
 #[serde(transparent)]
+/// A succinct identifyer of an identity provider on the chain.
+/// In credential deployments, and other interactions with the chain this is
+/// used to identify which identity provider is meant.
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
@@ -358,36 +368,13 @@ impl ArIdentity {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(try_from = "AttributeStringTag", into = "AttributeStringTag")]
+/// Attribute tags have two representations. The "internal" one which is a u8
+/// element, and an external, human-readable one, which is a string. There is a
+/// defined mapping between them defined by the [ATTRIBUTE_NAMES] array (indices
+/// are internal tags, values at those indices are string tags).
+/// The JSON instances for this type are via the [AttributeStringTag] type
+/// defined below.
 pub struct AttributeTag(pub u8);
-
-/// Given two ordered iterators call the corresponding functions in the
-/// increasing order of keys. That is, essentially merge the two iterators into
-/// an ordered iterator and then map, but this is all done inline.
-pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mut f: F)
-where
-    I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
-    I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
-    F: FnMut(Either<&'a V1, &'a V2>), {
-    let mut iter_1 = i1.into_iter().peekable();
-    let mut iter_2 = i2.into_iter().peekable();
-    while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {
-        if tag_1 < tag_2 {
-            f(Either::Left(v_1));
-            // advance the first iterator
-            let _ = iter_1.next().is_none();
-        } else {
-            f(Either::Right(v_2));
-            // advance the second iterator
-            let _ = iter_2.next();
-        }
-    }
-    for (_, v) in iter_1 {
-        f(Either::Left(v))
-    }
-    for (_, v) in iter_2 {
-        f(Either::Right(v))
-    }
-}
 
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
@@ -412,6 +399,10 @@ pub const ATTRIBUTE_NAMES: [&str; 13] = [
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(transparent)]
+/// Attribute tags have two representations. The "internal" one which is a u8
+/// element, and an external, human-readable one, which is a string. There is a
+/// defined mapping between them defined by the [ATTRIBUTE_NAMES] array (indices
+/// are internal tags, values at those indices are string tags).
 pub struct AttributeStringTag(String);
 
 impl<'a> fmt::Display for AttributeStringTag {
@@ -475,8 +466,13 @@ impl From<u8> for AttributeTag {
     fn from(tag: u8) -> Self { AttributeTag(tag) }
 }
 
+/// An abstraction of an attribute. In the id library internals the only thing
+/// we care about attributes is that they can be encoded as field elements.
+/// The meaning of attributes is then assigned at the outer layers when the
+/// library is used. In order to make the library as generic (and ultimately
+/// simple) as possible this trait is used.
 pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
-    // convert an attribute to a field element
+    /// Convert an attribute to a field element
     fn to_field_element(&self) -> F;
 }
 
@@ -621,17 +617,24 @@ impl From<YearMonth> for u32 {
     serialize = "F: Field, AttributeType: Attribute<F> + SerdeSerialize",
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
 ))]
+/// An attribute list that is part of a normal credential. It consists of some
+/// mandatory attributes and some user selected attributes.
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     #[serde(rename = "validTo")]
+    /// The latest month and year where the credential is still valid.
     pub valid_to:     YearMonth,
     #[serde(rename = "createdAt")]
+    /// The year and month when the identity object from which the credential is
+    /// derived was created. This deliberately has low granularity since if it
+    /// was, e.g., a unix timestamp in seconds then the identity provider could
+    /// link accounts on the chain to identities they have issued.
     pub created_at:   YearMonth,
     /// Maximum number of accounts that can be created from the owning identity
     /// object.
     #[serde(rename = "maxAccounts")]
     pub max_accounts: u8,
-    /// The attributes map. The map size can be at most k where k is the number
-    /// of bits that fit into a field element.
+    /// The attributes map. The map size can be at most `k` where `k` is the
+    /// number of bits that fit into a field element.
     #[serde(rename = "chosenAttributes")]
     #[map_size_length = 2]
     pub alist:        BTreeMap<AttributeTag, AttributeType>,
@@ -972,7 +975,7 @@ pub struct ArInfos<C: Curve> {
 
 /// A helper trait to access only the public key of the ArInfo structure.
 /// We use this to have functions work both on a map of public keys only, as
-/// well as on maps of ArInfos, see verify_cdi.
+/// well as on maps of ArInfos, see [crate::chain::verify_cdi].
 
 pub trait HasArPublicKey<C: Curve> {
     fn get_public_key(&self) -> &ArPublicKey<C>;
@@ -1017,21 +1020,37 @@ pub struct CredentialDeploymentCommitments<C: Curve> {
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+/// Randomness that is generated to commit to attributes when creating a
+/// credential. This randomness is needed later on if the user wishes to do
+/// something with those commitments, for example reveal the commited value, or
+/// prove a property of the value.
 pub struct CommitmentsRandomness<C: Curve> {
     #[serde(rename = "idCredSecRand")]
+    /// Randomness of the commitment to idCredSec.
     pub id_cred_sec_rand:  PedersenRandomness<C>,
     #[serde(rename = "prfRand")]
+    /// Randomness of the commitment to the PRF key.
     pub prf_rand:          PedersenRandomness<C>,
     #[serde(rename = "credCounterRand")]
+    /// Randomness of the commitment to the credential nonce. This nonce is the
+    /// number that is used to ensure that only a limited number of credentials
+    /// can be created from a given identity object.
     pub cred_counter_rand: PedersenRandomness<C>,
     #[serde(rename = "maxAccountsRand")]
+    /// Randomness of the commitment to the maximum number of accounts the user
+    /// may create from the identity object.
     pub max_accounts_rand: PedersenRandomness<C>,
     #[serde(rename = "attributesRand")]
+    /// Randomness, if any, used to commit to user-chosen attributes, such as
+    /// country of nationality.
     pub attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 #[derive(Debug, SerdeBase16IgnoreLengthSerialize, Clone)]
+/// Proofs that the credential is well-formed.
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Proofs that ensure that the credential is derived in a valid way from a
+    /// valid identity object.
     pub id_proofs:    IdOwnershipProofs<P, C>,
     /// Proof of knowledge of acc secret keys (signing keys corresponding to the
     /// verification keys either on the account already, or the ones which are
@@ -1167,6 +1186,8 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
+/// A policy is (currently) revealed values of attributes that are part of the
+/// identity object. Policies are part of credentials.
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     #[serde(rename = "validTo")]
     pub valid_to:   YearMonth,
@@ -1205,11 +1226,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
 }
 
 #[derive(Debug, PartialEq, Eq)]
+/// Which signature scheme is being used. Currently only one is supported.
 pub enum SchemeId {
     Ed25519,
 }
 
 #[derive(Debug, Eq, Clone)]
+/// Public AKA verification key for a given scheme. Only ed25519 is currently
+/// supported.
 pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
 }
@@ -1229,56 +1253,54 @@ impl SerdeSerialize for VerifyKey {
 
 impl<'de> SerdeDeserialize<'de> for VerifyKey {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        // expect a map, but also handle string
-        des.deserialize_any(VerifyKeyVisitor)
-    }
-}
+        struct VerifyKeyVisitor;
 
-pub struct VerifyKeyVisitor;
+        impl<'de> Visitor<'de> for VerifyKeyVisitor {
+            type Value = VerifyKey;
 
-impl<'de> Visitor<'de> for VerifyKeyVisitor {
-    type Value = VerifyKey;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(formatter, "Either a string or a map with verification key.")
+            }
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "Either a string or a map with verification key.")
-    }
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                let bytes = decode(v).map_err(de::Error::custom)?;
+                let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
+                Ok(VerifyKey::Ed25519VerifyKey(key))
+            }
 
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        let bytes = decode(v).map_err(de::Error::custom)?;
-        let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
-        Ok(VerifyKey::Ed25519VerifyKey(key))
-    }
-
-    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-        let mut map = map;
-        let mut tmp_map: BTreeMap<String, String> = BTreeMap::new();
-        while tmp_map.len() < 2 {
-            if let Some((k, v)) = map.next_entry()? {
-                if k == "schemeId" {
-                    if v != "Ed25519" {
-                        return Err(de::Error::custom(format!(
-                            "Unknown signature scheme type {}",
-                            v
-                        )));
+            fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                let mut map = map;
+                let mut tmp_map: BTreeMap<String, String> = BTreeMap::new();
+                while tmp_map.len() < 2 {
+                    if let Some((k, v)) = map.next_entry()? {
+                        if k == "schemeId" {
+                            if v != "Ed25519" {
+                                return Err(de::Error::custom(format!(
+                                    "Unknown signature scheme type {}",
+                                    v
+                                )));
+                            }
+                            if tmp_map.insert(k, v).is_some() {
+                                return Err(de::Error::custom("Duplicate schemeId."));
+                            }
+                        } else if k == "verifyKey" {
+                            tmp_map.insert(k, v);
+                        }
+                    } else {
+                        return Err(de::Error::custom(
+                            "At least the two keys 'schemeId' and 'verifyKey' are expected.",
+                        ));
                     }
-                    if tmp_map.insert(k, v).is_some() {
-                        return Err(de::Error::custom("Duplicate schemeId."));
-                    }
-                } else if k == "verifyKey" {
-                    tmp_map.insert(k, v);
                 }
-            } else {
-                return Err(de::Error::custom(
-                    "At least the two keys 'schemeId' and 'verifyKey' are expected.",
-                ));
+                let vf_key_str = tmp_map.get("verifyKey").ok_or_else(|| {
+                    de::Error::custom("Could not find verifyKey, should not happen.")
+                })?;
+                let bytes = decode(vf_key_str).map_err(de::Error::custom)?;
+                let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
+                Ok(VerifyKey::Ed25519VerifyKey(key))
             }
         }
-        let vf_key_str = tmp_map
-            .get("verifyKey")
-            .ok_or_else(|| de::Error::custom("Could not find verifyKey, should not happen."))?;
-        let bytes = decode(vf_key_str).map_err(de::Error::custom)?;
-        let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
-        Ok(VerifyKey::Ed25519VerifyKey(key))
+        des.deserialize_any(VerifyKeyVisitor)
     }
 }
 
@@ -1354,13 +1376,6 @@ impl VerifyKey {
             }
         }
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-pub struct NewAccount {
-    #[size_length = 1]
-    pub keys:      Vec<VerifyKey>,
-    pub threshold: SignatureThreshold,
 }
 
 /// Values (as opposed to proofs) in credential deployment.
@@ -1465,6 +1480,8 @@ fn deserialize_ar_data<'de, D: de::Deserializer<'de>, C: Curve>(
     deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
+/// A credential with attributes, public keys, and proofs that it is
+/// well-formed.
 pub struct CredentialDeploymentInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -1521,16 +1538,12 @@ pub struct UnsignedCredentialDeploymentInfo<
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
-// #[serde(bound(
-//     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
-//                  Attribute<C::Scalar> + SerdeSerialize",
-//     deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
-//                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
-// ))]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
+/// Information needed to create an `initial` account. This account is created
+/// on behalf of the user by the identity provider.
 pub struct InitialCredentialDeploymentInfo<
     // P: Pairing,
     C: Curve, //<Scalar = P::ScalarField>,
@@ -1585,6 +1598,8 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P
 
 #[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+/// A set of cryptographic parameters that are particular to the chain and
+/// shared by everybody that interacts with the chain.
 pub struct GlobalContext<C: Curve> {
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
@@ -1598,7 +1613,8 @@ pub struct GlobalContext<C: Curve> {
     bulletproof_generators:      Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
-    /// A free-form string used to distinguish between different chains.
+    /// A free-form string used to distinguish between different chains even if
+    /// they share other parameters.
     pub genesis_string:          String,
 }
 
@@ -2079,6 +2095,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
+/// Account credential message is an account credential together with a message
+/// expiry. This is the payload that is sent to the chain when new account are
+/// created, either initial accounts or normal accounts.
 pub struct AccountCredentialMessage<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,

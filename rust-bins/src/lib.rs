@@ -1,6 +1,6 @@
 use crypto_common::*;
 use curve_arithmetic::*;
-use id::{ffi::*, types::*};
+use id::{constants::*, types::*};
 use pairing::bls12_381::Bls12;
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};

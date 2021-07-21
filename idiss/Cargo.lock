@@ -631,6 +631,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.1",
  "sha3",
+ "thiserror",
  "wasm-bindgen",
 ]
 

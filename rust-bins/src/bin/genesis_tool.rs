@@ -10,7 +10,7 @@ use crypto_common::{
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use id::{account_holder::*, constants::*, ffi::*, secret_sharing::Threshold, types::*};
+use id::{account_holder::*, constants::*, secret_sharing::Threshold, types::*};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
 use std::{

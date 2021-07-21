@@ -10,7 +10,7 @@ use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
-use id::{account_holder, ffi::AttributeKind, secret_sharing::Threshold, types::*};
+use id::{account_holder, constants::AttributeKind, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
