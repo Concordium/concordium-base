@@ -23,7 +23,7 @@ use std::{
     io::Cursor,
 };
 
-use crypto_common::serde_impls::KeyPairDef;
+use crypto_common::types::KeyPair;
 type ExampleCurve = G1;
 
 /// Context for a transaction to send.
@@ -325,7 +325,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let mut csprng = thread_rng();
     keys.insert(
         KeyIndex(0),
-        crypto_common::serde_impls::KeyPairDef::from(ed25519::Keypair::generate(&mut csprng)),
+        crypto_common::types::KeyPair::from(ed25519::Keypair::generate(&mut csprng)),
     );
 
     let initial_acc_data = InitialAccountData {
@@ -393,7 +393,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     let cred_data = {
         let mut keys = std::collections::BTreeMap::new();
         let mut csprng = thread_rng();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
 
         CredentialData {
             keys,

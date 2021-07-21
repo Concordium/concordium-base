@@ -11,8 +11,7 @@ use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
 use crypto_common::{
-    serde_impls::KeyPairDef,
-    types::{CredentialIndex, KeyIndex},
+    types::{CredentialIndex, KeyIndex, KeyPair},
     *,
 };
 use crypto_common_derive::*;
@@ -1291,8 +1290,8 @@ impl From<&ed25519::Keypair> for VerifyKey {
     fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
-impl From<&KeyPairDef> for VerifyKey {
-    fn from(kp: &KeyPairDef) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+impl From<&KeyPair> for VerifyKey {
+    fn from(kp: &KeyPair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
 /// Compare byte representation.
@@ -1797,7 +1796,7 @@ impl From<InitialAccountData> for AccountKeys {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialData {
     #[serde(rename = "keys")]
-    pub keys:      BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    pub keys:      BTreeMap<KeyIndex, crypto_common::types::KeyPair>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
@@ -1838,7 +1837,7 @@ impl CredentialDataWithSigning for CredentialData {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct InitialAccountData {
     #[serde(rename = "keys")]
-    pub keys:      BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    pub keys:      BTreeMap<KeyIndex, crypto_common::types::KeyPair>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }

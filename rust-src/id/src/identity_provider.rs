@@ -466,7 +466,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 mod tests {
     use super::*;
     use crate::{constants::ArCurve, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use ff::Field;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
@@ -538,9 +538,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -626,9 +626,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -673,9 +673,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),

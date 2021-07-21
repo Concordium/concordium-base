@@ -183,7 +183,7 @@ fn main() -> std::io::Result<()> {
         for idx in 0..common.num_keys {
             initial_keys.insert(
                 KeyIndex(idx as u8),
-                crypto_common::serde_impls::KeyPairDef::generate(csprng),
+                crypto_common::types::KeyPair::generate(csprng),
             );
         }
 

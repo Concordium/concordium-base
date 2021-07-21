@@ -1,6 +1,4 @@
-use pairing::bls12_381::{Bls12, G1};
-
-use crypto_common::{base16_decode_string, types::TransactionTime, version::*};
+use crypto_common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0};
 use curve_arithmetic::*;
 use id::{
     constants::ArCurve,
@@ -10,6 +8,7 @@ use id::{
     },
     types::*,
 };
+use pairing::bls12_381::{Bls12, G1};
 use serde_json::{from_str, from_value, ser::to_string, Value};
 use std::fmt::Display;
 

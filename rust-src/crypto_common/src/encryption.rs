@@ -98,12 +98,15 @@ pub struct EncryptionMetadata {
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(transparent)]
+/// A wrapper around a byte array to represent a ciphertext. JSON encodings are
+/// in base64.
 pub struct CipherText {
     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     ct: Vec<u8>,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
+/// Ciphertext together with metadata describing the encryption method.
 pub struct EncryptedData {
     #[serde(rename = "metadata")]
     metadata:    EncryptionMetadata,
@@ -111,6 +114,8 @@ pub struct EncryptedData {
     cipher_text: CipherText,
 }
 
+/// The number of rounds of the key derivation function to use for hashing the
+/// password.
 pub const NUM_ROUNDS: u32 = 100000;
 
 /// Encrypt the given plaintext using the provided password.
@@ -155,6 +160,7 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
+/// Errors that can occur during AES decryption.
 pub enum DecryptionError {
     /// Error during AES decryption.
     #[error("Decryption error.")]

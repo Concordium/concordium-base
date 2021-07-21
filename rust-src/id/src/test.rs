@@ -9,9 +9,8 @@ use crate::{
     types::*,
 };
 use crypto_common::{
-    serde_impls::KeyPairDef,
     types::{KeyIndex, TransactionTime},
-    *,
+    KeyPair, *,
 };
 use curve_arithmetic::Curve;
 use dodis_yampolskiy_prf::secret as prf;
@@ -174,9 +173,9 @@ pub fn test_pipeline() {
     let acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
@@ -232,9 +231,9 @@ pub fn test_pipeline() {
     let acc_data = CredentialData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),

@@ -1,8 +1,7 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
-    serde_impls::KeyPairDef,
-    types::{Amount, CredentialIndex, KeyIndex, TransactionTime},
+    types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
     *,
 };
 use dialoguer::{Input, MultiSelect, Select};
@@ -817,9 +816,9 @@ fn handle_create_credential(cc: CreateCredential) {
     let acc_data = {
         let mut csprng = thread_rng();
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
 
         CredentialData {
             keys,
@@ -1280,9 +1279,9 @@ fn handle_start_ip(sip: StartIp) {
     let initial_acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),

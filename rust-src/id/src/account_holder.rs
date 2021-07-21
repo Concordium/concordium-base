@@ -1080,7 +1080,7 @@ mod tests {
     use super::*;
 
     use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use curve_arithmetic::Curve;
     use either::Either::Left;
     use pedersen_scheme::key::CommitmentKey as PedersenKey;
@@ -1216,9 +1216,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -1260,9 +1260,9 @@ mod tests {
             _phantom: Default::default(),
         };
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let sigthres = SignatureThreshold(2);
         let acc_data = CredentialData {
             keys,

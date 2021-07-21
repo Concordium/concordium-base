@@ -404,7 +404,7 @@ mod tests {
     use super::*;
 
     use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
@@ -433,9 +433,9 @@ mod tests {
         let initial_acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -482,9 +482,9 @@ mod tests {
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -508,9 +508,9 @@ mod tests {
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -554,9 +554,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
