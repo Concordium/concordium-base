@@ -3,7 +3,7 @@ use crypto_common::{
     types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
@@ -31,8 +31,8 @@ const EXPIRY: TransactionTime = TransactionTime {
 fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
-    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
-    let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
+    let ip_public_key = ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ArCurve> {

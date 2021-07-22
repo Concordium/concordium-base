@@ -15,12 +15,11 @@ use bulletproofs::{
 };
 use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use elgamal::{multicombine, Cipher};
 use ff::Field;
 use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, value::Value,
+    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
 };
 use rand::*;
 use random_oracle::RandomOracle;
@@ -1085,7 +1084,7 @@ mod tests {
     use crypto_common::types::{KeyIndex, KeyPair};
     use curve_arithmetic::Curve;
     use either::Either::Left;
-    use pedersen_scheme::key::CommitmentKey as PedersenKey;
+    use pedersen_scheme::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;
 

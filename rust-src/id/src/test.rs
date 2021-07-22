@@ -12,7 +12,7 @@ use crypto_common::{
     *,
 };
 use curve_arithmetic::Curve;
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
@@ -71,8 +71,8 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     // Create key for IP long enough to encode the attributes and anonymity
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
-    let ip_secret_key = ps_sig::secret::SecretKey::<IpPairing>::generate(ps_len, csprng);
-    let ip_verify_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = ps_sig::SecretKey::<IpPairing>::generate(ps_len, csprng);
+    let ip_verify_key = ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(csprng);
     let ip_cdi_verify_key = keypair.public;
     let ip_cdi_secret_key = keypair.secret;

@@ -8,16 +8,21 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use rand::*;
 
-/// A commitment  key.
+/// A commitment key is a pair of group elements that are used as a base to
+/// raise the value and randomness, respectively.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct CommitmentKey<C: Curve> {
+    /// Base to raise the value to when committing.
     pub g: C,
+    /// Base to raise the randomness to when committing.
     pub h: C,
 }
 
 impl<C: Curve> CommitmentKey<C> {
     pub fn new(g: C, h: C) -> Self { CommitmentKey { g, h } }
 
+    /// Commit to the given value using a freshly generated randomness, and
+    /// return the randomness that was generated.
     pub fn commit<T, V: AsRef<C::Scalar>>(
         &self,
         s: &V,
@@ -42,10 +47,13 @@ impl<C: Curve> CommitmentKey<C> {
     }
 
     #[inline(always)]
+    /// Hide the value inside a commitment using the given randomness.
     pub fn hide<V: AsRef<C::Scalar>>(&self, s: &V, r: &Randomness<C>) -> Commitment<C> {
         self.hide_worker(s.as_ref(), r.as_ref())
     }
 
+    /// Prove that the commitment `self` contains the given value and
+    /// randomness.
     pub fn open(&self, s: &Value<C>, r: &Randomness<C>, c: &Commitment<C>) -> bool {
         self.hide(s, r) == *c
     }

@@ -1,11 +1,7 @@
-//! ed25519 VRF
-
 pub use crate::{errors::*, proof::*, public::*, secret::*};
 use crypto_common::{size_t, *};
-pub use curve25519_dalek::digest::Digest;
 use ffi_helpers::*;
 use rand::{thread_rng, CryptoRng, Rng};
-pub use sha2::Sha512;
 use std::{cmp::Ordering, sync::Arc};
 use subtle::ConstantTimeEq;
 
@@ -75,7 +71,7 @@ macro_derive_binary!(Box ecvrf_secret_key_eq, SecretKey, |x, y| bool::from(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 /// Generate a VRF proof. This function assumes the arguments are not
 /// null-pointers and it always returns a non-null pointer.
-pub extern "C" fn ecvrf_prove(
+extern "C" fn ecvrf_prove(
     public: *mut PublicKey,
     secret: *mut SecretKey,
     message: *const u8,
@@ -91,7 +87,7 @@ pub extern "C" fn ecvrf_prove(
 #[no_mangle]
 /// Generate a new secret key using the system random number generator.
 /// The result is always a non-null pointer.
-pub extern "C" fn ecvrf_priv_key() -> *mut SecretKey {
+extern "C" fn ecvrf_priv_key() -> *mut SecretKey {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
     Box::into_raw(Box::new(sk))
@@ -102,7 +98,7 @@ pub extern "C" fn ecvrf_priv_key() -> *mut SecretKey {
 /// We assume the secret key pointer is non-null.
 /// The result is always a non-null pointer.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn ecvrf_pub_key(secret_key: *mut SecretKey) -> *mut PublicKey {
+extern "C" fn ecvrf_pub_key(secret_key: *mut SecretKey) -> *mut PublicKey {
     let sk = from_ptr!(secret_key);
     let pk = PublicKey::from(sk);
     Box::into_raw(Box::new(pk))
@@ -112,7 +108,7 @@ pub extern "C" fn ecvrf_pub_key(secret_key: *mut SecretKey) -> *mut PublicKey {
 /// Compute hash of a proof.
 /// We assume the proof pointer is non-null.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn ecvrf_proof_to_hash(hash_ptr: *mut u8, proof_ptr: *const Proof) {
+extern "C" fn ecvrf_proof_to_hash(hash_ptr: *mut u8, proof_ptr: *const Proof) {
     let hash = mut_slice_from_c_bytes!(hash_ptr, 64);
     let proof = from_ptr!(proof_ptr);
     hash.copy_from_slice(&proof.to_hash())
@@ -120,7 +116,7 @@ pub extern "C" fn ecvrf_proof_to_hash(hash_ptr: *mut u8, proof_ptr: *const Proof
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn ecvrf_verify_key(key_ptr: *mut PublicKey) -> i32 {
+extern "C" fn ecvrf_verify_key(key_ptr: *mut PublicKey) -> i32 {
     let key = from_ptr!(key_ptr);
     if key.verify_key() {
         1
@@ -133,7 +129,7 @@ pub extern "C" fn ecvrf_verify_key(key_ptr: *mut PublicKey) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 /// Verify. Returns 1 if verification successful and 0 otherwise.
 /// We assume all pointers are non-null.
-pub extern "C" fn ecvrf_verify(
+extern "C" fn ecvrf_verify(
     public_key_ptr: *mut PublicKey,
     proof_ptr: *const Proof,
     message_ptr: *const u8,
@@ -153,7 +149,7 @@ pub extern "C" fn ecvrf_verify(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 // support ord instance needed in Haskell
-pub extern "C" fn ecvrf_proof_cmp(proof_ptr_1: *const Proof, proof_ptr_2: *const Proof) -> i32 {
+extern "C" fn ecvrf_proof_cmp(proof_ptr_1: *const Proof, proof_ptr_2: *const Proof) -> i32 {
     // optimistic check first.
     if proof_ptr_1 == proof_ptr_2 {
         return 0;
@@ -186,7 +182,7 @@ pub extern "C" fn ecvrf_proof_cmp(proof_ptr_1: *const Proof, proof_ptr_2: *const
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 // ord instance for public keys
-pub extern "C" fn ecvrf_public_key_cmp(
+extern "C" fn ecvrf_public_key_cmp(
     public_key_ptr_1: *mut PublicKey,
     public_key_ptr_2: *mut PublicKey,
 ) -> i32 {

@@ -11,7 +11,7 @@ use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
+use pedersen_scheme::{Commitment, CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
@@ -476,7 +476,7 @@ mod tests {
     use crate::{constants::ArCurve, test::*};
     use crypto_common::types::{KeyIndex, KeyPair};
     use ff::Field;
-    use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
+    use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
 
     const EXPIRY: TransactionTime = TransactionTime {

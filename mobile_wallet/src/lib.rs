@@ -5,7 +5,7 @@ use crypto_common::{
     types::{Amount, KeyIndex, Signature, TransactionSignature},
     *,
 };
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
 use either::Either::{Left, Right};

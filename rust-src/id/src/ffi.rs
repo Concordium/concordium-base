@@ -7,7 +7,7 @@ use crypto_common::{size_t, types::TransactionTime, *};
 use either::Either::{Left, Right};
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
-use pedersen_scheme::key::CommitmentKey as PedersenKey;
+use pedersen_scheme::CommitmentKey as PedersenKey;
 use rand::thread_rng;
 use std::{collections::BTreeMap, convert::TryInto, io::Cursor};
 
@@ -187,7 +187,7 @@ mod test {
         test::*,
     };
     use crypto_common::types::{KeyIndex, KeyPair};
-    use dodis_yampolskiy_prf::secret as prf;
+    use dodis_yampolskiy_prf as prf;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<BaseField, AttributeKind>;

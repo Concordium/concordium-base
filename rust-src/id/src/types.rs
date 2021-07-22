@@ -19,7 +19,7 @@ use crypto_common::{
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use derive_more::*;
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
 use either::Either;
@@ -27,10 +27,9 @@ use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
-    commitment as pedersen, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, Value as PedersenValue,
+    Commitment as PedersenCommitment, CommitmentKey as PedersenKey,
+    Randomness as PedersenRandomness, Value as PedersenValue,
 };
-use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
 use random_oracle::Challenge;
 use serde::{
     de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
@@ -826,16 +825,16 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// the PS public key. This is used to compute the message that the IP
     /// signs.
     #[serde(rename = "idCredSecCommitment")]
-    pub cmm_sc:                pedersen::Commitment<P::G1>,
+    pub cmm_sc:                PedersenCommitment<P::G1>,
     /// Commitment to the prf key in group G1.
     #[serde(rename = "prfKeyCommitmentWithIP")]
-    pub cmm_prf:               pedersen::Commitment<P::G1>,
+    pub cmm_prf:               PedersenCommitment<P::G1>,
     /// commitments to the coefficients of the polynomial
     /// used to share the prf key
     /// K + b1 X + b2 X^2...
     /// where K is the prf key
     #[serde(rename = "prfKeySharingCoeffCommitments")]
-    pub cmm_prf_sharing_coeff: Vec<pedersen::Commitment<C>>,
+    pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
     /// Proofs of knowledge. See the documentation of PreIdentityProof for
     /// details.
     #[serde(
@@ -869,7 +868,7 @@ pub struct IdentityObject<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub signature:           Signature<P>,
+    pub signature:           ps_sig::Signature<P>,
 }
 
 /// Anonymity revokers associated with a single identity provider
@@ -927,7 +926,7 @@ pub struct IpInfo<P: Pairing> {
     pub ip_description:    Description,
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
-    pub ip_verify_key:     pssig::PublicKey<P>,
+    pub ip_verify_key:     ps_sig::PublicKey<P>,
     /// Ed public key of the IP
     #[serde(
         rename = "ipCdiVerifyKey",
@@ -996,26 +995,26 @@ impl<C: Curve> HasArPublicKey<C> for ArPublicKey<C> {
 pub struct CredentialDeploymentCommitments<C: Curve> {
     /// commitment to the prf key
     #[serde(rename = "cmmPrf")]
-    pub cmm_prf: pedersen::Commitment<C>,
+    pub cmm_prf: PedersenCommitment<C>,
     /// commitment to credential counter
     #[serde(rename = "cmmCredCounter")]
-    pub cmm_cred_counter: pedersen::Commitment<C>,
+    pub cmm_cred_counter: PedersenCommitment<C>,
     /// commitment to the max account number.
     #[serde(rename = "cmmMaxAccounts")]
-    pub cmm_max_accounts: pedersen::Commitment<C>,
+    pub cmm_max_accounts: PedersenCommitment<C>,
     /// List of commitments to the attributes that are not revealed.
     /// For the purposes of checking signatures, the commitments to those
     /// that are revealed as part of the policy are going to be computed by the
     /// verifier.
     #[map_size_length = 2]
     #[serde(rename = "cmmAttributes")]
-    pub cmm_attributes: BTreeMap<AttributeTag, pedersen::Commitment<C>>,
+    pub cmm_attributes: BTreeMap<AttributeTag, PedersenCommitment<C>>,
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
     /// S + b1 X + b2 X^2...
     /// where S is id_cred_sec
     #[serde(rename = "cmmIdCredSecSharingCoeff")]
-    pub cmm_id_cred_sec_sharing_coeff: Vec<pedersen::Commitment<C>>,
+    pub cmm_id_cred_sec_sharing_coeff: Vec<PedersenCommitment<C>>,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -1132,7 +1131,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub sig: BlindedSignature<P>,
+    pub sig: ps_sig::BlindedSignature<P>,
     /// list of  commitments to the attributes .
     #[serde(
         rename = "commitments",
@@ -2001,7 +2000,7 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub randomness: SigRetrievalRandomness<P>,
+    pub randomness: ps_sig::SigRetrievalRandomness<P>,
 }
 
 /// Data that needs to be stored by the identity provider to support anonymity

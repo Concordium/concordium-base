@@ -8,10 +8,12 @@ use curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,
 };
-pub use sha2::{Sha256, Sha512};
+use sha2::Sha512;
 
 use crate::{constants::*, errors::*, proof::*, secret::*};
-/// An ed25519 public key.
+/// An ed25519-like public key. This has a bit stricter requirements than the
+/// signature scheme public keys, in particular points of small order are not
+/// allowed, and this is checked during serialization.
 #[derive(Copy, Clone, Default, Eq, PartialEq)]
 pub struct PublicKey(pub(crate) CompressedEdwardsY, pub(crate) EdwardsPoint);
 

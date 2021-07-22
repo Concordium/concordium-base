@@ -11,9 +11,7 @@ use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
-use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
-};
+use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};

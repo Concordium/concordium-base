@@ -1,9 +1,9 @@
 //! This module provides the random oracle replacement function needed in the
-//! sigma protocols, and any other constructions needing it.
+//! sigma protocols, bulletproofs, and any other constructions. It is based on
+//! SHA3.
 use crypto_common::*;
 use crypto_common_derive::Serialize;
 use curve_arithmetic::Curve;
-
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -22,6 +22,8 @@ impl AsRef<[u8]> for Challenge {
     fn as_ref(&self) -> &[u8] { &self.challenge }
 }
 
+/// This implementation allows the use of a random oracle without intermediate
+/// allocations of byte buffers.
 impl Write for RandomOracle {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -39,6 +41,8 @@ impl Write for RandomOracle {
     fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
+/// This implementation allows the use of a random oracle without intermediate
+/// allocations of byte buffers.
 impl Buffer for RandomOracle {
     type Result = sha3::digest::generic_array::GenericArray<
         u8,

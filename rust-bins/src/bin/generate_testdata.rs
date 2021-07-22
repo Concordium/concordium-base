@@ -5,7 +5,7 @@ use crypto_common::{
     *,
 };
 use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use either::{Left, Right};
 use id::{
     account_holder::*,

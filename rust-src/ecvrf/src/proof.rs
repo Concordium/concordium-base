@@ -25,6 +25,8 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 }
 
 #[derive(Clone, PartialEq, Eq)]
+/// Proof that the value produced by the VRF function is correct with respect to
+/// a given public key.
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
 /// Implements step 8 of <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1>

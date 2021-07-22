@@ -3,15 +3,13 @@
 use crate::errors::{InternalError::DivisionByZero, *};
 use crypto_common::*;
 use curve_arithmetic::{Curve, Secret, Value};
-
+use ff::Field;
 use rand::*;
 use std::rc::Rc;
 
-use ff::Field;
-
-/// A PRF  key.
+/// A PRF key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
-pub struct SecretKey<C: Curve>(pub Rc<Secret<C::Scalar>>);
+pub struct SecretKey<C: Curve>(Rc<Secret<C::Scalar>>);
 
 /// This trait allows automatic conversion of &SecretKey<C> to &C::Scalar.
 impl<C: Curve> std::ops::Deref for SecretKey<C> {
@@ -46,6 +44,11 @@ impl<C: Curve> SecretKey<C> {
         }
     }
 
+    /// Compute the exponent of the PRF function. This is an intermediate step
+    /// in the computation of the PRF function, but it is sometimes necessary to
+    /// know the exponent alone, and not just the result of the computation.
+    /// If this function returns OK(_) then the [SecretKey::prf] would also
+    /// return Ok, and vice-versa.
     pub fn prf_exponent(&self, n: u8) -> Result<C::Scalar, PrfError> {
         let mut x = C::scalar_from_u64(u64::from(n));
         x.add_assign(self);
@@ -55,6 +58,7 @@ impl<C: Curve> SecretKey<C> {
         }
     }
 
+    /// Compute the PRF function given the base `g` and the counter.
     pub fn prf(&self, g: &C, n: u8) -> Result<C, PrfError> {
         let y = self.prf_exponent(n)?;
         Ok(g.mul_by_scalar(&y))
