@@ -86,5 +86,6 @@ name = "verify_cdi"
 harness = false
 
 [features]
-default = []
-wasm-browser-test = []
+default = ["ffi"]
+ffi = []
+wasm-browser-test = ["ffi"]

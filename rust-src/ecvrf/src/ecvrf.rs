@@ -28,7 +28,7 @@ impl Keypair {
         }
     }
 
-    /// prove a message with this keypair's secret key.
+    /// Construct a VRF proof with this keypair's secret key.
     pub fn prove(&self, message: &[u8]) -> Proof {
         let expanded: ExpandedSecretKey = (&self.secret).into();
 

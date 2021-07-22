@@ -5,7 +5,8 @@ pub mod account_holder;
 pub mod anonymity_revoker;
 pub mod chain;
 pub mod constants;
-pub mod ffi;
+#[cfg(feature = "ffi")]
+mod ffi;
 pub mod identity_provider;
 pub mod secret_sharing;
 pub mod sigma_protocols;

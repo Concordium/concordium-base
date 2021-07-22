@@ -76,7 +76,7 @@ impl SecretKey {
         Ok(SecretKey(bits))
     }
 
-    #[allow(non_snake_case)]
+    /// Construct a VRF proof seeded by the given message.
     pub fn prove(&self, public_key: &PublicKey, message: &[u8]) -> Proof {
         ExpandedSecretKey::from(self).prove(&public_key, &message)
     }
