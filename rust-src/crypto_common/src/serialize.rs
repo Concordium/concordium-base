@@ -118,7 +118,7 @@ pub fn deserial_string<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult
     Ok(String::from_utf8(svec)?)
 }
 
-/// Write a string directlyt to the provided sink (without encoding its length).
+/// Write a string directly to the provided sink (without encoding its length).
 /// The string is utf8 encoded.
 pub fn serial_string<R: Buffer>(s: &str, out: &mut R) {
     out.write_all(s.as_bytes())
@@ -392,7 +392,7 @@ impl Serial for [u8] {
     }
 }
 
-/// Analogue of [Serial], but instead this has the type to serialize as a type
+/// Analogue of [Deserial], but instead this has the type to serialize as a type
 /// parameter, and is implemented once for a source. The reason for this trait
 /// is that it is often more convenient to use since we can rely on the
 /// typechecker to fill in more details. Contrast `A::deserial(source)` to

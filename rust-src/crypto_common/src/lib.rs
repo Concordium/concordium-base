@@ -1,4 +1,5 @@
-//! Common types and operations used throught the Concordium chain development.
+//! Common types and operations used throughout the Concordium chain
+//! development.
 mod helpers;
 mod impls;
 mod serde_impls;

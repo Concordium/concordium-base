@@ -279,7 +279,7 @@ impl AccountOwnershipProof {
 )]
 #[repr(transparent)]
 #[serde(transparent)]
-/// A succinct identifyer of an identity provider on the chain.
+/// A succinct identifier of an identity provider on the chain.
 /// In credential deployments, and other interactions with the chain this is
 /// used to identify which identity provider is meant.
 pub struct IpIdentity(pub u32);

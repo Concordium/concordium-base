@@ -17,7 +17,7 @@ pub struct EncryptedAmountIndex {
 #[derive(Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize, Debug, Default)]
 #[serde(transparent)]
 #[repr(transparent)]
-/// An that represents which encrypted amounts have been combined into an
+/// An index that represents which encrypted amounts have been combined into an
 /// associated encrypted amount.
 /// This is in contrast to [EncryptedAmountIndex] which identifies a single
 /// encrypted amount (per account).

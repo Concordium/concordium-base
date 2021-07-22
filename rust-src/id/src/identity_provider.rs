@@ -1,4 +1,4 @@
-//! Functionality needed by the identity provider. This gathers togehter the
+//! Functionality needed by the identity provider. This gathers together the
 //! primitives from the rest of the library into a convenient package.
 use crate::{
     secret_sharing::Threshold,
