@@ -2,58 +2,6 @@ use crate::*;
 use serde::{de, de::Visitor, Deserializer};
 use std::convert::TryInto;
 
-// A workaround since dalek does not implement proper serde instances.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct KeyPairDef {
-    #[serde(
-        rename = "signKey",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub secret: ed25519_dalek::SecretKey,
-    #[serde(
-        rename = "verifyKey",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub public: ed25519_dalek::PublicKey,
-}
-
-impl KeyPairDef {
-    pub fn generate<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
-        Self::from(ed25519_dalek::Keypair::generate(rng))
-    }
-}
-
-impl From<ed25519_dalek::Keypair> for KeyPairDef {
-    fn from(kp: ed25519_dalek::Keypair) -> Self {
-        Self {
-            secret: kp.secret,
-            public: kp.public,
-        }
-    }
-}
-
-impl KeyPairDef {
-    /// Sign the given message with the keypair.
-    pub fn sign(&self, msg: &[u8]) -> types::Signature {
-        let expanded = ed25519_dalek::ExpandedSecretKey::from(&self.secret);
-        let sig = expanded.sign(msg, &self.public);
-        types::Signature {
-            sig: sig.to_bytes().to_vec(),
-        }
-    }
-}
-
-impl From<KeyPairDef> for ed25519_dalek::Keypair {
-    fn from(kp: KeyPairDef) -> ed25519_dalek::Keypair {
-        ed25519_dalek::Keypair {
-            secret: kp.secret,
-            public: kp.public,
-        }
-    }
-}
-
 /// A manual implementation of the Serde deserializer to support
 /// reading both from strings and from integers.
 impl<'de> SerdeDeserialize<'de> for types::KeyIndex {

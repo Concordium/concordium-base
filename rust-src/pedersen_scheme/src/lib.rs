@@ -1,8 +1,9 @@
-pub mod commitment;
+//! Implementation of Pedersen commitments over an arbitrary curve.
+mod commitment;
 mod errors;
-pub mod key;
-pub mod randomness;
-pub mod value;
+mod key;
+mod randomness;
+mod value;
 
 pub use crate::{commitment::*, key::*, randomness::*, value::*};
 

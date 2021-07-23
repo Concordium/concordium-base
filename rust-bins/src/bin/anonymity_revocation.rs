@@ -3,7 +3,7 @@ use client_server_helpers::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Value};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use elgamal::{decrypt_from_chunks_given_generator, Message};
 use id::{anonymity_revoker::*, constants::ArCurve, types::*};
 use serde_json::json;

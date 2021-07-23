@@ -1,13 +1,11 @@
 //! Common types needed in concordium.
 
-//! FIXME: This should be moved into a concordium-common at some point when that
-//! is moved to the bottom of the dependency hierarchy.
-
 use crate::{Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial};
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
-use derive_more::*;
+use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
+use thiserror::*;
 
 /// Index of an account key that is to be used.
 #[derive(
@@ -42,6 +40,9 @@ pub struct CredentialIndex {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+/// An amount of GTU. The lowest expressible amount is 1microGTU. The string
+/// representation of this type uses a decimal separator with at most 6
+/// decimals.
 pub struct Amount {
     pub microgtu: u64,
 }
@@ -86,28 +87,21 @@ impl Add<Option<Amount>> for Amount {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Errors that can occur during parsing of an [Amount] from a string.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
 pub enum AmountParseError {
+    #[error("Amount overflow.")]
     Overflow,
+    #[error("Expected dot.")]
     ExpectedDot,
+    #[error("Expected digit.")]
     ExpectedDigit,
+    #[error("Expected more input.")]
     ExpectedMore,
+    #[error("Expected digit or dot.")]
     ExpectedDigitOrDot,
+    #[error("Amounts can have at most six decimals.")]
     AtMostSixDecimals,
-}
-
-impl std::fmt::Display for AmountParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use AmountParseError::*;
-        match self {
-            Overflow => write!(f, "Amount overflow."),
-            ExpectedDot => write!(f, "Expected dot."),
-            ExpectedDigit => write!(f, "Expected digit."),
-            ExpectedMore => write!(f, "Expected more input."),
-            ExpectedDigitOrDot => write!(f, "Expected digit or dot."),
-            AtMostSixDecimals => write!(f, "Amounts can have at most six decimals."),
-        }
-    }
 }
 
 /// Parse from string in GTU units. The input string must be of the form
@@ -371,6 +365,60 @@ impl FromStr for Timestamp {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let millis = u64::from_str(s)?;
         Ok(Self { millis })
+    }
+}
+
+/// A ed25519 keypair. This is available in the `ed25519::dalek` crate, but the
+/// JSON serialization there is not compatible with what we use, so we redefine
+/// it there.
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+pub struct KeyPair {
+    #[serde(
+        rename = "signKey",
+        serialize_with = "crate::serialize::base16_encode",
+        deserialize_with = "crate::serialize::base16_decode"
+    )]
+    pub secret: ed25519_dalek::SecretKey,
+    #[serde(
+        rename = "verifyKey",
+        serialize_with = "crate::serialize::base16_encode",
+        deserialize_with = "crate::serialize::base16_decode"
+    )]
+    pub public: ed25519_dalek::PublicKey,
+}
+
+impl KeyPair {
+    pub fn generate<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
+        Self::from(ed25519_dalek::Keypair::generate(rng))
+    }
+}
+
+impl From<ed25519_dalek::Keypair> for KeyPair {
+    fn from(kp: ed25519_dalek::Keypair) -> Self {
+        Self {
+            secret: kp.secret,
+            public: kp.public,
+        }
+    }
+}
+
+impl KeyPair {
+    /// Sign the given message with the keypair.
+    pub fn sign(&self, msg: &[u8]) -> Signature {
+        let expanded = ed25519_dalek::ExpandedSecretKey::from(&self.secret);
+        let sig = expanded.sign(msg, &self.public);
+        Signature {
+            sig: sig.to_bytes().to_vec(),
+        }
+    }
+}
+
+impl From<KeyPair> for ed25519_dalek::Keypair {
+    fn from(kp: KeyPair) -> ed25519_dalek::Keypair {
+        ed25519_dalek::Keypair {
+            secret: kp.secret,
+            public: kp.public,
+        }
     }
 }
 

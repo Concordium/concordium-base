@@ -1,3 +1,4 @@
+//! Functionality needed by the chain to verify credential deployments.
 use crate::{
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*},
@@ -10,14 +11,13 @@ use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
-use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
-};
+use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Reason why verification of a credential failed.
 pub enum CdiVerificationError {
     RegId,
     IdCredPub,
@@ -43,7 +43,8 @@ impl Display for CdiVerificationError {
         }
     }
 }
-/// verify credential deployment info
+/// Verify credential deployment info. This checks that the data is consistent,
+/// and that the credential is signed by the specified identity provider.
 pub fn verify_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -184,7 +185,8 @@ pub fn verify_cdi<
     Ok(())
 }
 
-/// verify initial credential deployment info
+/// Verify initial account creation. This is essentially checking that the
+/// signature by the identity provider is correct.
 pub fn verify_initial_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -256,60 +258,6 @@ fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     _commitments: &CredentialDeploymentCommitments<C>,
     _policy: &Policy<C, AttributeType>,
 ) -> bool {
-    // let variant_scalar = C::scalar_from_u64(u64::from(policy.variant)).unwrap();
-    // let expiry_scalar = C::scalar_from_u64(policy.expiry).unwrap();
-
-    // let cmm_vec = &commitments.cmm_attributes;
-
-    // let b1 = commitment_key.open(
-    //     &Value {
-    //         value: variant_scalar,
-    //     },
-    //     &policy_proof.variant_rand,
-    //     &cmm_vec[0],
-    // );
-    // if !b1 {
-    //     return false;
-    // }
-    // let b2 = commitment_key.open(
-    //     &Value {
-    //         value: expiry_scalar,
-    //     },
-    //     &policy_proof.expiry_rand,
-    //     &cmm_vec[1],
-    // );
-    // if !b2 {
-    //     return false;
-    // }
-
-    // // NOTE: This is basic proof-of concept. The correct solution is to instead
-    // // check that both lists come in increasing order of idx. Then the check
-    // // will be linear in the number of items in the policy, as opposed to
-    // // quadratic as it is now.
-    // for (idx, v) in policy.policy_vec.iter() {
-    //     if usize::from(idx + 2) < cmm_vec.len() {
-    //         if let Some(pos) = policy_proof
-    //             .cmm_opening_map
-    //             .iter()
-    //             .position(|idx_1| *idx == idx_1.0)
-    //         {
-    //             // found a randomness, now check opening
-    //             if !commitment_key.open(
-    //                 &Value {
-    //                     value: v.to_field_element(),
-    //                 },
-    //                 &policy_proof.cmm_opening_map[pos].1,
-    //                 &cmm_vec[usize::from(idx + 2)],
-    //             ) {
-    //                 return false;
-    //             }
-    //         } else {
-    //             return false;
-    //         }
-    //     } else {
-    //         return false;
-    //     }
-    // }
     true
 }
 
@@ -383,7 +331,7 @@ fn pok_sig_verifier<
         }
     };
 
-    merge_iter(
+    utils::merge_iter(
         policy.policy_vec.iter(),
         commitments.cmm_attributes.iter(),
         f,
@@ -403,8 +351,8 @@ fn pok_sig_verifier<
 mod tests {
     use super::*;
 
-    use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crate::{account_holder::*, constants::*, identity_provider::*, test::*};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
@@ -433,9 +381,9 @@ mod tests {
         let initial_acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -482,9 +430,9 @@ mod tests {
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -508,9 +456,9 @@ mod tests {
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -554,9 +502,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),

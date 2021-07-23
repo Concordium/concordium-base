@@ -1,3 +1,5 @@
+//! Implementations of sigma protocols needed by the identity layer of
+//! Concordium.
 pub mod aggregate_dlog;
 pub mod com_enc_eq;
 pub mod com_eq;

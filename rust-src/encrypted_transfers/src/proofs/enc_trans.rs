@@ -1,5 +1,7 @@
 //! This module provides an implementation of the sigma protocol used for
-//! encrypted transfers. It enables one to prove knowledge of a secret key `sk`,
+//! encrypted transfers.
+//!
+//! It enables one to prove knowledge of a secret key `sk`,
 //! exponent `s` and chunks a_1, ..., a_t, s_1', ..., s_(t')', r_1, ..., r_t,
 //! r_1', ..., r_(t')' such that pk_sender = g^sk, S_2 = S_1^sk h^s , and
 //! c_{i,1} = g^{r_i}, c_{i,2} = h^{a_i} pk_receiver^{r_i} for all i in {1,..,
@@ -51,7 +53,7 @@ use curve_arithmetic::{multiexp, Curve};
 use elgamal::ChunkSize;
 use ff::Field;
 use id::sigma_protocols::{
-    com_eq::{Witness as ComEqWitness, *},
+    com_eq::{ComEq, ComEqSecret, CommittedPoints, Witness as ComEqWitness},
     common::*,
     dlog::*,
 };
@@ -59,6 +61,10 @@ use pedersen_scheme::{Randomness as PedersenRandomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
 
+/// An auxiliary structure that contains data related to the proof of correct
+/// decryption. This is stated as an independent protocol in the blue papers,
+/// but for efficiency reasons the prover and verifier are inlined together with
+/// the main [EncTrans] proof provers and verifiers. Only the data is separate.
 pub struct ElgDec<C: Curve> {
     /// S_2 above
     pub public: C,
@@ -73,6 +79,7 @@ impl<C: Curve> ElgDec<C> {
     }
 }
 
+/// The [EncTrans] sigma protocol as specified in the blue paper.
 pub struct EncTrans<C: Curve> {
     pub dlog:    Dlog<C>,
     /// elg_dec contains the publicly known values S_1, S_2 and h
@@ -83,6 +90,8 @@ pub struct EncTrans<C: Curve> {
     pub encexp2: Vec<ComEq<C, C>>,
 }
 
+/// Witness for the [EncTrans] protocol.
+///
 /// The elc_dec protocol actually has two witnesses, one involving sk and one
 /// involving s, but since sk is also the secret for the dlog, and since
 /// s is a linear combination of the secrets for the EncExp/ComEq's,
@@ -90,7 +99,7 @@ pub struct EncTrans<C: Curve> {
 /// the extract_point function. We do therefore not need to transfer/send
 /// those witnesses, since they are determined by the ones below.
 #[derive(Debug, Serialize, Clone)]
-pub struct Witness<C: Curve> {
+pub struct EncTransWitness<C: Curve> {
     /// The common witness for both dlog and elc-dec
     witness_common:  C::Scalar,
     /// For EncExp/ComEq's involving a_i
@@ -101,16 +110,22 @@ pub struct Witness<C: Curve> {
     witness_encexp2: Vec<ComEqWitness<C>>,
 }
 
+/// Secret values which the [EncTrans] proof talks about. For constructing
+/// proofs these must match the public values that are part of the [EncTrans]
+/// structure.
 pub struct EncTransSecret<C: Curve> {
     /// dlog_secret contains the secret key `sk`
     pub dlog_secret:     Rc<C::Scalar>,
-    // ComEq secrets for encexp1
+    /// ComEq secrets for encexp1
     pub encexp1_secrets: Vec<ComEqSecret<C>>,
-    // ComeEq secrets for encexp2
+    /// ComeEq secrets for encexp2
     pub encexp2_secrets: Vec<ComEqSecret<C>>,
 }
 
 #[derive(Debug, Serialize)]
+/// A structure that represents the intermediate state of the sigma protocol
+/// after the prover has committed to all the values they wish to prove
+/// statements about. This is then used in the computation of the challenge.
 pub struct EncTransCommit<C: Curve> {
     /// Commitmessage for dlog
     dlog:    C,
@@ -139,7 +154,7 @@ pub struct EncTransState<C: Curve> {
 
 /// This function takes scalars x_1, ..., x_n and returns
 /// \sum_{i=1}^n 2^{(chunk_size)*(i-1)} (x_i)
-pub fn linear_combination_with_powers_of_two<C: Curve>(
+fn linear_combination_with_powers_of_two<C: Curve>(
     scalars: &[C::Scalar],
     chunk_size: ChunkSize,
 ) -> C::Scalar {
@@ -160,7 +175,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type CommitMessage = EncTransCommit<C>;
     type ProtocolChallenge = C::Scalar;
     type ProverState = EncTransState<C>;
-    type ProverWitness = Witness<C>;
+    type ProverWitness = EncTransWitness<C>;
     type SecretData = EncTransSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -269,7 +284,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             }
         }
 
-        Some(Witness {
+        Some(EncTransWitness {
             witness_common,
             witness_encexp1,
             witness_encexp2,

@@ -5,8 +5,7 @@ use crypto_common::{
 };
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
-    constants::{ArCurve, IpPairing},
-    ffi::AttributeKind,
+    constants::{ArCurve, AttributeKind, IpPairing},
     identity_provider::{
         create_initial_cdi, sign_identity_object, validate_request as ip_validate_request,
     },

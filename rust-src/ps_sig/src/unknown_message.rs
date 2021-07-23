@@ -8,6 +8,11 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Debug, Serialize)]
+/// A message to sign. In contrast to [KnownMessage](super::KnownMessage) this
+/// is a single group element that must be constructed in a special way. The
+/// idea is that this message is a commitment to some values. The person signing
+/// only knows the commitment, but does not know the values they are signing
+/// directly.
 pub struct UnknownMessage<C: Pairing>(pub C::G1);
 
 impl<C: Pairing> PartialEq for UnknownMessage<C> {

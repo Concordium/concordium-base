@@ -5,12 +5,12 @@ use crypto_common::{
     types::{Amount, KeyIndex, Signature, TransactionSignature},
     *,
 };
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
-use id::{account_holder, ffi::AttributeKind, secret_sharing::Threshold, types::*};
+use id::{account_holder, constants::AttributeKind, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
@@ -23,7 +23,7 @@ use std::{
     io::Cursor,
 };
 
-use crypto_common::serde_impls::KeyPairDef;
+use crypto_common::types::KeyPair;
 type ExampleCurve = G1;
 
 /// Context for a transaction to send.
@@ -325,7 +325,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let mut csprng = thread_rng();
     keys.insert(
         KeyIndex(0),
-        crypto_common::serde_impls::KeyPairDef::from(ed25519::Keypair::generate(&mut csprng)),
+        crypto_common::types::KeyPair::from(ed25519::Keypair::generate(&mut csprng)),
     );
 
     let initial_acc_data = InitialAccountData {
@@ -393,7 +393,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     let cred_data = {
         let mut keys = std::collections::BTreeMap::new();
         let mut csprng = thread_rng();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
 
         CredentialData {
             keys,

@@ -1,9 +1,10 @@
+//! An implementation of the Pointcheval-Sanders signature scheme <https://eprint.iacr.org/2015/525>
 mod errors;
-pub mod known_message;
-pub mod public;
-pub mod secret;
-pub mod signature;
-pub mod unknown_message;
+mod known_message;
+mod public;
+mod secret;
+mod signature;
+mod unknown_message;
 
 pub use known_message::*;
 pub use public::*;
