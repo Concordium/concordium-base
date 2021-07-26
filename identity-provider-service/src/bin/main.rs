@@ -11,7 +11,7 @@ use id::{
     },
     types::*,
 };
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use reqwest::Client;
 use serde_json::{from_str, json, to_value};
 use std::{
@@ -435,17 +435,20 @@ struct GetParameters {
 }
 
 /// Query the status of the transaction and update the status in the database if
-/// finalized, or if unable to submit the transaction successfully.
+/// finalized, if unable to submit the transaction successfully, or if the
+/// account creation transaction is missing.
+/// Returns `true` if and only if the account creation transaction cannot be
+/// submitted, or has gone missing.
 async fn followup(
     client: Client,
     db: DB,
     submission_url: url::Url,
     mut query_url_base: url::Url,
-    key: String,
-) {
+    key: &str,
+) -> bool {
     let v = {
         let hm = db.pending.lock().unwrap();
-        hm.get(&key).cloned()
+        hm.get(key).cloned()
     }; // release lock
     if let Some(v) = v {
         match &v.status {
@@ -453,18 +456,20 @@ async fn followup(
                 match submit_account_creation(&client, submission_url.clone(), &v.value).await {
                     Ok(new_status) => {
                         let mut hm = db.pending.lock().unwrap();
-                        if let Some(point) = hm.get_mut(&key) {
+                        if let Some(point) = hm.get_mut(key) {
                             point.status = new_status;
                         }
                     }
                     Err(_) => {
-                        db.delete_all(&key);
+                        db.delete_all(key);
                         warn!("Account creation transaction rejected.");
+                        return true;
                     }
                 }
             }
             PendingStatus::Submitted { submission_id, .. } => {
                 query_url_base.set_path(&format!("v0/submissionStatus/{}", submission_id));
+                debug!("Querying {}", query_url_base);
                 match client.get(query_url_base.clone()).send().await {
                     Ok(response) => {
                         match response.status() {
@@ -473,13 +478,19 @@ async fn followup(
                                     Ok(ss) => {
                                         match ss.status {
                                             SubmissionStatus::Finalized => {
-                                                db.mark_finalized(&key);
+                                                db.mark_finalized(key);
                                                 info!("Account creation transaction finalized.");
                                             }
-                                            SubmissionStatus::Absent => error!(
-                                                "An account creation transaction has gone \
-                                                 missing. This indicates a configuration error."
-                                            ),
+                                            SubmissionStatus::Absent => {
+                                                warn!(
+                                                    "An account creation transaction has gone \
+                                                     missing. Most likely it was invalid. \
+                                                     Deleting identity {}",
+                                                    key
+                                                );
+                                                db.delete_all(key);
+                                                return true;
+                                            }
                                             // do nothing, wait for the next call
                                             SubmissionStatus::Received => {}
                                             SubmissionStatus::Committed => {}
@@ -509,6 +520,7 @@ async fn followup(
             }
         }
     }
+    false
 }
 
 /// Checks the status of an initial account creation. A pending token is
@@ -523,12 +535,12 @@ async fn get_identity_token(
     // Check status of initial account creation transaction and update the file
     // database accordingly.
     let query_url_base = server_config.submit_credential_url.clone();
-    followup(
+    let initial_account_missing = followup(
         client,
         retrieval_db.clone(),
         server_config.submit_credential_url.clone(),
         query_url_base,
-        id_cred_pub.clone(),
+        &id_cred_pub,
     )
     .await;
 
@@ -559,7 +571,11 @@ async fn get_identity_token(
                 info!("Identity object does not exist or the request is malformed.");
                 let error_identity_token_container = IdentityTokenContainer {
                     status: IdentityStatus::Error,
-                    detail: "Identity object does not exist".to_string(),
+                    detail: if initial_account_missing {
+                        "Initial account could not be created.".to_string()
+                    } else {
+                        "Identity object does not exist".to_string()
+                    },
                     token:  serde_json::Value::Null,
                 };
                 Ok(warp::reply::json(&error_identity_token_container))
