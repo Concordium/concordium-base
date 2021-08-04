@@ -419,7 +419,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
     }
     // let seed_32 = Sha256::digest(&bytes_from_file);
     let ip_secret_key = succeed_or_die!(generate_ps_sk(kgip.bound, &bytes_from_file), e => "Could not generate signature key for the Pointcheval-Sanders Signature Scheme because {}");
-    let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let ip_public_key = ps_sig::PublicKey::from(&ip_secret_key);
     let ed_sk = succeed_or_die!(generate_ed_sk(&bytes_from_file), e => "Could not generate signature key for EdDSA because {}");
     let ed_pk = ed25519_dalek::PublicKey::from(&ed_sk);
     let ip_cdi_verify_key = ed_pk;
@@ -513,17 +513,14 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
 /// It generates multiple scalars by calling keygen_bls with different values
 /// `key_info`. The integer n determines the number of scalars generated and
 /// must be less than 256.
-pub fn generate_ps_sk(
-    n: u32,
-    ikm: &[u8],
-) -> Result<ps_sig::secret::SecretKey<Bls12>, hkdf::InvalidLength> {
+pub fn generate_ps_sk(n: u32, ikm: &[u8]) -> Result<ps_sig::SecretKey<Bls12>, hkdf::InvalidLength> {
     let mut ys: Vec<Fr> = Vec::with_capacity(n as usize);
     for i in 0..n {
         let key = keygen_bls(&ikm, &i.to_be_bytes()[..])?;
         ys.push(key);
     }
     let key = keygen_bls(&ikm, &[])?;
-    Ok(ps_sig::secret::SecretKey {
+    Ok(ps_sig::SecretKey {
         g: G1::one_point(),
         g_tilda: G2::one_point(),
         ys,
@@ -536,7 +533,7 @@ pub fn generate_ps_sk(
 /// the ed25519_dalek.
 pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
     let mut mac =
-        Hmac::<Sha512>::new_varkey(b"ed25519 seed").expect("HMAC can take key of any size");
+        Hmac::<Sha512>::new_from_slice(b"ed25519 seed").expect("HMAC can take key of any size");
     mac.update(&seed);
     let result = mac.finalize();
     let code_bytes = result.into_bytes();

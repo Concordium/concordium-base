@@ -5,8 +5,7 @@ use crypto_common::{
 };
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
-    constants::{ArCurve, IpPairing},
-    ffi::AttributeKind,
+    constants::{ArCurve, AttributeKind, IpPairing},
     identity_provider::{
         create_initial_cdi, sign_identity_object, validate_request as ip_validate_request,
     },
@@ -238,17 +237,15 @@ impl DB {
         fs::create_dir_all(root.join("pending"))?;
         fs::create_dir_all(root.join("requests"))?;
         let mut hm = HashMap::new();
-        for file in fs::read_dir(root.join("pending"))? {
-            if let Ok(file) = file {
-                if file.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
-                    let name = file
-                        .file_name()
-                        .into_string()
-                        .expect("Base16 strings are valid strings.");
-                    let contents = fs::read_to_string(file.path())?;
-                    let entry = from_str::<PendingEntry>(&contents)?;
-                    hm.insert(name, entry);
-                }
+        for file in fs::read_dir(root.join("pending"))?.flatten() {
+            if file.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                let name = file
+                    .file_name()
+                    .into_string()
+                    .expect("Base16 strings are valid strings.");
+                let contents = fs::read_to_string(file.path())?;
+                let entry = from_str::<PendingEntry>(&contents)?;
+                hm.insert(name, entry);
             }
         }
         let pending = Arc::new(Mutex::new(hm));

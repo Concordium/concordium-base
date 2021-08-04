@@ -1,17 +1,15 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
-    serde_impls::KeyPairDef,
-    types::{KeyIndex, TransactionTime},
+    types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };
 use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use either::{Left, Right};
 use id::{
     account_holder::*,
-    constants::{ArCurve, IpPairing},
-    ffi::*,
+    constants::{ArCurve, IpPairing, *},
     identity_provider::*,
     secret_sharing::Threshold,
     types::*,
@@ -131,9 +129,9 @@ fn main() {
     let initial_acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
@@ -183,16 +181,16 @@ fn main() {
     {
         // output testdata.bin for basic verification checking.
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
 
         let acc_data = CredentialData {
             keys,
             threshold: SignatureThreshold(2),
         };
 
-        let cdi_1 = create_credential(
+        let (cdi_1, _) = create_credential(
             context,
             &id_object,
             &id_object_use_data,
@@ -206,9 +204,9 @@ fn main() {
         // Generate the second credential for an existing account (the one
         // created by the first credential)
         let mut keys_2 = BTreeMap::new();
-        keys_2.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys_2.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys_2.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys_2.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys_2.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys_2.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let acc_data_2 = CredentialData {
             keys:      acc_data.keys,
             threshold: SignatureThreshold(1),
@@ -216,7 +214,7 @@ fn main() {
 
         let addr = AccountAddress::new(&cdi_1.values.cred_id);
 
-        let cdi_2 = create_credential(
+        let (cdi_2, _) = create_credential(
             context,
             &id_object,
             &id_object_use_data,
@@ -331,9 +329,9 @@ fn main() {
     let mut generate = |maybe_addr, acc_num, idx| {
         let acc_data = {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
 
             CredentialData {
                 keys,
@@ -341,7 +339,7 @@ fn main() {
             }
         };
 
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_object_use_data,
@@ -410,9 +408,9 @@ fn main() {
     let mut generate_initial = |prf, idx, ip_secret| {
         let initial_acc_data = {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
 
             InitialAccountData {
                 keys,

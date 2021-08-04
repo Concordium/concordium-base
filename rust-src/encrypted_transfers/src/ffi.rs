@@ -133,7 +133,7 @@ unsafe extern "C" fn make_encrypted_transfer_data(
     *low_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[0]));
     *high_transfer = Box::into_raw(Box::new(data.transfer_amount.encryptions[1]));
     *low_transfer = Box::into_raw(Box::new(data.transfer_amount.encryptions[0]));
-    *out_index = data.index;
+    *out_index = data.index.index;
 
     let mut bytes = to_bytes(&data.proof);
     *proof_len = bytes.len() as u64;
@@ -198,7 +198,7 @@ unsafe extern "C" fn verify_encrypted_transfer(
     let transfer_data = EncryptedAmountTransferData {
         remaining_amount,
         transfer_amount,
-        index: encrypted_agg_index,
+        index: encrypted_agg_index.into(),
         proof,
     };
 
@@ -244,7 +244,7 @@ unsafe extern "C" fn make_sec_to_pub_data(
 
     *high_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[1]));
     *low_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[0]));
-    *out_index = data.index;
+    *out_index = data.index.index;
 
     let mut bytes = to_bytes(&data.proof);
     *proof_len = bytes.len() as u64;
@@ -301,7 +301,7 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
     let transfer_data = SecToPubAmountTransferData {
         remaining_amount,
         transfer_amount,
-        index: encrypted_agg_index,
+        index: encrypted_agg_index.into(),
         proof,
     };
 
@@ -330,7 +330,7 @@ unsafe extern "C" fn make_aggregated_decrypted_amount(
     Box::into_raw(Box::new(AggregatedDecryptedAmount {
         agg_encrypted_amount,
         agg_amount: Amount { microgtu },
-        agg_index,
+        agg_index: agg_index.into(),
     }))
 }
 

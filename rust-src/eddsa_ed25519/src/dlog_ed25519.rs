@@ -136,7 +136,17 @@ pub fn verify_dlog_ed25519(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::*;
+
+    fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
+        // length of the challenge
+        let l = csprng.gen_range(0, 1000);
+        let mut challenge_prefix = vec![0; l];
+        for v in challenge_prefix.iter_mut() {
+            *v = csprng.gen();
+        }
+        challenge_prefix
+    }
+
     #[test]
     pub fn test_ed25519_dlog() {
         let mut csprng = thread_rng();

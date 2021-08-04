@@ -11,7 +11,7 @@ use random_oracle::RandomOracle;
 // foreign function interfacee
 
 #[no_mangle]
-pub extern "C" fn eddsa_priv_key() -> *mut SecretKey {
+extern "C" fn eddsa_priv_key() -> *mut SecretKey {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
     Box::into_raw(Box::new(sk))
@@ -21,7 +21,7 @@ pub extern "C" fn eddsa_priv_key() -> *mut SecretKey {
 //-1 bad input
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_pub_key(sk_ptr: *mut SecretKey) -> *mut PublicKey {
+extern "C" fn eddsa_pub_key(sk_ptr: *mut SecretKey) -> *mut PublicKey {
     let sk = from_ptr!(sk_ptr);
     Box::into_raw(Box::new(PublicKey::from(sk)))
 }
@@ -31,10 +31,7 @@ macro_free_ffi!(Box eddsa_public_free, PublicKey);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_sign_to_bytes(
-    input_ptr: *mut SecretKey,
-    output_len: *mut size_t,
-) -> *const u8 {
+extern "C" fn eddsa_sign_to_bytes(input_ptr: *mut SecretKey, output_len: *mut size_t) -> *const u8 {
     let input = from_ptr!(input_ptr);
     let bytes = input.to_bytes().to_vec();
     unsafe { *output_len = bytes.len() as size_t }
@@ -45,7 +42,7 @@ pub extern "C" fn eddsa_sign_to_bytes(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_public_to_bytes(
+extern "C" fn eddsa_public_to_bytes(
     input_ptr: *mut PublicKey,
     output_len: *mut size_t,
 ) -> *const u8 {
@@ -59,10 +56,7 @@ pub extern "C" fn eddsa_public_to_bytes(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_public_from_bytes(
-    input_bytes: *mut u8,
-    input_len: size_t,
-) -> *mut PublicKey {
+extern "C" fn eddsa_public_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut PublicKey {
     let len = input_len as usize;
     let bytes = slice_from_c_bytes!(input_bytes, len);
     let e = PublicKey::from_bytes(bytes);
@@ -74,7 +68,7 @@ pub extern "C" fn eddsa_public_from_bytes(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_sign_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut SecretKey {
+extern "C" fn eddsa_sign_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut SecretKey {
     let len = input_len as usize;
     let bytes = slice_from_c_bytes!(input_bytes, len);
     let e = SecretKey::from_bytes(bytes);
@@ -86,7 +80,7 @@ pub extern "C" fn eddsa_sign_from_bytes(input_bytes: *mut u8, input_len: size_t)
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_sign(
+extern "C" fn eddsa_sign(
     message: *const u8,
     len: usize,
     sk_ptr: *mut SecretKey,
@@ -105,7 +99,7 @@ pub extern "C" fn eddsa_sign(
 // 0 verification failed
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_verify(
+extern "C" fn eddsa_verify(
     message: *const u8,
     len: usize,
     pk_ptr: *mut PublicKey,
@@ -122,7 +116,7 @@ pub extern "C" fn eddsa_verify(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_verify_dlog_ed25519(
+extern "C" fn eddsa_verify_dlog_ed25519(
     challenge_prefix_ptr: *const u8,
     challenge_len: size_t,
     public_key_bytes: *const u8,
@@ -152,7 +146,7 @@ pub extern "C" fn eddsa_verify_dlog_ed25519(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_prove_dlog_ed25519(
+extern "C" fn eddsa_prove_dlog_ed25519(
     challenge_prefix_ptr: *const u8,
     challenge_len: size_t,
     public_key_bytes: *const u8,

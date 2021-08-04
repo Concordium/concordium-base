@@ -8,6 +8,8 @@ use curve_arithmetic::Curve;
 
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 #[repr(transparent)]
+/// Message to be encrypted. This is a simple wrapper around a group element,
+/// but we use it for added type safety.
 pub struct Message<C: Curve> {
     pub value: C,
 }
@@ -28,20 +30,18 @@ mod tests {
     use super::*;
     use pairing::bls12_381::{G1, G2};
 
-    macro_rules! macro_test_message_to_byte_conversion {
-        ($function_name:ident, $curve_type:path) => {
-            #[test]
-            pub fn $function_name() {
-                let mut csprng = thread_rng();
-                for _i in 1..100 {
-                    let m: Message<$curve_type> = Message::generate(&mut csprng);
-                    let s = serialize_deserialize(&m);
-                    assert!(s.is_ok());
-                    assert_eq!(m, s.unwrap());
-                }
-            }
-        };
+    fn test_message_serialization_helper<C: Curve>() {
+        let mut csprng = thread_rng();
+        for _i in 1..100 {
+            let m: Message<C> = Message::generate(&mut csprng);
+            let s = serialize_deserialize(&m);
+            assert!(s.is_ok());
+            assert_eq!(m, s.unwrap());
+        }
     }
-    macro_test_message_to_byte_conversion!(message_to_byte_conversion_g1, G1);
-    macro_test_message_to_byte_conversion!(message_to_byte_conversion_g2, G2);
+
+    #[test]
+    pub fn message_to_byte_conversion_g1() { test_message_serialization_helper::<G1>(); }
+    #[test]
+    pub fn message_to_byte_conversion_g2() { test_message_serialization_helper::<G2>(); }
 }

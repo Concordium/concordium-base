@@ -24,6 +24,9 @@ rayon = "1.4"
 either = "1.6"
 pairing = "0.15"
 num = "0.3"
+derive_more = "0.99"
+thiserror = "1.0"
+
 # only for printing account addresses
 base58check = "0.1"
 
@@ -83,5 +86,6 @@ name = "verify_cdi"
 harness = false
 
 [features]
-default = []
-wasm-browser-test = []
+default = ["ffi"]
+ffi = []
+wasm-browser-test = ["ffi"]

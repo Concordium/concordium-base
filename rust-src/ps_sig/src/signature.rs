@@ -21,8 +21,8 @@ pub struct BlindedSignature<P: Pairing> {
     pub sig: Signature<P>,
 }
 
-/// A signature
 #[derive(Debug, Clone, Serialize)]
+/// A signature on a [KnownMessage](super::KnownMessage).
 pub struct Signature<C: Pairing>(pub C::G1, pub C::G1);
 
 impl<C: Pairing> PartialEq for Signature<C> {

@@ -1,3 +1,5 @@
+//! Functionality needed by the account holder, either when interacting with the
+//! identity provider, or when interacting with the chain.
 use crate::{
     secret_sharing::*,
     sigma_protocols::{
@@ -13,12 +15,11 @@ use bulletproofs::{
 };
 use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use elgamal::{multicombine, Cipher};
 use ff::Field;
 use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, value::Value,
+    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
 };
 use rand::*;
 use random_oracle::RandomOracle;
@@ -503,9 +504,10 @@ pub fn commitment_to_share_and_rand<C: Curve>(
     (cmm, rnd)
 }
 
-/// Generates a credential deployment info.
-/// The information is meant to be valid in the context of a given identity
-/// provider, and global parameter.
+/// Generates a credential deployment info and outputs the randomness used in
+/// commitments. The randomness should be stored for later use, e.g. to open
+/// commitments later on. The information is meant to be valid in the context of
+/// a given identity provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 pub fn create_credential<
     'a,
@@ -520,10 +522,13 @@ pub fn create_credential<
     policy: Policy<C, AttributeType>,
     cred_data: &impl CredentialDataWithSigning,
     new_or_existing: &either::Either<TransactionTime, AccountAddress>,
-) -> anyhow::Result<CredentialDeploymentInfo<P, C, AttributeType>>
+) -> anyhow::Result<(
+    CredentialDeploymentInfo<P, C, AttributeType>,
+    CommitmentsRandomness<C>,
+)>
 where
     AttributeType: Clone, {
-    let unsigned_credential_info = create_unsigned_credential(
+    let (unsigned_credential_info, commitments_randomness) = create_unsigned_credential(
         context,
         id_object,
         id_object_use_data,
@@ -547,12 +552,12 @@ where
         proofs: cdp,
     };
 
-    Ok(info)
+    Ok((info, commitments_randomness))
 }
 
-/// Generates an unsigned credential deployment info.
-/// The information is meant to be valid in the context of a given identity
-/// provider, and global parameter.
+/// Generates an unsigned credential deployment info and outputs the randomness
+/// used in commitments. The information is meant to be valid in the context of
+/// a given identity provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 /// It should be the case that using the output, one can construct an actual
 /// credential deployment info, by signing the unsigned challenge.
@@ -569,7 +574,10 @@ pub fn create_unsigned_credential<
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
     addr: Option<&AccountAddress>,
-) -> anyhow::Result<UnsignedCredentialDeploymentInfo<P, C, AttributeType>>
+) -> anyhow::Result<(
+    UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
+    CommitmentsRandomness<C>,
+)>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -800,7 +808,7 @@ where
         values: cred_values,
         proofs: id_proofs,
     };
-    Ok(info)
+    Ok((info, commitment_rands))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -943,14 +951,6 @@ fn compute_pok_sig<
     Ok((prover, secret))
 }
 
-pub struct CommitmentsRandomness<C: Curve> {
-    id_cred_sec_rand:  PedersenRandomness<C>,
-    prf_rand:          PedersenRandomness<C>,
-    cred_counter_rand: PedersenRandomness<C>,
-    max_accounts_rand: PedersenRandomness<C>,
-    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
-}
-
 /// Computing the commitments for the credential deployment info. We only
 /// compute commitments for values that are not revealed as part of the policy.
 /// For the other values the verifier (the chain) will compute commitments with
@@ -1080,11 +1080,11 @@ fn compute_pok_reg_id<C: Curve>(
 mod tests {
     use super::*;
 
-    use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crate::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use curve_arithmetic::Curve;
     use either::Either::Left;
-    use pedersen_scheme::key::CommitmentKey as PedersenKey;
+    use pedersen_scheme::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;
 
@@ -1217,9 +1217,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -1261,9 +1261,9 @@ mod tests {
             _phantom: Default::default(),
         };
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let sigthres = SignatureThreshold(2);
         let acc_data = CredentialData {
             keys,
@@ -1271,7 +1271,7 @@ mod tests {
         };
 
         let cred_ctr = 42;
-        let cdi = create_credential(
+        let (cdi, _) = create_credential(
             context,
             &id_object,
             &id_use_data,

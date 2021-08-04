@@ -1,10 +1,10 @@
 cabal-version: 1.24
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bee12c1a1aa1edcfaed5a30df0cb5d539332b071c1d34ad598ee6edfcc35b64b
+-- hash: df981d0b53eaf25f809878e4f4a629ade3503268311dad43dcd0e0045a69a94f
 
 name:           concordium-base
 version:        0.1.0.0
@@ -90,7 +90,15 @@ library
       Paths_concordium_base
   hs-source-dirs:
       haskell-src
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   ghc-options: -Wall -Wcompat -Werror=missing-fields -Werror=missing-methods -Wredundant-constraints -fno-ignore-asserts
   extra-libraries:
       aggregate_sig
@@ -144,7 +152,15 @@ executable generate-update-keys
       Paths_concordium_base
   hs-source-dirs:
       haskell-bins/generate-update-keys
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   ghc-options: -Wall -Wcompat -Werror=missing-fields -Werror=missing-methods -Wredundant-constraints -fno-ignore-asserts
   build-depends:
       QuickCheck >=2.12
@@ -190,7 +206,15 @@ executable genesis
       Paths_concordium_base
   hs-source-dirs:
       haskell-bins/genesis
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   ghc-options: -Wall -Wcompat -fno-ignore-asserts
   build-depends:
       QuickCheck >=2.12
@@ -256,7 +280,15 @@ test-suite test
       Paths_concordium_base
   hs-source-dirs:
       haskell-tests
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   ghc-options: -threaded -with-rtsopts=-N -Wall -Wno-deprecations
   build-depends:
       HUnit >=1.6
@@ -305,7 +337,15 @@ benchmark bls-perf
   main-is: haskell-bench/BlsPerf.hs
   other-modules:
       Paths_concordium_base
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -349,7 +389,15 @@ benchmark ed25519-perf
   main-is: haskell-bench/Ed25519Perf.hs
   other-modules:
       Paths_concordium_base
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -393,7 +441,15 @@ benchmark ed25519dlog-perf
   main-is: haskell-bench/Ed25519DlogPerf.hs
   other-modules:
       Paths_concordium_base
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -437,7 +493,15 @@ benchmark sha256-perf
   main-is: haskell-bench/SHA256Perf.hs
   other-modules:
       Paths_concordium_base
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -481,7 +545,15 @@ benchmark verify-credential-perf
   main-is: haskell-bench/VerifyCredentialPerf.hs
   other-modules:
       Paths_concordium_base
-  default-extensions: FlexibleContexts FlexibleInstances FunctionalDependencies GeneralizedNewtypeDeriving LambdaCase MultiParamTypeClasses RecordWildCards TupleSections
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      FunctionalDependencies
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      RecordWildCards
+      TupleSections
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2

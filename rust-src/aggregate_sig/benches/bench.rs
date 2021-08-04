@@ -1,4 +1,4 @@
-use aggregate_sig::aggregate_sig::*;
+use aggregate_sig::*;
 
 use criterion::*;
 use pairing::bls12_381::Bls12;
@@ -20,10 +20,7 @@ macro_rules! get_sks_pks {
             .map(|_| SecretKey::<Bls12>::generate(&mut $rng))
             .collect();
 
-        let pks: Vec<PublicKey<Bls12>> = sks
-            .iter()
-            .map(|x| PublicKey::<Bls12>::from_secret(*x))
-            .collect();
+        let pks: Vec<PublicKey<Bls12>> = sks.iter().map(PublicKey::<Bls12>::from_secret).collect();
 
         (sks, pks)
     };};
@@ -35,7 +32,7 @@ fn bench_sign_and_verify(c: &mut Criterion) {
     let m_clone = m.clone();
 
     let sk = SecretKey::<Bls12>::generate(&mut csprng);
-    let pk = PublicKey::<Bls12>::from_secret(sk);
+    let pk = PublicKey::<Bls12>::from_secret(&sk);
     let sig = sk.sign(m.as_slice());
     c.bench_function("sign", move |b| b.iter(|| sk.sign(m.as_slice())));
     c.bench_function("verify", move |b| {

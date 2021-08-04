@@ -1,21 +1,27 @@
 pub use crate::impls::*;
-
 use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
+use sha2::Digest;
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomData};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
+/// Result when deserializing a value. This is a simple wrapper around `Result`
+/// that fixes the error type to be [anyhow::Error].
 pub type ParseResult<T> = anyhow::Result<T>;
 
 /// As Vec::with_capacity, but only allocate maximum MAX_PREALLOCATED_CAPACITY
 /// elements.
 #[inline]
 pub fn safe_with_capacity<T>(capacity: usize) -> Vec<T> {
+    // TODO: This should probably use the size of the type T as well.
+    // As long as sizeof(T) is not excessive it does not matter very much, but it
+    // would be cleaner.
     Vec::with_capacity(cmp::min(capacity, MAX_PREALLOCATED_CAPACITY))
 }
 
+/// Trait for types which can be recovered from byte sources.
 pub trait Deserial: Sized {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self>;
 }
@@ -35,6 +41,17 @@ impl Deserial for u32 {
 impl Deserial for u16 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u16> {
         Ok(source.read_u16::<BigEndian>()?)
+    }
+}
+
+impl Deserial for bool {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let x: u8 = source.read_u8()?;
+        match x {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => anyhow::bail!("Unrecognized boolean value {}", x),
+        }
     }
 }
 
@@ -91,17 +108,25 @@ impl<T: Deserial, S: Deserial, U: Deserial> Deserial for (T, S, U) {
     }
 }
 
+/// Read a string of given size.
+/// NB: Be aware that this allocates a buffer of the given length, and so this
+/// must only be used when the size is bounded, otherwise it will lead to a
+/// memory allocation failure, and panic.
 pub fn deserial_string<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<String> {
     let mut svec = vec![0; l];
     reader.read_exact(&mut svec)?;
     Ok(String::from_utf8(svec)?)
 }
 
+/// Write a string directly to the provided sink (without encoding its length).
+/// The string is utf8 encoded.
 pub fn serial_string<R: Buffer>(s: &str, out: &mut R) {
     out.write_all(s.as_bytes())
         .expect("Writing to buffer should succeed.")
 }
 
+/// Read a vector of a given size. This protects against excessive memory
+/// allocation by only pre-allocating a maximum safe size.
 pub fn deserial_vector_no_length<R: ReadBytesExt, T: Deserial>(
     reader: &mut R,
     len: usize,
@@ -113,6 +138,10 @@ pub fn deserial_vector_no_length<R: ReadBytesExt, T: Deserial>(
     Ok(vec)
 }
 
+/// Read a vector of the given size.
+/// NB: Be aware that this allocates a buffer of the given length, and so this
+/// must only be used when the size is bounded, otherwise it will lead to a
+/// memory allocation failure, and panic.
 pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<Vec<u8>> {
     let mut svec = vec![0; l];
     reader.read_exact(&mut svec)?;
@@ -122,6 +151,13 @@ pub fn deserial_bytes<R: ReadBytesExt>(reader: &mut R, l: usize) -> ParseResult<
 impl<T> Deserial for PhantomData<T> {
     #[inline]
     fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { Ok(Default::default()) }
+}
+
+impl<T: Deserial> Deserial for Box<T> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let x = T::deserial(source)?;
+        Ok(Box::new(x))
+    }
 }
 
 /// Trait for writers which will not fail in normal operation with
@@ -145,6 +181,16 @@ impl Buffer for Vec<u8> {
     fn result(self) -> Self::Result { self }
 }
 
+impl Buffer for sha2::Sha256 {
+    type Result = [u8; 32];
+
+    fn start() -> Self { sha2::Sha256::new() }
+
+    fn result(self) -> Self::Result { self.finalize().into() }
+}
+
+/// Trait implemented by types which can be encoded into byte arrays.
+/// The intention is that the encoding is binary and not human readable.
 pub trait Serial {
     fn serial<B: Buffer>(&self, _out: &mut B);
 }
@@ -167,6 +213,17 @@ impl Serial for u16 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_u16::<BigEndian>(*self)
             .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for bool {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (if *self {
+            out.write_u8(1)
+        } else {
+            out.write_u8(0)
+        })
+        .expect("Writing to a buffer should not fail.");
     }
 }
 
@@ -205,6 +262,8 @@ impl Serial for i8 {
     }
 }
 
+/// Serialize a vector by encoding its length as a u64 in big endian and then
+/// the list of elements in sequence.
 impl<T: Serial> Serial for Vec<T> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         (self.len() as u64).serial(out);
@@ -224,8 +283,7 @@ pub fn serial_vector_no_length<B: Buffer, T: Serial>(xs: &[T], out: &mut B) {
     serial_iter(xs.iter(), out)
 }
 
-// Serialize anything that is an iterator over keypairs, which is in practice a
-// map.
+/// Serialize an ordered map. Serialization is by increasing order of keys.
 pub fn serial_map_no_length<'a, B: Buffer, K: Serial + 'a, V: Serial + 'a>(
     map: &BTreeMap<K, V>,
     out: &mut B,
@@ -237,8 +295,8 @@ pub fn serial_map_no_length<'a, B: Buffer, K: Serial + 'a, V: Serial + 'a>(
     }
 }
 
-/// NB: This ensures there are no duplicates, hence the specialized type.
-/// Moreover this will only succeed if keys are listed in order.
+/// Deserialize a map from a byte source. This ensures there are no duplicates,
+/// as well as that all keys are in strictly increasing order.
 pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Deserial>(
     source: &mut R,
     len: usize,
@@ -265,14 +323,16 @@ pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Dese
     Ok(out)
 }
 
+/// Analogous to [serial_map_no_length], but for sets.
 pub fn serial_set_no_length<'a, B: Buffer, K: Serial + 'a>(map: &BTreeSet<K>, out: &mut B) {
     for k in map.iter() {
         out.put(k);
     }
 }
 
-/// NB: This ensures there are no duplicates, hence the specialized type.
-/// Moreover this will only succeed if keys are listed in order.
+/// Analogous to [deserial_map_no_length], but for sets.
+/// NB: This ensures there are no duplicates, and that all the keys are in
+/// strictly increasing order.
 pub fn deserial_set_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy>(
     source: &mut R,
     len: usize,
@@ -320,6 +380,11 @@ impl<T> Serial for PhantomData<T> {
     fn serial<B: Buffer>(&self, _out: &mut B) {}
 }
 
+impl<T: Serial> Serial for Box<T> {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) { self.as_ref().serial(out) }
+}
+
 impl Serial for [u8] {
     #[inline]
     fn serial<B: Buffer>(&self, out: &mut B) {
@@ -327,7 +392,12 @@ impl Serial for [u8] {
     }
 }
 
-/// Conventient wrappers.
+/// Analogue of [Deserial], but instead this has the type to serialize as a type
+/// parameter, and is implemented once for a source. The reason for this trait
+/// is that it is often more convenient to use since we can rely on the
+/// typechecker to fill in more details. Contrast `A::deserial(source)` to
+/// `source.get()`. In the latter case the return type is usually clear from
+/// context.
 pub trait Get<A> {
     fn get(&mut self) -> ParseResult<A>;
 }
@@ -337,7 +407,9 @@ impl<R: ReadBytesExt, A: Deserial> Get<A> for R {
     fn get(&mut self) -> ParseResult<A> { A::deserial(self) }
 }
 
-/// Conventient wrappers.
+/// Dual to `Get`, and the analogue of `Serial`. It allows writing
+/// `sink.put(value)` in contrast to `value.serial(sink)`. It is less important
+/// than `Get`.
 pub trait Put<A> {
     fn put(&mut self, _v: &A);
 }
@@ -347,7 +419,7 @@ impl<R: Buffer, A: Serial> Put<A> for R {
     fn put(&mut self, v: &A) { v.serial(self) }
 }
 
-/// A convenient way to refer to both put and get together.
+/// A convenient way to refer to both [Serial] and [Deserial] together.
 pub trait Serialize: Serial + Deserial {}
 
 /// Generic instance deriving Deserialize for any type that implements
@@ -363,6 +435,8 @@ pub fn to_bytes<A: Serial>(x: &A) -> Vec<u8> {
 }
 
 #[inline]
+/// A small wrapper that is sometimes more convenient than `A::deserial`.
+/// It is here mostly for historical reasons, for backwards compatibility.
 pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A> {
     A::deserial(source)
 }
@@ -537,42 +611,49 @@ use hex::{decode, encode};
 use serde::{de, de::Visitor, Deserializer, Serializer};
 use std::{fmt, io::Cursor};
 
-struct Base16Visitor<D>(std::marker::PhantomData<D>);
-
+/// Encode the given value into a byte array using its [Serial] instance, and
+/// then encode that byte array as a hex string into the provided serde
+/// Serializer.
 pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> Result<S::Ok, S::Error> {
     let b16_str = encode(&to_bytes(v));
     ser.serialize_str(&b16_str)
 }
 
+/// Dual to [base16_encode].
 pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T, D::Error> {
+    struct Base16Visitor<D>(std::marker::PhantomData<D>);
+
+    impl<'de, D: Deserial> Visitor<'de> for Base16Visitor<D> {
+        type Value = D;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(formatter, "A base 16 string.")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let bytes = decode(v).map_err(de::Error::custom)?;
+            D::deserial(&mut Cursor::new(&bytes)).map_err(de::Error::custom)
+        }
+    }
+
     des.deserialize_str(Base16Visitor(Default::default()))
 }
 
+/// Analogous to [base16_encode], but encodes into a string rather than a serde
+/// Serializer.
 pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(&to_bytes(x)) }
 
+/// Dual to [base16_encode_string].
 pub fn base16_decode_string<S: Deserial>(x: &str) -> ParseResult<S> {
     let d = decode(x)?;
     from_bytes(&mut Cursor::new(&d))
 }
 
-impl<'de, D: Deserial> Visitor<'de> for Base16Visitor<D> {
-    type Value = D;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "A base 16 string.")
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        let bytes = decode(v).map_err(de::Error::custom)?;
-        D::deserial(&mut Cursor::new(&bytes)).map_err(de::Error::custom)
-    }
-}
-
-// Deserialization in base 16 for values which explicitly record the length.
-// In JSON serialization this explicit length is not needed because JSON is
-// self-describing and we always know the length of input.
-struct Base16IgnoreLengthVisitor<D>(std::marker::PhantomData<D>);
-
+/// Analogous to [base16_encode] but after serializing to a byte array it only
+/// encodes the `&[4..]` into the serde Serializer. This is intended to use in
+/// cases where we are encoding a collection such as a vector into JSON. Since
+/// JSON is self-describing we do not need to explicitly record the length,
+/// which we do in binary.
 pub fn base16_ignore_length_encode<S: Serializer, T: Serial>(
     v: &T,
     ser: S,
@@ -581,24 +662,29 @@ pub fn base16_ignore_length_encode<S: Serializer, T: Serial>(
     ser.serialize_str(&b16_str)
 }
 
+/// Dual to [base16_ignore_length_encode]
 pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     des: D,
 ) -> Result<T, D::Error> {
+    // Deserialization in base 16 for values which explicitly record the length.
+    // In JSON serialization this explicit length is not needed because JSON is
+    // self-describing and we always know the length of input.
+    struct Base16IgnoreLengthVisitor<D>(std::marker::PhantomData<D>);
+
+    impl<'de, D: Deserial> Visitor<'de> for Base16IgnoreLengthVisitor<D> {
+        type Value = D;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(formatter, "A base 16 string.")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let bytes = decode(v).map_err(de::Error::custom)?;
+            let mut all_bytes = Vec::with_capacity(bytes.len() + 4);
+            all_bytes.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+            all_bytes.extend_from_slice(&bytes);
+            D::deserial(&mut Cursor::new(&all_bytes)).map_err(de::Error::custom)
+        }
+    }
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
-}
-
-impl<'de, D: Deserial> Visitor<'de> for Base16IgnoreLengthVisitor<D> {
-    type Value = D;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "A base 16 string.")
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        let bytes = decode(v).map_err(de::Error::custom)?;
-        let mut all_bytes = Vec::with_capacity(bytes.len() + 4);
-        all_bytes.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
-        all_bytes.extend_from_slice(&bytes);
-        D::deserial(&mut Cursor::new(&all_bytes)).map_err(de::Error::custom)
-    }
 }

@@ -1,7 +1,5 @@
-pub mod aggregate_sig;
-pub mod ffi;
+//! Implementation of aggregate signatures specified in <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
+mod aggregate_sig;
+mod ffi;
 
 pub use crate::aggregate_sig::*;
-
-#[macro_use]
-extern crate crypto_common_derive;

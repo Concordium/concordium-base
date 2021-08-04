@@ -22,7 +22,7 @@ import Data.Serialize
 -- |An enumeration of the supported versions of the consensus protocol.
 data ProtocolVersion
     = P1
-    deriving (Eq,Show)
+    deriving (Eq, Show)
 
 -- |The singleton type associated with 'ProtocolVersion'.
 -- There is a unique constructor of 'SProtocolVersion' for

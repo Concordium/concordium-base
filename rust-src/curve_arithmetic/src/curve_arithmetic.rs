@@ -14,32 +14,56 @@ pub enum CurveDecodingError {
     NotOnCurve,
 }
 
+/// A relatively large trait that covers what is needed to perform constructions
+/// and proofs upon a base group. This can only be implemented by groups of
+/// prime order size. More correctly this would be called a group, since it is
+/// generally a subset of an elliptic curve, but the name is in use now.
 pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
+    /// The prime field of the group order size.
     type Scalar: PrimeField + Field + Serialize;
+    /// The base field of the curve. In general larger than the Scalar field.
     type Base: Field;
+    /// A compressed representation of curve points used for compact
+    /// serialization.
     type Compressed;
+    /// Size in bytes of elements of the [Curve::Scalar] field.
     const SCALAR_LENGTH: usize;
+    /// Size in bytes of group elements when serialized.
     const GROUP_ELEMENT_LENGTH: usize;
+    /// Unit for the group operation.
     fn zero_point() -> Self;
-    fn one_point() -> Self; // generator
+    /// Chosen generator of the group.
+    fn one_point() -> Self;
     fn is_zero_point(&self) -> bool;
     #[must_use]
+    /// Return the group inverse of the given element.
     fn inverse_point(&self) -> Self;
     #[must_use]
+    /// Given x compute x + x.
     fn double_point(&self) -> Self;
     #[must_use]
+    /// The group operation.
     fn plus_point(&self, other: &Self) -> Self;
     #[must_use]
+    /// Subtraction. This is generally more efficient than a combination of
+    /// [Curve::inverse_point] and [Curve::plus_point].
     fn minus_point(&self, other: &Self) -> Self;
     #[must_use]
+    /// Exponentiation by a scalar, i.e., compute n * x for a group element x
+    /// and integer n.
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
     #[must_use]
     fn compress(&self) -> Self::Compressed;
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
+    /// Deserialize a value from a byte source, but do not check that it is in
+    /// the group itself. This can be cheaper if the source of the value is
+    /// trusted, but it must not be used on untrusted sources.
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> anyhow::Result<Self>;
+    /// Generate a random group element, uniformly distributed.
     fn generate<R: Rng>(rng: &mut R) -> Self;
+    /// Generate a random scalar value, uniformly distributed.
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     /// Generate a non-zero scalar. The default implementation does repeated
     /// sampling until a non-zero scalar is reached.
@@ -61,15 +85,28 @@ pub trait Curve:
     fn hash_to_group(m: &[u8]) -> Self;
 }
 
+/// A pairing friendly curve is a collection of two groups and a pairing
+/// function. The groups must be of prime order.
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
+    /// The first group of the pairing.
     type G1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    /// The second group, must have the same order as [Pairing::G1]. Both G1 and
+    /// G2 must be of prime order size.
     type G2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    /// An auxiliary type that is used as an input to the pairing function.
     type G1Prepared;
+    /// An auxiliary type that is used as an input to the pairing function.
     type G2Prepared;
+    /// Field of the size of G1 and G2.
     type BaseField: PrimeField;
+    /// The target of the pairing function. The pairing function actually maps
+    /// to a subgroup of the same order as G1 and G2, but this subgroup is
+    /// not exposed here and is generally not useful. It is subgroup of the
+    /// multiplicative subgroup of the field.
     type TargetField: Field + Serial;
 
+    /// Compute the miller loop on the given sequence of prepared points.
     fn miller_loop<'a, I>(i: I) -> Self::TargetField
     where
         I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>;
@@ -124,7 +161,6 @@ pub trait Pairing: Sized + 'static + Clone {
         }
     }
 
-    const SCALAR_LENGTH: usize;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
     /// Generate non-zero scalar by repeated sampling. Can be overriden by a
     /// more efficient implementation.
@@ -147,7 +183,8 @@ pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
 }
 
 /// This implements the WNAF method from
-/// https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
+/// <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf>
+///
 /// Assumes:
 /// - the lengths of inputs are the same
 /// - window size at least 1
@@ -173,7 +210,7 @@ pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
 /// `multiexp_worker`, as well as the fact that the table corresponds to the
 /// window-size and the given inputs.
 ///
-/// See https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf for what it means
+/// See <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf> for what it means
 /// for the table to be computed correctly.
 pub fn multiexp_worker_given_table<C: Curve>(
     exps: &[C::Scalar],
@@ -207,12 +244,11 @@ pub fn multiexp_worker_given_table<C: Curve>(
             if limb & 1 == 1 {
                 let u = limb & mask;
                 // check if window_size'th bit is set.
+                c.sub_assign(&C::scalar_from_u64(u));
                 if u & (1 << window_size) != 0 {
-                    c.sub_assign(&C::scalar_from_u64(u));
                     c.add_assign(&two_to_wp1_scalar);
                     v.push((u as i64) - (two_to_wp1 as i64));
                 } else {
-                    c.sub_assign(&C::scalar_from_u64(u));
                     v.push(u as i64);
                 }
             } else {
