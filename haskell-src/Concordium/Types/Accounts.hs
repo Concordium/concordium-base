@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -27,7 +28,6 @@ module Concordium.Types.Accounts (
     makeAccountBakerHash,
     nullAccountBakerHash,
     AccountInfo (..),
-    accountInfoPairs,
 ) where
 
 import Data.Aeson
@@ -165,45 +165,48 @@ instance HashableTo AccountBakerHash AccountBaker where
             _accountBakerInfo
             _bakerPendingChange
 
-type AccountBakerHash = Hash.Hash
+-- |A hash value derived from an 'AccountBaker'.
+newtype AccountBakerHash = AccountBakerHash Hash.Hash
+    deriving (Eq, Ord, Show, Serialize, ToJSON, FromJSON) via Hash.Hash
 
 -- |Make an 'AccountBakerHash' for a baker.
 makeAccountBakerHash :: Amount -> Bool -> BakerInfo -> BakerPendingChange -> AccountBakerHash
 makeAccountBakerHash amt stkEarnings binfo bpc =
-    Hash.hashLazy $
+    AccountBakerHash $ Hash.hashLazy $
         runPutLazy $
             put amt >> put stkEarnings >> put binfo >> put bpc
 
 -- |An 'AccountBakerHash' that is used when an account has no baker.
 -- This is defined as the hash of the empty string.
 nullAccountBakerHash :: AccountBakerHash
-nullAccountBakerHash = Hash.hash ""
+nullAccountBakerHash = AccountBakerHash $ Hash.hash ""
 
 -- |The details of the state of an account on the chain, as may be returned by a query.
 data AccountInfo = AccountInfo
     { -- |The next nonce for the account
-      aiAccountNonce :: Nonce,
+      aiAccountNonce :: !Nonce,
       -- |The total non-encrypted balance on the account
-      aiAccountAmount :: Amount,
+      aiAccountAmount :: !Amount,
       -- |The release schedule for locked amounts on the account
-      aiAccountReleaseSchedule :: AccountReleaseSchedule,
+      aiAccountReleaseSchedule :: !AccountReleaseSummary,
       -- |The credentials on the account
-      aiAccountCredentials :: Map.Map CredentialIndex (Versioned AccountCredential),
+      aiAccountCredentials :: !(Map.Map CredentialIndex (Versioned AccountCredential)),
       -- |Number of credentials required to sign a valid transaction
-      aiAccountThreshold :: AccountThreshold,
+      aiAccountThreshold :: !AccountThreshold,
       -- |The encrypted amount on the account
-      aiAccountEncryptedAmount :: AccountEncryptedAmount,
+      aiAccountEncryptedAmount :: !AccountEncryptedAmount,
       -- |The encryption key for the account
-      aiAccountEncryptionKey :: AccountEncryptionKey,
+      aiAccountEncryptionKey :: !AccountEncryptionKey,
       -- |The account index
-      aiAccountIndex :: AccountIndex,
+      aiAccountIndex :: !AccountIndex,
       -- |The baker associated with the account (if any)
-      aiBaker :: Maybe AccountBaker
+      aiBaker :: !(Maybe AccountBaker)
     }
     deriving (Eq, Show)
 
 -- |Helper function for 'ToJSON' instance for 'AccountInfo'.
 accountInfoPairs :: (KeyValue kv) => AccountInfo -> [kv]
+{-# INLINE accountInfoPairs #-}
 accountInfoPairs AccountInfo{..} =
     [ "accountNonce" .= aiAccountNonce,
       "accountAmount" .= aiAccountAmount,
