@@ -71,8 +71,8 @@ instancePairs istance =
 
 -- |JSON instance to support consensus queries.
 instance ToJSON Instance where
-    toJSON = object . instancePairs
-    toEncoding = pairs . mconcat . instancePairs
+    toJSON inst = object $ instancePairs inst
+    toEncoding inst = pairs $ mconcat $ instancePairs inst
 
 makeInstanceParameterHash :: ContractAddress -> AccountAddress -> ModuleRef -> Wasm.InitName -> H.Hash
 makeInstanceParameterHash ca aa modRef conName = H.hashLazy $ runPutLazy $ do
