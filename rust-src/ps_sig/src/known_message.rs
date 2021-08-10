@@ -5,7 +5,9 @@ use rand::*;
 use crypto_common::*;
 use curve_arithmetic::*;
 
-/// A message
+/// A message to sign. The PS scheme allows signing both a known message, where
+/// the message is a vector of values to be signed, and also an unknown message,
+/// which is a single value constructed in a special way.
 #[derive(Debug, Serialize)]
 pub struct KnownMessage<C: Pairing>(#[size_length = 4] pub Vec<C::ScalarField>);
 

@@ -1,11 +1,16 @@
+//! Generate a private key in a deterministic way from a secret seed and key
+//! description.
 use curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
 use hkdf::Hkdf;
 use pairing::bls12_381::{Fr, FrRepr, G1};
 use sha2::{Digest, Sha256};
 
-/// This function is an implementation of the procedure described in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3
+/// This function is an implementation of the procedure described in <https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3>
 /// It computes a random scalar in Fr given a seed (the argument `ikm`).
+///
+/// This is a building block for deterministic key generation for identity
+/// provider and anonymity revoker keys.
 pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength> {
     let mut ikm = ikm.to_vec();
     ikm.push(0);

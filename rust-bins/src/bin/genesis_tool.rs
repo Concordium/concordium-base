@@ -7,10 +7,10 @@ use crypto_common::{
     types::{Amount, KeyIndex},
     *,
 };
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use id::{account_holder::*, constants::*, ffi::*, secret_sharing::Threshold, types::*};
+use id::{account_holder::*, constants::*, secret_sharing::Threshold, types::*};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
 use std::{
@@ -183,7 +183,7 @@ fn main() -> std::io::Result<()> {
         for idx in 0..common.num_keys {
             initial_keys.insert(
                 KeyIndex(idx as u8),
-                crypto_common::serde_impls::KeyPairDef::generate(csprng),
+                crypto_common::types::KeyPair::generate(csprng),
             );
         }
 
@@ -343,7 +343,7 @@ fn main() -> std::io::Result<()> {
                     let sign_key = ed25519::Keypair::generate(&mut csprng);
 
                     let agg_sign_key = agg::SecretKey::<IpPairing>::generate(&mut csprng);
-                    let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
+                    let agg_verify_key = agg::PublicKey::from_secret(&agg_sign_key);
 
                     let public_baker_data = json!({
                         "bakerId": acc_num,

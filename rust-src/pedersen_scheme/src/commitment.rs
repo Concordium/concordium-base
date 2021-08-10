@@ -8,8 +8,8 @@ use curve_arithmetic::*;
 
 use std::ops::Deref;
 
-/// A Commitment is a group element .
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
+/// A Commitment is a group element.
 pub struct Commitment<C: Curve>(pub C);
 
 impl<C: Curve> Commitment<C> {

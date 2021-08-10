@@ -1,3 +1,5 @@
+//! Functionality needed by the account holder, either when interacting with the
+//! identity provider, or when interacting with the chain.
 use crate::{
     secret_sharing::*,
     sigma_protocols::{
@@ -13,12 +15,11 @@ use bulletproofs::{
 };
 use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use elgamal::{multicombine, Cipher};
 use ff::Field;
 use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, value::Value,
+    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
 };
 use rand::*;
 use random_oracle::RandomOracle;
@@ -1079,11 +1080,11 @@ fn compute_pok_reg_id<C: Curve>(
 mod tests {
     use super::*;
 
-    use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crate::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use curve_arithmetic::Curve;
     use either::Either::Left;
-    use pedersen_scheme::key::CommitmentKey as PedersenKey;
+    use pedersen_scheme::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;
 
@@ -1216,9 +1217,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -1260,9 +1261,9 @@ mod tests {
             _phantom: Default::default(),
         };
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let sigthres = SignatureThreshold(2);
         let acc_data = CredentialData {
             keys,

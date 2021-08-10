@@ -31,6 +31,7 @@ pub struct SecretKey<C: Curve> {
 pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
 
 #[derive(Eq, PartialEq, Debug)]
+/// The table for the baby step giant step algorithm, with some auxiliary data.
 pub struct BabyStepGiantStep<C: Curve> {
     /// Precomputed table of powers.
     table:         BabyStepGiantStepTable,

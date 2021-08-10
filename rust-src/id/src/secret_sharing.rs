@@ -1,3 +1,4 @@
+//! Implementation of Shamir secret sharing.
 use anyhow::bail;
 use crypto_common::*;
 use curve_arithmetic::*;
@@ -78,6 +79,7 @@ impl std::fmt::Display for Threshold {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.0.fmt(f) }
 }
 
+/// Data used to share a single value.
 pub struct SharingData<C: Curve> {
     /// The coefficients of the sharing polyomial, except the zeroth.
     pub coefficients: Vec<PedersenValue<C>>,

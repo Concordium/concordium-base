@@ -1,3 +1,5 @@
+//! Functionality needed by the identity provider. This gathers together the
+//! primitives from the rest of the library into a convenient package.
 use crate::{
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
@@ -9,13 +11,16 @@ use crypto_common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
+use pedersen_scheme::{Commitment, CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Reason for rejecting an identity object request.
+/// This is for cryptographic reasons only, real-world identity verification is
+/// not handled in this library.
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyIdCredSecEquality,
@@ -241,6 +246,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 }
 
+/// Sign the given pre-identity-object to produce an identity object.
 pub fn sign_identity_object<
     P: Pairing,
     AttributeType: Attribute<P::ScalarField>,
@@ -342,6 +348,8 @@ pub fn verify_credentials<
     Ok((sig, initial_cdi))
 }
 
+/// Produce a signature on the initial account data to make a message that is
+/// submitted to the chain to create an initial account.
 pub fn create_initial_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -374,7 +382,7 @@ pub fn create_initial_cdi<
     }
 }
 
-pub fn sign_initial_cred_values<
+fn sign_initial_cred_values<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
@@ -466,9 +474,9 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 mod tests {
     use super::*;
     use crate::{constants::ArCurve, test::*};
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use ff::Field;
-    use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
+    use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
 
     const EXPIRY: TransactionTime = TransactionTime {
@@ -538,9 +546,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -626,9 +634,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -673,9 +681,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),

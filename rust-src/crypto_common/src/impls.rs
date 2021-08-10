@@ -262,7 +262,7 @@ impl<T: Deserial> Deserial for Option<T> {
     }
 }
 
-/// `None` is serialized as [0u8], `Some(v)` is serialized by prepending `1u8`
+/// `None` is serialized as `0u8`, `Some(v)` is serialized by prepending `1u8`
 /// to the serialization of `v`.
 impl<T: Serial> Serial for Option<T> {
     fn serial<B: Buffer>(&self, out: &mut B) {

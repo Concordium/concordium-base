@@ -1,13 +1,13 @@
 use crate::*;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
-/// Some constants for ease of use.
+/// Version 0 as a constant for ease of use.
 pub const VERSION_0: Version = Version { value: 0 };
 
-/// Version of a data structure. Binary coded as a variable integer represented
-/// by bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a
-/// byte is Big Endian data bits for the value. A version number is bounded by
-/// u32 max.
+/// Version of the serialization of a data structure. Binary coded as a variable
+/// integer represented by bytes, where MSB=1 indicates more bytes follow, and
+/// the 7 lower bits in a byte is Big Endian data bits for the value. A version
+/// number is bounded by u32 max.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
 #[serde(transparent)]
 pub struct Version {

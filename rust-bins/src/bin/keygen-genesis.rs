@@ -172,8 +172,8 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
 
 /// This function uses the functions for hashing to G1 and G2 from
 /// curve_arithmetic to generate random looking group elements to
-/// create an instance of `ps_sig::public::PublicKey`.
-pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::public::PublicKey<Bls12> {
+/// create an instance of `ps_sig::PublicKey`.
+pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::PublicKey<Bls12> {
     let mut ys: Vec<G1> = Vec::with_capacity(n as usize);
     let mut y_tildas: Vec<G2> = Vec::with_capacity(n as usize);
     let mut g1_element = G1::hash_to_group(bytes);
@@ -185,7 +185,7 @@ pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::public::PublicKey<Bls12> 
         g2_element = G2::hash_to_group(&to_bytes(&g1_element));
     }
     let x_tilda = G2::hash_to_group(&to_bytes(&g2_element));
-    ps_sig::public::PublicKey {
+    ps_sig::PublicKey {
         g: G1::one_point(),
         g_tilda: G2::one_point(),
         ys,

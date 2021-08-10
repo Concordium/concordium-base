@@ -2,11 +2,11 @@ use sha2::*;
 use std::slice;
 
 #[no_mangle]
-pub extern "C" fn sha256_new() -> *mut Sha256 { Box::into_raw(Box::new(Sha256::new())) }
+extern "C" fn sha256_new() -> *mut Sha256 { Box::into_raw(Box::new(Sha256::new())) }
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn sha256_free(ptr: *mut Sha256) {
+extern "C" fn sha256_free(ptr: *mut Sha256) {
     if ptr.is_null() {
         return;
     }
@@ -17,7 +17,7 @@ pub extern "C" fn sha256_free(ptr: *mut Sha256) {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
+extern "C" fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
     assert!(!ptr.is_null());
     let hasher: &mut Sha256 = unsafe { &mut *ptr };
 
@@ -34,7 +34,7 @@ pub extern "C" fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn sha256_result(hash: &mut [u8; 32], ptr: *mut Sha256) {
+extern "C" fn sha256_result(hash: &mut [u8; 32], ptr: *mut Sha256) {
     let hasher = unsafe { Box::from_raw(ptr) };
     // let hasher  = unsafe {
     //    assert!(!ptr.is_null());

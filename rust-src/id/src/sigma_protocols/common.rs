@@ -71,7 +71,7 @@ pub trait SigmaProtocol: Sized {
     );
 }
 
-#[derive(Debug, Serialize, Eq, PartialEq, SerdeBase16Serialize)]
+#[derive(Debug, Serialize, Eq, PartialEq, SerdeBase16Serialize, Clone)]
 /// Generic structure to contain a single sigma proof.
 pub struct SigmaProof<W: Serialize> {
     pub challenge: Challenge,

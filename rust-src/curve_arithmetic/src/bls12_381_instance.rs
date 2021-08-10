@@ -370,8 +370,6 @@ impl Pairing for Bls12 {
     type ScalarField = Fr;
     type TargetField = <Bls12 as Engine>::Fqk;
 
-    const SCALAR_LENGTH: usize = 32;
-
     #[inline(always)]
     fn g1_prepare(g: &Self::G1) -> Self::G1Prepared { g.into_affine().prepare() }
 

@@ -1,3 +1,5 @@
+//! Implementation of high-level protocols for encrypted transfers, combining
+//! all the building parts into a single wrapper per operation.
 #![allow(non_snake_case)]
 use crate::{proofs::enc_trans::*, types::*};
 use bulletproofs::range_proof::{
