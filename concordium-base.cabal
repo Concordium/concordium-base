@@ -64,6 +64,8 @@ library
       Concordium.SQL.AccountTransactionIndex
       Concordium.SQL.Helpers
       Concordium.Types
+      Concordium.Types.Accounts
+      Concordium.Types.Accounts.Releases
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
       Concordium.Types.DummyData
@@ -71,12 +73,15 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
+      Concordium.Types.Instance
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
+      Concordium.Types.Queries
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions
+      Concordium.Types.UpdateQueues
       Concordium.Types.Updates
       Concordium.Utils
       Concordium.Utils.Encryption

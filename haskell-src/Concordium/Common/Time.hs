@@ -68,7 +68,7 @@ instance PersistFieldSql Timestamp where
 
 -- | Time duration in milliseconds
 newtype Duration = Duration { durationMillis :: Word64 }
-  deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON)
+  deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, ToJSON)
 
 -- | Convert a 'Timestamp' to a 'UTCTime'
 timestampToUTCTime :: Timestamp -> UTCTime
