@@ -78,6 +78,9 @@ module Concordium.Types (
   registeredDataFromBSS,
   maxRegisteredDataSize,
 
+  -- * Registered Data
+  Memo(..),
+
   -- * Baking
   ElectionDifficulty(..),
   makeElectionDifficulty,
@@ -581,6 +584,44 @@ instance S.Serialize Nonce where
 
 minNonce :: Nonce
 minNonce = 1
+
+-- |Data type for memos that can be added to transfers.
+-- Max length of 'maxMemoSize' is assumed.
+-- Create new values with 'memoFromBSS' to ensure assumed properties.
+newtype Memo = Memo BSS.ShortByteString
+  deriving Eq
+  deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+
+-- |Maximum size for 'Memo'.
+maxMemoSize :: Int
+maxMemoSize = 256
+
+-- |Construct 'Memo' from a 'BSS.ShortByteString'.
+-- Fails if the length exceeds 'maxMemoSize'.
+memoFromBSS :: MonadError String m => BSS.ShortByteString -> m Memo
+memoFromBSS bss = if len <= maxMemoSize
+                              then return . Memo $ bss
+                              else throwError $ "Max size for registered data is " ++ show maxMemoSize
+                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+  where len = BSS.length bss
+
+-- Uses two bytes for length to be more future-proof.
+instance S.Serialize Memo where
+  put (Memo bss) = do
+    S.putWord16be . fromIntegral . BSS.length $ bss
+    S.putShortByteString bss
+
+  get = do
+    l <- fromIntegral <$> S.getWord16be
+    unless (l <= maxMemoSize) $ fail "Data too long"
+    Memo <$> S.getShortByteString l
+
+instance AE.FromJSON Memo where
+  parseJSON v = do
+    (BSH.ByteStringHex bss) <- AE.parseJSON v
+    case memoFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
 
 -- |Data type for registering data on chain.
 -- Max length of 'maxRegisteredDataSize' is assumed.

@@ -21,7 +21,8 @@ import Data.Serialize
 
 -- |An enumeration of the supported versions of the consensus protocol.
 data ProtocolVersion
-    = P1
+    = P1 
+    | P2
     deriving (Eq, Show)
 
 -- |The singleton type associated with 'ProtocolVersion'.
@@ -29,12 +30,15 @@ data ProtocolVersion
 -- each constructor of 'ProtocolVersion'.
 data SProtocolVersion (pv :: ProtocolVersion) where
     SP1 :: SProtocolVersion 'P1
+    SP2 :: SProtocolVersion 'P2
 
 instance Serialize ProtocolVersion where
     put P1 = putWord64be 1
+    put P2 = putWord64be 2
     get =
         getWord64be >>= \case
             1 -> return P1
+            2 -> return P2
             v -> fail $ "Unknown protocol version: " ++ show v
 
 -- |Type class for relating type-level 'ProtocolVersion's with
@@ -47,9 +51,14 @@ instance IsProtocolVersion 'P1 where
     protocolVersion = SP1
     {-# INLINE protocolVersion #-}
 
+instance IsProtocolVersion 'P2 where
+    protocolVersion = SP2
+    {-# INLINE protocolVersion #-}
+
 -- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
 demoteProtocolVersion SP1 = P1
+demoteProtocolVersion SP2 = P2
 
 -- |An existentially quantified protocol version.
 data SomeProtocolVersion where
@@ -59,3 +68,4 @@ data SomeProtocolVersion where
 -- type 'SomeProtocolVersion'.
 promoteProtocolVersion :: ProtocolVersion -> SomeProtocolVersion
 promoteProtocolVersion P1 = SomeProtocolVersion SP1
+promoteProtocolVersion P2 = SomeProtocolVersion SP2
