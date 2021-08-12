@@ -131,6 +131,7 @@ module Concordium.Types (
   VoterVRFPublicKey,
   VoterAggregationPrivateKey,
   VoterAggregationVerifyKey,
+  FinalizationIndex(..),
   FinalizationCommitteeSize,
 
   -- * Hashing
@@ -315,6 +316,17 @@ makeElectionDifficultyUnchecked = ElectionDifficulty . PartsPerHundredThousands
 -- The maximum absolute error for any value of is about 7 * 10^-12.
 getDoubleFromElectionDifficulty :: ElectionDifficulty -> Double
 getDoubleFromElectionDifficulty = (/ 100000) . fromIntegral
+
+-- |A sequential index of each finalization on a chain.
+-- The genesis block has finalization index 0.
+-- Note that this is not comparable with block height, since finalization does not occur at every
+-- level of the chain.
+newtype FinalizationIndex = FinalizationIndex {theFinalizationIndex :: Word64}
+    deriving (Eq, Ord, Num, Real, Enum, Integral, Show, ToJSON, FromJSON) via Word64
+
+instance S.Serialize FinalizationIndex where
+  put (FinalizationIndex w) = S.putWord64be w
+  get = FinalizationIndex <$> S.getWord64be
 
 type FinalizationCommitteeSize = Word32
 -- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).

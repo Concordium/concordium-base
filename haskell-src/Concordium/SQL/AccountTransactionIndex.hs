@@ -22,7 +22,11 @@ import qualified Data.Aeson as AE
 
 import Concordium.SQL.Helpers
 
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+-- We deliberately do not derive automatic migration here since it leads to
+-- suboptimal indices. Instead we manually create the database when needed in
+-- the node. If the types of columns/tables change we will have to provide a
+-- manual migration path for it.
+share [mkPersist sqlSettings] [persistLowerCase|
   Summary sql=summaries
     block (ByteStringSerialized BlockHash)
     timestamp Timestamp
