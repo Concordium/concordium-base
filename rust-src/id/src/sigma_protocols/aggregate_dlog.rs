@@ -5,7 +5,7 @@
 //! commitments.
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
@@ -49,16 +49,12 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         // Make sure our data is consistent.
         let n = self.coeff.len();
-
         let mut rands = Vec::with_capacity(n);
-        let mut point = C::zero_point();
-        for g in self.coeff.iter() {
+        for _ in 0..n {
             let rand = C::generate_non_zero_scalar(csprng);
-            // FIXME: Multiexponentiation would be useful in this case.
-            point = point.plus_point(&g.mul_by_scalar(&rand));
             rands.push(rand);
         }
-        Some((point, rands))
+        Some((multiexp(&self.coeff, &rands), rands))
     }
 
     fn generate_witness(

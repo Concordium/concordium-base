@@ -84,6 +84,10 @@ crate-type = ["rlib", "staticlib", "cdylib" ]
 [[bench]]
 name = "verify_cdi"
 harness = false
+	
+[[bench]]
+name = "aggr_dlog_commit_point"
+harness = false
 
 [features]
 default = ["ffi"]
