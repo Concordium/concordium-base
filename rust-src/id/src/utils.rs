@@ -7,7 +7,7 @@ use crypto_common::{
     types::{KeyIndex, TransactionTime},
     ParseResult,
 };
-use curve_arithmetic::{Curve, Pairing, Value};
+use curve_arithmetic::{multiexp, Curve, Pairing, Value};
 use ed25519_dalek::Verifier;
 use either::Either;
 use elgamal::*;
@@ -26,15 +26,14 @@ pub fn commitment_to_share<C: Curve>(
     share_number: &C::Scalar,
     coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
-    // TODO: This would benefit from multiexponentiation.
-    let mut cmm_share_point: C = C::zero_point();
-    // Horner's scheme in the exponent
-    for cmm in coeff_commitments.iter().rev() {
-        // FIXME: This would benefit from multiexponentiation.
-        cmm_share_point = cmm_share_point.mul_by_scalar(&share_number);
-        cmm_share_point = cmm_share_point.plus_point(cmm);
+    let n = coeff_commitments.len();
+    let mut exponents = Vec::with_capacity(n);
+    let mut exponent: C::Scalar = C::Scalar::one();
+    for _ in 0..n {
+        exponents.push(exponent);
+        exponent.mul_assign(share_number);
     }
-    Commitment(cmm_share_point)
+    Commitment(multiexp(coeff_commitments, &exponents))
 }
 
 /// Interpret the array as coefficients of a polynomial starting at 0,
