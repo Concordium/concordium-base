@@ -47,6 +47,7 @@ getByteStringLen = do
     getByteString len
 
 -- |Get a 'LBS.ByteString' preceded by its length as a 64-bit (unsigned) integer.
+-- This creates a copy of the underlying bytes.
 getLazyByteStringLen :: Get LBS.ByteString
 getLazyByteStringLen = do
     len <- getLength
