@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -62,12 +63,22 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP2 -> P1.putGenesisDataV3 . unGDP2
 
 -- |Deserialize genesis data with a version tag.
+-- See `putVersionedGenesisData` for details of the version tag.
 getVersionedGenesisData :: forall pv. IsProtocolVersion pv => Get (GenesisData pv)
 getVersionedGenesisData = case protocolVersion @pv of
     SP1 -> GDP1 <$> P1.getVersionedGenesisData
     SP2 -> GDP2 <$> P1.getVersionedGenesisData
 
 -- |Serialize genesis data with a version tag.
+-- Each version tag must be specific to a protocol version, though more than one version tag can
+-- be used for the same protocol version.
+-- The currently supported versions are:
+--
+-- +-------------+------------------+
+-- | Version tag | Protocol version |
+-- +=============+==================+
+-- | 3           | P1               |
+-- +-------------+------------------+
 putVersionedGenesisData :: forall pv. IsProtocolVersion pv => Putter (GenesisData pv)
 putVersionedGenesisData = case protocolVersion @pv of
     SP1 -> P1.putVersionedGenesisData . unGDP1
@@ -80,3 +91,13 @@ genesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHa
 genesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.genesisBlockHash . unGDP1
     SP2 -> P1.genesisBlockHash . unGDP2
+
+-- |A dependent pair of a protocol version and genesis data.
+data PVGenesisData = forall pv. IsProtocolVersion pv => PVGenesisData (GenesisData pv)
+
+-- |Deserialize genesis data with a version tag to a 'PVGenesisData'.
+-- This should attempt to parse with all supported protocol versions.
+-- The version tag will uniquely determine the protocol version.
+-- For details, see `putVersionedGenesisData`.
+getPVGenesisData :: Get PVGenesisData
+getPVGenesisData = PVGenesisData . GDP1 <$> P1.getVersionedGenesisData

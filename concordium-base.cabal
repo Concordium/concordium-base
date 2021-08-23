@@ -125,6 +125,7 @@ library
     , containers >=0.6
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -180,6 +181,7 @@ executable generate-update-keys
     , containers >=0.6
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , filepath >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -234,6 +236,7 @@ executable genesis
     , containers >=0.6
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , filepath >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -306,6 +309,7 @@ test-suite test
     , containers
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , hspec >=2.6
@@ -361,6 +365,7 @@ benchmark bls-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -412,6 +417,7 @@ benchmark ed25519-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -463,6 +469,7 @@ benchmark ed25519dlog-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -514,6 +521,7 @@ benchmark sha256-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -565,6 +573,7 @@ benchmark verify-credential-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3

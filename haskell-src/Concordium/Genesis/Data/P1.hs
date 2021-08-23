@@ -2,7 +2,7 @@
 module Concordium.Genesis.Data.P1 where
 
 import Control.Monad
-import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Serialize
 import qualified Data.Vector as Vec
 import qualified Data.Map.Strict as Map
@@ -153,7 +153,7 @@ data GenesisDataP1
           -- |The hash of the block state for the regenesis.
           genesisStateHash :: !StateHash,
           -- |The serialized block state. This should match the specified hash.
-          genesisNewState :: !ByteString
+          genesisNewState :: !BS.ByteString
         }
     deriving (Eq, Show)
 

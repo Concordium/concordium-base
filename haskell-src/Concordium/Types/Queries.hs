@@ -232,7 +232,7 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 data TransactionStatus
     = -- |Transaction was received but is not in any blocks
       Received
-    | -- |Transaction was received an is present in some (non-finalized) block(s)
+    | -- |Transaction was received and is present in some (non-finalized) block(s)
       Committed (Map.Map BlockHash (Maybe TransactionSummary))
     | -- |Transaction has been finalized in a block
       Finalized BlockHash (Maybe TransactionSummary)
