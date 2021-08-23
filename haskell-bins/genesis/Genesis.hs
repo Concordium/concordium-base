@@ -182,7 +182,7 @@ main = cmdArgsRun mode >>=
           source <- LBS.readFile gdSource
           case S.runGetLazy getVersionedGenesisData source of
             Left err -> putStrLn $ "Cannot parse genesis data:" ++ err
-            Right (GDP1 P1.GDP1Regenesis{genesisCore = P1.CoreGenesisParameters{..}, ..}) -> do
+            Right (GDP1 P1.GDP1Regenesis{genesisRegenesis = RegenesisData{genesisCore = CoreGenesisParameters{..}, ..}}) -> do
               putStrLn "Re-genesis data."
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
@@ -206,7 +206,7 @@ main = cmdArgsRun mode >>=
               putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
               putStrLn $ "State hash: " ++ show genesisStateHash
 
-            Right gd@(GDP1 P1.GDP1Initial{genesisCore = P1.CoreGenesisParameters{..}, genesisInitialState = P1.GenesisState{..}}) -> do
+            Right gd@(GDP1 P1.GDP1Initial{genesisCore = CoreGenesisParameters{..}, genesisInitialState = P1.GenesisState{..}}) -> do
               putStrLn $ "Genesis data for genesis block with hash " ++ show (genesisBlockHash gd)
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
