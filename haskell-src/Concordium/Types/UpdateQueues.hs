@@ -307,3 +307,13 @@ initialUpdates initialKeyCollection _currentParameters = Updates {
         _pendingUpdates = emptyPendingUpdates,
         ..
     }
+
+-- |The status of protocol updates on a chain.  Either an update has occurred, or zero or more
+-- updates are pending.
+data ProtocolUpdateStatus
+    = -- |The specified protocol update has occurred.
+      ProtocolUpdated !ProtocolUpdate
+    | -- |No protocol update has occurred, but there may be pending updates.
+      -- The list may be empty, and is ordered by the effective timestamp of the update.
+      PendingProtocolUpdates ![(TransactionTime, ProtocolUpdate)]
+    deriving (Eq, Show)
