@@ -18,10 +18,14 @@
 module Concordium.Types.ProtocolVersion where
 
 import Data.Serialize
+import Data.Aeson
+import Data.Aeson.Types
+import Data.Word
 
 -- |An enumeration of the supported versions of the consensus protocol.
+-- Binary and JSON serializations are as Word64 corresponding to the protocol number.
 data ProtocolVersion
-    = P1 
+    = P1
     | P2
     deriving (Eq, Show)
 
@@ -40,6 +44,19 @@ instance Serialize ProtocolVersion where
             1 -> return P1
             2 -> return P2
             v -> fail $ "Unknown protocol version: " ++ show v
+
+instance ToJSON ProtocolVersion where
+  toJSON P1 = toJSON (1 :: Word64)
+  toJSON P2 = toJSON (2 :: Word64)
+
+instance FromJSON ProtocolVersion where
+  parseJSON v = prependFailure "Protocol version" $ do
+      x <- parseJSON v
+      case x :: Word64 of
+          1 -> return P1
+          2 -> return P2
+          _ -> fail $ "Unknown protocol version: " ++ show x
+
 
 -- |Type class for relating type-level 'ProtocolVersion's with
 -- term level 'SProtocolVersion's.
