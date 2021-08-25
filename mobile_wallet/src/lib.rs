@@ -159,7 +159,7 @@ fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let amount: Amount = try_get(&v, "amount")?;
     let maybe_memo: Option<Memo> = match v.get("memo") {
-        Some(m) => from_value(m.clone())?,
+        Some(m) => Some(from_value(m.clone())?),
         None => None,
     };
 
