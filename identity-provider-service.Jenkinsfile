@@ -2,14 +2,19 @@ pipeline {
     agent any
 
     environment {
-        image_repo = '192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/identity-provider-service'
+        image_repo = 'concordium/identity-provider-service'
         image_name = "${image_repo}:${image_tag}"
     }
 
     stages {
-        stage('ecr-login') {
+        stage('dockerhub-login') {
+            environment {
+                // Defines 'CRED_USR' and 'CRED_PSW'
+                // (see 'https://www.jenkins.io/doc/book/pipeline/jenkinsfile/#handling-credentials').
+                CRED = credentials('jenkins-dockerhub')
+            }
             steps {
-                sh '$(aws --region eu-west-1 ecr get-login | sed -e \'s/-e none//g\')'
+                sh 'docker login --username "${CRED_USR}" --password "${CRED_PSW}"'
             }
         }
         stage('build') {
