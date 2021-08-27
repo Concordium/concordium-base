@@ -617,7 +617,7 @@ maxMemoSize = 256
 memoFromBSS :: MonadError String m => BSS.ShortByteString -> m Memo
 memoFromBSS bss = if len <= maxMemoSize
                               then return . Memo $ bss
-                              else throwError $ "Max size for registered data is " ++ show maxMemoSize
+                              else throwError $ "Max size for memo is " ++ show maxMemoSize
                                              ++ " bytes, but got: " ++ show len ++ " bytes."
   where len = BSS.length bss
 
