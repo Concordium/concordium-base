@@ -416,32 +416,32 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
             21 -> do
               rdData <- S.get
               return RegisterData{..}
-            n -> case spv of 
-              SP1 -> fail $ "unsupported transaction type '" ++ show n ++ "'"
-              SP2 -> case n of
-                22 -> do
-                  twmToAddress <- S.get
-                  twmMemo <- S.get
-                  twmAmount <- S.get
-                  return TransferWithMemo{..}
-                23 -> do
-                  eatwmTo <- S.get
-                  eatwmMemo <- S.get
-                  eatdRemainingAmount <- S.get
-                  eatdTransferAmount <- S.get
-                  eatdIndex <- S.get
-                  cur <- S.bytesRead
-                  -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
-                  -- and bytesRead
-                  eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
-                  return EncryptedAmountTransferWithMemo{eatwmData = EncryptedAmountTransferData{..}, ..}
-                24 -> do
-                  twswmTo <- S.get
-                  twswmMemo <- S.get
-                  len <- S.getWord8
-                  twswmSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
-                  return TransferWithScheduleAndMemo{..}
-                _ -> fail $ "unsupported transaction type '" ++ show n ++ "'"
+            22 | supportMemo -> do
+              twmToAddress <- S.get
+              twmMemo <- S.get
+              twmAmount <- S.get
+              return TransferWithMemo{..}
+            23 | supportMemo -> do
+              eatwmTo <- S.get
+              eatwmMemo <- S.get
+              eatdRemainingAmount <- S.get
+              eatdTransferAmount <- S.get
+              eatdIndex <- S.get
+              cur <- S.bytesRead
+              -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+              -- and bytesRead
+              eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
+              return EncryptedAmountTransferWithMemo{eatwmData = EncryptedAmountTransferData{..}, ..}
+            24 | supportMemo -> do
+              twswmTo <- S.get
+              twswmMemo <- S.get
+              len <- S.getWord8
+              twswmSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
+              return TransferWithScheduleAndMemo{..}
+            n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
+        supportMemo = case spv of
+          SP1 -> False
+          SP2 -> True
 
 -- |Builds a set from a list of ascending elements.
 -- Fails if the elements are not ordered or a duplicate is encountered.

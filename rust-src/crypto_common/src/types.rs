@@ -237,7 +237,6 @@ impl Deserial for Memo {
                 MAX_MEMO_SIZE
             )
         }
-        // allocating is safe because len is a u16
         let mut memo = vec![0; len as usize];
         source.read_exact(&mut memo)?;
         Ok(Memo { memo })

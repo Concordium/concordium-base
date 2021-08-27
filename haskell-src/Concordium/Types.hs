@@ -621,7 +621,6 @@ memoFromBSS bss = if len <= maxMemoSize
                                              ++ " bytes, but got: " ++ show len ++ " bytes."
   where len = BSS.length bss
 
--- Uses two bytes for length to be more future-proof.
 instance S.Serialize Memo where
   put (Memo bss) = do
     S.putWord16be . fromIntegral . BSS.length $ bss
