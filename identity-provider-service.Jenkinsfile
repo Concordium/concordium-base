@@ -22,8 +22,8 @@ pipeline {
                 sh '''\
                     docker build \
                       -t "${image_name}" \
-                      --build-arg development_image_tag="${development_image_tag}" \
-                      --label development_image_tag="${development_image_tag}" \
+                      --build-arg base_image_tag="${base_image_tag}" \
+                      --label base_image_tag="${base_image_tag}" \
                       -f scripts/identity-provider-service.Dockerfile \
                       .
                     docker push "${image_name}"

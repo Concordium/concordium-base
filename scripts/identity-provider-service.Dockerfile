@@ -1,5 +1,5 @@
 # Build binaries in builder image.
-ARG development_image_tag
+ARG base_image_tag
 FROM concordium/base:${base_image_tag} as builder
 COPY . /build
 WORKDIR /build/identity-provider-service
