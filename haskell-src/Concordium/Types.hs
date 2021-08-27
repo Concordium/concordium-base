@@ -627,9 +627,9 @@ instance S.Serialize Memo where
     S.putWord16be . fromIntegral . BSS.length $ bss
     S.putShortByteString bss
 
-  get = do
+  get = label "Memo" $ do
     l <- fromIntegral <$> S.getWord16be
-    unless (l <= maxMemoSize) $ fail "Data too long"
+    unless (l <= maxMemoSize) $ fail $ "Memo length (" ++ show l ++ ") exceeds maximum (" ++ maxMemoSize ++ ")"
     Memo <$> S.getShortByteString l
 
 instance AE.FromJSON Memo where
