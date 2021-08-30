@@ -118,7 +118,7 @@ genesisBlockHash GDP1Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash .
     put genesisSlot
     put P1
     putWord8 1 -- Regenesis
-    -- NB: The following are unfolded since the state serialization does not go into computing the hash.
+    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
     -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
