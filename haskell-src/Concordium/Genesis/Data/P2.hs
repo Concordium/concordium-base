@@ -2,36 +2,65 @@
 module Concordium.Genesis.Data.P2 where
 
 import Data.Serialize
+import qualified Data.ByteString as BS
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Genesis.Data.Base
 import Concordium.Types
+import Concordium.Utils.Serialization
 
--- |Genesis data for the P2 protocol version.
-newtype GenesisDataP2
-    = GenesisDataP2 { unGenesisDataP2 :: RegenesisData }
+-- |Genesis data for the P2 protocol version. The initial variant is here
+-- because it might be used in the future, at present it is not used.
+data GenesisDataP2
+    = GDP2Initial {
+      -- |The immutable genesis parameters.
+      genesisCore :: !CoreGenesisParameters,
+      -- |Serialized initial block state.
+      -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
+      genesisInitialState :: !BS.ByteString
+    }
+    | GDP2Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
 
+_core :: GenesisDataP2 -> CoreGenesisParameters
+_core GDP2Initial{..} = genesisCore
+_core GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = genesisCore
+
 instance BasicGenesisData GenesisDataP2 where
-    gdGenesisTime = genesisTime . genesisCore . unGenesisDataP2
+    gdGenesisTime = genesisTime . _core
     {-# INLINE gdGenesisTime #-}
-    gdSlotDuration = genesisSlotDuration . genesisCore . unGenesisDataP2
+    gdSlotDuration = genesisSlotDuration . _core
     {-# INLINE gdSlotDuration #-}
-    gdMaxBlockEnergy = genesisMaxBlockEnergy . genesisCore . unGenesisDataP2
+    gdMaxBlockEnergy = genesisMaxBlockEnergy . _core
     {-# INLINE gdMaxBlockEnergy #-}
-    gdFinalizationParameters = genesisFinalizationParameters . genesisCore . unGenesisDataP2
+    gdFinalizationParameters = genesisFinalizationParameters . _core
     {-# INLINE gdFinalizationParameters #-}
-    gdEpochLength = genesisEpochLength . genesisCore . unGenesisDataP2
+    gdEpochLength = genesisEpochLength . _core
     {-# INLINE gdEpochLength #-}
 
 -- |Deserialize genesis data in the V4 format.
 getGenesisDataV4 :: Get GenesisDataP2
-getGenesisDataV4 = GenesisDataP2 <$> getRegenesisData
+getGenesisDataV4 =
+    getWord8 >>= \case
+        0 -> do
+            genesisCore <- get
+            genesisInitialState <- getByteStringLen
+            return GDP2Initial{..}
+        1 -> do
+            genesisRegenesis <- getRegenesisData
+            return GDP2Regenesis{..}
+        _ -> fail "Unrecognized P2 genesis data type."
 
 -- |Serialize genesis data in the V4 format.
 putGenesisDataV4 :: Putter GenesisDataP2
-putGenesisDataV4 = putRegenesisData . unGenesisDataP2
+putGenesisDataV4 GDP2Initial{..} = do
+  putWord8 0
+  put genesisCore
+  putByteStringLen genesisInitialState
+putGenesisDataV4 GDP2Regenesis{..} = do
+  putWord8 1
+  putRegenesisData genesisRegenesis
 
 -- |Deserialize genesis data with a version tag. The expected version tag is 4
 -- and this must be distinct from version tags of other genesis data formats.
@@ -39,7 +68,7 @@ getVersionedGenesisData :: Get GenesisDataP2
 getVersionedGenesisData =
     getVersion >>= \case
         4 -> getGenesisDataV4
-        n -> fail $ "Unsupported genesis data version for P2 genssis: " ++ show n
+        n -> fail $ "Unsupported genesis data version for P2 genesis: " ++ show n
 
 -- |Serialize genesis data with a version tag.
 -- This will use the V4 format.
@@ -52,12 +81,21 @@ putVersionedGenesisData gd = do
 -- Every block hash is derived from a message that begins with the block slot,
 -- which is 0 for genesis blocks.
 --
--- NB: The serialized state is not included in the block hash, only the state
--- hash is.
+-- NB: For the regenesis variant the serialized state is not included in the
+-- block hash, only the state hash is. This makes it possible to optimize the
+-- format in the future since it does not have protocol defined meaning. In
+-- contrast, for the initial P2 genesis the initial state is hashed as is.
 genesisBlockHash :: GenesisDataP2 -> BlockHash
-genesisBlockHash GenesisDataP2{unGenesisDataP2=RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+genesisBlockHash GDP2Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
+  put genesisSlot
+  put P2
+  putWord8 0 -- initial variant
+  put genesisCore
+  putByteStringLen genesisInitialState
+genesisBlockHash GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P2
+    putWord8 1 -- regenesis variant
     -- NB: The following are unfolded since the state serialization does not go into computing the hash.
     -- Only the state hash is used.
     put genesisCore

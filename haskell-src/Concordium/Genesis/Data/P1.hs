@@ -110,20 +110,20 @@ data GenesisDataP1
         { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
 
-core :: GenesisDataP1 -> CoreGenesisParameters
-core GDP1Initial{..} = genesisCore
-core GDP1Regenesis{genesisRegenesis=RegenesisData{..}} = genesisCore
+_core :: GenesisDataP1 -> CoreGenesisParameters
+_core GDP1Initial{..} = genesisCore
+_core GDP1Regenesis{genesisRegenesis=RegenesisData{..}} = genesisCore
 
 instance BasicGenesisData GenesisDataP1 where
-    gdGenesisTime = genesisTime . core
+    gdGenesisTime = genesisTime . _core
     {-# INLINE gdGenesisTime #-}
-    gdSlotDuration = genesisSlotDuration . core
+    gdSlotDuration = genesisSlotDuration . _core
     {-# INLINE gdSlotDuration #-}
-    gdMaxBlockEnergy = genesisMaxBlockEnergy . core
+    gdMaxBlockEnergy = genesisMaxBlockEnergy . _core
     {-# INLINE gdMaxBlockEnergy #-}
-    gdFinalizationParameters = genesisFinalizationParameters . core
+    gdFinalizationParameters = genesisFinalizationParameters . _core
     {-# INLINE gdFinalizationParameters #-}
-    gdEpochLength = genesisEpochLength . core
+    gdEpochLength = genesisEpochLength . _core
     {-# INLINE gdEpochLength #-}
 
 -- |Deserialize genesis data in the V3 format.
