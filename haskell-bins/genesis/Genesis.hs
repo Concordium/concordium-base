@@ -27,6 +27,7 @@ import Concordium.Types.Parameters
 import Concordium.Genesis.Parameters
 import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P1 as P1
+import qualified Concordium.Genesis.Data.Base as GDBase
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
 import Concordium.Types
@@ -206,7 +207,7 @@ main = cmdArgsRun mode >>=
               putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
               putStrLn $ "State hash: " ++ show genesisStateHash
 
-            Right gd@(GDP1 P1.GDP1Initial{genesisCore = CoreGenesisParameters{..}, genesisInitialState = P1.GenesisState{..}}) -> do
+            Right gd@(GDP1 P1.GDP1Initial{genesisCore = CoreGenesisParameters{..}, genesisInitialState = GDBase.GenesisState{..}}) -> do
               putStrLn $ "Genesis data for genesis block with hash " ++ show (genesisBlockHash gd)
               putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
               putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)

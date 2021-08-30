@@ -1,76 +1,13 @@
 -- |This module defines the genesis data fromat for the 'P1' protocol version.
 module Concordium.Genesis.Data.P1 where
 
-import Control.Monad
 import Data.Serialize
-import qualified Data.Vector as Vec
-import qualified Data.Map.Strict as Map
-import Lens.Micro.Platform
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
-import Concordium.Genesis.Account
 import Concordium.Genesis.Data.Base
-import Concordium.Genesis.Parameters
 import Concordium.Types
-import Concordium.Types.AnonymityRevokers
-import Concordium.Types.IdentityProviders
-import Concordium.Types.Parameters
-import Concordium.Types.Updates
-import Concordium.Utils.Serialization
-
--- |Initial state configuration for genesis.
---
--- The initial accounts are assigned account indexes sequentially based
--- on their index in 'genesisAccounts'. This means that, when accounts
--- are bakers, their baker ID must correspond to this index.
---
--- It is also required that the foundation account specified in the
--- chain parameters is one of the genesis accounts.
-data GenesisState = GenesisState
-    { -- |Cryptographic parameters for on-chain proofs.
-      genesisCryptographicParameters :: !CryptographicParameters,
-      -- |The initial collection of identity providers.
-      genesisIdentityProviders :: !IdentityProviders,
-      -- |The initial collection of anonymity revokers.
-      genesisAnonymityRevokers :: !AnonymityRevokers,
-      -- |The initial update keys structure for chain updates.
-      genesisUpdateKeys :: !UpdateKeysCollection,
-      -- |The initial (updatable) chain parameters.
-      genesisChainParameters :: !ChainParameters,
-      -- |The initial leadership election nonce.
-      genesisLeadershipElectionNonce :: !LeadershipElectionNonce,
-      -- |The initial accounts on the chain.
-      genesisAccounts :: !(Vec.Vector GenesisAccount)
-    }
-    deriving (Eq, Show)
-
-instance Serialize GenesisState where
-    put GenesisState{..} = do
-        put genesisCryptographicParameters
-        put genesisIdentityProviders
-        put genesisAnonymityRevokers
-        put genesisUpdateKeys
-        put genesisChainParameters
-        put genesisLeadershipElectionNonce
-        putLength (length genesisAccounts)
-        mapM_ putGenesisAccountGD3 genesisAccounts
-    get = do
-        genesisCryptographicParameters <- get
-        genesisIdentityProviders <- get
-        genesisAnonymityRevokers <- get
-        genesisUpdateKeys <- get
-        genesisChainParameters <- get
-        genesisLeadershipElectionNonce <- get
-        nGenesisAccounts <- getLength
-        genesisAccounts <- Vec.replicateM nGenesisAccounts getGenesisAccountGD3
-        Vec.forM_ (Vec.indexed genesisAccounts) $ \case
-            (i, GenesisAccount{gaBaker = Just GenesisBaker{..}})
-                | (gbBakerId /= fromIntegral i) -> fail "Baker Id is incorrect."
-            _ -> return ()
-        unless (genesisChainParameters ^. cpFoundationAccount < fromIntegral (Vec.length genesisAccounts)) $
-            fail "Invalid foundation account."
-        return GenesisState{..}
+import Concordium.Genesis.Parameters
 
 -- |Genesis data for the P1 protocol version.
 -- Two types of genesis data are supported.
@@ -161,44 +98,8 @@ putVersionedGenesisData gd = do
     putVersion 3
     putGenesisDataV3 gd
 
--- |Convert 'GenesisParameters' to 'GenesisDataP1'.
 parametersToGenesisData :: GenesisParameters -> GenesisDataP1
-parametersToGenesisData GenesisParametersV2{gpChainParameters = GenesisChainParameters{..}, ..} =
-    GDP1Initial
-        { genesisCore = CoreGenesisParameters{..},
-          genesisInitialState = GenesisState{..}
-        }
-  where
-    genesisTime = gpGenesisTime
-    genesisSlotDuration = gpSlotDuration
-    genesisEpochLength = gpEpochLength
-    genesisLeadershipElectionNonce = gpLeadershipElectionNonce
-    genesisAccounts = Vec.fromList gpInitialAccounts
-    genesisFinalizationParameters = gpFinalizationParameters
-    genesisCryptographicParameters = gpCryptographicParameters
-    genesisIdentityProviders =
-      case filter (\(k, v) -> k /= ipIdentity v) (Map.toList (idProviders gpIdentityProviders)) of
-        [] -> gpIdentityProviders
-        ips -> error $ "Inconsistent identity provider ids: " ++ show ips
-    genesisAnonymityRevokers =
-      case filter (\(k, v) -> k /= arIdentity v) (Map.toList (arRevokers gpAnonymityRevokers)) of
-        [] -> gpAnonymityRevokers
-        ars -> error $ "Inconsistent anonymity revoker ids: " ++ show ars
-    genesisMaxBlockEnergy = gpMaxBlockEnergy
-    genesisUpdateKeys = gpUpdateKeys
-    genesisChainParameters =
-        makeChainParameters
-            gcpElectionDifficulty
-            gcpEuroPerEnergy
-            gcpMicroGTUPerEuro
-            gcpBakerExtraCooldownEpochs
-            gcpAccountCreationLimit
-            gcpRewardParameters
-            foundationAccountIndex
-            gcpBakerStakeThreshold
-    foundationAccountIndex = case Vec.findIndex ((gcpFoundationAccount ==) . gaAddress) genesisAccounts of
-        Nothing -> error "Foundation account is missing"
-        Just i -> fromIntegral i
+parametersToGenesisData = uncurry GDP1Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
 -- Every block hash is derived from a message that begins with the block slot,

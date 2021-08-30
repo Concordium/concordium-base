@@ -2,13 +2,11 @@
 module Concordium.Genesis.Data.P2 where
 
 import Data.Serialize
-import qualified Data.ByteString as BS
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Genesis.Data.Base
 import Concordium.Types
-import Concordium.Utils.Serialization
 
 -- |Genesis data for the P2 protocol version. The initial variant is here
 -- because it might be used in the future, at present it is not used.
@@ -18,7 +16,7 @@ data GenesisDataP2
       genesisCore :: !CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-      genesisInitialState :: !BS.ByteString
+      genesisInitialState :: !GenesisState
     }
     | GDP2Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
@@ -45,7 +43,7 @@ getGenesisDataV4 =
     getWord8 >>= \case
         0 -> do
             genesisCore <- get
-            genesisInitialState <- getByteStringLen
+            genesisInitialState <- get
             return GDP2Initial{..}
         1 -> do
             genesisRegenesis <- getRegenesisData
@@ -57,7 +55,7 @@ putGenesisDataV4 :: Putter GenesisDataP2
 putGenesisDataV4 GDP2Initial{..} = do
   putWord8 0
   put genesisCore
-  putByteStringLen genesisInitialState
+  put genesisInitialState
 putGenesisDataV4 GDP2Regenesis{..} = do
   putWord8 1
   putRegenesisData genesisRegenesis
@@ -91,7 +89,7 @@ genesisBlockHash GDP2Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
   put P2
   putWord8 0 -- initial variant
   put genesisCore
-  putByteStringLen genesisInitialState
+  put genesisInitialState
 genesisBlockHash GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P2
