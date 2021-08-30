@@ -78,7 +78,7 @@ module Concordium.Types (
   registeredDataFromBSS,
   maxRegisteredDataSize,
 
-  -- * Registered Data
+  -- * Transaction memo
   Memo(..),
 
   -- * Baking
