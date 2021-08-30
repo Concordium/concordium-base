@@ -80,6 +80,8 @@ module Concordium.Types (
 
   -- * Transaction memo
   Memo(..),
+  maxMemoSize,
+  memoFromBSS,
 
   -- * Baking
   ElectionDifficulty(..),
@@ -604,6 +606,9 @@ minNonce = 1
 -- |Data type for memos that can be added to transfers.
 -- Max length of 'maxMemoSize' is assumed.
 -- Create new values with 'memoFromBSS' to ensure assumed properties.
+--
+-- Note that the ToJSON instance of this type is derived, based on hex encoding.
+-- The FromJSON instance is manually implemented to ensure length limits.
 newtype Memo = Memo BSS.ShortByteString
   deriving Eq
   deriving (AE.ToJSON, Show) via BSH.ByteStringHex
