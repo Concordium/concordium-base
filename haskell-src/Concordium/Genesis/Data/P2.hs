@@ -6,6 +6,7 @@ import Data.Serialize
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Genesis.Data.Base
+import Concordium.Genesis.Parameters
 import Concordium.Types
 
 -- |Genesis data for the P2 protocol version. The initial variant is here
@@ -74,6 +75,9 @@ putVersionedGenesisData :: Putter GenesisDataP2
 putVersionedGenesisData gd = do
     putVersion 4
     putGenesisDataV4 gd
+
+parametersToGenesisData :: GenesisParameters -> GenesisDataP2
+parametersToGenesisData = uncurry GDP2Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
 -- Every block hash is derived from a message that begins with the block slot,

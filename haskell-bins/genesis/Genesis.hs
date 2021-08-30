@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-cse #-}
-{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, ScopedTypeVariables, GADTs, TypeApplications #-}
 module Main where
 
 import System.Exit
@@ -27,6 +27,7 @@ import Concordium.Types.Parameters
 import Concordium.Genesis.Parameters
 import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P1 as P1
+import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.Base as GDBase
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
@@ -166,151 +167,167 @@ main = cmdArgsRun mode >>=
                   case fromJSON value of
                     Error err -> do
                       die $ "Could not decode genesis parameters: " ++ show err
-                    Success params -> case gdVersion of
-                      3 -> do
-                        let genesisData = GDP1 $ P1.parametersToGenesisData params
-                        putStrLn "Successfully generated genesis data."
-                        LBS.writeFile gdOutput (S.runPutLazy $ putVersionedGenesisData genesisData)
-                        putStrLn $ "Wrote genesis data to file " ++ gdOutput
-                        let hashFile = takeDirectory gdOutput </> "genesis_hash"
-                        LBS.writeFile hashFile (encode [genesisBlockHash genesisData])
-                        putStrLn $ "Wrote genesis hash list to file " ++ hashFile
-                        exitSuccess
-                      n -> do
-                        putStrLn $ "Unsupported genesis data version: " ++ show n
-                        exitFailure
+                    Success params -> do
+                      -- P1 and P2 initial genesis are really the same format, so we combine them into
+                      -- the same PVGenesisData type when generating, and then output it.
+                      pvGD <- case gdVersion of
+                               3 -> return $ PVGenesisData . GDP1 $ P1.parametersToGenesisData params
+                               -- see documentation of 'putVersionedGenesisData'
+                               -- for why we assign these versions to P1 and P2 genesis
+                               4 -> return $ PVGenesisData . GDP2 $ P2.parametersToGenesisData params
+                               n -> do
+                                 putStrLn $ "Unsupported genesis data version: " ++ show n
+                                 exitFailure
+                      putStrLn $ "Generated genesis data for protocol version " ++ show (pvProtocolVersion pvGD)
+                      LBS.writeFile gdOutput (S.runPutLazy $ putPVGenesisData pvGD)
+                      putStrLn $ "Wrote genesis data to file " ++ gdOutput
+                      let hashFile = takeDirectory gdOutput </> "genesis_hash"
+                      LBS.writeFile hashFile (encode [pvGenesisBlockHash pvGD])
+                      putStrLn $ "Wrote genesis hash list to file " ++ hashFile
+                      exitSuccess
         PrintGenesisData{..} -> do
           source <- LBS.readFile gdSource
-          case S.runGetLazy getVersionedGenesisData source of
+          case S.runGetLazy getPVGenesisData source of
             Left err -> putStrLn $ "Cannot parse genesis data:" ++ err
-            Right (GDP1 P1.GDP1Regenesis{genesisRegenesis = RegenesisData{genesisCore = CoreGenesisParameters{..}, ..}}) -> do
-              putStrLn "Re-genesis data."
-              putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
-              putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
-              putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
+            Right (PVGenesisData (gdata :: GenesisData pv)) ->
+              case protocolVersion @pv of
+                SP1 -> case gdata of
+                  GDP1 P1.GDP1Regenesis{..} -> printRegenesis P1 genesisRegenesis
+                  gd@(GDP1 P1.GDP1Initial{..}) -> printInitial P1 (genesisBlockHash gd) genesisCore genesisInitialState
+                SP2 -> case gdata of
+                  GDP2 P2.GDP2Regenesis{..} -> printRegenesis P2 genesisRegenesis
+                  gd@(GDP2 P2.GDP2Initial{..}) -> printInitial P2 (genesisBlockHash gd) genesisCore genesisInitialState
 
-              putStrLn ""
-              putStrLn "Finalization parameters: "
-              let FinalizationParameters{..} = genesisFinalizationParameters
-              putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
-              putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
-              putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-              putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
-              putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
-              putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
-              putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
-              putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
+printRegenesis :: ProtocolVersion -> RegenesisData -> IO ()
+printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do
+    putStrLn $ "Re-genesis data for protocol version " ++ show pv
+    putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
+    putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
+    putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
 
-              putStrLn ""
-              putStrLn $ "First genesis block: " ++ show genesisFirstGenesis
-              putStrLn $ "Previous (re)genesis block: " ++ show genesisPreviousGenesis
-              putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
-              putStrLn $ "State hash: " ++ show genesisStateHash
+    putStrLn ""
+    putStrLn "Finalization parameters: "
+    let FinalizationParameters{..} = genesisFinalizationParameters
+    putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
+    putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
+    putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
+    putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
+    putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
+    putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
+    putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
+    putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
 
-            Right gd@(GDP1 P1.GDP1Initial{genesisCore = CoreGenesisParameters{..}, genesisInitialState = GDBase.GenesisState{..}}) -> do
-              putStrLn $ "Genesis data for genesis block with hash " ++ show (genesisBlockHash gd)
-              putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
-              putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
-              putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
-              putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
+    putStrLn ""
+    putStrLn $ "First genesis block: " ++ show genesisFirstGenesis
+    putStrLn $ "Previous (re)genesis block: " ++ show genesisPreviousGenesis
+    putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
+    putStrLn $ "State hash: " ++ show genesisStateHash
 
-              let totalGTU = sum (gaBalance <$> genesisAccounts)
+printInitial :: ProtocolVersion -> BlockHash -> CoreGenesisParameters -> GDBase.GenesisState -> IO ()
+printInitial pv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
+    putStrLn $ "Genesis data for genesis block with hash " ++ show gh
+    putStrLn $ "Protocol version " ++ show pv
+    putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
+    putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
+    putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
+    putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
 
-              putStrLn ""
-              putStrLn $ "Genesis total GTU: " ++ amountToString totalGTU
-              putStrLn $ "Maximum block energy: " ++ show genesisMaxBlockEnergy
+    let totalGTU = sum (gaBalance <$> genesisAccounts)
 
-              putStrLn ""
-              putStrLn "Finalization parameters: "
-              let FinalizationParameters{..} = genesisFinalizationParameters
-              putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
-              putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
-              putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-              putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
-              putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
-              putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
-              putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
-              putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
+    putStrLn ""
+    putStrLn $ "Genesis total GTU: " ++ amountToString totalGTU
+    putStrLn $ "Maximum block energy: " ++ show genesisMaxBlockEnergy
 
-              let ChainParameters{..} = genesisChainParameters
-              putStrLn ""
-              putStrLn "Chain parameters: "
-              putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
-              putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate _cpEuroPerEnergy
-              putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate _cpMicroGTUPerEuro
-              putStrLn $ "  - baker extra cooldown epochs: " ++ show _cpBakerExtraCooldownEpochs
-              putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
-              putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU _cpBakerStakeThreshold
-              putStrLn "  - reward parameters:"
-              putStrLn "    + mint distribution:"
-              putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
-              putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
-              putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
-              putStrLn "    + transaction fee distribution:"
-              putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
-              putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
-              putStrLn "    + GAS rewards:"
-              putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
-              putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
-              putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
-              putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
+    putStrLn ""
+    putStrLn "Finalization parameters: "
+    let FinalizationParameters{..} = genesisFinalizationParameters
+    putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
+    putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
+    putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
+    putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
+    putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
+    putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
+    putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
+    putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
 
-              let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
-                    Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
-                    Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
-              putStrLn $ "  - foundation account: " ++ foundAcc
+    let ChainParameters{..} = genesisChainParameters
+    putStrLn ""
+    putStrLn "Chain parameters: "
+    putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+    putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate _cpEuroPerEnergy
+    putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate _cpMicroGTUPerEuro
+    putStrLn $ "  - baker extra cooldown epochs: " ++ show _cpBakerExtraCooldownEpochs
+    putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+    putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU _cpBakerStakeThreshold
+    putStrLn "  - reward parameters:"
+    putStrLn "    + mint distribution:"
+    putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
+    putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+    putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+    putStrLn "    + transaction fee distribution:"
+    putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+    putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+    putStrLn "    + GAS rewards:"
+    putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+    putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+    putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+    putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
 
-              putStrLn ""
-              putStrLn $ "Cryptographic parameters: "
-              putStrLn $ "  - " ++ showAsJSON 3 genesisCryptographicParameters
+    let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
+          Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
+          Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+    putStrLn $ "  - foundation account: " ++ foundAcc
 
-              putStrLn ""
-              putStrLn "Identity providers: "
-              forM_ (OrdMap.toAscList (idProviders genesisIdentityProviders)) $ \(ipId, ipData) ->
-                putStrLn $ "  - " ++ show ipId ++ ": " ++ showAsJSON (6 + length (show ipId)) ipData
+    putStrLn ""
+    putStrLn $ "Cryptographic parameters: "
+    putStrLn $ "  - " ++ showAsJSON 3 genesisCryptographicParameters
 
-              putStrLn ""
-              putStrLn "Anonymity revokers: "
-              forM_ (OrdMap.toAscList (arRevokers genesisAnonymityRevokers)) $ \(arId, arData) ->
-                putStrLn $ "  - " ++ show arId ++ ": " ++ showAsJSON (6 + length (show arId)) arData
+    putStrLn ""
+    putStrLn "Identity providers: "
+    forM_ (OrdMap.toAscList (idProviders genesisIdentityProviders)) $ \(ipId, ipData) ->
+      putStrLn $ "  - " ++ show ipId ++ ": " ++ showAsJSON (6 + length (show ipId)) ipData
 
-              putStrLn ""
-              let bkrs = catMaybes (gaBaker <$> toList genesisAccounts)
-              let bkrTotalStake = foldl' (+) 0 (gbStake <$> bkrs)
-              putStrLn $ "\nThere are " ++ show (length bkrs) ++ " bakers with total stake: " ++ showBalance totalGTU bkrTotalStake
+    putStrLn ""
+    putStrLn "Anonymity revokers: "
+    forM_ (OrdMap.toAscList (arRevokers genesisAnonymityRevokers)) $ \(arId, arData) ->
+      putStrLn $ "  - " ++ show arId ++ ": " ++ showAsJSON (6 + length (show arId)) arData
 
-              putStrLn ""
-              putStrLn "Genesis accounts:"
-              forM_ genesisAccounts (showAccount bkrTotalStake totalGTU)
+    putStrLn ""
+    let bkrs = catMaybes (gaBaker <$> toList genesisAccounts)
+    let bkrTotalStake = foldl' (+) 0 (gbStake <$> bkrs)
+    putStrLn $ "\nThere are " ++ show (length bkrs) ++ " bakers with total stake: " ++ showBalance totalGTU bkrTotalStake
 
-              let UpdateKeysCollection{level2Keys = Authorizations{..}, ..} = genesisUpdateKeys
-              putStrLn ""
-              putStrLn "Root level update authorizations:"
-              putStrLn $ " - "  ++ show (hlkThreshold rootKeys) ++ " of:"
-              Vec.mapM_ (\k -> putStrLn $ "    " ++ show k) (hlkKeys rootKeys)
-              putStrLn ""
-              putStrLn "Level 1 update authorizations:"
-              putStrLn $ " - "  ++ show (hlkThreshold level1Keys) ++ " of:"
-              Vec.mapM_ (\k -> putStrLn $ "    " ++ show k) (hlkKeys level1Keys)
-              putStrLn ""
-              putStrLn "Level 2 update authorizations:"
-              putStrLn "  - public keys:"
-              Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
-              printAccessStructure "emergency" asEmergency
-              printAccessStructure "protocol" asProtocol
-              printAccessStructure "election difficulty" asParamElectionDifficulty
-              printAccessStructure "euro per energy" asParamEuroPerEnergy
-              printAccessStructure "microGTU per euro" asParamMicroGTUPerEuro
-              printAccessStructure "foundation account" asParamFoundationAccount
-              printAccessStructure "mint distribution" asParamMintDistribution
-              printAccessStructure "transaction fee distribution" asParamTransactionFeeDistribution
-              printAccessStructure "gas reward parameters" asParamGASRewards
-              printAccessStructure "baker stake threshold" asBakerStakeThreshold
-              printAccessStructure "add anonymity revokers" asAddAnonymityRevoker
-              printAccessStructure "add identity providers" asAddIdentityProvider
+    putStrLn ""
+    putStrLn "Genesis accounts:"
+    forM_ genesisAccounts (showAccount bkrTotalStake totalGTU)
 
-  where showTime t = formatTime defaultTimeLocale rfc822DateFormat (timestampToUTCTime t)
-        showBalance totalGTU balance =
+    let UpdateKeysCollection{level2Keys = Authorizations{..}, ..} = genesisUpdateKeys
+    putStrLn ""
+    putStrLn "Root level update authorizations:"
+    putStrLn $ " - "  ++ show (hlkThreshold rootKeys) ++ " of:"
+    Vec.mapM_ (\k -> putStrLn $ "    " ++ show k) (hlkKeys rootKeys)
+    putStrLn ""
+    putStrLn "Level 1 update authorizations:"
+    putStrLn $ " - "  ++ show (hlkThreshold level1Keys) ++ " of:"
+    Vec.mapM_ (\k -> putStrLn $ "    " ++ show k) (hlkKeys level1Keys)
+    putStrLn ""
+    putStrLn "Level 2 update authorizations:"
+    putStrLn "  - public keys:"
+    Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
+    printAccessStructure "emergency" asEmergency
+    printAccessStructure "protocol" asProtocol
+    printAccessStructure "election difficulty" asParamElectionDifficulty
+    printAccessStructure "euro per energy" asParamEuroPerEnergy
+    printAccessStructure "microGTU per euro" asParamMicroGTUPerEuro
+    printAccessStructure "foundation account" asParamFoundationAccount
+    printAccessStructure "mint distribution" asParamMintDistribution
+    printAccessStructure "transaction fee distribution" asParamTransactionFeeDistribution
+    printAccessStructure "gas reward parameters" asParamGASRewards
+    printAccessStructure "baker stake threshold" asBakerStakeThreshold
+    printAccessStructure "add anonymity revokers" asAddAnonymityRevoker
+    printAccessStructure "add identity providers" asAddIdentityProvider
+
+  where showBalance totalGTU balance =
             printf "%s (= %.4f%%)" (amountToString balance) (100 * (fromIntegral balance / fromIntegral totalGTU) :: Double)
         showAccount bkrTotalStake totalGTU GenesisAccount{..} = do
           putStrLn $ "  - " ++ show gaAddress
@@ -337,9 +354,14 @@ main = cmdArgsRun mode >>=
           in LBS8.unpack . LBS8.unlines . zipWith indentLine [0..] $ (LBS8.lines bs)
         printAccessStructure n AccessStructure{..} = putStrLn $ "  - " ++ n ++ " update: " ++ show accessThreshold ++ " of " ++ show (toList accessPublicKeys)
 
-        showRatio r =
-          let num = numerator r
-              den = denominator r
-          in show num ++ " / " ++ show den ++ " (approx " ++ show (realToFrac r :: Double) ++ ")"
-
         showExchangeRate (ExchangeRate r) = showRatio r
+
+showTime :: Timestamp -> String
+showTime t = formatTime defaultTimeLocale rfc822DateFormat (timestampToUTCTime t)
+
+showRatio :: (Show a, Integral a) => Ratio a -> String
+showRatio r =
+  let num = numerator r
+      den = denominator r
+  in show num ++ " / " ++ show den ++ " (approx " ++ show (realToFrac r :: Double) ++ ")"
+

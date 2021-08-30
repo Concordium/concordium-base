@@ -14,6 +14,7 @@ own changelogs.
      hashed and signed.
    
 ## haskell-src library changes
+   - Add support for transfers with memos. This introduces protocol version 2.
    - Two new update types for adding identity providers and anonymity revokers.
    - New transaction/payload type `RegisterData`. And a corresponding event `DataRegistered`.
    - Transaction signatures have a double indexing now with (credentialIndex,
@@ -23,5 +24,7 @@ own changelogs.
      transaction to update keys of a specific credential.
 
 ## Changes in other tools
+   - the `genesis` tool can generate genesis for the P2 chain if supplied with
+     genesis parameters in version 4.
    - the `client` tool renames `accountData` to `accountKeys` in its
      `create_credential` function.

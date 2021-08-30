@@ -108,3 +108,18 @@ getPVGenesisData = do
     3 -> PVGenesisData . GDP1 <$> P1.getGenesisDataV3
     4 -> PVGenesisData . GDP2 <$> P2.getGenesisDataV4
     n -> fail $ "Unsupported genesis version: " ++ show n
+
+-- |Serialize genesis data with a version tag. This is a helper function that
+-- modulo types does exactly the same as 'putVersionedGenesisData' defined
+-- above.
+putPVGenesisData :: Putter PVGenesisData
+putPVGenesisData (PVGenesisData gd) = putVersionedGenesisData gd
+
+-- |Helper function that modulo types, does exactly the same as
+-- 'genesisBlockHash' defined above.
+pvGenesisBlockHash :: PVGenesisData -> BlockHash
+pvGenesisBlockHash (PVGenesisData gd) = genesisBlockHash gd
+
+-- |Helper function to project the protocol version out of 'PVGenesisData'.
+pvProtocolVersion :: PVGenesisData -> ProtocolVersion
+pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion (protocolVersion @pv)
