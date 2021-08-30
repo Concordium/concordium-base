@@ -708,69 +708,29 @@ impl<K: Deserial + Hash + Eq> Deserial for HashSet<K> {
     }
 }
 
-macro_rules! serialize_array_x {
-    ($x:expr) => {
-        /// Serialize the array by writing elements consecutively starting at 0.
-        /// Since the length of the array is known statically it is not written out
-        /// explicitly. Thus serialization of the array A and the slice &A[..] differ.
-        impl<T: Serial> Serial for [T; $x] {
-            fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-                for elem in self.iter() {
-                    elem.serial(out)?;
-                }
-                Ok(())
-            }
+/// Serialize the array by writing elements consecutively starting at 0.
+/// Since the length of the array is known statically it is not written out
+/// explicitly. Thus serialization of the array A and the slice &A[..] differ.
+impl<T: Serial, const N: usize> Serial for [T; N] {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        for elem in self.iter() {
+            elem.serial(out)?;
         }
-
-        impl<T: Deserial> Deserial for [T; $x] {
-            fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-                let mut data: MaybeUninit<[T; $x]> = MaybeUninit::uninit();
-                let ptr = data.as_mut_ptr();
-                for i in 0..$x {
-                    let item = T::deserial(source)?;
-                    unsafe { (*ptr)[i] = item };
-                }
-                Ok(unsafe { data.assume_init() })
-            }
-        }
-    };
+        Ok(())
+    }
 }
 
-repeat_macro!(
-    serialize_array_x,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20,
-    21,
-    22,
-    23,
-    24,
-    25,
-    26,
-    27,
-    28,
-    29,
-    30,
-    31,
-    32
-);
+impl<T: Deserial, const N: usize> Deserial for [T; N] {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let mut data: MaybeUninit<[T; N]> = MaybeUninit::uninit();
+        let ptr = data.as_mut_ptr();
+        for i in 0..N {
+            let item = T::deserial(source)?;
+            unsafe { (*ptr)[i] = item };
+        }
+        Ok(unsafe { data.assume_init() })
+    }
+}
 
 impl Address {
     pub fn matches_account(&self, acc: &AccountAddress) -> bool {
