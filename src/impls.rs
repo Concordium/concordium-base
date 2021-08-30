@@ -9,17 +9,6 @@ use hash::Hash;
 #[cfg(feature = "std")]
 use std::{collections, hash, marker, mem::MaybeUninit, slice};
 
-/// Apply the given macro to each of the elements in the list
-/// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
-/// `println!("foo"); println!("bar").
-macro_rules! repeat_macro {
-    ($f:ident, $n:expr) => ($f!($n););
-    ($f:ident, $n:expr, $($ns:expr),*) => {
-        $f!($n);
-        repeat_macro!($f, $($ns),*);
-    };
-}
-
 // Implementations of Serialize
 
 impl<X: Serial, Y: Serial> Serial for (X, Y) {
