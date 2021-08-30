@@ -36,26 +36,26 @@ data SProtocolVersion (pv :: ProtocolVersion) where
     SP1 :: SProtocolVersion 'P1
     SP2 :: SProtocolVersion 'P2
 
+protocolVersionToWord64 :: ProtocolVersion -> Word64
+protocolVersionToWord64 P1 = 1
+protocolVersionToWord64 P2 = 2
+
+protocolVersionFromWord64 :: MonadFail m => Word64 -> m ProtocolVersion
+protocolVersionFromWord64 1 = return P1
+protocolVersionFromWord64 2 = return P2
+protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
+
 instance Serialize ProtocolVersion where
-    put P1 = putWord64be 1
-    put P2 = putWord64be 2
-    get =
-        getWord64be >>= \case
-            1 -> return P1
-            2 -> return P2
-            v -> fail $ "Unknown protocol version: " ++ show v
+    put = putWord64be . protocolVersionToWord64
+    get = protocolVersionFromWord64 =<< getWord64be
 
 instance ToJSON ProtocolVersion where
-  toJSON P1 = toJSON (1 :: Word64)
-  toJSON P2 = toJSON (2 :: Word64)
+  toJSON = toJSON . protocolVersionToWord64
 
 instance FromJSON ProtocolVersion where
   parseJSON v = prependFailure "Protocol version" $ do
       x <- parseJSON v
-      case x :: Word64 of
-          1 -> return P1
-          2 -> return P2
-          _ -> fail $ "Unknown protocol version: " ++ show x
+      protocolVersionFromWord64 x
 
 
 -- |Type class for relating type-level 'ProtocolVersion's with
