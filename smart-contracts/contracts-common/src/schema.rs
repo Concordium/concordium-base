@@ -237,49 +237,9 @@ impl SchemaType for OwnedReceiveName {
     fn get_type() -> Type { Type::ReceiveName(SizeLength::U16) }
 }
 
-macro_rules! schema_type_array_x {
-    ($x:expr) => {
-        impl<A: SchemaType> SchemaType for [A; $x] {
-            fn get_type() -> Type { Type::Array($x, Box::new(A::get_type())) }
-        }
-    };
+impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
+    fn get_type() -> Type { Type::Array(N.try_into().unwrap(), Box::new(A::get_type())) }
 }
-
-repeat_macro!(
-    schema_type_array_x,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20,
-    21,
-    22,
-    23,
-    24,
-    25,
-    26,
-    27,
-    28,
-    29,
-    30,
-    31,
-    32
-);
 
 impl Serial for Fields {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
