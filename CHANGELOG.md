@@ -11,6 +11,8 @@
 - Make `HashMap` and `HashSet` default to the `fnv` hasher.
 - Add functions for serializing and deserializing `HashMap` and `HashSet` without the length (`serial_hashmap_no_length`, `deserial_hashmap_no_length`, `deserial_hashset_no_length`, `deserial_hashset_no_length`).
 - Use const generics in Serial, Deserial and SchemaType implementation for arrays.
+- Bump minimum supported Rust version to 1.51.
+
 ## concordium-contracts-common 0.4.0 (2021-05-12)
 
 - Add String to the schema.
