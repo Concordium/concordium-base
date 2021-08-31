@@ -230,13 +230,7 @@ impl Serial for Memo {
 impl Deserial for Memo {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
-        if len as usize > MAX_MEMO_SIZE {
-            anyhow::bail!(
-                "Memo size of {} is too big. Maximum memo size is {}.",
-                len,
-                MAX_MEMO_SIZE
-            )
-        }
+        anyhow::ensure!(len as usize <= MAX_MEMO_SIZE, "Memo size of {} is too big. Maximum size is {}.", len, MAX_MEMO_SIZE);
         let mut memo = vec![0; len as usize];
         source.read_exact(&mut memo)?;
         Ok(Memo { memo })
