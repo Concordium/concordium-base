@@ -2,7 +2,7 @@
 extern crate serde_json;
 use anyhow::{bail, ensure};
 use crypto_common::{
-    types::{Amount, KeyIndex, Signature, TransactionSignature},
+    types::{Amount, KeyIndex, Memo, Signature, TransactionSignature},
     *,
 };
 use dodis_yampolskiy_prf as prf;
@@ -74,6 +74,11 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     // plaintext amount to transfer
     let amount: Amount = try_get(&v, "amount")?;
 
+    let maybe_memo: Option<Memo> = match v.get("memo") {
+        Some(m) => from_value(m.clone())?,
+        None => None,
+    };
+
     let sender_sk: elgamal::SecretKey<ExampleCurve> = try_get(&v, "senderSecretKey")?;
 
     let receiver_pk = try_get(&v, "receiverPublicKey")?;
@@ -99,8 +104,14 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let (hash, body) = {
         let mut payload_bytes = Vec::new();
-        payload_bytes.put(&16u8); // transaction type is encrypted transfer
-        payload_bytes.put(&ctx_to);
+        if let Some(memo) = maybe_memo {
+            payload_bytes.put(&23u8); // transaction type is encrypted transfer with memo
+            payload_bytes.put(&ctx_to);
+            payload_bytes.put(&memo);
+        } else {
+            payload_bytes.put(&16u8); // transaction type is encrypted transfer
+            payload_bytes.put(&ctx_to);
+        }
         payload_bytes.extend_from_slice(&to_bytes(&payload));
 
         make_transaction_bytes(&ctx, &payload_bytes)
@@ -147,15 +158,22 @@ fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
     };
 
     let amount: Amount = try_get(&v, "amount")?;
+    let maybe_memo: Option<Memo> = match v.get("memo") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
 
     let (hash, body) = {
         let mut payload = Vec::new();
-        payload.put(&3u8); // transaction type is transfer
-        payload.put(&ctx_to);
+        if let Some(memo) = maybe_memo {
+            payload.put(&22u8); // transaction type is transfer with memo
+            payload.put(&ctx_to);
+            payload.put(&memo);
+        } else {
+            payload.put(&3u8); // transaction type is transfer
+            payload.put(&ctx_to);
+        }
         payload.put(&amount);
-
-        let payload_size: u32 = payload.len() as u32;
-        assert_eq!(payload_size, 41);
 
         make_transaction_bytes(&ctx, &payload)
     };

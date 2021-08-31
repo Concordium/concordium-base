@@ -3,8 +3,6 @@ cabal-version: 1.24
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: df981d0b53eaf25f809878e4f4a629ade3503268311dad43dcd0e0045a69a94f
 
 name:           concordium-base
 version:        0.1.0.0
@@ -53,6 +51,7 @@ library
       Concordium.Genesis.Data
       Concordium.Genesis.Data.Base
       Concordium.Genesis.Data.P1
+      Concordium.Genesis.Data.P2
       Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker

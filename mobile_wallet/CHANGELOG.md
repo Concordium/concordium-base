@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+   - The functions `create_transfer` and `create_encrypted_transfer` have been extended to support
+     the new transfer types, i.e. transfer with memo and encrypted transfer with memo, respectively.
+     If the JSON field `memo` is given in the input, `create_transfer` will use the payload for
+     transfer with memo, and `create_encrypted_transfer` will use the payload for encrypted transfer
+    with memo. If the `memo` is not given in the input, the functions will use the payloads for transfer
+    and encrypted transfer, respectively. 
+
 ## 0.8.0
    - in the response `create_credential` the field `commitmentsRandomness` is added and
      contains the randomness from commitments used in proofs.
