@@ -92,6 +92,7 @@ testing purposes they may be generated using the
 ### Supported protocol versions
 
 - If `--gdver=3` then the tool will output initial genesis for protocol version 1.
+  (This is the default if no version is specified.)
 - If `--gdver=4` then the tool will output initial genesis for protocol version 2.
 
 ## Printing contents of genesis blocks
