@@ -27,6 +27,9 @@ pub fn commitment_to_share<C: Curve>(
     coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
     let n = coeff_commitments.len();
+    if n == 0 {
+        return Commitment(C::zero_point());
+    }
     let mut exponents = Vec::with_capacity(n);
     let mut exponent: C::Scalar = C::Scalar::one();
     for _ in 0..n {
