@@ -85,6 +85,10 @@ crate-type = ["rlib", "staticlib", "cdylib" ]
 name = "verify_cdi"
 harness = false
 
+[[bench]]
+name = "commitment_to_share"
+harness = false
+
 [features]
 default = ["ffi"]
 ffi = []
