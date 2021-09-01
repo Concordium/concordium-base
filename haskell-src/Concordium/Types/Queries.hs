@@ -13,6 +13,7 @@ import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 
 import Concordium.Types
+import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import Concordium.Types.UpdateQueues (Updates)
@@ -37,9 +38,9 @@ data ConsensusStatus = ConsensusStatus
       -- |Hash of the last finalized block
       csLastFinalizedBlock :: !BlockHash,
       -- |Height of the best block (since latest regenesis)
-      csBestBlockHeight :: !BlockHeight,
+      csBestBlockHeight :: !AbsoluteBlockHeight,
       -- |Height of the last finalized block (since latest regenesis)
-      csLastFinalizedBlockHeight :: !BlockHeight,
+      csLastFinalizedBlockHeight :: !AbsoluteBlockHeight,
       -- |Total number of blocks received
       csBlocksReceivedCount :: !Int,
       -- |The last time a block was received
@@ -116,7 +117,7 @@ data BlockInfo = BlockInfo
       -- |The last finalized block when this block was baked
       biBlockLastFinalized :: !BlockHash,
       -- |The height of this block
-      biBlockHeight :: !BlockHeight,
+      biBlockHeight :: !AbsoluteBlockHeight,
       -- |The time the block was received
       biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified
