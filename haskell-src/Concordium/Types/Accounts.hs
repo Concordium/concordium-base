@@ -157,6 +157,31 @@ instance ToJSON AccountBaker where
     toJSON ab = object $ accountBakerPairs ab
     toEncoding ab = pairs $ mconcat $ accountBakerPairs ab
 
+-- |FromJSON instance is manually written to match the ToJSON instance above.
+instance FromJSON AccountBaker where
+    parseJSON = withObject "Account baker" $ \obj -> do
+        _stakedAmount <- obj .: "stakedAmount"
+        _stakeEarnings <- obj .: "restakeEarnings"
+        _bakerIdentity <- obj .: "bakerId"
+        _bakerElectionVerifyKey <- obj .: "bakerElectionVerifyKey"
+        _bakerSignatureVerifyKey <- obj .: "bakerSignatureVerifyKey"
+        _bakerAggregationVerifyKey <- obj .: "bakerAggregationVerifyKey"
+        let _accountBakerInfo = BakerInfo{..}
+        pendingChange <- obj .:! "pendingChange"
+        case pendingChange of
+            Nothing -> return AccountBaker{_bakerPendingChange=NoChange,..}
+            Just changeV -> flip (withObject "Baker change") changeV $ \changeObj -> do
+                variant <- changeObj .: "change"
+                case variant of
+                    "ReduceStake" -> do
+                        _bakerPendingChange <- ReduceStake <$> (changeObj .: "newStake") <*> (changeObj .: "epoch")
+                        return AccountBaker{..}
+                    "RemoveBaker" -> do
+                        _bakerPendingChange <- RemoveBaker <$> (changeObj .: "epoch")
+                        return AccountBaker{..}
+                    _ -> fail $ "Unrecognized baker change variant: " ++ variant
+
+
 instance HashableTo AccountBakerHash AccountBaker where
     getHash AccountBaker{..} =
         makeAccountBakerHash
@@ -222,3 +247,17 @@ accountInfoPairs AccountInfo{..} =
 instance ToJSON AccountInfo where
     toJSON ai = object $ accountInfoPairs ai
     toEncoding ai = pairs $ mconcat $ accountInfoPairs ai
+
+-- Due to the inconsistent naming of the AccountInfo fields we have to write the fromJSON instance manually.
+instance FromJSON AccountInfo where
+    parseJSON = withObject "Account info" $ \obj -> do
+        aiAccountNonce <- obj .: "accountNonce"
+        aiAccountAmount <- obj .: "accountAmount"
+        aiAccountReleaseSchedule <- obj .: "accountReleaseSchedule"
+        aiAccountCredentials <- obj .: "accountCredentials"
+        aiAccountThreshold <- obj .: "accountThreshold"
+        aiAccountEncryptedAmount <- obj .: "accountEncryptedAmount"
+        aiAccountEncryptionKey <- obj .: "accountEncryptionKey"
+        aiAccountIndex <- obj .: "accountIndex"
+        aiBaker <- obj .:? "accountBaker"
+        return AccountInfo{..}
