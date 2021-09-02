@@ -112,7 +112,8 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 data BlockInfo = BlockInfo
     { -- |The block hash
       biBlockHash :: !BlockHash,
-      -- |The parent block hash
+      -- |The parent block hash. For a re-genesis block, this will be the terminal block of the
+      -- previous chain. For the initial genesis block, this will be the hash of the block itself.
       biBlockParent :: !BlockHash,
       -- |The last finalized block when this block was baked
       biBlockLastFinalized :: !BlockHash,
