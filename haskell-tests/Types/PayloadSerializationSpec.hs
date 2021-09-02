@@ -36,6 +36,7 @@ import Concordium.Wasm
 
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.DummyData
+import Concordium.Types.ProtocolVersion
 
 genAttributeValue :: Gen AttributeValue
 genAttributeValue = AttributeValue . BSS.pack <$> (vector =<< choose (0,31))
@@ -271,7 +272,7 @@ groupIntoSize s =
 
 checkPayload :: Payload -> Property
 checkPayload e = let bs = S.runPut $ putPayload e
-                 in case S.runGet (getPayload (fromIntegral (BS.length bs))) bs of
+                 in case S.runGet (getPayload SP1 (fromIntegral (BS.length bs))) bs of
                       Left err -> counterexample err False
                       Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
 

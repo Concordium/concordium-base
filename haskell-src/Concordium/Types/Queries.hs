@@ -76,7 +76,18 @@ data ConsensusStatus = ConsensusStatus
       -- |Moving average time between finalizations
       csFinalizationPeriodEMA :: !(Maybe Double),
       -- |Standard deviation of moving average time between finalizations
-      csFinalizationPeriodEMSD :: !(Maybe Double)
+      csFinalizationPeriodEMSD :: !(Maybe Double),
+      -- |Currently active protocol version.
+      csProtocolVersion :: !ProtocolVersion,
+      -- |The number of chain restarts via a protocol update. An effected
+      -- protocol update instruction might not change the protocol version
+      -- specified in the previous field, but it always increments the genesis
+      -- index.
+      csGenesisIndex :: !GenesisIndex,
+      -- |Block hash of the current era, i.e., since the last protocol update. Initially this is equal to 'csGenesisBlock'.
+      csCurrentEraGenesisBlock :: !BlockHash,
+      -- |Time when the current era started.
+      csCurrentEraGenesisTime  :: !UTCTime
     }
     deriving (Show)
 

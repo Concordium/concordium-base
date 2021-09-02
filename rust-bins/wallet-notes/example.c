@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
       uint8_t flag = 1;
       char *out;
       uint64_t decrypted;
-      if (ends_with(argv[1], "create_transfer-input.json")) {
+      if (ends_with(argv[1], "create_transfer-input.json") || ends_with(argv[1], "create_transfer_with_memo-input.json")) {
         out = create_transfer(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_id_request_and_private_data-input.json")) {
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
       } else if (ends_with(argv[1], "generate-accounts-input.json")) {
         out = generate_accounts(buffer, &flag);
         return printStr(out, flag);
-      } else if (ends_with(argv[1], "create_encrypted_transfer-input.json")) {
+      } else if (ends_with(argv[1], "create_encrypted_transfer-input.json") || ends_with(argv[1], "create_encrypted_transfer_with_memo-input.json")) {
         out = create_encrypted_transfer(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_pub_to_sec_transfer-input.json")) {
