@@ -873,21 +873,6 @@ impl fmt::Display for NewReceiveNameError {
     }
 }
 
-/// Genesis block has slot number 0, and otherwise it is always the case that a
-/// parent of a block has a slot number strictly less than the block itself.
-/// However in contrast to `BlockHeight`, slot numbers are not strictly
-/// sequential, there will be gaps.
-pub type SlotNumber = u64;
-
-/// Height of the block. Height of the genesis block is 0, and otherwise it is
-/// always the case that a block has height one more than its parent.
-pub type BlockHeight = u64;
-
-/// Finalized height. In the context of chain metadata this is the height of the
-/// block which is explicitly recorded as the last finalized block in the block
-/// under consideration.
-pub type FinalizedHeight = u64;
-
 /// Time at the beginning of the current slot, in miliseconds since unix epoch.
 pub type SlotTime = Timestamp;
 
