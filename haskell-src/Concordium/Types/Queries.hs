@@ -130,6 +130,11 @@ data BlockInfo = BlockInfo
       biBlockLastFinalized :: !BlockHash,
       -- |The height of this block
       biBlockHeight :: !AbsoluteBlockHeight,
+      -- |The genesis index for this block. This counts the number of protocol updates that have
+      -- preceded this block.
+      biGenesisIndex :: !GenesisIndex,
+      -- |The height of this block relative to the (re)genesis block at its genesis index.
+      biLocalBlockHeight :: !BlockHeight,
       -- |The time the block was received
       biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified
