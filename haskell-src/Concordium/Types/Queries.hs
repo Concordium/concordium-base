@@ -37,9 +37,9 @@ data ConsensusStatus = ConsensusStatus
       csEpochDuration :: !Duration,
       -- |Hash of the last finalized block
       csLastFinalizedBlock :: !BlockHash,
-      -- |Height of the best block (since latest regenesis)
+      -- |Absolute height of the best block
       csBestBlockHeight :: !AbsoluteBlockHeight,
-      -- |Height of the last finalized block (since latest regenesis)
+      -- |Absolute height of the last finalized block
       csLastFinalizedBlockHeight :: !AbsoluteBlockHeight,
       -- |Total number of blocks received
       csBlocksReceivedCount :: !Int,
@@ -84,7 +84,8 @@ data ConsensusStatus = ConsensusStatus
       -- specified in the previous field, but it always increments the genesis
       -- index.
       csGenesisIndex :: !GenesisIndex,
-      -- |Block hash of the current era, i.e., since the last protocol update. Initially this is equal to 'csGenesisBlock'.
+      -- |Block hash of the genesis block of current era, i.e., since the last protocol update.
+      -- Initially this is equal to 'csGenesisBlock'.
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
       csCurrentEraGenesisTime  :: !UTCTime
@@ -131,10 +132,10 @@ data BlockInfo = BlockInfo
       -- |The height of this block
       biBlockHeight :: !AbsoluteBlockHeight,
       -- |The genesis index for this block. This counts the number of protocol updates that have
-      -- preceded this block.
+      -- preceded this block, and defines the era of the block.
       biGenesisIndex :: !GenesisIndex,
-      -- |The height of this block relative to the (re)genesis block at its genesis index.
-      biLocalBlockHeight :: !BlockHeight,
+      -- |The height of this block relative to the (re)genesis block of its era.
+      biEraBlockHeight :: !BlockHeight,
       -- |The time the block was received
       biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified

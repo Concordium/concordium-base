@@ -25,6 +25,8 @@ type EpochLength = Slot
 type Epoch = Word64
 
 -- |Block height relative to the genesis block on the block's chain.
+-- In the event of a protocol update, a new chain is created with the new genesis block having
+-- 'BlockHeight' 0.
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
   deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField)
 
@@ -36,6 +38,8 @@ instance S.Serialize BlockHeight where
   get = BlockHeight <$> S.getWord64be
 
 -- |Block height relative to the initial genesis block.
+-- In the event of a protocol update, the regenesis block will have absolute height 1 greater than
+-- the last finalized block of the preceding chain.
 newtype AbsoluteBlockHeight = AbsoluteBlockHeight {theAbsoluteBlockHeight :: Word64}
   deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField)
 
