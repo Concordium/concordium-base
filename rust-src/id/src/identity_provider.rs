@@ -436,11 +436,11 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     let m = ar_encoded.len();
     let n = att_vec.len();
     let key_vec = &ps_public_key.ys;
-    
+
     if key_vec.len() < n + m + 7 {
         return Err(Reason::TooManyAttributes);
     }
-    
+
     let mut gs = Vec::new();
     let mut exps = Vec::new();
 
@@ -457,8 +457,7 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // and add all anonymity revocation
     for i in 3..(m + 3) {
         let ar_handle = ar_encoded[i - 3];
-        // FIXME: Could benefit from multiexponentiation
-        gs.push(key_vec[i]);//todo could we just use the key_vec for gs?
+        gs.push(key_vec[i]);
         exps.push(ar_handle);
     }
 
@@ -475,7 +474,8 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         gs.push(k);
         exps.push(att);
     }
-    let msg = ps_sig::UnknownMessage(multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)));
+    let msg =
+        ps_sig::UnknownMessage(multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)));
     Ok(msg)
 }
 
