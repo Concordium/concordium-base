@@ -162,7 +162,9 @@ mod tests {
 
                 // Verify failure for invalid parameters
                 // Incorrect context string
-                assert!(!verify(&mut wrong_ro, &agg, &proof));
+                if verify(&mut wrong_ro, &agg, &proof) {
+                    assert_eq!(wrong_ro, ro);
+                }
                 let wrong_agg = AggregateDlog {
                     public: wrong_public,
                     ..agg

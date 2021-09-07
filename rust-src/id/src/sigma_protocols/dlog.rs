@@ -145,7 +145,9 @@ mod tests {
                 };
 
                 // Verify failure for invalid parameters
-                assert!(!verify(&mut wrong_ro, &dlog, &proof));
+                if verify(&mut wrong_ro, &dlog, &proof) {
+                    assert_eq!(wrong_ro, ro);
+                }
                 let dlog_wrong_base = Dlog {
                     coeff: wrong_base,
                     ..dlog

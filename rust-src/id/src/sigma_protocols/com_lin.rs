@@ -255,7 +255,9 @@ mod tests {
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
 
                 // Verify failure for invalid parameters
-                assert!(!verify(&mut wrong_ro, &com_lin, &proof));
+                if verify(&mut wrong_ro, &com_lin, &proof) {
+                    assert_eq!(wrong_ro, ro);
+                }
                 let mut wrong_cmm = com_lin;
                 for i in 0..n {
                     let tmp = wrong_cmm.cmms[i];
