@@ -12,15 +12,6 @@ pipeline {
         OUTFILE = "s3://distribution.concordium.software/tools/linux/cargo-concordium_${VERSION}"
     }
     stages {
-        stage('ecr-login') {
-            steps {
-                sh 'aws ecr get-login-password \
-                        --region eu-west-1 \
-                    | docker login \
-                        --username AWS \
-                        --password-stdin 192549843005.dkr.ecr.eu-west-1.amazonaws.com'
-            }
-        }
         stage('precheck') {
             steps {
                 sh '''\
@@ -37,8 +28,7 @@ pipeline {
             agent { 
                 docker {
                     reuseNode true
-                    image 'concordium/base:latest' 
-                    registryUrl 'https://192549843005.dkr.ecr.eu-west-1.amazonaws.com/'
+                    image 'concordium/base:latest'
                     args '-u root'
                 } 
             }
