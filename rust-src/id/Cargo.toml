@@ -88,6 +88,10 @@ harness = false
 [[bench]]
 name = "aggr_dlog_commit_point"
 harness = false
+	
+[[bench]]
+name = "compute_message"
+harness = false
 
 [features]
 default = ["ffi"]

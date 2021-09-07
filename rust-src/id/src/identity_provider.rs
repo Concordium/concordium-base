@@ -402,7 +402,7 @@ fn sign_initial_cred_values<
         .into()
 }
 
-fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
+pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G1>,
     cmm_sc: &Commitment<P::G1>,
     threshold: Threshold,
