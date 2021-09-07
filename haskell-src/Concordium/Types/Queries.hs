@@ -13,6 +13,7 @@ import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 
 import Concordium.Types
+import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import Concordium.Types.UpdateQueues (Updates)
@@ -36,10 +37,10 @@ data ConsensusStatus = ConsensusStatus
       csEpochDuration :: !Duration,
       -- |Hash of the last finalized block
       csLastFinalizedBlock :: !BlockHash,
-      -- |Height of the best block (since latest regenesis)
-      csBestBlockHeight :: !BlockHeight,
-      -- |Height of the last finalized block (since latest regenesis)
-      csLastFinalizedBlockHeight :: !BlockHeight,
+      -- |Absolute height of the best block
+      csBestBlockHeight :: !AbsoluteBlockHeight,
+      -- |Absolute height of the last finalized block
+      csLastFinalizedBlockHeight :: !AbsoluteBlockHeight,
       -- |Total number of blocks received
       csBlocksReceivedCount :: !Int,
       -- |The last time a block was received
@@ -75,7 +76,19 @@ data ConsensusStatus = ConsensusStatus
       -- |Moving average time between finalizations
       csFinalizationPeriodEMA :: !(Maybe Double),
       -- |Standard deviation of moving average time between finalizations
-      csFinalizationPeriodEMSD :: !(Maybe Double)
+      csFinalizationPeriodEMSD :: !(Maybe Double),
+      -- |Currently active protocol version.
+      csProtocolVersion :: !ProtocolVersion,
+      -- |The number of chain restarts via a protocol update. An effected
+      -- protocol update instruction might not change the protocol version
+      -- specified in the previous field, but it always increments the genesis
+      -- index.
+      csGenesisIndex :: !GenesisIndex,
+      -- |Block hash of the genesis block of current era, i.e., since the last protocol update.
+      -- Initially this is equal to 'csGenesisBlock'.
+      csCurrentEraGenesisBlock :: !BlockHash,
+      -- |Time when the current era started.
+      csCurrentEraGenesisTime  :: !UTCTime
     }
     deriving (Show)
 
@@ -111,12 +124,18 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 data BlockInfo = BlockInfo
     { -- |The block hash
       biBlockHash :: !BlockHash,
-      -- |The parent block hash
+      -- |The parent block hash. For a re-genesis block, this will be the terminal block of the
+      -- previous chain. For the initial genesis block, this will be the hash of the block itself.
       biBlockParent :: !BlockHash,
       -- |The last finalized block when this block was baked
       biBlockLastFinalized :: !BlockHash,
       -- |The height of this block
-      biBlockHeight :: !BlockHeight,
+      biBlockHeight :: !AbsoluteBlockHeight,
+      -- |The genesis index for this block. This counts the number of protocol updates that have
+      -- preceded this block, and defines the era of the block.
+      biGenesisIndex :: !GenesisIndex,
+      -- |The height of this block relative to the (re)genesis block of its era.
+      biEraBlockHeight :: !BlockHeight,
       -- |The time the block was received
       biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified
@@ -232,7 +251,7 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 data TransactionStatus
     = -- |Transaction was received but is not in any blocks
       Received
-    | -- |Transaction was received an is present in some (non-finalized) block(s)
+    | -- |Transaction was received and is present in some (non-finalized) block(s)
       Committed (Map.Map BlockHash (Maybe TransactionSummary))
     | -- |Transaction has been finalized in a block
       Finalized BlockHash (Maybe TransactionSummary)

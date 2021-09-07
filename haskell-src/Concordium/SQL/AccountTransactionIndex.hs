@@ -30,7 +30,7 @@ share [mkPersist sqlSettings] [persistLowerCase|
   Summary sql=summaries
     block (ByteStringSerialized BlockHash)
     timestamp Timestamp
-    height BlockHeight
+    height AbsoluteBlockHeight
     summary AE.Value
     deriving Eq Show
 

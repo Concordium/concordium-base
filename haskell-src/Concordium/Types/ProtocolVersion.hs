@@ -18,10 +18,15 @@
 module Concordium.Types.ProtocolVersion where
 
 import Data.Serialize
+import Data.Aeson
+import Data.Aeson.Types
+import Data.Word
 
 -- |An enumeration of the supported versions of the consensus protocol.
+-- Binary and JSON serializations are as Word64 corresponding to the protocol number.
 data ProtocolVersion
     = P1
+    | P2
     deriving (Eq, Show)
 
 -- |The singleton type associated with 'ProtocolVersion'.
@@ -29,13 +34,29 @@ data ProtocolVersion
 -- each constructor of 'ProtocolVersion'.
 data SProtocolVersion (pv :: ProtocolVersion) where
     SP1 :: SProtocolVersion 'P1
+    SP2 :: SProtocolVersion 'P2
+
+protocolVersionToWord64 :: ProtocolVersion -> Word64
+protocolVersionToWord64 P1 = 1
+protocolVersionToWord64 P2 = 2
+
+protocolVersionFromWord64 :: MonadFail m => Word64 -> m ProtocolVersion
+protocolVersionFromWord64 1 = return P1
+protocolVersionFromWord64 2 = return P2
+protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 instance Serialize ProtocolVersion where
-    put P1 = putWord64be 1
-    get =
-        getWord64be >>= \case
-            1 -> return P1
-            v -> fail $ "Unknown protocol version: " ++ show v
+    put = putWord64be . protocolVersionToWord64
+    get = protocolVersionFromWord64 =<< getWord64be
+
+instance ToJSON ProtocolVersion where
+  toJSON = toJSON . protocolVersionToWord64
+
+instance FromJSON ProtocolVersion where
+  parseJSON v = prependFailure "Protocol version" $ do
+      x <- parseJSON v
+      protocolVersionFromWord64 x
+
 
 -- |Type class for relating type-level 'ProtocolVersion's with
 -- term level 'SProtocolVersion's.
@@ -47,9 +68,14 @@ instance IsProtocolVersion 'P1 where
     protocolVersion = SP1
     {-# INLINE protocolVersion #-}
 
+instance IsProtocolVersion 'P2 where
+    protocolVersion = SP2
+    {-# INLINE protocolVersion #-}
+
 -- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
 demoteProtocolVersion SP1 = P1
+demoteProtocolVersion SP2 = P2
 
 -- |An existentially quantified protocol version.
 data SomeProtocolVersion where
@@ -59,3 +85,4 @@ data SomeProtocolVersion where
 -- type 'SomeProtocolVersion'.
 promoteProtocolVersion :: ProtocolVersion -> SomeProtocolVersion
 promoteProtocolVersion P1 = SomeProtocolVersion SP1
+promoteProtocolVersion P2 = SomeProtocolVersion SP2

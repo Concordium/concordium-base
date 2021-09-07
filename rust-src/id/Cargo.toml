@@ -93,6 +93,10 @@ harness = false
 name = "compute_message"
 harness = false
 
+[[bench]]
+name = "commitment_to_share"
+harness = false
+
 [features]
 default = ["ffi"]
 ffi = []

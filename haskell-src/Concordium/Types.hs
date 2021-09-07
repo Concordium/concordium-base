@@ -78,6 +78,11 @@ module Concordium.Types (
   registeredDataFromBSS,
   maxRegisteredDataSize,
 
+  -- * Transaction memo
+  Memo(..),
+  maxMemoSize,
+  memoFromBSS,
+
   -- * Baking
   ElectionDifficulty(..),
   makeElectionDifficulty,
@@ -136,11 +141,15 @@ module Concordium.Types (
   unhashed,
   makeHashed,
   
+  -- * Regenesis
+  GenesisIndex(..),
+
   -- * Protocol version
   module Concordium.Types.ProtocolVersion) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
+import Foreign.Storable
 
 import Concordium.Common.Amount
 import Concordium.Common.Time
@@ -594,6 +603,46 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
+-- |Data type for memos that can be added to transfers.
+-- Max length of 'maxMemoSize' is assumed.
+-- Create new values with 'memoFromBSS' to ensure assumed properties.
+--
+-- Note that the ToJSON instance of this type is derived, based on hex encoding.
+-- The FromJSON instance is manually implemented to ensure length limits.
+newtype Memo = Memo BSS.ShortByteString
+  deriving Eq
+  deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+
+-- |Maximum size for 'Memo'.
+maxMemoSize :: Int
+maxMemoSize = 256
+
+-- |Construct 'Memo' from a 'BSS.ShortByteString'.
+-- Fails if the length exceeds 'maxMemoSize'.
+memoFromBSS :: MonadError String m => BSS.ShortByteString -> m Memo
+memoFromBSS bss = if len <= maxMemoSize
+                              then return . Memo $ bss
+                              else throwError $ "Max size for memo is " ++ show maxMemoSize
+                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+  where len = BSS.length bss
+
+instance S.Serialize Memo where
+  put (Memo bss) = do
+    S.putWord16be . fromIntegral . BSS.length $ bss
+    S.putShortByteString bss
+
+  get = G.label "Memo" $ do
+    l <- fromIntegral <$> S.getWord16be
+    unless (l <= maxMemoSize) $ fail $ "Memo length (" ++ show l ++ ") exceeds maximum (" ++ show maxMemoSize ++ ")"
+    Memo <$> S.getShortByteString l
+
+instance AE.FromJSON Memo where
+  parseJSON v = do
+    (BSH.ByteStringHex bss) <- AE.parseJSON v
+    case memoFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
+
 -- |Data type for registering data on chain.
 -- Max length of 'maxRegisteredDataSize' is assumed.
 -- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
@@ -849,6 +898,16 @@ transactionTimeToSlot genesis slotDur t
   | otherwise = fromIntegral $ (tsMillis (tt - genesis - 1) `div` durationMillis slotDur) + 1
   where
     tt = transactionTimeToTimestamp t
+
+-- |Type indicating the index of a (re)genesis block.
+-- The initial genesis block has index @0@ and each subsequent regenesis
+-- has an incrementally higher index.
+newtype GenesisIndex = GenesisIndex Word32
+  deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON, Storable) via Word32
+
+instance S.Serialize GenesisIndex where
+  put (GenesisIndex gi) = S.putWord32be gi
+  get = GenesisIndex <$> S.getWord32be
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
