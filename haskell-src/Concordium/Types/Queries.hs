@@ -261,7 +261,7 @@ instance ToJSON TransactionStatus where
     toJSON Received = object ["status" .= String "received"]
     toJSON (Committed m) =
         object
-            [ "status" .= String "finalized",
+            [ "status" .= String "committed",
               "outcomes" .= m
             ]
     toJSON (Finalized bh outcome) =
