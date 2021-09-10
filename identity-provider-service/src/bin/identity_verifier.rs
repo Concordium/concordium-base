@@ -1,9 +1,10 @@
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap, fs, sync::RwLock};
 
+use anyhow::Context;
 use crypto_common::{base16_decode_string, Versioned};
 use ed25519_dalek::Verifier;
 use id::{constants::IpPairing, types::IpInfo};
-use log::{error, info};
+use log::{error, info, warn};
 use reqwest::header::LOCATION;
 use rust_embed::RustEmbed;
 use serde_json::from_str;
@@ -45,6 +46,67 @@ struct Config {
 #[folder = "html/"]
 struct Asset;
 
+/// A mockup of a database to store all the data.
+/// In production this would be a real database, here we store everything as
+/// files on disk and synchronize access to disk via a lock. Attributes are also
+/// never deleted from the database.
+#[derive(Clone)]
+struct DB {
+    /// Root directory where all the data is stored.
+    /// The lock serves to guard all accesses to files in the directory.
+    root: Arc<RwLock<std::path::PathBuf>>,
+}
+
+enum WriteAttributesError {
+    InternalServer(String),
+    FileExists,
+}
+
+impl DB {
+    /// Create a new database.
+    pub fn new(root: PathBuf) -> Self {
+        fs::create_dir_all(root.join("attributes"))
+            .expect("Unable to create attributes database directory.");
+        Self {
+            root: Arc::new(RwLock::new(root)),
+        }
+    }
+
+    pub fn write_attributes(
+        &self,
+        id_cred_pub: &str,
+        input: &BTreeMap<String, String>,
+    ) -> Result<(), WriteAttributesError> {
+        let attributes_dir = self
+            .root
+            .write()
+            .expect("Cannot acquire lock, something is very wrong.");
+        let attributes_file = attributes_dir.join(id_cred_pub);
+        if std::path::Path::exists(&attributes_file) {
+            return Err(WriteAttributesError::FileExists);
+        }
+        let file = std::fs::File::create(attributes_file)
+            .map_err(|e| (WriteAttributesError::InternalServer(e.to_string())))?;
+        serde_json::to_writer(file, input)
+            .map_err(|e| WriteAttributesError::InternalServer(e.to_string()))
+    }
+
+    pub fn read_attributes(&self, id_cred_pub: &str) -> anyhow::Result<String> {
+        // since we are writing to a location based on id_cred_pub we do a little sanity
+        // checking that the path is a non-empty hex string, which
+        // means it won't be used to write to silly locations.
+        anyhow::ensure!(
+            !id_cred_pub.is_empty() && hex::decode(id_cred_pub).is_ok(),
+            "Invalid id_cred_pub format."
+        );
+        let attributes_dir = self
+            .root
+            .read()
+            .expect("Cannot acquire read lock. Something is very wrong.");
+        fs::read_to_string(attributes_dir.join(id_cred_pub)).context("Cannot read attributes file.")
+    }
+}
+
 /// A small binary that simulates an identity verifier that always verifies an
 /// identity, and returns a verified attribute list.
 #[tokio::main]
@@ -67,8 +129,7 @@ async fn main() {
     let ip_data_arc = Arc::new(versioned_ip_data.value);
 
     let database_root = std::path::Path::new("database").to_path_buf();
-    fs::create_dir_all(database_root.join("attributes"))
-        .expect("Unable to create attributes database directory.");
+    let db = DB::new(database_root);
 
     // The path for serving the attribute form to the caller. The HTML form has a
     // hidden field containing the id_cred_pub so that the session is preserved
@@ -99,7 +160,7 @@ async fn main() {
     // The path for submitting an attribute list. The attribute list is serialized
     // as JSON and saved to the file database. If successful, then forward the
     // user back to the identity provider.
-    let root_clone = database_root.clone();
+    let db_get = db.clone();
     let id_provider_url = opt.id_provider_url.to_string();
     let submit_verification_attributes =
         warp::post()
@@ -110,7 +171,17 @@ async fn main() {
                         "Saving verified attributes and forwarding user back to identity provider."
                     );
                     let id_cred_pub = input.get("id_cred_pub").unwrap().clone();
-                    let id_cred_pub_bytes = hex::decode(&id_cred_pub).unwrap();
+                    // since we are writing to a location based on id_cred_pub we do a little sanity
+                    // checking that the path is a non-empty hex string, which
+                    // means it won't be used to write to silly locations.
+                    let id_cred_pub_bytes = match hex::decode(&id_cred_pub) {
+                        Ok(bs) if !bs.is_empty() => bs,
+                        _ => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("Invalid format of id_cred_pub.".to_string());
+                        }
+                    };
                     input.remove("id_cred_pub");
 
                     let id_cred_pub_signature = input.get("id_cred_pub_signature").unwrap().clone();
@@ -146,28 +217,26 @@ async fn main() {
                         }
                     }
 
-                    // The signature was valid, so save the received attributes to the file
-                    // database.
-
-                    let file = match std::fs::File::create(
-                        root_clone.join("attributes").join(&id_cred_pub),
-                    ) {
-                        Ok(file) => file,
-                        Err(e) => {
-                            return Response::builder()
-                                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                .body(e.to_string())
+                    // The signature was valid, so attempt to save the received attributes to the
+                    // file database. If the file with attributes already exists fail.
+                    if let Err(e) = db.write_attributes(&id_cred_pub, &input) {
+                        match e {
+                            WriteAttributesError::InternalServer(msg) => {
+                                error!("Could not store attributes: {}", msg);
+                                return Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(msg);
+                            }
+                            WriteAttributesError::FileExists => {
+                                warn!("Duplicate submission for id_cred_pub {}", id_cred_pub);
+                                return Response::builder().status(StatusCode::BAD_REQUEST).body(
+                                    "The received request for attributes for (id_cred_pub) is \
+                                     duplicate."
+                                        .to_string(),
+                                );
+                            }
                         }
-                    };
-                    match serde_json::to_writer(file, &input) {
-                        Ok(()) => (),
-                        Err(e) => {
-                            return Response::builder()
-                                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                .body(e.to_string())
-                        }
-                    };
-
+                    }
                     let location = format!(
                         "{}{}{}",
                         id_provider_url, "api/identity/create/", id_cred_pub
@@ -184,15 +253,15 @@ async fn main() {
     let read_attributes = warp::get()
         .and(warp::path!("api" / "verify" / "attributes" / String))
         .map(move |id_cred_pub: String| {
-            let attributes =
-                match fs::read_to_string(database_root.join("attributes").join(id_cred_pub)) {
-                    Ok(attributes) => attributes,
-                    Err(e) => {
-                        return Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(e.to_string())
-                    }
-                };
+            let attributes = match db_get.read_attributes(&id_cred_pub) {
+                Ok(attributes) => attributes,
+                Err(e) => {
+                    warn!("Could not read attributes for {}: {}", id_cred_pub, e);
+                    return Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .body(format!("Attributes for {} not found.", id_cred_pub));
+                }
+            };
             Response::builder()
                 .header(CONTENT_TYPE, "application/json")
                 .body(attributes)

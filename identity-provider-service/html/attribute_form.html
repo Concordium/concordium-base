@@ -43,7 +43,9 @@ world scenario the attributes will be derived from the identity verification pro
 <body>
   <div>
     <h1>Concordium Identity Verification</h1>
-    <form action="/api/submit" method="post">
+    <form action="/api/submit"
+          onsubmit="var button = document.getElementById('submitButton');
+          button.disabled=true; button.value='Processing ...'" method="post">
 
         <input type="hidden" id="idcredpub" name="id_cred_pub" value="$id_cred_pub$">
         <input type="hidden" id="idcredpubsignature" name="id_cred_pub_signature" value="$id_cred_pub_signature$">
@@ -87,7 +89,7 @@ world scenario the attributes will be derived from the identity verification pro
         <label for="taxIdNo">Tax id no</label>
         <input type="text" id="taxIdNo" name="taxIdNo" value="T-1234">
 
-        <input type="submit" value="Submit">
+        <input id="submitButton" type="submit" value="Submit">
     </form>
   </div>
 </body>

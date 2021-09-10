@@ -156,7 +156,7 @@ struct DB {
     pending:     Arc<Mutex<HashMap<String, PendingEntry>>>,
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, Clone, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 /// When the initial account transaction is submitted we use this type to keep
 /// track of its status.
@@ -170,6 +170,8 @@ enum PendingStatus {
     /// The transaction could not be submitted due to, most likely, network
     /// issues. It should be retried.
     CouldNotSubmit,
+    /// Submission is in progress.
+    InProgress,
 }
 
 #[derive(SerdeDeserialize, SerdeSerialize)]
@@ -355,25 +357,79 @@ impl DB {
         Ok(from_str::<serde_json::Value>(&contents)?)
     }
 
-    /// Store the pending entry. This is only used in case of server-restart to
-    /// pupulate the pending table.
-    pub fn write_pending(
+    /// Store the pending entry. The file on disk is only used in case of
+    /// server-restart to pupulate the pending table.
+    /// If submission is already pending its status is returned, and the entry
+    /// is not updated.
+    pub fn try_write_pending(
         &self,
         key: &str,
         status: PendingStatus,
         value: serde_json::Value,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<PendingStatus>> {
         let mut lock = self
             .pending
             .lock()
             .expect("Cannot acquire a lock, which means something is very wrong.");
-        {
-            let file = std::fs::File::create(self.root.join("pending").join(key))?;
-            let value = PendingEntry { status, value };
-            serde_json::to_writer(file, &value)?;
-            lock.insert(key.to_string(), value);
+        if let Some(pe) = lock.get(key) {
+            return Ok(Some(pe.status.clone()));
         }
-        Ok(())
+        let pending_path = self.root.join("pending").join(key);
+        let file = std::fs::File::create(pending_path)?;
+        let pe = PendingEntry { status, value };
+        serde_json::to_writer(file, &pe)?;
+        lock.insert(key.to_string(), pe);
+        Ok(None)
+    }
+
+    /// Update a pending entry with the given status. Returns the old status.
+    /// If the pending entry does not exist an error is returned.
+    pub fn update_pending(
+        &self,
+        key: &str,
+        status: PendingStatus,
+    ) -> anyhow::Result<PendingStatus> {
+        let mut lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        if let Some(e) = lock.get_mut(key) {
+            let ret = std::mem::replace(&mut e.status, status);
+            let pending_path = self.root.join("pending").join(key);
+            let file = std::fs::File::create(pending_path)?;
+            serde_json::to_writer(file, e)?;
+            Ok(ret)
+        } else {
+            bail!("Missing pending entry for id_cred_pub {}", key);
+        }
+    }
+
+    /// Try to update a pending entry with the given status, if the status is as
+    /// expected. Return true if successful. In case of database errors an
+    /// erorr is returned.
+    pub fn try_update_pending(
+        &self,
+        key: &str,
+        new_status: PendingStatus,
+        expected_status: PendingStatus,
+    ) -> anyhow::Result<bool> {
+        let mut lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        if let Some(e) = lock.get_mut(key) {
+            if e.status == expected_status {
+                e.status = new_status;
+                let pending_path = self.root.join("pending").join(key);
+                let file = std::fs::File::create(pending_path)?;
+                serde_json::to_writer(file, e)?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
     }
 
     pub fn mark_finalized(&self, key: &str) {
@@ -402,7 +458,7 @@ impl DB {
     pub fn is_pending(&self, key: &str) -> bool { self.pending.lock().unwrap().get(key).is_some() }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, Clone, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 /// Status of a submission as returned by the wallet-proxy.
 enum SubmissionStatus {
@@ -452,18 +508,29 @@ async fn followup(
     }; // release lock
     if let Some(v) = v {
         match &v.status {
+            PendingStatus::InProgress => {
+                // If a submission is already in progress then we just wait.
+                debug!("Account submission for identity {} in progress.", key);
+            }
             PendingStatus::CouldNotSubmit => {
-                match submit_account_creation(&client, submission_url.clone(), &v.value).await {
-                    Ok(new_status) => {
-                        let mut hm = db.pending.lock().unwrap();
-                        if let Some(point) = hm.get_mut(key) {
-                            point.status = new_status;
+                if let Ok(true) = db.try_update_pending(
+                    key,
+                    PendingStatus::InProgress,
+                    PendingStatus::CouldNotSubmit,
+                ) {
+                    // FIXME: We should make a new submission since it might have expired.
+                    // If it does this will lead to a failed identity at the moment.
+                    match submit_account_creation(&client, submission_url.clone(), &v.value).await {
+                        Ok(new_status) => {
+                            if let Err(e) = db.update_pending(key, new_status) {
+                                error!("Could not update pending status: {}", e);
+                            }
                         }
-                    }
-                    Err(_) => {
-                        db.delete_all(key);
-                        warn!("Account creation transaction rejected.");
-                        return true;
+                        Err(_) => {
+                            db.delete_all(key);
+                            warn!("Account creation transaction rejected.");
+                            return true;
+                        }
                     }
                 }
             }
@@ -921,7 +988,7 @@ async fn create_signed_identity_object(
     };
 
     // At this point the identity has been verified, and the identity provider
-    // constructs the identity object and signs it. An anonymity revocation
+    // constructs the identity object and signs it. An anonymity revocaatttion
     // record and the identity object are persisted, so that they can be
     // retrieved when needed. The constructed response contains a redirect to a
     // webservice that returns the identity object constructed here.
@@ -938,7 +1005,7 @@ async fn create_signed_identity_object(
         valid_to:     valid_to_next_year,
         created_at:   now,
         alist:        attribute_list,
-        max_accounts: 200,
+        max_accounts: 25,
         _phantom:     Default::default(),
     };
 
@@ -1016,21 +1083,51 @@ async fn create_signed_identity_object(
     // Submit and wait for the submission ID.
     let submission_value = to_value(versioned_submission).unwrap();
 
-    match submit_account_creation(
-        &client,
-        server_config.submit_credential_url.clone(),
-        &submission_value,
-    )
-    .await
-    {
-        Ok(status) => {
-            ok_or_500!(
-                db.write_pending(&base16_encoded_id_cred_pub, status, submission_value),
-                "Could not write submission status."
+    match db.try_write_pending(
+        &base16_encoded_id_cred_pub,
+        PendingStatus::InProgress,
+        submission_value.clone(),
+    ) {
+        Ok(Some(pe)) => {
+            // if account submission is already in progress we do nothing since a concurrent
+            // operation is in progress.
+            debug!(
+                "Account submission for id_cred_pub {} already in progress with status {:?}",
+                base16_encoded_id_cred_pub, pe
             );
         }
-        Err(_) => return Err(warp::reject::custom(IdRequestRejection::ReuseOfRegId)),
-    };
+        Ok(None) => {
+            // successful write, try to submit.
+            match submit_account_creation(
+                &client,
+                server_config.submit_credential_url.clone(),
+                &submission_value,
+            )
+            .await
+            {
+                Ok(status) => {
+                    // write the new status.
+                    ok_or_500!(
+                        db.update_pending(&base16_encoded_id_cred_pub, status),
+                        "Could not write submission status."
+                    );
+                }
+                Err(_) => {
+                    // since we are rejecting this identity we delete all data about this user.
+                    db.delete_all(&base16_encoded_id_cred_pub);
+                    return Err(warp::reject::custom(IdRequestRejection::ReuseOfRegId));
+                }
+            };
+        }
+        Err(e) => {
+            error!(
+                "Could not write submission status for {}: {}.",
+                base16_encoded_id_cred_pub, e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+        }
+    }
+
     // If we reached here it means we at least have a pending request. We respond
     // with a URL where they will be able to retrieve the ID object.
 
