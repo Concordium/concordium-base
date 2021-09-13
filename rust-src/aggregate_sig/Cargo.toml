@@ -12,7 +12,6 @@ rayon = "1.4"
 generic-array = "0.14"
 pairing = "0.15"
 ff = "0.5"
-group = "0.2"
 serde = "1.0"
 
 [dependencies.curve_arithmetic]
