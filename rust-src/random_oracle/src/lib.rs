@@ -57,10 +57,10 @@ impl Buffer for RandomOracle {
     fn result(self) -> Self::Result { self.0.finalize() }
 }
 
+impl Eq for RandomOracle {}
+
 impl PartialEq for RandomOracle {
-    fn eq(&self, other: &Self) -> bool {
-        self.split().get_challenge() == other.split().get_challenge()
-    }
+    fn eq(&self, other: &Self) -> bool { self.0.clone().finalize() == other.0.clone().finalize() }
 }
 
 impl RandomOracle {
