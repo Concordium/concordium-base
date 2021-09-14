@@ -1,6 +1,13 @@
 use criterion::*;
+use crypto_common::types::*;
 use curve_arithmetic::*;
-use id::{identity_provider::compute_message, secret_sharing::Threshold, types::*};
+use id::{
+    constants::*,
+    identity_provider::{compute_message, sign_identity_object, validate_request},
+    secret_sharing::Threshold,
+    test::*,
+    types::*,
+};
 use pairing::bls12_381::{G1, *};
 use pedersen_scheme::Commitment;
 use rand::*;
@@ -67,5 +74,79 @@ fn bench_compute_message(c: &mut Criterion) {
     });
 }
 
-criterion_group!(compute_message_benchmarks, bench_compute_message);
+fn bench_validate_request(c: &mut Criterion) {
+    // Arrange (create identity provider and PreIdentityObject, and verify validity)
+    let max_attrs = 10;
+    let num_ars = 4;
+    let mut csprng = thread_rng();
+    let IpData {
+        public_ip_info: ip_info,
+        ip_secret_key: _,
+        ip_cdi_secret_key: _,
+    } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+    let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+    let (ars_infos, _) =
+        test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+
+    let aci = test_create_aci(&mut csprng);
+    let acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
+    let (context, pio, _) =
+        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+
+    // Act
+    c.bench_function("Validate request", move |b| {
+        b.iter(|| validate_request(&pio, context))
+    });
+}
+
+fn bench_sign_identity_object(c: &mut Criterion) {
+    // Arrange (create identity provider and PreIdentityObject, and verify validity)
+    let max_attrs = 10;
+    let num_ars = 4;
+    let mut csprng = thread_rng();
+    let IpData {
+        public_ip_info: ip_info,
+        ip_secret_key,
+        ip_cdi_secret_key: _,
+    } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+    let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+    let (ars_infos, _) =
+        test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+
+    let aci = test_create_aci(&mut csprng);
+    let acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
+    let (context, pio, _) =
+        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+    let attrs = test_create_attributes();
+
+    // Act
+    c.bench_function("Sign identity object", move |b| {
+        b.iter(|| sign_identity_object(&pio, &context.ip_info, &attrs, &ip_secret_key))
+    });
+}
+
+criterion_group!(
+    compute_message_benchmarks,
+    bench_compute_message,
+    bench_validate_request,
+    bench_sign_identity_object
+);
 criterion_main!(compute_message_benchmarks);
