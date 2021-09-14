@@ -8,7 +8,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_efficient;
 use crypto_common::{to_bytes, types::TransactionTime};
-use curve_arithmetic::{Curve, Pairing};
+use curve_arithmetic::{multiexp, Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey};
@@ -402,7 +402,7 @@ fn sign_initial_cred_values<
         .into()
 }
 
-fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
+pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G1>,
     cmm_sc: &Commitment<P::G1>,
     threshold: Threshold,
@@ -432,16 +432,17 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         None => return Err(Reason::WrongArParameters),
     };
 
-    let mut message = cmm_sc.0;
-    message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
     let m = ar_encoded.len();
     let n = att_vec.len();
     let key_vec = &ps_public_key.ys;
 
-    if key_vec.len() < n + m + 7 {
+    if key_vec.len() < n + m + 5 {
         return Err(Reason::TooManyAttributes);
     }
+
+    let mut gs = Vec::with_capacity(1 + m + 2 + n);
+    let mut exps = Vec::with_capacity(1 + m + 2 + n);
 
     // The error here should never happen, but it is safe to just propagate it if it
     // does by any chance.
@@ -450,23 +451,31 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
             .map_err(|_| Reason::IllegalAttributeRequirements)?;
 
     // add valid_to, created_at, threshold.
-    message = message.plus_point(&key_vec[2].mul_by_scalar(&public_params));
+    gs.push(key_vec[2]);
+    exps.push(public_params);
+
     // and add all anonymity revocation
     for i in 3..(m + 3) {
         let ar_handle = ar_encoded[i - 3];
-        // FIXME: Could benefit from multiexponentiation
-        message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
+        gs.push(key_vec[i]);
+        exps.push(ar_handle);
     }
 
-    message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&tags));
-    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&max_accounts));
+    gs.push(key_vec[m + 3]);
+    exps.push(tags);
+
+    gs.push(key_vec[m + 3 + 1]);
+    exps.push(max_accounts);
+
     // NB: It is crucial that att_vec is an ordered map and that .values iterator
     // returns messages in order of tags.
-    for (k, v) in key_vec.iter().skip(m + 5).zip(att_vec.values()) {
+    for (&k, v) in key_vec.iter().skip(m + 5).zip(att_vec.values()) {
         let att = v.to_field_element();
-        message = message.plus_point(&k.mul_by_scalar(&att));
+        gs.push(k);
+        exps.push(att);
     }
-    let msg = ps_sig::UnknownMessage(message);
+    let msg =
+        ps_sig::UnknownMessage(multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)));
     Ok(msg)
 }
 

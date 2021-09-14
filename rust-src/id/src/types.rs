@@ -355,7 +355,7 @@ impl ArIdentity {
     /// integers.
     pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-helpers"))]
     // This is unchecked, and only used in tests.
     pub fn new(x: u32) -> Self {
         assert_ne!(x, 0, "Trying to construct ArIdentity 0.");

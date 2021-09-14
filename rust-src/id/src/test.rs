@@ -19,16 +19,11 @@ use elgamal::{PublicKey, SecretKey};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_test::*;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-browser-test"))]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-
 type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
-const EXPIRY: TransactionTime = TransactionTime {
+pub const EXPIRY: TransactionTime = TransactionTime {
     seconds: 111111111111111111,
 };
 
@@ -339,10 +334,6 @@ pub fn test_pipeline() {
     let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
     assert_ne!(cdi_check, Ok(()));
 }
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen_test]
-pub fn run_pipeline_wasm() { test_pipeline(); }
 
 #[test]
 pub fn run_pipeline() { test_pipeline(); }
