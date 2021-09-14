@@ -437,12 +437,12 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     let n = att_vec.len();
     let key_vec = &ps_public_key.ys;
 
-    if key_vec.len() < n + m + 7 {
+    if key_vec.len() < n + m + 5 {
         return Err(Reason::TooManyAttributes);
     }
 
-    let mut gs = Vec::new();
-    let mut exps = Vec::new();
+    let mut gs = Vec::with_capacity(1 + m + 2 + n);
+    let mut exps = Vec::with_capacity(1 + m + 2 + n);
 
     // The error here should never happen, but it is safe to just propagate it if it
     // does by any chance.
