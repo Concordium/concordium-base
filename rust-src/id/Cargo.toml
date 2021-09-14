@@ -97,5 +97,5 @@ harness = false
 [features]
 default = ["ffi"]
 ffi = []
-# allow use of code annotated with `#[cfg(any(test, feature = "test-helpers"))]` in benchmarks using `required-features = ["test-helpers"]` :
+# This feature is used to expose some internal testing code so it can be used in integration tests and benchmarks.
 test-helpers = [] 
