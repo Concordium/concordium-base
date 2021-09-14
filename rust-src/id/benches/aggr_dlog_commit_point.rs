@@ -4,6 +4,7 @@ use id::sigma_protocols::{aggregate_dlog::*, common::*};
 use pairing::bls12_381::G1;
 use rand::*;
 
+/// Benchmark the aggregate dlog sigma protocol
 fn bench_aggr_dlog_commit_point(c: &mut Criterion) {
     let mut csprng = thread_rng();
     let number_of_coeffs = 42;

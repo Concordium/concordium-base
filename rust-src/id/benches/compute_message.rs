@@ -49,7 +49,7 @@ fn bench_compute_message(c: &mut Criterion) {
         AttributeList<id::constants::BaseField, id::constants::AttributeKind>;
     let alist: BTreeMap<AttributeTag, id::constants::AttributeKind> = from_str(aliststr).unwrap();
 
-    // the number of scalars in the pk should be equal to the total number of
+    // the number of scalars in the pk should be at least the total number of
     // attributes, including mandatory attributes: i.e. `valid_to` etc.
     let public_key: ps_sig::PublicKey<Bls12> =
         ps_sig::PublicKey::arbitrary(alist.len() + 3, &mut csprng);
