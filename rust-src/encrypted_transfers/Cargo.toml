@@ -7,16 +7,11 @@ license-file = "../../LICENSE"
 
 [dependencies]
 ff = "0.5"
-sha3 = "0.9"
-sha2 = "0.9"
 itertools = "0.9"
 pairing = "0.15"
 serde = "1.0"
 libc = "0.2"
 
-[dependencies.eddsa_ed25519]
-path = "../eddsa_ed25519"
-version = "0"
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
 version = "0"

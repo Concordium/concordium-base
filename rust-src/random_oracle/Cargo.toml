@@ -9,9 +9,7 @@ license-file = "../../LICENSE"
 
 [dependencies]
 sha3 = "0.9"
-itertools = "0.9"
 rand = "=0.7"
-rand_core = "=0.5"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"

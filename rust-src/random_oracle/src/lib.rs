@@ -9,6 +9,7 @@ use std::io::Write;
 
 /// State of the random oracle, used to incrementally build up the output.
 #[repr(transparent)]
+#[derive(Debug)]
 pub struct RandomOracle(Sha3_256);
 
 /// Type of challenges computed from the random oracle.
@@ -54,6 +55,12 @@ impl Buffer for RandomOracle {
 
     // Compute the result in the given state, consuming the state.
     fn result(self) -> Self::Result { self.0.finalize() }
+}
+
+impl Eq for RandomOracle {}
+
+impl PartialEq for RandomOracle {
+    fn eq(&self, other: &Self) -> bool { self.0.clone().finalize() == other.0.clone().finalize() }
 }
 
 impl RandomOracle {
