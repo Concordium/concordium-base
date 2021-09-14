@@ -177,7 +177,9 @@ mod test {
                     .expect("Proving should succeed.");
 
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
-                assert!(!verify(&mut wrong_ro, &com_eq, &proof));
+                if verify(&mut wrong_ro, &com_eq, &proof) {
+                    assert_eq!(wrong_ro, ro);
+                }
                 let mut wrong_com_eq = com_eq;
                 {
                     let tmp = wrong_com_eq.commitment;

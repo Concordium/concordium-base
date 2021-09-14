@@ -498,7 +498,9 @@ mod tests {
                     prove(&mut ro_split, &enc_trans, secret, rng).expect("Proving should succeed.");
 
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(rng));
-                assert!(!verify(&mut wrong_ro, &enc_trans, &proof));
+                if verify(&mut wrong_ro, &enc_trans, &proof) {
+                    assert_eq!(wrong_ro, ro);
+                }
 
                 // check that changing any information in the protocol makes the proof not
                 // verify
