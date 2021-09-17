@@ -3,8 +3,9 @@ use concordium_contracts_common::{Address, Amount, ChainMetadata, ContractAddres
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
-    constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, Energy, InitContext, InitHost,
-    Logs, Outcome, ProcessedImports, ReceiveContext, ReceiveHost, State, TestHost,
+    constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, InitContext, InitHost,
+    InterpreterEnergy, Logs, Outcome, ProcessedImports, ReceiveContext, ReceiveHost, State,
+    TestHost,
 };
 
 use wasm_transform::{
@@ -23,7 +24,7 @@ static CONTRACT_BYTES_LOOP: &[u8] = include_bytes!("./code/loop-energy.wasm");
 static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/host-functions.wasm");
 
 struct MeteringHost {
-    energy:            Energy,
+    energy:            InterpreterEnergy,
     activation_frames: u32,
 }
 
@@ -363,7 +364,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_function(name, move |b: &mut criterion::Bencher| {
                 b.iter(|| {
                     let mut host = MeteringHost {
-                        energy:            Energy {
+                        energy:            InterpreterEnergy {
                             energy: nrg * 1000, // should correspond to about 1ms of execution.
                         },
                         activation_frames: MAX_ACTIVATION_FRAMES,
@@ -523,7 +524,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let setup_init_host = || -> InitHost<InitContext<&[u8]>> {
             InitHost {
-                energy:            Energy {
+                energy:            InterpreterEnergy {
                     energy: nrg * 1000,
                 },
                 activation_frames: MAX_ACTIVATION_FRAMES,
@@ -536,7 +537,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let setup_receive_host = |state, param| -> ReceiveHost<ReceiveContext<&[u8]>> {
             ReceiveHost {
-                energy: Energy {
+                energy: InterpreterEnergy {
                     energy: nrg * 1000,
                 },
                 activation_frames: MAX_ACTIVATION_FRAMES,

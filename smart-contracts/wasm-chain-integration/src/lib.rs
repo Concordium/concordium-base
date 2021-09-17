@@ -71,7 +71,9 @@ impl Logs {
 }
 
 #[derive(Clone, Copy)]
-pub struct Energy {
+/// Interpreter energy used to count execution steps in the interpreter.
+/// This energy is converted to NRG by the scheduler.
+pub struct InterpreterEnergy {
     /// Energy left to use
     pub energy: u64,
 }
@@ -89,7 +91,7 @@ impl std::fmt::Display for OutOfEnergy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
 }
 
-impl Energy {
+impl InterpreterEnergy {
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {
             self.energy -= amount;
@@ -273,7 +275,7 @@ impl State {
 
 pub struct InitHost<'a, Ctx> {
     /// Remaining energy for execution.
-    pub energy:            Energy,
+    pub energy:            InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames: u32,
@@ -289,7 +291,7 @@ pub struct InitHost<'a, Ctx> {
 
 pub struct ReceiveHost<'a, Ctx> {
     /// Remaining energy for execution.
-    pub energy:            Energy,
+    pub energy:            InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames: u32,
@@ -310,7 +312,7 @@ pub trait HasCommon {
     type PolicyBytesType: AsRef<[u8]>;
     type PolicyType: SerialPolicies<Self::PolicyBytesType>;
 
-    fn energy(&mut self) -> &mut Energy;
+    fn energy(&mut self) -> &mut InterpreterEnergy;
     fn logs(&mut self) -> &mut Logs;
     fn state(&mut self) -> &mut State;
     fn param(&self) -> &[u8];
@@ -323,7 +325,7 @@ impl<'a, Ctx: HasInitContext> HasCommon for InitHost<'a, Ctx> {
     type PolicyBytesType = Ctx::PolicyBytesType;
     type PolicyType = Ctx::PolicyType;
 
-    fn energy(&mut self) -> &mut Energy { &mut self.energy }
+    fn energy(&mut self) -> &mut InterpreterEnergy { &mut self.energy }
 
     fn logs(&mut self) -> &mut Logs { &mut self.logs }
 
@@ -341,7 +343,7 @@ impl<'a, Ctx: HasReceiveContext> HasCommon for ReceiveHost<'a, Ctx> {
     type PolicyBytesType = Ctx::PolicyBytesType;
     type PolicyType = Ctx::PolicyType;
 
-    fn energy(&mut self) -> &mut Energy { &mut self.energy }
+    fn energy(&mut self) -> &mut InterpreterEnergy { &mut self.energy }
 
     fn logs(&mut self) -> &mut Logs { &mut self.logs }
 
@@ -766,7 +768,7 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     energy: u64,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
-        energy: Energy {
+        energy: InterpreterEnergy {
             energy,
         },
         activation_frames: MAX_ACTIVATION_FRAMES,
@@ -864,7 +866,7 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let mut host = ReceiveHost {
-        energy:            Energy {
+        energy:            InterpreterEnergy {
             energy,
         },
         activation_frames: MAX_ACTIVATION_FRAMES,
