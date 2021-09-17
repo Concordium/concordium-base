@@ -120,7 +120,9 @@ struct Runner {
     #[structopt(
         name = "energy",
         long = "energy",
-        help = "Initial amount of energy to invoke the contract call with.",
+        help = "Initial amount of interpreter energy to invoke the contract call with. Note that \
+                interpreter energy is not the same as NRG, there is a conversion factor between \
+                them.",
         default_value = "1000000"
     )]
     energy:              u64,
@@ -373,14 +375,20 @@ pub fn main() -> anyhow::Result<()> {
                         } => {
                             eprintln!("Init call succeeded. The following logs were produced:");
                             print_result(state, logs)?;
-                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
+                            eprintln!(
+                                "Interpreter energy spent is {}",
+                                runner.energy - remaining_energy
+                            )
                         }
                         InitResult::Reject {
                             remaining_energy,
                             reason,
                         } => {
                             eprintln!("Init call rejected with reason {}.", reason);
-                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
+                            eprintln!(
+                                "Interpreter energy spent is {}",
+                                runner.energy - remaining_energy
+                            )
                         }
                         InitResult::OutOfEnergy => {
                             eprintln!("Init call terminated with out of energy.")
@@ -513,14 +521,20 @@ pub fn main() -> anyhow::Result<()> {
                                 }
                             }
 
-                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
+                            eprintln!(
+                                "Interpreter energy spent is {}",
+                                runner.energy - remaining_energy
+                            )
                         }
                         ReceiveResult::Reject {
                             remaining_energy,
                             reason,
                         } => {
                             eprintln!("Receive call rejected with reason {}", reason);
-                            eprintln!("Energy spent is {}", runner.energy - remaining_energy)
+                            eprintln!(
+                                "Interpreter energy spent is {}",
+                                runner.energy - remaining_energy
+                            )
                         }
                         ReceiveResult::OutOfEnergy => {
                             eprintln!("Receive call terminated with: out of energy.")
