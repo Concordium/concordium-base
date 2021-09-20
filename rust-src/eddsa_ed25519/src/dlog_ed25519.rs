@@ -66,11 +66,12 @@ fn generate_rand_scalar() -> Scalar {
     Scalar::from_hash(hasher)
 }
 
-fn scalar_from_secret_key(secret_key: &SecretKey) -> Scalar {
+// secret key must be generic to work with ecvrf secret key as well.
+fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
     let mut bits: [u8; 32] = [0u8; 32];
-    h.update(secret_key.as_bytes());
+    h.update(secret_key);
     hash.copy_from_slice(h.finalize().as_slice());
     bits.copy_from_slice(&hash[..32]);
     bits[0] &= 248;
@@ -86,12 +87,12 @@ fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
 
 pub fn prove_dlog_ed25519(
     ro: &mut RandomOracle,
-    public: &PublicKey,
-    secret_key: &SecretKey,
+    public_key: &impl Serial, // Must be generic to work with ecvrf public key as well.
+    secret_key: &impl AsRef<[u8]>, // Must be generic to work with ecvrf secret key as well.
 ) -> Ed25519DlogProof {
-    let secret = scalar_from_secret_key(&secret_key);
+    let secret = scalar_from_secret_key(secret_key);
     // FIXME: Add base to the proof.
-    ro.append_message(b"dlog_ed25519", public);
+    ro.append_message(b"dlog_ed25519", public_key);
 
     // FIXME non_zero scalar should be generated
     let rand_scalar = generate_rand_scalar();
