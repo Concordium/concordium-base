@@ -66,7 +66,6 @@ fn generate_rand_scalar() -> Scalar {
     Scalar::from_hash(hasher)
 }
 
-// secret key must be generic to work with ecvrf secret key as well.
 fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
@@ -85,10 +84,20 @@ fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
     CompressedEdwardsY::from_slice(&bytes).decompress()
 }
 
+/// Construct a proof of knowledge of secret key.
+///
+/// The `public_key` and `secret_key` must be the ed25519 public and secret key
+/// pair. The reason this function is not stated with those types is that it is
+/// at present used both for proving ownership of normal signature keys, as well
+/// as for proving ownership of the VRF keys.
+/// The keys for the VRF protocol are physically the same, but they are defined
+/// in a different crate and thus have different types. This situation should be
+/// remedied to regain type safety when we have time to do it properly. This
+/// will probably mean some reorganization of the crates.
 pub fn prove_dlog_ed25519(
     ro: &mut RandomOracle,
-    public_key: &impl Serial, // Must be generic to work with ecvrf public key as well.
-    secret_key: &impl AsRef<[u8]>, // Must be generic to work with ecvrf secret key as well.
+    public_key: &impl Serial,
+    secret_key: &impl AsRef<[u8]>,
 ) -> Ed25519DlogProof {
     let secret = scalar_from_secret_key(secret_key);
     // FIXME: Add base to the proof.
