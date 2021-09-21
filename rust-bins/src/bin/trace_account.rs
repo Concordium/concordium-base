@@ -496,8 +496,8 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
-                        } /* todo what if this tx fails? Is the cost different? If not should the
-                           * output change? */
+                        } // todo what if this tx fails? Is the cost different? If not should the
+                        // output change?
                         AdditionalDetails::Update => {
                             writeln!(
                                 writer,
@@ -510,8 +510,8 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
-                        } /* todo what if this tx fails? Is the cost different? If not should the
-                           * output change? */
+                        } // todo what if this tx fails? Is the cost different? If not should the
+                        // output change?
                         AdditionalDetails::SimpleTransfer(st) => {
                             if let SimpleTransfer::Success {
                                 transfer_source,
