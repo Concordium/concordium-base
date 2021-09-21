@@ -115,12 +115,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "bytes"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
-
-[[package]]
 name = "cc"
 version = "1.0.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -279,13 +273,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "byteorder",
- "bytes",
  "crypto_common",
  "crypto_common_derive",
  "ff",
- "ffi_helpers",
  "group",
- "libc",
  "pairing",
  "rand",
  "serde",
@@ -328,7 +319,6 @@ dependencies = [
 name = "dodis_yampolskiy_prf"
 version = "0.1.0"
 dependencies = [
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -393,7 +383,6 @@ name = "elgamal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -415,7 +404,6 @@ dependencies = [
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
- "eddsa_ed25519",
  "elgamal",
  "ff",
  "ffi_helpers",
@@ -427,8 +415,6 @@ dependencies = [
  "rand",
  "random_oracle",
  "serde",
- "sha2 0.9.3",
- "sha3",
  "wasm-bindgen",
 ]
 
@@ -464,7 +450,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5796e7d62ca01a00ed3a649b0da1ffa1ac8f06bcad40339df09dbdd69a05ba9"
 dependencies = [
- "num-bigint 0.2.6",
+ "num-bigint",
  "num-integer",
  "num-traits",
  "proc-macro2",
@@ -546,7 +532,6 @@ dependencies = [
  "bulletproofs",
  "byteorder",
  "chrono",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -561,18 +546,15 @@ dependencies = [
  "hex",
  "itertools",
  "libc",
- "num",
  "pairing",
  "pedersen_scheme",
  "ps_sig",
  "rand",
  "rand_core",
  "random_oracle",
- "rayon",
  "serde",
  "serde_json",
  "sha2 0.9.3",
- "sha3",
  "thiserror",
  "wasm-bindgen",
 ]
@@ -665,7 +647,7 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -694,20 +676,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b7a8e9be5e039e2ff869df49155f1c06bd01ade2117ec783e56ab0932b67a8f"
-dependencies = [
- "num-bigint 0.3.2",
- "num-complex",
- "num-integer",
- "num-iter",
- "num-rational",
- "num-traits",
-]
-
-[[package]]
 name = "num-bigint"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -719,55 +687,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-bigint"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d0a3d5e207573f948a9e5376662aa743a2ea13f7c50a554d7af443a73fbfeba"
-dependencies = [
- "autocfg",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "num-integer"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"
 dependencies = [
  "autocfg",
- "num-traits",
-]
-
-[[package]]
-name = "num-iter"
-version = "0.1.42"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2021c8337a54d21aca0d59a92577a029af9431cb59b909b03252b9c164fad59"
-dependencies = [
- "autocfg",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
-dependencies = [
- "autocfg",
- "num-bigint 0.3.2",
- "num-integer",
  "num-traits",
 ]
 
@@ -819,7 +744,6 @@ name = "pedersen_scheme"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -942,9 +866,7 @@ dependencies = [
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
- "itertools",
  "rand",
- "rand_core",
  "sha3",
 ]
 

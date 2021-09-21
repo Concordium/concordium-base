@@ -104,7 +104,7 @@ struct Origin {
 }
 
 /// Interesting parts of the response for a single transaction.
-#[derive(SerdeDeserialize)]
+#[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct TransactionResponse {
     id:               u64,
@@ -114,7 +114,8 @@ struct TransactionResponse {
     transaction_hash: Option<TransactionHash>,
     details:          Details,
     subtotal:         Option<AmountDelta>,
-    total:            Option<AmountDelta>,
+    total:            Option<AmountDelta>, /* todo according to https://github.com/Concordium/concordium-wallet-proxy#total-required total is required */
+    cost:             Option<Amount>,
 }
 /// Outcome of a transaction.
 #[derive(SerdeDeserialize, Eq, PartialEq, Debug)]
@@ -127,9 +128,9 @@ enum Outcome {
 
 /// Details of a particular transaction. The actual details are transaction
 /// specific, and are thus handled by the enumeration `AdditionalDetails`.
-#[derive(SerdeDeserialize)]
+#[derive(SerdeDeserialize, Debug)]
 struct Details {
-    outcome:            Option<Outcome>,
+    outcome:            Option<Outcome>, /* todo according to https://github.com/Concordium/concordium-wallet-proxy#details-required outcome is required */
     #[serde(flatten)]
     additional_details: AdditionalDetails,
 }
@@ -144,15 +145,18 @@ enum AdditionalDetails {
     InitContract,
     #[serde(rename = "update")]
     Update,
-    #[serde(rename = "transfer")]
+    #[serde(rename = "transfer", alias = "transferWithMemo")]
     SimpleTransfer(SimpleTransfer),
-    #[serde(rename = "encryptedAmountTransfer")]
+    #[serde(
+        rename = "encryptedAmountTransfer",
+        alias = "encryptedAmountTransferWithMemo"
+    )]
     EncryptedAmountTransfer(EncryptedTransfer),
     #[serde(rename = "transferToEncrypted")]
     TransferToEncrypted(TransferToEncrypted),
     #[serde(rename = "transferToPublic")]
     TransferToPublic(TransferToPublic),
-    #[serde(rename = "transferWithSchedule")]
+    #[serde(rename = "transferWithSchedule", alias = "transferWithScheduleAndMemo")]
     TransferWithSchedule(TransferWithSchedule),
     #[serde(rename = "blockReward")]
     BlockReward,
@@ -162,50 +166,90 @@ enum AdditionalDetails {
     BakingReward,
     #[serde(rename = "platformDevelopmentCharge")]
     Mint,
+    #[serde(rename = "deployModule")]
+    DeployModule,
+    #[serde(rename = "addBaker")]
+    AddBaker,
+    #[serde(rename = "removeBaker")]
+    RemoveBaker,
+    #[serde(rename = "updateBakerStake")]
+    UpdateBakerStake,
+    #[serde(rename = "updateBakerKeys")]
+    UpdateBakerKeys,
+    #[serde(rename = "updateBakerRestakeEarnings")]
+    UpdateBakerRestakeEarnings,
+    #[serde(rename = "registerData")]
+    RegisterData,
+    #[serde(rename = "deployCredential")]
+    DeployCredential,
+    #[serde(rename = "updateCredentials")]
+    UpdateCredentials,
+    #[serde(rename = "updateAccountKeys")]
+    UpdateAccountKeys,
     #[serde(other)]
     Uninteresting,
 }
 
 #[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct SimpleTransfer {
-    transfer_source:      AccountAddress,
-    transfer_destination: AccountAddress,
-    transfer_amount:      Amount,
+#[serde(untagged)]
+pub enum SimpleTransfer {
+    #[serde(rename_all = "camelCase")]
+    Success {
+        transfer_source:      AccountAddress,
+        transfer_destination: AccountAddress,
+        transfer_amount:      Amount,
+    },
+    Reject {},
 }
 
 #[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct EncryptedTransfer {
-    transfer_source:           AccountAddress,
-    transfer_destination:      AccountAddress,
-    encrypted_amount:          EncryptedAmount,
-    input_encrypted_amount:    EncryptedAmount,
-    new_self_encrypted_amount: EncryptedAmount,
+#[serde(untagged)]
+pub enum EncryptedTransfer {
+    #[serde(rename_all = "camelCase")]
+    Success {
+        transfer_source:           AccountAddress,
+        transfer_destination:      AccountAddress,
+        encrypted_amount:          EncryptedAmount,
+        input_encrypted_amount:    EncryptedAmount,
+        new_self_encrypted_amount: EncryptedAmount,
+    },
+    Reject {},
 }
 
 #[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferWithSchedule {
-    transfer_destination: AccountAddress,
-    transfer_amount:      Amount,
+#[serde(untagged)]
+pub enum TransferWithSchedule {
+    #[serde(rename_all = "camelCase")]
+    Success {
+        transfer_destination: AccountAddress,
+        transfer_amount:      Amount,
+    },
+    Reject {},
 }
 
 #[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferToEncrypted {
-    transfer_source:           AccountAddress,
-    amount_subtracted:         Amount,
-    new_self_encrypted_amount: EncryptedAmount,
+#[serde(untagged)]
+pub enum TransferToEncrypted {
+    #[serde(rename_all = "camelCase")]
+    Success {
+        transfer_source:           AccountAddress,
+        amount_subtracted:         Amount,
+        new_self_encrypted_amount: EncryptedAmount,
+    },
+    Reject {},
 }
 
 #[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferToPublic {
-    transfer_source:           AccountAddress,
-    amount_added:              Amount,
-    input_encrypted_amount:    EncryptedAmount,
-    new_self_encrypted_amount: EncryptedAmount,
+#[serde(untagged)]
+pub enum TransferToPublic {
+    #[serde(rename_all = "camelCase")]
+    Success {
+        transfer_source:           AccountAddress,
+        amount_added:              Amount,
+        input_encrypted_amount:    EncryptedAmount,
+        new_self_encrypted_amount: EncryptedAmount,
+    },
+    Reject {},
 }
 
 /// A success response from accBalance endpoint
@@ -256,7 +300,7 @@ struct Trace {
     #[structopt(
         long = "source",
         help = "URL to the wallet-proxy instance.",
-        default_value = "https://wallet-proxy.eu.staging.concordium.com"
+        default_value = "https://wallet-proxy.stagenet.concordium.com"
     )]
     source: url::Url,
     #[structopt(subcommand)]
@@ -449,174 +493,234 @@ fn trace_single_account(
                             .expect("Could not write.");
                         }
                         AdditionalDetails::SimpleTransfer(st) => {
-                            if tx.origin.origin_type == OriginType::Own {
-                                writeln!(
-                                    writer,
-                                    "[{}] {}: Outgoing transfer of {} GTU to account {}.\n    \
-                                     Block hash: {}\n   Transaction hash: {}",
-                                    pretty_time(tx.block_time),
-                                    i,
-                                    st.transfer_amount,
-                                    st.transfer_destination,
-                                    tx.block_hash,
-                                    tx.transaction_hash.as_ref().unwrap(),
-                                )
-                                .expect("Could not write.");
+                            if let SimpleTransfer::Success {
+                                transfer_source,
+                                transfer_destination,
+                                transfer_amount,
+                            } = st
+                            {
+                                if tx.origin.origin_type == OriginType::Own {
+                                    writeln!(
+                                        writer,
+                                        "[{}] {}: Outgoing transfer of {} GTU
+                                to account {}.\n    Block hash: {}\n   Transaction hash:
+                                {}",
+                                        pretty_time(tx.block_time),
+                                        i,
+                                        transfer_amount,
+                                        transfer_destination,
+                                        tx.block_hash,
+                                        tx.transaction_hash.as_ref().unwrap(),
+                                    )
+                                    .expect("Could not write.");
+                                } else {
+                                    writeln!(
+                                        writer,
+                                        "[{}] {}: Incoming transfer of {} GTU
+                                from account {}.\n    Block hash: {}\n    Transaction
+                                hash: {}",
+                                        pretty_time(tx.block_time),
+                                        i,
+                                        transfer_amount,
+                                        transfer_source,
+                                        tx.block_hash,
+                                        tx.transaction_hash.as_ref().unwrap(),
+                                    )
+                                    .expect("Could not write.");
+                                }
                             } else {
-                                writeln!(
-                                    writer,
-                                    "[{}] {}: Incoming transfer of {} GTU from account {}.\n    \
-                                     Block hash: {}\n    Transaction hash: {}",
-                                    pretty_time(tx.block_time),
-                                    i,
-                                    st.transfer_amount,
-                                    st.transfer_source,
-                                    tx.block_hash,
-                                    tx.transaction_hash.as_ref().unwrap(),
-                                )
-                                .expect("Could not write.");
+                                eprintln!("Missing fields in successful Transfer");
+                                break; // or panic? todo the same for all
+                                       // instances
                             }
                         }
 
                         AdditionalDetails::EncryptedAmountTransfer(et) => {
-                            if tx.origin.origin_type == OriginType::Own {
-                                if let Some(sk) = &sk {
-                                    let before = encrypted_transfers::decrypt_amount(
-                                        &table,
-                                        &sk,
-                                        &et.input_encrypted_amount,
-                                    );
-                                    let after = encrypted_transfers::decrypt_amount(
-                                        &table,
-                                        &sk,
-                                        &et.new_self_encrypted_amount,
-                                    );
-                                    assert!(before >= after);
-                                    let amount = Amount {
-                                        microgtu: before.microgtu - after.microgtu,
-                                    };
-                                    writeln!(
-                                        writer,
-                                        "[{}] {}: outgoing encrypted transfer of {} GTU to \
-                                         account {}.\n    Block hash: {}\n    Transaction hash: {}",
-                                        pretty_time(tx.block_time),
-                                        i,
-                                        amount,
-                                        et.transfer_destination,
-                                        tx.block_hash,
-                                        tx.transaction_hash.as_ref().unwrap(),
-                                    )
-                                    .expect("Could not write.");
-                                } else {
-                                    writeln!(
-                                        writer,
-                                        "[{}] {}: outgoing encrypted transfer to account {}.\n    \
-                                         Block hash: {}\n    Transaction hash: {}",
-                                        pretty_time(tx.block_time),
-                                        i,
-                                        et.transfer_destination,
-                                        tx.block_hash,
-                                        tx.transaction_hash.as_ref().unwrap(),
-                                    )
-                                    .expect("Could not write.");
+                            if let EncryptedTransfer::Success {
+                                transfer_source,
+                                transfer_destination,
+                                encrypted_amount,
+                                input_encrypted_amount,
+                                new_self_encrypted_amount,
+                            } = et
+                            {
+                                if tx.origin.origin_type == OriginType::Own {
+                                    if let Some(sk) = &sk {
+                                        let before = encrypted_transfers::decrypt_amount(
+                                            &table,
+                                            &sk,
+                                            &input_encrypted_amount,
+                                        );
+                                        let after = encrypted_transfers::decrypt_amount(
+                                            &table,
+                                            &sk,
+                                            &new_self_encrypted_amount,
+                                        );
+                                        assert!(before >= after);
+                                        let amount = Amount {
+                                            microgtu: before.microgtu - after.microgtu,
+                                        };
+                                        writeln!(
+                                            writer,
+                                            "[{}] {}: outgoing encrypted
+                                transfer of {} GTU to account {}.\n    Block hash:
+                                {}\n    Transaction hash: {}",
+                                            pretty_time(tx.block_time),
+                                            i,
+                                            amount,
+                                            transfer_destination,
+                                            tx.block_hash,
+                                            tx.transaction_hash.as_ref().unwrap(),
+                                        )
+                                        .expect("Could not write.");
+                                    } else {
+                                        writeln!(
+                                            writer,
+                                            "[{}] {}: outgoing encrypted
+                                transfer to account {}.\n    Block hash: {}\n
+                                Transaction hash: {}",
+                                            pretty_time(tx.block_time),
+                                            i,
+                                            transfer_destination,
+                                            tx.block_hash,
+                                            tx.transaction_hash.as_ref().unwrap(),
+                                        )
+                                        .expect("Could not write.");
+                                    }
+                                } else if tx.origin.origin_type == OriginType::Account {
+                                    if let Some(sk) = &sk {
+                                        let amount = encrypted_transfers::decrypt_amount(
+                                            &table,
+                                            &sk,
+                                            &encrypted_amount,
+                                        );
+                                        writeln!(
+                                            writer,
+                                            "[{}] {}: incoming encrypted
+                                transfer of {} GTU from account {}\n    Block hash: {}\n
+                                Transaction hash: {}",
+                                            pretty_time(tx.block_time),
+                                            i,
+                                            amount,
+                                            transfer_source,
+                                            tx.block_hash,
+                                            tx.transaction_hash.as_ref().unwrap(),
+                                        )
+                                        .expect("Could not write.")
+                                    } else {
+                                        writeln!(
+                                            writer,
+                                            "[{}] {}: incoming encrypted
+                                transfer from account {}\n    Block hash: {}\n
+                                Transaction hash: {}",
+                                            pretty_time(tx.block_time),
+                                            i,
+                                            transfer_source,
+                                            tx.block_hash,
+                                            tx.transaction_hash.as_ref().unwrap()
+                                        )
+                                        .expect("Could not write.")
+                                    }
                                 }
-                            } else if tx.origin.origin_type == OriginType::Account {
-                                if let Some(sk) = &sk {
-                                    let amount = encrypted_transfers::decrypt_amount(
-                                        &table,
-                                        &sk,
-                                        &et.encrypted_amount,
-                                    );
-                                    writeln!(
-                                        writer,
-                                        "[{}] {}: incoming encrypted transfer of {} GTU from \
-                                         account {}\n    Block hash: {}\n    Transaction hash: {}",
-                                        pretty_time(tx.block_time),
-                                        i,
-                                        amount,
-                                        et.transfer_source,
-                                        tx.block_hash,
-                                        tx.transaction_hash.as_ref().unwrap(),
-                                    )
-                                    .expect("Could not write.")
-                                } else {
-                                    writeln!(
-                                        writer,
-                                        "[{}] {}: incoming encrypted transfer from \
-                                         account {}\n    Block hash: {}\n    Transaction \
-                                         hash: {}",
-                                        pretty_time(tx.block_time),
-                                        i,
-                                        et.transfer_source,
-                                        tx.block_hash,
-                                        tx.transaction_hash.as_ref().unwrap()
-                                    )
-                                    .expect("Could not write.")
-                                }
+                            } else {
+                                eprintln!("Missing fields in successful Encrypted transfer");
+                                break;
                             }
                         }
                         AdditionalDetails::TransferToEncrypted(tte) => {
-                            writeln!(
-                                writer,
-                                "[{}] {}: account {} shielded {} GTU\n    Block hash: {}\n    \
-                                 Transaction hash: {}",
-                                pretty_time(tx.block_time),
-                                i,
-                                tte.transfer_source,
-                                tte.amount_subtracted,
-                                tx.block_hash,
-                                tx.transaction_hash.as_ref().unwrap()
-                            )
-                            .expect("Could not write.");
-                        }
-                        AdditionalDetails::TransferToPublic(ttp) => {
-                            writeln!(
-                                writer,
-                                "[{}] {}: account {} unshielded {} GTU\n    Block hash: {}\n    \
-                                 Transaction hash: {}",
-                                pretty_time(tx.block_time),
-                                i,
-                                ttp.transfer_source,
-                                ttp.amount_added,
-                                tx.block_hash,
-                                tx.transaction_hash.as_ref().unwrap()
-                            )
-                            .expect("Could not write.");
-                        }
-                        AdditionalDetails::TransferWithSchedule(tws) => {
-                            if tx.origin.origin_type == OriginType::Own {
-                                writeln!(
-                                    writer,
-                                    "[{}] {}: Outgoing scheduled transfer of {} GTU to account \
-                                     {}\n    Block hash: {}\n    Transaction hash: {}",
-                                    pretty_time(tx.block_time),
-                                    i,
-                                    tws.transfer_amount,
-                                    tws.transfer_destination,
-                                    tx.block_hash,
-                                    tx.transaction_hash.as_ref().unwrap()
-                                )
-                                .expect("Could not write.");
-                            } else if let AmountDelta::PositiveAmount(am) =
-                                tx.total.as_ref().unwrap()
+                            if let TransferToEncrypted::Success {
+                                transfer_source,
+                                amount_subtracted,
+                                new_self_encrypted_amount: _,
+                            } = tte
                             {
                                 writeln!(
                                     writer,
-                                    "[{}] {}: Incoming scheduled transfer of {} GTU from account \
-                                     {}\n    Block hash: {}\n    Transaction hash: {}",
+                                    "[{}] {}: account {} shielded {} GTU\n
+                                Block hash: {}\n    Transaction hash: {}",
                                     pretty_time(tx.block_time),
                                     i,
-                                    am,
-                                    tx.origin.address.as_ref().unwrap(),
+                                    transfer_source,
+                                    amount_subtracted,
                                     tx.block_hash,
                                     tx.transaction_hash.as_ref().unwrap()
                                 )
                                 .expect("Could not write.");
                             } else {
-                                panic!(
-                                    "Malformed transaction details. Incoming scheduled transfer \
-                                     with negative balance"
-                                );
+                                eprintln!("Missing fields in successful Transfer to encrypted");
+                                break;
+                            }
+                        }
+                        AdditionalDetails::TransferToPublic(ttp) => {
+                            if let TransferToPublic::Success {
+                                transfer_source,
+                                amount_added,
+                                input_encrypted_amount: _,
+                                new_self_encrypted_amount: _,
+                            } = ttp
+                            {
+                                writeln!(
+                                    writer,
+                                    "[{}] {}: account {} unshielded {} GTU\n
+                                Block hash: {}\n    Transaction hash: {}",
+                                    pretty_time(tx.block_time),
+                                    i,
+                                    transfer_source,
+                                    amount_added,
+                                    tx.block_hash,
+                                    tx.transaction_hash.as_ref().unwrap()
+                                )
+                                .expect("Could not write.");
+                            } else {
+                                eprintln!("Missing fields in successful Transfer to public");
+                                break;
+                            }
+                        }
+                        AdditionalDetails::TransferWithSchedule(tws) => {
+                            if let TransferWithSchedule::Success {
+                                transfer_destination,
+                                transfer_amount,
+                            } = tws
+                            {
+                                if tx.origin.origin_type == OriginType::Own {
+                                    writeln!(
+                                        writer,
+                                        "[{}] {}: Outgoing scheduled transfer
+                                of {} GTU to account {}\n    Block hash: {}\n
+                                Transaction hash: {}",
+                                        pretty_time(tx.block_time),
+                                        i,
+                                        transfer_amount,
+                                        transfer_destination,
+                                        tx.block_hash,
+                                        tx.transaction_hash.as_ref().unwrap()
+                                    )
+                                    .expect("Could not write.");
+                                } else if let AmountDelta::PositiveAmount(am) =
+                                    tx.total.as_ref().unwrap()
+                                {
+                                    writeln!(
+                                        writer,
+                                        "[{}] {}: Incoming scheduled transfer
+                                of {} GTU from account {}\n    Block hash: {}\n
+                                Transaction hash: {}",
+                                        pretty_time(tx.block_time),
+                                        i,
+                                        am,
+                                        tx.origin.address.as_ref().unwrap(),
+                                        tx.block_hash,
+                                        tx.transaction_hash.as_ref().unwrap()
+                                    )
+                                    .expect("Could not write.");
+                                } else {
+                                    panic!(
+                                        "Malformed transaction details.
+                                Incoming scheduled transfer with negative balance"
+                                    );
+                                }
+                            } else {
+                                eprintln!("Missing fields in successful Transfer with schedule");
+                                break;
                             }
                         }
                         AdditionalDetails::BlockReward
@@ -626,7 +730,8 @@ fn trace_single_account(
                             if let AmountDelta::PositiveAmount(am) = tx.total.as_ref().unwrap() {
                                 writeln!(
                                     writer,
-                                    "[{}] {}: Received a {} reward of {} GTU\n    Block hash: {}",
+                                    "[{}] {}: Received a {} reward of {}
+                            GTU\n    Block hash: {}",
                                     pretty_time(tx.block_time),
                                     i,
                                     match &tx.details.additional_details {
@@ -641,7 +746,49 @@ fn trace_single_account(
                                 )
                                 .expect("Could not write.");
                             } else {
-                                panic!("Malformed transaction details. Negative reward");
+                                panic!(
+                                    "Malformed transaction details.
+                            Negative reward"
+                                );
+                            }
+                        }
+                        AdditionalDetails::AddBaker
+                        | AdditionalDetails::DeployModule
+                        | AdditionalDetails::RemoveBaker
+                        | AdditionalDetails::UpdateBakerStake
+                        | AdditionalDetails::UpdateBakerKeys
+                        | AdditionalDetails::UpdateBakerRestakeEarnings
+                        | AdditionalDetails::RegisterData
+                        | AdditionalDetails::DeployCredential
+                        | AdditionalDetails::UpdateCredentials
+                        | AdditionalDetails::UpdateAccountKeys => {
+                            if let Some(am) = tx.cost {
+                                writeln!(
+                                            writer,
+                                            "[{}] {}: {} resulting in a change of balance \
+                                            of {} GTUs\n    Block hash: {}\n    Transaction hash: {}",
+                                            pretty_time(tx.block_time),
+                                            i,
+                                            match tx.details.additional_details {// todo can any of the transactions below affect other accounts?
+                                                AdditionalDetails::AddBaker => "added as baker account", //todo check wording
+                                                AdditionalDetails::DeployModule => "deployed a module",
+                                                AdditionalDetails::RemoveBaker => "removed as baker account", // todo check wording
+                                                AdditionalDetails::UpdateBakerStake => "updated its baker stake", // todo check wording
+                                                AdditionalDetails::UpdateBakerKeys => "updated its baker keys",// todo check wording
+                                                AdditionalDetails::UpdateBakerRestakeEarnings => "updated its baker restake earnings", // todo check wording
+                                                AdditionalDetails::RegisterData => "registered data",
+                                                AdditionalDetails::DeployCredential => "deployed a credential",
+                                                AdditionalDetails::UpdateCredentials => "updated its credentials",// todo check wording
+                                                AdditionalDetails::UpdateAccountKeys => "updated its account keys",// todo check wording
+                                                _ => unreachable!(),
+
+                                            },
+                                            am,
+                                            tx.block_hash,
+                                            tx.transaction_hash.as_ref().unwrap()
+                                        ).expect("Could not write.");
+                            } else {
+                                panic!("Missing cost field of outgoing transaction: {:?}", tx);
                             }
                         }
                         AdditionalDetails::Uninteresting => {
