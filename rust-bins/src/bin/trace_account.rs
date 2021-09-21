@@ -448,6 +448,27 @@ fn trace_single_account(
             Err(e) => Err(format!("Request cannot be made {}", e)),
         }
     };
+
+    fn rejected_tx_with_cost(writer: &mut impl std::io::Write, i: u64, tx: &TransactionResponse, event: &str) {
+        if let Some(am) = tx.cost {
+            writeln!(
+                writer,
+                "[{}] {}: Rejected {} resulting in a cost of {} GTU
+            .\n    Block hash: {}\n   Transaction hash:
+            {}",
+                pretty_time(tx.block_time),
+                i,
+                event,
+                am,
+                tx.block_hash,
+                tx.transaction_hash.as_ref().unwrap(),
+            )
+            .expect("Could not write.");
+        } else {
+            panic!("Cost field missing for rejected {}: {:?}", event, tx);
+        }
+    }
+
     let mut init = None;
     let mut i = 0u64;
     let sk = &input.encryption_secret_key;
@@ -457,9 +478,6 @@ fn trace_single_account(
         match rq {
             Ok(response) => {
                 for tx in response.transactions.iter() {
-                    if tx.details.outcome == Outcome::Reject {
-                        continue;
-                    }
                     match &tx.details.additional_details {
                         AdditionalDetails::InitContract => {
                             writeln!(
@@ -473,7 +491,7 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
-                        }
+                        } // todo what if this tx fails? Is the cost different? If not should the output change?
                         AdditionalDetails::Update => {
                             writeln!(
                                 writer,
@@ -486,7 +504,7 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
-                        }
+                        } // todo what if this tx fails? Is the cost different? If not should the output change?
                         AdditionalDetails::SimpleTransfer(st) => {
                             if let SimpleTransfer::Success {
                                 transfer_source,
@@ -524,12 +542,9 @@ fn trace_single_account(
                                     .expect("Could not write.");
                                 }
                             } else {
-                                eprintln!("Missing fields in successful Transfer");
-                                break; // or panic? todo the same for all
-                                       // instances
+                                rejected_tx_with_cost(writer, i, tx, "transfer");
                             }
                         }
-
                         AdditionalDetails::EncryptedAmountTransfer(et) => {
                             if let EncryptedTransfer::Success {
                                 transfer_source,
@@ -618,8 +633,7 @@ fn trace_single_account(
                                     }
                                 }
                             } else {
-                                eprintln!("Missing fields in successful Encrypted transfer");
-                                break;
+                                rejected_tx_with_cost(writer, i, tx, "encrypted transfer");
                             }
                         }
                         AdditionalDetails::TransferToEncrypted(tte) => {
@@ -642,8 +656,7 @@ fn trace_single_account(
                                 )
                                 .expect("Could not write.");
                             } else {
-                                eprintln!("Missing fields in successful Transfer to encrypted");
-                                break;
+                                rejected_tx_with_cost(writer, i, tx, "shielding");
                             }
                         }
                         AdditionalDetails::TransferToPublic(ttp) => {
@@ -667,8 +680,7 @@ fn trace_single_account(
                                 )
                                 .expect("Could not write.");
                             } else {
-                                eprintln!("Missing fields in successful Transfer to public");
-                                break;
+                                rejected_tx_with_cost(writer, i, tx, "unshielding");
                             }
                         }
                         AdditionalDetails::TransferWithSchedule(tws) => {
@@ -712,8 +724,7 @@ fn trace_single_account(
                                     );
                                 }
                             } else {
-                                eprintln!("Missing fields in successful Transfer with schedule");
-                                break;
+                                rejected_tx_with_cost(writer, i, tx, "transfer with schedule");
                             }
                         }
                         AdditionalDetails::BlockReward
@@ -782,7 +793,7 @@ fn trace_single_account(
                                         ).expect("Could not write.");
                             } else {
                                 panic!("Missing cost field of outgoing transaction: {:?}", tx);
-                            }
+                            } // todo what if this tx fails? Is the cost different? If not should the output change?
                         }
                         AdditionalDetails::Uninteresting => {
                             // do nothing for other transaction types.
