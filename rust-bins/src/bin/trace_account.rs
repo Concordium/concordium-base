@@ -449,7 +449,12 @@ fn trace_single_account(
         }
     };
 
-    fn rejected_tx_with_cost(writer: &mut impl std::io::Write, i: u64, tx: &TransactionResponse, event: &str) {
+    fn rejected_tx_with_cost(
+        writer: &mut impl std::io::Write,
+        i: u64,
+        tx: &TransactionResponse,
+        event: &str,
+    ) {
         if let Some(am) = tx.cost {
             writeln!(
                 writer,
@@ -491,7 +496,8 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
-                        } // todo what if this tx fails? Is the cost different? If not should the output change?
+                        } /* todo what if this tx fails? Is the cost different? If not should the
+                           * output change? */
                         AdditionalDetails::Update => {
                             writeln!(
                                 writer,
@@ -504,7 +510,8 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
-                        } // todo what if this tx fails? Is the cost different? If not should the output change?
+                        } /* todo what if this tx fails? Is the cost different? If not should the
+                           * output change? */
                         AdditionalDetails::SimpleTransfer(st) => {
                             if let SimpleTransfer::Success {
                                 transfer_source,
@@ -793,7 +800,8 @@ fn trace_single_account(
                                         ).expect("Could not write.");
                             } else {
                                 panic!("Missing cost field of outgoing transaction: {:?}", tx);
-                            } // todo what if this tx fails? Is the cost different? If not should the output change?
+                            } // todo what if this tx fails? Is the cost
+                              // different? If not should the output change?
                         }
                         AdditionalDetails::Uninteresting => {
                             // do nothing for other transaction types.
