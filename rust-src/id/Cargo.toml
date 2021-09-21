@@ -80,6 +80,15 @@ crate-type = ["rlib", "staticlib", "cdylib" ]
 [[bench]]
 name = "verify_cdi"
 harness = false
+	
+[[bench]]
+name = "aggr_dlog_commit_point"
+harness = false
+	
+[[bench]]
+name = "compute_message"
+harness = false
+required-features = ["test-helpers"]
 
 [[bench]]
 name = "commitment_to_share"
@@ -88,4 +97,5 @@ harness = false
 [features]
 default = ["ffi"]
 ffi = []
-wasm-browser-test = ["ffi"]
+# This feature is used to expose some internal testing code so it can be used in integration tests and benchmarks.
+test-helpers = [] 

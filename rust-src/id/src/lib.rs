@@ -16,5 +16,5 @@ pub mod utils;
 #[macro_use]
 extern crate crypto_common_derive;
 
-#[cfg(any(test, bench))]
+#[cfg(any(test, feature = "test-helpers"))]
 pub mod test;
