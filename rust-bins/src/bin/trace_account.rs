@@ -114,7 +114,7 @@ struct TransactionResponse {
     transaction_hash: Option<TransactionHash>,
     details:          Details,
     subtotal:         Option<AmountDelta>,
-    total:            Option<AmountDelta>, /* todo according to https://github.com/Concordium/concordium-wallet-proxy#total-required total is required */
+    total:            AmountDelta,
     cost:             Option<Amount>,
 }
 /// Outcome of a transaction.
@@ -130,7 +130,7 @@ enum Outcome {
 /// specific, and are thus handled by the enumeration `AdditionalDetails`.
 #[derive(SerdeDeserialize, Debug)]
 struct Details {
-    outcome:            Option<Outcome>, /* todo according to https://github.com/Concordium/concordium-wallet-proxy#details-required outcome is required */
+    outcome:            Outcome,
     #[serde(flatten)]
     additional_details: AdditionalDetails,
 }
@@ -457,12 +457,7 @@ fn trace_single_account(
         match rq {
             Ok(response) => {
                 for tx in response.transactions.iter() {
-                    if tx
-                        .details
-                        .outcome
-                        .as_ref()
-                        .map_or(false, |x| x == &Outcome::Reject)
-                    {
+                    if tx.details.outcome == Outcome::Reject {
                         continue;
                     }
                     match &tx.details.additional_details {
@@ -696,9 +691,7 @@ fn trace_single_account(
                                         tx.transaction_hash.as_ref().unwrap()
                                     )
                                     .expect("Could not write.");
-                                } else if let AmountDelta::PositiveAmount(am) =
-                                    tx.total.as_ref().unwrap()
-                                {
+                                } else if let AmountDelta::PositiveAmount(am) = tx.total {
                                     writeln!(
                                         writer,
                                         "[{}] {}: Incoming scheduled transfer
@@ -727,7 +720,7 @@ fn trace_single_account(
                         | AdditionalDetails::FinalizationReward
                         | AdditionalDetails::BakingReward
                         | AdditionalDetails::Mint => {
-                            if let AmountDelta::PositiveAmount(am) = tx.total.as_ref().unwrap() {
+                            if let AmountDelta::PositiveAmount(am) = tx.total {
                                 writeln!(
                                     writer,
                                     "[{}] {}: Received a {} reward of {}
