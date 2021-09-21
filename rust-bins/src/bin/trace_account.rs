@@ -485,18 +485,27 @@ fn trace_single_account(
                 for tx in response.transactions.iter() {
                     match &tx.details.additional_details {
                         AdditionalDetails::InitContract => {
-                            writeln!(
-                                writer,
-                                "[{}] {}: initialized a contract resulting in a change of balance \
-                                 of {} GTUs\n    Block hash: {}\n    Transaction hash: {}",
-                                pretty_time(tx.block_time),
-                                i,
-                                tx.subtotal.as_ref().unwrap(),
-                                tx.block_hash,
-                                tx.transaction_hash.as_ref().unwrap()
-                            )
-                            .expect("Could not write.");
-                        } // todo what if this tx fails? Is the cost different? If not should the
+                            if let Some(subtotal) = &tx.subtotal {
+                                writeln!(
+                                    writer,
+                                    "[{}] {}: initialized a contract resulting in a change of \
+                                     balance of {} GTUs\n    Block hash: {}\n    Transaction \
+                                     hash: {}",
+                                    pretty_time(tx.block_time),
+                                    i,
+                                    subtotal,
+                                    tx.block_hash,
+                                    tx.transaction_hash.as_ref().unwrap()
+                                )
+                                .expect("Could not write.");
+                                // todo according to https://github.com/Concordium/concordium-wallet-proxy#subtotal-optional 
+                                // subtotal does not include transaction fees. I think we should be using total, or maybe report both?
+                            } else {
+                                panic!("No subtotal: {:?}", tx);
+                                // todo this seems to only happen when outcome=reject
+                            }
+                        } /* todo what if this tx fails? Is it equivalent to checking missing
+                           * subtotal? Is the cost different? If not should the */
                         // output change?
                         AdditionalDetails::Update => {
                             writeln!(
@@ -510,6 +519,7 @@ fn trace_single_account(
                                 tx.transaction_hash.as_ref().unwrap()
                             )
                             .expect("Could not write.");
+                            // todo in this case we probably also want total rather than subtotal?
                         } // todo what if this tx fails? Is the cost different? If not should the
                         // output change?
                         AdditionalDetails::SimpleTransfer(st) => {
