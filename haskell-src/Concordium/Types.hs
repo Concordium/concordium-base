@@ -617,13 +617,15 @@ newtype Memo = Memo BSS.ShortByteString
 maxMemoSize :: Int
 maxMemoSize = 256
 
+tooBigErrorString :: String -> Int -> Int -> String
+tooBigErrorString name len maxSize = "Size of the "++ name ++" (" ++ show len ++ " bytes) exceeds maximum allowed size (" ++ show maxSize ++ " bytes)."
+
 -- |Construct 'Memo' from a 'BSS.ShortByteString'.
 -- Fails if the length exceeds 'maxMemoSize'.
 memoFromBSS :: MonadError String m => BSS.ShortByteString -> m Memo
 memoFromBSS bss = if len <= maxMemoSize
                               then return . Memo $ bss
-                              else throwError $ "Max size for memo is " ++ show maxMemoSize
-                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+                              else throwError $ tooBigErrorString "memo" len maxMemoSize
   where len = BSS.length bss
 
 instance S.Serialize Memo where
@@ -633,7 +635,7 @@ instance S.Serialize Memo where
 
   get = G.label "Memo" $ do
     l <- fromIntegral <$> S.getWord16be
-    unless (l <= maxMemoSize) $ fail $ "Memo length (" ++ show l ++ ") exceeds maximum (" ++ show maxMemoSize ++ ")"
+    unless (l <= maxMemoSize) $ fail $ tooBigErrorString "memo" l maxMemoSize
     Memo <$> S.getShortByteString l
 
 instance AE.FromJSON Memo where
@@ -659,8 +661,7 @@ maxRegisteredDataSize = 256
 registeredDataFromBSS :: MonadError String m => BSS.ShortByteString -> m RegisteredData
 registeredDataFromBSS bss = if len <= maxRegisteredDataSize
                               then return . RegisteredData $ bss
-                              else throwError $ "Max size for registered data is " ++ show maxRegisteredDataSize
-                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+                              else throwError $ tooBigErrorString "data" len maxRegisteredDataSize
   where len = BSS.length bss
 
 -- Uses two bytes for length to be more future-proof.
@@ -671,7 +672,7 @@ instance S.Serialize RegisteredData where
 
   get = do
     l <- fromIntegral <$> S.getWord16be
-    unless (l <= maxRegisteredDataSize) $ fail "Data too long"
+    unless (l <= maxRegisteredDataSize) $ fail $ tooBigErrorString "data" l maxRegisteredDataSize
     RegisteredData <$> S.getShortByteString l
 
 instance AE.FromJSON RegisteredData where
