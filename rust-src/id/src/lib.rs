@@ -5,10 +5,10 @@ pub mod account_holder;
 pub mod anonymity_revoker;
 pub mod chain;
 pub mod constants;
-pub mod id_prover;
-pub mod id_verifier;
 #[cfg(feature = "ffi")]
 mod ffi;
+pub mod id_prover;
+pub mod id_verifier;
 pub mod identity_provider;
 pub mod secret_sharing;
 pub mod sigma_protocols;

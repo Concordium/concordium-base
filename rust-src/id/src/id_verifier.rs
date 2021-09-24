@@ -3,8 +3,7 @@ use bulletproofs::range_proof::{verify_efficient, Generators, RangeProof};
 use curve_arithmetic::Curve;
 use ff::Field;
 use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, value::Value,
+    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
 };
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};

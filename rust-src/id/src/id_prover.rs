@@ -3,9 +3,7 @@ use bulletproofs::range_proof::{prove_given_scalars, Generators, RangeProof};
 use curve_arithmetic::Curve;
 use ed25519_dalek as ed25519;
 use ff::Field;
-use pedersen_scheme::{
-    key::CommitmentKey as PedersenKey, randomness::Randomness as PedersenRandomness,
-};
+use pedersen_scheme::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness};
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 
