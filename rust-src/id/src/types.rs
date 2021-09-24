@@ -2087,7 +2087,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize, Debug, Clone)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
                  Attribute<C::Scalar> + SerdeSerialize",
