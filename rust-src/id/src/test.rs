@@ -2,35 +2,28 @@ use crate::{
     account_holder::*,
     anonymity_revoker::*,
     chain::*,
-    constants::{ArCurve, BaseField, IpPairing},
-    ffi::*,
+    constants::{ArCurve, BaseField, IpPairing, *},
     identity_provider::*,
     secret_sharing::Threshold,
     types::*,
 };
 use crypto_common::{
-    serde_impls::KeyPairDef,
-    types::{KeyIndex, TransactionTime},
+    types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };
 use curve_arithmetic::Curve;
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_test::*;
-#[cfg(all(target_arch = "wasm32", feature = "wasm-browser-test"))]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-
 type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
-const EXPIRY: TransactionTime = TransactionTime {
+pub const EXPIRY: TransactionTime = TransactionTime {
     seconds: 111111111111111111,
 };
 
@@ -73,8 +66,8 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     // Create key for IP long enough to encode the attributes and anonymity
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
-    let ip_secret_key = ps_sig::secret::SecretKey::<IpPairing>::generate(ps_len, csprng);
-    let ip_verify_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = ps_sig::SecretKey::<IpPairing>::generate(ps_len, csprng);
+    let ip_verify_key = ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(csprng);
     let ip_cdi_verify_key = keypair.public;
     let ip_cdi_secret_key = keypair.secret;
@@ -174,9 +167,9 @@ pub fn test_pipeline() {
     let acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
@@ -232,9 +225,9 @@ pub fn test_pipeline() {
     let acc_data = CredentialData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
@@ -341,10 +334,6 @@ pub fn test_pipeline() {
     let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
     assert_ne!(cdi_check, Ok(()));
 }
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen_test]
-pub fn run_pipeline_wasm() { test_pipeline(); }
 
 #[test]
 pub fn run_pipeline() { test_pipeline(); }

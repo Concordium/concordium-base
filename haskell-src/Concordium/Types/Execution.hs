@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GADTs #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -189,6 +190,30 @@ data Payload =
       -- | The data to register.
       rdData :: !RegisteredData
   }
+  -- |Simple transfer from an account to an account with additional memo.
+  | TransferWithMemo {
+      -- |Recepient.
+      twmToAddress :: !AccountAddress,
+      -- |Memo.
+      twmMemo :: !Memo,
+      -- |Amount to transfer.
+      twmAmount :: !Amount
+      }
+  -- | Send an encrypted amount to an account with additional memo.
+  | EncryptedAmountTransferWithMemo {
+      -- | Receiver account address.
+      eatwmTo :: !AccountAddress,
+      -- |Memo.
+      eatwmMemo :: !Memo,
+      eatwmData :: !EncryptedAmountTransferData
+  }
+  -- | Send a transfer with an attached schedule and additional memo.
+  | TransferWithScheduleAndMemo {
+      twswmTo :: !AccountAddress,
+      -- |Memo.
+      twswmMemo :: !Memo,
+      twswmSchedule :: ![(Timestamp, Amount)]
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -279,10 +304,30 @@ putPayload UpdateCredentials{..} =
 putPayload RegisterData{..} =
   S.putWord8 21 <>
   S.put rdData
+putPayload TransferWithMemo{..} =
+    P.putWord8 22 <>
+    S.put twmToAddress <>
+    S.put twmMemo <>
+    S.put twmAmount
+putPayload EncryptedAmountTransferWithMemo{eatwmData = EncryptedAmountTransferData{..}, ..} =
+    S.putWord8 23 <>
+    S.put eatwmTo <>
+    S.put eatwmMemo <>
+    S.put eatdRemainingAmount <>
+    S.put eatdTransferAmount <>
+    S.put eatdIndex <>
+    putEncryptedAmountTransferProof eatdProof
+putPayload TransferWithScheduleAndMemo{..} =
+    S.putWord8 24 <>
+    S.put twswmTo <>
+    S.put twswmMemo <>
+    P.putWord8 (fromIntegral (length twswmSchedule)) <>
+    forM_ twswmSchedule (\(a,b) -> S.put a >> S.put b)
+    
 
 -- |Get the payload of the given size.
-getPayload :: PayloadSize -> S.Get Payload
-getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
+getPayload :: SProtocolVersion pv -> PayloadSize -> S.Get Payload
+getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
   -- isolate is required to consume all the bytes it is meant to.
   where go start = G.getWord8 >>= \case
             0 -> do
@@ -371,7 +416,32 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
             21 -> do
               rdData <- S.get
               return RegisterData{..}
+            22 | supportMemo -> do
+              twmToAddress <- S.get
+              twmMemo <- S.get
+              twmAmount <- S.get
+              return TransferWithMemo{..}
+            23 | supportMemo -> do
+              eatwmTo <- S.get
+              eatwmMemo <- S.get
+              eatdRemainingAmount <- S.get
+              eatdTransferAmount <- S.get
+              eatdIndex <- S.get
+              cur <- S.bytesRead
+              -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+              -- and bytesRead
+              eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
+              return EncryptedAmountTransferWithMemo{eatwmData = EncryptedAmountTransferData{..}, ..}
+            24 | supportMemo -> do
+              twswmTo <- S.get
+              twswmMemo <- S.get
+              len <- S.getWord8
+              twswmSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
+              return TransferWithScheduleAndMemo{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
+        supportMemo = case spv of
+          SP1 -> False
+          SP2 -> True
 
 -- |Builds a set from a list of ascending elements.
 -- Fails if the elements are not ordered or a duplicate is encountered.
@@ -388,8 +458,8 @@ safeSetFromAscList = go Set.empty Nothing
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
-decodePayload :: PayloadSize -> EncodedPayload -> Either String Payload
-decodePayload size (EncodedPayload s) = S.runGet (getPayload size) . BSS.fromShort $ s
+decodePayload :: SProtocolVersion pv -> PayloadSize -> EncodedPayload -> Either String Payload
+decodePayload spv size (EncodedPayload s) = S.runGet (getPayload spv size) . BSS.fromShort $ s
 {-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}
@@ -591,6 +661,11 @@ data Event =
            | DataRegistered {
                -- | The actual data.
                drData :: !RegisteredData
+           }
+           -- | Memo from simple transfer, encrypted transfer or scheduled transfer.
+           | TransferMemo {
+               -- | The memo.
+               tmMemo :: !Memo
            }
 
   deriving (Show, Generic, Eq)

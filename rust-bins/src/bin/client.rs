@@ -1,12 +1,11 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{
-    serde_impls::KeyPairDef,
-    types::{Amount, CredentialIndex, KeyIndex, TransactionTime},
+    types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
     *,
 };
 use dialoguer::{Input, MultiSelect, Select};
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
 use elgamal::{PublicKey, SecretKey};
@@ -1128,9 +1127,9 @@ fn handle_create_credential(cc: CreateCredential) {
     let acc_data = {
         let mut csprng = thread_rng();
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
 
         CredentialData {
             keys,
@@ -1591,9 +1590,9 @@ fn handle_start_ip(sip: StartIp) {
     let initial_acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
@@ -1711,9 +1710,8 @@ fn handle_generate_ips(gip: GenerateIps) {
 
         // TODO: hard-coded length of the key for now, but should be changed
         // based on the maximum length of the attribute list
-        let id_secret_key =
-            ps_sig::secret::SecretKey::<Bls12>::generate(gip.key_capacity, &mut csprng);
-        let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
+        let id_secret_key = ps_sig::SecretKey::<Bls12>::generate(gip.key_capacity, &mut csprng);
+        let id_public_key = ps_sig::PublicKey::from(&id_secret_key);
 
         let keypair = ed25519::Keypair::generate(&mut csprng);
         let ip_cdi_verify_key = keypair.public;

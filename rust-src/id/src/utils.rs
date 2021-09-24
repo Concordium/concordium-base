@@ -1,3 +1,5 @@
+//! A collection of auxiliary functions that don't belong anywhere else.
+
 use crate::{secret_sharing::Threshold, types::*};
 use anyhow::bail;
 use crypto_common::{
@@ -5,7 +7,7 @@ use crypto_common::{
     types::{KeyIndex, TransactionTime},
     ParseResult,
 };
-use curve_arithmetic::{Curve, Pairing, Value};
+use curve_arithmetic::{multiexp, Curve, Pairing, Value};
 use ed25519_dalek::Verifier;
 use either::Either;
 use elgamal::*;
@@ -24,15 +26,17 @@ pub fn commitment_to_share<C: Curve>(
     share_number: &C::Scalar,
     coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
-    // TODO: This would benefit from multiexponentiation.
-    let mut cmm_share_point: C = C::zero_point();
-    // Horner's scheme in the exponent
-    for cmm in coeff_commitments.iter().rev() {
-        // FIXME: This would benefit from multiexponentiation.
-        cmm_share_point = cmm_share_point.mul_by_scalar(&share_number);
-        cmm_share_point = cmm_share_point.plus_point(cmm);
+    let n = coeff_commitments.len();
+    if n == 0 {
+        return Commitment(C::zero_point());
     }
-    Commitment(cmm_share_point)
+    let mut exponents = Vec::with_capacity(n);
+    let mut exponent: C::Scalar = C::Scalar::one();
+    for _ in 0..n {
+        exponents.push(exponent);
+        exponent.mul_assign(share_number);
+    }
+    Commitment(multiexp(coeff_commitments, &exponents))
 }
 
 /// Interpret the array as coefficients of a polynomial starting at 0,
@@ -282,6 +286,35 @@ pub fn credential_hash_to_sign<
     hasher.update(&to_bytes(&new_or_existing));
     let to_sign = &hasher.finalize();
     to_sign.to_vec()
+}
+
+/// Given two ordered iterators call the corresponding functions in the
+/// increasing order of keys. That is, essentially merge the two iterators into
+/// an ordered iterator and then map, but this is all done inline.
+pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mut f: F)
+where
+    I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
+    I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
+    F: FnMut(Either<&'a V1, &'a V2>), {
+    let mut iter_1 = i1.into_iter().peekable();
+    let mut iter_2 = i2.into_iter().peekable();
+    while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {
+        if tag_1 < tag_2 {
+            f(Either::Left(v_1));
+            // advance the first iterator
+            let _ = iter_1.next().is_none();
+        } else {
+            f(Either::Right(v_2));
+            // advance the second iterator
+            let _ = iter_2.next();
+        }
+    }
+    for (_, v) in iter_1 {
+        f(Either::Left(v))
+    }
+    for (_, v) in iter_2 {
+        f(Either::Right(v))
+    }
 }
 
 #[cfg(test)]

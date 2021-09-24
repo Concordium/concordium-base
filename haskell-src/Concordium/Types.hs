@@ -78,6 +78,11 @@ module Concordium.Types (
   registeredDataFromBSS,
   maxRegisteredDataSize,
 
+  -- * Transaction memo
+  Memo(..),
+  maxMemoSize,
+  memoFromBSS,
+
   -- * Baking
   ElectionDifficulty(..),
   makeElectionDifficulty,
@@ -128,6 +133,7 @@ module Concordium.Types (
   VoterVRFPublicKey,
   VoterAggregationPrivateKey,
   VoterAggregationVerifyKey,
+  FinalizationIndex(..),
   FinalizationCommitteeSize,
 
   -- * Hashing
@@ -135,11 +141,15 @@ module Concordium.Types (
   unhashed,
   makeHashed,
   
+  -- * Regenesis
+  GenesisIndex(..),
+
   -- * Protocol version
   module Concordium.Types.ProtocolVersion) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
+import Foreign.Storable
 
 import Concordium.Common.Amount
 import Concordium.Common.Time
@@ -312,6 +322,17 @@ makeElectionDifficultyUnchecked = ElectionDifficulty . PartsPerHundredThousands
 -- The maximum absolute error for any value of is about 7 * 10^-12.
 getDoubleFromElectionDifficulty :: ElectionDifficulty -> Double
 getDoubleFromElectionDifficulty = (/ 100000) . fromIntegral
+
+-- |A sequential index of each finalization on a chain.
+-- The genesis block has finalization index 0.
+-- Note that this is not comparable with block height, since finalization does not occur at every
+-- level of the chain.
+newtype FinalizationIndex = FinalizationIndex {theFinalizationIndex :: Word64}
+    deriving (Eq, Ord, Num, Real, Enum, Integral, Show, ToJSON, FromJSON) via Word64
+
+instance S.Serialize FinalizationIndex where
+  put (FinalizationIndex w) = S.putWord64be w
+  get = FinalizationIndex <$> S.getWord64be
 
 type FinalizationCommitteeSize = Word32
 -- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
@@ -582,6 +603,48 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
+-- |Data type for memos that can be added to transfers.
+-- Max length of 'maxMemoSize' is assumed.
+-- Create new values with 'memoFromBSS' to ensure assumed properties.
+--
+-- Note that the ToJSON instance of this type is derived, based on hex encoding.
+-- The FromJSON instance is manually implemented to ensure length limits.
+newtype Memo = Memo BSS.ShortByteString
+  deriving Eq
+  deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+
+-- |Maximum size for 'Memo'.
+maxMemoSize :: Int
+maxMemoSize = 256
+
+tooBigErrorString :: String -> Int -> Int -> String
+tooBigErrorString name len maxSize = "Size of the "++ name ++" (" ++ show len ++ " bytes) exceeds maximum allowed size (" ++ show maxSize ++ " bytes)."
+
+-- |Construct 'Memo' from a 'BSS.ShortByteString'.
+-- Fails if the length exceeds 'maxMemoSize'.
+memoFromBSS :: MonadError String m => BSS.ShortByteString -> m Memo
+memoFromBSS bss = if len <= maxMemoSize
+                              then return . Memo $ bss
+                              else throwError $ tooBigErrorString "memo" len maxMemoSize
+  where len = BSS.length bss
+
+instance S.Serialize Memo where
+  put (Memo bss) = do
+    S.putWord16be . fromIntegral . BSS.length $ bss
+    S.putShortByteString bss
+
+  get = G.label "Memo" $ do
+    l <- fromIntegral <$> S.getWord16be
+    unless (l <= maxMemoSize) $ fail $ tooBigErrorString "memo" l maxMemoSize
+    Memo <$> S.getShortByteString l
+
+instance AE.FromJSON Memo where
+  parseJSON v = do
+    (BSH.ByteStringHex bss) <- AE.parseJSON v
+    case memoFromBSS bss of
+      Left err -> fail err
+      Right rd -> return rd
+
 -- |Data type for registering data on chain.
 -- Max length of 'maxRegisteredDataSize' is assumed.
 -- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
@@ -598,8 +661,7 @@ maxRegisteredDataSize = 256
 registeredDataFromBSS :: MonadError String m => BSS.ShortByteString -> m RegisteredData
 registeredDataFromBSS bss = if len <= maxRegisteredDataSize
                               then return . RegisteredData $ bss
-                              else throwError $ "Max size for registered data is " ++ show maxRegisteredDataSize
-                                             ++ " bytes, but got: " ++ show len ++ " bytes."
+                              else throwError $ tooBigErrorString "data" len maxRegisteredDataSize
   where len = BSS.length bss
 
 -- Uses two bytes for length to be more future-proof.
@@ -610,7 +672,7 @@ instance S.Serialize RegisteredData where
 
   get = do
     l <- fromIntegral <$> S.getWord16be
-    unless (l <= maxRegisteredDataSize) $ fail "Data too long"
+    unless (l <= maxRegisteredDataSize) $ fail $ tooBigErrorString "data" l maxRegisteredDataSize
     RegisteredData <$> S.getShortByteString l
 
 instance AE.FromJSON RegisteredData where
@@ -837,6 +899,16 @@ transactionTimeToSlot genesis slotDur t
   | otherwise = fromIntegral $ (tsMillis (tt - genesis - 1) `div` durationMillis slotDur) + 1
   where
     tt = transactionTimeToTimestamp t
+
+-- |Type indicating the index of a (re)genesis block.
+-- The initial genesis block has index @0@ and each subsequent regenesis
+-- has an incrementally higher index.
+newtype GenesisIndex = GenesisIndex Word32
+  deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON, Storable) via Word32
+
+instance S.Serialize GenesisIndex where
+  put (GenesisIndex gi) = S.putWord32be gi
+  get = GenesisIndex <$> S.getWord32be
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

@@ -7,7 +7,7 @@ use criterion::Criterion;
 use crypto_common::types::Amount;
 use curve_arithmetic::Value;
 use elgamal::{PublicKey, SecretKey};
-use encrypted_transfers::proofs::generate_proofs::*;
+use encrypted_transfers::proofs::*;
 use id::types::GlobalContext;
 use pairing::bls12_381::G1;
 use random_oracle::*;

@@ -3,8 +3,6 @@ cabal-version: 1.24
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: df981d0b53eaf25f809878e4f4a629ade3503268311dad43dcd0e0045a69a94f
 
 name:           concordium-base
 version:        0.1.0.0
@@ -53,6 +51,7 @@ library
       Concordium.Genesis.Data
       Concordium.Genesis.Data.Base
       Concordium.Genesis.Data.P1
+      Concordium.Genesis.Data.P2
       Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker
@@ -64,6 +63,8 @@ library
       Concordium.SQL.AccountTransactionIndex
       Concordium.SQL.Helpers
       Concordium.Types
+      Concordium.Types.Accounts
+      Concordium.Types.Accounts.Releases
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
       Concordium.Types.DummyData
@@ -71,12 +72,15 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
+      Concordium.Types.Instance
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
+      Concordium.Types.Queries
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions
+      Concordium.Types.UpdateQueues
       Concordium.Types.Updates
       Concordium.Utils
       Concordium.Utils.Encryption
@@ -120,6 +124,7 @@ library
     , containers >=0.6
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -175,6 +180,7 @@ executable generate-update-keys
     , containers >=0.6
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , filepath >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -229,6 +235,7 @@ executable genesis
     , containers >=0.6
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , filepath >=1.4
     , ghc-prim >=0.5.3
     , hashable >=1.2
@@ -301,6 +308,7 @@ test-suite test
     , containers
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , hspec >=2.6
@@ -356,6 +364,7 @@ benchmark bls-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -407,6 +416,7 @@ benchmark ed25519-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -458,6 +468,7 @@ benchmark ed25519dlog-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -509,6 +520,7 @@ benchmark sha256-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3
@@ -560,6 +572,7 @@ benchmark verify-credential-perf
     , criterion >=1.5
     , cryptonite >=0.27
     , deepseq >=1.4
+    , exceptions >=0.10
     , ghc-prim >=0.5.3
     , hashable >=1.2
     , microlens >=0.3

@@ -1,10 +1,9 @@
 use criterion::*;
 use crypto_common::{
-    serde_impls::KeyPairDef,
-    types::{KeyIndex, TransactionTime},
+    types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };
-use dodis_yampolskiy_prf::secret as prf;
+use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
@@ -12,8 +11,7 @@ use id::{
     account_holder::*,
     anonymity_revoker::*,
     chain::*,
-    constants::{ArCurve, BaseField},
-    ffi::*,
+    constants::{ArCurve, BaseField, *},
     identity_provider::*,
     secret_sharing::Threshold,
     types::*,
@@ -33,8 +31,8 @@ const EXPIRY: TransactionTime = TransactionTime {
 fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
-    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
-    let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
+    let ip_public_key = ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ArCurve> {
@@ -124,9 +122,9 @@ fn bench_parts(c: &mut Criterion) {
     let initial_acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
@@ -162,9 +160,9 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let mut keys = BTreeMap::new();
-    keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-    keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-    keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+    keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+    keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+    keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
 
     let acc_data = CredentialData {
         keys,

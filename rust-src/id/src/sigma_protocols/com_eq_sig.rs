@@ -322,7 +322,9 @@ mod tests {
 
                 // Construct invalid parameters
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
-                assert!(!verify(&mut wrong_ro, &ces, &proof));
+                if verify(&mut wrong_ro, &ces, &proof) {
+                    assert_eq!(wrong_ro, ro);
+                }
 
                 let mut wrong_ces = ces;
                 {

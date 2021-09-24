@@ -7,6 +7,7 @@ import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
@@ -17,6 +18,7 @@ import qualified Data.Text.Encoding as TE
 
 -- |Put a length as a 64-bit (unsigned) integer.
 putLength :: Putter Int
+{-# INLINE putLength #-}
 putLength = putWord64be . fromIntegral
 
 -- |Get a length as a 64-bit (unsigned) integer.
@@ -34,11 +36,22 @@ getLength = do
 putByteStringLen :: Putter BS.ByteString
 putByteStringLen bs = putLength (BS.length bs) >> putByteString bs
 
+-- |Put a 'LBS.ByteString' preceded by its length as a 64-bit (unsigned) integer.
+putLazyByteStringLen :: Putter LBS.ByteString
+putLazyByteStringLen bs = putLength (fromIntegral (LBS.length bs)) >> putLazyByteString bs
+
 -- |Get a 'BS.ByteString' preceded by its length as a 64-bit (unsigned) integer.
 getByteStringLen :: Get BS.ByteString
 getByteStringLen = do
     len <- getLength
     getByteString len
+
+-- |Get a 'LBS.ByteString' preceded by its length as a 64-bit (unsigned) integer.
+-- This creates a copy of the underlying bytes.
+getLazyByteStringLen :: Get LBS.ByteString
+getLazyByteStringLen = do
+    len <- getLength
+    getLazyByteString (fromIntegral len)
 
 -- * Unicode string
 

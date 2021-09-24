@@ -1,4 +1,4 @@
-use crate::aggregate_sig::*;
+use crate::*;
 use crypto_common::*;
 use ffi_helpers::*;
 use id::sigma_protocols::dlog;
@@ -18,7 +18,7 @@ pub extern "C" fn bls_generate_secretkey() -> *mut SecretKey<Bls12> {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_derive_publickey(sk_ptr: *mut SecretKey<Bls12>) -> *mut PublicKey<Bls12> {
     let sk = from_ptr!(sk_ptr);
-    Box::into_raw(Box::new(PublicKey::from_secret(*sk)))
+    Box::into_raw(Box::new(PublicKey::from_secret(sk)))
 }
 
 macro_derive_from_bytes!(Box bls_sk_from_bytes, SecretKey<Bls12>);
@@ -204,8 +204,8 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let sk1 = SecretKey::<Bls12>::generate(&mut rng);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
-            let mut pk1 = PublicKey::<Bls12>::from_secret(sk1);
-            let mut pk2 = PublicKey::<Bls12>::from_secret(sk2);
+            let mut pk1 = PublicKey::<Bls12>::from_secret(&sk1);
+            let mut pk2 = PublicKey::<Bls12>::from_secret(&sk2);
             let mut sig = sk1.sign(&m);
             sig = sig.aggregate(sk2.sign(&m));
 

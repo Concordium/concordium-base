@@ -66,11 +66,11 @@ fn generate_rand_scalar() -> Scalar {
     Scalar::from_hash(hasher)
 }
 
-fn scalar_from_secret_key(secret_key: &SecretKey) -> Scalar {
+fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
     let mut bits: [u8; 32] = [0u8; 32];
-    h.update(secret_key.as_bytes());
+    h.update(secret_key);
     hash.copy_from_slice(h.finalize().as_slice());
     bits.copy_from_slice(&hash[..32]);
     bits[0] &= 248;
@@ -84,14 +84,24 @@ fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
     CompressedEdwardsY::from_slice(&bytes).decompress()
 }
 
+/// Construct a proof of knowledge of secret key.
+///
+/// The `public_key` and `secret_key` must be the ed25519 public and secret key
+/// pair. The reason this function is not stated with those types is that it is
+/// at present used both for proving ownership of normal signature keys, as well
+/// as for proving ownership of the VRF keys.
+/// The keys for the VRF protocol are physically the same, but they are defined
+/// in a different crate and thus have different types. This situation should be
+/// remedied to regain type safety when we have time to do it properly. This
+/// will probably mean some reorganization of the crates.
 pub fn prove_dlog_ed25519(
     ro: &mut RandomOracle,
-    public: &PublicKey,
-    secret_key: &SecretKey,
+    public_key: &impl Serial,
+    secret_key: &impl AsRef<[u8]>,
 ) -> Ed25519DlogProof {
-    let secret = scalar_from_secret_key(&secret_key);
+    let secret = scalar_from_secret_key(secret_key);
     // FIXME: Add base to the proof.
-    ro.append_message(b"dlog_ed25519", public);
+    ro.append_message(b"dlog_ed25519", public_key);
 
     // FIXME non_zero scalar should be generated
     let rand_scalar = generate_rand_scalar();
@@ -136,7 +146,17 @@ pub fn verify_dlog_ed25519(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::*;
+
+    fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
+        // length of the challenge
+        let l = csprng.gen_range(0, 1000);
+        let mut challenge_prefix = vec![0; l];
+        for v in challenge_prefix.iter_mut() {
+            *v = csprng.gen();
+        }
+        challenge_prefix
+    }
+
     #[test]
     pub fn test_ed25519_dlog() {
         let mut csprng = thread_rng();

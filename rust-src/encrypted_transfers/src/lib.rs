@@ -14,7 +14,6 @@ use crypto_common::types::Amount;
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
-use proofs::*;
 use rand::*;
 use random_oracle::*;
 
@@ -129,9 +128,10 @@ impl<C: Curve> EncryptedAmount<C> {
     }
 }
 
-/// # Public API intended for use by the wallet.
+// # Public API intended for use by the wallet.
 
 /// Produce the payload of an encrypted amount transaction.
+///
 /// The arguments are
 ///
 /// - global context with parameters for generating proofs, and generators for
@@ -158,7 +158,7 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     ro.append_message(b"receiver_pk", &receiver_pk);
     ro.append_message(b"sender_pk", &sender_pk);
 
-    generate_proofs::gen_enc_trans(
+    proofs::gen_enc_trans(
         ctx,
         &mut ro,
         sender_pk,
@@ -173,6 +173,7 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
 }
 
 /// Verify an encrypted amount transaction.
+///
 /// The arguments are
 ///
 /// - global context with parameters for generating proofs, and generators for
@@ -199,7 +200,7 @@ pub fn verify_transfer_data<C: Curve>(
 
     // FIXME: Revise order of arguments in verify_enc_trans to be more consistent
     // with the rest.
-    generate_proofs::verify_enc_trans(
+    proofs::verify_enc_trans(
         ctx,
         &mut ro,
         transfer_data,
@@ -211,6 +212,7 @@ pub fn verify_transfer_data<C: Curve>(
 }
 
 /// Produce the payload of an secret to public amount transaction.
+///
 /// The arguments are
 ///
 /// - global context with parameters for generating proofs, and generators for
@@ -222,7 +224,6 @@ pub fn verify_transfer_data<C: Curve>(
 /// The return value is going to be `None` if a transfer could not be produced.
 /// This could be because the `to_transfer` is too large, or because of some
 /// other data inconsistency that means a proof could not be produced.
-
 pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     ctx: &GlobalContext<C>,
     sk: &SecretKey<C>,
@@ -237,7 +238,7 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     ro.append_message(b"pk", &pk);
 
     // FIXME: Make arguments more in line between gen_sec_to_pub_trans and this.
-    generate_proofs::gen_sec_to_pub_trans(
+    proofs::gen_sec_to_pub_trans(
         ctx,
         &mut ro,
         pk,
@@ -250,9 +251,10 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     )
 }
 
-/// # Public API intended for use by the wallet.
+// # Public API intended for use by the wallet.
 
-/// Verify an secret to public amount transaction.
+/// Verify a secret to public amount transaction.
+///
 /// The arguments are
 ///
 /// - global context with parameters for generating proofs, and generators for
@@ -277,8 +279,7 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
 
     // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
     // consistent with the rest.
-    generate_proofs::verify_sec_to_pub_trans(ctx, &mut ro, transfer_data, pk, &before_amount.join())
-        .is_ok()
+    proofs::verify_sec_to_pub_trans(ctx, &mut ro, transfer_data, pk, &before_amount.join()).is_ok()
 }
 
 #[cfg(test)]

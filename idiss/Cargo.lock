@@ -167,12 +167,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
-name = "bytes"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
-
-[[package]]
 name = "cc"
 version = "1.0.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -347,13 +341,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "byteorder",
- "bytes",
  "crypto_common",
  "crypto_common_derive",
  "ff",
- "ffi_helpers",
  "group",
- "libc",
  "pairing",
  "rand",
  "serde",
@@ -396,7 +387,6 @@ dependencies = [
 name = "dodis_yampolskiy_prf"
 version = "0.1.0"
 dependencies = [
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -461,7 +451,6 @@ name = "elgamal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -511,7 +500,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5796e7d62ca01a00ed3a649b0da1ffa1ac8f06bcad40339df09dbdd69a05ba9"
 dependencies = [
- "num-bigint 0.2.6",
+ "num-bigint",
  "num-integer",
  "num-traits",
  "proc-macro2",
@@ -604,7 +593,6 @@ dependencies = [
  "bulletproofs",
  "byteorder",
  "chrono",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -619,18 +607,16 @@ dependencies = [
  "hex",
  "itertools",
  "libc",
- "num",
  "pairing",
  "pedersen_scheme",
  "ps_sig",
  "rand",
  "rand_core",
  "random_oracle",
- "rayon",
  "serde",
  "serde_json",
  "sha2 0.9.1",
- "sha3",
+ "thiserror",
  "wasm-bindgen",
 ]
 
@@ -753,20 +739,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab3e176191bc4faad357e3122c4747aa098ac880e88b168f106386128736cf4a"
-dependencies = [
- "num-bigint 0.3.0",
- "num-complex",
- "num-integer",
- "num-iter",
- "num-rational",
- "num-traits",
-]
-
-[[package]]
 name = "num-bigint"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -778,55 +750,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-bigint"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f3fc75e3697059fb1bc465e3d8cca6cf92f56854f201158b3f9c77d5a3cfa0"
-dependencies = [
- "autocfg",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b05ad05bd8977050b171b3f6b48175fea6e0565b7981059b486075e1026a9fb5"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "num-integer"
 version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d59457e662d541ba17869cf51cf177c0b5f0cbf476c66bdc90bf1edac4f875b"
 dependencies = [
  "autocfg",
- "num-traits",
-]
-
-[[package]]
-name = "num-iter"
-version = "0.1.41"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6e6b7c748f995c4c29c5f5ae0248536e04a5739927c74ec0fa564805094b9f"
-dependencies = [
- "autocfg",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5b4d7360f362cfb50dde8143501e6940b22f644be75a4cc90b2d81968908138"
-dependencies = [
- "autocfg",
- "num-bigint 0.3.0",
- "num-integer",
  "num-traits",
 ]
 
@@ -878,7 +807,6 @@ name = "pedersen_scheme"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -1007,9 +935,7 @@ dependencies = [
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
- "itertools",
  "rand",
- "rand_core",
  "sha3",
 ]
 
