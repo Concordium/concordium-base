@@ -46,6 +46,16 @@ pub fn prove_ownership_of_account(
     AccountOwnershipProof { sigs }
 }
 
+/// Function for proving that an attribute inside a commitment is in a range of
+/// the form [a,b). The parameters are
+/// - gens - the bulletproof generators needed for range proofs
+/// - keys - the commitments keys used to commit to the attribute
+/// - attribute - the attribute inside the commitment
+/// - lower - the lower bound of the range
+/// - upper - the upper bound of the range
+///
+/// The function outputs a proof that the attribute is in the given range, i.e.
+/// that lower <= attribute < upper.
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     gens: &Generators<C>,
     keys: &PedersenKey<C>,

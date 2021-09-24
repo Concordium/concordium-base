@@ -8,6 +8,14 @@ use pedersen_scheme::{
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 
+/// Function for opening an attribute inside a commitment. The arguments are
+/// - keys - the commitments keys used to commit to the attribute
+/// - attribute - the attribute claimed to be inside the commitment
+/// - r - the randomness used to commit
+/// - c - the commitment
+///
+/// The function outputs a bool, indicicating whether the commitment contains
+/// the given attribute.
 pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
     keys: &PedersenKey<C>,
     attribute: &AttributeType,
@@ -18,6 +26,17 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
     keys.open(&s, &r, &c)
 }
 
+/// Function for verifying a range proof about an attribute inside a commitment.
+/// The arguments are
+/// - keys - the commitments keys used to commit to the attribute
+/// - gens - the bulletproof generators needed for range proofs
+/// - lower - the lower bound of the range
+/// - upper - the upper bound of the range
+/// - c - the commitment to the attribute
+/// - proof - the range proof about the attribute inside the commitment
+///
+/// The function outputs a bool, indicating whether the proof is correct or not,
+/// i.e., wether is attribute inside the commitment lies in [lower,upper).
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
@@ -78,8 +97,8 @@ pub fn verify_account_ownership(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id_prover::*;
-    use crypto_common::{serde_impls::KeyPairDef, types::KeyIndex};
+    use crate::{constants::AttributeKind, id_prover::*};
+    use crypto_common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
@@ -91,9 +110,9 @@ mod tests {
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
-                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -113,5 +132,42 @@ mod tests {
             challenge,
             &proof
         ));
+    }
+
+    #[test]
+    fn test_verify_attribute() {
+        let mut csprng = thread_rng();
+        let keys = PedersenKey::<G1>::generate(&mut csprng);
+        let attribute = AttributeKind("some attribute value".to_string());
+        let value = Value::<G1>::new(attribute.to_field_element());
+        let (commitment, randomness) = keys.commit(&value, &mut csprng);
+
+        assert!(verify_attribute(
+            &keys,
+            &attribute,
+            &randomness,
+            &commitment
+        ));
+    }
+
+    #[test]
+    fn test_verify_attribute_in_range() {
+        let mut csprng = thread_rng();
+        let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let keys = global.on_chain_commitment_key;
+        let gens = global.bulletproof_generators();
+        let lower = AttributeKind("20000102".to_string());
+        let attribute = AttributeKind("20000102".to_string());
+        let upper = AttributeKind("20000103".to_string());
+        let value = Value::<G1>::new(attribute.to_field_element());
+        let (commitment, randomness) = keys.commit(&value, &mut csprng);
+        let maybe_proof =
+            prove_attribute_in_range(&gens, &keys, &attribute, &lower, &upper, &randomness);
+        let result = if let Some(proof) = maybe_proof {
+            verify_attribute_range(&keys, &gens, &lower, &upper, &commitment, &proof)
+        } else {
+            false
+        };
+        assert!(result);
     }
 }
