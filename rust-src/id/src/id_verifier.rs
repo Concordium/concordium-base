@@ -1,5 +1,5 @@
 use crate::{types::*, utils};
-use bulletproofs::range_proof::{verify_efficient, Generators, RangeProof};
+use bulletproofs::range_proof::{verify_efficient, Generators, RangeProof, VerificationError};
 use curve_arithmetic::Curve;
 use ff::Field;
 use pedersen_scheme::{
@@ -37,6 +37,9 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 ///
 /// The function outputs a bool, indicating whether the proof is correct or not,
 /// i.e., wether is attribute inside the commitment lies in [lower,upper).
+/// This is done by verifying that the attribute inside the commitment satisfies
+/// that attribute-upper+2^n and attribute-lower lie in [0, 2^n).
+/// For further details about this technique, see page 15 in https://arxiv.org/pdf/1907.06381.pdf.
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
@@ -44,11 +47,11 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     upper: &AttributeType,
     c: &Commitment<C>,
     proof: &RangeProof<C>,
-) -> bool {
+) -> Result<(), VerificationError> {
     let mut transcript = RandomOracle::domain("attribute_range_proof");
     let a = lower.to_field_element();
     let b = upper.to_field_element();
-    let zero_randomness = PedersenRandomness::<C>::new(C::Scalar::zero());
+    let zero_randomness = PedersenRandomness::<C>::zero();
     let com_a = keys.hide_worker(&a, &zero_randomness);
     let com_b = keys.hide_worker(&b, &zero_randomness);
     let two = C::scalar_from_u64(2);
@@ -65,7 +68,6 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
         gens,
         keys,
     )
-    .is_ok()
 }
 
 /// Function for verifying account ownership. The arguments are
@@ -142,12 +144,10 @@ mod tests {
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
 
-        assert!(verify_attribute(
-            &keys,
-            &attribute,
-            &randomness,
-            &commitment
-        ));
+        assert!(
+            verify_attribute(&keys, &attribute, &randomness, &commitment),
+            "Incorrect opening of attribute."
+        );
     }
 
     #[test]
@@ -163,11 +163,14 @@ mod tests {
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let maybe_proof =
             prove_attribute_in_range(&gens, &keys, &attribute, &lower, &upper, &randomness);
-        let result = if let Some(proof) = maybe_proof {
-            verify_attribute_range(&keys, &gens, &lower, &upper, &commitment, &proof)
+        if let Some(proof) = maybe_proof {
+            assert_eq!(
+                verify_attribute_range(&keys, &gens, &lower, &upper, &commitment, &proof),
+                Ok(()),
+                "Incorrect range proof."
+            );
         } else {
-            false
+            assert!(false, "Failed to produce proof.");
         };
-        assert!(result);
     }
 }
