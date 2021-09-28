@@ -31,7 +31,7 @@ pub fn prove_ownership_of_account(
 ) -> AccountOwnershipProof {
     let mut hasher = Sha256::new();
     hasher.update(account.0);
-    hasher.update([0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]);
+    hasher.update([0u8; 8]);
     hasher.update(b"account_ownership_proof");
     hasher.update(&challenge);
     let to_sign = &hasher.finalize();
