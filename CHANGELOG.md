@@ -4,6 +4,8 @@ The [idiss](./idiss) and [mobile_wallet](./mobile_wallet/) libraries have their
 own changelogs.
 
 ## rust-src libraries (most recent on top)
+   - Introduce core functionality for proving and verifying properties about an identity behind an account, such as
+     revealing an attribute, proving ownership of an account, and proving that an attribute is in a range.
    - Move AttributeKind from the id::ffi module to id::constants.
    - the Display implementation of AttrubuteTag has been fixed. It was off by one.
    - the `create_credential` also outputs the randomness from the commitments used 
