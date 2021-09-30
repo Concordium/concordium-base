@@ -1,7 +1,7 @@
 title Identity provider proof of concept
 
 
-App->Identity provider: GET identity-provider-url?response_type=code&state=urlencoded({IdentityObjectRequest})
+App->Identity provider: GET identity-provider-url?response_type=code&state=urlencoded({IdentityObjectRequest})&redirect_uri={redirect_uri}
 Identity provider->Identity provider: Validate request and save to database
 Identity provider->App: HTTP 302 Found\nLocation identity-verifier-url/api/verify/{id_cred_pub}/{signed_id_cred_pub}
 
