@@ -77,6 +77,15 @@ iOS platforms, respectively.
 Contains various utilities that are used for testing and prototyping. From key generation to
 generation to tools for analyzing the chain.
 
+See documentation for
+- [id-client](./rust-bins/docs/id-client.md) (identity layer interactions for testing)
+- [keygen tool](./rust-bins/docs/keygen.md) key generation for identity
+  providers and anonymity revokers
+- [keygen genesis](./rust-bins/docs/keygen-genesis.md) (this uses a different
+  key generation procedure that allows key recovery from a seed phrase)
+- [genesis tool](./rust-bins/docs/genesis-tool.md) tool to generate data for
+  test genesis blocks, allows creation of accounts and bakers
+
 # Build requirements.
 
 In order to build the components in this repository you need
