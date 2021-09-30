@@ -3,7 +3,7 @@
 This module contains a proof of concept identity provider service which helps to show the flow that is required by
 an identity provider. It uses the provided libraries from the crypto repository to verify the incoming request,
 and after an identity verifier has verified the caller's identity, to create the identity object that the wallet can
-then retrieve and use. 
+then retrieve and use.
 
 # How to build and run
 
@@ -32,7 +32,7 @@ An example of each file type can be found in the [./data](./data) subdirectory.
 
 The identity verifier is a supporting service that verifies the real-life
 identity of the user. In this POC we assume that the service has a REST API that
-the provider uses. The identity provider redirects the caller, after it has 
+the provider uses. The identity provider redirects the caller, after it has
 validated the cryptographic proofs, to the identity verifier, which would
 then verify the real-life identity, by e.g., asking the user to take photos, and
 provide documents. In the proof of concept the user can simply input all their
@@ -51,7 +51,7 @@ or directly running the binary `identity_verifier` in `./target/release/`.
 
 It is possible to test identity creation using the proof of concept identity provider service locally. Build and run the
 two services as described above. Install and run an Android emulator using Android 8 (it is not possible
-to use Android 9 or above, as they prohibit HTTP communication by default, which this proof of concept relies on). 
+to use Android 9 or above, as they prohibit HTTP communication by default, which this proof of concept relies on).
 When creating a new identity select `Internal test` as this will forward the wallet to `10.0.2.2` which is how
 the Android emulator calls the host machine.
 
@@ -59,12 +59,29 @@ the Android emulator calls the host machine.
 
 |Method|URL|Description|
 |---|---|---|
-|POST+GET|`http://[hostname]:[provider_port]/api/identity`|The endpoint the wallet calls to initiate the identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
+|GET (+POST)|`http://[hostname]:[provider_port]/api/identity`|The endpoint the wallet calls to initiate the identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
 |GET|`http://[hostname]:[provider_port]/api/identity/create/{id_cred_pub}`|Endpoint that the identity verifier forwards the user to after having validated their attributes. If the user has created a valid set of attributes, then this endpoint will ensure that an identity is created.|
 |GET|`http://[hostname]:[provider_port]/api/identity/{base_16_encoded_id_cred_pub}`|The endpoint that exposes access to created identity objects. The caller will be redirected to this URL after creation of an identity object, so that they can retrieve it.|
 |GET|`http://[hostname]:[verifier_port]/api/verify/`|An endpoint that simulates an identity verifier. The endpoint presents an HTML form where the user can submit their attributes which will always be accepted. In a real world application the attributes would have to be verified.|
 |POST|`http://[hostname]:[verifier_port]/api/submit/`|Accepts submissions from the HTML for served by the verifier. The attributes are saved to a file database. No verification of the attributes are performed for the POC.|
 |GET|`http://[hostname]:[verifier_port]/api/verify/attributes/{id_cred_pub}`|Provides read access to saved attributes. The identity provider accesses this endpoint to get attributes, and assumes that if an attribute list exists, then the user has been verified successfully.|
+
+The POST method is only there for historical reasons. The GET method is the one in use.
+
+The `state` field of the initial `GET` request should be urlencoded string
+containing valid JSON of the form
+```json
+{
+    "idObjectRequest": {
+        "v": 0,
+        "value": {
+            PreIdentityObject JSON
+        }
+    }
+}
+```
+and `redirect_uri` should be a string.
+
 
 The initial POST request should have content-type `application/json` and the body should be a JSON object in the format
 ```json
@@ -73,43 +90,44 @@ The initial POST request should have content-type `application/json` and the bod
         "v": 0,
         "value": {
             PreIdentityObject JSON
-        }    
+        }
     },
     "redirectURI": "url where the response is redirected"
 }
 ```
 
+
 # Service flow description
 
-The flow that is implemented by this proof of concept follows the flow that is expected by the current Concordium ID app 
+The flow that is implemented by this proof of concept follows the flow that is expected by the current Concordium ID app
 for Android. The flow is as follows:
 
 1. Receive a request from a wallet on `http://[hostname]:8100/api/identity
-1. Deserialize `IdentityObjectRequest` and validate its contents by using the supplied library function 
+1. Deserialize `IdentityObjectRequest` and validate its contents by using the supplied library function
 `id::identity_provider::validate_request`. The validated request is saved in the database.
 1. Forward the wallet to the identity verification attribute HTML form. When forwarding a signature on the `id_cred_pub`
    is also provided to the identity verifier, so that the identity verifier can verify if the incoming submission
    should be handled or not.
 1. The user fills out the attribute form and submits it to the identity verifier, which then verifies the signature
-   from the identity provider service using its public-key, and then saves the attributes to a file database. If the 
-   signature is invalid the submission is rejected. At this step the identity verifier should validate the attributes of 
-   the user, but for the POC the attributes are simply accepted at face value. Afterwards the user is forwarded back 
+   from the identity provider service using its public-key, and then saves the attributes to a file database. If the
+   signature is invalid the submission is rejected. At this step the identity verifier should validate the attributes of
+   the user, but for the POC the attributes are simply accepted at face value. Afterwards the user is forwarded back
    to the identity provider service that will perform the next step.
 1. Read the validated request from the database that matches the current flow. The attribute list for the given user
 is retrieved from the identity verifier. The request and attribute list are signed by using the supplied library function
 `id::identity_provider::sign_identity_object`.
 1. Save the corresponding revocation record that can be used by the anonymity revokers to identify the user.
-1. Generate the identity object which consists of the received request, the attribute list and the signature and 
+1. Generate the identity object which consists of the received request, the attribute list and the signature and
 save it so that it can be retrieved later.
 1. Create the initial account transaction using the supplied library function and submit it to a Concordium-run service `wallet-proxy`.
 1. Return to the caller with an HTTP 302 Found redirect `location` header to where the identity object will be available
-when processing has completed. In the case of the proof of concept it will be available instantaneously. The format of 
+when processing has completed. In the case of the proof of concept it will be available instantaneously. The format of
 the `location` header is: `redirect_uri#code_uri=url_where_identity_object_can_be_retrieved`, where `redirect_uri` is
 the query parameter received in step 1. The proof of concept supplies the identity object at `http://[hostname]:8100/api/identity/{id_cred_pub}`.
 1. The wallet starts polling asynchronously for the identity object at the provided `code_uri`. When retrieving
  the identity object it is wrapped inside the following JSON object that the wallet expects:
 ```
-{ 
+{
     "status": "(done|pending|error)",
     "detail": "Optional free text",
     "token": { "identityObject": {...},
@@ -136,9 +154,9 @@ The test data files can be regenerated with the
 only be done if some formats have changed.
 
 1. Act as a client that wants a new identity and send the request in [data/valid_request.json](./data/valid_request.json)
-1. If the identity provider returned successfully, then verify that the HTTP code is 302 Found, and that the `location` 
-header is `concordiumwallet://identity-issuer/callback#code_uri=url_where_identity_object_is_available`. The first part 
-is  determined by the value of `redirect_uri`, but the value for `code_uri` is controlled by the identity provider 
+1. If the identity provider returned successfully, then verify that the HTTP code is 302 Found, and that the `location`
+header is `concordiumwallet://identity-issuer/callback#code_uri=url_where_identity_object_is_available`. The first part
+is  determined by the value of `redirect_uri`, but the value for `code_uri` is controlled by the identity provider
 implementation, and should direct to the service that serves the identity object when it has been created.
 1. Verify that the anonymity revocation record and the identity object have been stored if the identity verification
 process has completed.
@@ -217,8 +235,8 @@ process has completed.
   "status": "done"
 }
 ```
-    
-If no error has been encountered, but the identity object is not ready yet due to the identity verification 
+
+If no error has been encountered, but the identity object is not ready yet due to the identity verification
 process, then an expected response would look like:
 ```
 {
@@ -226,7 +244,7 @@ process, then an expected response would look like:
     "detail": ""
 }
 ```
-    
+
 To signal that an error occurred, i.e. if queried for an identity object that does not exist, and is not currently
 being processed, then an error can be returned:
 ```
