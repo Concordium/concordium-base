@@ -25,7 +25,7 @@ use sha2::{Digest, Sha256};
 /// coincide with the hash of a transaction (assuming that SHA256 is
 /// collision-resistant).
 pub fn prove_ownership_of_account(
-    data: CredentialData,
+    data: &CredentialData,
     account: AccountAddress,
     challenge: &[u8],
 ) -> AccountOwnershipProof {
