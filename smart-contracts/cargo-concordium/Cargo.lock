@@ -118,7 +118,7 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "cargo-concordium"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "ansi_term 0.12.1",
  "anyhow",
@@ -190,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "0.4.1"
+version = "1.0.0"
 dependencies = [
  "base58check",
  "chrono",
