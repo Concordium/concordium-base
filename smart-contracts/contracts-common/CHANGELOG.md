@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased changes
+
+## concordium-contracts-common 1.0.0 (2021-10-05)
 - Add public validation functions to contract and receive names.
 - Add new cases for NewContractNameError and NewReceiveNameError.
 - Remove the needless reference in `to_owned` and `get_chain_name` methods.
