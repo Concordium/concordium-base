@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased changes
+- Fix deserialization of arrays.
 
 ## concordium-contracts-common 1.0.0 (2021-10-05)
 - Add public validation functions to contract and receive names.
