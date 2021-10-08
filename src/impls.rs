@@ -711,13 +711,11 @@ impl<T: Serial, const N: usize> Serial for [T; N] {
 
 impl<T: Deserial, const N: usize> Deserial for [T; N] {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let mut data: MaybeUninit<[T; N]> = MaybeUninit::uninit();
-        let ptr = data.as_mut_ptr();
-        for i in 0..N {
-            let item = T::deserial(source)?;
-            unsafe { (*ptr)[i] = item };
+        let mut data: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+        for item in data.iter_mut() {
+            *item = MaybeUninit::new(T::deserial(source)?);
         }
-        Ok(unsafe { data.assume_init() })
+        Ok(unsafe { data.as_ptr().cast::<[T; N]>().read() })
     }
 }
 
@@ -856,4 +854,32 @@ pub fn to_bytes<S: Serial>(x: &S) -> Vec<u8> {
 pub fn from_bytes<S: Deserial>(source: &[u8]) -> ParseResult<S> {
     let mut cursor = Cursor::new(source);
     cursor.get()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_u64_array_deserial_serial_is_id() {
+        let xs: [u64; 1] = [123];
+        let bytes = to_bytes(&xs);
+        let xs2: ParseResult<[u64; 1]> = from_bytes(&bytes);
+        assert_eq!(
+            xs,
+            xs2.unwrap(),
+            "Serializing and then deserializing should return original value."
+        );
+    }
+
+    #[test]
+    fn test_string_array_deserial_serial_is_id() {
+        let xs: [String; 1] = ["hello".to_string()];
+        let bytes = to_bytes(&xs);
+        let xs2: ParseResult<[String; 1]> = from_bytes(&bytes);
+        assert_eq!(
+            xs,
+            xs2.unwrap(),
+            "Serializing and then deserializing should return original value."
+        );
+    }
 }
