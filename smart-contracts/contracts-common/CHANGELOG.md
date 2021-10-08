@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased changes
+
+## concordium-contracts-common 1.0.1 (2021-10-08)
 - Fix deserialization of arrays.
 
 ## concordium-contracts-common 1.0.0 (2021-10-05)
