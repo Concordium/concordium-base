@@ -211,7 +211,8 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(values) = json {
                 ensure!(
                     (values.len() as u32) == *len,
-                    "Expected array with {} elements",
+                    "Expected array with {} elements, but it had {} elements",
+                    len,
                     values.len()
                 );
                 for value in values {
