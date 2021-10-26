@@ -15,6 +15,18 @@ pub mod sigma_protocols;
 pub mod types;
 pub mod utils;
 
+/// Re-export of Pedersen commitments functionality.
+pub use pedersen_scheme as pedersen_commitment;
+
+/// Re-export of curve arithmetic.
+pub use curve_arithmetic;
+
+/// Re-export of Elgamal encryption.
+pub use elgamal;
+
+/// Re-export of bulletproofs.
+pub use bulletproofs::range_proof;
+
 #[macro_use]
 extern crate crypto_common_derive;
 

@@ -126,7 +126,7 @@ mod tests {
         let account_address = AccountAddress::new(&reg_id);
         let challenge = b"13549686546546546854651357687354";
 
-        let proof = prove_ownership_of_account(cred_data, account_address, challenge);
+        let proof = prove_ownership_of_account(&cred_data, account_address, challenge);
 
         assert!(verify_account_ownership(
             &pub_data,

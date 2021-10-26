@@ -1,6 +1,8 @@
+@Library('concordium-pipelines') _
 pipeline {
     agent any
     environment {
+        ecr_repo_domain = '192549843005.dkr.ecr.eu-west-1.amazonaws.com'
         FILENAME_DEBUG = 'mobile_wallet_lib-debug.aar'
         FILENAME_RELEASE = 'mobile_wallet_lib-release.aar'
         S3_BUCKET = 's3://static-libraries.concordium.com/android'
@@ -9,11 +11,7 @@ pipeline {
         stage('ecr-login') {
             agent { label 'jenkins-worker' }
             steps {
-                sh 'aws ecr get-login-password \
-                        --region eu-west-1 \
-                    | docker login \
-                        --username AWS \
-                        --password-stdin 192549843005.dkr.ecr.eu-west-1.amazonaws.com'
+                ecrLogin(env.ecr_repo_domain, 'eu-west-1')
             }
         }
         stage('build') {
@@ -21,7 +19,7 @@ pipeline {
                 docker {
                     label 'jenkins-worker'
                     image 'concordium/android-builder:latest' 
-                    registryUrl 'https://192549843005.dkr.ecr.eu-west-1.amazonaws.com/'
+                    registryUrl "https://${env.ecr_repo_domain}/"
                     args '-u root'
                 } 
             }
