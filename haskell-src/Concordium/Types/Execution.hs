@@ -218,7 +218,54 @@ data Payload =
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
 
-instance S.Serialize TransactionType
+-- NB: This serialization instance would ideally match the tags used when
+-- serializing the 'Payload'. Unfortunately in the past (at least for protocol
+-- versions 1 and 2) it was derived automatically so it did not match. The
+-- instance is now explicit, but to retain compatibility it must match what it
+-- used to be.
+instance S.Serialize TransactionType where
+  put = \case
+    TTDeployModule -> S.putWord8 0
+    TTInitContract -> S.putWord8 1
+    TTUpdate -> S.putWord8 2
+    TTTransfer -> S.putWord8 3
+    TTAddBaker -> S.putWord8 4
+    TTRemoveBaker -> S.putWord8 5
+    TTUpdateBakerStake -> S.putWord8 6
+    TTUpdateBakerRestakeEarnings -> S.putWord8 7
+    TTUpdateBakerKeys -> S.putWord8 8
+    TTUpdateCredentialKeys -> S.putWord8 9
+    TTEncryptedAmountTransfer -> S.putWord8 10
+    TTTransferToEncrypted -> S.putWord8 11
+    TTTransferToPublic -> S.putWord8 12
+    TTTransferWithSchedule -> S.putWord8 13
+    TTUpdateCredentials -> S.putWord8 14
+    TTRegisterData -> S.putWord8 15
+    TTTransferWithMemo -> S.putWord8 16
+    TTEncryptedAmountTransferWithMemo -> S.putWord8 17
+    TTTransferWithScheduleAndMemo -> S.putWord8 18
+
+  get = S.getWord8 >>= \case
+    0 -> return TTDeployModule
+    1 -> return TTInitContract
+    2 -> return TTUpdate
+    3 -> return TTTransfer
+    4 -> return TTAddBaker
+    5 -> return TTRemoveBaker
+    6 -> return TTUpdateBakerStake
+    7 -> return TTUpdateBakerRestakeEarnings
+    8 -> return TTUpdateBakerKeys
+    9 -> return TTUpdateCredentialKeys
+    10 -> return TTEncryptedAmountTransfer
+    11 -> return TTTransferToEncrypted
+    12 -> return TTTransferToPublic
+    13 -> return TTTransferWithSchedule
+    14 -> return TTUpdateCredentials
+    15 -> return TTRegisterData
+    16 -> return TTTransferWithMemo
+    17 -> return TTEncryptedAmountTransferWithMemo
+    18 -> return TTTransferWithScheduleAndMemo
+    n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 -- |Payload serialization according to
 --
@@ -323,7 +370,7 @@ putPayload TransferWithScheduleAndMemo{..} =
     S.put twswmMemo <>
     P.putWord8 (fromIntegral (length twswmSchedule)) <>
     forM_ twswmSchedule (\(a,b) -> S.put a >> S.put b)
-    
+
 
 -- |Get the payload of the given size.
 getPayload :: SProtocolVersion pv -> PayloadSize -> S.Get Payload
@@ -486,10 +533,10 @@ data Event =
                -- |Initial amount transferred to the contract.
                ecAmount :: !Amount,
                -- |Name of the contract init function being called
-               ecInitName :: Wasm.InitName,
+               ecInitName :: !Wasm.InitName,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
-               ecEvents :: [Wasm.ContractEvent]
+               ecEvents :: ![Wasm.ContractEvent]
                -- TODO: We could include initial state hash here.
                -- Including the whole state is likely not a good idea.
                }
@@ -504,10 +551,10 @@ data Event =
                -- |The message which was sent to the contract.
                euMessage :: !Wasm.Parameter,
                -- |Name of the contract receive function being called
-               euReceiveName :: Wasm.ReceiveName,
+               euReceiveName :: !Wasm.ReceiveName,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
-               euEvents :: [Wasm.ContractEvent]
+               euEvents :: ![Wasm.ContractEvent]
                -- TODO: We could include input/output state hashes here
                -- Including the whole state pre/post run is likely not a good idea.
                }
@@ -596,7 +643,7 @@ data Event =
            -- | A set of credential keys was updated. Also covers the case of updating the signature threshold for the credential in question
            | CredentialKeysUpdated {
              -- |The credential that had its keys and threshold updated.
-             ckuCredId :: CredentialRegistrationID
+             ckuCredId :: !CredentialRegistrationID
            }
            -- | New encrypted amount added to an account, with a given index.
            --
@@ -670,7 +717,230 @@ data Event =
 
   deriving (Show, Generic, Eq)
 
-instance S.Serialize Event
+instance S.Serialize Event where
+  put = \case ModuleDeployed mref ->
+                S.putWord8 0 <>
+                S.put mref
+              ContractInitialized{..} ->
+                S.putWord8 1 <>
+                S.put ecRef <>
+                S.put ecAddress <>
+                S.put ecAmount <>
+                S.put ecInitName <>
+                putListOf S.put ecEvents
+              Updated{..} ->
+                S.putWord8 2 <>
+                S.put euAddress <>
+                S.put euInstigator <>
+                S.put euAmount <>
+                S.put euMessage <>
+                S.put euReceiveName <>
+                putListOf S.put euEvents
+              Transferred{..} ->
+                S.putWord8 3 <>
+                S.put etFrom <>
+                S.put etAmount <>
+                S.put etTo
+              AccountCreated addr ->
+                S.putWord8 4 <>
+                S.put addr
+              CredentialDeployed{..} ->
+                S.putWord8 5 <>
+                S.put ecdRegId <>
+                S.put ecdAccount
+              BakerAdded {..} ->
+                S.putWord8 6 <>
+                S.put ebaBakerId <>
+                S.put ebaAccount <>
+                S.put ebaSignKey <>
+                S.put ebaElectionKey <>
+                S.put ebaAggregationKey <>
+                S.put ebaStake <>
+                putBool ebaRestakeEarnings
+              BakerRemoved {..} ->
+                S.putWord8 7 <>
+                S.put ebrBakerId <>
+                S.put ebrAccount
+              BakerStakeIncreased {..} ->
+                S.putWord8 8 <>
+                S.put ebsiBakerId <>
+                S.put ebsiAccount <>
+                S.put ebsiNewStake
+              BakerStakeDecreased {..} ->
+                S.putWord8 9 <>
+                S.put ebsiBakerId <>
+                S.put ebsiAccount <>
+                S.put ebsiNewStake
+              BakerSetRestakeEarnings {..} ->
+                S.putWord8 10 <>
+                S.put ebsreBakerId <>
+                S.put ebsreAccount <>
+                putBool ebsreRestakeEarnings
+              BakerKeysUpdated {..} ->
+                S.putWord8 11 <>
+                S.put ebkuBakerId <>
+                S.put ebkuAccount <>
+                S.put ebkuSignKey <>
+                S.put ebkuElectionKey <>
+                S.put ebkuAggregationKey
+              CredentialKeysUpdated {..} ->
+                S.putWord8 12 <>
+                S.put ckuCredId
+              NewEncryptedAmount{..} ->
+                S.putWord8 13 <>
+                S.put neaAccount <>
+                S.put neaNewIndex <>
+                S.put neaEncryptedAmount
+              EncryptedAmountsRemoved{..} ->
+                S.putWord8 14 <>
+                S.put earAccount <>
+                S.put earNewAmount <>
+                S.put earInputAmount <>
+                S.put earUpToIndex
+              AmountAddedByDecryption {..} ->
+                S.putWord8 15 <>
+                S.put aabdAccount <>
+                S.put aabdAmount
+              EncryptedSelfAmountAdded{..} ->
+                S.putWord8 16 <>
+                S.put eaaAccount <>
+                S.put eaaNewAmount <>
+                S.put eaaAmount
+              UpdateEnqueued {..} ->
+                S.putWord8 17 <>
+                S.put ueEffectiveTime <>
+                S.put uePayload
+              TransferredWithSchedule {..} ->
+                S.putWord8 18 <>
+                S.put etwsFrom <>
+                S.put etwsTo <>
+                putListOf S.put etwsAmount
+              CredentialsUpdated {..} ->
+                S.putWord8 19 <>
+                S.put cuAccount <>
+                putListOf S.put cuNewCredIds <>
+                putListOf S.put cuRemovedCredIds <>
+                S.put cuNewThreshold
+              DataRegistered {..} ->
+                S.putWord8 20 <>
+                S.put drData
+              TransferMemo {..} ->
+                S.putWord8 21 <>
+                S.put tmMemo
+
+  get = S.getWord8 >>= \case
+    0 -> do
+      mref <- S.get
+      return (ModuleDeployed mref)
+    1 -> do
+      ecRef <- S.get
+      ecAddress <- S.get
+      ecAmount <- S.get
+      ecInitName <- S.get
+      ecEvents <- getListOf S.get
+      return ContractInitialized{..}
+    2 -> do
+      euAddress <- S.get
+      euInstigator <- S.get
+      euAmount <- S.get
+      euMessage <- S.get
+      euReceiveName <- S.get
+      euEvents <- getListOf S.get
+      return Updated{..}
+    3 -> do
+      etFrom <- S.get
+      etAmount <- S.get
+      etTo <- S.get
+      return Transferred{..}
+    4 -> do
+      addr <- S.get
+      return $ AccountCreated addr
+    5 -> do
+      ecdRegId <- S.get
+      ecdAccount <- S.get
+      return CredentialDeployed{..}
+    6 -> do
+      ebaBakerId  <- S.get
+      ebaAccount  <- S.get
+      ebaSignKey  <- S.get
+      ebaElectionKey  <- S.get
+      ebaAggregationKey  <- S.get
+      ebaStake  <- S.get
+      ebaRestakeEarnings <- getBool
+      return BakerAdded {..}
+    7 -> do
+      ebrBakerId  <- S.get
+      ebrAccount <- S.get
+      return BakerRemoved {..}
+    8 -> do
+      ebsiBakerId  <- S.get
+      ebsiAccount  <- S.get
+      ebsiNewStake <- S.get
+      return BakerStakeIncreased {..}
+    9 -> do
+      ebsiBakerId  <- S.get
+      ebsiAccount  <- S.get
+      ebsiNewStake <- S.get
+      return BakerStakeDecreased {..}
+    10 -> do
+      ebsreBakerId  <- S.get
+      ebsreAccount  <- S.get
+      ebsreRestakeEarnings <- getBool
+      return BakerSetRestakeEarnings {..}
+    11 -> do
+      ebkuBakerId  <- S.get
+      ebkuAccount  <- S.get
+      ebkuSignKey  <- S.get
+      ebkuElectionKey  <- S.get
+      ebkuAggregationKey <- S.get
+      return BakerKeysUpdated {..}
+    12 -> do
+      ckuCredId <- S.get
+      return CredentialKeysUpdated {..}
+    13 -> do
+      neaAccount  <- S.get
+      neaNewIndex  <- S.get
+      neaEncryptedAmount <- S.get
+      return NewEncryptedAmount{..}
+    14 -> do
+      earAccount  <- S.get
+      earNewAmount  <- S.get
+      earInputAmount  <- S.get
+      earUpToIndex <- S.get
+      return EncryptedAmountsRemoved{..}
+    15 -> do
+      aabdAccount  <- S.get
+      aabdAmount <- S.get
+      return AmountAddedByDecryption {..}
+    16 -> do
+      eaaAccount  <- S.get
+      eaaNewAmount  <- S.get
+      eaaAmount <- S.get
+      return EncryptedSelfAmountAdded{..}
+    17 -> do
+      ueEffectiveTime  <- S.get
+      uePayload <- S.get
+      return UpdateEnqueued {..}
+    18 -> do
+      etwsFrom  <- S.get
+      etwsTo  <- S.get
+      etwsAmount <- getListOf S.get
+      return TransferredWithSchedule {..}
+    19 -> do
+      cuAccount  <- S.get
+      cuNewCredIds  <- getListOf S.get
+      cuRemovedCredIds  <- getListOf S.get
+      cuNewThreshold <- S.get
+      return CredentialsUpdated {..}
+    20 -> do
+      drData <- S.get
+      return DataRegistered {..}
+    21 -> do
+      tmMemo <- S.get
+      return  TransferMemo {..}
+    n -> fail $ "Unrecognized event tag: " ++ show n
+
+
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
@@ -716,9 +986,17 @@ type TransactionSummary = TransactionSummary' ValidResult
 -- successful transaction with a list of events which occurred during execution.
 -- We also record the cost of the transaction.
 data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
-  deriving(Show, Generic, Eq)
+  deriving(Show, Eq)
 
-instance S.Serialize ValidResult
+instance S.Serialize ValidResult where
+  put TxSuccess{..} = S.putWord8 0 <> putListOf S.put vrEvents
+  put TxReject{..} = S.putWord8 1 <> S.put vrRejectReason
+
+  get = S.getWord8 >>= \case
+    0 -> TxSuccess <$> getListOf S.get
+    1 -> TxReject <$> S.get
+    n -> fail $ "Unrecognized ValidResult tag: " ++ show n
+
 instance S.Serialize TransactionSummaryType where
   put (TSTAccountTransaction tt) = S.putWord8 0 <> putMaybe S.put tt
   put (TSTCredentialDeploymentTransaction credType) = S.putWord8 1 <> S.put credType
@@ -730,7 +1008,25 @@ instance S.Serialize TransactionSummaryType where
     2 -> TSTUpdateTransaction <$> S.get
     _ -> fail "Unsupported transaction summary type."
 
-instance S.Serialize TransactionSummary
+instance S.Serialize TransactionSummary where
+  put TransactionSummary {..} =
+    putMaybe S.put tsSender <>
+    S.put tsHash <>
+    S.put tsCost <>
+    S.put tsEnergyCost <>
+    S.put tsType <>
+    S.put tsResult <>
+    S.put tsIndex
+
+  get = do
+    tsSender <- getMaybe S.get
+    tsHash <- S.get
+    tsCost <- S.get
+    tsEnergyCost <- S.get
+    tsType <- S.get
+    tsResult <- S.get
+    tsIndex <- S.get
+    return TransactionSummary {..}
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 -- Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
@@ -742,7 +1038,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidModuleReference !ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
                   | RuntimeFailure -- ^Runtime exception occurred when running either the init or receive method.
-                  -- ^The receiver contract does not have a valid credential.
                   | AmountTooLarge !Address !Amount
                   -- ^When one wishes to transfer an amount from A to B but there
                   -- are not enough funds on account/contract A to make this
@@ -812,7 +1107,108 @@ wasmRejectToRejectReasonReceive :: ContractAddress -> Wasm.ReceiveName -> Wasm.P
 wasmRejectToRejectReasonReceive addr name param (Wasm.ContractReject reason) = RejectedReceive reason addr name param
 wasmRejectToRejectReasonReceive _ _ _ Wasm.RuntimeFailure = RuntimeFailure
 
-instance S.Serialize RejectReason
+instance S.Serialize RejectReason where
+  put = \case
+    ModuleNotWF -> S.putWord8 0
+    ModuleHashAlreadyExists mref -> S.putWord8 1 <> S.put mref
+    InvalidAccountReference addr -> S.putWord8 2 <> S.put addr
+    InvalidInitMethod mref iname -> S.putWord8 3 <> S.put mref <> S.put iname
+    InvalidReceiveMethod mref rname -> S.putWord8 4 <> S.put mref <> S.put rname
+    InvalidModuleReference mref -> S.putWord8 5 <> S.put mref
+    InvalidContractAddress caddr -> S.putWord8 6 <> S.put caddr
+    RuntimeFailure -> S.putWord8 7
+    AmountTooLarge addr amnt -> S.putWord8 8 <> S.put addr <> S.put amnt
+    SerializationFailure -> S.putWord8 9
+    OutOfEnergy -> S.putWord8 10
+    RejectedInit {..} -> S.putWord8 11 <> S.putInt32be rejectReason
+    RejectedReceive {..} ->
+      S.putWord8 12 <>
+      S.putInt32be rejectReason <>
+      S.put contractAddress <>
+      S.put receiveName <>
+      S.put parameter
+    NonExistentRewardAccount addr -> S.putWord8 13 <> S.put addr
+    InvalidProof -> S.putWord8 14
+    AlreadyABaker bid -> S.putWord8 15 <> S.put bid
+    NotABaker addr -> S.putWord8 16 <> S.put addr
+    InsufficientBalanceForBakerStake -> S.putWord8 17
+    StakeUnderMinimumThresholdForBaking -> S.putWord8 18
+    BakerInCooldown -> S.putWord8 19
+    DuplicateAggregationKey bvfkey -> S.putWord8 20 <> S.put bvfkey
+    NonExistentCredentialID -> S.putWord8 21
+    KeyIndexAlreadyInUse -> S.putWord8 22
+    InvalidAccountThreshold -> S.putWord8 23
+    InvalidCredentialKeySignThreshold -> S.putWord8 24
+    InvalidEncryptedAmountTransferProof -> S.putWord8 25
+    InvalidTransferToPublicProof -> S.putWord8 26
+    EncryptedAmountSelfTransfer addr -> S.putWord8 27 <> S.put addr
+    InvalidIndexOnEncryptedTransfer -> S.putWord8 28
+    ZeroScheduledAmount -> S.putWord8 29
+    NonIncreasingSchedule -> S.putWord8 30
+    FirstScheduledReleaseExpired -> S.putWord8 31
+    ScheduledSelfTransfer addr -> S.putWord8 32 <> S.put addr
+    InvalidCredentials -> S.putWord8 33
+    DuplicateCredIDs ids -> S.putWord8 34 <> putListOf S.put ids
+    NonExistentCredIDs ids -> S.putWord8 35 <> putListOf S.put ids
+    RemoveFirstCredential -> S.putWord8 36
+    CredentialHolderDidNotSign -> S.putWord8 37
+    NotAllowedMultipleCredentials -> S.putWord8 38
+    NotAllowedToReceiveEncrypted -> S.putWord8 39
+    NotAllowedToHandleEncrypted -> S.putWord8 40
+
+  get = S.getWord8 >>= \case
+    0 -> return ModuleNotWF
+    1 -> ModuleHashAlreadyExists <$> S.get
+    2 -> InvalidAccountReference <$> S.get
+    3 -> InvalidInitMethod <$> S.get <*> S.get
+    4 -> InvalidReceiveMethod <$> S.get <*> S.get
+    5 -> InvalidModuleReference <$> S.get
+    6 -> InvalidContractAddress <$> S.get
+    7 -> return RuntimeFailure
+    8 -> AmountTooLarge <$> S.get <*> S.get
+    9 -> return SerializationFailure
+    10 -> return OutOfEnergy
+    11 -> do
+      rejectReason <- S.getInt32be
+      return RejectedInit {..}
+    12 -> do
+      rejectReason <- S.getInt32be
+      contractAddress <- S.get
+      receiveName <- S.get
+      parameter <- S.get
+      return RejectedReceive {..}
+    13 -> NonExistentRewardAccount <$> S.get
+    14 -> return InvalidProof
+    15 -> AlreadyABaker <$> S.get
+    16 -> NotABaker <$> S.get
+    17 -> return InsufficientBalanceForBakerStake
+    18 -> return StakeUnderMinimumThresholdForBaking
+    19 -> return BakerInCooldown
+    20 -> DuplicateAggregationKey <$> S.get
+    21 -> return NonExistentCredentialID
+    22 -> return KeyIndexAlreadyInUse
+    23 -> return InvalidAccountThreshold
+    24 -> return InvalidCredentialKeySignThreshold
+    25 -> return InvalidEncryptedAmountTransferProof
+    26 -> return InvalidTransferToPublicProof
+    27 -> EncryptedAmountSelfTransfer <$> S.get
+    28 -> return InvalidIndexOnEncryptedTransfer
+    29 -> return ZeroScheduledAmount
+    30 -> return NonIncreasingSchedule
+    31 -> return FirstScheduledReleaseExpired
+    32 -> ScheduledSelfTransfer <$> S.get
+    33 -> return InvalidCredentials
+    34 -> DuplicateCredIDs <$> getListOf S.get
+    35 -> NonExistentCredIDs <$> getListOf S.get
+    36 -> return RemoveFirstCredential
+    37 -> return CredentialHolderDidNotSign
+    38 -> return NotAllowedMultipleCredentials
+    39 -> return NotAllowedToReceiveEncrypted
+    40 -> return NotAllowedToHandleEncrypted
+    n -> fail $ "Unrecognized RejectReason tag: " ++ show n
+
+
+
 instance AE.ToJSON RejectReason
 instance AE.FromJSON RejectReason
 

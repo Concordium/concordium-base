@@ -69,6 +69,24 @@ getUtf8 = do
 
 -- * Containers
 
+-- |Put a list of elements by first putting the size using 'putLength', then
+-- putting the elements from head to tail.
+putListOf
+    :: Putter a
+    -- ^How to put a value
+    -> Putter [a]
+putListOf pVal xs = putLength (length xs) <> mapM_ pVal xs
+
+
+-- |Get a list of elements. Dual to 'putListOf'.
+getListOf
+    :: Get a
+    -- ^How to get a value.
+    -> Get [a]
+getListOf gVal = do
+        sz <- getLength
+        replicateM sz gVal
+
 -- |Put a 'Set.Set' by first putting the size, then putting the elements in ascending order.
 putSafeSetOf
     :: Putter a
