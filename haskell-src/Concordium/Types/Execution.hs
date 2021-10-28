@@ -986,7 +986,7 @@ type TransactionSummary = TransactionSummary' ValidResult
 -- successful transaction with a list of events which occurred during execution.
 -- We also record the cost of the transaction.
 data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
-  deriving(Show, Eq)
+  deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult where
   put TxSuccess{..} = S.putWord8 0 <> putListOf S.put vrEvents
@@ -1087,7 +1087,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | DuplicateCredIDs ![IDTypes.CredentialRegistrationID]
                   -- | A credential id that was to be removed is not part of the account.
                   | NonExistentCredIDs ![IDTypes.CredentialRegistrationID]
-                  -- | Attemp to remove the first credential
+                  -- | Attempt to remove the first credential
                   | RemoveFirstCredential
                   -- | The credential holder of the keys to be updated did not sign the transaction
                   | CredentialHolderDidNotSign

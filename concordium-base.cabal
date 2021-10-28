@@ -280,6 +280,7 @@ test-suite test
       Types.RewardTypes
       Types.TransactionGen
       Types.TransactionSerializationSpec
+      Types.TransactionSummarySpec
       Types.UpdatesSpec
       Paths_concordium_base
   hs-source-dirs:

@@ -138,7 +138,7 @@ aggregateAmounts left right = unsafePerformIO $ do
 -------------------------- Encrypted aggregated index --------------------------
 --------------------------------------------------------------------------------
 
--- |An indexed used to determine which encryped amounts were used in a transaction.
+-- |An index used to determine which encrypted amounts were used in a transaction.
 newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex {theAggIndex :: Word64}
     deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum, Storable, Serialize)
 
