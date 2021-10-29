@@ -36,7 +36,6 @@ import Concordium.Wasm
 
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.DummyData
-import Concordium.Types.ProtocolVersion
 
 genAttributeValue :: Gen AttributeValue
 genAttributeValue = AttributeValue . BSS.pack <$> (vector =<< choose (0,31))

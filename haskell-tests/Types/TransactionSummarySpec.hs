@@ -4,7 +4,6 @@ module Types.TransactionSummarySpec where
 
 import qualified Data.ByteString.Short as SBS
 import Data.Serialize
-import GHC.Generics
 import Test.Hspec
 import Test.QuickCheck
 
@@ -54,11 +53,6 @@ testTransactionTypesSerialIdentity :: Expectation
 testTransactionTypesSerialIdentity = mapM_ testEncDec transactionTypes
   where
     testEncDec tt = decode (encode tt) `shouldBe` Right tt
-
-testTransactionTypesSerialGeneric :: Expectation
-testTransactionTypesSerialGeneric = mapM_ testEncGen transactionTypes
-  where
-    testEncGen tt = encode tt `shouldBe` runPut (gPut (from tt))
 
 genEncryptedAmount :: Gen EncryptedAmount
 genEncryptedAmount = EncryptedAmount <$> genElgamalCipher <*> genElgamalCipher
@@ -147,11 +141,6 @@ instance Arbitrary Event where
 testEventSerializationIdentity :: Event -> Property
 testEventSerializationIdentity e = decode (encode e) === Right e
 
--- |Test that the serialization of 'Event's is equivalent to the 'Generic'-derived serialization
--- instance.  This test may be superceded with future changes to the 'Event' type.
-testEventSerializationGeneric :: Event -> Property
-testEventSerializationGeneric e = encode e === runPut (gPut (from e))
-
 instance Arbitrary RejectReason where
     arbitrary =
         oneof
@@ -202,11 +191,6 @@ instance Arbitrary RejectReason where
 testRejectReasonSerializationIdentity :: RejectReason -> Property
 testRejectReasonSerializationIdentity e = decode (encode e) === Right e
 
--- |Test that the serialization of 'RejectReason's is equivalent to the 'Generic'-derived serialization
--- instance.  This test may be superceded with future changes to the 'RejectReason' type.
-testRejectReasonSerializationGeneric :: RejectReason -> Property
-testRejectReasonSerializationGeneric e = encode e === runPut (gPut (from e))
-
 instance Arbitrary ValidResult where
     arbitrary =
         oneof
@@ -217,11 +201,6 @@ instance Arbitrary ValidResult where
 -- |Test that decoding is the inverse of encoding for 'ValidResult's.
 testValidResultSerializationIdentity :: ValidResult -> Property
 testValidResultSerializationIdentity e = decode (encode e) === Right e
-
--- |Test that the serialization of 'ValidResult's is equivalent to the 'Generic'-derived serialization
--- instance.  This test may be superceded with future changes to the 'ValidResult' type.
-testValidResultSerializationGeneric :: ValidResult -> Property
-testValidResultSerializationGeneric e = encode e === runPut (gPut (from e))
 
 instance Arbitrary TransactionSummary where
     arbitrary = do
@@ -243,21 +222,10 @@ instance Arbitrary TransactionSummary where
 testTransactionSummarySerializationIdentity :: TransactionSummary -> Property
 testTransactionSummarySerializationIdentity e = decode (encode e) === Right e
 
--- |Test that the serialization of 'TransactionSummary's is equivalent to the 'Generic'-derived serialization
--- instance.  This test may be superceded with future changes to the 'TransactionSummary' type.
-testTransactionSummarySerializationGeneric :: TransactionSummary -> Property
-testTransactionSummarySerializationGeneric e = encode e === runPut (gPut (from e))
-
-
 tests :: Spec
 tests = describe "Transaction summaries" $ do
     specify "TransactionType: serialize then deserialize is identity" testTransactionTypesSerialIdentity
-    specify "TransactionType: serialize is equivalent to generic serialize" testTransactionTypesSerialGeneric
     specify "Event: serialize then deserialize is identity" $ withMaxSuccess 10000 testEventSerializationIdentity
-    specify "Event: serialize is equivalent to generic serialize" $ withMaxSuccess 10000 testEventSerializationGeneric
     specify "RejectReason: serialize then deserialize is identity" $ withMaxSuccess 10000 testRejectReasonSerializationIdentity
-    specify "RejectReason: serialize is equivalent to generic serialize" $ withMaxSuccess 10000 testRejectReasonSerializationGeneric
     specify "ValidResult: serialize then deserialize is identity" $ withMaxSuccess 1000 testValidResultSerializationIdentity
-    specify "ValidResult: serialize is equivalent to generic serialize" $ withMaxSuccess 1000 testValidResultSerializationGeneric
     specify "TransactionSummary: serialize then deserialize is identity" $ withMaxSuccess 1000 testTransactionSummarySerializationIdentity
-    specify "TransactionSummary: serialize is equivalent to generic serialize" $ withMaxSuccess 1000 testTransactionSummarySerializationGeneric
