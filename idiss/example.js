@@ -7,11 +7,19 @@ const global = fs.readFileSync('../identity-provider-service/data/global.json', 
 const request = fs.readFileSync('../identity-provider-service/data/valid_request.json', 'utf8')
 const ars_infos = fs.readFileSync('../identity-provider-service/data/anonymity_revokers.json', 'utf8')
 const ip_info = fs.readFileSync('../identity-provider-service/data/identity_provider.pub.json', 'utf8')
+const alist3 = fs.readFileSync('../identity-provider-service/data/alist.json', 'utf8')
 
 const validation_result = validator.validate_request(global, ip_info, ars_infos, request);
-if (!validation_result.result) {
-    console.error("Request is not valid.");
+// if (!validation_result.result) {
+//     console.error("Request is not valid.");
+//     process.exit(1)
+// }
+
+if (validation_result instanceof Error) {
+    console.error("Request is not valid: " + validation_result.message)
     process.exit(1)
+} else {
+    console.log(validation_result)
 }
 
 const alist = `{
@@ -41,10 +49,10 @@ const ip_cdi_private_key = "c7a0e9394dbed945ec1a8ea160fce0901ce3867f3c0d969318b9
 
 const expiry = 1234567;
 
-const res = validator.create_identity_object(ip_info, request, alist, expiry, private_key, ip_cdi_private_key)
+const res = validator.create_identity_object(ip_info, request, alist3, expiry, private_key, ip_cdi_private_key)
 
 if (res instanceof Error) {
-    console.error("Error creating id object: " + res.message)
+    console.error("Error creating id object:::: " + res.message)
     process.exit(1)
 } else {
     console.log(res)

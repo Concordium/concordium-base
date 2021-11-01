@@ -624,14 +624,17 @@ dependencies = [
 name = "idiss"
 version = "0.4.0"
 dependencies = [
+ "anyhow",
  "byteorder",
  "chrono",
  "crypto_common",
  "curve_arithmetic",
  "ed25519-dalek",
  "ff",
+ "ffi_helpers",
  "hex",
  "id",
+ "napi-build",
  "nodejs-sys",
  "pairing",
  "ps_sig",
@@ -718,6 +721,12 @@ checksum = "c198b026e1bbf08a937e94c6c60f9ec4a2267f5b0d2eec9c1b21b061ce2be55f"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "napi-build"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fbe11972c601a48aa12a0e2aa032e9e251655ce6c6836cac26e5c0b3b5a5dcc"
 
 [[package]]
 name = "nodejs-sys"

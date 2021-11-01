@@ -2,8 +2,8 @@
 
 This package provides a streamlined API for the identity provider usable from non-Rust languages.
 The core of the library is [src/lib.rs](src/lib.rs) file which defines two functions, `validate_request` and `create_identity_object`.
-In addition to this we provide `nodejs` exports (optionally) via [src/nodejs_exports.rs](src/nodejs_exports.rs).
-These can be enabled/disabled via the feature `nodejs`, which is currently enabled by default.
+In addition to this we provide `nodejs` and `C#` exports (optionally) via [src/nodejs_exports.rs](src/nodejs_exports.rs) and [src/csharp_exports.rs](src/csharp_exports.rs), respectively.
+These can be enabled/disabled via the features `nodejs` and `csharp`, respectively.
 
 **If you need to use the identity issuer functionality from a Rust project this is not the library you want.**
 In such a case it is much better to use the [../rust-src/id](../rust-src/id) crate directly since it provides support for serialization of all the relevant values.
@@ -36,9 +36,9 @@ The arguments are
 - `ars_infos`, public keys of anonymity revokers the identity provider cooperates with.
 - `request`, this is the request that the wallet sends which contains cryptographic values and proofs.
 
-The result is a pair of
-- a boolean indicating whether the request is valid. This means that all values are well-formed and cryptographic proofs are valid.
+In case of success, the return value is
 - an account address encoded as a string. This is the address of the initial account that would be created based on the request.
+Otherwise, the return value is an error.
 
 ## `create_identity_object`
 
@@ -52,12 +52,12 @@ The arguments are
 - `ip_private_key`, the first part of the private key, used to sign the identity object sent back to the user
 - `ip_cdi_private_key`, the second part of the private key, used to sign the initial account creation message.
 
-The return value is either an error if some of the values are malformed, or a triple of Strings containing JSON encoded values.
-The three values are
+The return value is either an error if some of the values are malformed, or a struct containing
 
 - the identity object that is returned to the user
 - the anonymity revocation record
 - the initial account creation object that is sent to the chain
+- the address of the inital account
 
 Note that the anonymity revocation record only contains the cryptographic parts, the encryptions of data that the anonymity revoker decrypts.
 It does not contain contact information for the user. It is the responsibility of the identity provider to maintain that data in addition to the anonymity revocation record.
@@ -73,25 +73,32 @@ In order to build you need the following
   ```
 
 # Building
+To build the nodejs exports, do
   ```
-  cargo build --relese
+  cargo build --release --features=nodejs
   ```
-  
-  will build the library and produce artifacts in `./target/release/`.
-  - On linux this produces a shared library `libidiss.so` that needs to be
-    loaded into a nodejs instance. To do this move/rename the generated shared library
-    to `libidiss.node` (the extension is important, the name is not, it just has
-    to match the import statement in javascript later on)
+- On linux this produces a shared library `libidiss.so` that needs to be
+  loaded into a nodejs instance. To do this move/rename the generated shared library
+  to `libidiss.node` (the extension is important, the name is not, it just has
+  to match the import statement in javascript later on). On Windows it produces
+  a `idiss.dll` that (similarly) be moved and renamed to `libidiss.node`.
+
+To build the csharp exports, do instead
+  ```
+  cargo build --release --features=csharp
+  ```
+- On Windows this will produce `idiss.dll`. 
+
+Both will build the library and produce artifacts in `./target/release/`.
 
 # Javascript API
 
 The library exposes two functions
 ```javascript
-  fn validate_request(ip_info: string, ars_infos: string, request: string): { result: boolean, accountAddress: string } | Error
+  fn validate_request(global_context: string, ip_info: string, ars_infos: string, request: string): { accountAddress: string } | Error
 ```
-which validates the given request and returns a boolean indicating its validity,
-or an Error if an internal error occurred (this indicates something is wrong
-with the setup, an Error will never occur due to a malformed request)
+which validates the given request and returns the account address of the initial account if the request is valid,
+or an Error otherwise.
 
 ```javascript
   fn create_identity_object(ip_info: string, alist: string, request: string, ip_private_key: string, ip_cdi_private_key: string): {idObject: string; arRecord: string, initialAccount: string} | Error
@@ -111,3 +118,38 @@ list (the `alist` argument) or any other arguments are malformed.
   
   The script also illustrates the input formats of the values and whether
   exceptions can or cannot be raised.
+
+
+# C# API
+
+The library exposes two functions `validate_request_cs` and `create_identity_object_cs` that can be imported in C# by
+
+```csharp
+[DllImport("idiss.dll")]
+private static extern IntPtr validate_request_cs(
+[MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len, 
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len, 
+[MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len, 
+[MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_success);
+```
+which validates the given request and returns a pointer the account address of the initial account if the request is valid,
+or a pointer to a bytearray describing an error. It writes to a variable `out_length` the length of the output. If the request is valid,
+`1` is written to out_success, otherwise `-1` is written to out_success.
+
+```csharp
+
+[DllImport("idiss.dll")]
+private static extern IntPtr create_identity_object_cs(
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len, 
+[MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, 
+[MarshalAs(UnmanagedType.LPArray)] byte[] alist, int alist_len, 
+UInt64 expiry,
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_private_key, int ip_private_key_ptr_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_cdi_private_key, int ip_cdi_private_key_ptr_len,
+out int out_length, out int out_success);
+```
+which returns a pointer to either the identity object to be sent back to the user, as well as the
+anonymity revocation record, and information about the initial account that must
+be submitted to the chain, or a pointer to a bytearray describing an error.
+It writes to a variable `out_length` the length of the output. If identity creation went well,
+`1` is written to out_success, otherwise `-1` is written to out_success.
