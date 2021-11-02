@@ -7,7 +7,9 @@ using System.Text.Json.Serialization;
 
 namespace IdissLib
 {
-   
+
+    /// Here we provide classes that match some of the Rust types that involved with identity validation and creation. 
+    /// Most of the field names of these classes are chosen so that they match JSON fields of JSON serialization of the corresponding Rust types.
     public class YearMonth {
         public string str{get;set;}
 
@@ -256,8 +258,10 @@ namespace IdissLib
     }
 
     public static class Idiss {
+
+        /// We first import the two C functions that are exported by the Rust library "idiss". 
         
-       [DllImport("idiss.dll")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr validate_request_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len, 
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len, 
         [MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len, 
@@ -272,6 +276,11 @@ namespace IdissLib
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_cdi_private_key, int ip_cdi_private_key_ptr_len,
         out int out_length, out int out_success);
 
+        /// Instead of using the imported functions directly, two wrapper functions are provided that can be used on the relevant classes defined above. 
+        /// The wrapper functions serialize the input to JSON bytes and then use the imported functions on pointers to these bytes. 
+
+        /// The validate_request looks at bytes the resulting pointer is pointing to, and then either converts the bytes to a string (in case of success), 
+        /// or throws an error described by the string the bytes converts to (otherwise)
         public static string validate_request(VersionedGlobalContext global, VersionedIpInfo ip_info, VersionedArInfos ars_infos, IdObjectRequest request){
             byte[] global_bytes = JsonSerializer.SerializeToUtf8Bytes(global);
             byte[] request_bytes = JsonSerializer.SerializeToUtf8Bytes(request);
@@ -291,6 +300,10 @@ namespace IdissLib
                 throw new RequestValidationException("Unknown error");
             }
         }
+
+        
+        /// The create_identity_object looks at bytes the resulting pointer is pointing to, and then either JSON deserializes the bytes to a IdentityCreation object (in case of success), 
+        /// or throws an error described by the string the bytes converts to (otherwise).
 
         public static IdentityCreation create_identity_object(VersionedIpInfo ip_info, AttributeList alist, IdObjectRequest request, UInt64 expiry, IpPrivateKeys ip_keys){
             var options = new JsonSerializerOptions();
