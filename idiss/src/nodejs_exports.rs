@@ -229,7 +229,7 @@ unsafe extern "C" fn create_identity_object_js(
             }
             ret_obj
         }
-        Err(err) => create_error(env, &format!("hej: {:?}", err)),
+        Err(err) => create_error(env, &format!("ERROR: {}", err)),
     }
 }
 

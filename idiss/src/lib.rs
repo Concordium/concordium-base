@@ -12,7 +12,6 @@ use pairing::bls12_381::{Bls12, G1};
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "nodejs")]
 use serde_json::ser::to_string;
-use std::str;
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
@@ -122,8 +121,8 @@ fn create_identity_object(
     let ip_info: IpInfo<Bls12> = parse_exact_versioned_ip_info(ip_info_bytes)?;
     let alist: ExampleAttributeList =
         serde_json::from_slice(alist_bytes).context("Could not parse attribute list")?;
-    let ip_private_key_str = str::from_utf8(&ip_private_key_bytes)?;
-    let ip_cdi_private_key_str = str::from_utf8(&ip_cdi_private_key_bytes)?;
+    let ip_private_key_str = std::str::from_utf8(&ip_private_key_bytes)?;
+    let ip_cdi_private_key_str = std::str::from_utf8(&ip_cdi_private_key_bytes)?;
 
     let ip_private_key: ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;

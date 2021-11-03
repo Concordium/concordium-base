@@ -1,6 +1,36 @@
 use crate::*;
 use ffi_helpers::*;
 
+/// This function takes pointers to bytearrays and use the library function
+/// `validate_request`` on these. The arguments are
+/// - `ctx_ptr` - A pointer to a bytearray, assumed to represent the JSON
+///   serialization of the global context
+/// - `ctx_len` - The length of the bytearray that `ctx_ptr` points to
+/// - `ip_info_ptr` - A pointer to a bytearray, assumed to represent the JSON
+///   serialization of the IpInfo
+/// - `ip_info_len` - The length of the bytearray that `ip_info_ptr` points to
+/// - `ars_infos_ptr` - A pointer to a bytearray, assumed to represent the JSON
+///   serialization of the ArInfos
+/// - `ars_len` - The length of the bytearray that `ars_infos_ptr` points to
+/// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
+///   form
+/// `{
+///     idObjectRequest: ...
+/// }`,
+/// where `...` denotes the JSON serialization of the pre-identity object.
+/// - `request_len` - The length of the bytearray that `request_ptr` points to
+/// - `out_length` - Pointer to an i32 to write the length of the resulting
+///   bytearray to
+/// - `out_success` - Pointer to an i32 to write an integer indicating success
+///   or failure
+///
+/// The function returns a pointer to a bytearray that either
+/// - represents the address of the initial account, if validation was
+///   successful, or
+/// - represents an error describing what went wrong.
+/// The length of this bytearray is written to the integer that `out_length`
+/// points to. Either 1 or -1 (indicating success/failure) is written to the
+/// integer that `out_success` points to.
 #[no_mangle]
 pub unsafe extern "C" fn validate_request_cs(
     ctx_ptr: *const u8,
@@ -44,6 +74,48 @@ pub unsafe extern "C" fn validate_request_cs(
     }
 }
 
+/// This function takes pointers to bytearrays and use the library function
+/// `create_identity_object`` on these. The arguments are
+/// - `ip_info_ptr` - A pointer to a bytearray, assumed to represent the JSON
+///   serialization of the IpInfo
+/// - `ip_info_len` - The length of the bytearray that `ip_info_ptr` points to
+/// - `alist_ptr` - A pointer to a bytearray, assumed to represent the JSON
+///   serialization of the attribute list
+/// - `alist_len` - The length of the bytearray that `alist_ptr` points to
+/// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
+///   form
+/// `{
+///     idObjectRequest: ...
+/// }`,
+/// where `...` denotes the JSON serialization of the pre-identity object.
+/// - `request_len` - The length of the bytearray that `request_ptr` points to
+/// - `expiry` - the expiry time of the account creation message sent to the
+///   chain.
+/// - `ip_private_key_ptr` - A pointer to a bytearray, assumed to represent the
+///   JSON serialization of the private key used to sign the identity object
+/// - `ip_private_key_len` - The length of the bytearray that
+///   `ip_private_key_ptr` points to
+/// - `ip_cdi_private_key_ptr` - A pointer to a bytearray, assumed to represent
+///   the JSON serialization of the private key used to sign the initial account
+///   creation message
+/// - `ip_cdi_private_key_len` - The length of the bytearray that
+///   `ip_cdi_private_key_ptr` points to
+/// - `out_length` - Pointer to an i32 to write the length of the resulting
+///   bytearray to
+/// - `out_success` - Pointer to an i32 to write an integer indicating success
+///   or failure
+///
+/// The function returns a pointer to a bytearray that either
+/// - represents the JSON serialization of an IdentityCreation instance, i.e. it
+///   contains
+///     * the identity object that is returned to the user
+///     * the anonymity revocation record
+///     * the initial account creation object that is sent to the chain
+///     * the address of the inital account, or
+/// - represents an error describing what went wrong.
+/// The length of this bytearray is written to the integer that `out_length`
+/// points to. Either 1 or -1 (indicating success/failure) is written to the
+/// integer that `out_success` points to.
 #[no_mangle]
 pub unsafe extern "C" fn create_identity_object_cs(
     ip_info_ptr: *const u8,

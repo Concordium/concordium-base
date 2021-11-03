@@ -40,7 +40,7 @@ namespace IdissLibTest
             UInt64 expiry = 1234567;
             try {
                 var result = Idiss.validate_request(global, ip_info, ars_infos, request);
-                string expected = "3XqeZafxX5vpcUb6hLW98gYwdMxAsPWG5CkkijW98ZMptvej3y";
+                var expected = new AccountAddress("3XqeZafxX5vpcUb6hLW98gYwdMxAsPWG5CkkijW98ZMptvej3y");
                 Assert.AreEqual(result, expected);
                 var id_creation = Idiss.create_identity_object(ip_info, alist, request, expiry, ip_keys);
             } catch (RequestValidationException e){

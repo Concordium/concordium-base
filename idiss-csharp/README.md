@@ -43,6 +43,8 @@ In order to run the example on Windows, do
    ```bash
    dotnet run
    ```
+If building and running in Release mode (using the flag `--configuration Release`), the `ìdiss.dll` instead have to be placed at
+`IdissExample/bin/Release/net5.0`.
 
 # Testing
 
@@ -64,3 +66,5 @@ In order to run the test on Windows, do
    ```bash
    dotnet test
    ```
+If building and testing in Release mode (using the flag `--configuration Release`), the `ìdiss.dll` instead have to be placed at
+`IdissLibTest/bin/Release/net5.0`.
