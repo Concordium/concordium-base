@@ -50,7 +50,7 @@ impl<C: Pairing> PublicKey<C> {
         let ys = &self.y_tildas;
         let x = self.x_tilda;
         let ms = &message.0;
-        if ms.len() > ys.len() {
+        if sig.0 == C::G1::zero_point() || ms.len() > ys.len() {
             return false;
         }
         let h = ys
@@ -186,4 +186,24 @@ mod tests {
     }
 
     macro_test_sign_verify_different_sig!(sign_verify_different_sig_bls12_381, Bls12);
+
+    macro_rules! macro_test_sign_verify_dummy_sig {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
+                    let pk = PublicKey::from(&sk);
+                    let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let sig = sk.sign_known_message(&message, &mut csprng);
+                    assert!(sig.is_ok());
+                    let dummy = Signature(<$pairing_type as Pairing>::G1::zero_point(), <$pairing_type as Pairing>::G1::zero_point());
+                    assert!(!&pk.verify(&dummy, &message));
+                }
+            }
+        };
+    }
+
+    macro_test_sign_verify_dummy_sig!(sign_verify_dummy_sig_bls12_381, Bls12);
 }
