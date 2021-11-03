@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 namespace IdissLib
 {
 
-    /// Here we provide classes that match some of the Rust types that involved with identity validation and creation. 
+    /// Here we provide classes that match some of the Rust types that are involved with identity validation and creation. 
     /// Most of the field names of these classes are chosen so that they match JSON fields of the JSON serialization of the corresponding Rust types.
 
     /// YearMonth in Gregorian calendar.
