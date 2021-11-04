@@ -1,33 +1,34 @@
-﻿using System;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.IO;
 using System.Text.Json;
 using IdissLib;
 
-namespace IdissExample
+namespace IdissLibTest
 {
-    class Program
+    [TestClass]
+    public class IdissTests
     {
-        static void Main(string[] args)
+        [TestMethod]
+        public void TestValidationAndIdCreation()
         {
-            StreamReader r = new StreamReader("../data/global.json");
+            StreamReader r = new StreamReader("../../../../data/global.json");
             string globalStr = r.ReadToEnd();
             var global = JsonSerializer.Deserialize<VersionedGlobalContext>(globalStr);
-            StreamReader r2 = new StreamReader("../data/valid_request.json");
+            StreamReader r2 = new StreamReader("../../../../data/valid_request.json");
             string requestStr = r2.ReadToEnd();
             var request = JsonSerializer.Deserialize<IdObjectRequest>(requestStr);
-            StreamReader r3 = new StreamReader("../data/anonymity_revokers.json");
+            StreamReader r3 = new StreamReader("../../../../data/anonymity_revokers.json");
             string arsInfosStr = r3.ReadToEnd();
             var arsInfos = JsonSerializer.Deserialize<VersionedArInfos>(arsInfosStr);
-            StreamReader r4 = new StreamReader("../data/identity_provider.pub.json");
+            StreamReader r4 = new StreamReader("../../../../data/identity_provider.pub.json");
             string ipInfoStr = r4.ReadToEnd();
             var ipInfo = JsonSerializer.Deserialize<VersionedIpInfo>(ipInfoStr);
-
-
             var options = new JsonSerializerOptions();
             options.Converters.Add(new DictionaryConverter());
             options.Converters.Add(new YearMonthConverter());
 
-            StreamReader r5 = new StreamReader("../data/alist.json");
+            StreamReader r5 = new StreamReader("../../../../data/alist.json");
             string alistStr = r5.ReadToEnd();
             var alist = JsonSerializer.Deserialize<AttributeList>(alistStr, options);
 
@@ -41,25 +42,18 @@ namespace IdissExample
             try
             {
                 var result = Idiss.ValidateRequest(global, ipInfo, arsInfos, request);
-                Console.WriteLine("Validation was successful. Address: ");
-                Console.WriteLine(result);
+                var expected = new AccountAddress("3XqeZafxX5vpcUb6hLW98gYwdMxAsPWG5CkkijW98ZMptvej3y");
+                Assert.AreEqual(result, expected);
                 var idCreation = Idiss.CreateIdentityObject(ipInfo, alist, request, expiry, ipKeys);
-                var idCreationJson = JsonSerializer.Serialize(idCreation, options);
-                Console.WriteLine("Id creation JSON output:");
-                Console.WriteLine(idCreationJson);
             }
             catch (RequestValidationException e)
             {
-                Console.WriteLine("Validation failed:");
-                Console.WriteLine(e.Message);
+                Assert.Fail(String.Format("Validation failed: {0}", e.Message));
             }
             catch (IdentityCreationException e)
             {
-                Console.WriteLine("Identity creation failed:");
-                Console.WriteLine(e.Message);
+                Assert.Fail(String.Format("Identity creation failed: {0}", e.Message));
             }
-
-            Console.ReadLine();
         }
     }
 }
