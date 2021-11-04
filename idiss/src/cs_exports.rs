@@ -17,7 +17,8 @@ use ffi_helpers::*;
 /// `{
 ///     idObjectRequest: ...
 /// }`,
-/// where `...` denotes the JSON serialization of the versioned pre-identity object.
+/// where `...` denotes the JSON serialization of the versioned pre-identity
+/// object.
 /// - `request_len` - The length of the bytearray that `request_ptr` points to
 /// - `out_length` - Pointer to an i32 to write the length of the resulting
 ///   bytearray to
