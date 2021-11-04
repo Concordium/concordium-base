@@ -50,7 +50,7 @@ impl<C: Pairing> PublicKey<C> {
         let ys = &self.y_tildas;
         let x = self.x_tilda;
         let ms = &message.0;
-        if sig.0 == C::G1::zero_point() || ms.len() > ys.len() {
+        if sig.0.is_zero_point() || ms.len() > ys.len() {
             return false;
         }
         let h = ys
