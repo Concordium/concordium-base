@@ -690,8 +690,8 @@ pub struct AccCredentialInfo<C: Curve> {
 }
 
 /// The data relating to a single anonymity revoker
-/// sent by the account holder to the identity provider
-/// typically the account holder will send a vector of these
+/// sent by the account holder to the identity provider.
+/// Typically the account holder will send a vector of these.
 #[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
@@ -948,8 +948,8 @@ pub struct IpInfos<P: Pairing> {
 /// Public key of an anonymity revoker.
 pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 
-/// Information on a single anonymity reovker held by the IP
-/// typically an IP will hold a more than one.
+/// Information on a single anonymity revoker held by the IP.
+/// Typically an IP will hold a more than one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ArInfo<C: Curve> {
@@ -1556,7 +1556,7 @@ pub struct InitialCredentialDeploymentInfo<
 
 /// This struct contains information from the account holder that the identity
 /// provider needs in order to create the initial credential for the account
-/// hoder. It contains idCredPub, regId and the account keys.
+/// holder. It contains idCredPub, regId and the account keys.
 /// It is part of the preidentity object.
 #[derive(Debug, Serialize, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
@@ -2095,7 +2095,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 /// Account credential message is an account credential together with a message
-/// expiry. This is the payload that is sent to the chain when new account are
+/// expiry. This is the payload that is sent to the chain when new accounts are
 /// created, either initial accounts or normal accounts.
 pub struct AccountCredentialMessage<
     P: Pairing,

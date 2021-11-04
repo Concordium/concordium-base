@@ -1,5 +1,6 @@
 [package]
 name = "idiss"
+build = "build.rs"
 version = "0.4.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
@@ -8,13 +9,23 @@ license-file = "../../LICENSE-APACHE"
 description = "Exports of the identity issuance functionality needed by the identity provider. Currently supports use from nodejs."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# Use the same optimization level for building build.rs as for the library
+# itself in release mode. This is necessary because some of the dependencies
+# (e.g., id) have a `cdylib/staticlib` crate-type which builds some artifacts
+# even though they are not needed directly by the build script. This then leads
+# to name clashes and failed compilation.
+#
+# Ideally we would have the crate-type of dependencies feature configurable, but
+# this is not supported by Cargo at the moment.
+[profile.release.build-override]
+opt-level = 3
 
 [features]
 nodejs = ["nodejs-sys"]
-
-default = ["nodejs"]
+csharp = []
 
 [dependencies]
+anyhow = "1.0"
 pairing = "0.15"
 ff = "0.5"
 hex = "0.4"
@@ -23,6 +34,10 @@ serde_json = "1.0"
 chrono = "0.4"
 ed25519-dalek = "1.0.1"
 byteorder = "1.3"
+
+[dependencies.ffi_helpers]
+path= "../rust-src/ffi_helpers"
+version = "0"
 
 [dependencies.nodejs-sys]
 version = "0.12.0"
@@ -45,13 +60,8 @@ version = "0"
 path = "../rust-src/ps_sig"
 version = "0"
 
-[build-dependencies.crypto_common]
-path = "../rust-src/crypto_common"
-version = "0"
-
-[build-dependencies.id]
-path = "../rust-src/id"
-version = "0"
+[build-dependencies]
+napi-build = "*"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rand = "=0.7"

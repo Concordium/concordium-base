@@ -9,9 +9,12 @@ const ars_infos = fs.readFileSync('../identity-provider-service/data/anonymity_r
 const ip_info = fs.readFileSync('../identity-provider-service/data/identity_provider.pub.json', 'utf8')
 
 const validation_result = validator.validate_request(global, ip_info, ars_infos, request);
-if (!validation_result.result) {
-    console.error("Request is not valid.");
+
+if (validation_result instanceof Error) {
+    console.error("Request is not valid: " + validation_result.message)
     process.exit(1)
+} else {
+    console.log(validation_result)
 }
 
 const alist = `{

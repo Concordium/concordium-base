@@ -35,7 +35,7 @@ unsafe fn make_string(env: napi_env, value: &str) -> napi_value {
     }
 }
 
-unsafe fn get_string_arg(env: napi_env, buf: napi_value) -> Option<String> {
+unsafe fn get_string_arg(env: napi_env, buf: napi_value) -> Option<Vec<u8>> {
     let mut cap = 0;
     napi_get_value_string_utf8(env, buf, std::ptr::null_mut(), 0, &mut cap);
     let mut ve: Vec<u8> = Vec::with_capacity(cap + 1); // + 1 for the NUL byte.
@@ -49,7 +49,7 @@ unsafe fn get_string_arg(env: napi_env, buf: napi_value) -> Option<String> {
     );
     if res == napi_status::napi_ok {
         ve.set_len(len);
-        Some(String::from_utf8(ve).ok()?)
+        Some(ve)
     } else {
         None
     }
@@ -91,6 +91,7 @@ unsafe fn set_string_property(
     }
 }
 
+#[no_mangle]
 unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info) -> napi_value {
     let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
     let mut argc = 4usize;
@@ -128,21 +129,15 @@ unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info
         Some(arg) => arg,
         None => return create_error(env, "Argument should be a string."),
     };
-    let (res, addr) = validate_request(&global_context, &ip_info, &ars_info, &request);
+    let addr = match validate_request(&global_context, &ip_info, &ars_info, &request) {
+        Ok(addr) => to_string(&serde_json::json!(addr))
+            .expect("JSON serialization of initial credentials should not fail."),
+        Err(_) => return create_error(env, "Validation failed."),
+    };
     let mut ret_obj: napi_value = std::mem::zeroed();
     if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
         return create_error(env, "Cannot make return object.");
     };
-    let mut ret_b: napi_value = std::mem::zeroed();
-    if napi_get_boolean(env, res, &mut ret_b) != napi_status::napi_ok {
-        return create_error(env, "Cannot create a boolean.");
-    }
-    let name = std::ffi::CString::new("result").unwrap();
-    if napi_set_named_property(env, ret_obj, name.as_ptr() as *const i8, ret_b)
-        != napi_status::napi_ok
-    {
-        return create_error(env, "Cannot set 'result' property");
-    }
     if set_string_property(env, ret_obj, "accountAddress", &addr).is_none() {
         return create_error(env, "Cannot set 'accountAddress' property");
     }
@@ -208,12 +203,22 @@ unsafe extern "C" fn create_identity_object_js(
         &ip_cdi_private_key,
     );
     match e {
-        Ok((idobj, ar_record, icdi)) => {
+        Ok(id_creation) => {
+            let id_obj = to_string(&id_creation.id_obj)
+                .expect("JSON serialization of versioned identity objects should not fail.");
+            let ar_record = to_string(&id_creation.ar_record)
+                .expect("JSON serialization of anonymity revocation records should not fail.");
+            let response = serde_json::json!({
+                "request": id_creation.request,
+                "accountAddress": id_creation.account_address
+            });
+            let icdi = to_string(&response)
+                .expect("JSON serialization of initial credentials should not fail.");
             let mut ret_obj: napi_value = std::mem::zeroed();
             if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
                 return create_error(env, "Cannot make return object.");
             }
-            if set_string_property(env, ret_obj, "idObject", &idobj).is_none() {
+            if set_string_property(env, ret_obj, "idObject", &id_obj).is_none() {
                 return create_error(env, "Cannot set 'idObject' property");
             }
             if set_string_property(env, ret_obj, "arRecord", &ar_record).is_none() {
@@ -224,7 +229,7 @@ unsafe extern "C" fn create_identity_object_js(
             }
             ret_obj
         }
-        Err(err) => create_error(env, &err),
+        Err(err) => create_error(env, &format!("ERROR: {}", err)),
     }
 }
 

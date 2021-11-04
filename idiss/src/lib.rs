@@ -1,3 +1,4 @@
+use anyhow::Context;
 use crypto_common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0};
 use curve_arithmetic::*;
 use id::{
@@ -8,174 +9,158 @@ use id::{
     types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
-use serde_json::{from_str, from_value, ser::to_string, Value};
-use std::fmt::Display;
+use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
+#[cfg(feature = "nodejs")]
+use serde_json::ser::to_string;
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
 // Parse an IpInfo taking into account the version.
 // For now only version 0 is supported.
-fn parse_exact_versioned_ip_info(ip_info_str: &str) -> Result<IpInfo<Bls12>, String> {
-    let v: Versioned<IpInfo<Bls12>> = from_str(ip_info_str).map_err(show_err)?;
+fn parse_exact_versioned_ip_info(bytes: &[u8]) -> anyhow::Result<IpInfo<Bls12>> {
+    let v: Versioned<IpInfo<Bls12>> =
+        serde_json::from_slice(bytes).context("Could not parse versioned ip info.")?;
     if v.version == VERSION_0 {
         Ok(v.value)
     } else {
-        Err(show_err("Incorrect IpInfo version."))
+        anyhow::bail!("Incorrect IpInfo version.");
     }
 }
 
 // Parse anonymity revokers taking into account the version.
 // For now only version 0 is supported.
-fn parse_exact_versioned_ars_infos(ars_info_str: &str) -> Result<ArInfos<ArCurve>, String> {
-    let v: Versioned<ArInfos<ArCurve>> = from_str(ars_info_str).map_err(show_err)?;
+
+fn parse_exact_versioned_ars_infos(bytes: &[u8]) -> anyhow::Result<ArInfos<ArCurve>> {
+    let v: Versioned<ArInfos<ArCurve>> =
+        serde_json::from_slice(bytes).context("Could not parse versioned ar infos.")?;
     if v.version == VERSION_0 {
         Ok(v.value)
     } else {
-        Err(show_err("Incorrect Ars version."))
+        anyhow::bail!("Incorrect Ars version.");
     }
 }
 
 // Parse an GlobalContext taking into account the version.
 // For now only version 0 is supported.
 fn parse_exact_versioned_global_context(
-    global_context_str: &str,
-) -> Result<GlobalContext<ExampleCurve>, String> {
+    bytes: &[u8],
+) -> anyhow::Result<GlobalContext<ExampleCurve>> {
     let v: Versioned<GlobalContext<ExampleCurve>> =
-        from_str(global_context_str).map_err(show_err)?;
+        serde_json::from_slice(bytes).context("Could not parse versioned global context.")?;
     if v.version == VERSION_0 {
         Ok(v.value)
     } else {
-        Err(show_err("Incorrect Global context version."))
+        anyhow::bail!("Incorrect Global context version.");
     }
 }
 
-pub fn validate_request(
-    global_context_str: &str,
-    ip_info_str: &str,
-    ars_infos_str: &str,
-    request_str: &str,
-) -> (bool, String) {
-    let global_context = match parse_exact_versioned_global_context(global_context_str) {
-        Ok(v) => v,
-        Err(_) => return (false, String::new()),
-    };
+fn parse_exact_versioned_pio_from_request(
+    bytes: &[u8],
+) -> anyhow::Result<PreIdentityObject<Bls12, ExampleCurve>> {
+    let v: serde_json::Value = serde_json::from_slice(bytes)
+        .context("Could not parse JSON containing idObjectRequest.")?;
+    let pre_id_obj_value = v
+        .get("idObjectRequest")
+        .context("Field 'idObjectRequest' not found")?;
 
-    let ip_info = match parse_exact_versioned_ip_info(ip_info_str) {
-        Ok(v) => v,
-        Err(_) => return (false, String::new()),
-    };
+    let v = serde_json::from_value::<Versioned<PreIdentityObject<_, _>>>(pre_id_obj_value.clone())
+        .context("Could not parse preIdentityObject")?;
+    if v.version == VERSION_0 {
+        Ok(v.value)
+    } else {
+        anyhow::bail!("Incorrect version of pre identity object.");
+    }
+}
 
-    let ars_infos = match parse_exact_versioned_ars_infos(ars_infos_str) {
-        Ok(v) => v,
-        Err(_) => return (false, String::new()),
-    };
-
-    let request: PreIdentityObject<Bls12, ExampleCurve> = {
-        let v: Value = match from_str(request_str) {
-            Ok(v) => v,
-            Err(_) => return (false, String::new()),
-        };
-        let pre_id_obj_value = {
-            match v.get("idObjectRequest") {
-                Some(v) => v,
-                None => return (false, String::new()),
-            }
-        };
-
-        if let Ok(v) = from_value::<Versioned<PreIdentityObject<_, _>>>(pre_id_obj_value.clone()) {
-            if v.version == VERSION_0 {
-                v.value
-            } else {
-                return (false, String::new());
-            }
-        } else {
-            return (false, String::new());
-        }
-    };
+/// Validate a request
+fn validate_request(
+    global_context_bytes: &[u8],
+    ip_info_bytes: &[u8],
+    ars_infos_bytes: &[u8],
+    request_bytes: &[u8],
+) -> anyhow::Result<AccountAddress> {
+    let global_context: GlobalContext<ExampleCurve> =
+        parse_exact_versioned_global_context(global_context_bytes)?;
+    let ip_info: IpInfo<Bls12> = parse_exact_versioned_ip_info(ip_info_bytes)?;
+    let ars_infos: ArInfos<ArCurve> = parse_exact_versioned_ars_infos(ars_infos_bytes)?;
+    let request: PreIdentityObject<Bls12, ExampleCurve> =
+        parse_exact_versioned_pio_from_request(request_bytes)?;
 
     let context = IpContext {
         ip_info:        &ip_info,
         ars_infos:      &ars_infos.anonymity_revokers,
         global_context: &global_context,
     };
-
-    let addr = to_string(&serde_json::json!(AccountAddress::new(
-        &request.pub_info_for_ip.reg_id
-    )))
-    .expect("JSON serialization of accounts cannot fail.");
-    let vf = ip_validate_request(&request, context);
-    if let Ok(()) = vf {
-        (true, addr)
-    } else {
-        (false, addr)
+    let addr = AccountAddress::new(&request.pub_info_for_ip.reg_id);
+    if let Err(e) = ip_validate_request(&request, context) {
+        anyhow::bail!("Ip validation failed: {:?}", e);
     }
+    Ok(addr)
 }
 
-fn show_err<D: Display>(err: D) -> String { format!("ERROR: {}", err) }
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityCreation {
+    id_obj:          Versioned<IdentityObject<Bls12, ExampleCurve, AttributeKind>>,
+    ar_record:       Versioned<AnonymityRevocationRecord<ExampleCurve>>,
+    request:         Versioned<AccountCredentialMessage<Bls12, ExampleCurve, AttributeKind>>,
+    account_address: AccountAddress,
+}
 
 /// Create an identity object, the anonymity revocation record, and the initial
 /// account object.
-pub fn create_identity_object(
-    ip_info_str: &str,
-    request_str: &str,
-    alist_str: &str,
+fn create_identity_object(
+    ip_info_bytes: &[u8],
+    request_bytes: &[u8],
+    alist_bytes: &[u8],
     expiry: u64,
-    ip_private_key_str: &str,
-    ip_cdi_private_key_str: &str,
-) -> Result<(String, String, String), String> {
-    let ip_info = parse_exact_versioned_ip_info(ip_info_str)?;
-
-    let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
-        let v: Value = from_str(request_str).map_err(show_err)?;
-        let pre_id_obj_value = v
-            .get("idObjectRequest")
-            .ok_or_else(|| show_err("'idObjectRequest' field not present."))?;
-        from_value(pre_id_obj_value.clone()).map_err(show_err)?
-    };
-
-    if request.version != VERSION_0 {
-        return Err(show_err("Incorrect request version."));
-    }
-
-    let alist: ExampleAttributeList = from_str(alist_str).map_err(show_err)?;
+    ip_private_key_bytes: &[u8],
+    ip_cdi_private_key_bytes: &[u8],
+) -> anyhow::Result<IdentityCreation> {
+    let ip_info: IpInfo<Bls12> = parse_exact_versioned_ip_info(ip_info_bytes)?;
+    let alist: ExampleAttributeList =
+        serde_json::from_slice(alist_bytes).context("Could not parse attribute list")?;
+    let ip_private_key_str = std::str::from_utf8(&ip_private_key_bytes)?;
+    let ip_cdi_private_key_str = std::str::from_utf8(&ip_cdi_private_key_bytes)?;
 
     let ip_private_key: ps_sig::SecretKey<Bls12> =
-        base16_decode_string(ip_private_key_str).map_err(show_err)?;
-    let ip_cdi_private_key: ed25519_dalek::SecretKey =
-        base16_decode_string(ip_cdi_private_key_str).map_err(show_err)?;
+        base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;
+    let ip_cdi_private_key: ed25519_dalek::SecretKey = base16_decode_string(ip_cdi_private_key_str)
+        .context("Could not parse ip_cdi_private_key")?;
 
-    let signature = sign_identity_object(&request.value, &ip_info, &alist, &ip_private_key)
-        .map_err(show_err)?;
+    let request: PreIdentityObject<Bls12, ExampleCurve> =
+        parse_exact_versioned_pio_from_request(request_bytes)?;
+
+    let signature = match sign_identity_object(&request, &ip_info, &alist, &ip_private_key) {
+        Ok(sig) => sig,
+        Err(e) => anyhow::bail!("Signing failed, {}", e),
+    };
 
     let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  request.value.pub_info_for_ip.id_cred_pub,
-        ar_data:      request.value.ip_ar_data.clone(),
+        id_cred_pub:  request.pub_info_for_ip.id_cred_pub,
+        ar_data:      request.ip_ar_data.clone(),
         max_accounts: alist.max_accounts,
-        threshold:    request.value.choice_ar_parameters.threshold,
+        threshold:    request.choice_ar_parameters.threshold,
     });
 
     let icdi = create_initial_cdi(
         &ip_info,
-        request.value.pub_info_for_ip.clone(),
+        request.pub_info_for_ip.clone(),
         &alist,
         TransactionTime::from(expiry),
         &ip_cdi_private_key,
     );
 
-    // address of the account that will be created.
     let id = IdentityObject {
-        pre_identity_object: request.value,
+        pre_identity_object: request,
         alist,
         signature,
     };
     let vid = Versioned::new(VERSION_0, id);
-    let id_obj =
-        to_string(&vid).expect("JSON serialization of versioned identity objects should not fail.");
-    let ar_record = to_string(&ar_record)
-        .expect("JSON serialization of anonymity revocation records should not fail.");
 
-    let addr = AccountAddress::new(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
+    let account_address =
+        AccountAddress::new(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
 
     let message = AccountCredentialMessage {
         message_expiry: TransactionTime { seconds: expiry },
@@ -183,14 +168,18 @@ pub fn create_identity_object(
     };
     let v_initial_cdi = Versioned::new(VERSION_0, message);
 
-    let response = serde_json::json!({
-        "request": v_initial_cdi,
-        "accountAddress": addr
-    });
-    let init_acc =
-        to_string(&response).expect("JSON serialization of initial credentials should not fail.");
-    Ok((id_obj, ar_record, init_acc))
+    let response = IdentityCreation {
+        id_obj: vid,
+        account_address,
+        ar_record,
+        request: v_initial_cdi,
+    };
+
+    Ok(response)
 }
+
+#[cfg(feature = "csharp")]
+mod cs_exports;
 
 #[cfg(feature = "nodejs")]
 mod nodejs_exports;
