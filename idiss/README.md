@@ -81,7 +81,7 @@ To build the nodejs exports, do
   loaded into a nodejs instance. To do this move/rename the generated shared library
   to `libidiss.node` (the extension is important, the name is not, it just has
   to match the import statement in javascript later on). On Windows it produces
-  a `idiss.dll` that (similarly) be moved and renamed to `libidiss.node`.
+  a `idiss.dll` that (similarly) should be moved and renamed to `libidiss.node`.
 
 To build the csharp exports, do instead
   ```
