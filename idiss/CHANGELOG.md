@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased changes
+  - Change the response format of `validate_request_js`. It now either returns the account address of the intial account (in case of success) or an error.
   - Add a `cs_exports.rs` module that exports the C functions `validate_request_cs` and `create_identity_object_cs` to be used from C#. 
     These takes pointers to bytearrays representing JSON and invokes the functions `validate_request` and `create_identity_object` from `lib.rs`.
     The `validate_request_cs` then returns a pointer to a bytearray representing either
