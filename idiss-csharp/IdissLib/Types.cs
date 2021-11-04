@@ -4,7 +4,6 @@ using System.Collections.Generic;
 
 namespace IdissLib
 {
-
     /// Here we provide classes that match some of the Rust types that are involved with identity validation and creation. 
     /// Most of the field names of these classes are chosen so that they match JSON fields of the JSON serialization of the corresponding Rust types.
 
@@ -124,17 +123,10 @@ namespace IdissLib
         public string signature { get; set; }
     }
 
-    /// A versioned pre-identity object. 
-    public class VersionedPreIdentityObject
-    {
-        public UInt32 v { get; set; }
-        public PreIdentityObject value { get; set; }
-    }
-
     /// A IdObjectRequest is a versioned pre-identity object.
     public class IdObjectRequest
     {
-        public VersionedPreIdentityObject idObjectRequest { set; get; }
+        public Versioned<PreIdentityObject> idObjectRequest { set; get; }
     }
 
     /// Data that needs to be stored by the identity provider to support anonymity
@@ -145,13 +137,6 @@ namespace IdissLib
         public Dictionary<string, IpArData> arData { get; set; }
         public byte maxAccounts { get; set; }
         public byte threshold { get; set; }
-    }
-
-    /// A versioned anonymity revocation record.
-    public class VersionedArRecord
-    {
-        public UInt32 v { get; set; }
-        public AnonymityRevocationRecord value { get; set; }
     }
 
     /// A wrapper around the InitialCredentialDeploymentInfo class.
@@ -205,20 +190,6 @@ namespace IdissLib
         public AccountCredential credential { get; set; }
     }
 
-    /// A versioned account credential message.
-    public class VersionedAccountCredentialMessage
-    {
-        public UInt32 v { get; set; }
-        public AccountCredentialMessage value { get; set; }
-    }
-
-    /// A versioned identity object.
-    public class VersionedIdentityObject
-    {
-        public UInt32 v { get; set; }
-        public IdentityObject value { get; set; }
-    }
-
     /// IdentityCreation is defined to match the JSON that is sent back (if nothing went wrong) from
     /// the imported function "create_identity_object_cs". 
     /// The identity provider is then meant to send the versioned identity object to back to the user,
@@ -226,9 +197,9 @@ namespace IdissLib
     /// and the account address. The versioned account credential message should be sent to the chain. 
     public class IdentityCreation
     {
-        public VersionedIdentityObject idObj { get; set; }
-        public VersionedArRecord arRecord { get; set; }
-        public VersionedAccountCredentialMessage request { get; set; }
+        public Versioned<IdentityObject> idObj { get; set; }
+        public Versioned<AnonymityRevocationRecord> arRecord { get; set; }
+        public Versioned<AccountCredentialMessage> request { get; set; }
         public AccountAddress accountAddress { get; set; }
     }
 
@@ -285,14 +256,6 @@ namespace IdissLib
         public string arPublicKey { get; set; }
     }
 
-    /// A versioned map of ArInfos.
-    public class VersionedArInfos
-    {
-        public UInt32 v { get; set; }
-        public Dictionary<string, ArInfo> value { get; set; }
-    }
-
-
     /// Public information about an identity provider.
     public class IpInfo
     {
@@ -306,12 +269,6 @@ namespace IdissLib
         public string ipCdiVerifyKey { get; set; }
     }
 
-    /// Versioned identity provider info
-    public class VersionedIpInfo
-    {
-        public UInt32 v { get; set; }
-        public IpInfo value { get; set; }
-    }
 
     /// A set of cryptographic parameters that are particular to the chain and
     /// shared by everybody that interacts with the chain.  
@@ -328,13 +285,6 @@ namespace IdissLib
         public string genesisString { get; set; }
     }
 
-    /// A versioned global context.
-    public class VersionedGlobalContext
-    {
-        public UInt32 v { get; set; }
-        public GlobalContext value { get; set; }
-    }
-
     /// The private identity provider keys
     public class IpPrivateKeys
     {
@@ -342,5 +292,11 @@ namespace IdissLib
         public string ipPrivateKey { get; set; }
         /// The private key used to sign the initial account creation message.
         public string ipCdiPrivateKey { get; set; }
+    }
+
+    public class Versioned<T> 
+    {
+        public UInt32 v { get; set; }
+        public T value { get; set; }
     }
 }

@@ -2,26 +2,10 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Collections.Generic;
 
 namespace IdissLib
 {
-
-    /// An Exception to be thrown in case of validation failure of a request.
-    public class RequestValidationException : Exception
-    {
-        public RequestValidationException(string message) : base(message)
-        {
-        }
-    }
-
-    /// An Exception to be thrown in case that identity creation does not succeed.
-    public class IdentityCreationException : Exception
-    {
-        public IdentityCreationException(string message) : base(message)
-        {
-        }
-    }
-
     public static class Idiss
     {
         /// Import of the two C functions that are exported by the Rust library "idiss". 
@@ -48,7 +32,7 @@ namespace IdissLib
         /// The function either
         /// - returns the address of the initial account, if the request is valid, or
         /// - throws an exception, if the request is invalid or the input is malformed. 
-        public static AccountAddress ValidateRequest(VersionedGlobalContext global, VersionedIpInfo ipInfo, VersionedArInfos arsInfos, IdObjectRequest request)
+        public static AccountAddress ValidateRequest(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, Versioned<Dictionary<string, ArInfo>> arsInfos, IdObjectRequest request)
         {
             byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
             byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
@@ -88,7 +72,7 @@ namespace IdissLib
         ///     * the address of the inital account, or 
         ///  - throws an exception, if any of the inputs are malformed. 
 
-        public static IdentityCreation CreateIdentityObject(VersionedIpInfo ipInfo, AttributeList alist, IdObjectRequest request, UInt64 expiry, IpPrivateKeys ipKeys)
+        public static IdentityCreation CreateIdentityObject(Versioned<IpInfo> ipInfo, AttributeList alist, IdObjectRequest request, UInt64 expiry, IpPrivateKeys ipKeys)
         {
             var options = new JsonSerializerOptions();
             options.Converters.Add(new DictionaryConverter());

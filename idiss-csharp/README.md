@@ -5,14 +5,14 @@ that are exported by the Rust library `idiss` in `concordium-base`.
 
 The `IdissLib` library provides two wrappers around the imported C functions :
 ```csharp
-public static string validate_request(VersionedGlobalContext global, VersionedIpInfo ip_info, VersionedArInfos ars_infos, IdObjectRequest request)
+public static AccountAddress ValidateRequest(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, Versioned<Dictionary<string, ArInfo>> arsInfos, IdObjectRequest request)
 ```
 that given a global context, identity provider info, anonymity revoker info and a request either
 - returns the address of the initial account, if the request is valid, or
 - throws an exception, if the request is invalid or the input is malformed.
 
 ```csharp
-public static IdentityCreation create_identity_object(VersionedIpInfo ip_info, AttributeList alist, IdObjectRequest request, UInt64 expiry, IpPrivateKeys ip_keys){
+public static IdentityCreation CreateIdentityObject(Versioned<IpInfo> ipInfo, AttributeList alist, IdObjectRequest request, UInt64 expiry, IpPrivateKeys ipKeys)
 ```
 that given identity provider info, attribute list, request, expiry and the private keys of the identity provider either
 - returns a `IdentityCreation` object containing 

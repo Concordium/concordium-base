@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using IdissLib;
+using System.Collections.Generic;
 
 namespace IdissLibTest
 {
@@ -14,16 +15,16 @@ namespace IdissLibTest
         {
             StreamReader r = new StreamReader("../../../../data/global.json");
             string globalStr = r.ReadToEnd();
-            var global = JsonSerializer.Deserialize<VersionedGlobalContext>(globalStr);
+            var global = JsonSerializer.Deserialize<Versioned<GlobalContext>>(globalStr);
             StreamReader r2 = new StreamReader("../../../../data/valid_request.json");
             string requestStr = r2.ReadToEnd();
             var request = JsonSerializer.Deserialize<IdObjectRequest>(requestStr);
             StreamReader r3 = new StreamReader("../../../../data/anonymity_revokers.json");
             string arsInfosStr = r3.ReadToEnd();
-            var arsInfos = JsonSerializer.Deserialize<VersionedArInfos>(arsInfosStr);
+            var arsInfos = JsonSerializer.Deserialize<Versioned<Dictionary<string, ArInfo>>>(arsInfosStr);
             StreamReader r4 = new StreamReader("../../../../data/identity_provider.pub.json");
             string ipInfoStr = r4.ReadToEnd();
-            var ipInfo = JsonSerializer.Deserialize<VersionedIpInfo>(ipInfoStr);
+            var ipInfo = JsonSerializer.Deserialize<Versioned<IpInfo>>(ipInfoStr);
             var options = new JsonSerializerOptions();
             options.Converters.Add(new DictionaryConverter());
             options.Converters.Add(new YearMonthConverter());
