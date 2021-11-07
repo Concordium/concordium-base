@@ -19,6 +19,7 @@ import Concordium.Genesis.Account
 import Concordium.Genesis.Data.Base
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
+import qualified Concordium.Genesis.Data.P3 as P3
 import Concordium.Types
 
 -- |Data family for genesis data.
@@ -28,41 +29,50 @@ data family GenesisData (pv :: ProtocolVersion)
 
 newtype instance GenesisData 'P1 = GDP1 {unGDP1 :: P1.GenesisDataP1}
 newtype instance GenesisData 'P2 = GDP2 {unGDP2 :: P2.GenesisDataP2}
+newtype instance GenesisData 'P3 = GDP3 {unGDP3 :: P3.GenesisDataP3}
 
 instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
     gdGenesisTime = case protocolVersion @pv of
         SP1 -> gdGenesisTime . unGDP1
         SP2 -> gdGenesisTime . unGDP2
+        SP3 -> gdGenesisTime . unGDP3
     {-# INLINE gdGenesisTime #-}
     gdSlotDuration = case protocolVersion @pv of
         SP1 -> gdSlotDuration . unGDP1
         SP2 -> gdSlotDuration . unGDP2
+        SP3 -> gdSlotDuration . unGDP3
     {-# INLINE gdSlotDuration #-}
     gdMaxBlockEnergy = case protocolVersion @pv of
         SP1 -> gdMaxBlockEnergy . unGDP1
         SP2 -> gdMaxBlockEnergy . unGDP2
+        SP3 -> gdMaxBlockEnergy . unGDP3
     {-# INLINE gdMaxBlockEnergy #-}
     gdFinalizationParameters = case protocolVersion @pv of
         SP1 -> gdFinalizationParameters . unGDP1
         SP2 -> gdFinalizationParameters . unGDP2
+        SP3 -> gdFinalizationParameters . unGDP3
     {-# INLINE gdFinalizationParameters #-}
     gdEpochLength = case protocolVersion @pv of
         SP1 -> gdEpochLength . unGDP1
         SP2 -> gdEpochLength . unGDP2
+        SP3 -> gdEpochLength . unGDP3
     {-# INLINE gdEpochLength #-}
 
 instance (IsProtocolVersion pv) => Eq (GenesisData pv) where
     (==) = case protocolVersion @pv of
         SP1 -> (==) `on` unGDP1
         SP2 -> (==) `on` unGDP2
+        SP3 -> (==) `on` unGDP3
 
 instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
     get = case protocolVersion @pv of
         SP1 -> GDP1 <$> P1.getGenesisDataV3
         SP2 -> GDP2 <$> P2.getGenesisDataV4
+        SP3 -> GDP3 <$> P3.getGenesisDataV5
     put = case protocolVersion @pv of
         SP1 -> P1.putGenesisDataV3 . unGDP1
         SP2 -> P2.putGenesisDataV4 . unGDP2
+        SP3 -> P3.putGenesisDataV5 . unGDP3
 
 -- |Deserialize genesis data with a version tag.
 -- See `putVersionedGenesisData` for details of the version tag.
@@ -70,6 +80,7 @@ getVersionedGenesisData :: forall pv. IsProtocolVersion pv => Get (GenesisData p
 getVersionedGenesisData = case protocolVersion @pv of
     SP1 -> GDP1 <$> P1.getVersionedGenesisData
     SP2 -> GDP2 <$> P2.getVersionedGenesisData
+    SP3 -> GDP3 <$> P3.getVersionedGenesisData
 
 -- |Serialize genesis data with a version tag.
 -- Each version tag must be specific to a protocol version, though more than one version tag can
@@ -81,11 +92,13 @@ getVersionedGenesisData = case protocolVersion @pv of
 -- +=============+==================+
 -- | 3           | P1               |
 -- | 4           | P2               |
+-- | 5           | P3               |
 -- +-------------+------------------+
 putVersionedGenesisData :: forall pv. IsProtocolVersion pv => Putter (GenesisData pv)
 putVersionedGenesisData = case protocolVersion @pv of
     SP1 -> P1.putVersionedGenesisData . unGDP1
     SP2 -> P2.putVersionedGenesisData . unGDP2
+    SP3 -> P3.putVersionedGenesisData . unGDP3
 
 -- |Generate the block hash of a genesis block with the given genesis data.
 -- This is based on the presumption that a block hash is computed from a byte string
@@ -94,6 +107,7 @@ genesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHa
 genesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.genesisBlockHash . unGDP1
     SP2 -> P2.genesisBlockHash . unGDP2
+    SP3 -> P3.genesisBlockHash . unGDP3
 
 -- |A dependent pair of a protocol version and genesis data.
 data PVGenesisData = forall pv. IsProtocolVersion pv => PVGenesisData (GenesisData pv)
@@ -107,6 +121,7 @@ getPVGenesisData = do
   getVersion >>= \case
     3 -> PVGenesisData . GDP1 <$> P1.getGenesisDataV3
     4 -> PVGenesisData . GDP2 <$> P2.getGenesisDataV4
+    5 -> PVGenesisData . GDP3 <$> P3.getGenesisDataV5
     n -> fail $ "Unsupported genesis version: " ++ show n
 
 -- |Serialize genesis data with a version tag. This is a helper function that
