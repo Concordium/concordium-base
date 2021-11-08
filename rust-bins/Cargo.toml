@@ -41,7 +41,7 @@ anyhow = "1.0"
 
 [dependencies.keygen_bls]
 path = "../rust-src/keygen_bls"
-version = "0"
+version = "2.0.0"
 
 [dependencies.crypto_common]
 path = "../rust-src/crypto_common"
