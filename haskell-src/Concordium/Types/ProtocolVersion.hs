@@ -28,7 +28,7 @@ data ProtocolVersion
     = P1
     | P2
     | P3
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
 
 -- |The singleton type associated with 'ProtocolVersion'.
 -- There is a unique constructor of 'SProtocolVersion' for

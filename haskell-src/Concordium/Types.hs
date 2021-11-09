@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
 -- |Basic blockchain types.
 module Concordium.Types (
   -- * Cost units
@@ -145,7 +146,12 @@ module Concordium.Types (
   GenesisIndex(..),
 
   -- * Protocol version
-  module Concordium.Types.ProtocolVersion) where
+  module Concordium.Types.ProtocolVersion,
+
+  -- * Accound address identifications.
+  AccountAddressEq(..),
+  accountAddressEmbed,
+  ) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
@@ -166,12 +172,13 @@ import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
 import Concordium.Constants
+import qualified Data.FixedByteString as FBS
 
 import Control.Exception (assert)
 import Control.Monad
 import Control.Monad.Except
 
-import Data.Hashable (Hashable)
+import Data.Hashable (Hashable (..))
 import Data.Word
 import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
@@ -909,6 +916,42 @@ newtype GenesisIndex = GenesisIndex Word32
 instance S.Serialize GenesisIndex where
   put (GenesisIndex gi) = S.putWord32be gi
   get = GenesisIndex <$> S.getWord32be
+
+-- |Equivalence class of account addresses. In protocol versions 1 and 2
+-- addresses are in 1-1 correspondence with accounts. In protocol version 3 only
+-- the first 29 bytes of the address uniquely identify an account. This type
+-- wrapper is used to wrap account addresses and add different equality and
+-- hashable instances so that we can identify transactions coming from different
+-- addresses but the same account.
+--
+-- For backwards compatibility we retain the equality and hashable instances for
+-- account addresses as they were since account addresses are compared in a few
+-- places in the scheduler.
+newtype AccountAddressEq = AccountAddressEq {
+  aaeAddress :: AccountAddress
+  }
+    deriving (Show)
+
+{-# INLINE accountAddressEmbed #-}
+-- |Embed an account address into its equivalence class.
+accountAddressEmbed :: AccountAddress -> AccountAddressEq
+accountAddressEmbed = AccountAddressEq
+
+instance Eq AccountAddressEq where
+  -- compare the first 29 bytes of the address
+  AccountAddressEq (AccountAddress a1) == AccountAddressEq (AccountAddress a2) =
+      FBS.unsafeIndexByteArray @Word64 a1 0 == FBS.unsafeIndexByteArray @Word64 a2 0 &&
+      FBS.unsafeIndexByteArray @Word64 a1 1 == FBS.unsafeIndexByteArray @Word64 a2 1 &&
+      FBS.unsafeIndexByteArray @Word64 a1 2 == FBS.unsafeIndexByteArray @Word64 a2 2 &&
+      FBS.unsafeIndexByteArray @Word32 a1 6 == FBS.unsafeIndexByteArray @Word32 a2 6 &&
+      FBS.unsafeIndexByteArray @Word8 a1 28 == FBS.unsafeIndexByteArray @Word8 a2 28
+
+instance Hashable AccountAddressEq where
+    hashWithSalt s (AccountAddressEq (AccountAddress b)) = hashWithSalt s (FBS.unsafeReadWord64 b)
+    {-# INLINE hashWithSalt #-}
+    hash (AccountAddressEq (AccountAddress b)) = fromIntegral (FBS.unsafeReadWord64 b)
+    {-# INLINE hash #-}
+
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

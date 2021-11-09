@@ -18,6 +18,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Short.Internal as BSS
 import Data.Primitive.ByteArray
+import Data.Primitive.Types
 
 import Control.Monad.Primitive(touch)
 
@@ -300,6 +301,15 @@ withPtrReadOnlyST (FixedByteString ba) f = runST comp
 {-# INLINE unsafeReadWord64 #-}
 unsafeReadWord64 :: FixedLength s => FixedByteString s -> Word64
 unsafeReadWord64 (FixedByteString fbs) = indexByteArray fbs 0
+
+-- |Read a primitive value from the byte string at the given offset. __The
+-- offset is given in elements of type a rather than in bytes.__ This function
+-- does no bounds checking and its behaviour is undefined if an attempt is made
+-- to read past the end of the byte array.
+{-# INLINE unsafeIndexByteArray #-}
+unsafeIndexByteArray :: forall a s . (Prim a, FixedLength s) => FixedByteString s -> Int -> a
+unsafeIndexByteArray (FixedByteString fbs) = indexByteArray fbs
+
 
 -- |Read the first 8 bytes as a Word64 in __big__ endian.  If there are fewer
 -- than 8 bytes, these will be used as the low-order bytes (i.e. we pad with 0s on
