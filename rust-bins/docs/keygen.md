@@ -30,6 +30,7 @@ Generate keys for an anonymity revoker. The following options are supported
 - `--no-confirmation` if set, do not ask user to re-enter generated recovery phrase.
 - `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
 - `--only-system-randomness` if set, do not ask the user for a list of words to add to randomness, instead only relying on system randomness.
+- `--v1` if set, use the deprecated version of the BLS keygen when generating `ar_secret_key`.
 
 No arguments are required. If the arguments `ar-identity`, `description`,
 `global`, `name`, `url`, `out`, or `out-pub` are not supplied they are queried
@@ -47,6 +48,7 @@ Generate keys for the identity provider. The following options are supported
 - `--out`, a filename where the private keys will be emitted
 - `--out-pub`, a filename where the public data will be emitted. This is the data that must go to the chain.
 - `--bound`, upper bound on the number of messages signed by the identity provider's key. See the Pointcheval-Sanders signatures scheme for details of what this means. This defaults to 30 which is sufficient for the current numbers.
+- `--v1` if set, use the deprecated version of the BLS keygen when generating `ip_secret_key`.
 
 ## gen-rand
 
