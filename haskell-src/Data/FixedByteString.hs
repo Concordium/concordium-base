@@ -307,7 +307,10 @@ unsafeReadWord64 (FixedByteString fbs) = indexByteArray fbs 0
 -- does no bounds checking and its behaviour is undefined if an attempt is made
 -- to read past the end of the byte array.
 {-# INLINE unsafeIndexByteArray #-}
-unsafeIndexByteArray :: forall a s . (Prim a, FixedLength s) => FixedByteString s -> Int -> a
+unsafeIndexByteArray :: forall a s . (Prim a, FixedLength s)
+                     => FixedByteString s
+                     -> Int -- ^ Offset in elements of the type @a@. Must be non-negative.
+                     -> a
 unsafeIndexByteArray (FixedByteString fbs) = indexByteArray fbs
 
 
