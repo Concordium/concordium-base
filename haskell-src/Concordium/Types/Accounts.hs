@@ -225,7 +225,11 @@ data AccountInfo = AccountInfo
       -- |The account index
       aiAccountIndex :: !AccountIndex,
       -- |The baker associated with the account (if any)
-      aiBaker :: !(Maybe AccountBaker)
+      aiBaker :: !(Maybe AccountBaker),
+      -- |The canonical address of the account, derived from the first
+      -- credential. While this is not necessary, since it is derived from
+      -- another field of this type, it is convenient for consumers to have it.
+      aiAccountAddress :: !AccountAddress
     }
     deriving (Eq, Show)
 
@@ -240,7 +244,8 @@ accountInfoPairs AccountInfo{..} =
       "accountThreshold" .= aiAccountThreshold,
       "accountEncryptedAmount" .= aiAccountEncryptedAmount,
       "accountEncryptionKey" .= aiAccountEncryptionKey,
-      "accountIndex" .= aiAccountIndex
+      "accountIndex" .= aiAccountIndex,
+      "accountAddress" .= aiAccountAddress
     ]
         <> maybe [] (\b -> ["accountBaker" .= b]) aiBaker
 
@@ -255,9 +260,18 @@ instance FromJSON AccountInfo where
         aiAccountAmount <- obj .: "accountAmount"
         aiAccountReleaseSchedule <- obj .: "accountReleaseSchedule"
         aiAccountCredentials <- obj .: "accountCredentials"
+        creatingCredential <-
+            case Map.lookup (CredentialIndex 0) aiAccountCredentials of
+                Nothing -> fail "Accounts must have a credential with index 0."
+                Just ac -> return ac
         aiAccountThreshold <- obj .: "accountThreshold"
         aiAccountEncryptedAmount <- obj .: "accountEncryptedAmount"
         aiAccountEncryptionKey <- obj .: "accountEncryptionKey"
         aiAccountIndex <- obj .: "accountIndex"
+        -- For backwards compatibility we retrieve the account address from the
+        -- credential.
+        aiAccountAddress <- obj .:! "accountAddress" >>= \case
+            Nothing -> return (addressFromRegId (credId (vValue creatingCredential)))
+            Just addr -> return addr
         aiBaker <- obj .:? "accountBaker"
         return AccountInfo{..}
