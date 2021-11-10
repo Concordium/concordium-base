@@ -192,49 +192,6 @@ data FinalizationParameters = FinalizationParameters
     }
     deriving (Eq, Show)
 
--- |Serialize 'FinalizationParameters' in the V2 GenesisData
--- format.
-putFinalizationParametersGD2 :: Putter FinalizationParameters
-putFinalizationParametersGD2 FinalizationParameters{..} = do
-    put finalizationMinimumSkip
-    put finalizationCommitteeMaxSize
-    put finalizationWaitingTime
-    put True -- finalizationIgnoreFirstWait
-    put False -- finalizationOldStyleSkip
-    put finalizationSkipShrinkFactor
-    put finalizationSkipGrowFactor
-    put finalizationDelayShrinkFactor
-    put finalizationDelayGrowFactor
-    put finalizationAllowZeroDelay
-
--- |Deserialize 'FinalizationParameters' in the V2 GenesisData
--- format.
-getFinalizationParametersGD2 :: Get FinalizationParameters
-getFinalizationParametersGD2 = label "FinalizationParameters" $ do
-    finalizationMinimumSkip <- get
-    finalizationCommitteeMaxSize <- get
-    finalizationWaitingTime <- get
-    finalizationIgnoreFirstWait <- get
-    unless finalizationIgnoreFirstWait $
-        fail "finalizationIgnoreFirstWait must be True"
-    finalizationOldStyleSkip <- get
-    when finalizationOldStyleSkip $
-        fail "finalizationOldStyleSkip must be False"
-    finalizationSkipShrinkFactor <- get
-    unless (finalizationSkipShrinkFactor > 0 && finalizationSkipShrinkFactor < 1) $
-        fail "skipShrinkFactor must be strictly between 0 and 1"
-    finalizationSkipGrowFactor <- get
-    unless (finalizationSkipGrowFactor > 1) $
-        fail "skipGrowFactor must be strictly greater than 1"
-    finalizationDelayShrinkFactor <- get
-    unless (finalizationDelayShrinkFactor > 0 && finalizationDelayShrinkFactor < 1) $
-        fail "delayShrinkFactor must be strictly between 0 and 1"
-    finalizationDelayGrowFactor <- get
-    unless (finalizationDelayGrowFactor > 1) $
-        fail "delayGrowFactor must be strictly greater than 1"
-    finalizationAllowZeroDelay <- get
-    return FinalizationParameters{..}
-
 -- |Serialize 'FinalizationParameters' in the V3 GenesisData
 -- format.
 putFinalizationParametersGD3 :: Putter FinalizationParameters
