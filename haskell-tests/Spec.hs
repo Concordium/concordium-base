@@ -20,6 +20,7 @@ import qualified Types.AmountSpec
 import qualified Types.UpdatesSpec
 import qualified Types.AccountEncryptedAmountSpec
 import qualified Types.RewardTypes
+import qualified Types.TransactionSummarySpec
 
 main :: IO  ()
 main = hspec $ parallel $ do
@@ -36,7 +37,7 @@ main = hspec $ parallel $ do
     ConcordiumTests.Crypto.EncryptedTransfers.tests
     ConcordiumTests.Utils.Encryption.tests
     -- NB: The following tests are far from complete. They do not test what
-    -- happens when data is corrupt in various ways (number of commmited values
+    -- happens when data is corrupt in various ways (number of commmitted values
     -- is incorrect, or similar)
     Types.PayloadSerializationSpec.tests
     Types.TransactionSerializationSpec.tests
@@ -44,3 +45,4 @@ main = hspec $ parallel $ do
     Types.UpdatesSpec.tests
     Types.AccountEncryptedAmountSpec.tests
     Types.RewardTypes.tests
+    Types.TransactionSummarySpec.tests

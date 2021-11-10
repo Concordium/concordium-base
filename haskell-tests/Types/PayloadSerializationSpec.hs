@@ -36,7 +36,6 @@ import Concordium.Wasm
 
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.DummyData
-import Concordium.Types.ProtocolVersion
 
 genAttributeValue :: Gen AttributeValue
 genAttributeValue = AttributeValue . BSS.pack <$> (vector =<< choose (0,31))
@@ -70,6 +69,22 @@ genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSub
 genModuleRef :: Gen ModuleRef
 genModuleRef = ModuleRef . SHA256.hash . BS.pack <$> vector 32
 
+-- These generators name contracts as numbers to make sure the names are valid.
+genInitName :: Gen InitName
+genInitName =
+  InitName . Text.pack . ("init_" ++) . show <$> (arbitrary :: Gen Word)
+
+genReceiveName :: Gen ReceiveName
+genReceiveName = do
+  contract <- show <$> (arbitrary :: Gen Word)
+  receive <- show <$> (arbitrary :: Gen Word)
+  return . ReceiveName . Text.pack $ receive ++ "." ++ contract
+
+genParameter :: Gen Parameter
+genParameter = do
+  n <- choose (0,1000)
+  Parameter . BSS.pack <$> vector n
+
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
                     genInit,
@@ -100,21 +115,6 @@ genPayload = oneof [genDeployModule,
         genByteString = do
           n <- choose (0,1000)
           BS.pack <$> vector n
-
-        -- These generators name contracts as numbers to make sure the names are valid.
-        genInitName :: Gen InitName
-        genInitName =
-          InitName . Text.pack . ("init_" ++) . show <$> (arbitrary :: Gen Word)
-
-        genReceiveName :: Gen ReceiveName
-        genReceiveName = do
-          contract <- show <$> (arbitrary :: Gen Word)
-          receive <- show <$> (arbitrary :: Gen Word)
-          return . ReceiveName . Text.pack $ receive ++ "." ++ contract
-
-        genParameter = do
-          n <- choose (0,1000)
-          Parameter . BSS.pack <$> vector n
 
         genDeployModule = DeployModule <$> (WasmModule 0 . ModuleSource <$> genByteString)
 
