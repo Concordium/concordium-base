@@ -16,6 +16,7 @@ own changelogs.
      hashed and signed.
    
 ## haskell-src library changes
+   - Add support for account aliases. This introduces protocol version 3.
    - Add support for transfers with memos. This introduces protocol version 2.
    - Two new update types for adding identity providers and anonymity revokers.
    - New transaction/payload type `RegisterData`. And a corresponding event `DataRegistered`.
@@ -26,7 +27,8 @@ own changelogs.
      transaction to update keys of a specific credential.
 
 ## Changes in other tools
-   - the `genesis` tool can generate genesis for the P2 chain if supplied with
-     genesis parameters in version 4.
+   - the `genesis` tool now supports generating genesis for the P3 chain if
+     if asked with `--gdVer=5`.
+   - the `genesis` tool can generate genesis for the P2 chain if asked with `--gdVer=4`
    - the `client` tool renames `accountData` to `accountKeys` in its
      `create_credential` function.
