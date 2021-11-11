@@ -150,6 +150,7 @@ module Concordium.Types (
   -- * Account address identifications.
   AccountAddressEq(..),
   accountAddressEmbed,
+  accountAddressPrefixSize
   ) where
 
 import Data.Data (Typeable, Data)
@@ -931,6 +932,10 @@ newtype AccountAddressEq = AccountAddressEq {
   }
     deriving (Show)
 
+-- |Length of the account address prefix used when uniquely determining the account.
+accountAddressPrefixSize :: Int
+accountAddressPrefixSize = 29
+
 {-# INLINE accountAddressEmbed #-}
 -- |Embed an account address into its equivalence class.
 accountAddressEmbed :: AccountAddress -> AccountAddressEq
@@ -938,7 +943,7 @@ accountAddressEmbed = AccountAddressEq
 
 instance Eq AccountAddressEq where
   -- compare the first 29 bytes of the address
-  AccountAddressEq (AccountAddress a1) == AccountAddressEq (AccountAddress a2) = FBS.unsafeCompareFixedByteStrings 0 29 a1 a2 == EQ
+  AccountAddressEq (AccountAddress a1) == AccountAddressEq (AccountAddress a2) = FBS.unsafeCompareFixedByteStrings 0 accountAddressPrefixSize a1 a2 == EQ
 
 instance Hashable AccountAddressEq where
     hashWithSalt s (AccountAddressEq (AccountAddress b)) = hashWithSalt s (FBS.unsafeReadWord64 b)

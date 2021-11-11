@@ -15,7 +15,7 @@ genAddress = do
 genAliases :: AccountAddress -> Gen AccountAddress
 genAliases (AccountAddress addr) = do
   suffix <- vector 3
-  return $ AccountAddress . FBS.pack $ (take 29 (FBS.unpack addr) ++ suffix)
+  return $ AccountAddress . FBS.pack $ (take accountAddressPrefixSize (FBS.unpack addr) ++ suffix)
 
 -- Test that AccountAddressEq has the correct hashable and eq instances that do
 -- not distinguish aliases.
@@ -43,7 +43,7 @@ testNegative :: Property
 testNegative = forAll genAddress $ \addr@(AccountAddress addrFbs) ->
   forAll (genCorrupt addr) $ \maybeAlias@(AccountAddress maybeAliasFbs) ->
       accountAddressEmbed addr =/= accountAddressEmbed maybeAlias .||. 
-      take 29 (FBS.unpack addrFbs) === take 29 (FBS.unpack maybeAliasFbs)
+      take accountAddressPrefixSize (FBS.unpack addrFbs) === take accountAddressPrefixSize (FBS.unpack maybeAliasFbs)
 
 tests :: Spec
 tests = do
