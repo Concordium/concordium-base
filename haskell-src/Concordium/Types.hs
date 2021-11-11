@@ -147,7 +147,7 @@ module Concordium.Types (
   -- * Protocol version
   module Concordium.Types.ProtocolVersion,
 
-  -- * Accound address identifications.
+  -- * Account address identifications.
   AccountAddressEq(..),
   accountAddressEmbed,
   ) where

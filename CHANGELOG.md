@@ -28,7 +28,7 @@ own changelogs.
 
 ## Changes in other tools
    - the `genesis` tool now supports generating genesis for the P3 chain if
-     if asked with `--gdVer=5`.
-   - the `genesis` tool can generate genesis for the P2 chain if asked with `--gdVer=4`
+     if asked with `--gdver=5`.
+   - the `genesis` tool can generate genesis for the P2 chain if asked with `--gdver=4`
    - the `client` tool renames `accountData` to `accountKeys` in its
      `create_credential` function.
