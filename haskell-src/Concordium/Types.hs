@@ -3,7 +3,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeApplications #-}
 -- |Basic blockchain types.
 module Concordium.Types (
   -- * Cost units
@@ -939,12 +938,7 @@ accountAddressEmbed = AccountAddressEq
 
 instance Eq AccountAddressEq where
   -- compare the first 29 bytes of the address
-  AccountAddressEq (AccountAddress a1) == AccountAddressEq (AccountAddress a2) =
-      FBS.unsafeIndexByteArray @Word64 a1 0 == FBS.unsafeIndexByteArray @Word64 a2 0 &&
-      FBS.unsafeIndexByteArray @Word64 a1 1 == FBS.unsafeIndexByteArray @Word64 a2 1 &&
-      FBS.unsafeIndexByteArray @Word64 a1 2 == FBS.unsafeIndexByteArray @Word64 a2 2 &&
-      FBS.unsafeIndexByteArray @Word32 a1 6 == FBS.unsafeIndexByteArray @Word32 a2 6 &&
-      FBS.unsafeIndexByteArray @Word8 a1 28 == FBS.unsafeIndexByteArray @Word8 a2 28
+  AccountAddressEq (AccountAddress a1) == AccountAddressEq (AccountAddress a2) = FBS.unsafeCompareFixedByteStrings 0 29 a1 a2 == EQ
 
 instance Hashable AccountAddressEq where
     hashWithSalt s (AccountAddressEq (AccountAddress b)) = hashWithSalt s (FBS.unsafeReadWord64 b)

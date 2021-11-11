@@ -21,6 +21,7 @@ import qualified Types.UpdatesSpec
 import qualified Types.AccountEncryptedAmountSpec
 import qualified Types.RewardTypes
 import qualified Types.TransactionSummarySpec
+import qualified Types.AddressesSpec
 
 main :: IO  ()
 main = hspec $ parallel $ do
@@ -46,3 +47,4 @@ main = hspec $ parallel $ do
     Types.AccountEncryptedAmountSpec.tests
     Types.RewardTypes.tests
     Types.TransactionSummarySpec.tests
+    Types.AddressesSpec.tests

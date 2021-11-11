@@ -313,6 +313,17 @@ unsafeIndexByteArray :: forall a s . (Prim a, FixedLength s)
                      -> a
 unsafeIndexByteArray (FixedByteString fbs) = indexByteArray fbs
 
+-- |Compare two fixed byte strings. This function's behaviour is undefined if
+-- the offset and length do not satisfy the precondition mentioned below, hence
+-- it is marked unsafe.
+unsafeCompareFixedByteStrings :: FixedLength s
+    => Int -- ^Start of the subsection (offset). Must be @<= fixedLength _@
+    -> Int -- ^Length of the slice in bytes. Offset + length must be @<= fixedLength _@ and length must be non-negative.
+    -> FixedByteString s
+    -> FixedByteString s
+    -> Ordering
+unsafeCompareFixedByteStrings offset len (FixedByteString fbs1) (FixedByteString fbs2) = compareByteArrays fbs1 offset fbs2 offset len
+{-# INLINE unsafeCompareFixedByteStrings #-}
 
 -- |Read the first 8 bytes as a Word64 in __big__ endian.  If there are fewer
 -- than 8 bytes, these will be used as the low-order bytes (i.e. we pad with 0s on

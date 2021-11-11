@@ -276,6 +276,7 @@ test-suite test
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
       Types.AccountEncryptedAmountSpec
+      Types.AddressesSpec
       Types.AmountSpec
       Types.PayloadSerializationSpec
       Types.RewardTypes
