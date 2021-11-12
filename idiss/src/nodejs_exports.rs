@@ -132,7 +132,7 @@ unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info
     let addr = match validate_request(&global_context, &ip_info, &ars_info, &request) {
         Ok(addr) => to_string(&serde_json::json!(addr))
             .expect("JSON serialization of initial credentials should not fail."),
-        Err(_) => return create_error(env, "Validation failed."),
+        Err(e) => return create_error(env, &format!("Validation failed: {}", e)),
     };
     let mut ret_obj: napi_value = std::mem::zeroed();
     if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
