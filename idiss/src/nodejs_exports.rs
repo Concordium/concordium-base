@@ -234,6 +234,11 @@ unsafe extern "C" fn create_identity_object_js(
 }
 
 #[no_mangle]
+unsafe extern "C" fn version_js(env: napi_env, _info: napi_callback_info) -> napi_value {
+    make_string(env, env!("CARGO_PKG_VERSION"))
+}
+
+#[no_mangle]
 unsafe extern "C" fn napi_register_module_v1(env: napi_env, exports: napi_value) -> napi_value {
     let vr = std::ffi::CString::new("validate_request").expect("CString::new failed");
     let mut local: napi_value = std::mem::zeroed();
@@ -269,6 +274,26 @@ unsafe extern "C" fn napi_register_module_v1(env: napi_env, exports: napi_value)
     if napi_set_named_property(env, exports, create.as_ptr(), local_create) != napi_status::napi_ok
     {
         return create_error(env, "Could not assing 'create_identity_object' property.");
+    }
+
+    let version = std::ffi::CString::new("version").expect("CString::new failed");
+    let mut local_version: napi_value = std::mem::zeroed();
+    if napi_create_function(
+        env,
+        version.as_ptr(),
+        "version".len(),
+        Some(version_js),
+        std::ptr::null_mut(),
+        &mut local_version,
+    ) != napi_status::napi_ok
+    {
+        return create_error(env, "Cannot create 'version' function.");
+    }
+
+    if napi_set_named_property(env, exports, version.as_ptr(), local_version)
+        != napi_status::napi_ok
+    {
+        return create_error(env, "Could not assing 'version' property.");
     }
 
     exports
