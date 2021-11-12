@@ -12,7 +12,7 @@ use elgamal::{PublicKey, SecretKey};
 use hkdf::HkdfExtract;
 use hmac::{Hmac, Mac, NewMac};
 use id::types::*;
-use keygen_bls::keygen_bls;
+use keygen_bls::{keygen_bls, keygen_bls_deprecated};
 use pairing::bls12_381::{Bls12, Fr, G1, G2};
 use rand::Rng;
 use sha2::{Digest, Sha256, Sha512};
@@ -60,6 +60,12 @@ struct KeygenIp {
     out:         PathBuf,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
     out_pub:     PathBuf,
+    #[structopt(
+        long = "v1",
+        help = "Use deprecated version 1 of BLS keygen. If keys were generated with version 1, \
+                this flag must be used during recovery."
+    )]
+    v1:          bool,
 }
 
 #[derive(StructOpt)]
@@ -110,6 +116,12 @@ struct KeygenAr {
                 randomness."
     )]
     only_system_randomness: bool,
+    #[structopt(
+        long = "v1",
+        help = "Use deprecated version 1 of BLS keygen. If keys were generated with version 1, \
+                this flag must be used during recovery."
+    )]
+    v1:                     bool,
 }
 
 #[derive(StructOpt)]
@@ -145,25 +157,25 @@ struct GenRand {
     about = "Tool for generating keys",
     name = "keygen",
     author = "Concordium",
-    version = "1.0"
+    version = "2.0"
 )]
 enum KeygenTool {
     #[structopt(
         name = "keygen-ip",
         about = "Generate identity provider keys.",
-        version = "1.0"
+        version = "2.0"
     )]
     KeygenIp(KeygenIp),
     #[structopt(
         name = "keygen-ar",
         about = "Generate anonymity revoker keys.",
-        version = "1.0"
+        version = "2.0"
     )]
     KeygenAr(KeygenAr),
     #[structopt(
         name = "gen-rand",
         about = "Generate randomness file.",
-        version = "1.0"
+        version = "2.0"
     )]
     GenRand(GenRand),
 }
@@ -329,7 +341,12 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     };
     let ar_base = global_ctx.on_chain_commitment_key.g;
     let key_info = b"elgamal_keys".as_ref();
-    let scalar = succeed_or_die!(keygen_bls(&random_bytes, &key_info), e => "Could not generate key because {}");
+    let scalar = if kgar.v1 {
+        println!("Using deprecated BLS keygen.");
+        succeed_or_die!(keygen_bls_deprecated(&random_bytes, &key_info), e => "Could not generate key because {}")
+    } else {
+        succeed_or_die!(keygen_bls(&random_bytes, &key_info), e => "Could not generate key because {}")
+    };
     let ar_secret_key = SecretKey {
         generator: ar_base,
         scalar,
@@ -418,7 +435,10 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
         return Err("Provided randomness should be of size at least 64 bytes".to_string());
     }
     // let seed_32 = Sha256::digest(&bytes_from_file);
-    let ip_secret_key = succeed_or_die!(generate_ps_sk(kgip.bound, &bytes_from_file), e => "Could not generate signature key for the Pointcheval-Sanders Signature Scheme because {}");
+    let ip_secret_key = succeed_or_die!(generate_ps_sk(kgip.bound, &bytes_from_file, kgip.v1), e => "Could not generate signature key for the Pointcheval-Sanders Signature Scheme because {}");
+    if kgip.v1 {
+        println!("Using deprecated BLS keygen.");
+    }
     let ip_public_key = ps_sig::PublicKey::from(&ip_secret_key);
     let ed_sk = succeed_or_die!(generate_ed_sk(&bytes_from_file), e => "Could not generate signature key for EdDSA because {}");
     let ed_pk = ed25519_dalek::PublicKey::from(&ed_sk);
@@ -449,7 +469,7 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
         Ok(_) => println!("Wrote private to {}.", kgip.out.display()),
         Err(e) => {
             return Err(format!(
-                "Could not JSON private keys write to file because {}",
+                "Could not JSON write private keys to file because {}",
                 e
             ));
         }
@@ -513,13 +533,25 @@ fn handle_generate_randomness(grand: GenRand) -> Result<(), String> {
 /// It generates multiple scalars by calling keygen_bls with different values
 /// `key_info`. The integer n determines the number of scalars generated and
 /// must be less than 256.
-pub fn generate_ps_sk(n: u32, ikm: &[u8]) -> Result<ps_sig::SecretKey<Bls12>, hkdf::InvalidLength> {
+pub fn generate_ps_sk(
+    n: u32,
+    ikm: &[u8],
+    legacy: bool,
+) -> Result<ps_sig::SecretKey<Bls12>, hkdf::InvalidLength> {
     let mut ys: Vec<Fr> = Vec::with_capacity(n as usize);
-    for i in 0..n {
-        let key = keygen_bls(&ikm, &i.to_be_bytes()[..])?;
-        ys.push(key);
-    }
-    let key = keygen_bls(&ikm, &[])?;
+    let key = if legacy {
+        for i in 0..n {
+            let key = keygen_bls_deprecated(&ikm, &i.to_be_bytes()[..])?;
+            ys.push(key);
+        }
+        keygen_bls_deprecated(&ikm, &[])?
+    } else {
+        for i in 0..n {
+            let key = keygen_bls(&ikm, &i.to_be_bytes()[..])?;
+            ys.push(key);
+        }
+        keygen_bls(&ikm, &[])?
+    };
     Ok(ps_sig::SecretKey {
         g: G1::one_point(),
         g_tilda: G2::one_point(),
