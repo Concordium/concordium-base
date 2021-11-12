@@ -60,7 +60,7 @@ struct KeygenIp {
     out:         PathBuf,
     #[structopt(long = "out-pub", help = "File to output the public keys to.")]
     out_pub:     PathBuf,
-    #[structopt(long = "v1", help = "Use deprecated version 1 of BLS keygen.")]
+    #[structopt(long = "v1", help = "Use deprecated version 1 of BLS keygen. If keys were generated with version 1, this flag must be used during recovery.")]
     v1:          bool,
 }
 
@@ -112,7 +112,7 @@ struct KeygenAr {
                 randomness."
     )]
     only_system_randomness: bool,
-    #[structopt(long = "v1", help = "Use deprecated version 1 of BLS keygen.")]
+    #[structopt(long = "v1", help = "Use deprecated version 1 of BLS keygen. If keys were generated with version 1, this flag must be used during recovery.")]
     v1:                     bool,
 }
 
