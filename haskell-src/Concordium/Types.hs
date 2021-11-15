@@ -150,7 +150,8 @@ module Concordium.Types (
   -- * Account address identifications.
   AccountAddressEq(..),
   accountAddressEmbed,
-  accountAddressPrefixSize
+  accountAddressPrefixSize,
+  createAlias
   ) where
 
 import Data.Data (Typeable, Data)
@@ -951,6 +952,12 @@ instance Hashable AccountAddressEq where
     hash (AccountAddressEq (AccountAddress b)) = fromIntegral (FBS.unsafeReadWord64 b)
     {-# INLINE hash #-}
 
+-- |Create an alias for the address using the counter. The counter is used
+-- modulo 2^24, and the three bytes are appended in big endian order.
+createAlias :: AccountAddress -> Word -> AccountAddress
+createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. rest)
+  where rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
+        mask = complement (FBS.encodeInteger 0xffffff) -- mask to clear out the last three bytes of the addr
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
