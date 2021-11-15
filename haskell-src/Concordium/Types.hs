@@ -954,6 +954,11 @@ instance Hashable AccountAddressEq where
 
 -- |Create an alias for the address using the counter. The counter is used
 -- modulo 2^24, and the three bytes are appended in big endian order.
+--
+-- Examples
+-- - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256^2) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
+-- - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256 * 256 + 4 * 256 * 256 * 256) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
+-- - @createAlias addr x = createAlias (createAlias addr y) x@ for any x and y
 createAlias :: AccountAddress -> Word -> AccountAddress
 createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. rest)
   where rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
