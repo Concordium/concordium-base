@@ -18,6 +18,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Short.Internal as BSS
 import Data.Primitive.ByteArray
+import Data.Primitive.Types
 
 import Control.Monad.Primitive(touch)
 
@@ -300,6 +301,29 @@ withPtrReadOnlyST (FixedByteString ba) f = runST comp
 {-# INLINE unsafeReadWord64 #-}
 unsafeReadWord64 :: FixedLength s => FixedByteString s -> Word64
 unsafeReadWord64 (FixedByteString fbs) = indexByteArray fbs 0
+
+-- |Read a primitive value from the byte string at the given offset. __The
+-- offset is given in elements of type a rather than in bytes.__ This function
+-- does no bounds checking and its behaviour is undefined if an attempt is made
+-- to read past the end of the byte array.
+{-# INLINE unsafeIndexByteArray #-}
+unsafeIndexByteArray :: forall a s . (Prim a, FixedLength s)
+                     => FixedByteString s
+                     -> Int -- ^ Offset in elements of the type @a@. Must be non-negative.
+                     -> a
+unsafeIndexByteArray (FixedByteString fbs) = indexByteArray fbs
+
+-- |Compare two fixed byte strings. This function's behaviour is undefined if
+-- the offset and length do not satisfy the precondition mentioned below, hence
+-- it is marked unsafe.
+unsafeCompareFixedByteStrings :: FixedLength s
+    => Int -- ^Start of the subsection (offset). Must be @<= fixedLength _@
+    -> Int -- ^Length of the slice in bytes. Offset + length must be @<= fixedLength _@ and length must be non-negative.
+    -> FixedByteString s
+    -> FixedByteString s
+    -> Ordering
+unsafeCompareFixedByteStrings offset len (FixedByteString fbs1) (FixedByteString fbs2) = compareByteArrays fbs1 offset fbs2 offset len
+{-# INLINE unsafeCompareFixedByteStrings #-}
 
 -- |Read the first 8 bytes as a Word64 in __big__ endian.  If there are fewer
 -- than 8 bytes, these will be used as the low-order bytes (i.e. we pad with 0s on

@@ -145,7 +145,14 @@ module Concordium.Types (
   GenesisIndex(..),
 
   -- * Protocol version
-  module Concordium.Types.ProtocolVersion) where
+  module Concordium.Types.ProtocolVersion,
+
+  -- * Account address identifications.
+  AccountAddressEq(..),
+  accountAddressEmbed,
+  accountAddressPrefixSize,
+  createAlias
+  ) where
 
 import Data.Data (Typeable, Data)
 import Data.Scientific
@@ -166,12 +173,13 @@ import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
 import Concordium.Constants
+import qualified Data.FixedByteString as FBS
 
 import Control.Exception (assert)
 import Control.Monad
 import Control.Monad.Except
 
-import Data.Hashable (Hashable)
+import Data.Hashable (Hashable (..))
 import Data.Word
 import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
@@ -909,6 +917,52 @@ newtype GenesisIndex = GenesisIndex Word32
 instance S.Serialize GenesisIndex where
   put (GenesisIndex gi) = S.putWord32be gi
   get = GenesisIndex <$> S.getWord32be
+
+-- |Equivalence class of account addresses. In protocol versions 1 and 2
+-- addresses are in 1-1 correspondence with accounts. In protocol version 3 only
+-- the first 29 bytes of the address uniquely identify an account. This type
+-- wrapper is used to wrap account addresses and add different equality and
+-- hashable instances so that we can identify transactions coming from different
+-- addresses but the same account.
+--
+-- For backwards compatibility we retain the equality and hashable instances for
+-- account addresses as they were since account addresses are compared in a few
+-- places in the scheduler.
+newtype AccountAddressEq = AccountAddressEq {
+  aaeAddress :: AccountAddress
+  }
+    deriving (Show)
+
+-- |Length of the account address prefix used when uniquely determining the account.
+accountAddressPrefixSize :: Int
+accountAddressPrefixSize = 29
+
+{-# INLINE accountAddressEmbed #-}
+-- |Embed an account address into its equivalence class.
+accountAddressEmbed :: AccountAddress -> AccountAddressEq
+accountAddressEmbed = AccountAddressEq
+
+instance Eq AccountAddressEq where
+  -- compare the first 29 bytes of the address
+  AccountAddressEq (AccountAddress a1) == AccountAddressEq (AccountAddress a2) = FBS.unsafeCompareFixedByteStrings 0 accountAddressPrefixSize a1 a2 == EQ
+
+instance Hashable AccountAddressEq where
+    hashWithSalt s (AccountAddressEq (AccountAddress b)) = hashWithSalt s (FBS.unsafeReadWord64 b)
+    {-# INLINE hashWithSalt #-}
+    hash (AccountAddressEq (AccountAddress b)) = fromIntegral (FBS.unsafeReadWord64 b)
+    {-# INLINE hash #-}
+
+-- |Create an alias for the address using the counter. The counter is used
+-- modulo 2^24, and the three bytes are appended in big endian order.
+--
+-- Examples
+-- - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256^2) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
+-- - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256 * 256 + 4 * 256 * 256 * 256) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
+-- - @createAlias addr x = createAlias (createAlias addr y) x@ for any x and y
+createAlias :: AccountAddress -> Word -> AccountAddress
+createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. rest)
+  where rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
+        mask = complement (FBS.encodeInteger 0xffffff) -- mask to clear out the last three bytes of the addr
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

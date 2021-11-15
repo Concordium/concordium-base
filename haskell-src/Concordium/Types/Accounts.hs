@@ -206,7 +206,9 @@ makeAccountBakerHash amt stkEarnings binfo bpc =
 nullAccountBakerHash :: AccountBakerHash
 nullAccountBakerHash = AccountBakerHash $ Hash.hash ""
 
--- |The details of the state of an account on the chain, as may be returned by a query.
+-- |The details of the state of an account on the chain, as may be returned by a
+-- query. At present the account credentials map must always contain credential
+-- at index 0.
 data AccountInfo = AccountInfo
     { -- |The next nonce for the account
       aiAccountNonce :: !Nonce,
@@ -214,7 +216,8 @@ data AccountInfo = AccountInfo
       aiAccountAmount :: !Amount,
       -- |The release schedule for locked amounts on the account
       aiAccountReleaseSchedule :: !AccountReleaseSummary,
-      -- |The credentials on the account
+      -- |The credentials on the account. This map must always contain a
+      -- credential at credential index 0.
       aiAccountCredentials :: !(Map.Map CredentialIndex (Versioned AccountCredential)),
       -- |Number of credentials required to sign a valid transaction
       aiAccountThreshold :: !AccountThreshold,
@@ -225,7 +228,11 @@ data AccountInfo = AccountInfo
       -- |The account index
       aiAccountIndex :: !AccountIndex,
       -- |The baker associated with the account (if any)
-      aiBaker :: !(Maybe AccountBaker)
+      aiBaker :: !(Maybe AccountBaker),
+      -- |The canonical address of the account, derived from the first
+      -- credential. While this is not necessary, since it is derived from
+      -- another field of this type, it is convenient for consumers to have it.
+      aiAccountAddress :: !AccountAddress
     }
     deriving (Eq, Show)
 
@@ -240,7 +247,8 @@ accountInfoPairs AccountInfo{..} =
       "accountThreshold" .= aiAccountThreshold,
       "accountEncryptedAmount" .= aiAccountEncryptedAmount,
       "accountEncryptionKey" .= aiAccountEncryptionKey,
-      "accountIndex" .= aiAccountIndex
+      "accountIndex" .= aiAccountIndex,
+      "accountAddress" .= aiAccountAddress
     ]
         <> maybe [] (\b -> ["accountBaker" .= b]) aiBaker
 
@@ -255,9 +263,18 @@ instance FromJSON AccountInfo where
         aiAccountAmount <- obj .: "accountAmount"
         aiAccountReleaseSchedule <- obj .: "accountReleaseSchedule"
         aiAccountCredentials <- obj .: "accountCredentials"
+        creatingCredential <-
+            case Map.lookup (CredentialIndex 0) aiAccountCredentials of
+                Nothing -> fail "Accounts must have a credential with index 0."
+                Just ac -> return ac
         aiAccountThreshold <- obj .: "accountThreshold"
         aiAccountEncryptedAmount <- obj .: "accountEncryptedAmount"
         aiAccountEncryptionKey <- obj .: "accountEncryptionKey"
         aiAccountIndex <- obj .: "accountIndex"
+        -- For backwards compatibility we retrieve the account address from the
+        -- credential.
+        aiAccountAddress <- obj .:! "accountAddress" >>= \case
+            Nothing -> return (addressFromRegId (credId (vValue creatingCredential)))
+            Just addr -> return addr
         aiBaker <- obj .:? "accountBaker"
         return AccountInfo{..}

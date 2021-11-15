@@ -52,6 +52,7 @@ library
       Concordium.Genesis.Data.Base
       Concordium.Genesis.Data.P1
       Concordium.Genesis.Data.P2
+      Concordium.Genesis.Data.P3
       Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker
@@ -275,6 +276,7 @@ test-suite test
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
       Types.AccountEncryptedAmountSpec
+      Types.AddressesSpec
       Types.AmountSpec
       Types.PayloadSerializationSpec
       Types.RewardTypes

@@ -489,6 +489,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
         supportMemo = case spv of
           SP1 -> False
           SP2 -> True
+          SP3 -> True
 
 -- |Builds a set from a list of ascending elements.
 -- Fails if the elements are not ordered or a duplicate is encountered.
