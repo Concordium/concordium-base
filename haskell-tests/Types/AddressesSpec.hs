@@ -34,7 +34,7 @@ testEquivalence = forAll genAddress $ \addr ->
 genCorrupt :: AccountAddress -> Gen AccountAddress
 genCorrupt (AccountAddress addr) = do
   place <- choose (0, 31)
-  let (start, ~(_:rest)) = splitAt place (FBS.unpack addr) -- since we split at most at 31 there is at least one elemnt of the tail
+  let (start, ~(_:rest)) = splitAt place (FBS.unpack addr) -- since we split at most at 31 there is at least one element of the tail
   new <- arbitrary
   return $ AccountAddress . FBS.pack $ (start ++ new:rest)
 
