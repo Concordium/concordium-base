@@ -64,6 +64,17 @@ pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 /// version byte 1.
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
+/// Implement hash manually based on the first 8 bytes of the address.
+impl std::hash::Hash for AccountAddress {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(u64::from_ne_bytes(
+            self.0[0..8]
+                .try_into()
+                .expect("Cannot fail since we have a slice of 8 bytes."),
+        ))
+    }
+}
+
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
 }
@@ -88,6 +99,10 @@ impl std::str::FromStr for AccountAddress {
 
 impl AsRef<[u8; 32]> for AccountAddress {
     fn as_ref(&self) -> &[u8; 32] { &self.0 }
+}
+
+impl AsMut<[u8; 32]> for AccountAddress {
+    fn as_mut(&mut self) -> &mut [u8; 32] { &mut self.0 }
 }
 
 impl SerdeSerialize for AccountAddress {
@@ -1393,7 +1408,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub cred_id:       C,
+    pub cred_id:       CredId<C>,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -1429,7 +1444,7 @@ pub struct InitialCredentialDeploymentValues<C: Curve, AttributeType: Attribute<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id:       C,
+    pub reg_id:       CredId<C>,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -1514,6 +1529,21 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
         #[serde(rename = "commitments")]
         commitments: CredentialDeploymentCommitments<C>,
     },
+}
+
+/// Type of credential registration IDs.
+pub type CredId<C> = C;
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>>
+    AccountCredentialWithoutProofs<C, AttributeType>
+{
+    /// Return the credential registration ID of the account credential.
+    pub fn cred_id(&self) -> &CredId<C> {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => &icdv.reg_id,
+            AccountCredentialWithoutProofs::Normal { cdv, .. } => &cdv.cred_id,
+        }
+    }
 }
 
 /// This is the CredentialDeploymentInfo structure, that instead of containing
