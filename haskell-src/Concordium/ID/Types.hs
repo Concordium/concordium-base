@@ -364,16 +364,18 @@ instance FromJSONKey AttributeTag where
   fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
 
 instance ToJSONKey AttributeTag where
-  toJSONKey = toJSONKeyText $ (\tag -> fromMaybe "UNKNOWN" $ Map.lookup tag invMapping)
+  toJSONKey = toJSONKeyText $ (\tag -> fromMaybe (Text.pack ("UNNAMED#" ++ show tag)) $ Map.lookup tag invMapping)
 
 instance FromJSON AttributeTag where
-  parseJSON = withText "Attribute name" $ \text ->do
+  parseJSON = withText "Attribute name" $ \text -> do
         case Map.lookup text mapping of
           Just x -> return x
-          Nothing -> fail $ "Attribute " ++ Text.unpack text ++ " does not exist."
+          Nothing -> case Text.stripPrefix "UNNAMED#" text >>= Text.readMaybe . Text.unpack of
+            Just tag | tag < 254 -> return $ AttributeTag tag -- 254 is the capacity of the field defined by the BLS curve.
+            _ -> fail "Unsupported tag."
 
 instance ToJSON AttributeTag where
-  toJSON tag = maybe "UNKNOWN" toJSON $ Map.lookup tag invMapping
+  toJSON tag = maybe (String (Text.pack ("UNNAMED#" ++ show tag))) toJSON $ Map.lookup tag invMapping
 
 data Policy = Policy {
   -- |Validity of this credential.
