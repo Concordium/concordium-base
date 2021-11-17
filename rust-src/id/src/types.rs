@@ -418,7 +418,11 @@ impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == v.0) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(anyhow!("{} tag unknown.", v.0))
+            match v.0.strip_prefix("UNNAMED#").and_then(|x| x.parse().ok()) {
+                Some(num) if num < 254 => Ok(AttributeTag(num)), // 254 is the capacity of the
+                // BLS curve field
+                _ => Err(anyhow!("Unrecognized attribute tag.")),
+            }
         }
     }
 }
@@ -429,7 +433,7 @@ impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
         if v_usize < ATTRIBUTE_NAMES.len() {
             AttributeStringTag(ATTRIBUTE_NAMES[v_usize].to_owned())
         } else {
-            AttributeStringTag("UNKNOWN".to_owned())
+            AttributeStringTag(format!("UNNAMED#{}", v))
         }
     }
 }
