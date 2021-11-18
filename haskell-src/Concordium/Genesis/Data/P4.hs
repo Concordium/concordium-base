@@ -38,7 +38,7 @@ instance BasicGenesisData GenesisDataP4 where
     gdEpochLength = genesisEpochLength . _core
     {-# INLINE gdEpochLength #-}
 
--- |Deserialize genesis data in the V5 format.
+-- |Deserialize genesis data in the V6 format.
 getGenesisDataV6 :: Get GenesisDataP4
 getGenesisDataV6 =
     getWord8 >>= \case
@@ -51,7 +51,7 @@ getGenesisDataV6 =
             return GDP4Regenesis{..}
         _ -> fail "Unrecognized P4 genesis data type."
 
--- |Serialize genesis data in the V5 format.
+-- |Serialize genesis data in the V6 format.
 putGenesisDataV6 :: Putter GenesisDataP4
 putGenesisDataV6 GDP4Initial{..} = do
   putWord8 0
@@ -70,7 +70,7 @@ getVersionedGenesisData =
         n -> fail $ "Unsupported genesis data version for P4 genesis: " ++ show n
 
 -- |Serialize genesis data with a version tag.
--- This will use the V5 format.
+-- This will use the V6 format.
 putVersionedGenesisData :: Putter GenesisDataP4
 putVersionedGenesisData gd = do
     putVersion 6

@@ -4,34 +4,10 @@ module Types.AccountEncryptedAmountSpec where
 
 import qualified Data.Aeson as AE
 import qualified Data.Serialize as S
-import qualified Data.Sequence as Seq
 import Test.Hspec
 import Test.QuickCheck as QC
 
-import Concordium.ID.DummyData
-import Concordium.Crypto.EncryptedTransfers
-import Concordium.Types
-
--- This generates an encryption with zero randomness, but that is sufficient for
--- our testing since we assume serialization of encrypted amounts themselves is
--- fine, and we are only checking the account structure.
-genEncryptedAmount :: Gen EncryptedAmount
-genEncryptedAmount = do
-  amnt <- Amount <$> arbitrary
-  return $ encryptAmountZeroRandomness globalContext amnt
-
-genAccountEncryptedAmount :: Gen AccountEncryptedAmount
-genAccountEncryptedAmount = do
-  _selfAmount <- genEncryptedAmount
-  _startIndex <- EncryptedAmountAggIndex <$> arbitrary
-  len <- choose (0,100)
-  _incomingEncryptedAmounts <- Seq.replicateM len genEncryptedAmount
-  numAgg <- arbitrary
-  aggAmount <- genEncryptedAmount
-  if numAgg == Just 1 || numAgg == Just 0 then
-    return AccountEncryptedAmount{_aggregatedAmount = Nothing,..}
-  else
-    return AccountEncryptedAmount{_aggregatedAmount = (aggAmount,) <$> numAgg,..}
+import Types.Generators
 
 testBinarySerialization :: Property
 testBinarySerialization = forAll genAccountEncryptedAmount $ \acc ->

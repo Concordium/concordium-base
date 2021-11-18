@@ -3,7 +3,6 @@ module ConcordiumTests.ID.Types where
 
 import Concordium.Common.Version
 import Concordium.ID.Types
-import qualified Data.FixedByteString as FBS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S

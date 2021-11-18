@@ -5,23 +5,15 @@ import Test.QuickCheck as QC
 import Data.Hashable
 
 import Concordium.Types
-import Concordium.ID.Types
 import qualified Data.FixedByteString as FBS
 
-genAddress :: Gen AccountAddress
-genAddress = do
-  AccountAddress . FBS.pack <$> vector accountAddressSize
-
-genAliases :: AccountAddress -> Gen AccountAddress
-genAliases (AccountAddress addr) = do
-  suffix <- vector 3
-  return $ AccountAddress . FBS.pack $ (take accountAddressPrefixSize (FBS.unpack addr) ++ suffix)
+import Types.Generators
 
 -- Test that AccountAddressEq has the correct hashable and eq instances that do
 -- not distinguish aliases.
 testEquivalence :: Property
-testEquivalence = forAll genAddress $ \addr ->
-  forAll (genAliases addr) $ \alias ->
+testEquivalence = forAll genAccountAddress $ \addr ->
+  forAll (genAccountAliases addr) $ \alias ->
     forAll arbitrary $ \salt -> 
       accountAddressEmbed addr === accountAddressEmbed alias .&&.
       hash (accountAddressEmbed addr) === hash (accountAddressEmbed alias) .&&.
@@ -40,7 +32,7 @@ genCorrupt (AccountAddress addr) = do
 
 -- Dual to the test above, check that equivalence does not identify more than 29 bytes.
 testNegative :: Property
-testNegative = forAll genAddress $ \addr@(AccountAddress addrFbs) ->
+testNegative = forAll genAccountAddress $ \addr@(AccountAddress addrFbs) ->
   forAll (genCorrupt addr) $ \maybeAlias@(AccountAddress maybeAliasFbs) ->
       accountAddressEmbed addr =/= accountAddressEmbed maybeAlias .||. 
       take accountAddressPrefixSize (FBS.unpack addrFbs) === take accountAddressPrefixSize (FBS.unpack maybeAliasFbs)

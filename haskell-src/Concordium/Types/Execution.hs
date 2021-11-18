@@ -674,7 +674,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
           SP3 -> False
           SP4 -> True
         configureBakerBitMask = 0b0000001111111111
-        configureDelegationBitMask = 0b000000000000111
+        configureDelegationBitMask = 0b0000000000000111
 
 -- |Builds a set from a list of ascending elements.
 -- Fails if the elements are not ordered or a duplicate is encountered.

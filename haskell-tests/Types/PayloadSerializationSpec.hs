@@ -7,49 +7,28 @@ import Test.QuickCheck.Monadic
 import Test.QuickCheck
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Short as BSS
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import qualified Data.Serialize as S
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as TE
-import qualified Data.Vector as Vec
 import Data.Int
-import System.Random
-import Control.Monad
-import System.IO.Unsafe
 
-import qualified Concordium.Crypto.BlockSignature as BlockSig
-import qualified Concordium.Crypto.BlsSignature as Bls
-import Concordium.Crypto.SignatureScheme
 import Concordium.ID.Types
 import Concordium.ID.DummyData
-import Concordium.Common.Time
-import qualified Concordium.Crypto.VRF as VRF
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.Crypto.FFIDataTypes
-import qualified Data.FixedByteString as FBS
-import qualified Concordium.Crypto.SHA256 as SHA256
 
 import Concordium.Types.Execution
 import Concordium.Types
-import Concordium.Wasm
-
-import Concordium.Crypto.Proofs
-import Concordium.Crypto.DummyData
-
-import Types.RewardTypes
 
 import Types.Generators
 
 testSerializeEncryptedTransfer :: Property
-testSerializeEncryptedTransfer = property $ \gen gen1 seed1 seed2 -> forAll genAddress $ \addr -> monadicIO $ do
-  let public = AccountEncryptionKey . deriveElgamalPublicKey globalContext . generateGroupElementFromSeed globalContext $ seed1
-  let private = generateElgamalSecretKeyFromSeed globalContext seed2
-  let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
-  let amount = gen `div` 2
-  Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
-  return (checkPayload SP1 (EncryptedAmountTransfer addr eatd))
+testSerializeEncryptedTransfer =
+  property $ \gen gen1 seed1 seed2 -> forAll genAccountAddress $ \addr -> monadicIO $ do
+    let public = AccountEncryptionKey . deriveElgamalPublicKey globalContext . generateGroupElementFromSeed globalContext $ seed1
+    let private = generateElgamalSecretKeyFromSeed globalContext seed2
+    let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
+    let amount = gen `div` 2
+    Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
+    return (checkPayload SP1 (EncryptedAmountTransfer addr eatd))
 
 testSecToPubTransfer :: Property
 testSecToPubTransfer = property $ \gen gen1 seed1 -> monadicIO $ do
