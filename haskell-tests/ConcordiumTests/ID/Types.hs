@@ -13,23 +13,21 @@ import Test.Hspec
 import Test.HUnit
 import Data.Aeson
 
+import Types.Generators
+
 testJSON :: Property
-testJSON = forAll genAddress ck
+testJSON = forAll genAccountAddress ck
   where ck :: AccountAddress -> Property
         ck b58 = case decode (encode b58) of
                    Nothing -> counterexample (show b58) False
                    Just x -> x === b58
 
 testFromBytes :: Property
-testFromBytes = forAll genAddress ck
+testFromBytes = forAll genAccountAddress ck
   where ck :: AccountAddress -> Property
         ck addr = case addressFromBytes (BS8.pack (show addr)) of
                    Left _ -> counterexample ("Problem = " ++ show addr) False
                    Right x -> x === addr
-
-genAddress :: Gen AccountAddress
-genAddress = do
-  AccountAddress . FBS.pack <$> vector accountAddressSize
 
 -- Check that serializations in Haskell and rust, json and binary are compatible.
 checkCDICompatibility :: FilePath -> FilePath -> Expectation

@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE EmptyCase #-}
@@ -15,6 +16,7 @@ import Data.Char
 import qualified Data.Aeson as AE
 import Data.Aeson((.=), (.:))
 import Data.Aeson.TH
+import Data.Bits
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map as Map
 import qualified Data.Serialize.Put as P
@@ -22,6 +24,8 @@ import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 import Concordium.Utils.Serialization
 import qualified Data.Set as Set
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 
@@ -63,6 +67,69 @@ instance AE.FromJSON AccountOwnershipProof where
 instance AE.ToJSON AccountOwnershipProof where
   toJSON (AccountOwnershipProof proofs) = AE.toJSON $ HMap.fromList proofs
 
+-- |The status of whether a baking pool allows delegators to join.
+data OpenStatus
+  = OpenForAll
+  -- ^New delegators may join the pool.
+  | ClosedForNew
+  -- ^New delegators may not join, but existing delegators are kept.
+  | ClosedForAll
+  -- ^No delegators are allowed.
+  deriving (Eq, Show)
+
+instance S.Serialize OpenStatus where
+  put OpenForAll = S.putWord8 0
+  put ClosedForNew = S.putWord8 1
+  put ClosedForAll = S.putWord8 2
+  get = S.getWord8 >>= \case
+    0 -> return OpenForAll
+    1 -> return ClosedForNew
+    2 -> return ClosedForAll
+    _ -> fail "Invalid OpenStatus"
+
+-- |The pool to which a delegator may delegate.
+data DelegationTarget
+  = DelegateToLPool
+  -- ^Delegate to the lock-up pool (L-pool).
+  | DelegateToBaker !BakerId
+  -- ^Delegate to a specific baker.
+  deriving (Eq, Show)
+
+instance S.Serialize DelegationTarget where
+  put DelegateToLPool = S.putWord8 0
+  put (DelegateToBaker bid) = S.putWord8 1 >> S.put bid
+  get = S.getWord8 >>= \case
+    0 -> return DelegateToLPool
+    1 -> DelegateToBaker <$> S.get
+    _ -> fail "Invalid DelegationTarget"
+
+-- |The maximum allowed length of a 'UrlText' in bytes (Utf8 encoded).
+maxUrlTextLength :: Word16
+maxUrlTextLength = 2048
+
+-- |A unicode representation of a Url.
+-- The Utf8 encoding of the Url must be at most 'maxUrlTextLength' bytes.
+newtype UrlText = UrlText T.Text
+  deriving newtype (Eq, Show)
+
+instance S.Serialize UrlText where
+  put (UrlText url)
+    | len <= fromIntegral maxUrlTextLength = do
+      S.putWord16be (fromIntegral len)
+      S.putByteString enc
+    | otherwise = error "UrlText is too long"
+    where 
+      enc = T.encodeUtf8 url
+      len = BS.length enc
+  get = do
+      len <- S.getWord16be
+      when (len > maxUrlTextLength) $
+        fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
+      bytes <- S.getByteString (fromIntegral len)
+      case T.decodeUtf8' bytes of
+        Left e -> fail (show e)
+        Right r -> return (UrlText r)
+
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
@@ -96,7 +163,7 @@ data Payload =
       }
   -- |Simple transfer from an account to an account.
   | Transfer {
-      -- |Recepient.
+      -- |Recipient.
       tToAddress :: !AccountAddress,
       -- |Amount to transfer.
       tAmount :: !Amount
@@ -192,7 +259,7 @@ data Payload =
   }
   -- |Simple transfer from an account to an account with additional memo.
   | TransferWithMemo {
-      -- |Recepient.
+      -- |Recipient.
       twmToAddress :: !AccountAddress,
       -- |Memo.
       twmMemo :: !Memo,
@@ -214,6 +281,41 @@ data Payload =
       twswmMemo :: !Memo,
       twswmSchedule :: ![(Timestamp, Amount)]
       }
+  -- | Configure a baker on an account.
+  | ConfigureBaker {
+      -- |The equity capital of the baker
+      cbCapital :: !(Maybe Amount),
+      -- |Whether the baker's earnings are restaked
+      cbRestakeEarnings :: !(Maybe Bool),
+      -- |Whether the pool is open for delegators
+      cbOpenForDelegation :: !(Maybe OpenStatus),
+      -- |Public key to verify block signatures signed by the baker, with a proof of knowledge of
+      -- the secret key.
+      cbSignatureVerifyKey :: !(Maybe (BakerSignVerifyKey, Dlog25519Proof)),
+      -- |Public key to verify the baker has won the election, with a proof of knowledge of the
+      -- secret key.
+      cbElectionVerifyKey :: !(Maybe (BakerElectionVerifyKey, Dlog25519Proof)),
+      -- |Public key to verify aggregate signatures in which the baker participates, with a proof
+      -- of knowledge of the secret key.
+      cbAggregationVerifyKey :: !(Maybe (BakerAggregationVerifyKey, BakerAggregationProof)),
+      -- |The URL referencing the baker's metadata.
+      cbMetadataURL :: !(Maybe UrlText),
+      -- |The commission the pool owner takes on transaction fees.
+      cbTransactionFeeCommission :: !(Maybe RewardFraction),
+      -- |The commission the pool owner takes on baking rewards.
+      cbBakingRewardCommission :: !(Maybe RewardFraction),
+      -- |The commission the pool owner takes on finalization rewards.
+      cbFinalizationRewardCommission :: !(Maybe RewardFraction)
+  }
+  -- | Configure an account's stake delegation.
+  | ConfigureDelegation {
+      -- |The capital delegated to the pool.
+      cdCapital :: !(Maybe Amount),
+      -- |Whether the delegator's earnings are restaked.
+      cdRestakeEarnings :: !(Maybe Bool),
+      -- |The target of the delegation.
+      cdDelegationTarget :: !(Maybe DelegationTarget)
+  }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -244,6 +346,8 @@ instance S.Serialize TransactionType where
     TTTransferWithMemo -> S.putWord8 16
     TTEncryptedAmountTransferWithMemo -> S.putWord8 17
     TTTransferWithScheduleAndMemo -> S.putWord8 18
+    TTConfigureBaker -> S.putWord8 19
+    TTConfigureDelegation -> S.putWord8 20
 
   get = S.getWord8 >>= \case
     0 -> return TTDeployModule
@@ -265,6 +369,8 @@ instance S.Serialize TransactionType where
     16 -> return TTTransferWithMemo
     17 -> return TTEncryptedAmountTransferWithMemo
     18 -> return TTTransferWithScheduleAndMemo
+    19 -> return TTConfigureBaker
+    20 -> return TTConfigureDelegation
     n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 -- |Payload serialization according to
@@ -370,7 +476,47 @@ putPayload TransferWithScheduleAndMemo{..} =
     S.put twswmMemo <>
     P.putWord8 (fromIntegral (length twswmSchedule)) <>
     forM_ twswmSchedule (\(a,b) -> S.put a >> S.put b)
+putPayload ConfigureBaker{..} = do
+    S.putWord8 25
+    S.putWord16be bitmap
+    mapM_ S.put cbCapital
+    mapM_ S.put cbRestakeEarnings
+    mapM_ S.put cbOpenForDelegation
+    mapM_ S.put cbSignatureVerifyKey
+    mapM_ S.put cbElectionVerifyKey
+    mapM_ S.put cbAggregationVerifyKey
+    mapM_ S.put cbMetadataURL
+    mapM_ S.put cbTransactionFeeCommission
+    mapM_ S.put cbBakingRewardCommission
+    mapM_ S.put cbFinalizationRewardCommission
+  where
+    bitmap =
+      bitFor 0 cbCapital .|.
+      bitFor 1 cbRestakeEarnings .|.
+      bitFor 2 cbOpenForDelegation .|.
+      bitFor 3 cbSignatureVerifyKey .|.
+      bitFor 4 cbElectionVerifyKey .|.
+      bitFor 5 cbAggregationVerifyKey .|.
+      bitFor 6 cbMetadataURL .|.
+      bitFor 7 cbTransactionFeeCommission .|.
+      bitFor 8 cbBakingRewardCommission .|.
+      bitFor 9 cbFinalizationRewardCommission
+putPayload ConfigureDelegation{..} = do
+    S.putWord8 26
+    S.putWord16be bitmap
+    mapM_ S.put cdCapital
+    mapM_ S.put cdRestakeEarnings
+    mapM_ S.put cdDelegationTarget
+  where
+    bitmap =
+      bitFor 0 cdCapital .|.
+      bitFor 1 cdRestakeEarnings .|.
+      bitFor 2 cdDelegationTarget
 
+-- |Set the given bit if the value is a 'Just'.
+bitFor :: (Bits b) => Int -> Maybe a -> b
+bitFor _ Nothing = zeroBits
+bitFor i (Just _) = bit i
 
 -- |Get the payload of the given size.
 getPayload :: SProtocolVersion pv -> PayloadSize -> S.Get Payload
@@ -396,7 +542,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               tToAddress <- S.get
               tAmount <- S.get
               return Transfer{..}
-            4 -> do
+            4 | not supportDelegation -> do
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
               abAggregationVerifyKey <- S.get
@@ -406,15 +552,15 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               abBakingStake <- S.get
               abRestakeEarnings <- getBool
               return AddBaker{..}
-            5 -> do
+            5 | not supportDelegation -> do
               return RemoveBaker
-            6 -> S.label "UpdateBakerStake" $ do
+            6 | not supportDelegation -> S.label "UpdateBakerStake" $ do
               ubsStake <- S.get
               return UpdateBakerStake{..}
-            7 -> S.label "RestakeEarnings" $ do
+            7 | not supportDelegation -> S.label "RestakeEarnings" $ do
               ubreRestakeEarnings <- getBool
               return UpdateBakerRestakeEarnings{..}
-            8 -> do
+            8 | not supportDelegation -> do
               ubkElectionVerifyKey <- S.get
               ubkSignatureVerifyKey <- S.get
               ubkAggregationVerifyKey <- S.get
@@ -485,11 +631,50 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               len <- S.getWord8
               twswmSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
               return TransferWithScheduleAndMemo{..}
+            25 | supportDelegation -> S.label "ConfigureBaker" $ do
+              bitmap <- S.getWord16be
+              unless (bitmap .&. configureBakerBitMask == bitmap) $
+                fail "Unsupported ConfigureBaker field(s)"
+              let maybeGet :: (S.Serialize g) => Int -> S.Get (Maybe g)
+                  maybeGet b
+                    | testBit bitmap b = Just <$> S.get
+                    | otherwise = return Nothing
+              cbCapital <- maybeGet 0
+              cbRestakeEarnings <- maybeGet 1
+              cbOpenForDelegation <- maybeGet 2
+              cbSignatureVerifyKey <- maybeGet 3
+              cbElectionVerifyKey <- maybeGet 4
+              cbAggregationVerifyKey <- maybeGet 5
+              cbMetadataURL <- maybeGet 6
+              cbTransactionFeeCommission <- maybeGet 7
+              cbBakingRewardCommission <- maybeGet 8
+              cbFinalizationRewardCommission <- maybeGet 9
+              return ConfigureBaker{..}
+            26 | supportDelegation -> S.label "ConfigureDelgation" $ do
+              bitmap <- S.getWord16be
+              unless (bitmap .&. configureDelegationBitMask == bitmap) $
+                fail "Unsupported ConfigureDelegation field(s)"
+              let maybeGet :: (S.Serialize g) => Int -> S.Get (Maybe g)
+                  maybeGet b
+                    | testBit bitmap b = Just <$> S.get
+                    | otherwise = return Nothing
+              cdCapital <- maybeGet 0
+              cdRestakeEarnings <- maybeGet 1
+              cdDelegationTarget <- maybeGet 2
+              return ConfigureDelegation{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
         supportMemo = case spv of
           SP1 -> False
           SP2 -> True
           SP3 -> True
+          SP4 -> True
+        supportDelegation = case spv of
+          SP1 -> False
+          SP2 -> False
+          SP3 -> False
+          SP4 -> True
+        configureBakerBitMask = 0b0000001111111111
+        configureDelegationBitMask = 0b000000000000111
 
 -- |Builds a set from a list of ascending elements.
 -- Fails if the elements are not ordered or a duplicate is encountered.
@@ -520,7 +705,7 @@ payloadBodyBytes (EncodedPayload ss) =
   else BS.tail (BSS.fromShort ss)
 
 -- |Events which are generated during transaction execution.
--- These are only used for commited transactions.
+-- These are only used for committed transactions.
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
 data Event =
            -- |Module with the given address was deployed.
