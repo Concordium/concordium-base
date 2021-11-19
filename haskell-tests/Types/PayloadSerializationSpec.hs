@@ -10,9 +10,8 @@ import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import Data.Int
 import Data.Word
-import Data.Bits (bit, (.|.))
+import qualified Data.Bits as Bit
 import Data.Either (isLeft)
-import Data.List (delete)
 
 import Concordium.ID.Types
 import Concordium.ID.DummyData
@@ -69,10 +68,9 @@ modifyPayloadBitmap f bs =
 -- (higher) bits are modified to invalidate the payload's bitmap.
 genPayloadWithInvalidBitmap :: Int -> BS.ByteString -> Gen BS.ByteString
 genPayloadWithInvalidBitmap sizeOfBitmap payload = do
-  forcedBit <- choose (sizeOfBitmap, 15)
-  optionalBits <- mapM (\i -> elements [0, bit i]) $ delete forcedBit [sizeOfBitmap..15]
-  let bits = foldl (.|.) (bit forcedBit) optionalBits
-  return (modifyPayloadBitmap (bits .|.) payload)
+  let invalidBitmask = Bit.shiftL maxBound sizeOfBitmap
+  invalidBits <- suchThat (fmap (invalidBitmask Bit..&.) arbitrary) (/= 0)
+  return (modifyPayloadBitmap (invalidBits Bit..|.) payload)
 
 genInvalidPayloadConfigureBaker :: Gen BS.ByteString
 genInvalidPayloadConfigureBaker = do
