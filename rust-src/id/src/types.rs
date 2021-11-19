@@ -59,10 +59,15 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, Copy, Clone, PartialOrd, Ord)]
 /// Address of an account. Textual representation uses base58check encoding with
 /// version byte 1.
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
+
+// Implemented manually since we are implementing hash manually.
+impl PartialEq for AccountAddress {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+}
 
 /// Implement hash manually based on the first 8 bytes of the address.
 impl std::hash::Hash for AccountAddress {
