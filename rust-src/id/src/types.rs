@@ -378,7 +378,7 @@ pub struct AttributeTag(pub u8);
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 13] = [
+pub const ATTRIBUTE_NAMES: [&str; 14] = [
     "firstName",
     "lastName",
     "sex",
@@ -392,6 +392,7 @@ pub const ATTRIBUTE_NAMES: [&str; 13] = [
     "idDocExpiresAt",
     "nationalIdNo",
     "taxIdNo",
+    "lei",
 ];
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -433,7 +434,7 @@ impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
         if v_usize < ATTRIBUTE_NAMES.len() {
             AttributeStringTag(ATTRIBUTE_NAMES[v_usize].to_owned())
         } else {
-            AttributeStringTag(format!("UNNAMED#{}", v))
+            AttributeStringTag(format!("UNNAMED#{}", v.0))
         }
     }
 }
