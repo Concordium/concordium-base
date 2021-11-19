@@ -59,26 +59,10 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, Eq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
 /// Address of an account. Textual representation uses base58check encoding with
 /// version byte 1.
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
-
-// Implemented manually since we are implementing hash manually.
-impl PartialEq for AccountAddress {
-    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
-}
-
-/// Implement hash manually based on the first 8 bytes of the address.
-impl std::hash::Hash for AccountAddress {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(u64::from_ne_bytes(
-            self.0[0..8]
-                .try_into()
-                .expect("Cannot fail since we have a slice of 8 bytes."),
-        ))
-    }
-}
 
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
