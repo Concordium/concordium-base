@@ -22,6 +22,11 @@ struct StartIp {
     )]
     ip_info:            PathBuf,
     #[structopt(
+        long = "initial-keys",
+        help = "File to write the JSON encoded private keys of the user's initial account."
+    )]
+    initial_keys:       PathBuf,
+    #[structopt(
         long = "ars",
         help = "File with a list of anonymity revokers.",
         default_value = "database/anonymity_revokers.json"
@@ -266,6 +271,18 @@ fn handle_start_ip(sip: StartIp) {
         },
         threshold: SignatureThreshold(2),
     };
+    println!("Generated private keys for initial account.");
+    if let Err(e) = output_possibly_encrypted(&sip.initial_keys, &initial_acc_data) {
+        eprintln!(
+            "Could not write (encrypted) private keys of initial account to file because: {}",
+            e
+        );
+        return;
+    }
+    println!(
+        "Wrote (encrypted) private keys of initial account to file {}.",
+        &sip.private.to_string_lossy()
+    );
     let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
         .expect("Generating the pre-identity object should succeed.");
 
