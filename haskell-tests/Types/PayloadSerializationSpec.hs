@@ -9,6 +9,10 @@ import Test.QuickCheck
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import Data.Int
+import Data.Word
+import Data.Bits (bit, (.|.))
+import Data.Either (isLeft)
+import Data.List (delete)
 
 import Concordium.ID.Types
 import Concordium.ID.DummyData
@@ -54,6 +58,36 @@ checkPayload spv e = let bs = S.runPut $ putPayload e
                       Left err -> counterexample err False
                       Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
 
+modifyPayloadBitmap :: (Word16 -> Word16) -> BS.ByteString -> BS.ByteString
+modifyPayloadBitmap f bs =
+  let Right ((header, bitmap), rest) = S.runGetState ((,) <$> S.getWord8 <*> S.getWord16be) bs 0
+  in S.runPut (S.putWord8 header <> S.putWord16be (f bitmap)) `BS.append` rest
+
+genModifyPayloadBitmap :: Int -> BS.ByteString -> Gen BS.ByteString
+genModifyPayloadBitmap sizeOfBitmap payload = do
+  forcedBit <- choose (sizeOfBitmap, 15)
+  optionalBits <- mapM (\i -> elements [0, bit i]) $ delete forcedBit [sizeOfBitmap..15]
+  let bits = bit forcedBit .|. foldl (.|.) 0 optionalBits
+  return (modifyPayloadBitmap (bits .|.) payload)
+
+genInvalidPayloadConfigureBaker :: Gen BS.ByteString
+genInvalidPayloadConfigureBaker = do
+  bs <- S.runPut . putPayload <$> genPayloadConfigureBaker
+  genModifyPayloadBitmap 10 bs
+
+genInvalidPayloadConfigureDelegation :: Gen BS.ByteString
+genInvalidPayloadConfigureDelegation = do
+  bs <- S.runPut . putPayload <$> genPayloadConfigureDelegation
+  genModifyPayloadBitmap 3 bs
+
+genInvalidPayloadByteString :: Gen BS.ByteString
+genInvalidPayloadByteString =
+  oneof [genInvalidPayloadConfigureBaker, genInvalidPayloadConfigureDelegation]
+
+checkInvalidPayloadByteString :: SProtocolVersion pv -> BS.ByteString -> Property
+checkInvalidPayloadByteString spv bs =
+  property $ isLeft $ S.runGet (getPayload spv (fromIntegral (BS.length bs))) bs
+
 tests :: Spec
 tests = do
   describe "Payload serialization tests" $ do
@@ -61,6 +95,8 @@ tests = do
     test SP3 50 500
     test SP4 25 1000
     test SP4 50 500
+  describe "Negative payload serialization tests" $
+    negativeTest SP4 20 200
   describe "Encrypted transfer payloads" $ do
     specify "Encrypted transfer" $ testSerializeEncryptedTransfer
     specify "Transfer to public" $ testSecToPubTransfer
@@ -69,3 +105,8 @@ tests = do
            specify ("Payload serialization (" ++ show (demoteProtocolVersion spv) 
               ++ ") with size = " ++ show size ++ ":") $
                 forAll (resize size $ genPayload (demoteProtocolVersion spv)) (checkPayload spv)
+       negativeTest spv size num =
+         modifyMaxSuccess (const num) $
+           specify ("Negative payload serialization (" ++ show (demoteProtocolVersion spv)
+              ++ ") with size = " ++ show size ++ ":") $
+                forAll (resize size genInvalidPayloadByteString) (checkInvalidPayloadByteString spv)

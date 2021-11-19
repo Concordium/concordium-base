@@ -112,127 +112,140 @@ genRewardFraction = makeRewardFraction <$> arbitrary `suchThat` (<= 100000)
 genPayload :: ProtocolVersion -> Gen Payload
 genPayload pv =
     oneof $
-        [ genDeployModule,
-          genInit,
-          genUpdate,
-          genTransfer,
-          genCredentialUpdate,
-          genUpdateCredentialKeys,
-          genTransferToEncrypted,
-          genRegisterData
+        [ genPayloadDeployModule,
+          genPayloadInitContract,
+          genPayloadUpdate,
+          genPayloadTransfer,
+          genPayloadUpdateCredentials,
+          genPayloadUpdateCredentialKeys,
+          genPayloadTransferToEncrypted,
+          genPayloadRegisterData
         ]
             ++ if pv < P4
                 then
-                    [ genAddBaker,
-                      genRemoveBaker,
-                      genUpdateBakerStake,
-                      genUpdateBakerRestakeEarnings,
-                      genUpdateBakerKeys
+                    [ genPayloadAddBaker,
+                      genPayloadRemoveBaker,
+                      genPayloadUpdateBakerStake,
+                      genPayloadUpdateBakerRestateEarnings,
+                      genPayloadUpdateBakerKeys
                     ]
                 else
-                    [ genConfigureBaker,
-                      genConfigureDelegation
+                    [ genPayloadConfigureBaker,
+                      genPayloadConfigureDelegation
                     ]
-  where
-    genCredentialUpdate = do
-        maxNumCredentials <- choose (0, 255)
-        indices <- Set.fromList . map CredentialIndex <$> replicateM maxNumCredentials (choose (0, 255))
-        -- the actual number of key indices. Duplicate key indices might have been generated.
-        let numCredentials = Set.size indices
-        credentials <- replicateM numCredentials genCredentialDeploymentInformation
-        ucNewThreshold <- AccountThreshold <$> choose (1, 255) -- since we are only updating there is no requirement that the threshold is less than the amount of credentials
-        toRemoveLen <- choose (0, 30)
-        ucRemoveCredIds <- replicateM toRemoveLen genCredentialId
-        return UpdateCredentials{ucNewCredInfos = Map.fromList (zip (Set.toList indices) credentials), ..}
 
-    genByteString = do
-        n <- choose (0, 1000)
-        BS.pack <$> vector n
+genPayloadUpdateCredentials :: Gen Payload
+genPayloadUpdateCredentials = do
+    maxNumCredentials <- choose (0, 255)
+    indices <- Set.fromList . map CredentialIndex <$> replicateM maxNumCredentials (choose (0, 255))
+    -- the actual number of key indices. Duplicate key indices might have been generated.
+    let numCredentials = Set.size indices
+    credentials <- replicateM numCredentials genCredentialDeploymentInformation
+    ucNewThreshold <- AccountThreshold <$> choose (1, 255) -- since we are only updating there is no requirement that the threshold is less than the amount of credentials
+    toRemoveLen <- choose (0, 30)
+    ucRemoveCredIds <- replicateM toRemoveLen genCredentialId
+    return UpdateCredentials{ucNewCredInfos = Map.fromList (zip (Set.toList indices) credentials), ..}
 
-    genDeployModule = DeployModule <$> (Wasm.WasmModule 0 . Wasm.ModuleSource <$> genByteString)
+genByteString :: Gen BS.ByteString
+genByteString = do
+    n <- choose (0, 1000)
+    BS.pack <$> vector n
 
-    genInit = do
-        icAmount <- Amount <$> arbitrary
-        icModRef <- genModuleRef
-        icInitName <- genInitName
-        icParam <- genParameter
-        return InitContract{..}
+genPayloadDeployModule :: Gen Payload
+genPayloadDeployModule = DeployModule <$> (Wasm.WasmModule 0 . Wasm.ModuleSource <$> genByteString)
 
-    genUpdate = do
-        uAmount <- Amount <$> arbitrary
-        uAddress <- genCAddress
-        uMessage <- genParameter
-        uReceiveName <- genReceiveName
-        return Update{..}
+genPayloadInitContract :: Gen Payload
+genPayloadInitContract = do
+    icAmount <- Amount <$> arbitrary
+    icModRef <- genModuleRef
+    icInitName <- genInitName
+    icParam <- genParameter
+    return InitContract{..}
 
-    genTransfer = do
-        a <- genAccountAddress
-        amnt <- Amount <$> arbitrary
-        return $ Transfer a amnt
+genPayloadUpdate :: Gen Payload
+genPayloadUpdate = do
+    uAmount <- Amount <$> arbitrary
+    uAddress <- genCAddress
+    uMessage <- genParameter
+    uReceiveName <- genReceiveName
+    return Update{..}
 
-    genAddBaker = do
-        abElectionVerifyKey <- VRF.publicKey <$> arbitrary
-        abSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
-        (abAggregationVerifyKey, abProofAggregation) <- genAggregationVerifyKeyAndProof
-        abProofSig <- genDlogProof
-        abProofElection <- genDlogProof
-        abBakingStake <- arbitrary
-        abRestakeEarnings <- arbitrary
-        return AddBaker{..}
+genPayloadTransfer :: Gen Payload
+genPayloadTransfer = do
+    a <- genAccountAddress
+    amnt <- Amount <$> arbitrary
+    return $ Transfer a amnt
 
-    genRemoveBaker = return RemoveBaker
+genPayloadAddBaker :: Gen Payload
+genPayloadAddBaker = do
+    abElectionVerifyKey <- VRF.publicKey <$> arbitrary
+    abSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
+    (abAggregationVerifyKey, abProofAggregation) <- genAggregationVerifyKeyAndProof
+    abProofSig <- genDlogProof
+    abProofElection <- genDlogProof
+    abBakingStake <- arbitrary
+    abRestakeEarnings <- arbitrary
+    return AddBaker{..}
 
-    genUpdateBakerStake =
-        UpdateBakerStake <$> arbitrary
+genPayloadRemoveBaker :: Gen Payload
+genPayloadRemoveBaker = return RemoveBaker
 
-    genUpdateBakerRestakeEarnings =
-        UpdateBakerRestakeEarnings <$> arbitrary
+genPayloadUpdateBakerStake :: Gen Payload
+genPayloadUpdateBakerStake = UpdateBakerStake <$> arbitrary
 
-    genUpdateBakerKeys = do
-        ubkElectionVerifyKey <- VRF.publicKey <$> arbitrary
-        ubkSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
-        (ubkAggregationVerifyKey, ubkProofAggregation) <- genAggregationVerifyKeyAndProof
-        ubkProofSig <- genDlogProof
-        ubkProofElection <- genDlogProof
-        return UpdateBakerKeys{..}
+genPayloadUpdateBakerRestateEarnings :: Gen Payload
+genPayloadUpdateBakerRestateEarnings = UpdateBakerRestakeEarnings <$> arbitrary
 
-    genUpdateCredentialKeys = do
-        uckKeys <- genCredentialPublicKeys
-        uckCredId <- genCredentialId
-        return UpdateCredentialKeys{..}
+genPayloadUpdateBakerKeys :: Gen Payload
+genPayloadUpdateBakerKeys = do
+    ubkElectionVerifyKey <- VRF.publicKey <$> arbitrary
+    ubkSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
+    (ubkAggregationVerifyKey, ubkProofAggregation) <- genAggregationVerifyKeyAndProof
+    ubkProofSig <- genDlogProof
+    ubkProofElection <- genDlogProof
+    return UpdateBakerKeys{..}
 
-    genTransferToEncrypted =
-        TransferToEncrypted . Amount <$> arbitrary
+genPayloadUpdateCredentialKeys :: Gen Payload
+genPayloadUpdateCredentialKeys = do
+    uckKeys <- genCredentialPublicKeys
+    uckCredId <- genCredentialId
+    return UpdateCredentialKeys{..}
 
-    genRegisterData = do
-        n <- chooseInt (0, maxRegisteredDataSize)
-        rdData <- RegisteredData . BSS.pack <$> vectorOf n arbitrary
-        return RegisterData{..}
+genPayloadTransferToEncrypted :: Gen Payload
+genPayloadTransferToEncrypted = TransferToEncrypted . Amount <$> arbitrary
 
-    genConfigureBaker = do
-        cbCapital <- arbitrary
-        cbRestakeEarnings <- arbitrary
-        cbOpenForDelegation <- liftArbitrary $ elements [OpenForAll, ClosedForNew, ClosedForAll]
-        cbSignatureVerifyKey <-
-            liftArbitrary $
-                (,) <$> (BlockSig.verifyKey <$> genBlockKeyPair) <*> genDlogProof
-        cbElectionVerifyKey <-
-            liftArbitrary $
-                (,) <$> (VRF.publicKey <$> arbitrary) <*> genDlogProof
-        cbAggregationVerifyKey <- liftArbitrary genAggregationVerifyKeyAndProof
-        cbMetadataURL <- liftArbitrary genUrlText
-        cbTransactionFeeCommission <- liftArbitrary genRewardFraction
-        cbBakingRewardCommission <- liftArbitrary genRewardFraction
-        cbFinalizationRewardCommission <- liftArbitrary genRewardFraction
-        return ConfigureBaker{..}
+genPayloadRegisterData :: Gen Payload
+genPayloadRegisterData = do
+    n <- chooseInt (0, maxRegisteredDataSize)
+    rdData <- RegisteredData . BSS.pack <$> vectorOf n arbitrary
+    return RegisterData{..}
 
-    genConfigureDelegation = do
-        cdCapital <- arbitrary
-        cdRestakeEarnings <- arbitrary
-        cdDelegationTarget <-
-            liftArbitrary $
-                oneof [return DelegateToLPool, DelegateToBaker . BakerId . AccountIndex <$> arbitrary]
-        return ConfigureDelegation{..}
+genPayloadConfigureBaker :: Gen Payload
+genPayloadConfigureBaker = do
+    cbCapital <- arbitrary
+    cbRestakeEarnings <- arbitrary
+    cbOpenForDelegation <- liftArbitrary $ elements [OpenForAll, ClosedForNew, ClosedForAll]
+    cbSignatureVerifyKey <-
+        liftArbitrary $
+            (,) <$> (BlockSig.verifyKey <$> genBlockKeyPair) <*> genDlogProof
+    cbElectionVerifyKey <-
+        liftArbitrary $
+            (,) <$> (VRF.publicKey <$> arbitrary) <*> genDlogProof
+    cbAggregationVerifyKey <- liftArbitrary genAggregationVerifyKeyAndProof
+    cbMetadataURL <- liftArbitrary genUrlText
+    cbTransactionFeeCommission <- liftArbitrary genRewardFraction
+    cbBakingRewardCommission <- liftArbitrary genRewardFraction
+    cbFinalizationRewardCommission <- liftArbitrary genRewardFraction
+    return ConfigureBaker{..}
+
+genPayloadConfigureDelegation :: Gen Payload
+genPayloadConfigureDelegation = do
+    cdCapital <- arbitrary
+    cdRestakeEarnings <- arbitrary
+    cdDelegationTarget <-
+        liftArbitrary $
+            oneof [return DelegateToLPool, DelegateToBaker . BakerId . AccountIndex <$> arbitrary]
+    return ConfigureDelegation{..}
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
