@@ -63,22 +63,26 @@ modifyPayloadBitmap f bs =
   let Right ((header, bitmap), rest) = S.runGetState ((,) <$> S.getWord8 <*> S.getWord16be) bs 0
   in S.runPut (S.putWord8 header <> S.putWord16be (f bitmap)) `BS.append` rest
 
-genModifyPayloadBitmap :: Int -> BS.ByteString -> Gen BS.ByteString
-genModifyPayloadBitmap sizeOfBitmap payload = do
+-- | 'genPayloadWithInvalidBitmap' @sizeOfBitmap@ @payload@ will update the @payload@ by setting
+-- invalid bits in the high end of the 16 bit bitmap. The bitmap is assumed to be located at index
+-- '1' of the payload. The @sizeOfBitmap@ is the number of allowed bits in the bitmap. The remaining
+-- (higher) bits are modified to invalidate the payload's bitmap.
+genPayloadWithInvalidBitmap :: Int -> BS.ByteString -> Gen BS.ByteString
+genPayloadWithInvalidBitmap sizeOfBitmap payload = do
   forcedBit <- choose (sizeOfBitmap, 15)
   optionalBits <- mapM (\i -> elements [0, bit i]) $ delete forcedBit [sizeOfBitmap..15]
-  let bits = bit forcedBit .|. foldl (.|.) 0 optionalBits
+  let bits = foldl (.|.) (bit forcedBit) optionalBits
   return (modifyPayloadBitmap (bits .|.) payload)
 
 genInvalidPayloadConfigureBaker :: Gen BS.ByteString
 genInvalidPayloadConfigureBaker = do
   bs <- S.runPut . putPayload <$> genPayloadConfigureBaker
-  genModifyPayloadBitmap 10 bs
+  genPayloadWithInvalidBitmap 10 bs
 
 genInvalidPayloadConfigureDelegation :: Gen BS.ByteString
 genInvalidPayloadConfigureDelegation = do
   bs <- S.runPut . putPayload <$> genPayloadConfigureDelegation
-  genModifyPayloadBitmap 3 bs
+  genPayloadWithInvalidBitmap 3 bs
 
 genInvalidPayloadByteString :: Gen BS.ByteString
 genInvalidPayloadByteString =
