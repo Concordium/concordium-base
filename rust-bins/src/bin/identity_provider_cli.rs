@@ -54,6 +54,11 @@ struct IpSignPio {
         help = "Expiry time of the identity object message. As YYYYMM."
     )]
     id_expiry:          Option<YearMonth>,
+    #[structopt(
+        long = "ar-record",
+        help = "File to write anonymity revocation record to."
+    )]
+    ar_record:          PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -181,9 +186,16 @@ fn handle_act_as_ip(aai: IpSignPio) {
         &ip_sec_key,
         &ip_cdi_secret_key,
     );
+    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
+        id_cred_pub:  pio.pub_info_for_ip.id_cred_pub,
+        ar_data:      pio.ip_ar_data.clone(),
+        max_accounts: attributes.max_accounts,
+        threshold:    pio.choice_ar_parameters.threshold,
+    });
 
     match vf {
         Ok((signature, icdi)) => {
+            let account_address = AccountAddress::new(&pio.pub_info_for_ip.reg_id);
             let id_object = IdentityObject {
                 pre_identity_object: pio,
                 alist: attributes,
@@ -210,7 +222,26 @@ fn handle_act_as_ip(aai: IpSignPio) {
                     &aai.out_icdi.to_string_lossy()
                 ),
                 Err(e) => {
-                    eprintln!("Could not JSON write to file because: {}", e);
+                    eprintln!(
+                        "Could not JSON write transaction payload to file because: {}",
+                        e
+                    );
+                }
+            }
+            let to_store = serde_json::json!({
+                "arRecord": ar_record,
+                "accountAddress": account_address
+            });
+            match write_json_to_file(&aai.ar_record, &to_store) {
+                Ok(_) => println!(
+                    "Wrote anonymity revocation record to JSON file {}.",
+                    &aai.ar_record.to_string_lossy()
+                ),
+                Err(e) => {
+                    eprintln!(
+                        "Could not JSON write anonymity revocation record to file because: {}",
+                        e
+                    );
                 }
             }
         }
