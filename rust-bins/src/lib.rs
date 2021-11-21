@@ -61,23 +61,26 @@ pub fn read_id_object<P: AsRef<Path> + Debug>(
 }
 
 /// Encrypt data (if password is provided), and write the (encrypted) data to
-/// file
+/// file. Upon success, returns Ok(true) if data was encrypted and Ok(false) if
+/// not.
 pub fn output_possibly_encrypted<X: SerdeSerialize>(
     fname: &Path,
     data: &X,
-) -> Result<(), std::io::Error> {
+) -> Result<bool, std::io::Error> {
     let pass = ask_for_password_confirm(
         "Enter password to encrypt (leave empty for no encryption): ",
         true,
     )?;
     if pass.is_empty() {
         println!("No password supplied, so output will not be encrypted.");
-        write_json_to_file(fname, data)
+        write_json_to_file(fname, data)?;
+        Ok(false)
     } else {
         let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
         let encrypted =
             crypto_common::encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
-        write_json_to_file(fname, &encrypted)
+        write_json_to_file(fname, &encrypted)?;
+        Ok(true)
     }
 }
 

@@ -490,6 +490,10 @@ pub struct YearMonth {
     pub month: u8,
 }
 
+impl ToString for YearMonth {
+    fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
+}
+
 impl SerdeSerialize for YearMonth {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

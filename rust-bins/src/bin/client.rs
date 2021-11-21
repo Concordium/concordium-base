@@ -947,7 +947,7 @@ fn handle_create_chi(cc: CreateChi) {
     };
     if let Some(filepath) = cc.out {
         match output_possibly_encrypted(&filepath, &ah_info) {
-            Ok(()) => println!("Wrote CHI to file."),
+            Ok(_) => println!("Wrote CHI to file."),
             Err(_) => {
                 eprintln!("Could not write to file. The generated information is");
                 output_json(&ah_info);
