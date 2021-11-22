@@ -395,6 +395,9 @@ pub const ATTRIBUTE_NAMES: [&str; 14] = [
     "lei",
 ];
 
+/// Attribute tag for the LEI attribute.
+pub const ATTRIBUTE_TAG_LEI: AttributeTag = AttributeTag(13);
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]

@@ -142,7 +142,7 @@ fn main() -> anyhow::Result<()> {
             .interact()
             .context("Could not read attribute LEI")?;
         if !s.is_empty() {
-            alist.insert(AttributeTag(13u8), AttributeKind(s));
+            alist.insert(ATTRIBUTE_TAG_LEI, AttributeKind(s));
         }
         alist
     };
