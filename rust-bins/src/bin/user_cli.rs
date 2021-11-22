@@ -39,7 +39,10 @@ struct StartIp {
         help = "File to write the request to that is to be sent to the identity provider."
     )]
     public:             PathBuf,
-    #[structopt(long = "global", help = "File with global parameters.")]
+    #[structopt(
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
     global:             PathBuf,
     #[structopt(
         name = "ar-threshold",
@@ -50,7 +53,8 @@ struct StartIp {
     threshold:          Option<u8>,
     #[structopt(
         long = "selected-ars",
-        help = "Indices of selected ars. If none are provided an interactive choice will be given.",
+        help = "Indices of selected ars. If none are provided an interactive choice will be \
+                presented.",
         requires = "ar-threshold"
     )]
     selected_ars:       Vec<u32>,
@@ -72,7 +76,7 @@ struct CreateCredential {
     )]
     account:     Option<AccountAddress>,
     #[structopt(
-        long = "expiry",
+        long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
         required_unless = "account",
         conflicts_with = "account",
@@ -436,18 +440,21 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
 
     let address = AccountAddress::new(&cdi.values.cred_id);
 
-    let cdi = AccountCredential::Normal { cdi };
-
+    // Output in the format accepted by concordium-client.
     let (versioned_credentials, randomness_map) = {
         let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
         let mut randomness = BTreeMap::new();
-        // NB: We insert the reference to the credential here so as to avoid cloning
-        // (which is not implemented for the type)
-        credentials.insert(ki, &cdi);
+        let cdvp = AccountCredentialWithoutProofs::Normal {
+            cdv:         cdi.values.clone(),
+            commitments: cdi.proofs.id_proofs.commitments.clone(),
+        };
+        credentials.insert(ki, cdvp);
         randomness.insert(ki, &commitments_randomness);
         (Versioned::new(VERSION_0, credentials), randomness)
     };
+
+    let cdi = AccountCredential::Normal { cdi };
 
     let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
 

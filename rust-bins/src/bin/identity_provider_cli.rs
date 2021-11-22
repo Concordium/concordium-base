@@ -95,6 +95,27 @@ fn main() -> anyhow::Result<()> {
         app.anonymity_revokers.display()
     ))?;
 
+    let confirm_ar = dialoguer::Confirm::new()
+        .default(false)
+        .show_default(true)
+        .wait_for_newline(true)
+        .with_prompt(format!(
+            "The user chose anonymity revocation threshold {} and anonymity revokers [{}]. Accept?",
+            pio.choice_ar_parameters.threshold,
+            pio.choice_ar_parameters
+                .ar_identities
+                .iter()
+                .map(|ar| ar.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+        .interact()
+        .context("Did not get acceptable response.")?;
+    anyhow::ensure!(
+        confirm_ar,
+        "Anonymity revocation parameters are not acceptable."
+    );
+
     let created_at = YearMonth::now();
     let valid_to = match app.id_expiry {
         Some(exp) => exp,

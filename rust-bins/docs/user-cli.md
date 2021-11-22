@@ -1,15 +1,55 @@
-This page describes how to use the `user_cli` tool to create an identity and an account interacticting with an identity provider using the tool `identity_provider_cli`.
+This page describes how to use the `user_cli` tool to request an identity object from an identity provider and create accounts from the identity returned by the identity provider.
 
-# Steps to obtain an enterprise identity and account
-The entity uses the binary `user_cli` to do the following steps:
-1. Create secret account holder information and generate the data to be sent to the identity provider using the command
-    ```bash
-    ./user_cli start-ip --private private.json --public public.json --ip-info identity_provider.json --ars anonymity_revokers.json --initial-keys initial_account_keys.json
-    ```
-    This will ask the entity for a password to encrypt the account holder information that will be written to `private.json`. In case no password is provided, the data will not be encrypted. Public information needed by the identity provider will be written to `public.json`. The private keys of the initial account will be written to `initial_account_keys.json`.
-2. Prove real-life identity to the identity provider and give them public.json. Await identity object from the identity provider.
-3. Create a credential
-    ```bash
-    ./user_cli create-credential --expiry 500 --id-object id_object.json --ip-info identity_provider.json --out create_credential.json --private private.json --keys-out account_keys.json
-    ```
-    This will decrypt the `private.json` if it was encrypted in step 1 and encrypt the account keys that will be written to `account_keys.json`. The transaction payload for deploying the new account will be written to `create_credential.json`. The expiry is given in seconds from the current time.
+# Prerequisites
+
+- The `user_cli` tool.
+- A file with cryptographic parameters for the chain. We'll refer to this file as `cryptographic-parameters.json` below.
+- A file with the list of anonymity revokers supported by the identity provider. We refer to this file as `ars.json` below.
+- A file with identity provider public keys. We refer to this file as `ip-info.json` below.
+- For creating accounts from the identity the `concordium-client` tool and access to an up-to-date node.
+
+The tool supports two modes. The `generate-request` mode which generates the request for the identity object that is to be sent to the identity provider, and the `create-credential` mode.
+In this latter mode the tool requires the identity object returned by the identity provider and generates a credential that can be sent to the chain to create an account.
+
+# Generate a request for the identity object
+
+To generate a request to the identity provider together with some auxiliary data use the following command, modifying the paths as appropriate.
+```console
+user_cli generate-request --cryptographic-parameters cryptographic-parameters.json \
+                          --ars ars.json \
+                          --ip-info ip-info.json
+                          --initial-keys-out initial-keys.json \ # keys of the initial account together with its address.
+                          --id-use-data-out id-use-data.json \ # data that enables use of the identity object
+                          --request-out request.json # request to send to the identity provider
+```
+This will ask for some additional input and output the following files
+- `initial-keys.json` data about the initial account, including its address and keys for signing transactions. DO NOT LOSE THIS FILE. It cannot be recovered.
+- `id-use-data.json` contains data that enables the use of the identity object returned by the identity provider. DO NOT LOSE THIS FILE. It cannot be retrieved.
+- `request.json` contains the request that should be sent to the identity provider.
+
+Assuming everything is in order the identity provider should eventually return the identity object. We refer to it as `id-object.json` in the command below.
+
+# Create accounts from an identity object.
+
+After obtaining the identity object from the identity object from the identity provider you can create additional accounts on the chain.
+Note that at this point the initial account already exists on the chain. Accounts are created by deploying credentials.
+The `user_cli` tool can only be used to create credentials. To deploy them to the chain, thus creating accounts, you need to use `concordium-client` and access to a node.
+
+To create a create a credential use the following command.
+```console
+user_cli create-credential --id-use-data id-use-data.json \
+                           --id-object id-object.json \
+                           --keys-out account-keys.json
+                           --credential-out credential.json
+```
+this will output two files
+- `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It canno be recovered.
+- `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
+By default this must be sent to the chain within 15min. A larger or shorter message expiry may be set with `--message-expiry` flag to the command.
+Do note that an expiry longer than 2 hours is not acceptable.
+
+To create the account on the chain do
+```console
+concordium-client transaction deploy-credential credential.json
+```
+where `credential.json` is the file obtained in the previous step.
