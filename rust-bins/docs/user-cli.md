@@ -29,7 +29,7 @@ This will ask for some additional input and output the following files
 
 Assuming everything is in order the identity provider should eventually return the identity object. We refer to it as `id-object.json` in the command below.
 
-# Create accounts from an identity object.
+# Create accounts from an identity object
 
 After obtaining the identity object from the identity object from the identity provider you can create additional accounts on the chain.
 Note that at this point the initial account already exists on the chain. Accounts are created by deploying credentials.
@@ -43,7 +43,7 @@ user_cli create-credential --id-use-data id-use-data.json \
                            --credential-out credential.json
 ```
 this will output two files
-- `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It canno be recovered.
+- `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
 By default this must be sent to the chain within 15min. A larger or shorter message expiry may be set with `--message-expiry` flag to the command.
 Do note that an expiry longer than 2 hours is not acceptable.
