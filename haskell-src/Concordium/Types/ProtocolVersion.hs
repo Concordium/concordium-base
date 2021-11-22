@@ -1,6 +1,9 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
@@ -21,6 +24,7 @@ import Data.Serialize
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Word
+import GHC.TypeNats
 
 -- |An enumeration of the supported versions of the consensus protocol.
 -- Binary and JSON serializations are as Word64 corresponding to the protocol number.
@@ -52,6 +56,14 @@ protocolVersionFromWord64 2 = return P2
 protocolVersionFromWord64 3 = return P3
 protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
+
+type family PVNat (pv :: ProtocolVersion) :: Nat where
+    PVNat 'P1 = 1
+    PVNat 'P2 = 2
+    PVNat 'P3 = 3
+    PVNat 'P4 = 4
+
+type SupportsDelegation pv = 4 <= PVNat pv
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64

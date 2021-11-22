@@ -21,8 +21,16 @@ genesisSlot = 0
 
 type EpochLength = Slot
 
--- |Index of an epoch.
+-- |Index of an epoch, or number of epochs.
 type Epoch = Word64
+
+-- |Length of a reward period in epochs.
+newtype RewardPeriodLength = RewardPeriodLength {rewardPeriodEpochs :: Epoch}
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
+
+-- |Number of reward periods.
+newtype RewardPeriod = RewardPeriod {theRewardPeriod :: Word64}
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
 
 -- |Block height relative to the genesis block on the block's chain.
 -- In the event of a protocol update, a new chain is created with the new genesis block having

@@ -111,6 +111,8 @@ module Concordium.Types (
   Slot(..),
   EpochLength,
   Epoch,
+  RewardPeriodLength(..),
+  RewardPeriod(..),
   genesisSlot,
   CredentialsPerBlockLimit,
   -- ** Transactions
@@ -457,6 +459,7 @@ mintAmount :: MintRate -> Amount -> Amount
 {-# INLINE mintAmount #-}
 mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
 
+-- TODO: Rename to make this more general
 -- |A fraction in [0,1], represented as parts per 100000.
 -- This resolution (thousandths of a percent) was agreed in tokenomics discussions
 -- to be sufficient.

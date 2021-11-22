@@ -1,4 +1,11 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE GADTs #-}
 
 module Concordium.Types.Parameters where
 
@@ -8,50 +15,241 @@ import Data.Aeson.Types
 import Data.Ratio
 import Data.Serialize
 import Data.Word
+import GHC.TypeNats
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
-import Concordium.Types.Updates
-    ( HasRewardParameters(rewardParameters), RewardParameters )
+import Concordium.Types.ProtocolVersion.TH
+import Concordium.Types.Updates (
+    HasRewardParameters (rewardParameters),
+    RewardParameters,
+ )
+import Data.Function
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
--- |Updatable chain parameters.
-data ChainParameters = ChainParameters
-    { -- |Election difficulty parameter.
-      _cpElectionDifficulty :: !ElectionDifficulty,
-      -- |Euro:Energy rate.
-      _cpEuroPerEnergy :: !ExchangeRate,
+data ExchangeRates = ExchangeRates
+    { -- |Euro:Energy rate.
+      _erEuroPerEnergy :: !ExchangeRate,
       -- |uGTU:Euro rate.
-      _cpMicroGTUPerEuro :: !ExchangeRate,
+      _erMicroGTUPerEuro :: !ExchangeRate,
       -- |uGTU:Energy rate.
       -- This is derived, but will be computed when the other
       -- rates are updated since it is more useful.
-      _cpEnergyRate :: !EnergyRate,
-      -- |Number of additional epochs that bakers must cool down when
+      _erEnergyRate :: !EnergyRate
+    }
+    deriving (Eq, Show)
+
+makeExchangeRates ::
+    -- |Euro:Energy rate
+    ExchangeRate ->
+    -- |uGTU:Euro rate
+    ExchangeRate ->
+    ExchangeRates
+makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro = ExchangeRates{..}
+  where
+    _erEnergyRate = computeEnergyRate _erMicroGTUPerEuro _erEuroPerEnergy
+
+class HasExchangeRates t where
+    exchangeRates :: Lens' t ExchangeRates
+    euroPerEnergy :: Lens' t ExchangeRate
+    euroPerEnergy = exchangeRates . lens _erEuroPerEnergy (\er epe -> er{_erEuroPerEnergy = epe, _erEnergyRate = computeEnergyRate (_erMicroGTUPerEuro er) epe})
+    microGTUPerEuro :: Lens' t ExchangeRate
+    microGTUPerEuro = exchangeRates . lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
+    energyRate :: SimpleGetter t EnergyRate
+    energyRate = exchangeRates . to _erEnergyRate
+
+instance HasExchangeRates ExchangeRates where
+    exchangeRates = id
+    euroPerEnergy = lens _erEuroPerEnergy (\er epe -> er{_erEuroPerEnergy = epe, _erEnergyRate = computeEnergyRate (_erMicroGTUPerEuro er) epe})
+    microGTUPerEuro = lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
+    energyRate = to _erEnergyRate
+
+-- |Euro:Energy rate parameter.
+{-# INLINE erEuroPerEnergy #-}
+erEuroPerEnergy :: Lens' ExchangeRates ExchangeRate
+erEuroPerEnergy = lens _erEuroPerEnergy (\er epe -> er{_erEuroPerEnergy = epe, _erEnergyRate = computeEnergyRate (_erMicroGTUPerEuro er) epe})
+
+-- |uGTU:Euro rate parameter.
+{-# INLINE erMicroGTUPerEuro #-}
+erMicroGTUPerEuro :: Lens' ExchangeRates ExchangeRate
+erMicroGTUPerEuro = lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
+
+-- |uGTU:Energy rate parameter (derived).
+{-# INLINE erEnergyRate #-}
+erEnergyRate :: SimpleGetter ExchangeRates EnergyRate
+erEnergyRate = to _erEnergyRate
+
+-- |Cooldown parameters for protocol versions P1, P2 and P3.
+newtype CooldownParametersP1 = CooldownParametersP1
+    { -- |Number of additional epochs that bakers must cool down when
       -- removing stake. The cool-down will effectively be 2 epochs
       -- longer than this value, since at any given time, the bakers
       -- (and stakes) for the current and next epochs have already
       -- been determined.
-      _cpBakerExtraCooldownEpochs :: !Epoch,
+      _cpBakerExtraCooldownEpochs :: Epoch
+    }
+    deriving (Eq, Show)
+
+-- |Cooldown parameters for protocol version P4.
+data CooldownParametersP4 = CooldownParameterP4
+    { -- |Number of reward periods that pool owners must cooldown
+      -- when reducing their equity capital or closing the pool.
+      _cpPoolOwnerCooldown :: !RewardPeriod,
+      -- |Number of reward periods that a delegator must cooldown
+      -- when reducing their delegated stake.
+      _cpDelegatorCooldown :: !RewardPeriod
+    }
+    deriving (Eq, Show)
+
+-- |Type family for cooldown parameters.
+type family CooldownParametersType (pv :: ProtocolVersion) where
+    CooldownParametersType 'P1 = CooldownParametersP1
+    CooldownParametersType 'P2 = CooldownParametersP1
+    CooldownParametersType 'P3 = CooldownParametersP1
+    CooldownParametersType 'P4 = CooldownParametersP4
+
+-- |Version-indexed type of cooldown parameters.
+-- This is a newtype to provide instances of 'Eq' and 'Show'.
+newtype CooldownParameters pv = CooldownParameters {theCooldownParameters :: CooldownParametersType pv}
+
+instance forall pv. (IsProtocolVersion pv) => Eq (CooldownParameters pv) where
+    (==) = $(casePV [t|pv|] [|(==)|]) `on` theCooldownParameters
+
+instance forall pv. (IsProtocolVersion pv) => Show (CooldownParameters pv) where
+    show = $(casePV [t|pv|] [|show|]) . theCooldownParameters
+
+newtype TimeParametersP4 = TimeParametersP4
+    { _tpRewardPeriodLength :: RewardPeriodLength
+    }
+    deriving (Eq, Show)
+
+type family TimeParametersType (pv :: ProtocolVersion) where
+    TimeParametersType 'P1 = ()
+    TimeParametersType 'P2 = ()
+    TimeParametersType 'P3 = ()
+    TimeParametersType 'P4 = TimeParametersP4
+
+newtype TimeParameters (pv :: ProtocolVersion) = TimeParameters
+    { theTimeParameters :: TimeParametersType pv
+    }
+
+instance forall pv. (IsProtocolVersion pv) => Eq (TimeParameters pv) where
+    (==) = $(casePV [t|pv|] [|(==)|]) `on` theTimeParameters
+
+instance forall pv. (IsProtocolVersion pv) => Show (TimeParameters pv) where
+    show = $(casePV [t|pv|] [|show|]) . theTimeParameters
+
+-- |The commission rates charged by a pool owner.
+data CommissionRates = CommissionRates
+    { -- |Fraction of finalization rewards charged by the pool owner.
+      _finalizationCommission :: RewardFraction,
+      -- |Fraction of baking rewards charged by the pool owner.
+      _bakingCommission :: RewardFraction,
+      -- |Fraction of transaction rewards charged by the pool owner.
+      _transactionCommission :: RewardFraction
+    }
+    deriving (Eq, Show)
+
+makeLenses ''CommissionRates
+
+-- |A range that includes both endpoints.
+data InclusiveRange a = InclusiveRange {irMin :: !a, irMax :: !a}
+    deriving (Eq, Show)
+
+-- |Determine if a value is in a given 'InclusiveRange'.
+isInRange :: (Ord a) => a -> InclusiveRange a -> Bool
+isInRange v InclusiveRange{..} = irMin <= v && v <= irMax
+
+data CommissionRanges = CommissionRanges
+    { _finalizationCommissionRange :: !(InclusiveRange RewardFraction),
+      _bakingCommissionRange :: !(InclusiveRange RewardFraction),
+      _transactionCommissionRange :: !(InclusiveRange RewardFraction)
+    }
+    deriving (Eq, Show)
+makeLenses ''CommissionRanges
+
+type LeverageFactor = Ratio Word64
+
+newtype PoolParametersP1 = PoolParametersP1
+    { -- |Minimum threshold required for registering as a baker.
+      _ppBakerStakeThreshold :: Amount
+    }
+    deriving (Eq, Show)
+
+data PoolParametersP4 = PoolParametersP4
+    { -- |Commission rates charged by the L-pool.
+      _ppLPoolCommissions :: !CommissionRates,
+      -- |Bounds on the commission rates that may be charged by bakers.
+      _ppCommissionBounds :: !CommissionRanges,
+      -- |Minimum equity capital required for a new baker.
+      _ppMinimumEquityCapital :: !Amount,
+      -- |Minimum fraction of the total supply required for a baker to qualify
+      -- as a finalizer.
+      _ppMinimumFinalizationCapital :: !RewardFraction,
+      -- |Maximum fraction of the total supply of that a new baker can have.
+      _ppCapitalBound :: !RewardFraction,
+      -- |The maximum leverage that a baker can have as a ratio of total stake
+      -- to equity capital.
+      _ppLeverageBound :: !LeverageFactor
+    }
+    deriving (Eq, Show)
+
+type family PoolParametersType pv where
+    PoolParametersType 'P1 = PoolParametersP1
+    PoolParametersType 'P2 = PoolParametersP1
+    PoolParametersType 'P3 = PoolParametersP1
+    PoolParametersType 'P4 = PoolParametersP4
+
+newtype PoolParameters pv = PoolParameters {thePoolParameters :: PoolParametersType pv}
+
+instance forall pv. (IsProtocolVersion pv) => Eq (PoolParameters pv) where
+    (==) = $(casePV [t|pv|] [|(==)|]) `on` thePoolParameters
+
+instance forall pv. (IsProtocolVersion pv) => Show (PoolParameters pv) where
+    show = $(casePV [t|pv|] [|show|]) . thePoolParameters
+
+-- |Updatable chain parameters.
+data ChainParameters (pv :: ProtocolVersion) = ChainParameters
+    { -- |Election difficulty parameter.
+      _cpElectionDifficulty :: !ElectionDifficulty,
+      -- |Exchange rates.
+      _cpExchangeRates :: !ExchangeRates,
+      -- |Cooldown parameters.
+      _cpCooldownParameters :: !(CooldownParameters pv),
+      -- |Time parameters.
+      _cpTimeParameters :: !(TimeParameters pv),
       -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
       _cpAccountCreationLimit :: !CredentialsPerBlockLimit,
       -- |Reward parameters.
       _cpRewardParameters :: !RewardParameters,
       -- |Foundation account index.
-      _cpFoundationAccount :: !AccountIndex
-    , -- |Minimum threshold required for registering as a baker.
+      _cpFoundationAccount :: !AccountIndex,
+      -- |Minimum threshold required for registering as a baker.
       _cpBakerStakeThreshold :: !Amount
     }
     deriving (Eq, Show)
 
+makeLenses ''ChainParameters
+
+data Foo pv where
+    LeftFoo :: (PVNat pv <= 3) => Foo pv
+    RightFoo :: (4 <= PVNat pv) => Foo pv
+
+foo :: forall pv. (IsProtocolVersion pv) => Foo pv
+foo = case protocolVersion @pv of
+    SP1 -> LeftFoo
+    SP2 -> LeftFoo
+    SP3 -> LeftFoo
+    SP4 -> RightFoo
+
 -- |Constructor for chain parameters.
-makeChainParameters ::
+makeChainParametersP1 :: forall pv. (IsProtocolVersion pv, PVNat pv <= 3) =>
     -- |Election difficulty
     ElectionDifficulty ->
     -- |Euro:Energy rate
@@ -68,8 +266,8 @@ makeChainParameters ::
     AccountIndex ->
     -- |Minimum threshold required for registering as a baker
     Amount ->
-    ChainParameters
-makeChainParameters
+    ChainParameters pv
+makeChainParametersP1
     _cpElectionDifficulty
     _cpEuroPerEnergy
     _cpMicroGTUPerEuro
@@ -77,54 +275,36 @@ makeChainParameters
     _cpAccountCreationLimit
     _cpRewardParameters
     _cpFoundationAccount
-    _cpBakerStakeThreshold =
-        ChainParameters{..}
+    _cpBakerStakeThreshold = ChainParameters{..}
       where
-        _cpEnergyRate = computeEnergyRate _cpMicroGTUPerEuro _cpEuroPerEnergy
+        _cpCooldownParameters = -- $(casePV [t|pv|] [|CooldownParameters (CooldownParametersP1{..})|])
+            case protocolVersion @pv of
+                SP1 -> CooldownParameters (CooldownParametersP1{..})
+                SP2 -> CooldownParameters (CooldownParametersP1{..})
+                SP3 -> CooldownParameters (CooldownParametersP1{..})
+        _cpTimeParameters = undefined -- $(casePV [t|pv|] [|TimeParameters ()|])
+        _cpExchangeRates = makeExchangeRates _cpMicroGTUPerEuro _cpEuroPerEnergy
 
--- |Election difficulty chain parameter.
-{-# INLINE cpElectionDifficulty #-}
-cpElectionDifficulty :: Lens' ChainParameters ElectionDifficulty
-cpElectionDifficulty = lens _cpElectionDifficulty (\cp ed -> cp{_cpElectionDifficulty = ed})
+instance HasExchangeRates (ChainParameters pv) where
+    exchangeRates = cpExchangeRates
 
--- |Euro:Energy rate parameter.
-{-# INLINE cpEuroPerEnergy #-}
-cpEuroPerEnergy :: Lens' ChainParameters ExchangeRate
-cpEuroPerEnergy = lens _cpEuroPerEnergy (\cp epe -> cp{_cpEuroPerEnergy = epe, _cpEnergyRate = computeEnergyRate (_cpMicroGTUPerEuro cp) epe})
+instance HasRewardParameters (ChainParameters pv) where
+    rewardParameters = cpRewardParameters
 
--- |uGTU:Euro rate parameter.
-{-# INLINE cpMicroGTUPerEuro #-}
-cpMicroGTUPerEuro :: Lens' ChainParameters ExchangeRate
-cpMicroGTUPerEuro = lens _cpMicroGTUPerEuro (\cp mgtupe -> cp{_cpMicroGTUPerEuro = mgtupe, _cpEnergyRate = computeEnergyRate mgtupe (_cpEuroPerEnergy cp)})
+putChainParametersP1 :: (PVNat pv <= 3) => Putter (ChainParameters pv)
+putChainParametersP1 = undefined
 
--- |uGTU:Energy rate parameter (derived).
-{-# INLINE cpEnergyRate #-}
-cpEnergyRate :: SimpleGetter ChainParameters EnergyRate
-cpEnergyRate = to _cpEnergyRate
+putChainParametersP4 :: (4 <= PVNat pv) => Putter (ChainParameters pv)
+putChainParametersP4 = undefined
 
--- |Additional cooldown epochs on changes that reduce a baker's stake.
-{-# INLINE cpBakerExtraCooldownEpochs #-}
-cpBakerExtraCooldownEpochs :: Lens' ChainParameters Epoch
-cpBakerExtraCooldownEpochs = lens _cpBakerExtraCooldownEpochs (\cp bce -> cp{_cpBakerExtraCooldownEpochs = bce})
 
--- |Foundation account chain parameter.
-{-# INLINE cpFoundationAccount #-}
-cpFoundationAccount :: Lens' ChainParameters AccountIndex
-cpFoundationAccount = lens _cpFoundationAccount (\cp fa -> cp{_cpFoundationAccount = fa})
+instance forall pv. (IsProtocolVersion pv) => Serialize (ChainParameters pv) where
+    put cp = case foo @pv of
+        LeftFoo -> putChainParametersP1 cp
+        RightFoo -> putChainParametersP4 cp
+    get = undefined
 
--- |LimitAccountCreation parameter.
-{-# INLINE cpAccountCreationLimit #-}
-cpAccountCreationLimit :: Lens' ChainParameters CredentialsPerBlockLimit
-cpAccountCreationLimit = lens _cpAccountCreationLimit (\cp acl -> cp{_cpAccountCreationLimit = acl})
-
--- |Minimum baker threshold parameter.
-{-# INLINE cpBakerStakeThreshold #-}
-cpBakerStakeThreshold :: Lens' ChainParameters Amount
-cpBakerStakeThreshold = lens _cpBakerStakeThreshold (\cp bmt -> cp{_cpBakerStakeThreshold = bmt})
-
-instance HasRewardParameters ChainParameters where
-    rewardParameters = lens _cpRewardParameters (\cp rp -> cp{_cpRewardParameters = rp})
-
+{-}
 instance Serialize ChainParameters where
     put ChainParameters{..} = do
         put _cpElectionDifficulty
@@ -163,8 +343,8 @@ instance ToJSON ChainParameters where
               "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs,
               "accountCreationLimit" AE..= _cpAccountCreationLimit,
               "rewardParameters" AE..= _cpRewardParameters,
-              "foundationAccountIndex" AE..= _cpFoundationAccount
-            , "minimumThresholdForBaking" AE..= _cpBakerStakeThreshold
+              "foundationAccountIndex" AE..= _cpFoundationAccount,
+              "minimumThresholdForBaking" AE..= _cpBakerStakeThreshold
             ]
 
 -- |Parameters that affect finalization.
@@ -252,3 +432,4 @@ instance FromJSON FinalizationParameters where
             fail "delayGrowFactor must be strictly greater than 1"
         finalizationAllowZeroDelay <- v .:? "allowZeroDelay" .!= False
         return FinalizationParameters{..}
+-}
