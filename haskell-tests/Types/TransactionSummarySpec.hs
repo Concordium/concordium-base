@@ -2,24 +2,13 @@
 
 module Types.TransactionSummarySpec where
 
-import qualified Data.ByteString.Short as SBS
 import Data.Serialize
 import Test.Hspec
 import Test.QuickCheck
 
-import qualified Concordium.Crypto.BlockSignature as BlockSig
-import Concordium.Crypto.DummyData
-import Concordium.Crypto.EncryptedTransfers
-import Concordium.Crypto.SHA256 (Hash (Hash))
-import qualified Concordium.Crypto.VRF as VRF
-import Concordium.ID.Types (AccountThreshold (..), CredentialType (..))
-import Concordium.Types
 import Concordium.Types.Execution
-import qualified Concordium.Wasm as Wasm
-import qualified Data.FixedByteString as FBS
 
 import Types.Generators
-import Types.UpdatesSpec (genUpdatePayload)
 
 
 testTransactionTypesSerialIdentity :: Expectation

@@ -4,23 +4,15 @@
 module Types.UpdatesSpec where
 
 import qualified Data.Aeson as AE
-import qualified Data.ByteString as BS
 import qualified Data.Map as Map
-import Data.Ratio
 import Data.Serialize hiding (label)
 import qualified Data.Set as Set
-import qualified Data.Text as Text
-import qualified Data.Vector as Vec
-import Data.Word
 import Test.Hspec
 import Test.QuickCheck as QC
 
 import Concordium.Crypto.DummyData ( genSigSchemeKeyPair )
 import qualified Concordium.Crypto.SignatureScheme as Sig
-import qualified Concordium.Crypto.SHA256 as Hash
-
 import Concordium.Types.Updates
-import Concordium.Types
 
 import Types.Generators
 
