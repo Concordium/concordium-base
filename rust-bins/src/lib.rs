@@ -1,3 +1,4 @@
+use anyhow::Context;
 use crypto_common::*;
 use curve_arithmetic::*;
 use id::{constants::*, types::*};
@@ -59,11 +60,58 @@ pub fn read_id_object<P: AsRef<Path> + Debug>(
     }
 }
 
+/// Encrypt data (if password is provided), and write the (encrypted) data to
+/// file. Upon success, returns Ok(true) if data was encrypted and Ok(false) if
+/// not.
+pub fn output_possibly_encrypted<X: SerdeSerialize>(
+    fname: &Path,
+    data: &X,
+) -> Result<bool, std::io::Error> {
+    let pass = ask_for_password_confirm(
+        "Enter password to encrypt (leave empty for no encryption): ",
+        true,
+    )?;
+    if pass.is_empty() {
+        println!("No password supplied, so output will not be encrypted.");
+        write_json_to_file(fname, data)?;
+        Ok(false)
+    } else {
+        let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
+        let encrypted =
+            crypto_common::encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
+        write_json_to_file(fname, &encrypted)?;
+        Ok(true)
+    }
+}
+
+/// Decrypt data if encrypted.
+pub fn decrypt_input<P: AsRef<Path> + Debug, X: DeserializeOwned>(input: P) -> anyhow::Result<X> {
+    let data = std::fs::read(&input).context("Cannot read input file.")?;
+    match serde_json::from_slice(&data) {
+        Ok(data) => Ok(data),
+        Err(_) => {
+            let parsed_data = serde_json::from_slice(&data)?;
+            let pass = rpassword::read_password_from_tty(Some(&format!(
+                "Enter password to decrypt file {} with: ",
+                input.as_ref().to_string_lossy()
+            )))?;
+            let plaintext = crypto_common::encryption::decrypt(&pass.into(), &parsed_data)
+                .context("Could not decrypt data.")?;
+            serde_json::from_slice(&plaintext).context("Could not parse decrypted data.")
+        }
+    }
+}
+
 /// Read id_use_data, deciding on how to parse based on the version.
 pub fn read_id_use_data<P: AsRef<Path> + Debug>(
     filename: P,
 ) -> io::Result<IdObjectUseData<Bls12, ExampleCurve>> {
-    let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    let params: Versioned<serde_json::Value> = match decrypt_input(filename) {
+        Ok(versioned_val) => versioned_val,
+        Err(e) => {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("{}", e)));
+        }
+    };
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
         other => Err(io::Error::new(

@@ -20,7 +20,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use structopt::StructOpt;
 
@@ -219,25 +219,6 @@ macro_rules! succeed_or_die {
             None => return Err($s.to_owned()),
         }
     };
-}
-
-fn output_possibly_encrypted<X: SerdeSerialize>(
-    fname: &Path,
-    data: &X,
-) -> Result<(), std::io::Error> {
-    let pass = ask_for_password_confirm(
-        "Enter password to encrypt credentials (leave empty for no encryption): ",
-        true,
-    )?;
-    if pass.is_empty() {
-        println!("No password supplied, so output will not be encrypted.");
-        write_json_to_file(fname, data)
-    } else {
-        let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
-        let encrypted =
-            crypto_common::encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
-        write_json_to_file(fname, &encrypted)
-    }
 }
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {

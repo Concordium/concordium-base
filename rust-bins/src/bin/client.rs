@@ -777,10 +777,10 @@ fn handle_create_credential(cc: CreateCredential) {
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
     // signed the object.
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_id_use_data(&cc.private) {
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_id_use_data(cc.private) {
         Ok(v) => v,
         Err(x) => {
-            eprintln!("Could not read CHI object because {}", x);
+            eprintln!("Could not read CHI object because: {}", x);
             return;
         }
     };
@@ -876,14 +876,17 @@ fn handle_create_credential(cc: CreateCredential) {
     };
 
     if let Some(addr) = cc.account {
-        println!("Generated additional keys for the account.");
+        println!(
+            "Generated additional keys for the account to be encrypted and written to file {}.",
+            cc.keys_out.to_string_lossy()
+        );
         let js = json!({
             "address": addr,
             "accountKeys": AccountKeys::from((CredentialIndex{index: cc.key_index.unwrap()}, acc_data)),
             "credentials": versioned_credentials,
             "commitmentsRandomness": randomness_map,
         });
-        write_json_to_file(&cc.keys_out, &js).ok();
+        output_possibly_encrypted(&cc.keys_out, &js).ok();
     } else {
         let account_data_json = json!({
             "address": address,
@@ -895,10 +898,11 @@ fn handle_create_credential(cc: CreateCredential) {
             "aci": id_use_data.aci,
         });
         println!(
-            "Generated fresh verification and signature key of the account to file {}.",
+            "Generated fresh verification and signature key of the account to be encrypted and \
+             written to file {}.",
             cc.keys_out.to_string_lossy()
         );
-        write_json_to_file(&cc.keys_out, &account_data_json).ok();
+        output_possibly_encrypted(&cc.keys_out, &account_data_json).ok();
     }
 
     // Double check that the generated CDI is going to be successfully validated.
@@ -942,8 +946,8 @@ fn handle_create_chi(cc: CreateChi) {
         id_cred: IdCredentials::generate(&mut csprng),
     };
     if let Some(filepath) = cc.out {
-        match write_json_to_file(filepath, &ah_info) {
-            Ok(()) => println!("Wrote CHI to file."),
+        match output_possibly_encrypted(&filepath, &ah_info) {
+            Ok(_) => println!("Wrote CHI to file."),
             Err(_) => {
                 eprintln!("Could not write to file. The generated information is");
                 output_json(&ah_info);
@@ -968,14 +972,14 @@ fn handle_act_as_ip(aai: IpSignPio) {
         }
     };
     let (ip_info, ip_sec_key, ip_cdi_secret_key) =
-        match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
+        match decrypt_input::<_, IpData<Bls12>>(&aai.ip_data) {
             Ok(ip_data) => (
                 ip_data.public_ip_info,
                 ip_data.ip_secret_key,
                 ip_data.ip_cdi_secret_key,
             ),
             Err(x) => {
-                eprintln!("Could not read identity issuer information because {}", x);
+                eprintln!("Could not read identity issuer information because: {}", x);
                 return;
             }
         };
@@ -985,7 +989,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
         None => match read_validto() {
             Ok(ym) => ym,
             Err(e) => {
-                eprintln!("Could not read credential expiry because {}", e);
+                eprintln!("Could not read credential expiry because: {}", e);
                 return;
             }
         },
@@ -1126,11 +1130,12 @@ fn handle_act_as_ip(aai: IpSignPio) {
 
 fn handle_start_ip(sip: StartIp) {
     let chi = {
-        if let Ok(chi) = read_json_from_file(&sip.chi) {
-            chi
-        } else {
-            eprintln!("Could not read credential holder information.");
-            return;
+        match decrypt_input(sip.chi) {
+            Ok(chi) => chi,
+            Err(e) => {
+                eprintln!("Could not read credential holder information: {}", e);
+                return;
+            }
         }
     };
     let mut csprng = thread_rng();
@@ -1294,7 +1299,7 @@ fn handle_start_ip(sip: StartIp) {
     let id_use_data = IdObjectUseData { aci, randomness };
     let ver_id_use_data = Versioned::new(VERSION_0, id_use_data);
     if let Some(aci_out_path) = sip.private {
-        if write_json_to_file(aci_out_path, &ver_id_use_data).is_ok() {
+        if output_possibly_encrypted(&aci_out_path, &ver_id_use_data).is_ok() {
             println!("Wrote ACI and randomness to file.");
         } else {
             println!("Could not write ACI data to file. Outputting to standard output.");

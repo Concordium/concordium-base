@@ -382,7 +382,7 @@ pub struct AttributeTag(pub u8);
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 13] = [
+pub const ATTRIBUTE_NAMES: [&str; 14] = [
     "firstName",
     "lastName",
     "sex",
@@ -396,7 +396,11 @@ pub const ATTRIBUTE_NAMES: [&str; 13] = [
     "idDocExpiresAt",
     "nationalIdNo",
     "taxIdNo",
+    "lei",
 ];
+
+/// Attribute tag for the LEI attribute.
+pub const ATTRIBUTE_TAG_LEI: AttributeTag = AttributeTag(13);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(transparent)]
@@ -437,7 +441,7 @@ impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
         if v_usize < ATTRIBUTE_NAMES.len() {
             AttributeStringTag(ATTRIBUTE_NAMES[v_usize].to_owned())
         } else {
-            AttributeStringTag(format!("UNNAMED#{}", v))
+            AttributeStringTag(format!("UNNAMED#{}", v.0))
         }
     }
 }
@@ -491,6 +495,10 @@ pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Seri
 pub struct YearMonth {
     pub year:  u16,
     pub month: u8,
+}
+
+impl ToString for YearMonth {
+    fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
 }
 
 impl SerdeSerialize for YearMonth {
