@@ -22,33 +22,33 @@ user_cli generate-request --cryptographic-parameters cryptographic-parameters.js
                           --id-use-data-out id-use-data.json \ # data that enables use of the identity object
                           --request-out request.json # request to send to the identity provider
 ```
-This will ask for some additional input and output the following files
+The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and space key to select and deselect list entries. It outputs the following files
 - `initial-keys.json` data about the initial account, including its address and keys for signing transactions. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `id-use-data.json` contains data that enables the use of the identity object returned by the identity provider. DO NOT LOSE THIS FILE. It cannot be retrieved.
-- `request.json` contains the request that should be sent to the identity provider.
+- `request.json` contains the request that should be sent to the identity provider. This should be done through a trusted channel, together with any other required identity data.
 
-Assuming everything is in order the identity provider should eventually return the identity object. We refer to it as `id-object.json` in the command below.
+Assuming everything is in order when checking your identity, the identity provider should eventually return the identity object. We refer to it as `id-object.json` in the command below.
 
 # Create accounts from an identity object
 
-After obtaining the identity object from the identity object from the identity provider you can create additional accounts on the chain.
-Note that at this point the initial account already exists on the chain. Accounts are created by deploying credentials.
+After obtaining the identity object from the identity provider you can create additional accounts on the chain. Accounts are created by deploying credentials. Note that the initial account already exists on the chain, since the initial account credential was deployed by the identity provider before this point.
 The `user_cli` tool can only be used to create credentials. To deploy them to the chain, thus creating accounts, you need to use `concordium-client` and access to a node.
 
-To create a create a credential use the following command.
+To create a credential use the following command.
 ```console
 user_cli create-credential --id-use-data id-use-data.json \
                            --id-object id-object.json \
                            --keys-out account-keys.json
                            --credential-out credential.json
 ```
-this will output two files
+You will have to select whether to reveal the LEI, which was optional when creating the identity object. Use space key to select and deselect list entries. 
+It outputs the following files
 - `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
 By default this must be sent to the chain within 15min. A larger or shorter message expiry may be set with `--message-expiry` flag to the command.
-Do note that an expiry longer than 2 hours is not acceptable.
+Do note that an expiry longer than 2 hours is not acceptable. Note also that the credential number must be unique for each respective `id-object.json`. Duplicate credential numbers for the same `id-object.json` will be rejected when submitting to chain.
 
-To create the account on the chain do
+To create the account on the chain make sure you have access to a node, then do
 ```console
 concordium-client transaction deploy-credential credential.json
 ```
