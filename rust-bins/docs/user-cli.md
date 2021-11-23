@@ -22,12 +22,14 @@ user_cli generate-request --cryptographic-parameters cryptographic-parameters.js
                           --id-use-data-out id-use-data.json \ # data that enables use of the identity object
                           --request-out request.json # request to send to the identity provider
 ```
-The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. It outputs the following files
+The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. 
+
+It outputs the following files
 - `initial-keys.json` data about the initial account, including its address and keys for signing transactions. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `id-use-data.json` contains data that enables the use of the identity object returned by the identity provider. DO NOT LOSE THIS FILE. It cannot be retrieved.
-- `request.json` contains the request that should be sent to the identity provider. This should be done through a trusted channel, together with any other required identity data.
+- `request.json` contains the request that should be sent to the identity provider.
 
-Assuming everything is in order when checking your identity, the identity provider should eventually return the identity object. We refer to it as `id-object.json` in the command below.
+The request should be sent to the identity provider through a trusted channel, together with any other required identity data. Assuming everything is in order when checking your identity, the identity provider should eventually return the identity object. We refer to it as `id-object.json` in the command below.
 
 # Create accounts from an identity object
 
@@ -42,6 +44,7 @@ user_cli create-credential --id-use-data id-use-data.json \
                            --credential-out credential.json
 ```
 You will have to select whether to reveal the LEI, which was optional when creating the identity object. Use the space key to select and deselect list entries. 
+
 It outputs the following files
 - `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
