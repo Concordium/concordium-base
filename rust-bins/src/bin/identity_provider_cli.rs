@@ -15,9 +15,10 @@ use structopt::StructOpt;
 
 #[derive(StructOpt)]
 #[structopt(
-    about = "Identity provider command line client",
+    about = "Command line client that supports issuing identities for enterprises.",
+    name = "Identity provider CLI",
     author = "Concordium",
-    version = "1"
+    version = "1.0.0"
 )]
 struct IpClient {
     #[structopt(
@@ -214,6 +215,7 @@ fn main() -> anyhow::Result<()> {
         &app.out_icdi.to_string_lossy(),
         chrono::Local.timestamp(message_expiry.seconds as i64, 0),
     );
+    println!("The address of the initial account is {}.", account_address);
 
     let to_store = serde_json::json!({
         "arRecord": ar_record,
