@@ -30,7 +30,7 @@ identity_provider_cli --cryptographic-parameters cryptographic-parameters.json \
                       --ar-record-out ar-record.json
 ```
 
-The tool will first verify the cryptographic validity of the request and then ask for the following data
+The tool will first verify the cryptographic validity of the request. The identity provider must then accept the user's choice of anonymity revokers and anonymity revocation  threshold. After accepting, the tool will ask for the following data
 - expiry year and month of the identity object.
 - an LEI of the entity for which this identity object is being created. This is optional, and if left empty will not be used.
 
