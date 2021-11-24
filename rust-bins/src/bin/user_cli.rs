@@ -101,20 +101,23 @@ struct CreateCredential {
 
 #[derive(StructOpt)]
 #[structopt(
-    about = "Command line client to create identity objects and credentials.",
+    about = "Command line client to request identity objects and create credentials.",
+    name = "User CLI",
     author = "Concordium",
-    version = "1"
+    version = "1.0.0"
 )]
 enum UserClient {
     #[structopt(
         name = "generate-request",
-        about = "Generate data to send to the identity provider to obtain an identity object."
+        about = "Generate data to send to the identity provider to obtain an identity object.",
+        version = "1.0.0"
     )]
     StartIp(StartIp),
     #[structopt(
         name = "create-credential",
         about = "Take the identity object and create a credential object to deploy on chain to \
-                 create an account."
+                 create an account.",
+        version = "1.0.0"
     )]
     CreateCredential(CreateCredential),
 }
@@ -245,8 +248,10 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
 
     // initial account information. We don't have the credential and
     // the randomness so we don't store them.
+    // address of the initial account
+    let address = AccountAddress::new(&pio.pub_info_for_ip.reg_id);
     let init_acc = json!({
-        "address": AccountAddress::new(&pio.pub_info_for_ip.reg_id),
+        "address": address,
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountKeys": AccountKeys::from(initial_acc_data),
@@ -256,6 +261,7 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
     println!(
         "Generated private keys for initial account. The credential has one key with key index 0."
     );
+    println!("Address of the initial account will be {}.", address);
     let was_encrypted =
         output_possibly_encrypted(&sip.initial_keys, &init_acc).context(format!(
             "Could not write accounts keys of initial account to {}.",
@@ -532,6 +538,10 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
             "Wrote the account creation transaction to {}. Submit it before {}.",
             cc.out.display(),
             chrono::Local.timestamp(expiry.seconds as i64, 0)
+        );
+        println!(
+            "This transaction will create an account with address {}.",
+            address
         );
     } else {
         println!(
