@@ -334,7 +334,7 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
         &cc.id_object.display()
     ))?;
 
-    let data: Versioned<StoredData> = read_json_from_file(&cc.id_use_data).context(format!(
+    let data: Versioned<StoredData> = decrypt_input(&cc.id_use_data).context(format!(
         "Could not read identity object use data from {}.",
         cc.id_use_data.display()
     ))?;

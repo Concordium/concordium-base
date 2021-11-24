@@ -457,7 +457,7 @@ dependencies = [
  "hmac",
  "libc",
  "pairing",
- "pbkdf2",
+ "pbkdf2 0.9.0",
  "rand 0.7.3",
  "serde",
  "sha2 0.9.5",
@@ -1225,7 +1225,7 @@ dependencies = [
  "keygen_bls",
  "openssl-sys",
  "pairing",
- "pbkdf2",
+ "pbkdf2 0.8.0",
  "pedersen_scheme",
  "ps_sig",
  "rand 0.7.3",
@@ -1415,6 +1415,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d791538a6dcc1e7cb7fe6f6b58aca40e7f79403c45b2bc274008b5e647af1d8"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.3",
+ "subtle",
+]
+
+[[package]]
 name = "pbkdf2"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1423,7 +1434,19 @@ dependencies = [
  "base64ct",
  "crypto-mac",
  "hmac",
- "password-hash",
+ "password-hash 0.2.1",
+ "sha2 0.9.5",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f05894bce6a1ba4be299d0c5f29563e08af2bc18bb7d48313113bed71e904739"
+dependencies = [
+ "crypto-mac",
+ "hmac",
+ "password-hash 0.3.2",
  "sha2 0.9.5",
 ]
 
