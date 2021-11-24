@@ -215,7 +215,10 @@ fn main() -> anyhow::Result<()> {
         &app.out_icdi.to_string_lossy(),
         chrono::Local.timestamp(message_expiry.seconds as i64, 0),
     );
-    println!("The address of the initial account is {}.", account_address);
+    println!(
+        "Address of the initial account will be {}.",
+        account_address
+    );
 
     let to_store = serde_json::json!({
         "arRecord": ar_record,
