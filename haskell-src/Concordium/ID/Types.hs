@@ -349,7 +349,7 @@ attributeNames = ["firstName",
                   "idDocIssuedAt",
                   "idDocExpiresAt",
                   "nationalIdNo",
-                  "taxIdNo"
+                  "taxIdNo",
                   "lei"
                  ]
 
