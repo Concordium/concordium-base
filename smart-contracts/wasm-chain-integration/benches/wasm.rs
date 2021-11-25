@@ -10,7 +10,7 @@ use wasm_chain_integration::{
 
 use wasm_transform::{
     artifact::{ArtifactNamedImport, TryFromImport},
-    machine::{Host, Value},
+    machine::{Host, NoInterrupt, Value},
     types::{FunctionType, ValueType},
     *,
 };
@@ -115,23 +115,25 @@ impl Host<MeteringImport> for MeteringHost {
         f: &MeteringImport,
         _memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            MeteringFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() }),
+            MeteringFunc::ChargeEnergy => {
+                self.energy.tick_energy(unsafe { stack.pop_u64() }).map(|_| None)
+            }
             MeteringFunc::TrackCall => {
                 if let Some(fr) = self.activation_frames.checked_sub(1) {
                     self.activation_frames = fr;
-                    Ok(())
+                    Ok(None)
                 } else {
                     bail!("Too many nested functions.")
                 }
             }
             MeteringFunc::TrackReturn => {
                 self.activation_frames += 1;
-                Ok(())
+                Ok(None)
             }
             MeteringFunc::ChargeMemoryAlloc => {
-                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })
+                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() }).map(|_| None)
             }
         }
     }

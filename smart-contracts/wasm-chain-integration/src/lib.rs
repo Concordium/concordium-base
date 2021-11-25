@@ -17,7 +17,7 @@ use std::{
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
-    machine,
+    machine::{self, ExecutionOutcome, NoInterrupt},
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
     utils, validate,
@@ -586,7 +586,7 @@ impl<'a, Ctx: HasInitContext> machine::Host<ProcessedImports> for InitHost<'a, C
         f: &ProcessedImports,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
             ImportFunc::ChargeEnergy => {
                 self.energy.tick_energy(unsafe { stack.pop_u64() })?;
@@ -613,7 +613,7 @@ impl<'a, Ctx: HasInitContext> machine::Host<ProcessedImports> for InitHost<'a, C
                 bail!("Not implemented for init {:#?}.", f);
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -727,7 +727,7 @@ impl<'a, Ctx: HasReceiveContext> machine::Host<ProcessedImports> for ReceiveHost
         f: &ProcessedImports,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
             ImportFunc::ChargeEnergy => {
                 let amount = unsafe { stack.pop_u64() };
@@ -750,7 +750,7 @@ impl<'a, Ctx: HasReceiveContext> machine::Host<ProcessedImports> for ReceiveHost
                 bail!("Not implemented for receive.");
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -779,7 +779,14 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     };
 
     let res = match artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]) {
-        Ok((res, _)) => res,
+        Ok(ExecutionOutcome::Success {
+            result,
+            ..
+        }) => result,
+        Ok(ExecutionOutcome::Interrupted {
+            reason,
+            ..
+        }) => match reason {}, // impossible case, InitHost has no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(InitResult::OutOfEnergy);
@@ -878,7 +885,14 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     };
 
     let res = match artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]) {
-        Ok((res, _)) => res,
+        Ok(ExecutionOutcome::Success {
+            result,
+            ..
+        }) => result,
+        Ok(ExecutionOutcome::Interrupted {
+            reason,
+            ..
+        }) => match reason {}, // impossible case, ReceiveHost has no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(ReceiveResult::OutOfEnergy);
@@ -1011,7 +1025,7 @@ impl<I> machine::Host<I> for TrapHost {
         _f: &I,
         _memory: &mut Vec<u8>,
         _stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         bail!("TrapHost traps on all host calls.")
     }
 }
@@ -1089,7 +1103,7 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
         f: &ArtifactNamedImport,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         if f.matches("concordium", "report_error") {
             let column = unsafe { stack.pop_u32() };
             let line = unsafe { stack.pop_u32() };
@@ -1205,8 +1219,10 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     artifact: &Artifact<I, C>,
     schema_fn_name: &str,
 ) -> ExecResult<schema::Type> {
-    let (ptr, memory) = if let (Some(Value::I32(ptr)), memory) =
-        artifact.run(&mut TrapHost, schema_fn_name, &[])?
+    let (ptr, memory) = if let machine::ExecutionOutcome::Success {
+        result: Some(Value::I32(ptr)),
+        memory,
+    } = artifact.run(&mut TrapHost, schema_fn_name, &[])?
     {
         (ptr as u32 as usize, memory)
     } else {

@@ -349,6 +349,15 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
 
 /// A parsed Wasm module. This no longer has custom sections since they are not
 /// needed for further processing.
+/// The type parameter `ImportFunc` is instantiated with the representation of
+/// host functions. To efficiently and relatively safely execute the module we
+/// preprocess imported functions into an enum. However for testing we sometimes
+/// just use raw imports. This type parameter allows us flexibility.
+/// The type parameter `RunnableCode` is used to allow flexibility in code
+/// representation. For testing uses it is convenient that the type is
+/// "owned", in the sense of it being a vector of instructions. For efficient
+/// execution, and to avoid deserialization, the code is represented as a byte
+/// array (i.e., as as slice of bytes `&[u8]`) when we execute it on the node.
 #[derive(Debug, Clone)]
 pub struct Artifact<ImportFunc, CompiledCode> {
     /// Imports by (module name, item name).

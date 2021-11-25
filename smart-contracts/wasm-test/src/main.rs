@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use structopt::StructOpt;
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, CompiledFunction},
-    machine::{Host, RunResult, RuntimeError, RuntimeStack, Value},
+    machine::{ExecutionOutcome, Host, NoInterrupt, RunResult, RuntimeError, RuntimeStack, Value},
     parse::ParseError,
     types::{FunctionType, Module, Name},
     validate::ValidationError,
@@ -41,7 +41,7 @@ impl Host<ArtifactNamedImport> for TrapHost {
         f: &ArtifactNamedImport,
         _memory: &mut Vec<u8>,
         _stack: &mut RuntimeStack,
-    ) -> RunResult<()> {
+    ) -> RunResult<Option<NoInterrupt>> {
         bail!(HostCallError {
             name: f.clone(),
         })
@@ -62,7 +62,7 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         f: &ArtifactNamedImport,
         _memory: &mut Vec<u8>,
         _stack: &mut RuntimeStack,
-    ) -> RunResult<()> {
+    ) -> RunResult<Option<NoInterrupt>> {
         if f.matches("concordium_metering", "track_call") {
             self.call_depth += 1;
             ensure!(self.call_depth <= 10000, "Call depth exceeded.");
@@ -76,7 +76,7 @@ impl Host<ArtifactNamedImport> for MeteringHost {
                 name: f.clone(),
             })
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -163,8 +163,16 @@ fn invoke_update(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    let (res, _new_memory) = artifact.run(&mut TrapHost, name, args)?;
-    Ok(res)
+    match artifact.run(&mut TrapHost, name, args)? {
+        ExecutionOutcome::Success {
+            result,
+            ..
+        } => Ok(result),
+        ExecutionOutcome::Interrupted {
+            reason,
+            ..
+        } => match reason {}, // impossible case
+    }
 }
 
 fn invoke_update_metering(
@@ -172,7 +180,7 @@ fn invoke_update_metering(
     name: &str,
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
-    let (res, _new_memory) = artifact.run(
+    let run = artifact.run(
         &mut MeteringHost {
             call_depth:  0,
             energy_left: 10000,
@@ -180,7 +188,16 @@ fn invoke_update_metering(
         name,
         args,
     )?;
-    Ok(res)
+    match run {
+        ExecutionOutcome::Success {
+            result,
+            ..
+        } => Ok(result),
+        ExecutionOutcome::Interrupted {
+            reason,
+            ..
+        } => match reason {},
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -232,7 +249,7 @@ fn main() -> anyhow::Result<()> {
         if meta.is_file() {
             if let Some("wast") = entry.path().extension().and_then(|s| s.to_str()) {
                 let path = entry.path();
-                let file_name = path.to_string_lossy();
+                let file_name = path.display();
                 eprintln!("Processing file {}", file_name);
                 let input = fs::read_to_string(&path)?;
                 let source = parser::ParseBuffer::new(&input)?;
