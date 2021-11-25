@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- |This module defines the genesis data fromat for the 'P4' protocol version.
 module Concordium.Genesis.Data.P4 where
 
@@ -17,7 +19,7 @@ data GenesisDataP4
       genesisCore :: !CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-      genesisInitialState :: !GenesisState
+      genesisInitialState :: !(GenesisState 'P4)
     }
     | GDP4Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
@@ -76,7 +78,7 @@ putVersionedGenesisData gd = do
     putVersion 6
     putGenesisDataV6 gd
 
-parametersToGenesisData :: GenesisParameters -> GenesisDataP4
+parametersToGenesisData :: GenesisParameters 'P4 -> GenesisDataP4
 parametersToGenesisData = uncurry GDP4Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.

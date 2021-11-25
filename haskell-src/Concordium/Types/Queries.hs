@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Queries where
@@ -191,7 +193,7 @@ data FinalizationSummary = FinalizationSummary
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
 
 -- |Detailed information about a block.
-data BlockSummary = BlockSummary
+data BlockSummary (pv :: ProtocolVersion) = BlockSummary
     { -- |Details of transactions in the block
       bsTransactionSummaries :: !(Vec.Vector TransactionSummary),
       -- |Details of special events in the block
@@ -199,11 +201,28 @@ data BlockSummary = BlockSummary
       -- |Details of the finalization record in the block (if any)
       bsFinalizationData :: !(Maybe FinalizationSummary),
       -- |Details of the update queues and chain parameters as of the block
-      bsUpdates :: !Updates
+      bsUpdates :: !(Updates pv)
     }
     deriving (Show)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockSummary)
+instance IsProtocolVersion pv => ToJSON (BlockSummary pv) where
+  toJSON BlockSummary{..} = object
+            [ "transactionSummaries" .= bsTransactionSummaries,
+              "specialEvents" .= bsSpecialEvents,
+              "finalizationData" .= bsFinalizationData,
+              "updates" .= bsUpdates
+            ]
+
+instance IsProtocolVersion pv => FromJSON (BlockSummary pv) where
+  parseJSON = 
+    withObject "BlockSummary" $ \v ->
+        BlockSummary
+            <$> v .: "transactionSummaries"
+            <*> v .: "specialEvents"
+            <*> v .: "finalizationData"
+            <*> v .: "updates"
+
+-- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''Foo1)
 
 data RewardStatus = RewardStatus
     { -- |The total GTU in existence

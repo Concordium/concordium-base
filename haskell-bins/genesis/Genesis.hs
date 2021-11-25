@@ -150,6 +150,12 @@ expectedIpInfosVersion = 0
 expectedGenesisParametersVersion = genesisParametersVersion
 expectedCryptoParamsVersion = 0
 
+parseParametersAndGetGenesisData :: IsProtocolVersion pv => Value -> (GenesisParameters pv -> PVGenesisData) -> IO PVGenesisData
+parseParametersAndGetGenesisData value f = 
+  case fromJSON value of
+    Error err -> die $ "Could not decode genesis parameters: " ++ show err
+    Success params -> return $ f params
+
 main :: IO ()
 main = cmdArgsRun mode >>=
     \case
@@ -166,29 +172,21 @@ main = cmdArgsRun mode >>=
                   vCP <- maybeModifyValueVersioned expectedCryptoParamsVersion gdCryptoParams "cryptographicParameters" vAr
                   vAdditionalAccs <- maybeModifyValue gdAccounts "initialAccounts" vCP
                   value <- maybeModifyValue gdUpdateKeys "updateKeys" vAdditionalAccs
-                  case fromJSON value of
-                    Error err -> do
-                      die $ "Could not decode genesis parameters: " ++ show err
-                    Success params -> do
-                      -- P1 and P2 initial genesis are really the same format, so we combine them into
-                      -- the same PVGenesisData type when generating, and then output it.
-                      pvGD <- case gdVersion of
-                               3 -> return $ PVGenesisData . GDP1 $ P1.parametersToGenesisData params
-                               -- see documentation of 'putVersionedGenesisData'
-                               -- for why we assign these versions to P1 and P2 genesis
-                               4 -> return $ PVGenesisData . GDP2 $ P2.parametersToGenesisData params
-                               5 -> return $ PVGenesisData . GDP3 $ P3.parametersToGenesisData params
-                               6 -> return $ PVGenesisData . GDP4 $ P4.parametersToGenesisData params
-                               n -> do
-                                 putStrLn $ "Unsupported genesis data version: " ++ show n
-                                 exitFailure
-                      putStrLn $ "Generated genesis data for protocol version " ++ show (pvProtocolVersion pvGD)
-                      LBS.writeFile gdOutput (S.runPutLazy $ putPVGenesisData pvGD)
-                      putStrLn $ "Wrote genesis data to file " ++ gdOutput
-                      let hashFile = takeDirectory gdOutput </> "genesis_hash"
-                      LBS.writeFile hashFile (encode [pvGenesisBlockHash pvGD])
-                      putStrLn $ "Wrote genesis hash list to file " ++ hashFile
-                      exitSuccess
+                  pvGD <- case gdVersion of
+                    3 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP1 $ P1.parametersToGenesisData p
+                    4 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP2 $ P2.parametersToGenesisData p 
+                    5 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP3 $ P3.parametersToGenesisData p 
+                    6 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP4 $ P4.parametersToGenesisData p 
+                    n -> do
+                      putStrLn $ "Unsupported genesis data version: " ++ show n
+                      exitFailure
+                  putStrLn $ "Generated genesis data for protocol version " ++ show (pvProtocolVersion pvGD)
+                  LBS.writeFile gdOutput (S.runPutLazy $ putPVGenesisData pvGD)
+                  putStrLn $ "Wrote genesis data to file " ++ gdOutput
+                  let hashFile = takeDirectory gdOutput </> "genesis_hash"
+                  LBS.writeFile hashFile (encode [pvGenesisBlockHash pvGD])
+                  putStrLn $ "Wrote genesis hash list to file " ++ hashFile
+                  exitSuccess
         PrintGenesisData{..} -> do
           source <- LBS.readFile gdSource
           case S.runGetLazy getPVGenesisData source of
@@ -197,16 +195,16 @@ main = cmdArgsRun mode >>=
               case protocolVersion @pv of
                 SP1 -> case gdata of
                   GDP1 P1.GDP1Regenesis{..} -> printRegenesis P1 genesisRegenesis
-                  gd@(GDP1 P1.GDP1Initial{..}) -> printInitial P1 (genesisBlockHash gd) genesisCore genesisInitialState
+                  gd@(GDP1 P1.GDP1Initial{..}) -> printInitial SP1 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP2 -> case gdata of
                   GDP2 P2.GDP2Regenesis{..} -> printRegenesis P2 genesisRegenesis
-                  gd@(GDP2 P2.GDP2Initial{..}) -> printInitial P2 (genesisBlockHash gd) genesisCore genesisInitialState
+                  gd@(GDP2 P2.GDP2Initial{..}) -> printInitial SP2 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP3 -> case gdata of
                   GDP3 P3.GDP3Regenesis{..} -> printRegenesis P3 genesisRegenesis
-                  gd@(GDP3 P3.GDP3Initial{..}) -> printInitial P3 (genesisBlockHash gd) genesisCore genesisInitialState
+                  gd@(GDP3 P3.GDP3Initial{..}) -> printInitial SP3 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP4 -> case gdata of
                   GDP4 P4.GDP4Regenesis{..} -> printRegenesis P4 genesisRegenesis
-                  gd@(GDP4 P4.GDP4Initial{..}) -> printInitial P4 (genesisBlockHash gd) genesisCore genesisInitialState
+                  gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
 
 printRegenesis :: ProtocolVersion -> RegenesisData -> IO ()
 printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do
@@ -233,10 +231,54 @@ printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do
     putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
     putStrLn $ "State hash: " ++ show genesisStateHash
 
-printInitial :: ProtocolVersion -> BlockHash -> CoreGenesisParameters -> GDBase.GenesisState -> IO ()
-printInitial pv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
+printInitialChainParameters :: SProtocolVersion pv -> ChainParameters pv -> IO ()
+printInitialChainParameters spv ChainParameters{..} = do
+    putStrLn ""
+    putStrLn "Chain parameters: "
+    -- TODO: Finish the below:
+    -- putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+    -- putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_erEuroPerEnergy _cpExchangeRates)
+    -- putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_erMicroGTUPerEuro _cpExchangeRates)
+    -- case chainParametersVersionFor spv of
+    --   SCPV0 -> do
+    --     putStrLn $ "  - baker extra cooldown epochs: " ++ show (_cpBakerExtraCooldownEpochs _cpCooldownParameters)
+    --     putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --   SCPV1 -> do
+    --     putStrLn $ "  - pool owner cooldown: " ++ show (_cpPoolOwnerCooldown _cpCooldownParameters)
+    --     putStrLn $ "  - delegator cooldown: " ++ show (_cpDelegatorCooldown _cpCooldownParameters)
+    --     putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+    --     putStrLn $ "  - finalization commission for the L-Pool: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - baking commission for the L-Pool: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - transaction commission for the L-Pool: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - finalizationCommissionRange: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+    -- putStrLn "  - reward parameters:"
+    -- putStrLn "    + mint distribution:"
+    -- putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
+    -- putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+    -- putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+    -- putStrLn "    + transaction fee distribution:"
+    -- putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+    -- putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+    -- putStrLn "    + GAS rewards:"
+    -- putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+    -- putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+    -- putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+    -- putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
+
+
+printInitial :: SProtocolVersion pv -> BlockHash -> CoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
+printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     putStrLn $ "Genesis data for genesis block with hash " ++ show gh
-    putStrLn $ "Protocol version " ++ show pv
+    putStrLn $ "Protocol version " ++ show (demoteProtocolVersion spv)
     putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
     putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
     putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
@@ -261,28 +303,7 @@ printInitial pv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
 
     let ChainParameters{..} = genesisChainParameters
-    putStrLn ""
-    putStrLn "Chain parameters: "
-    putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
-    putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate _cpEuroPerEnergy
-    putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate _cpMicroGTUPerEuro
-    putStrLn $ "  - baker extra cooldown epochs: " ++ show _cpBakerExtraCooldownEpochs
-    putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
-    putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU _cpBakerStakeThreshold
-    putStrLn "  - reward parameters:"
-    putStrLn "    + mint distribution:"
-    putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
-    putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
-    putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
-    putStrLn "    + transaction fee distribution:"
-    putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
-    putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
-    putStrLn "    + GAS rewards:"
-    putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
-    putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
-    putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
-    putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
-
+    -- TODO: call `printInitialChainParameters`
     let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
           Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
           Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"

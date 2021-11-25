@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, BangPatterns, DeriveFunctor, OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell, BangPatterns, DeriveFunctor, OverloadedStrings, ScopedTypeVariables, TypeApplications, KindSignatures, DataKinds, TypeFamilies, GADTs #-}
 -- |Implementation of the chain update mechanism: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
 module Concordium.Types.UpdateQueues where
 
@@ -237,19 +237,19 @@ emptyPendingUpdates = PendingUpdates
         emptyUpdateQueue
 
 -- |Current state of updatable parameters and update queues.
-data Updates = Updates {
+data Updates (pv :: ProtocolVersion) = Updates {
     -- |Current update authorizations.
     _currentKeyCollection :: !(Hashed UpdateKeysCollection),
     -- |Current protocol update.
     _currentProtocolUpdate :: !(Maybe ProtocolUpdate),
     -- |Current chain parameters.
-    _currentParameters :: !ChainParameters,
+    _currentParameters :: !(ChainParameters pv),
     -- |Pending updates.
     _pendingUpdates :: !PendingUpdates
 } deriving (Show, Eq)
 makeClassy ''Updates
 
-instance HashableTo H.Hash Updates where
+instance HashableTo H.Hash (Updates cpv) where
     getHash Updates{..} = H.hash $
             hsh _currentKeyCollection
             <> case _currentProtocolUpdate of
@@ -262,45 +262,51 @@ instance HashableTo H.Hash Updates where
             hsh = H.hashToByteString . getHash
 
 -- |Serialize 'Updates' in V0 format.
-putUpdatesV0 :: Putter Updates
+putUpdatesV0 :: Putter (Updates pv)
 putUpdatesV0 Updates{..} = do
         put (_currentKeyCollection ^. unhashed)
         case _currentProtocolUpdate of
             Nothing -> putWord8 0
             Just cpu -> putWord8 1 >> put cpu
-        put _currentParameters
+        putChainParameters _currentParameters
         putPendingUpdatesV0 _pendingUpdates
 
 -- |Deserialize 'Updates' in V0 format.
-getUpdatesV0 :: Get Updates
+getUpdatesV0 :: forall pv. IsProtocolVersion pv => Get (Updates pv)
 getUpdatesV0 = do
         _currentKeyCollection <- makeHashed <$> get
         _currentProtocolUpdate <- getWord8 >>= \case
             0 -> return Nothing
             1 -> Just <$> get
             _ -> fail "Invalid Updates"
-        _currentParameters <- get
+        _currentParameters <- getChainParameters $ chainParametersVersionFor $ protocolVersion @pv
         _pendingUpdates <- getPendingUpdatesV0
         return Updates{..}
 
-instance ToJSON Updates where
+instance forall pv. IsProtocolVersion pv => ToJSON (Updates pv) where
     toJSON Updates{..} = object $ [
             "keys" AE..= _unhashed _currentKeyCollection,
-            "chainParameters" AE..= _currentParameters,
+            chainParametersJSON,
             "updateQueues" AE..= _pendingUpdates
         ] <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
+      where
+        chainParametersJSON = case chainParametersVersionFor $ protocolVersion @pv of
+            SCPV0 -> "chainParameters" AE..= _currentParameters
+            SCPV1 -> "chainParameters" AE..= _currentParameters
 
-instance FromJSON Updates where
+instance forall pv. IsProtocolVersion pv => FromJSON (Updates pv) where
     parseJSON = withObject "Updates" $ \o -> do
         _currentKeyCollection <- makeHashed <$> o AE..: "keys"
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
-        _currentParameters <- o AE..: "chainParameters"
+        _currentParameters <- case chainParametersVersionFor $ protocolVersion @pv of
+          SCPV0 -> o AE..: "chainParameters"
+          SCPV1 -> o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"
         return Updates{..}
 
 -- |An initial 'Updates' with the given initial 'Authorizations'
 -- and 'ChainParameters'.
-initialUpdates :: UpdateKeysCollection -> ChainParameters -> Updates
+initialUpdates :: UpdateKeysCollection -> ChainParameters pv -> Updates pv
 initialUpdates initialKeyCollection _currentParameters = Updates {
         _currentKeyCollection = makeHashed initialKeyCollection,
         _currentProtocolUpdate = Nothing,
