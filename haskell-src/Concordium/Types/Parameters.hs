@@ -16,19 +16,16 @@ import Data.Aeson.Types
 import Data.Ratio
 import Data.Serialize
 import Data.Word
-import GHC.TypeNats
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
-import Concordium.Types.ProtocolVersion.TH
 import Concordium.Types.Updates (
     HasRewardParameters (rewardParameters),
     RewardParameters,
  )
-import Data.Function
 
 data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
 
@@ -42,7 +39,7 @@ data SChainParametersVersion (cpv :: ChainParametersVersion) where
     SCPV0 :: SChainParametersVersion 'ChainParametersV0
     SCPV1 :: SChainParametersVersion 'ChainParametersV1
 
-chainParametersVersionFor :: IsProtocolVersion pv => SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
+chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
 chainParametersVersionFor spv = case spv of 
     SP1 -> SCPV0
     SP2 -> SCPV0
@@ -128,6 +125,24 @@ data CooldownParameters cpv where
       -- when reducing their delegated stake.
       _cpDelegatorCooldown :: !RewardPeriod
     } -> CooldownParameters 'ChainParametersV1
+
+-- |Lens for '_cpBakerExtraCooldownEpochs'
+{-# INLINE cpBakerExtraCooldownEpochs #-}
+cpBakerExtraCooldownEpochs :: Lens' (CooldownParameters 'ChainParametersV0) Epoch
+cpBakerExtraCooldownEpochs =
+  lens _cpBakerExtraCooldownEpochs (\cp x -> cp{_cpBakerExtraCooldownEpochs = x})
+
+-- |Lens for '_cpPoolOwnerCooldown'
+{-# INLINE cpPoolOwnerCooldown #-}
+cpPoolOwnerCooldown :: Lens' (CooldownParameters 'ChainParametersV1) RewardPeriod
+cpPoolOwnerCooldown =
+  lens _cpPoolOwnerCooldown (\cp x -> cp{_cpPoolOwnerCooldown = x})
+
+-- |Lens for '_cpDelegatorCooldown'
+{-# INLINE cpDelegatorCooldown #-}
+cpDelegatorCooldown :: Lens' (CooldownParameters 'ChainParametersV1) RewardPeriod
+cpDelegatorCooldown =
+  lens _cpDelegatorCooldown (\cp x -> cp{_cpDelegatorCooldown = x})
     
 deriving instance Eq (CooldownParameters cpv)
 deriving instance Show (CooldownParameters cpv)
@@ -149,6 +164,12 @@ data TimeParameters cpv where
     TimeParametersV1 :: {
          _tpRewardPeriodLength :: RewardPeriodLength
     } -> TimeParameters 'ChainParametersV1
+
+-- |Lens for '_tpRewardPeriodLength'
+{-# INLINE tpRewardPeriodLength #-}
+tpRewardPeriodLength :: Lens' (TimeParameters 'ChainParametersV1) RewardPeriodLength
+tpRewardPeriodLength =
+  lens _tpRewardPeriodLength (\tp x -> tp{_tpRewardPeriodLength = x})
 
 putTimeParameters :: Putter (TimeParameters cpv)
 putTimeParameters TimeParametersV0 = return ()
@@ -211,10 +232,13 @@ instance (Serialize a, Ord a) => Serialize (InclusiveRange a) where
 isInRange :: (Ord a) => a -> InclusiveRange a -> Bool
 isInRange v InclusiveRange{..} = irMin <= v && v <= irMax
 
+-- |Ranges of allowed commision values that pools may choose from.
 data CommissionRanges = CommissionRanges
-    -- TODO: Document these
-    { _finalizationCommissionRange :: !(InclusiveRange RewardFraction),
+    { -- |The range of allowed finalization commisions.
+      _finalizationCommissionRange :: !(InclusiveRange RewardFraction),
+      -- |The range of allowed baker commisions.
       _bakingCommissionRange :: !(InclusiveRange RewardFraction),
+      -- |The range of allowed transaction commisions.
       _transactionCommissionRange :: !(InclusiveRange RewardFraction)
     }
     deriving (Eq, Show)
@@ -248,6 +272,48 @@ data PoolParameters cpv where
       -- to equity capital.
       _ppLeverageBound :: !LeverageFactor
     } -> PoolParameters 'ChainParametersV1
+
+-- |Lens for '_ppBakerStakeThreshold'
+{-# INLINE ppBakerStakeThreshold #-}
+ppBakerStakeThreshold :: Lens' (PoolParameters 'ChainParametersV0) Amount
+ppBakerStakeThreshold =
+  lens _ppBakerStakeThreshold (\pp x -> pp{_ppBakerStakeThreshold = x})
+
+-- |Lens for '_ppLPoolCommissions'
+{-# INLINE ppLPoolCommissions #-}
+ppLPoolCommissions :: Lens' (PoolParameters 'ChainParametersV1) CommissionRates
+ppLPoolCommissions =
+  lens _ppLPoolCommissions (\pp x -> pp{_ppLPoolCommissions = x})
+
+-- |Lens for '_ppCommissionBounds'
+{-# INLINE ppCommissionBounds #-}
+ppCommissionBounds :: Lens' (PoolParameters 'ChainParametersV1) CommissionRanges
+ppCommissionBounds =
+  lens _ppCommissionBounds (\pp x -> pp{_ppCommissionBounds = x})
+
+-- |Lens for '_ppMinimumEquityCapital'
+{-# INLINE ppMinimumEquityCapital #-}
+ppMinimumEquityCapital :: Lens' (PoolParameters 'ChainParametersV1) Amount
+ppMinimumEquityCapital =
+  lens _ppMinimumEquityCapital (\pp x -> pp{_ppMinimumEquityCapital = x})
+
+-- |Lens for '_ppMinimumFinalizationCapital'
+{-# INLINE ppMinimumFinalizationCapital #-}
+ppMinimumFinalizationCapital :: Lens' (PoolParameters 'ChainParametersV1) RewardFraction
+ppMinimumFinalizationCapital =
+  lens _ppMinimumFinalizationCapital (\pp x -> pp{_ppMinimumFinalizationCapital = x})
+
+-- |Lens for '_ppCapitalBound'
+{-# INLINE ppCapitalBound #-}
+ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) RewardFraction
+ppCapitalBound =
+  lens _ppCapitalBound (\pp x -> pp{_ppCapitalBound = x})
+
+-- |Lens for '_ppLeverageBound'
+{-# INLINE ppLeverageBound #-}
+ppLeverageBound :: Lens' (PoolParameters 'ChainParametersV1) LeverageFactor
+ppLeverageBound =
+  lens _ppLeverageBound (\pp x -> pp{_ppLeverageBound = x})
 
 putPoolParameters :: Putter (PoolParameters cpv)
 putPoolParameters PoolParametersV0{..} = do
@@ -353,10 +419,11 @@ makeChainParametersV1 ::
     RewardFraction ->
     -- |Fraction of transaction rewards charged by the L-pool.
     RewardFraction ->
-    -- |Bounds on the commission rates that may be charged by bakers.
-    -- TODO: Document these
+    -- |The range of allowed finalization commisions for normal pools.
     InclusiveRange RewardFraction ->
+    -- |The range of allowed baker commisions for normal pools.
     InclusiveRange RewardFraction ->
+    -- |The range of allowed transaction commisions for normal pools.
     InclusiveRange RewardFraction ->
     -- |Minimum equity capital required for a new baker.
     Amount -> 
@@ -425,7 +492,7 @@ instance HashableTo Hash.Hash (ChainParameters' cpv) where
 
 instance Monad m => MHashableTo m Hash.Hash (ChainParameters' cpv)
 
-parseJSONForCPV0 :: Value -> Parser (ChainParameters' ChainParametersV0)
+parseJSONForCPV0 :: Value -> Parser (ChainParameters' 'ChainParametersV0)
 parseJSONForCPV0 = 
     withObject "ChainParameters" $ \v ->
         makeChainParametersV0
@@ -438,7 +505,7 @@ parseJSONForCPV0 =
             <*> v .: "foundationAccountIndex"
             <*> v .: "minimumThresholdForBaking"
 
-parseJSONForCPV1 :: Value -> Parser (ChainParameters' ChainParametersV1)
+parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
 parseJSONForCPV1 = 
     withObject "ChainParametersV1" $ \v ->
         makeChainParametersV1
@@ -462,13 +529,13 @@ parseJSONForCPV1 =
             <*> v .: "leverageBound"
             <*> v .: "rewardPeriodLength"
 
-instance FromJSON (ChainParameters' ChainParametersV0) where
+instance FromJSON (ChainParameters' 'ChainParametersV0) where
     parseJSON = parseJSONForCPV0
 
-instance FromJSON (ChainParameters' ChainParametersV1) where
+instance FromJSON (ChainParameters' 'ChainParametersV1) where
     parseJSON = parseJSONForCPV1
 
-instance ToJSON (ChainParameters' ChainParametersV0) where
+instance ToJSON (ChainParameters' 'ChainParametersV0) where
     toJSON ChainParameters{..} =
         object
             [ "electionDifficulty" AE..= _cpElectionDifficulty,
@@ -481,7 +548,7 @@ instance ToJSON (ChainParameters' ChainParametersV0) where
               "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold _cpPoolParameters
             ]
 
-instance ToJSON (ChainParameters' ChainParametersV1) where
+instance ToJSON (ChainParameters' 'ChainParametersV1) where
     toJSON ChainParameters{..} =
         object
             [ "electionDifficulty" AE..= _cpElectionDifficulty,

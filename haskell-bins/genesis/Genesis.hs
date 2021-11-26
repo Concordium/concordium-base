@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-cse #-}
-{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, ScopedTypeVariables, GADTs, TypeApplications #-}
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, ScopedTypeVariables, GADTs, TypeApplications, DataKinds #-}
 module Main where
 
 import System.Exit
@@ -231,50 +231,6 @@ printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do
     putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
     putStrLn $ "State hash: " ++ show genesisStateHash
 
-printInitialChainParameters :: SProtocolVersion pv -> ChainParameters pv -> IO ()
-printInitialChainParameters spv ChainParameters{..} = do
-    putStrLn ""
-    putStrLn "Chain parameters: "
-    -- TODO: Finish the below:
-    -- putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
-    -- putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_erEuroPerEnergy _cpExchangeRates)
-    -- putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_erMicroGTUPerEuro _cpExchangeRates)
-    -- case chainParametersVersionFor spv of
-    --   SCPV0 -> do
-    --     putStrLn $ "  - baker extra cooldown epochs: " ++ show (_cpBakerExtraCooldownEpochs _cpCooldownParameters)
-    --     putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --   SCPV1 -> do
-    --     putStrLn $ "  - pool owner cooldown: " ++ show (_cpPoolOwnerCooldown _cpCooldownParameters)
-    --     putStrLn $ "  - delegator cooldown: " ++ show (_cpDelegatorCooldown _cpCooldownParameters)
-    --     putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
-    --     putStrLn $ "  - finalization commission for the L-Pool: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - baking commission for the L-Pool: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - transaction commission for the L-Pool: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - finalizationCommissionRange: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    --     putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
-    -- putStrLn "  - reward parameters:"
-    -- putStrLn "    + mint distribution:"
-    -- putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
-    -- putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
-    -- putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
-    -- putStrLn "    + transaction fee distribution:"
-    -- putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
-    -- putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
-    -- putStrLn "    + GAS rewards:"
-    -- putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
-    -- putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
-    -- putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
-    -- putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
-
-
 printInitial :: SProtocolVersion pv -> BlockHash -> CoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
 printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     putStrLn $ "Genesis data for genesis block with hash " ++ show gh
@@ -283,8 +239,6 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
     putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
     putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
-
-    let totalGTU = sum (gaBalance <$> genesisAccounts)
 
     putStrLn ""
     putStrLn $ "Genesis total GTU: " ++ amountToString totalGTU
@@ -302,11 +256,12 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
     putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
 
-    let ChainParameters{..} = genesisChainParameters
-    -- TODO: call `printInitialChainParameters`
-    let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
-          Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
-          Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+    printInitialChainParameters
+
+    let genesisFoundationAccount = _cpFoundationAccount genesisChainParameters
+    let foundAcc = case genesisAccounts ^? ix (fromIntegral genesisFoundationAccount) of
+          Nothing -> "INVALID (" ++ show genesisFoundationAccount ++ ")"
+          Just acc -> show (gaAddress acc) ++ " (index " ++ show genesisFoundationAccount ++ ")"
     putStrLn $ "  - foundation account: " ++ foundAcc
 
     putStrLn ""
@@ -357,35 +312,121 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printAccessStructure "baker stake threshold" asBakerStakeThreshold
     printAccessStructure "add anonymity revokers" asAddAnonymityRevoker
     printAccessStructure "add identity providers" asAddIdentityProvider
+    where
+        totalGTU = sum (gaBalance <$> genesisAccounts)
 
-  where showBalance totalGTU balance =
-            printf "%s (= %.4f%%)" (amountToString balance) (100 * (fromIntegral balance / fromIntegral totalGTU) :: Double)
-        showAccount bkrTotalStake totalGTU GenesisAccount{..} = do
-          putStrLn $ "  - " ++ show gaAddress
-          putStrLn $ "     * balance: " ++ showBalance totalGTU gaBalance
-          putStrLn $ "     * threshold: " ++ show (gaThreshold)
-          putStrLn $ "     * credentials: "
-          forM_ (OrdMap.toAscList gaCredentials) $ \(idx, k) ->
-            putStrLn $ "       - " ++ show idx ++ ": " ++ showAsJSON (11 + length (show idx)) k
-          forM_ gaBaker $ \GenesisBaker{..} -> do
-            putStrLn $ "     * baker:"
-            putStrLn $ "       + id: " ++ show gbBakerId
-            putStrLn $ "       + stake: " ++ showBalance bkrTotalStake gbStake
-            putStrLn $ "       + election key: " ++ show gbElectionVerifyKey
-            putStrLn $ "       + signature key: " ++ show gbSignatureVerifyKey
-            putStrLn $ "       + aggregation key: " ++ show gbAggregationVerifyKey
-            putStrLn $ "       + earnings are " ++ (if gbRestakeEarnings then "" else "not ") ++ "restaked"
-        -- Use the JSON instance and pretty print it, indenting everything but the first line by the stated amount.
-        showAsJSON :: ToJSON a => Int -> a -> String
-        showAsJSON indent v =
-          let bs = encodePretty v
-              offset = replicate indent ' '
-              indentLine :: Int -> LBS8.ByteString -> LBS8.ByteString
-              indentLine idx line = if idx > 0 then LBS8.pack offset <> line else line
-          in LBS8.unpack . LBS8.unlines . zipWith indentLine [0..] $ (LBS8.lines bs)
-        printAccessStructure n AccessStructure{..} = putStrLn $ "  - " ++ n ++ " update: " ++ show accessThreshold ++ " of " ++ show (toList accessPublicKeys)
+        printInitialChainParametersV0 :: ChainParameters' 'ChainParametersV0 -> IO ()
+        printInitialChainParametersV0 ChainParameters{..} = do
+            putStrLn ""
+            putStrLn "Chain parameters: "
+            putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+            putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_erEuroPerEnergy _cpExchangeRates)
+            putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_erMicroGTUPerEuro _cpExchangeRates)
+            putStrLn $ "  - baker extra cooldown epochs: " ++ show (_cpBakerExtraCooldownEpochs _cpCooldownParameters)
+            putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+            putStrLn $ "  - minimum stake to become a baker: " ++ showBalance totalGTU (_ppBakerStakeThreshold _cpPoolParameters)
+            putStrLn "  - reward parameters:"
+            putStrLn "    + mint distribution:"
+            putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
+            putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+            putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+            putStrLn "    + transaction fee distribution:"
+            putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+            putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+            putStrLn "    + GAS rewards:"
+            putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+            putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+            putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+            putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
 
-        showExchangeRate (ExchangeRate r) = showRatio r
+        printInitialChainParametersV1 :: ChainParameters' 'ChainParametersV1 -> IO ()
+        printInitialChainParametersV1 ChainParameters{..} = do
+            putStrLn ""
+            putStrLn "Chain parameters: "
+            putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+            putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. erEuroPerEnergy)
+            putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. erMicroGTUPerEuro)
+            putStrLn $ "  - pool owner cooldown epochs: " ++ show (_cpCooldownParameters ^. cpPoolOwnerCooldown)
+            putStrLn $ "  - delegator cooldown epochs: " ++ show (_cpCooldownParameters ^. cpDelegatorCooldown)
+            putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+            putStrLn $ "  - L-Pool parameters:"
+            putStrLn $ "    + finalization commision: "
+                        ++ show (_cpPoolParameters ^. ppLPoolCommissions ^. finalizationCommission)
+            putStrLn $ "    + baking commision: "
+                        ++ show (_cpPoolParameters ^. ppLPoolCommissions ^. bakingCommission)
+            putStrLn $ "    + transaction commision: "
+                        ++ show (_cpPoolParameters ^. ppLPoolCommissions ^. transactionCommission)
+            putStrLn $ "  - normal pool parameters:"
+            putStrLn $ "    + allowed (inclusive) range for finalization commision: "
+                        ++ showInclusiveRange show (_cpPoolParameters ^. ppCommissionBounds ^. finalizationCommissionRange)
+            putStrLn $ "    + allowed (inclusive) range for baking commision: "
+                        ++ showInclusiveRange show (_cpPoolParameters ^. ppCommissionBounds ^. bakingCommissionRange)
+            putStrLn $ "    + allowed (inclusive) range for transaction commision: "
+                        ++ showInclusiveRange show (_cpPoolParameters ^. ppCommissionBounds ^. transactionCommissionRange)
+            putStrLn $ "    + minimum stake to be a baker: "
+                        ++ show (_cpPoolParameters ^. ppMinimumEquityCapital)
+            putStrLn $ "    + minimum fraction of total stake for a pool to be finalizer: "
+                        ++ show (_cpPoolParameters ^. ppMinimumFinalizationCapital)
+            putStrLn $ "    + maximum fraction of total stake a pool is allowed hold: "
+                        ++ show (_cpPoolParameters ^. ppCapitalBound)
+            putStrLn $ "    + maximum factor a pool may stake relative to the baker's stake: "
+                        ++ show (_cpPoolParameters ^. ppLeverageBound)
+            putStrLn "  - reward parameters:"
+            putStrLn "    + mint distribution:"
+            putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
+            putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+            putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+            putStrLn "    + transaction fee distribution:"
+            putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+            putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+            putStrLn "    + GAS rewards:"
+            putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+            putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+            putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+            putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
+            putStrLn $ "    + reward period length (in epochs): " ++ show (_cpTimeParameters ^. tpRewardPeriodLength)
+
+        printInitialChainParameters :: IO ()
+        printInitialChainParameters = do
+            case chainParametersVersionFor spv of
+                SCPV0 -> printInitialChainParametersV0 genesisChainParameters
+                SCPV1 -> printInitialChainParametersV1 genesisChainParameters
+
+showBalance :: Amount -> Amount -> String
+showBalance totalGTU balance =
+    printf "%s (= %.4f%%)" (amountToString balance) (100 * (fromIntegral balance / fromIntegral totalGTU) :: Double)
+
+showInclusiveRange :: (a -> String) -> InclusiveRange a -> String
+showInclusiveRange toStr InclusiveRange{..} = "[" ++ toStr irMin ++ ", " ++ toStr irMax ++ "]"
+
+showAccount :: Amount -> Amount -> GenesisAccount -> IO ()
+showAccount bkrTotalStake totalGTU GenesisAccount{..} = do
+    putStrLn $ "  - " ++ show gaAddress
+    putStrLn $ "     * balance: " ++ showBalance totalGTU gaBalance
+    putStrLn $ "     * threshold: " ++ show (gaThreshold)
+    putStrLn $ "     * credentials: "
+    forM_ (OrdMap.toAscList gaCredentials) $ \(idx, k) ->
+        putStrLn $ "       - " ++ show idx ++ ": " ++ showAsJSON (11 + length (show idx)) k
+    forM_ gaBaker $ \GenesisBaker{..} -> do
+        putStrLn $ "     * baker:"
+        putStrLn $ "       + id: " ++ show gbBakerId
+        putStrLn $ "       + stake: " ++ showBalance bkrTotalStake gbStake
+        putStrLn $ "       + election key: " ++ show gbElectionVerifyKey
+        putStrLn $ "       + signature key: " ++ show gbSignatureVerifyKey
+        putStrLn $ "       + aggregation key: " ++ show gbAggregationVerifyKey
+        putStrLn $ "       + earnings are " ++ (if gbRestakeEarnings then "" else "not ") ++ "restaked"
+
+  -- Use the JSON instance and pretty print it, indenting everything but the first line by the stated amount.
+showAsJSON :: ToJSON a => Int -> a -> String
+showAsJSON indent v =
+  let bs = encodePretty v
+      offset = replicate indent ' '
+      indentLine :: Int -> LBS8.ByteString -> LBS8.ByteString
+      indentLine idx line = if idx > 0 then LBS8.pack offset <> line else line
+  in LBS8.unpack . LBS8.unlines . zipWith indentLine [0..] $ (LBS8.lines bs)
+
+printAccessStructure :: String -> AccessStructure -> IO ()
+printAccessStructure n AccessStructure{..} = putStrLn $ "  - " ++ n ++ " update: " ++ show accessThreshold ++ " of " ++ show (toList accessPublicKeys)
 
 showTime :: Timestamp -> String
 showTime t = formatTime defaultTimeLocale rfc822DateFormat (timestampToUTCTime t)
@@ -395,4 +436,7 @@ showRatio r =
   let num = numerator r
       den = denominator r
   in show num ++ " / " ++ show den ++ " (approx " ++ show (realToFrac r :: Double) ++ ")"
+
+showExchangeRate :: ExchangeRate -> String
+showExchangeRate (ExchangeRate r) = showRatio r
 
