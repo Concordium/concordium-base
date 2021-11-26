@@ -42,6 +42,7 @@ import Concordium.Crypto.FFIDataTypes
 import Concordium.ID.Parameters
 import Concordium.Common.Time
 import qualified Concordium.Crypto.SHA256 as SHA256
+import Concordium.Types.HashableTo
 
 accountAddressSize :: Int
 accountAddressSize = 32
@@ -153,6 +154,9 @@ data AccountInformation = AccountInformation {
   aiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
   aiThreshold :: !AccountThreshold 
 } deriving(Eq, Show, Ord)
+
+instance HashableTo SHA256.Hash AccountInformation where
+  getHash = SHA256.hash . encode
 
 getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
 getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
