@@ -459,23 +459,30 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         self.run_config(host, config)
     }
 
-    fn run_config<'a, Interrupt>(
+    pub fn run_config<'a, Interrupt>(
         &'a self,
         host: &mut impl Host<I, Interrupt>,
-        mut config: RunConfig<'a>,
+        config: RunConfig<'a>,
     ) -> RunResult<ExecutionOutcome<'a, Interrupt>> {
-        let pc = &mut config.pc;
-        let instructions = &mut config.instructions;
-        let stack = &mut config.stack;
-        let memory = &mut config.memory;
-        let return_type = &mut config.return_type;
-        let function_frames = &mut config.function_frames;
-        let locals_base = &mut config.locals_base;
-        let globals = &mut config.globals;
-        let max_memory = config.max_memory; // this does not change during execution.
+        // we deliberately deconstruct the struct here instead of having mutable
+        // references to fields here to improve performance. On some benchmarks
+        // instruction execution is 30% slower if we keep references to the config
+        // struct instead of deconstructing it here. Why that is I don't know, but it
+        // likely has to do with memory layout.
+        let RunConfig {
+            mut pc,
+            mut instructions,
+            mut function_frames,
+            mut return_type,
+            mut memory,
+            mut stack,
+            mut locals_base,
+            mut globals,
+            max_memory,
+        } = config;
         'outer: loop {
-            let instr = instructions[*pc];
-            *pc += 1;
+            let instr = instructions[pc];
+            pc += 1;
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
             // InternalOpcode::try_from(instr). About 25% faster on a fibonacci test.
             // The ensure here guarantees that the transmute is safe, provided that
@@ -486,83 +493,83 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 // InternalOpcode::try_from(instr)? {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
-                    let else_target = get_u32(instructions, pc);
+                    let else_target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } == 0 {
                         // jump to the else branch.
-                        *pc = else_target as usize;
+                        pc = else_target as usize;
                     } // else do nothing and start executing the if branch
                 }
                 InternalOpcode::Br => {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
-                    let diff = get_u32(instructions, pc);
-                    let target = get_u32(instructions, pc);
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
                     stack.set_pos(stack.size() - diff as usize);
-                    *pc = target as usize;
+                    pc = target as usize;
                 }
                 InternalOpcode::BrCarry => {
                     let cur_size = stack.size();
-                    let diff = get_u32(instructions, pc);
-                    let target = get_u32(instructions, pc);
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     stack.set_pos(cur_size - diff as usize);
                     stack.push(top);
-                    *pc = target as usize;
+                    pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
                     let cur_size = stack.size();
-                    let diff = get_u32(instructions, pc);
-                    let target = get_u32(instructions, pc);
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } != 0 {
                         stack.set_pos(cur_size - diff as usize);
-                        *pc = target as usize;
+                        pc = target as usize;
                     } // else do nothing
                 }
                 InternalOpcode::BrIfCarry => {
                     let cur_size = stack.size();
-                    let diff = get_u32(instructions, pc);
-                    let target = get_u32(instructions, pc);
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } != 0 {
                         let top = stack.pop();
                         stack.set_pos(cur_size - diff as usize);
                         stack.push(top);
-                        *pc = target as usize;
+                        pc = target as usize;
                     } // else do nothing
                 }
                 InternalOpcode::BrTable => {
                     let cur_size = stack.size();
                     let top = stack.pop();
-                    let num_labels = get_u16(instructions, pc);
+                    let num_labels = get_u16(instructions, &mut pc);
                     let top: u32 = unsafe { top.short } as u32;
                     if top < u32::from(num_labels) {
-                        *pc += (top as usize + 1) * 8; // the +1 is for the
-                                                       // default branch.
+                        pc += (top as usize + 1) * 8; // the +1 is for the
+                                                      // default branch.
                     } // else use default branch
-                    let diff = get_u32(instructions, pc);
-                    let target = get_u32(instructions, pc);
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
                     stack.set_pos(cur_size - diff as usize);
-                    *pc = target as usize;
+                    pc = target as usize;
                 }
                 InternalOpcode::BrTableCarry => {
                     let cur_size = stack.size();
                     let top = stack.pop();
-                    let num_labels = get_u16(instructions, pc);
+                    let num_labels = get_u16(instructions, &mut pc);
                     let top: u32 = unsafe { top.short } as u32;
                     if top < u32::from(num_labels) {
-                        *pc += (top as usize + 1) * 8; // the +1 is for the
-                                                       // default branch.
+                        pc += (top as usize + 1) * 8; // the +1 is for the
+                                                      // default branch.
                     } // else use default branch
-                    let diff = get_u32(instructions, pc);
-                    let target = get_u32(instructions, pc);
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     stack.set_pos(cur_size - diff as usize);
                     stack.push(top);
-                    *pc = target as usize;
+                    pc = target as usize;
                 }
                 InternalOpcode::Return => {
                     if let Some(top_frame) = function_frames.pop() {
@@ -573,10 +580,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         } else {
                             stack.set_pos(top_frame.height);
                         }
-                        *pc = top_frame.pc;
-                        *instructions = top_frame.instructions;
-                        *return_type = top_frame.return_type;
-                        *locals_base = top_frame.locals_base;
+                        pc = top_frame.pc;
+                        instructions = top_frame.instructions;
+                        return_type = top_frame.return_type;
+                        locals_base = top_frame.locals_base;
                     } else {
                         break 'outer;
                     }
@@ -587,14 +594,28 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // overflow.
                     // 2. Manage storage of intermediate state
                     // ourselves. This means we have to store the state of execution, which is
-                    // stored in the config structure.
-                    let idx = get_u32(instructions, pc);
+                    // stored in the config structure. We handle synchronous calls by the host
+                    // function interrupting execution of the current
+                    // function/module. The host will then handle resumption.
+                    // If the host function returns Ok(None) then the meaning of it is that
+                    // execution should resume as normal.
+                    let idx = get_u32(instructions, &mut pc);
                     if let Some(f) = self.imports.get(idx as usize) {
                         // we are calling an imported function, handle the call directly.
-                        if let Some(reason) = host.call(f, memory, stack)? {
+                        if let Some(reason) = host.call(f, &mut memory, &mut stack)? {
                             return Ok(ExecutionOutcome::Interrupted {
                                 reason,
-                                state: config,
+                                state: RunConfig {
+                                    pc,
+                                    instructions,
+                                    function_frames,
+                                    return_type,
+                                    memory,
+                                    stack,
+                                    locals_base,
+                                    globals,
+                                    max_memory,
+                                },
                             });
                         }
                     } else {
@@ -603,13 +624,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             .get(idx as usize - self.imports.len())
                             .ok_or_else(|| anyhow!("Accessing non-existent code."))?;
                         let current_frame = FunctionState {
-                            pc: *pc,
+                            pc,
                             instructions,
-                            locals_base: *locals_base,
+                            locals_base,
                             height: stack.size() - f.num_params() as usize,
-                            return_type: *return_type,
+                            return_type,
                         };
-                        *locals_base = current_frame.height;
+                        locals_base = current_frame.height;
                         function_frames.push(current_frame);
                         for ty in f.locals() {
                             match ty {
@@ -617,13 +638,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 ValueType::I64 => stack.push(StackValue::from(0u64)),
                             }
                         }
-                        *instructions = f.code();
-                        *pc = 0;
-                        *return_type = f.return_type();
+                        instructions = f.code();
+                        pc = 0;
+                        return_type = f.return_type();
                     }
                 }
                 InternalOpcode::CallIndirect => {
-                    let ty_idx = get_u32(instructions, pc);
+                    let ty_idx = get_u32(instructions, &mut pc);
                     let ty = self
                         .ty
                         .get(ty_idx as usize)
@@ -635,10 +656,20 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             let ty_actual = f.ty();
                             // call imported function.
                             ensure!(ty_actual == ty, "Actual type different from expected.");
-                            if let Some(reason) = host.call(f, memory, stack)? {
+                            if let Some(reason) = host.call(f, &mut memory, &mut stack)? {
                                 return Ok(ExecutionOutcome::Interrupted {
                                     reason,
-                                    state: config,
+                                    state: RunConfig {
+                                        pc,
+                                        instructions,
+                                        function_frames,
+                                        return_type,
+                                        memory,
+                                        stack,
+                                        locals_base,
+                                        globals,
+                                        max_memory,
+                                    },
                                 });
                             }
                         } else {
@@ -656,13 +687,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             );
                             // FIXME: Remove duplication.
                             let current_frame = FunctionState {
-                                pc: *pc,
+                                pc,
                                 instructions,
-                                locals_base: *locals_base,
+                                locals_base,
                                 height: stack.size() - f.num_params() as usize,
-                                return_type: *return_type,
+                                return_type,
                             };
-                            *locals_base = current_frame.height;
+                            locals_base = current_frame.height;
                             function_frames.push(current_frame);
                             for ty in f.locals() {
                                 match ty {
@@ -674,9 +705,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                     }),
                                 }
                             }
-                            *instructions = f.code();
-                            *pc = 0;
-                            *return_type = f.return_type();
+                            instructions = f.code();
+                            pc = 0;
+                            return_type = f.return_type();
                         }
                     } else {
                         bail!("Calling undefined function {}.", idx) // trap
@@ -693,130 +724,130 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     } // else t1 remains on the top of the stack.
                 }
                 InternalOpcode::LocalGet => {
-                    let idx = get_u16(instructions, pc);
-                    let val = stack.stack[*locals_base + idx as usize];
+                    let idx = get_u16(instructions, &mut pc);
+                    let val = stack.stack[locals_base + idx as usize];
                     stack.push(val)
                 }
                 InternalOpcode::LocalSet => {
-                    let idx = get_u16(instructions, pc);
+                    let idx = get_u16(instructions, &mut pc);
                     let top = stack.pop();
-                    stack.stack[*locals_base + idx as usize] = top
+                    stack.stack[locals_base + idx as usize] = top
                 }
                 InternalOpcode::LocalTee => {
-                    let idx = get_u16(instructions, pc);
+                    let idx = get_u16(instructions, &mut pc);
                     let top = stack.peek();
-                    stack.stack[*locals_base + idx as usize] = top
+                    stack.stack[locals_base + idx as usize] = top
                 }
                 InternalOpcode::GlobalGet => {
-                    let idx = get_u16(instructions, pc);
+                    let idx = get_u16(instructions, &mut pc);
                     stack.push(globals[idx as usize])
                 }
                 InternalOpcode::GlobalSet => {
-                    let idx = get_u16(instructions, pc);
+                    let idx = get_u16(instructions, &mut pc);
                     let top = stack.pop();
                     globals[idx as usize] = top
                 }
                 InternalOpcode::I32Load => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i32(&memory, pos)?;
                     stack.push(StackValue::from(val))
                 }
                 InternalOpcode::I64Load => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i64(&memory, pos)?;
                     stack.push(StackValue::from(val))
                 }
                 InternalOpcode::I32Load8S => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i8(&memory, pos)?;
                     stack.push(StackValue::from(val as i32))
                 }
                 InternalOpcode::I32Load8U => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_u8(&memory, pos)?;
                     stack.push(StackValue::from(val as i32))
                 }
                 InternalOpcode::I32Load16S => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i16(&memory, pos)?;
                     stack.push(StackValue::from(val as i32))
                 }
                 InternalOpcode::I32Load16U => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_u16(&memory, pos)?;
                     stack.push(StackValue::from(val as i32))
                 }
                 InternalOpcode::I64Load8S => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i8(&memory, pos)?;
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I64Load8U => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_u8(&memory, pos)?;
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I64Load16S => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i16(&memory, pos)?;
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I64Load16U => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_u16(&memory, pos)?;
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I64Load32S => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_i32(&memory, pos)?;
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I64Load32U => {
-                    let pos = get_memory_pos(instructions, stack, pc)?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     let val = read_u32(&memory, pos)?;
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I32Store => {
                     let val = stack.pop();
                     let val = unsafe { val.short };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes())?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes())?;
                 }
                 InternalOpcode::I64Store => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes())?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes())?;
                 }
                 InternalOpcode::I32Store8 => {
                     let val = stack.pop();
                     let val = unsafe { val.short };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes()[..1])?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I32Store16 => {
                     let val = stack.pop();
                     let val = unsafe { val.short };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes()[..2])?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store8 => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes()[..1])?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I64Store16 => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes()[..2])?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store32 => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, stack, pc)?;
-                    write_memory_at(memory, pos, &val.to_le_bytes()[..4])?;
+                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    write_memory_at(&mut memory, pos, &val.to_le_bytes()[..4])?;
                 }
                 InternalOpcode::MemorySize => {
                     let l = memory.len() / PAGE_SIZE as usize;
@@ -836,11 +867,11 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::I32Const => {
-                    let val = get_i32(instructions, pc);
+                    let val = get_i32(instructions, &mut pc);
                     stack.push(StackValue::from(val));
                 }
                 InternalOpcode::I64Const => {
-                    let val = get_u64(instructions, pc);
+                    let val = get_u64(instructions, &mut pc);
                     stack.push(StackValue::from(val as i64));
                 }
                 InternalOpcode::I32Eqz => {
@@ -853,34 +884,34 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     };
                 }
                 InternalOpcode::I32Eq => {
-                    binary_i32(stack, |left, right| (left == right) as i32);
+                    binary_i32(&mut stack, |left, right| (left == right) as i32);
                 }
                 InternalOpcode::I32Ne => {
-                    binary_i32(stack, |left, right| (left != right) as i32);
+                    binary_i32(&mut stack, |left, right| (left != right) as i32);
                 }
                 InternalOpcode::I32LtS => {
-                    binary_i32(stack, |left, right| (left < right) as i32);
+                    binary_i32(&mut stack, |left, right| (left < right) as i32);
                 }
                 InternalOpcode::I32LtU => {
-                    binary_i32(stack, |left, right| ((left as u32) < (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| ((left as u32) < (right as u32)) as i32);
                 }
                 InternalOpcode::I32GtS => {
-                    binary_i32(stack, |left, right| (left > right) as i32);
+                    binary_i32(&mut stack, |left, right| (left > right) as i32);
                 }
                 InternalOpcode::I32GtU => {
-                    binary_i32(stack, |left, right| ((left as u32) > (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| ((left as u32) > (right as u32)) as i32);
                 }
                 InternalOpcode::I32LeS => {
-                    binary_i32(stack, |left, right| (left <= right) as i32);
+                    binary_i32(&mut stack, |left, right| (left <= right) as i32);
                 }
                 InternalOpcode::I32LeU => {
-                    binary_i32(stack, |left, right| ((left as u32) <= (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| ((left as u32) <= (right as u32)) as i32);
                 }
                 InternalOpcode::I32GeS => {
-                    binary_i32(stack, |left, right| (left >= right) as i32);
+                    binary_i32(&mut stack, |left, right| (left >= right) as i32);
                 }
                 InternalOpcode::I32GeU => {
-                    binary_i32(stack, |left, right| ((left as u32) >= (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| ((left as u32) >= (right as u32)) as i32);
                 }
                 InternalOpcode::I64Eqz => {
                     let top = stack.peek_mut();
@@ -892,150 +923,158 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     };
                 }
                 InternalOpcode::I64Eq => {
-                    binary_i64_test(stack, |left, right| (left == right) as i32);
+                    binary_i64_test(&mut stack, |left, right| (left == right) as i32);
                 }
                 InternalOpcode::I64Ne => {
-                    binary_i64_test(stack, |left, right| (left != right) as i32);
+                    binary_i64_test(&mut stack, |left, right| (left != right) as i32);
                 }
                 InternalOpcode::I64LtS => {
-                    binary_i64_test(stack, |left, right| (left < right) as i32);
+                    binary_i64_test(&mut stack, |left, right| (left < right) as i32);
                 }
                 InternalOpcode::I64LtU => {
-                    binary_i64_test(stack, |left, right| ((left as u64) < (right as u64)) as i32);
+                    binary_i64_test(&mut stack, |left, right| {
+                        ((left as u64) < (right as u64)) as i32
+                    });
                 }
                 InternalOpcode::I64GtS => {
-                    binary_i64_test(stack, |left, right| (left > right) as i32);
+                    binary_i64_test(&mut stack, |left, right| (left > right) as i32);
                 }
                 InternalOpcode::I64GtU => {
-                    binary_i64_test(stack, |left, right| ((left as u64) > (right as u64)) as i32);
+                    binary_i64_test(&mut stack, |left, right| {
+                        ((left as u64) > (right as u64)) as i32
+                    });
                 }
                 InternalOpcode::I64LeS => {
-                    binary_i64_test(stack, |left, right| (left <= right) as i32);
+                    binary_i64_test(&mut stack, |left, right| (left <= right) as i32);
                 }
                 InternalOpcode::I64LeU => {
-                    binary_i64_test(stack, |left, right| ((left as u64) <= (right as u64)) as i32);
+                    binary_i64_test(&mut stack, |left, right| {
+                        ((left as u64) <= (right as u64)) as i32
+                    });
                 }
                 InternalOpcode::I64GeS => {
-                    binary_i64_test(stack, |left, right| (left >= right) as i32);
+                    binary_i64_test(&mut stack, |left, right| (left >= right) as i32);
                 }
                 InternalOpcode::I64GeU => {
-                    binary_i64_test(stack, |left, right| ((left as u64) >= (right as u64)) as i32);
+                    binary_i64_test(&mut stack, |left, right| {
+                        ((left as u64) >= (right as u64)) as i32
+                    });
                 }
                 InternalOpcode::I32Clz => {
-                    unary_i32(stack, |x| x.leading_zeros() as i32);
+                    unary_i32(&mut stack, |x| x.leading_zeros() as i32);
                 }
                 InternalOpcode::I32Ctz => {
-                    unary_i32(stack, |x| x.trailing_zeros() as i32);
+                    unary_i32(&mut stack, |x| x.trailing_zeros() as i32);
                 }
                 InternalOpcode::I32Popcnt => {
-                    unary_i32(stack, |x| x.count_ones() as i32);
+                    unary_i32(&mut stack, |x| x.count_ones() as i32);
                 }
                 InternalOpcode::I32Add => {
-                    binary_i32(stack, |x, y| x.wrapping_add(y));
+                    binary_i32(&mut stack, |x, y| x.wrapping_add(y));
                 }
                 InternalOpcode::I32Sub => {
-                    binary_i32(stack, |x, y| x.wrapping_sub(y));
+                    binary_i32(&mut stack, |x, y| x.wrapping_sub(y));
                 }
                 InternalOpcode::I32Mul => {
-                    binary_i32(stack, |x, y| x.wrapping_mul(y));
+                    binary_i32(&mut stack, |x, y| x.wrapping_mul(y));
                 }
                 InternalOpcode::I32DivS => {
-                    binary_i32_partial(stack, |x, y| x.checked_div(y))?;
+                    binary_i32_partial(&mut stack, |x, y| x.checked_div(y))?;
                 }
                 InternalOpcode::I32DivU => {
-                    binary_i32_partial(stack, |x, y| {
+                    binary_i32_partial(&mut stack, |x, y| {
                         (x as u32).checked_div(y as u32).map(|x| x as i32)
                     })?;
                 }
                 InternalOpcode::I32RemS => {
-                    binary_i32_partial(stack, |x, y| x.checked_rem(y))?;
+                    binary_i32_partial(&mut stack, |x, y| x.checked_rem(y))?;
                 }
                 InternalOpcode::I32RemU => {
-                    binary_i32_partial(stack, |x, y| {
+                    binary_i32_partial(&mut stack, |x, y| {
                         (x as u32).checked_rem(y as u32).map(|x| x as i32)
                     })?;
                 }
                 InternalOpcode::I32And => {
-                    binary_i32(stack, |x, y| x & y);
+                    binary_i32(&mut stack, |x, y| x & y);
                 }
                 InternalOpcode::I32Or => {
-                    binary_i32(stack, |x, y| x | y);
+                    binary_i32(&mut stack, |x, y| x | y);
                 }
                 InternalOpcode::I32Xor => {
-                    binary_i32(stack, |x, y| x ^ y);
+                    binary_i32(&mut stack, |x, y| x ^ y);
                 }
                 InternalOpcode::I32Shl => {
-                    binary_i32(stack, |x, y| x << (y as u32 % 32));
+                    binary_i32(&mut stack, |x, y| x << (y as u32 % 32));
                 }
                 InternalOpcode::I32ShrS => {
-                    binary_i32(stack, |x, y| x >> (y as u32 % 32));
+                    binary_i32(&mut stack, |x, y| x >> (y as u32 % 32));
                 }
                 InternalOpcode::I32ShrU => {
-                    binary_i32(stack, |x, y| ((x as u32) >> (y as u32 % 32)) as i32);
+                    binary_i32(&mut stack, |x, y| ((x as u32) >> (y as u32 % 32)) as i32);
                 }
                 InternalOpcode::I32Rotl => {
-                    binary_i32(stack, |x, y| x.rotate_left(y as u32 % 32));
+                    binary_i32(&mut stack, |x, y| x.rotate_left(y as u32 % 32));
                 }
                 InternalOpcode::I32Rotr => {
-                    binary_i32(stack, |x, y| x.rotate_right(y as u32 % 32));
+                    binary_i32(&mut stack, |x, y| x.rotate_right(y as u32 % 32));
                 }
                 InternalOpcode::I64Clz => {
-                    unary_i64(stack, |x| x.leading_zeros() as i64);
+                    unary_i64(&mut stack, |x| x.leading_zeros() as i64);
                 }
                 InternalOpcode::I64Ctz => {
-                    unary_i64(stack, |x| x.trailing_zeros() as i64);
+                    unary_i64(&mut stack, |x| x.trailing_zeros() as i64);
                 }
                 InternalOpcode::I64Popcnt => {
-                    unary_i64(stack, |x| x.count_ones() as i64);
+                    unary_i64(&mut stack, |x| x.count_ones() as i64);
                 }
                 InternalOpcode::I64Add => {
-                    binary_i64(stack, |x, y| x.wrapping_add(y));
+                    binary_i64(&mut stack, |x, y| x.wrapping_add(y));
                 }
                 InternalOpcode::I64Sub => {
-                    binary_i64(stack, |x, y| x.wrapping_sub(y));
+                    binary_i64(&mut stack, |x, y| x.wrapping_sub(y));
                 }
                 InternalOpcode::I64Mul => {
-                    binary_i64(stack, |x, y| x.wrapping_mul(y));
+                    binary_i64(&mut stack, |x, y| x.wrapping_mul(y));
                 }
                 InternalOpcode::I64DivS => {
-                    binary_i64_partial(stack, |x, y| x.checked_div(y))?;
+                    binary_i64_partial(&mut stack, |x, y| x.checked_div(y))?;
                 }
                 InternalOpcode::I64DivU => {
-                    binary_i64_partial(stack, |x, y| {
+                    binary_i64_partial(&mut stack, |x, y| {
                         (x as u64).checked_div(y as u64).map(|x| x as i64)
                     })?;
                 }
                 InternalOpcode::I64RemS => {
-                    binary_i64_partial(stack, |x, y| x.checked_rem(y))?;
+                    binary_i64_partial(&mut stack, |x, y| x.checked_rem(y))?;
                 }
                 InternalOpcode::I64RemU => {
-                    binary_i64_partial(stack, |x, y| {
+                    binary_i64_partial(&mut stack, |x, y| {
                         (x as u64).checked_rem(y as u64).map(|x| x as i64)
                     })?;
                 }
                 InternalOpcode::I64And => {
-                    binary_i64(stack, |x, y| x & y);
+                    binary_i64(&mut stack, |x, y| x & y);
                 }
                 InternalOpcode::I64Or => {
-                    binary_i64(stack, |x, y| x | y);
+                    binary_i64(&mut stack, |x, y| x | y);
                 }
                 InternalOpcode::I64Xor => {
-                    binary_i64(stack, |x, y| x ^ y);
+                    binary_i64(&mut stack, |x, y| x ^ y);
                 }
                 InternalOpcode::I64Shl => {
-                    binary_i64(stack, |x, y| x << (y as u64 % 64));
+                    binary_i64(&mut stack, |x, y| x << (y as u64 % 64));
                 }
                 InternalOpcode::I64ShrS => {
-                    binary_i64(stack, |x, y| x >> (y as u64 % 64));
+                    binary_i64(&mut stack, |x, y| x >> (y as u64 % 64));
                 }
                 InternalOpcode::I64ShrU => {
-                    binary_i64(stack, |x, y| ((x as u64) >> (y as u64 % 64)) as i64);
+                    binary_i64(&mut stack, |x, y| ((x as u64) >> (y as u64 % 64)) as i64);
                 }
                 InternalOpcode::I64Rotl => {
-                    binary_i64(stack, |x, y| x.rotate_left((y as u64 % 64) as u32));
+                    binary_i64(&mut stack, |x, y| x.rotate_left((y as u64 % 64) as u32));
                 }
                 InternalOpcode::I64Rotr => {
-                    binary_i64(stack, |x, y| x.rotate_right((y as u64 % 64) as u32));
+                    binary_i64(&mut stack, |x, y| x.rotate_right((y as u64 % 64) as u32));
                 }
                 InternalOpcode::I32WrapI64 => {
                     let top = stack.peek_mut();
@@ -1055,24 +1094,24 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             }
         }
 
-        match *return_type {
+        match return_type {
             BlockType::ValueType(ValueType::I32) => {
                 let val = stack.pop();
                 Ok(ExecutionOutcome::Success {
                     result: Some(Value::I32(unsafe { val.short })),
-                    memory: std::mem::take(memory),
+                    memory,
                 })
             }
             BlockType::ValueType(ValueType::I64) => {
                 let val = stack.pop();
                 Ok(ExecutionOutcome::Success {
                     result: Some(Value::I64(unsafe { val.long })),
-                    memory: std::mem::take(memory),
+                    memory,
                 })
             }
             BlockType::EmptyType => Ok(ExecutionOutcome::Success {
                 result: None,
-                memory: std::mem::take(memory),
+                memory,
             }),
         }
     }
