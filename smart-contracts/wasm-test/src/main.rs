@@ -34,6 +34,8 @@ impl std::fmt::Display for HostCallError {
 }
 
 impl Host<ArtifactNamedImport> for TrapHost {
+    type Interrupt = NoInterrupt;
+
     fn tick_initial_memory(&mut self, _num_pages: u32) -> RunResult<()> { Ok(()) }
 
     fn call(
@@ -55,6 +57,8 @@ struct MeteringHost {
 }
 
 impl Host<ArtifactNamedImport> for MeteringHost {
+    type Interrupt = NoInterrupt;
+
     fn tick_initial_memory(&mut self, _num_pages: u32) -> RunResult<()> { Ok(()) }
 
     fn call(

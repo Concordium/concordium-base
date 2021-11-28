@@ -13,7 +13,8 @@ use std::{convert::TryInto, io::Write};
 pub enum NoInterrupt {}
 
 /// The host that can process external functions.
-pub trait Host<I, Interrupt = NoInterrupt> {
+pub trait Host<I> {
+    type Interrupt;
     /// Charge the given amount of energy for the initial memory.
     /// The argument is the number of pages.
     fn tick_initial_memory(&mut self, num_pages: u32) -> RunResult<()>;
@@ -26,7 +27,7 @@ pub trait Host<I, Interrupt = NoInterrupt> {
         f: &I,
         memory: &mut Vec<u8>,
         stack: &mut RuntimeStack,
-    ) -> RunResult<Option<Interrupt>>;
+    ) -> RunResult<Option<Self::Interrupt>>;
 }
 
 /// Result of execution. Runtime exceptions are returned as `Err(_)`.
@@ -35,32 +36,36 @@ pub type RunResult<A> = anyhow::Result<A>;
 
 /// Configuration that can be run.
 #[derive(Debug)]
-pub struct RunConfig<'a> {
+pub struct RunConfig {
     /// Current value of the program counter.
-    pc:              usize,
-    /// Current instruction list that we are executing (instructions of the
-    /// current function).
-    instructions:    &'a [u8],
+    pc:               usize,
+    /// Index of the current instruction list that we are executing
+    /// (instructions of the current function). Note that this is the index in
+    /// the list of defined functions. Imported functions do not count towards
+    /// it. It is assumed that this index points to a valid function in the
+    /// artifact's list of functions and the interpreter is subject to undefined
+    /// behaviour if this is not the case.
+    instructions_idx: usize,
     /// Stack of function frames.
-    function_frames: Vec<FunctionState<'a>>,
+    function_frames:  Vec<FunctionState>,
     /// Return value of the current frame.
-    return_type:     BlockType,
+    return_type:      BlockType,
     /// Current state of the memory.
-    memory:          Vec<u8>,
+    memory:           Vec<u8>,
     /// Stack of both the locals and the normal stack.
-    stack:           RuntimeStack,
+    stack:            RuntimeStack,
     /// Position where the locals for the current frame start.
-    locals_base:     usize,
+    locals_base:      usize,
     /// Current values of globals.
-    globals:         Vec<StackValue>,
+    globals:          Vec<StackValue>,
     /// Configuration parameter, the maximum size of the memory execution is
     /// allowed to allocate. This is fixed at startup and cannot be changed
     /// during execution.
-    max_memory:      usize,
+    max_memory:       usize,
 }
 
 #[derive(Debug)]
-pub enum ExecutionOutcome<'a, Interrupt> {
+pub enum ExecutionOutcome<Interrupt> {
     /// Execution was successful and the function terminated normally.
     Success {
         /// Result of execution of the function. If the function has unit result
@@ -73,20 +78,27 @@ pub enum ExecutionOutcome<'a, Interrupt> {
     /// is no resulting value since execution did not complete.
     Interrupted {
         reason: Interrupt,
-        state:  RunConfig<'a>,
+        state:  RunConfig,
     },
 }
 
 #[derive(Debug)]
-struct FunctionState<'a> {
-    /// The program counter.
-    pc:           usize,
-    /// Instructions
-    instructions: &'a [u8],
-    /// Stack height
-    height:       usize,
-    locals_base:  usize,
-    return_type:  BlockType,
+/// State of a function recorded in the function frame stack.
+/// This records enough information to allow us to resume execution upon return
+/// from a nested function call.
+struct FunctionState {
+    /// The program counter relative to the instruction list.
+    pc:               usize,
+    /// Instructions of the function.
+    instructions_idx: usize,
+    /// Stack height at present.
+    height:           usize,
+    /// Index in the stack where the locals start. We have a single stack for
+    /// the entire execution and after entering a function all the locals
+    /// are pushed on first (this includes function parameters).
+    locals_base:      usize,
+    /// Return type of the function.
+    return_type:      BlockType,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -368,12 +380,12 @@ fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) {
 }
 
 impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
-    pub fn run<Q: std::fmt::Display + Ord + ?Sized, Interrupt>(
+    pub fn run<Q: std::fmt::Display + Ord + ?Sized, H: Host<I>>(
         &self,
-        host: &mut impl Host<I, Interrupt>,
+        host: &mut H,
         name: &Q,
         args: &[Value],
-    ) -> RunResult<ExecutionOutcome<'_, Interrupt>>
+    ) -> RunResult<ExecutionOutcome<H::Interrupt>>
     where
         Name: std::borrow::Borrow<Q>, {
         let start = *self
@@ -383,7 +395,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         // FIXME: The next restriction could easily be lifted, but it is not a problem
         // for now.
         ensure!(start as usize >= self.imports.len(), RuntimeError::DirectlyCallImport);
-        let outer_function = &self.code[start as usize - self.imports.len()]; // safe because the artifact should be well-formed.
+        let instructions_idx = start as usize - self.imports.len();
+        let outer_function = &self.code[instructions_idx]; // safe because the artifact should be well-formed.
         let num_args: u32 = args.len().try_into()?;
         ensure!(
             outer_function.num_params() == num_args,
@@ -439,7 +452,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         let max_memory = self.memory.as_ref().map(|x| x.max_size).unwrap_or(0) as usize;
 
         let pc = 0;
-        let instructions: &[u8] = outer_function.code();
 
         let function_frames: Vec<FunctionState> = Vec::new();
         let return_type = outer_function.return_type();
@@ -447,7 +459,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
 
         let config = RunConfig {
             pc,
-            instructions,
+            instructions_idx,
             function_frames,
             return_type,
             memory,
@@ -459,11 +471,11 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         self.run_config(host, config)
     }
 
-    pub fn run_config<'a, Interrupt>(
-        &'a self,
-        host: &mut impl Host<I, Interrupt>,
-        config: RunConfig<'a>,
-    ) -> RunResult<ExecutionOutcome<'a, Interrupt>> {
+    pub fn run_config<H: Host<I>>(
+        &self,
+        host: &mut H,
+        config: RunConfig,
+    ) -> RunResult<ExecutionOutcome<H::Interrupt>> {
         // we deliberately deconstruct the struct here instead of having mutable
         // references to fields here to improve performance. On some benchmarks
         // instruction execution is 30% slower if we keep references to the config
@@ -471,7 +483,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         // likely has to do with memory layout.
         let RunConfig {
             mut pc,
-            mut instructions,
+            mut instructions_idx,
             mut function_frames,
             mut return_type,
             mut memory,
@@ -480,6 +492,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             mut globals,
             max_memory,
         } = config;
+        // the use of get_unchecked here is safe if the caller constructs the Runconfig
+        // in a protocol compliant way.
+        // The only way to construct a RunConfig is in this module (since all the fields
+        // are private), and the only place it is constructed is in the `run`
+        // method above, where the precondition is checked.
+        let mut instructions = unsafe { self.code.get_unchecked(instructions_idx).code() };
         'outer: loop {
             let instr = instructions[pc];
             pc += 1;
@@ -581,7 +599,15 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             stack.set_pos(top_frame.height);
                         }
                         pc = top_frame.pc;
-                        instructions = top_frame.instructions;
+                        instructions_idx = top_frame.instructions_idx;
+                        // the use of get_unchecked here is entirely safe. The only way for the
+                        // index to get on the stack is if we have been
+                        // executing that function already. Hence we must be able to look it up
+                        // again. The only way this property would fail to
+                        // hold is if somebody else was modifying the artifact's list of functions
+                        // at the same time. That would lead to other
+                        // problems as well and is not possible in safe Rust anyhow.
+                        instructions = unsafe { self.code.get_unchecked(instructions_idx).code() };
                         return_type = top_frame.return_type;
                         locals_base = top_frame.locals_base;
                     } else {
@@ -607,7 +633,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 reason,
                                 state: RunConfig {
                                     pc,
-                                    instructions,
+                                    instructions_idx,
                                     function_frames,
                                     return_type,
                                     memory,
@@ -619,13 +645,14 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             });
                         }
                     } else {
+                        let local_idx = idx as usize - self.imports.len();
                         let f = self
                             .code
-                            .get(idx as usize - self.imports.len())
+                            .get(local_idx)
                             .ok_or_else(|| anyhow!("Accessing non-existent code."))?;
                         let current_frame = FunctionState {
                             pc,
-                            instructions,
+                            instructions_idx,
                             locals_base,
                             height: stack.size() - f.num_params() as usize,
                             return_type,
@@ -639,6 +666,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             }
                         }
                         instructions = f.code();
+                        instructions_idx = local_idx;
                         pc = 0;
                         return_type = f.return_type();
                     }
@@ -661,7 +689,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                     reason,
                                     state: RunConfig {
                                         pc,
-                                        instructions,
+                                        instructions_idx,
                                         function_frames,
                                         return_type,
                                         memory,
@@ -688,7 +716,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             // FIXME: Remove duplication.
                             let current_frame = FunctionState {
                                 pc,
-                                instructions,
+                                instructions_idx,
                                 locals_base,
                                 height: stack.size() - f.num_params() as usize,
                                 return_type,
@@ -706,6 +734,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 }
                             }
                             instructions = f.code();
+                            instructions_idx = *f_idx as usize - self.imports.len();
                             pc = 0;
                             return_type = f.return_type();
                         }

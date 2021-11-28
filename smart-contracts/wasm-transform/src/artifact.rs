@@ -11,6 +11,7 @@ use crate::{
     validate::{validate, Handler, HasValidationContext, LocalsRange, ValidationState},
 };
 use anyhow::{anyhow, bail, ensure};
+use derive_more::{Display, From, Into};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -192,6 +193,19 @@ pub struct CompiledFunctionBytes<'a> {
     pub(crate) code:        &'a [u8],
 }
 
+impl<'a> From<CompiledFunctionBytes<'a>> for CompiledFunction {
+    fn from(cfb: CompiledFunctionBytes<'a>) -> Self {
+        Self {
+            type_idx:    cfb.type_idx,
+            return_type: cfb.return_type,
+            params:      cfb.params.to_vec(),
+            num_locals:  cfb.num_locals,
+            locals:      cfb.locals,
+            code:        cfb.code.to_vec().into(),
+        }
+    }
+}
+
 /// Try to process an import into something that is perhaps more suitable for
 /// execution, i.e., quicker to resolve.
 pub trait TryFromImport: Sized {
@@ -201,17 +215,12 @@ pub trait TryFromImport: Sized {
 
 /// An example of a processed import with minimal processing. Useful for testing
 /// an experimenting, but not for efficient execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{}.{}", mod_name, item_name)]
 pub struct ArtifactNamedImport {
     pub(crate) mod_name:  Name,
     pub(crate) item_name: Name,
     pub(crate) ty:        FunctionType,
-}
-
-impl std::fmt::Display for ArtifactNamedImport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.mod_name, self.item_name)
-    }
 }
 
 impl ArtifactNamedImport {
@@ -379,6 +388,37 @@ pub struct Artifact<ImportFunc, CompiledCode> {
     pub code:    Vec<CompiledCode>,
 }
 
+/// Ar artifact which does not own the code to run. The code is only a reference
+/// to a byte array.
+pub type BorrowedArtifact<'a, ImportFunc> = Artifact<ImportFunc, CompiledFunctionBytes<'a>>;
+/// An artifact that owns the code to run.
+pub type OwnedArtifact<ImportFunc> = Artifact<ImportFunc, CompiledFunction>;
+
+/// Convert a borrowed artifact to an owned one. This allocates memory for all
+/// the code of the artifact so it should be used sparingly.
+impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<ImportFunc> {
+    fn from(a: Artifact<ImportFunc, CompiledFunctionBytes<'a>>) -> Self {
+        let Artifact {
+            imports,
+            ty,
+            table,
+            memory,
+            global,
+            export,
+            code,
+        } = a;
+        Self {
+            imports,
+            ty,
+            table,
+            memory,
+            global,
+            export,
+            code: code.into_iter().map(CompiledFunction::from).collect::<Vec<_>>(),
+        }
+    }
+}
+
 /// Internal opcode. This is mostly the same as OpCode, but with control
 /// instructions resolved to jumps in the instruction sequence, and function
 /// calls processed.
@@ -504,7 +544,7 @@ pub enum InternalOpcode {
 /// Result of compilation. Either Ok(_) or an error indicating the reason.
 pub type CompileResult<A> = anyhow::Result<A>;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, From, Into)]
 /// A sequence of internal opcodes, followed by any immediate arguments.
 pub struct Instructions {
     pub(crate) bytes: Vec<u8>,

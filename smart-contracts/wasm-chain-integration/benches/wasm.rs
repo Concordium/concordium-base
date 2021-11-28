@@ -4,10 +4,9 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
     constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, InitContext, InitHost,
-    InterpreterEnergy, Logs, Outcome, ProcessedImports, ReceiveContext, ReceiveHost, State,
-    TestHost,
+    InterpreterEnergy, Logs, Outcome, Parameter, PolicyBytes, ProcessedImports, ReceiveContext,
+    ReceiveHost, State, TestHost,
 };
-
 use wasm_transform::{
     artifact::{ArtifactNamedImport, TryFromImport},
     machine::{Host, NoInterrupt, Value},
@@ -104,6 +103,8 @@ impl TryFromImport for MeteringImport {
 }
 
 impl Host<MeteringImport> for MeteringHost {
+    type Interrupt = NoInterrupt;
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
@@ -524,7 +525,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             sender_policies: &[],
         };
 
-        let setup_init_host = || -> InitHost<InitContext<&[u8]>> {
+        let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<PolicyBytes<'_>>> {
             InitHost {
                 energy:            InterpreterEnergy {
                     energy: nrg * 1000,
@@ -537,19 +538,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             }
         };
 
-        let setup_receive_host = |state, param| -> ReceiveHost<ReceiveContext<&[u8]>> {
-            ReceiveHost {
-                energy: InterpreterEnergy {
-                    energy: nrg * 1000,
-                },
-                activation_frames: MAX_ACTIVATION_FRAMES,
-                logs: Logs::new(),
-                state,
-                param,
-                outcomes: Outcome::new(),
-                receive_ctx: &receive_ctx,
-            }
-        };
+        let setup_receive_host =
+            |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<PolicyBytes<'_>>> {
+                ReceiveHost {
+                    energy: InterpreterEnergy {
+                        energy: nrg * 1000,
+                    },
+                    activation_frames: MAX_ACTIVATION_FRAMES,
+                    logs: Logs::new(),
+                    state,
+                    param,
+                    outcomes: Outcome::new(),
+                    receive_ctx: &receive_ctx,
+                }
+            };
 
         let run_init = |name, args| {
             // since we move the rest of the variables we must first take a reference to
