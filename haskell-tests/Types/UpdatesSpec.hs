@@ -14,7 +14,7 @@ import Concordium.Crypto.DummyData ( genSigSchemeKeyPair )
 import qualified Concordium.Crypto.SignatureScheme as Sig
 import Concordium.Types.Updates
 
-import Types.Generators
+import Generators
 
 
 checkSerialization :: (Serialize a, Eq a, Show a) => a -> Property

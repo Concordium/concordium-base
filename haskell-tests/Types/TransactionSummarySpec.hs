@@ -8,7 +8,7 @@ import Test.QuickCheck
 
 import Concordium.Types.Execution
 
-import Types.Generators
+import Generators
 
 
 testTransactionTypesSerialIdentity :: Expectation

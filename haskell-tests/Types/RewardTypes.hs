@@ -8,7 +8,7 @@ import Test.QuickCheck as QC
 
 import Concordium.Types
 
-import Types.Generators
+import Generators
 
 testRewardFractionToFromJSON :: Property
 testRewardFractionToFromJSON = forAll genRewardFraction check

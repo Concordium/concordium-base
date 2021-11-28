@@ -7,7 +7,7 @@ import qualified Data.Serialize as S
 import Test.Hspec
 import Test.QuickCheck as QC
 
-import Types.Generators
+import Generators
 
 testBinarySerialization :: Property
 testBinarySerialization = forAll genAccountEncryptedAmount $ \acc ->

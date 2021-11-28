@@ -22,6 +22,8 @@ import qualified Types.AccountEncryptedAmountSpec
 import qualified Types.RewardTypes
 import qualified Types.TransactionSummarySpec
 import qualified Types.AddressesSpec
+import qualified Types.ParametersSpec
+import qualified Genesis.ParametersSpec
 
 main :: IO  ()
 main = hspec $ parallel $ do
@@ -48,3 +50,5 @@ main = hspec $ parallel $ do
     Types.RewardTypes.tests
     Types.TransactionSummarySpec.tests
     Types.AddressesSpec.tests
+    Types.ParametersSpec.tests
+    Genesis.ParametersSpec.tests

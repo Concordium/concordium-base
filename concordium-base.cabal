@@ -276,10 +276,12 @@ test-suite test
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
+      Generators
+      Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec
       Types.AddressesSpec
       Types.AmountSpec
-      Types.Generators
+      Types.ParametersSpec
       Types.PayloadSerializationSpec
       Types.RewardTypes
       Types.TransactionSerializationSpec

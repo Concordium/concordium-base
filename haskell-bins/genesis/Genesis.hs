@@ -258,12 +258,6 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
 
     printInitialChainParameters
 
-    let genesisFoundationAccount = _cpFoundationAccount genesisChainParameters
-    let foundAcc = case genesisAccounts ^? ix (fromIntegral genesisFoundationAccount) of
-          Nothing -> "INVALID (" ++ show genesisFoundationAccount ++ ")"
-          Just acc -> show (gaAddress acc) ++ " (index " ++ show genesisFoundationAccount ++ ")"
-    putStrLn $ "  - foundation account: " ++ foundAcc
-
     putStrLn ""
     putStrLn $ "Cryptographic parameters: "
     putStrLn $ "  - " ++ showAsJSON 3 genesisCryptographicParameters
@@ -339,6 +333,11 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
             putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
 
+            let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
+                  Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
+                  Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+            putStrLn $ "  - foundation account: " ++ foundAcc
+
         printInitialChainParametersV1 :: ChainParameters' 'ChainParametersV1 -> IO ()
         printInitialChainParametersV1 ChainParameters{..} = do
             putStrLn ""
@@ -385,6 +384,11 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
             putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
             putStrLn $ "    + reward period length (in epochs): " ++ show (_cpTimeParameters ^. tpRewardPeriodLength)
+
+            let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
+                  Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
+                  Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+            putStrLn $ "  - foundation account: " ++ foundAcc
 
         printInitialChainParameters :: IO ()
         printInitialChainParameters = do

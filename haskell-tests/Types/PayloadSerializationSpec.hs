@@ -21,7 +21,7 @@ import Concordium.Crypto.FFIDataTypes
 import Concordium.Types.Execution
 import Concordium.Types
 
-import Types.Generators
+import Generators
 
 testSerializeEncryptedTransfer :: Property
 testSerializeEncryptedTransfer =

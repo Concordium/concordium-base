@@ -7,7 +7,7 @@ import Data.Hashable
 import Concordium.Types
 import qualified Data.FixedByteString as FBS
 
-import Types.Generators
+import Generators
 
 -- Test that AccountAddressEq has the correct hashable and eq instances that do
 -- not distinguish aliases.

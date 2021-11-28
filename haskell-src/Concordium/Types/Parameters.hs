@@ -28,6 +28,7 @@ import Concordium.Types.Updates (
  )
 
 data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
+    deriving (Show)
 
 type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParametersVersion where
     ChainParametersVersionFor 'P1 = 'ChainParametersV0
@@ -392,7 +393,7 @@ makeChainParametersV0
         _cpCooldownParameters = CooldownParametersV0{..}
         _cpTimeParameters = TimeParametersV0
         _cpPoolParameters = PoolParametersV0{..}
-        _cpExchangeRates = makeExchangeRates _cpMicroGTUPerEuro _cpEuroPerEnergy
+        _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
 
 makeChainParametersV1 ::
     -- |Election difficulty
@@ -462,7 +463,7 @@ makeChainParametersV1
         _cpCooldownParameters = CooldownParametersV1{..}
         _cpTimeParameters = TimeParametersV1{..}
         _cpPoolParameters = PoolParametersV1{..}
-        _cpExchangeRates = makeExchangeRates _cpMicroGTUPerEuro _cpEuroPerEnergy
+        _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
         _ppLPoolCommissions = CommissionRates{..}
         _ppCommissionBounds = CommissionRanges{..}
         

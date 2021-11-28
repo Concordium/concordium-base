@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE DataKinds #-}
 
-module Types.Generators where
+module Generators where
 
 import Test.QuickCheck
 
@@ -36,6 +37,8 @@ import Concordium.Types
 import Concordium.Types.Execution
 import Concordium.Types.Transactions
 import Concordium.Types.Updates
+import Concordium.Types.Parameters
+import Concordium.Genesis.Parameters
 import qualified Concordium.Wasm as Wasm
 import qualified Data.FixedByteString as FBS
 
@@ -108,6 +111,12 @@ genUrlText =
 
 genRewardFraction :: Gen RewardFraction
 genRewardFraction = makeRewardFraction <$> arbitrary `suchThat` (<= 100000)
+
+genInclusiveRangeOfRewardFraction :: Gen (InclusiveRange RewardFraction)
+genInclusiveRangeOfRewardFraction = do
+    (irMin, irMax) <- ((,) <$> genRewardFraction <*> genRewardFraction)
+                        `suchThat` (\(i0, i1) -> i0 <= i1)
+    return InclusiveRange{..}
 
 genPayload :: ProtocolVersion -> Gen Payload
 genPayload pv =
@@ -320,6 +329,97 @@ genCredentialDeploymentInformation = do
     let cdiValues = CredentialDeploymentValues{..}
     return CredentialDeploymentInformation{..}
 
+genCommissionRates :: Gen CommissionRates
+genCommissionRates =
+    CommissionRates <$> genRewardFraction <*> genRewardFraction <*> genRewardFraction
+
+genCommissionRanges :: Gen CommissionRanges
+genCommissionRanges =
+    CommissionRanges <$> genInclusiveRangeOfRewardFraction
+                     <*> genInclusiveRangeOfRewardFraction
+                     <*> genInclusiveRangeOfRewardFraction
+
+genChainParametersV0 :: Gen (ChainParameters' 'ChainParametersV0)
+genChainParametersV0 = do
+    _cpElectionDifficulty <- genElectionDifficulty
+    _cpExchangeRates <- genExchangeRates
+    _cpCooldownParameters <- genCooldownParametersV0
+    _cpTimeParameters <- genTimeParametersV0
+    _cpAccountCreationLimit <- arbitrary
+    _cpRewardParameters <- genRewardParameters
+    _cpFoundationAccount <- AccountIndex <$> arbitrary
+    _cpPoolParameters <- genPoolParametersV0
+    return ChainParameters{..}
+
+genChainParametersV1 :: Gen (ChainParameters' 'ChainParametersV1)
+genChainParametersV1 = do
+    _cpElectionDifficulty <- genElectionDifficulty
+    _cpExchangeRates <- genExchangeRates
+    _cpCooldownParameters <- genCooldownParametersV1
+    _cpTimeParameters <- genTimeParametersV1
+    _cpAccountCreationLimit <- arbitrary
+    _cpRewardParameters <- genRewardParameters
+    _cpFoundationAccount <- AccountIndex <$> arbitrary
+    _cpPoolParameters <- genPoolParametersV1
+    return ChainParameters{..}
+
+genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
+genGenesisChainParametersV0 = do
+    gcpElectionDifficulty <- genElectionDifficulty
+    gcpExchangeRates <- genExchangeRates
+    gcpCooldownParameters <- genCooldownParametersV0
+    gcpTimeParameters <- genTimeParametersV0
+    gcpAccountCreationLimit <- arbitrary
+    gcpRewardParameters <- genRewardParameters
+    gcpFoundationAccount <- genAccountAddress
+    gcpPoolParameters <- genPoolParametersV0
+    return GenesisChainParameters{..}
+
+genGenesisChainParametersV1 :: Gen (GenesisChainParameters' 'ChainParametersV1)
+genGenesisChainParametersV1 = do
+    gcpElectionDifficulty <- genElectionDifficulty
+    gcpExchangeRates <- genExchangeRates
+    gcpCooldownParameters <- genCooldownParametersV1
+    gcpTimeParameters <- genTimeParametersV1
+    gcpAccountCreationLimit <- arbitrary
+    gcpRewardParameters <- genRewardParameters
+    gcpFoundationAccount <- genAccountAddress
+    gcpPoolParameters <- genPoolParametersV1
+    return GenesisChainParameters{..}
+
+genCooldownParametersV0 :: Gen (CooldownParameters 'ChainParametersV0)
+genCooldownParametersV0 = CooldownParametersV0 <$> arbitrary
+
+genCooldownParametersV1 :: Gen (CooldownParameters 'ChainParametersV1)
+genCooldownParametersV1 =
+    CooldownParametersV1 <$> (RewardPeriod <$> arbitrary) <*> (RewardPeriod <$> arbitrary)
+
+genTimeParametersV0 :: Gen (TimeParameters 'ChainParametersV0)
+genTimeParametersV0 = return TimeParametersV0
+
+genTimeParametersV1 :: Gen (TimeParameters 'ChainParametersV1)
+genTimeParametersV1 = TimeParametersV1 <$> (RewardPeriodLength <$> arbitrary)
+
+genPoolParametersV0 :: Gen (PoolParameters 'ChainParametersV0)
+genPoolParametersV0 = PoolParametersV0 <$> arbitrary
+
+genPoolParametersV1 :: Gen (PoolParameters 'ChainParametersV1)
+genPoolParametersV1 = do
+    _ppLPoolCommissions <- genCommissionRates
+    _ppCommissionBounds <- genCommissionRanges
+    _ppMinimumEquityCapital <- genAmount
+    _ppMinimumFinalizationCapital <- genRewardFraction
+    _ppCapitalBound <- genRewardFraction
+    _ppLeverageBound <- genLeverageFactor
+    return PoolParametersV1{..}
+
+genRewardParameters :: Gen RewardParameters
+genRewardParameters = do
+    _rpMintDistribution <- genMintDistribution
+    _rpTransactionFeeDistribution <- genTransactionFeeDistribution
+    _rpGASRewards <- genGASRewards
+    return RewardParameters{..}
+
 transactionTypes :: [TransactionType]
 transactionTypes =
     [ TTDeployModule,
@@ -340,7 +440,9 @@ transactionTypes =
       TTRegisterData,
       TTTransferWithMemo,
       TTEncryptedAmountTransferWithMemo,
-      TTTransferWithScheduleAndMemo
+      TTTransferWithScheduleAndMemo,
+      TTConfigureBaker,
+      TTConfigureDelegation
     ]
 
 instance Arbitrary TransactionType where
@@ -633,11 +735,23 @@ genMintRate = do
     mrMantissa <- choose (0, fromIntegral (min (toInteger (maxBound :: Word32)) (10 ^ mrExponent)))
     return MintRate{..}
 
-genExchangeRate :: Gen ExchangeRate
-genExchangeRate = do
+genRatioOfWord64 :: Gen (Ratio Word64)
+genRatioOfWord64 = do
     num <- choose (1, maxBound)
     den <- choose (1, maxBound)
-    return $ ExchangeRate (num % den)
+    return $ num % den
+
+genLeverageFactor :: Gen LeverageFactor
+genLeverageFactor = genRatioOfWord64
+
+genExchangeRate :: Gen ExchangeRate
+genExchangeRate = ExchangeRate <$> genLeverageFactor
+
+genEnergyRate :: Gen EnergyRate
+genEnergyRate = max <*> negate <$> arbitrary
+
+genExchangeRates :: Gen ExchangeRates
+genExchangeRates = makeExchangeRates <$> genExchangeRate <*> genExchangeRate
 
 genMintDistribution :: Gen MintDistribution
 genMintDistribution = do

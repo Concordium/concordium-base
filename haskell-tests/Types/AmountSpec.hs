@@ -10,7 +10,7 @@ import Test.QuickCheck as QC
 
 import Concordium.Types
 
-import Types.Generators (genAmount)
+import Generators (genAmount)
 
 checkAmountString :: Amount -> Property
 checkAmountString s = let ma = amountFromString (amountToString s)

@@ -33,6 +33,7 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
     , -- |Minimum threshold required for registering as a baker.
       gcpPoolParameters :: !(PoolParameters cpv)
     }
+    deriving (Eq, Show)
 
 type GenesisChainParameters pv = GenesisChainParameters' (ChainParametersVersionFor pv)
 
@@ -68,7 +69,7 @@ makeGenesisChainParametersV0
         gcpCooldownParameters = CooldownParametersV0{..}
         gcpTimeParameters = TimeParametersV0
         gcpPoolParameters = PoolParametersV0{..}
-        gcpExchangeRates = makeExchangeRates _erMicroGTUPerEuro _erEuroPerEnergy
+        gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
 
 makeGenesisChainParametersV1 ::
     -- |Election difficulty
@@ -137,7 +138,7 @@ makeGenesisChainParametersV1
         gcpCooldownParameters = CooldownParametersV1{..}
         gcpTimeParameters = TimeParametersV1{..}
         gcpPoolParameters = PoolParametersV1{..}
-        gcpExchangeRates = makeExchangeRates _erMicroGTUPerEuro _erEuroPerEnergy
+        gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
         _ppLPoolCommissions = CommissionRates{..}
         _ppCommissionBounds = CommissionRanges{..}
 

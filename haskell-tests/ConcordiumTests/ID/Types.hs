@@ -12,7 +12,7 @@ import Test.Hspec
 import Test.HUnit
 import Data.Aeson
 
-import Types.Generators
+import Generators
 
 testJSON :: Property
 testJSON = forAll genAccountAddress ck
