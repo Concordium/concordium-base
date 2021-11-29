@@ -193,7 +193,7 @@ data FinalizationSummary = FinalizationSummary
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
 
 -- |Detailed information about a block.
-data BlockSummary (pv :: ProtocolVersion) = BlockSummary
+data BlockSummary = forall pv. IsProtocolVersion pv => BlockSummary
     { -- |Details of transactions in the block
       bsTransactionSummaries :: !(Vec.Vector TransactionSummary),
       -- |Details of special events in the block
@@ -205,22 +205,29 @@ data BlockSummary (pv :: ProtocolVersion) = BlockSummary
     }
     deriving (Show)
 
-instance IsProtocolVersion pv => ToJSON (BlockSummary pv) where
-  toJSON BlockSummary{..} = object
+instance ToJSON BlockSummary where
+  toJSON BlockSummary{bsUpdates = updates :: Updates pv, ..} = object
             [ "transactionSummaries" .= bsTransactionSummaries,
               "specialEvents" .= bsSpecialEvents,
               "finalizationData" .= bsFinalizationData,
-              "updates" .= bsUpdates
+              "updates" .= updates,
+              "protocolVersion" .= demoteProtocolVersion $ protocolVersion @pv
             ]
 
-instance IsProtocolVersion pv => FromJSON (BlockSummary pv) where
+instance FromJSON BlockSummary where
   parseJSON = 
     withObject "BlockSummary" $ \v ->
         BlockSummary
             <$> v .: "transactionSummaries"
             <*> v .: "specialEvents"
             <*> v .: "finalizationData"
-            <*> v .: "updates"
+            <*> do
+              version <- v .: "protocolVersion"
+              case version of
+                  P1 -> v .: "updates" :: Parser (Updates P1)
+                  P2 -> v .: "updates" :: Parser (Updates P2)
+                  P3 -> v .: "updates" :: Parser (Updates P3)
+                  P4 -> v .: "updates" :: Parser (Updates P4) 
 
 -- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''Foo1)
 
