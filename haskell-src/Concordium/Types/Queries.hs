@@ -1,13 +1,17 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Queries where
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Aeson.Types (Parser)
 import Data.Char (isLower)
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
@@ -90,7 +94,7 @@ data ConsensusStatus = ConsensusStatus
       -- Initially this is equal to 'csGenesisBlock'.
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
-      csCurrentEraGenesisTime  :: !UTCTime
+      csCurrentEraGenesisTime :: !UTCTime
     }
     deriving (Show)
 
@@ -193,7 +197,9 @@ data FinalizationSummary = FinalizationSummary
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
 
 -- |Detailed information about a block.
-data BlockSummary = forall pv. IsProtocolVersion pv => BlockSummary
+data BlockSummary = forall pv.
+      IsProtocolVersion pv =>
+    BlockSummary
     { -- |Details of transactions in the block
       bsTransactionSummaries :: !(Vec.Vector TransactionSummary),
       -- |Details of special events in the block
@@ -203,33 +209,49 @@ data BlockSummary = forall pv. IsProtocolVersion pv => BlockSummary
       -- |Details of the update queues and chain parameters as of the block
       bsUpdates :: !(Updates pv)
     }
-    deriving (Show)
+
+instance Show BlockSummary where
+    showsPrec prec BlockSummary{bsUpdates = bsUpdates :: Updates pv, ..} = do
+        showParen (prec > 11) $
+            showString "BlockSummary @"
+                . showsPrec 11 (demoteProtocolVersion (protocolVersion @pv))
+                . showString " {bsTransactionSummaries = "
+                . showsPrec 0 bsTransactionSummaries
+                . showString ",bsSpecialEvents = "
+                . showsPrec 0 bsSpecialEvents
+                . showString ",bsFinalizationData = "
+                . showsPrec 0 bsFinalizationData
+                . showString ",bsUpdates = "
+                . showsPrec 0 bsUpdates
+                . showString "}"
 
 instance ToJSON BlockSummary where
-  toJSON BlockSummary{bsUpdates = updates :: Updates pv, ..} = object
+    toJSON BlockSummary{bsUpdates = bsUpdates :: Updates pv, ..} =
+        object
             [ "transactionSummaries" .= bsTransactionSummaries,
               "specialEvents" .= bsSpecialEvents,
               "finalizationData" .= bsFinalizationData,
-              "updates" .= updates,
-              "protocolVersion" .= demoteProtocolVersion $ protocolVersion @pv
+              "updates" .= bsUpdates,
+              "protocolVersion" .= demoteProtocolVersion (protocolVersion @pv)
             ]
 
 instance FromJSON BlockSummary where
-  parseJSON = 
-    withObject "BlockSummary" $ \v ->
-        BlockSummary
-            <$> v .: "transactionSummaries"
-            <*> v .: "specialEvents"
-            <*> v .: "finalizationData"
-            <*> do
-              version <- v .: "protocolVersion"
-              case version of
-                  P1 -> v .: "updates" :: Parser (Updates P1)
-                  P2 -> v .: "updates" :: Parser (Updates P2)
-                  P3 -> v .: "updates" :: Parser (Updates P3)
-                  P4 -> v .: "updates" :: Parser (Updates P4) 
-
--- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''Foo1)
+    parseJSON =
+        withObject "BlockSummary" $ \v -> do
+            version <- v .: "protocolVersion"
+            case version of
+                P1 -> parse SP1 v
+                P2 -> parse SP2 v
+                P3 -> parse SP3 v
+                P4 -> parse SP4 v
+      where
+        parse :: forall pv. IsProtocolVersion pv => SProtocolVersion pv -> Object -> Parser BlockSummary
+        parse _ v =
+            BlockSummary
+                <$> v .: "transactionSummaries"
+                <*> v .: "specialEvents"
+                <*> v .: "finalizationData"
+                <*> (v .: "updates" :: Parser (Updates pv))
 
 data RewardStatus = RewardStatus
     { -- |The total GTU in existence
