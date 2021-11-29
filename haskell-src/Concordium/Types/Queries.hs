@@ -238,15 +238,11 @@ instance ToJSON BlockSummary where
 instance FromJSON BlockSummary where
     parseJSON =
         withObject "BlockSummary" $ \v -> do
-            version <- v .: "protocolVersion"
-            case version of
-                P1 -> parse SP1 v
-                P2 -> parse SP2 v
-                P3 -> parse SP3 v
-                P4 -> parse SP4 v
+            pv <- v .: "protocolVersion"
+            parse (promoteProtocolVersion pv) v
       where
-        parse :: forall pv. IsProtocolVersion pv => SProtocolVersion pv -> Object -> Parser BlockSummary
-        parse _ v =
+        parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
+        parse (SomeProtocolVersion (_ :: SProtocolVersion pv)) v =
             BlockSummary
                 <$> v .: "transactionSummaries"
                 <*> v .: "specialEvents"
