@@ -214,7 +214,7 @@ pub trait TryFromImport: Sized {
 }
 
 /// An example of a processed import with minimal processing. Useful for testing
-/// an experimenting, but not for efficient execution.
+/// and experimenting, but not for efficient execution.
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{}.{}", mod_name, item_name)]
 pub struct ArtifactNamedImport {
