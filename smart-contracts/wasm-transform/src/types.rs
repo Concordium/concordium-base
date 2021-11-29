@@ -7,15 +7,16 @@
 //! guaranteed automatically by the AST definition of the Module, and the
 //! parsing functions.
 
+use anyhow::bail;
+use derive_more::{Display, From};
 use std::{convert::TryFrom, rc::Rc};
 
-use anyhow::bail;
-
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
-/// A webassembly Name. We choose to have it be an owned value rather than ar
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone, Display)]
+/// A webassembly Name. We choose to have it be an owned value rather than a
 /// reference into the original module. Names are also used in the parsed AST,
 /// and we don't want to retain references to the original bytes just because of
 /// a few names.
+#[display(fmt = "{}", name)]
 pub struct Name {
     /// Names in Wasm are utf8 encoded.
     pub name: String,
@@ -23,11 +24,6 @@ pub struct Name {
 
 impl AsRef<str> for Name {
     fn as_ref(&self) -> &str { &self.name }
-}
-
-/// The Display just uses the Display instance for the underlying String.
-impl std::fmt::Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.name.fmt(f) }
 }
 
 impl<'a> From<&'a str> for Name {
@@ -435,17 +431,9 @@ pub type InstrSeq = Vec<OpCode>;
 
 /// An expression is a sequence of instructions followed by the "end" delimiter,
 /// which is also present in the binary format (see 5.4.6).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, From)]
 pub struct Expression {
     pub instrs: InstrSeq,
-}
-
-impl From<InstrSeq> for Expression {
-    fn from(instrs: InstrSeq) -> Self {
-        Expression {
-            instrs,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

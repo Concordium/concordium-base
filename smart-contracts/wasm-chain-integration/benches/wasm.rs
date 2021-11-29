@@ -4,13 +4,12 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
     constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, InitContext, InitHost,
-    InterpreterEnergy, Logs, Outcome, ProcessedImports, ReceiveContext, ReceiveHost, State,
-    TestHost,
+    InterpreterEnergy, Logs, Outcome, Parameter, PolicyBytes, ProcessedImports, ReceiveContext,
+    ReceiveHost, State, TestHost,
 };
-
 use wasm_transform::{
     artifact::{ArtifactNamedImport, TryFromImport},
-    machine::{Host, Value},
+    machine::{Host, NoInterrupt, Value},
     types::{FunctionType, ValueType},
     *,
 };
@@ -104,6 +103,8 @@ impl TryFromImport for MeteringImport {
 }
 
 impl Host<MeteringImport> for MeteringHost {
+    type Interrupt = NoInterrupt;
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
@@ -115,23 +116,25 @@ impl Host<MeteringImport> for MeteringHost {
         f: &MeteringImport,
         _memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            MeteringFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() }),
+            MeteringFunc::ChargeEnergy => {
+                self.energy.tick_energy(unsafe { stack.pop_u64() }).map(|_| None)
+            }
             MeteringFunc::TrackCall => {
                 if let Some(fr) = self.activation_frames.checked_sub(1) {
                     self.activation_frames = fr;
-                    Ok(())
+                    Ok(None)
                 } else {
                     bail!("Too many nested functions.")
                 }
             }
             MeteringFunc::TrackReturn => {
                 self.activation_frames += 1;
-                Ok(())
+                Ok(None)
             }
             MeteringFunc::ChargeMemoryAlloc => {
-                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })
+                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() }).map(|_| None)
             }
         }
     }
@@ -522,7 +525,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             sender_policies: &[],
         };
 
-        let setup_init_host = || -> InitHost<InitContext<&[u8]>> {
+        let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<PolicyBytes<'_>>> {
             InitHost {
                 energy:            InterpreterEnergy {
                     energy: nrg * 1000,
@@ -535,19 +538,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             }
         };
 
-        let setup_receive_host = |state, param| -> ReceiveHost<ReceiveContext<&[u8]>> {
-            ReceiveHost {
-                energy: InterpreterEnergy {
-                    energy: nrg * 1000,
-                },
-                activation_frames: MAX_ACTIVATION_FRAMES,
-                logs: Logs::new(),
-                state,
-                param,
-                outcomes: Outcome::new(),
-                receive_ctx: &receive_ctx,
-            }
-        };
+        let setup_receive_host =
+            |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<PolicyBytes<'_>>> {
+                ReceiveHost {
+                    energy: InterpreterEnergy {
+                        energy: nrg * 1000,
+                    },
+                    activation_frames: MAX_ACTIVATION_FRAMES,
+                    logs: Logs::new(),
+                    state,
+                    param,
+                    outcomes: Outcome::new(),
+                    receive_ctx: &receive_ctx,
+                }
+            };
 
         let run_init = |name, args| {
             // since we move the rest of the variables we must first take a reference to

@@ -1,6 +1,10 @@
 pub mod constants;
 #[cfg(feature = "enable-ffi")]
 mod ffi;
+#[cfg(feature = "fuzz")]
+pub mod fuzz;
+pub mod resumption;
+mod types;
 
 #[cfg(test)]
 mod validation_tests;
@@ -17,14 +21,11 @@ use std::{
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
-    machine,
+    machine::{self, ExecutionOutcome, NoInterrupt},
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
     utils, validate,
 };
-#[cfg(feature = "fuzz")]
-pub mod fuzz;
-mod types;
 
 pub type ExecResult<A> = anyhow::Result<A>;
 
@@ -131,7 +132,7 @@ impl InterpreterEnergy {
 }
 
 #[derive(Clone, Default)]
-/// The Default instance of this type constructs and empty list of outcomes.
+/// The Default instance of this type constructs an empty list of outcomes.
 pub struct Outcome {
     pub cur_state: Vec<Action>,
 }
@@ -273,7 +274,7 @@ impl State {
     }
 }
 
-pub struct InitHost<'a, Ctx> {
+pub struct InitHost<ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -284,12 +285,12 @@ pub struct InitHost<'a, Ctx> {
     /// The contract's state.
     pub state:             State,
     /// The parameter to the init method.
-    pub param:             &'a [u8],
+    pub param:             ParamType,
     /// The init context for this invocation.
-    pub init_ctx:          &'a Ctx,
+    pub init_ctx:          Ctx,
 }
 
-pub struct ReceiveHost<'a, Ctx> {
+pub struct ReceiveHost<ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -299,12 +300,12 @@ pub struct ReceiveHost<'a, Ctx> {
     pub logs:              Logs,
     /// The contract's state.
     pub state:             State,
-    /// The parameter to the init method.
-    pub param:             &'a [u8],
+    /// The parameter to the receive method.
+    pub param:             ParamType,
     /// Outcomes of the execution, i.e., the actions tree.
     pub outcomes:          Outcome,
     /// The receive context for this call.
-    pub receive_ctx:       &'a Ctx,
+    pub receive_ctx:       Ctx,
 }
 
 pub trait HasCommon {
@@ -320,7 +321,7 @@ pub trait HasCommon {
     fn metadata(&self) -> &Self::MetadataType;
 }
 
-impl<'a, Ctx: HasInitContext> HasCommon for InitHost<'a, Ctx> {
+impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> HasCommon for InitHost<ParamType, Ctx> {
     type MetadataType = Ctx::MetadataType;
     type PolicyBytesType = Ctx::PolicyBytesType;
     type PolicyType = Ctx::PolicyType;
@@ -331,14 +332,14 @@ impl<'a, Ctx: HasInitContext> HasCommon for InitHost<'a, Ctx> {
 
     fn state(&mut self) -> &mut State { &mut self.state }
 
-    fn param(&self) -> &[u8] { &self.param }
+    fn param(&self) -> &[u8] { self.param.as_ref() }
 
     fn metadata(&self) -> &Self::MetadataType { self.init_ctx.metadata() }
 
     fn policies(&self) -> ExecResult<&Self::PolicyType> { self.init_ctx.sender_policies() }
 }
 
-impl<'a, Ctx: HasReceiveContext> HasCommon for ReceiveHost<'a, Ctx> {
+impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> HasCommon for ReceiveHost<ParamType, Ctx> {
     type MetadataType = Ctx::MetadataType;
     type PolicyBytesType = Ctx::PolicyBytesType;
     type PolicyType = Ctx::PolicyType;
@@ -349,7 +350,7 @@ impl<'a, Ctx: HasReceiveContext> HasCommon for ReceiveHost<'a, Ctx> {
 
     fn state(&mut self) -> &mut State { &mut self.state }
 
-    fn param(&self) -> &[u8] { &self.param }
+    fn param(&self) -> &[u8] { self.param.as_ref() }
 
     fn metadata(&self) -> &Self::MetadataType { self.receive_ctx.metadata() }
 
@@ -374,6 +375,22 @@ pub trait HasInitContext {
     fn metadata(&self) -> &Self::MetadataType;
     fn init_origin(&self) -> ExecResult<&AccountAddress>;
     fn sender_policies(&self) -> ExecResult<&Self::PolicyType>;
+}
+
+/// Generic implementation for all references to types that already implement
+/// HasInitContext. This allows using InitContext as well as &InitContext in the
+/// init host, depending on whether we want to transfer ownership of the context
+/// or not.
+impl<'a, X: HasInitContext> HasInitContext for &'a X {
+    type MetadataType = X::MetadataType;
+    type PolicyBytesType = X::PolicyBytesType;
+    type PolicyType = X::PolicyType;
+
+    fn metadata(&self) -> &Self::MetadataType { (*self).metadata() }
+
+    fn init_origin(&self) -> ExecResult<&AccountAddress> { (*self).init_origin() }
+
+    fn sender_policies(&self) -> ExecResult<&Self::PolicyType> { (*self).sender_policies() }
 }
 
 impl HasInitContext for InitContext<Vec<OwnedPolicy>> {
@@ -422,6 +439,30 @@ pub trait HasReceiveContext {
     fn sender(&self) -> ExecResult<&Address>;
     fn owner(&self) -> ExecResult<&AccountAddress>;
     fn sender_policies(&self) -> ExecResult<&Self::PolicyType>;
+}
+
+/// Generic implementation for all references to types that already implement
+/// HasReceiveContext. This allows using ReceiveContext as well as
+/// &ReceiveContext in the receive host, depending on whether we want to
+/// transfer ownership of the context or not.
+impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
+    type MetadataType = X::MetadataType;
+    type PolicyBytesType = X::PolicyBytesType;
+    type PolicyType = X::PolicyType;
+
+    fn metadata(&self) -> &Self::MetadataType { (*self).metadata() }
+
+    fn invoker(&self) -> ExecResult<&AccountAddress> { (*self).invoker() }
+
+    fn self_address(&self) -> ExecResult<&ContractAddress> { (*self).self_address() }
+
+    fn self_balance(&self) -> ExecResult<Amount> { (*self).self_balance() }
+
+    fn sender(&self) -> ExecResult<&Address> { (*self).sender() }
+
+    fn owner(&self) -> ExecResult<&AccountAddress> { (*self).owner() }
+
+    fn sender_policies(&self) -> ExecResult<&Self::PolicyType> { (*self).sender_policies() }
 }
 
 impl HasReceiveContext for ReceiveContext<Vec<OwnedPolicy>> {
@@ -574,7 +615,11 @@ fn call_common<C: HasCommon>(
     Ok(())
 }
 
-impl<'a, Ctx: HasInitContext> machine::Host<ProcessedImports> for InitHost<'a, Ctx> {
+impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports>
+    for InitHost<ParamType, Ctx>
+{
+    type Interrupt = NoInterrupt;
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
@@ -586,7 +631,7 @@ impl<'a, Ctx: HasInitContext> machine::Host<ProcessedImports> for InitHost<'a, C
         f: &ProcessedImports,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
             ImportFunc::ChargeEnergy => {
                 self.energy.tick_energy(unsafe { stack.pop_u64() })?;
@@ -613,12 +658,13 @@ impl<'a, Ctx: HasInitContext> machine::Host<ProcessedImports> for InitHost<'a, C
                 bail!("Not implemented for init {:#?}.", f);
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
 
-impl<'a, Ctx> ReceiveHost<'a, Ctx>
+impl<ParamType, Ctx> ReceiveHost<ParamType, Ctx>
 where
+    ParamType: AsRef<[u8]>,
     Ctx: HasReceiveContext,
 {
     pub fn call_receive_only(
@@ -715,7 +761,11 @@ where
     }
 }
 
-impl<'a, Ctx: HasReceiveContext> machine::Host<ProcessedImports> for ReceiveHost<'a, Ctx> {
+impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImports>
+    for ReceiveHost<ParamType, Ctx>
+{
+    type Interrupt = NoInterrupt;
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
         self.energy.charge_memory_alloc(num_pages)
@@ -727,7 +777,7 @@ impl<'a, Ctx: HasReceiveContext> machine::Host<ProcessedImports> for ReceiveHost
         f: &ProcessedImports,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
             ImportFunc::ChargeEnergy => {
                 let amount = unsafe { stack.pop_u64() };
@@ -750,7 +800,7 @@ impl<'a, Ctx: HasReceiveContext> machine::Host<ProcessedImports> for ReceiveHost
                 bail!("Not implemented for receive.");
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -775,11 +825,18 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
         logs: Logs::new(),
         state: State::new(None),
         param,
-        init_ctx: &init_ctx,
+        init_ctx,
     };
 
     let res = match artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]) {
-        Ok((res, _)) => res,
+        Ok(ExecutionOutcome::Success {
+            result,
+            ..
+        }) => result,
+        Ok(ExecutionOutcome::Interrupted {
+            reason,
+            ..
+        }) => match reason {}, // impossible case, InitHost has no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(InitResult::OutOfEnergy);
@@ -866,19 +923,26 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let mut host = ReceiveHost {
-        energy:            InterpreterEnergy {
+        energy: InterpreterEnergy {
             energy,
         },
         activation_frames: MAX_ACTIVATION_FRAMES,
-        logs:              Logs::new(),
-        state:             State::new(Some(current_state)),
-        param:             &parameter,
-        receive_ctx:       &receive_ctx,
-        outcomes:          Outcome::new(),
+        logs: Logs::new(),
+        state: State::new(Some(current_state)),
+        param: &parameter,
+        receive_ctx,
+        outcomes: Outcome::new(),
     };
 
     let res = match artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]) {
-        Ok((res, _)) => res,
+        Ok(ExecutionOutcome::Success {
+            result,
+            ..
+        }) => result,
+        Ok(ExecutionOutcome::Interrupted {
+            reason,
+            ..
+        }) => match reason {}, // impossible case, ReceiveHost has no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(ReceiveResult::OutOfEnergy);
@@ -1004,6 +1068,8 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
 pub struct TrapHost;
 
 impl<I> machine::Host<I> for TrapHost {
+    type Interrupt = NoInterrupt;
+
     fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> { Ok(()) }
 
     fn call(
@@ -1011,7 +1077,7 @@ impl<I> machine::Host<I> for TrapHost {
         _f: &I,
         _memory: &mut Vec<u8>,
         _stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         bail!("TrapHost traps on all host calls.")
     }
 }
@@ -1079,6 +1145,8 @@ impl std::fmt::Display for ReportError {
 }
 
 impl machine::Host<ArtifactNamedImport> for TestHost {
+    type Interrupt = NoInterrupt;
+
     fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> {
         // The test host does not count energy.
         Ok(())
@@ -1089,7 +1157,7 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
         f: &ArtifactNamedImport,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<Option<NoInterrupt>> {
         if f.matches("concordium", "report_error") {
             let column = unsafe { stack.pop_u32() };
             let line = unsafe { stack.pop_u32() };
@@ -1205,8 +1273,10 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     artifact: &Artifact<I, C>,
     schema_fn_name: &str,
 ) -> ExecResult<schema::Type> {
-    let (ptr, memory) = if let (Some(Value::I32(ptr)), memory) =
-        artifact.run(&mut TrapHost, schema_fn_name, &[])?
+    let (ptr, memory) = if let machine::ExecutionOutcome::Success {
+        result: Some(Value::I32(ptr)),
+        memory,
+    } = artifact.run(&mut TrapHost, schema_fn_name, &[])?
     {
         (ptr as u32 as usize, memory)
     } else {
