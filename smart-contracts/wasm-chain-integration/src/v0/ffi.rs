@@ -23,7 +23,7 @@ macro_rules! slice_from_c_bytes {
 type ArtifactV0 = Artifact<ProcessedImports, CompiledFunction>;
 
 #[no_mangle]
-unsafe extern "C" fn call_init(
+unsafe extern "C" fn call_init_v0(
     artifact_ptr: *const ArtifactV0,
     init_ctx_bytes: *const u8,
     init_ctx_bytes_len: size_t,
@@ -66,7 +66,7 @@ unsafe extern "C" fn call_init(
 }
 
 #[no_mangle]
-unsafe extern "C" fn call_receive(
+unsafe extern "C" fn call_receive_v0(
     artifact_ptr: *const ArtifactV0,
     receive_ctx_bytes: *const u8,
     receive_ctx_bytes_len: size_t,
@@ -144,7 +144,7 @@ unsafe extern "C" fn call_receive(
 /// # Safety
 /// This function is safe provided all the supplied pointers are not null and
 /// the `wasm_bytes_ptr` points to an array of length at least `wasm_bytes_len`.
-unsafe extern "C" fn validate_and_process(
+unsafe extern "C" fn validate_and_process_v0(
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     output_len: *mut size_t, // this is the total length of the output byte array
