@@ -48,6 +48,7 @@ unsafe extern "C" fn call_init_v0(
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
+                        out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
                         std::mem::forget(out);
@@ -104,6 +105,7 @@ unsafe extern "C" fn call_receive_v0(
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
+                        out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
                         std::mem::forget(out);
@@ -164,6 +166,7 @@ unsafe extern "C" fn validate_and_process_v0(
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
+            out_buf.shrink_to_fit();
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();
             std::mem::forget(out_buf);
@@ -203,6 +206,7 @@ unsafe extern "C" fn artifact_v0_to_bytes(
     let artifact = Arc::from_raw(artifact_ptr);
     let mut bytes = Vec::new();
     artifact.output(&mut bytes).expect("Artifact serialization does not fail.");
+    bytes.shrink_to_fit();
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
