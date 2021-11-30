@@ -1,13 +1,16 @@
-use crate::*;
+use std::collections::LinkedList;
+
 use anyhow::bail;
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
+use concordium_contracts_common::*;
 use serde::Deserialize as SerdeDeserialize;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
     parse::{Byte, GetParseable, Parseable},
-    types::{FunctionType, Import, ValueType},
+    types::{FunctionType, Import, Name, ValueType},
+    validate,
 };
 
 /// Maximum length, in bytes, of an export function name.
@@ -105,6 +108,18 @@ pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[
     } else {
         Err(ParseError {})
     }
+}
+
+/// Smart contract state.
+#[derive(Clone, Debug)]
+pub struct State {
+    pub state: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Default)]
+/// Structure to support logging of events from smart contracts.
+pub struct Logs {
+    pub logs: LinkedList<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -592,7 +607,7 @@ impl TryFromImport for ProcessedImports {
                 type_idx,
             } => ctx
                 .get(type_idx as usize)
-                .ok_or_else(|| anyhow!("Unknown type, this should not happen."))?
+                .ok_or_else(|| anyhow::anyhow!("Unknown type, this should not happen."))?
                 .clone(),
         };
         Ok(Self {

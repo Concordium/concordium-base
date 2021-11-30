@@ -3,9 +3,13 @@ use concordium_contracts_common::{Address, Amount, ChainMetadata, ContractAddres
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
-    constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, InitContext, InitHost,
-    InterpreterEnergy, Logs, Outcome, Parameter, PolicyBytes, ProcessedImports, ReceiveContext,
-    ReceiveHost, State, TestHost,
+    constants::MAX_ACTIVATION_FRAMES,
+    utils::TestHost,
+    v0::{
+        ConcordiumAllowedImports, InitContext, InitHost, Logs, Outcome, Parameter, PolicyBytes,
+        ProcessedImports, ReceiveContext, ReceiveHost, State,
+    },
+    InterpreterEnergy,
 };
 use wasm_transform::{
     artifact::{ArtifactNamedImport, TryFromImport},

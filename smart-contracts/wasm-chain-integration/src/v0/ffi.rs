@@ -1,4 +1,4 @@
-use crate::*;
+use crate::v0::*;
 use libc::size_t;
 use std::sync::Arc;
 use wasm_transform::{artifact::CompiledFunction, output::Output, utils::parse_artifact};

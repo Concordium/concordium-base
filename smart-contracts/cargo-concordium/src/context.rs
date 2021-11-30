@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ContractAddress, OwnedPolicy, SlotTime,
 };
-use wasm_chain_integration::{ExecResult, HasChainMetadata, HasInitContext, HasReceiveContext};
+use wasm_chain_integration::{v0, ExecResult};
 
 /// A chain metadata with an optional field.
 /// Used when simulating contracts to allow the user to only specify the
@@ -14,7 +14,7 @@ pub(crate) struct ChainMetadataOpt {
     slot_time: Option<SlotTime>,
 }
 
-impl HasChainMetadata for ChainMetadataOpt {
+impl v0::HasChainMetadata for ChainMetadataOpt {
     fn slot_time(&self) -> ExecResult<SlotTime> { unwrap_ctx_field(self.slot_time, "slotTime") }
 }
 
@@ -32,7 +32,7 @@ pub(crate) struct InitContextOpt {
     sender_policies: Option<Vec<OwnedPolicy>>,
 }
 
-impl HasInitContext for InitContextOpt {
+impl v0::HasInitContext for InitContextOpt {
     type MetadataType = ChainMetadataOpt;
     type PolicyBytesType = Vec<u8>;
     type PolicyType = Vec<OwnedPolicy>;
@@ -67,7 +67,7 @@ pub(crate) struct ReceiveContextOpt {
     sender_policies:         Option<Vec<OwnedPolicy>>,
 }
 
-impl HasReceiveContext for ReceiveContextOpt {
+impl v0::HasReceiveContext for ReceiveContextOpt {
     type MetadataType = ChainMetadataOpt;
     type PolicyBytesType = Vec<u8>;
     type PolicyType = Vec<OwnedPolicy>;
