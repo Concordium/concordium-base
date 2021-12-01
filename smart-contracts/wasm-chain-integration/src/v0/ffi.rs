@@ -17,7 +17,7 @@ macro_rules! slice_from_c_bytes {
 }
 
 /// All functions in this module operate on an Arc<ArtifactV0>. The reason for
-/// choosing and Arc as opposed to Box or Rc is that we need to sometimes share
+/// choosing an Arc as opposed to Box or Rc is that we need to sometimes share
 /// this artifact to support resumable executions, and we might have to access
 /// it concurrently since these functions are called from Haskell.
 type ArtifactV0 = Artifact<ProcessedImports, CompiledFunction>;
@@ -132,8 +132,8 @@ unsafe extern "C" fn call_receive_v0(
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
-/// - `artifact_len` a pointer where the length of the artifact that is
-///   generated will be written.
+/// - `artifact_out` a pointer where the pointer to the artifact will be
+///   written.
 /// - `output_len` a pointer where the total length of the output will be
 ///   written
 ///
@@ -150,7 +150,8 @@ unsafe extern "C" fn validate_and_process_v0(
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     output_len: *mut size_t, // this is the total length of the output byte array
-    output_artifact: *mut *const ArtifactV0,
+    output_artifact: *mut *const ArtifactV0, /* location where the pointer to the artifact will
+                              * be written. */
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
