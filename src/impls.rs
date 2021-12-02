@@ -144,12 +144,12 @@ impl Deserial for bool {
 }
 
 impl Serial for Amount {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(self.micro_gtu) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(self.micro_ccd) }
 }
 
 impl Deserial for Amount {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        source.read_u64().map(Amount::from_micro_gtu)
+        source.read_u64().map(Amount::from_micro_ccd)
     }
 }
 
