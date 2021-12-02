@@ -658,7 +658,7 @@ where
                     .write_all(&self.receive_ctx.self_address()?.subindex.to_le_bytes())?;
             }
             ReceiveOnlyFunc::GetReceiveSelfBalance => {
-                stack.push_value(self.receive_ctx.self_balance()?.micro_gtu);
+                stack.push_value(self.receive_ctx.self_balance()?.micro_ccd);
             }
             ReceiveOnlyFunc::GetReceiveSender => {
                 let start = unsafe { stack.pop_u32() } as usize;

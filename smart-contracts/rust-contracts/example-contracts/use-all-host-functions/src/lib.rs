@@ -25,9 +25,9 @@ fn contract_receive<A: HasActions>(
     Ok(A::send_raw(
         &ctx.self_address(),
         ReceiveName::new_unchecked("use_all.receive"),
-        Amount::from_micro_gtu(100),
+        Amount::from_micro_ccd(100),
         &[1, 2, 3],
     )
-    .and_then(A::simple_transfer(&ctx.owner(), Amount::from_micro_gtu(100)).or_else(A::accept())))
+    .and_then(A::simple_transfer(&ctx.owner(), Amount::from_micro_ccd(100)).or_else(A::accept())))
     // Exercises combine_and, combine_or, send, simple_transfer and accept
 }

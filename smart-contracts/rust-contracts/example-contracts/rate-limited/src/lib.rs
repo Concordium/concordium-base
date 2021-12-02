@@ -1,12 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_std::*;
 
-/* A contract that acts like an account (can send, store and accept GTU),
- * but requires that no more than x GTU be withdrawn every y time-units.
+/* A contract that acts like an account (can send, store and accept CCD),
+ * but requires that no more than x CCD be withdrawn every y time-units.
  *
  * The idea being that perhaps it can act as something like an annuity,
  * or it can be a form of security in that it gives observers time to react
- * to odd movements of GTU before too much damage is inflicted (e.g. by
+ * to odd movements of CCD before too much damage is inflicted (e.g. by
  * enacting Concordium’s ability to unmask actors on the chain).
  *
  * Implementation:
@@ -25,7 +25,7 @@ use concordium_std::*;
 
 #[derive(Clone, Serialize, SchemaType)]
 struct TransferRequest {
-    /// The amount of GTU to transfer from the contract to the target_account
+    /// The amount of CCD to transfer from the contract to the target_account
     amount:         Amount,
     /// The account to transfer to
     target_account: AccountAddress,
@@ -42,7 +42,7 @@ struct Transfer {
 /// # State of the contract.
 #[derive(Serialize, SchemaType)]
 struct InitParams {
-    /// The amount of GTU allowed to be withdrawn within the time_limit
+    /// The amount of CCD allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
     /// The duration in which recently accepted recent_transfers are checked
     time_limit:           Duration,
@@ -63,9 +63,9 @@ pub struct State {
 fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
-    // If timed_withdraw_limit is zero then no GTU can be transferred from the
+    // If timed_withdraw_limit is zero then no CCD can be transferred from the
     // account, thus violating the purpose of the contract.
-    ensure!(init_params.timed_withdraw_limit.micro_gtu > 0); // The timed_withdraw_limit should be greater than 0.
+    ensure!(init_params.timed_withdraw_limit.micro_ccd > 0); // The timed_withdraw_limit should be greater than 0.
 
     let state = State {
         init_params,
@@ -76,7 +76,7 @@ fn contract_init(ctx: &impl HasInitContext<()>) -> InitResult<State> {
 }
 
 #[receive(contract = "rate-limited", name = "receive_deposit", payable)]
-/// Allows anyone to deposit GTU into the contract.
+/// Allows anyone to deposit CCD into the contract.
 fn contract_receive_deposit<A: HasActions>(
     _ctx: &impl HasReceiveContext<()>,
     _amount: Amount,
@@ -86,7 +86,7 @@ fn contract_receive_deposit<A: HasActions>(
 }
 
 #[receive(contract = "rate-limited", name = "receive", payable, parameter = "TransferRequest")]
-/// Allows the owner of the contract to transfer GTU from the contract to an
+/// Allows the owner of the contract to transfer CCD from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<A: HasActions>(
     ctx: &impl HasReceiveContext<()>,
@@ -149,7 +149,7 @@ mod tests {
         let target_account = AccountAddress([2u8; 32]);
 
         let parameter = TransferRequest {
-            amount: Amount::from_micro_gtu(5),
+            amount: Amount::from_micro_ccd(5),
             target_account,
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -159,35 +159,35 @@ mod tests {
         ctx.set_metadata_slot_time(Timestamp::from_timestamp_millis(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
-        ctx.set_self_balance(Amount::from_micro_gtu(10));
+        ctx.set_self_balance(Amount::from_micro_ccd(10));
 
         // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(6),
+                    amount:         Amount::from_micro_ccd(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(2),
+                    amount:         Amount::from_micro_ccd(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(3),
+                    amount:         Amount::from_micro_ccd(3),
                     target_account: account1,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: Amount::from_micro_gtu(10),
+            timed_withdraw_limit: Amount::from_micro_ccd(10),
             time_limit:           Duration::from_millis(9),
         };
 
@@ -207,7 +207,7 @@ mod tests {
         };
         claim_eq!(
             actions,
-            ActionsTree::simple_transfer(&target_account, Amount::from_micro_gtu(5)),
+            ActionsTree::simple_transfer(&target_account, Amount::from_micro_ccd(5)),
             "The request did not transfer the correct amount."
         );
         claim_eq!(
@@ -216,7 +216,7 @@ mod tests {
             "The oldest transfer should have been removed and the new one added."
         );
         claim_eq!(
-            state.recent_transfers[2].transfer_request.amount.micro_gtu,
+            state.recent_transfers[2].transfer_request.amount.micro_ccd,
             5,
             "The new transfer should have been added to recent_transfers."
         );
@@ -234,7 +234,7 @@ mod tests {
         let target_account = AccountAddress([2u8; 32]);
 
         let parameter = TransferRequest {
-            amount: Amount::from_micro_gtu(5),
+            amount: Amount::from_micro_ccd(5),
             target_account,
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -243,7 +243,7 @@ mod tests {
         ctx.set_metadata_slot_time(Timestamp::from_timestamp_millis(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
-        ctx.set_self_balance(Amount::from_micro_gtu(10));
+        ctx.set_self_balance(Amount::from_micro_ccd(10));
         ctx.set_parameter(&parameter_bytes);
 
         // Setup state
@@ -251,28 +251,28 @@ mod tests {
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(6),
+                    amount:         Amount::from_micro_ccd(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(2),
+                    amount:         Amount::from_micro_ccd(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(3),
+                    amount:         Amount::from_micro_ccd(3),
                     target_account: account2,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: Amount::from_micro_gtu(10),
+            timed_withdraw_limit: Amount::from_micro_ccd(10),
             time_limit:           Duration::from_millis(10),
         };
 
@@ -294,7 +294,7 @@ mod tests {
         );
 
         let recent_transfers_amounts: Vec<u64> =
-            state.recent_transfers.iter().map(|t| t.transfer_request.amount.micro_gtu).collect();
+            state.recent_transfers.iter().map(|t| t.transfer_request.amount.micro_ccd).collect();
         claim_eq!(
             recent_transfers_amounts,
             vec![6, 2, 3],
@@ -315,7 +315,7 @@ mod tests {
         let target_account = AccountAddress([2u8; 32]);
 
         let parameter = TransferRequest {
-            amount: Amount::from_micro_gtu(5),
+            amount: Amount::from_micro_ccd(5),
             target_account,
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -323,7 +323,7 @@ mod tests {
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_metadata_slot_time(Timestamp::from_timestamp_millis(10));
-        ctx.set_self_balance(Amount::from_micro_gtu(10));
+        ctx.set_self_balance(Amount::from_micro_ccd(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
 
@@ -332,28 +332,28 @@ mod tests {
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(1),
+                    amount:         Amount::from_micro_ccd(1),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(1),
+                    amount:         Amount::from_micro_ccd(1),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_gtu(1),
+                    amount:         Amount::from_micro_ccd(1),
                     target_account: account2,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: Amount::from_micro_gtu(10),
+            timed_withdraw_limit: Amount::from_micro_ccd(10),
             time_limit:           Duration::from_millis(1000),
         };
 

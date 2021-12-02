@@ -92,7 +92,7 @@ struct Runner {
     #[structopt(
         name = "amount",
         long = "amount",
-        help = "The amount of GTU to invoke the method with.",
+        help = "The amount of CCD to invoke the method with.",
         default_value = "0"
     )]
     amount:              Amount,
@@ -360,7 +360,7 @@ pub fn main() -> anyhow::Result<()> {
                     let name = format!("init_{}", contract_name);
                     let res = v0::invoke_init_with_metering_from_source(
                         &module,
-                        runner.amount.micro_gtu,
+                        runner.amount.micro_ccd,
                         init_ctx,
                         &name,
                         &parameter,
@@ -415,7 +415,7 @@ pub fn main() -> anyhow::Result<()> {
                     };
                     if let Some(balance) = balance {
                         receive_ctx.self_balance =
-                            Some(concordium_contracts_common::Amount::from_micro_gtu(balance));
+                            Some(concordium_contracts_common::Amount::from_micro_ccd(balance));
                     }
 
                     // initial state of the smart contract, read from either a binary or json file.
@@ -459,7 +459,7 @@ pub fn main() -> anyhow::Result<()> {
                     let name = format!("{}.{}", contract_name, func);
                     let res = v0::invoke_receive_with_metering_from_source(
                         &module,
-                        runner.amount.micro_gtu,
+                        runner.amount.micro_ccd,
                         receive_ctx,
                         &init_state,
                         &name,

@@ -1,16 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_std::*;
 
-/* This contract allows GTU to be allocated to a user or group of users,
- * where those GTU vest over a period of time defined at the contract's
+/* This contract allows CCD to be allocated to a user or group of users,
+ * where those CCD vest over a period of time defined at the contract's
  * point of creation.
  *
- * Zero or more accounts may be given the right to stop future GTU vesting
+ * Zero or more accounts may be given the right to stop future CCD vesting
  * (e.g. for cases such as an employee resigning where their future vesting
- * GTU is contingent on their employment). GTU corresponding to cancelled
+ * CCD is contingent on their employment). CCD corresponding to cancelled
  * vesting events will be returned to the contract owner.
  *
- * N.B. GTU that have notionally vested but have not yet been added to
+ * N.B. CCD that have notionally vested but have not yet been added to
  *      the available balance _will_ still be made available - only vesting
  *      events scheduled for after the current slot time will be cancelled.
  */
@@ -30,7 +30,7 @@ struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
 
-    // Who is authorised to cancel future GTU vesting (can be left empty)
+    // Who is authorised to cancel future CCD vesting (can be left empty)
     future_vesting_veto_accounts: Vec<AccountAddress>,
 
     // When funds become available
@@ -43,7 +43,7 @@ struct State {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
 
-    // Who is authorised to cancel future GTU vesting (can be left empty)
+    // Who is authorised to cancel future CCD vesting (can be left empty)
     future_vesting_veto_accounts: Vec<AccountAddress>,
 
     // Funds which have vested but have not yet been withdrawn
