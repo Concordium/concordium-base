@@ -65,3 +65,9 @@ pub fn action_send_cost(x: u32) -> u64 {
     // 3MB with the expected maximum of 3000000NRG per block
     BASE_SEND_ACTION_COST + 1000 * u64::from(x)
 }
+
+/// Cost of allocation of one page of memory in relation to execution cost.
+/// FIXME: It is unclear whether this is really necessary with the hard limit we
+/// have on memory use.
+/// If we keep it, the cost must be analyzed and put into perspective
+pub const MEMORY_COST_FACTOR: u32 = 100;

@@ -88,7 +88,7 @@ pub mod cost {
     /// Cost of a simple binary instruction. This includes all bit
     /// operations, and addition and subtraction.
     pub const SIMPLE_BINOP: Energy = BINOP + 1;
-    /// See for example https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/
+    /// See for example <https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/>
     /// The cost of `MUL`, `DIV` and `REM` is in general more, so we account for
     /// that. However the ratio compared to add is not that much more since our
     /// current implementation is an interpreter, and consequently there are

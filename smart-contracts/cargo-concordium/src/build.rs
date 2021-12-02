@@ -7,9 +7,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
 };
-use wasm_chain_integration::{
-    generate_contract_schema, run_module_tests, ConcordiumAllowedImports,
-};
+use wasm_chain_integration::{utils, v0};
 use wasm_transform::{
     output::{write_custom_section, Output},
     parse::parse_skeleton,
@@ -56,7 +54,7 @@ pub fn build_contract(
     // Remove all custom sections to reduce the size of the module
     strip(&mut skeleton);
 
-    validate_module(&ConcordiumAllowedImports, &skeleton)
+    validate_module(&v0::ConcordiumAllowedImports, &skeleton)
         .context("Could not validate resulting smart contract module.")?;
 
     let mut output_bytes = Vec::new();
@@ -113,7 +111,7 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
 
     let wasm =
         std::fs::read(filename).context("Could not read cargo build contract schema output.")?;
-    let schema = generate_contract_schema(&wasm)
+    let schema = utils::generate_contract_schema(&wasm)
         .context("Could not generate module schema from Wasm module.")?;
     Ok(schema)
 }
@@ -173,7 +171,7 @@ pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
 
     eprintln!("\n{}", Color::Green.bold().paint("Running tests ..."));
 
-    let results = run_module_tests(&wasm)?;
+    let results = utils::run_module_tests(&wasm)?;
     let mut num_failed = 0;
     for result in results {
         let test_name = result.0;

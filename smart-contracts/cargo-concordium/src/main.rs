@@ -4,7 +4,7 @@ use clap::AppSettings;
 use concordium_contracts_common::{from_bytes, to_bytes, Amount};
 use std::{fs, fs::File, io::Read, path::PathBuf};
 use structopt::StructOpt;
-use wasm_chain_integration::*;
+use wasm_chain_integration::{utils, v0};
 
 mod build;
 mod context;
@@ -245,7 +245,7 @@ pub fn main() -> anyhow::Result<()> {
                     .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
                 Some(schema)
             } else {
-                let res = get_embedded_schema(&module);
+                let res = utils::get_embedded_schema(&module);
                 if let Err(err) = &res {
                     eprintln!(
                         "{}",
@@ -271,7 +271,7 @@ pub fn main() -> anyhow::Result<()> {
                     } => contract_schema.receive.get(&func),
                 });
 
-            let print_result = |state: State, logs: Logs| -> anyhow::Result<()> {
+            let print_result = |state: v0::State, logs: v0::Logs| -> anyhow::Result<()> {
                 for (i, item) in logs.iterate().enumerate() {
                     eprintln!("{}: {:?}", i, item)
                 }
@@ -358,7 +358,7 @@ pub fn main() -> anyhow::Result<()> {
                         None => InitContextOpt::default(),
                     };
                     let name = format!("init_{}", contract_name);
-                    let res = invoke_init_with_metering_from_source(
+                    let res = v0::invoke_init_with_metering_from_source(
                         &module,
                         runner.amount.micro_gtu,
                         init_ctx,
@@ -368,7 +368,7 @@ pub fn main() -> anyhow::Result<()> {
                     )
                     .context("Invocation failed.")?;
                     match res {
-                        InitResult::Success {
+                        v0::InitResult::Success {
                             logs,
                             state,
                             remaining_energy,
@@ -380,7 +380,7 @@ pub fn main() -> anyhow::Result<()> {
                                 runner.energy - remaining_energy
                             )
                         }
-                        InitResult::Reject {
+                        v0::InitResult::Reject {
                             remaining_energy,
                             reason,
                         } => {
@@ -390,7 +390,7 @@ pub fn main() -> anyhow::Result<()> {
                                 runner.energy - remaining_energy
                             )
                         }
-                        InitResult::OutOfEnergy => {
+                        v0::InitResult::OutOfEnergy => {
                             eprintln!("Init call terminated with out of energy.")
                         }
                     };
@@ -457,7 +457,7 @@ pub fn main() -> anyhow::Result<()> {
                     };
 
                     let name = format!("{}.{}", contract_name, func);
-                    let res = invoke_receive_with_metering_from_source(
+                    let res = v0::invoke_receive_with_metering_from_source(
                         &module,
                         runner.amount.micro_gtu,
                         receive_ctx,
@@ -468,7 +468,7 @@ pub fn main() -> anyhow::Result<()> {
                     )
                     .context("Calling receive failed.")?;
                     match res {
-                        ReceiveResult::Success {
+                        v0::ReceiveResult::Success {
                             logs,
                             state,
                             actions,
@@ -481,7 +481,7 @@ pub fn main() -> anyhow::Result<()> {
                             eprintln!("The following actions were produced.");
                             for (i, action) in actions.iter().enumerate() {
                                 match action {
-                                    Action::Send {
+                                    v0::Action::Send {
                                         data,
                                     } => {
                                         let name_str = std::str::from_utf8(&data.name)
@@ -497,7 +497,7 @@ pub fn main() -> anyhow::Result<()> {
                                             parameter
                                         )
                                     }
-                                    Action::SimpleTransfer {
+                                    v0::Action::SimpleTransfer {
                                         data,
                                     } => {
                                         eprintln!(
@@ -509,15 +509,15 @@ pub fn main() -> anyhow::Result<()> {
                                             data.amount
                                         );
                                     }
-                                    Action::And {
+                                    v0::Action::And {
                                         l,
                                         r,
                                     } => eprintln!("{}: AND composition of {} and {}", i, l, r),
-                                    Action::Or {
+                                    v0::Action::Or {
                                         l,
                                         r,
                                     } => eprintln!("{}: OR composition of {} and {}", i, l, r),
-                                    Action::Accept => eprintln!("{}: ACCEPT", i),
+                                    v0::Action::Accept => eprintln!("{}: ACCEPT", i),
                                 }
                             }
 
@@ -526,7 +526,7 @@ pub fn main() -> anyhow::Result<()> {
                                 runner.energy - remaining_energy
                             )
                         }
-                        ReceiveResult::Reject {
+                        v0::ReceiveResult::Reject {
                             remaining_energy,
                             reason,
                         } => {
@@ -536,7 +536,7 @@ pub fn main() -> anyhow::Result<()> {
                                 runner.energy - remaining_energy
                             )
                         }
-                        ReceiveResult::OutOfEnergy => {
+                        v0::ReceiveResult::OutOfEnergy => {
                             eprintln!("Receive call terminated with: out of energy.")
                         }
                     }
