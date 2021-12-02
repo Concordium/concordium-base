@@ -29,13 +29,13 @@ pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Amount {
-    pub micro_gtu: u64,
+    pub micro_ccd: u64,
 }
 
 #[cfg(feature = "derive-serde")]
 impl SerdeSerialize for Amount {
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&self.micro_gtu.to_string())
+        ser.serialize_str(&self.micro_ccd.to_string())
     }
 }
 
@@ -43,9 +43,9 @@ impl SerdeSerialize for Amount {
 impl<'de> SerdeDeserialize<'de> for Amount {
     fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         let s = String::deserialize(des)?;
-        let micro_gtu = s.parse::<u64>().map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
+        let micro_ccd = s.parse::<u64>().map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
         Ok(Amount {
-            micro_gtu,
+            micro_ccd,
         })
     }
 }
@@ -78,7 +78,7 @@ impl fmt::Display for AmountParseError {
     }
 }
 
-/// Parse from string in GTU units. The input string must be of the form
+/// Parse from string in CCD units. The input string must be of the form
 /// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
 /// that that part is optional.
 ///
@@ -89,7 +89,7 @@ impl str::FromStr for Amount {
     type Err = AmountParseError;
 
     fn from_str(v: &str) -> Result<Self, Self::Err> {
-        let mut micro_gtu: u64 = 0;
+        let mut micro_ccd: u64 = 0;
         let mut after_dot = 0;
         let mut state = 0;
         for c in v.chars() {
@@ -100,7 +100,7 @@ impl str::FromStr for Amount {
                         if d == 0 {
                             state = 1;
                         } else {
-                            micro_gtu = u64::from(d);
+                            micro_ccd = u64::from(d);
                             state = 2;
                         }
                     } else {
@@ -119,8 +119,8 @@ impl str::FromStr for Amount {
                 2 => {
                     // we are reading a normal number until we hit the dot.
                     if let Some(d) = c.to_digit(10) {
-                        micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
-                        micro_gtu = micro_gtu
+                        micro_ccd = micro_ccd.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_ccd = micro_ccd
                             .checked_add(u64::from(d))
                             .ok_or(AmountParseError::Overflow)?;
                     } else if c == '.' {
@@ -135,8 +135,8 @@ impl str::FromStr for Amount {
                         return Err(AmountParseError::AtMostSixDecimals);
                     }
                     if let Some(d) = c.to_digit(10) {
-                        micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
-                        micro_gtu = micro_gtu
+                        micro_ccd = micro_ccd.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_ccd = micro_ccd
                             .checked_add(u64::from(d))
                             .ok_or(AmountParseError::Overflow)?;
                         after_dot += 1;
@@ -151,28 +151,28 @@ impl str::FromStr for Amount {
             return Err(AmountParseError::ExpectedMore);
         }
         for _ in 0..6 - after_dot {
-            micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+            micro_ccd = micro_ccd.checked_mul(10).ok_or(AmountParseError::Overflow)?;
         }
         Ok(Amount {
-            micro_gtu,
+            micro_ccd,
         })
     }
 }
 
 impl Amount {
-    /// Create amount from a number of microGTU
+    /// Create amount from a number of microCCD
     #[inline(always)]
-    pub fn from_micro_gtu(micro_gtu: u64) -> Amount {
+    pub fn from_micro_ccd(micro_ccd: u64) -> Amount {
         Amount {
-            micro_gtu,
+            micro_ccd,
         }
     }
 
-    /// Create amount from a number of GTU
+    /// Create amount from a number of CCD
     #[inline(always)]
-    pub fn from_gtu(gtu: u64) -> Amount {
+    pub fn from_ccd(ccd: u64) -> Amount {
         Amount {
-            micro_gtu: gtu * 1_000_000,
+            micro_ccd: ccd * 1_000_000,
         }
     }
 
@@ -180,15 +180,15 @@ impl Amount {
     #[inline(always)]
     pub fn zero() -> Amount {
         Amount {
-            micro_gtu: 0,
+            micro_ccd: 0,
         }
     }
 
-    /// Add a number of micro GTU to an amount
+    /// Add a number of micro CCD to an amount
     #[inline(always)]
-    pub fn add_micro_gtu(self, micro_gtu: u64) -> Amount {
+    pub fn add_micro_ccd(self, micro_ccd: u64) -> Amount {
         Amount {
-            micro_gtu: self.micro_gtu + micro_gtu,
+            micro_ccd: self.micro_ccd + micro_ccd,
         }
     }
 
@@ -196,30 +196,30 @@ impl Amount {
     /// occurred
     #[inline(always)]
     pub fn checked_add(self, other: Amount) -> Option<Amount> {
-        self.micro_gtu.checked_add(other.micro_gtu).map(Amount::from_micro_gtu)
+        self.micro_ccd.checked_add(other.micro_ccd).map(Amount::from_micro_ccd)
     }
 
-    /// Add a number of GTU to an amount
+    /// Add a number of CCD to an amount
     #[inline(always)]
-    pub fn add_gtu(self, gtu: u64) -> Amount {
+    pub fn add_ccd(self, ccd: u64) -> Amount {
         Amount {
-            micro_gtu: self.micro_gtu + gtu * 1_000_000,
+            micro_ccd: self.micro_ccd + ccd * 1_000_000,
         }
     }
 
-    /// Subtract a number of micro GTU to an amount
+    /// Subtract a number of micro CCD to an amount
     #[inline(always)]
-    pub fn subtract_micro_gtu(self, micro_gtu: u64) -> Amount {
+    pub fn subtract_micro_ccd(self, micro_ccd: u64) -> Amount {
         Amount {
-            micro_gtu: self.micro_gtu - micro_gtu,
+            micro_ccd: self.micro_ccd - micro_ccd,
         }
     }
 
-    /// Subtract a number of GTU to an amount
+    /// Subtract a number of CCD to an amount
     #[inline(always)]
-    pub fn subtract_gtu(self, gtu: u64) -> Amount {
+    pub fn subtract_ccd(self, ccd: u64) -> Amount {
         Amount {
-            micro_gtu: self.micro_gtu - gtu * 1_000_000,
+            micro_ccd: self.micro_ccd - ccd * 1_000_000,
         }
     }
 
@@ -227,7 +227,7 @@ impl Amount {
     #[inline(always)]
     pub fn quotient_remainder(self, denominator: u64) -> (Amount, Amount) {
         let div = Amount {
-            micro_gtu: self.micro_gtu / denominator,
+            micro_ccd: self.micro_ccd / denominator,
         };
         let rem = self % denominator;
         (div, rem)
@@ -240,7 +240,7 @@ impl ops::Mul<u64> for Amount {
     #[inline(always)]
     fn mul(self, other: u64) -> Self::Output {
         Amount {
-            micro_gtu: self.micro_gtu * other,
+            micro_ccd: self.micro_ccd * other,
         }
     }
 }
@@ -251,7 +251,7 @@ impl ops::Mul<Amount> for u64 {
     #[inline(always)]
     fn mul(self, other: Amount) -> Self::Output {
         Amount {
-            micro_gtu: self * other.micro_gtu,
+            micro_ccd: self * other.micro_ccd,
         }
     }
 }
@@ -262,7 +262,7 @@ impl ops::Add<Amount> for Amount {
     #[inline(always)]
     fn add(self, other: Amount) -> Self::Output {
         Amount {
-            micro_gtu: self.micro_gtu + other.micro_gtu,
+            micro_ccd: self.micro_ccd + other.micro_ccd,
         }
     }
 }
@@ -273,7 +273,7 @@ impl ops::Sub<Amount> for Amount {
     #[inline(always)]
     fn sub(self, other: Amount) -> Self::Output {
         Amount {
-            micro_gtu: self.micro_gtu - other.micro_gtu,
+            micro_ccd: self.micro_ccd - other.micro_ccd,
         }
     }
 }
@@ -284,14 +284,14 @@ impl ops::Rem<u64> for Amount {
     #[inline(always)]
     fn rem(self, other: u64) -> Self::Output {
         Amount {
-            micro_gtu: self.micro_gtu % other,
+            micro_ccd: self.micro_ccd % other,
         }
     }
 }
 
 impl iter::Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::from_micro_gtu(0), ops::Add::add)
+        iter.fold(Amount::from_micro_ccd(0), ops::Add::add)
     }
 }
 
@@ -1189,8 +1189,8 @@ mod serde_impl {
 
     impl fmt::Display for Amount {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let q = self.micro_gtu / 1_000_000;
-            let r = self.micro_gtu % 1_000_000;
+            let q = self.micro_ccd / 1_000_000;
+            let r = self.micro_ccd % 1_000_000;
             if r == 0 {
                 write!(f, "{}.0", q)
             } else {
