@@ -224,55 +224,6 @@ pub struct ReceiveHost<ParamType, Ctx> {
     pub receive_ctx:       Ctx,
 }
 
-pub trait HasCommon {
-    type MetadataType: HasChainMetadata;
-    type PolicyBytesType: AsRef<[u8]>;
-    type PolicyType: SerialPolicies<Self::PolicyBytesType>;
-
-    fn energy(&mut self) -> &mut InterpreterEnergy;
-    fn logs(&mut self) -> &mut Logs;
-    fn state(&mut self) -> &mut State;
-    fn param(&self) -> &[u8];
-    fn policies(&self) -> ExecResult<&Self::PolicyType>;
-    fn metadata(&self) -> &Self::MetadataType;
-}
-
-impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> HasCommon for InitHost<ParamType, Ctx> {
-    type MetadataType = Ctx::MetadataType;
-    type PolicyBytesType = Ctx::PolicyBytesType;
-    type PolicyType = Ctx::PolicyType;
-
-    fn energy(&mut self) -> &mut InterpreterEnergy { &mut self.energy }
-
-    fn logs(&mut self) -> &mut Logs { &mut self.logs }
-
-    fn state(&mut self) -> &mut State { &mut self.state }
-
-    fn param(&self) -> &[u8] { self.param.as_ref() }
-
-    fn metadata(&self) -> &Self::MetadataType { self.init_ctx.metadata() }
-
-    fn policies(&self) -> ExecResult<&Self::PolicyType> { self.init_ctx.sender_policies() }
-}
-
-impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> HasCommon for ReceiveHost<ParamType, Ctx> {
-    type MetadataType = Ctx::MetadataType;
-    type PolicyBytesType = Ctx::PolicyBytesType;
-    type PolicyType = Ctx::PolicyType;
-
-    fn energy(&mut self) -> &mut InterpreterEnergy { &mut self.energy }
-
-    fn logs(&mut self) -> &mut Logs { &mut self.logs }
-
-    fn state(&mut self) -> &mut State { &mut self.state }
-
-    fn param(&self) -> &[u8] { self.param.as_ref() }
-
-    fn metadata(&self) -> &Self::MetadataType { self.receive_ctx.metadata() }
-
-    fn policies(&self) -> ExecResult<&Self::PolicyType> { self.receive_ctx.sender_policies() }
-}
-
 /// Types which can act as init contexts.
 ///
 /// Used to enable partial JSON contexts when simulating contracts with
@@ -429,107 +380,347 @@ impl HasChainMetadata for ChainMetadata {
     fn slot_time(&self) -> ExecResult<SlotTime> { Ok(self.slot_time) }
 }
 
-fn call_common<C: HasCommon>(
-    host: &mut C,
-    f: CommonFunc,
-    memory: &mut Vec<u8>,
-    stack: &mut machine::RuntimeStack,
-) -> machine::RunResult<()> {
-    match f {
-        CommonFunc::GetParameterSize => {
-            // the cost of this function is adequately reflected by the base cost of a
-            // function call so we do not charge extra.
-            stack.push_value(host.param().len() as u32);
+/// Low-level implementations of host functions. They are written in this way so
+/// that they may be reused between init and receive functions, as well as in
+/// future versions of contract specifications.
+pub(crate) mod host {
+    use super::*;
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_parameter_size(
+        stack: &mut machine::RuntimeStack,
+        param_len: u32,
+    ) -> machine::RunResult<()> {
+        // the cost of this function is adequately reflected by the base cost of a
+        // function call so we do not charge extra.
+        stack.push_value(param_len);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_parameter_section(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        param: &[u8],
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() } as usize;
+        let length = unsafe { stack.pop_u32() };
+        let start = unsafe { stack.pop_u32() } as usize;
+        // charge energy linearly in the amount of data written.
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
+        ensure!(write_end <= memory.len(), "Illegal memory access.");
+        let end = std::cmp::min(offset + length as usize, param.len());
+        ensure!(offset <= end, "Attempting to read non-existent parameter.");
+        let amt = (&mut memory[start..write_end]).write(&param[offset..end])?;
+        stack.push_value(amt as u32);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_policy_section<R: AsRef<[u8]>, P: SerialPolicies<R>>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        policies: ExecResult<&P>,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() } as usize;
+        let length = unsafe { stack.pop_u32() };
+        // charge energy linearly in the amount of data written.
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        let start = unsafe { stack.pop_u32() } as usize;
+        let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
+        ensure!(write_end <= memory.len(), "Illegal memory access.");
+        let policies = policies?.policies_to_bytes();
+        let policies_bytes = policies.as_ref();
+        let end = std::cmp::min(offset + length as usize, policies_bytes.len());
+        ensure!(offset <= end, "Attempting to read non-existent policy.");
+        let amt = (&mut memory[start..write_end]).write(&policies_bytes[offset..end])?;
+        stack.push_value(amt as u32);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn log_event(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        logs: &mut Logs,
+    ) -> machine::RunResult<()> {
+        let length = unsafe { stack.pop_u32() };
+        let start = unsafe { stack.pop_u32() } as usize;
+        let end = start + length as usize;
+        ensure!(end <= memory.len(), "Illegal memory access.");
+        if length <= constants::MAX_LOG_SIZE {
+            // only charge if we actually log something.
+            energy.tick_energy(constants::log_event_cost(length))?;
+            stack.push_value(logs.log_event(memory[start..end].to_vec()))
+        } else {
+            // otherwise the cost is adequately reflected by just the cost of a function
+            // call.
+            stack.push_value(-1i32)
         }
-        CommonFunc::GetParameterSection => {
-            let offset = unsafe { stack.pop_u32() } as usize;
-            let length = unsafe { stack.pop_u32() };
-            let start = unsafe { stack.pop_u32() } as usize;
-            // charge energy linearly in the amount of data written.
-            host.energy().tick_energy(constants::copy_from_host_cost(length))?;
-            let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
-            ensure!(write_end <= memory.len(), "Illegal memory access.");
-            let end = std::cmp::min(offset + length as usize, host.param().len());
-            ensure!(offset <= end, "Attempting to read non-existent parameter.");
-            let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
-            stack.push_value(amt as u32);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn load_state(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut State,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let start = unsafe { stack.pop_u32() } as usize;
+        // charge energy linearly in the amount of data written.
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        let end = start + length as usize; // this cannot overflow on 64-bit machines.
+        ensure!(end <= memory.len(), "Illegal memory access.");
+        let res = state.load_state(offset, &mut memory[start..end])?;
+        stack.push_value(res);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn write_state(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut State,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let start = unsafe { stack.pop_u32() } as usize;
+        // charge energy linearly in the amount of data written.
+        energy.tick_energy(constants::copy_to_host_cost(length))?;
+        let end = start + length as usize; // this cannot overflow on 64-bit machines.
+        ensure!(end <= memory.len(), "Illegal memory access.");
+        let res = state.write_state(offset, &memory[start..end])?;
+        stack.push_value(res);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn resize_state(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut State,
+    ) -> machine::RunResult<()> {
+        let new_size = stack.pop();
+        let new_size = unsafe { new_size.short } as u32;
+        let old_size = state.len();
+        if new_size > old_size {
+            // resizing is very similar to writing 0 to the newly allocated parts,
+            // but since we don't have to read anything we charge it more cheaply.
+            energy.tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
         }
-        CommonFunc::GetPolicySection => {
-            let offset = unsafe { stack.pop_u32() } as usize;
-            let length = unsafe { stack.pop_u32() };
-            // charge energy linearly in the amount of data written.
-            host.energy().tick_energy(constants::copy_from_host_cost(length))?;
-            let start = unsafe { stack.pop_u32() } as usize;
-            let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
-            ensure!(write_end <= memory.len(), "Illegal memory access.");
-            let policies = host.policies()?.policies_to_bytes();
-            let policies_bytes = policies.as_ref();
-            let end = std::cmp::min(offset + length as usize, policies_bytes.len());
-            ensure!(offset <= end, "Attempting to read non-existent policy.");
-            let amt = (&mut memory[start..write_end]).write(&policies_bytes[offset..end])?;
-            stack.push_value(amt as u32);
-        }
-        CommonFunc::LogEvent => {
-            let length = unsafe { stack.pop_u32() };
-            let start = unsafe { stack.pop_u32() } as usize;
-            let end = start + length as usize;
-            ensure!(end <= memory.len(), "Illegal memory access.");
-            if length <= constants::MAX_LOG_SIZE {
-                // only charge if we actually log something.
-                host.energy().tick_energy(constants::log_event_cost(length))?;
-                stack.push_value(host.logs().log_event(memory[start..end].to_vec()))
-            } else {
-                // otherwise the cost is adequately reflected by just the cost of a function
-                // call.
-                stack.push_value(-1i32)
-            }
-        }
-        CommonFunc::LoadState => {
-            let offset = unsafe { stack.pop_u32() };
-            let length = unsafe { stack.pop_u32() };
-            let start = unsafe { stack.pop_u32() } as usize;
-            // charge energy linearly in the amount of data written.
-            host.energy().tick_energy(constants::copy_from_host_cost(length))?;
-            let end = start + length as usize; // this cannot overflow on 64-bit machines.
-            ensure!(end <= memory.len(), "Illegal memory access.");
-            let res = host.state().load_state(offset, &mut memory[start..end])?;
-            stack.push_value(res);
-        }
-        CommonFunc::WriteState => {
-            let offset = unsafe { stack.pop_u32() };
-            let length = unsafe { stack.pop_u32() };
-            let start = unsafe { stack.pop_u32() } as usize;
-            // charge energy linearly in the amount of data written.
-            host.energy().tick_energy(constants::copy_to_host_cost(length))?;
-            let end = start + length as usize; // this cannot overflow on 64-bit machines.
-            ensure!(end <= memory.len(), "Illegal memory access.");
-            let res = host.state().write_state(offset, &memory[start..end])?;
-            stack.push_value(res);
-        }
-        CommonFunc::ResizeState => {
-            let new_size = stack.pop();
-            let new_size = unsafe { new_size.short } as u32;
-            let old_size = host.state().len();
-            if new_size > old_size {
-                // resizing is very similar to writing 0 to the newly allocated parts,
-                // but since we don't have to read anything we charge it more cheaply.
-                host.energy()
-                    .tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
-            }
-            stack.push_value(host.state().resize_state(new_size));
-        }
-        CommonFunc::StateSize => {
-            // the cost of this function is adequately reflected by the base cost of a
-            // function call so we do not charge extra.
-            stack.push_value(host.state().len());
-        }
-        CommonFunc::GetSlotTime => {
-            // the cost of this function is adequately reflected by the base cost of a
-            // function call so we do not charge extra.
-            stack.push_value(host.metadata().slot_time()?.timestamp_millis());
+        stack.push_value(state.resize_state(new_size));
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn state_size(
+        stack: &mut machine::RuntimeStack,
+        state: &mut State,
+    ) -> machine::RunResult<()> {
+        // the cost of this function is adequately reflected by the base cost of a
+        // function call so we do not charge extra.
+        stack.push_value(state.len());
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn get_slot_time(
+        stack: &mut machine::RuntimeStack,
+        metadata: &impl HasChainMetadata,
+    ) -> machine::RunResult<()> {
+        // the cost of this function is adequately reflected by the base cost of a
+        // function call so we do not charge extra.
+        stack.push_value(metadata.slot_time()?.timestamp_millis());
+        Ok(())
+    }
+
+    pub fn get_init_origin(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        init_origin: ExecResult<&AccountAddress>,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() } as usize;
+        ensure!(start + 32 <= memory.len(), "Illegal memory access for init origin.");
+        (&mut memory[start..start + 32]).write_all(init_origin?.as_ref())?;
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn accept(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        outcomes: &mut Outcome,
+    ) -> machine::RunResult<()> {
+        energy.tick_energy(constants::BASE_ACTION_COST)?;
+        stack.push_value(outcomes.accept());
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn simple_transfer(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        outcomes: &mut Outcome,
+    ) -> machine::RunResult<()> {
+        energy.tick_energy(constants::BASE_ACTION_COST)?;
+        let amount = unsafe { stack.pop_u64() };
+        let addr_start = unsafe { stack.pop_u32() } as usize;
+        // Overflow is not possible in the next line on 64-bit machines.
+        ensure!(addr_start + 32 <= memory.len(), "Illegal memory access.");
+        stack.push_value(outcomes.simple_transfer(&memory[addr_start..addr_start + 32], amount)?);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn send(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        outcomes: &mut Outcome,
+    ) -> machine::RunResult<()> {
+        // all `as usize` are safe on 64-bit systems since we are converging from a u32
+        let parameter_len = unsafe { stack.pop_u32() };
+        energy.tick_energy(constants::action_send_cost(parameter_len))?;
+        let parameter_start = unsafe { stack.pop_u32() } as usize;
+        // Overflow is not possible in the next line on 64-bit machines.
+        let parameter_end = parameter_start + parameter_len as usize;
+        let amount = unsafe { stack.pop_u64() };
+        let receive_name_len = unsafe { stack.pop_u32() } as usize;
+        let receive_name_start = unsafe { stack.pop_u32() } as usize;
+        // Overflow is not possible in the next line on 64-bit machines.
+        let receive_name_end = receive_name_start + receive_name_len;
+        let addr_subindex = unsafe { stack.pop_u64() };
+        let addr_index = unsafe { stack.pop_u64() };
+        ensure!(parameter_end <= memory.len(), "Illegal memory access.");
+        ensure!(receive_name_end <= memory.len(), "Illegal memory access.");
+        let res = outcomes.send(
+            addr_index,
+            addr_subindex,
+            &memory[receive_name_start..receive_name_end],
+            amount,
+            &memory[parameter_start..parameter_end],
+        )?;
+        stack.push_value(res);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn combine_and(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        outcomes: &mut Outcome,
+    ) -> machine::RunResult<()> {
+        energy.tick_energy(constants::BASE_ACTION_COST)?;
+        let right = unsafe { stack.pop_u32() };
+        let left = unsafe { stack.pop_u32() };
+        let res = outcomes.combine_and(left, right)?;
+        stack.push_value(res);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn combine_or(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        outcomes: &mut Outcome,
+    ) -> machine::RunResult<()> {
+        energy.tick_energy(constants::BASE_ACTION_COST)?;
+        let right = unsafe { stack.pop_u32() };
+        let left = unsafe { stack.pop_u32() };
+        let res = outcomes.combine_or(left, right)?;
+        stack.push_value(res);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_invoker(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        invoker: ExecResult<&AccountAddress>,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() } as usize;
+        ensure!(start + 32 <= memory.len(), "Illegal memory access for receive invoker.");
+        (&mut memory[start..start + 32]).write_all(invoker?.as_ref())?;
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_self_address(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        self_address: ExecResult<&ContractAddress>,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() } as usize;
+        ensure!(start + 16 <= memory.len(), "Illegal memory access for receive owner.");
+        let self_address = self_address?;
+        (&mut memory[start..start + 8]).write_all(&self_address.index.to_le_bytes())?;
+        (&mut memory[start + 8..start + 16]).write_all(&self_address.subindex.to_le_bytes())?;
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_self_balance(
+        stack: &mut machine::RuntimeStack,
+        self_balance: ExecResult<Amount>,
+    ) -> machine::RunResult<()> {
+        stack.push_value(self_balance?.micro_gtu);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_sender(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        sender: ExecResult<&Address>,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() } as usize;
+        ensure!(start < memory.len(), "Illegal memory access for receive sender.");
+        sender?
+            .serial::<&mut [u8]>(&mut &mut memory[start..])
+            .map_err(|_| anyhow!("Memory out of bounds."))?;
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_owner(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        owner: ExecResult<&AccountAddress>,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() } as usize;
+        ensure!(start + 32 <= memory.len(), "Illegal memory access for receive owner.");
+        (&mut memory[start..start + 32]).write_all(owner?.as_ref())?;
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    pub fn track_call(activation_frames: &mut u32) -> machine::RunResult<()> {
+        if let Some(fr) = activation_frames.checked_sub(1) {
+            *activation_frames = fr;
+            Ok(())
+        } else {
+            bail!("Too many nested functions.")
         }
     }
-    Ok(())
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    pub fn track_return(activation_frames: &mut u32) { *activation_frames += 1; }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    pub fn charge_memory_alloc(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        energy.charge_memory_alloc(unsafe { stack.peek_u32() })
+    }
 }
 
 impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports>
@@ -550,131 +741,49 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => {
-                self.energy.tick_energy(unsafe { stack.pop_u64() })?;
-            }
-            ImportFunc::TrackCall => {
-                if let Some(fr) = self.activation_frames.checked_sub(1) {
-                    self.activation_frames = fr
-                } else {
-                    bail!("Too many nested functions.")
+            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
+            ImportFunc::TrackCall => host::track_call(&mut self.activation_frames)?,
+            ImportFunc::TrackReturn => host::track_return(&mut self.activation_frames),
+            ImportFunc::ChargeMemoryAlloc => host::charge_memory_alloc(stack, &mut self.energy)?,
+            ImportFunc::Common(cf) => match cf {
+                CommonFunc::GetParameterSize => {
+                    host::get_parameter_size(stack, self.param.as_ref().len() as u32)
                 }
-            }
-            ImportFunc::TrackReturn => self.activation_frames += 1,
-            ImportFunc::ChargeMemoryAlloc => {
-                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })?;
-            }
-            ImportFunc::Common(cf) => call_common(self, cf, memory, stack)?,
+                CommonFunc::GetParameterSection => host::get_parameter_section(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    self.param.as_ref(),
+                ),
+                CommonFunc::GetPolicySection => host::get_policy_section(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    self.init_ctx.sender_policies(),
+                ),
+                CommonFunc::LogEvent => {
+                    host::log_event(memory, stack, &mut self.energy, &mut self.logs)
+                }
+                CommonFunc::LoadState => {
+                    host::load_state(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::WriteState => {
+                    host::write_state(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::ResizeState => {
+                    host::resize_state(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateSize => host::state_size(stack, &mut self.state),
+                CommonFunc::GetSlotTime => host::get_slot_time(stack, self.init_ctx.metadata()),
+            }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
-                let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start + 32 <= memory.len(), "Illegal memory access for init origin.");
-                (&mut memory[start..start + 32])
-                    .write_all(self.init_ctx.init_origin()?.as_ref())?;
+                host::get_init_origin(memory, stack, self.init_ctx.init_origin())?
             }
             ImportFunc::ReceiveOnly(_) => {
                 bail!("Not implemented for init {:#?}.", f);
             }
         }
         Ok(None)
-    }
-}
-
-impl<ParamType, Ctx> ReceiveHost<ParamType, Ctx>
-where
-    ParamType: AsRef<[u8]>,
-    Ctx: HasReceiveContext,
-{
-    pub fn call_receive_only(
-        &mut self,
-        rof: ReceiveOnlyFunc,
-        memory: &mut Vec<u8>,
-        stack: &mut machine::RuntimeStack,
-    ) -> ExecResult<()> {
-        match rof {
-            ReceiveOnlyFunc::Accept => {
-                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
-                stack.push_value(self.outcomes.accept());
-            }
-            ReceiveOnlyFunc::SimpleTransfer => {
-                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
-                let amount = unsafe { stack.pop_u64() };
-                let addr_start = unsafe { stack.pop_u32() } as usize;
-                // Overflow is not possible in the next line on 64-bit machines.
-                ensure!(addr_start + 32 <= memory.len(), "Illegal memory access.");
-                stack.push_value(
-                    self.outcomes.simple_transfer(&memory[addr_start..addr_start + 32], amount)?,
-                )
-            }
-            ReceiveOnlyFunc::Send => {
-                // all `as usize` are safe on 64-bit systems since we are converging from a u32
-                let parameter_len = unsafe { stack.pop_u32() };
-                self.energy().tick_energy(constants::action_send_cost(parameter_len))?;
-                let parameter_start = unsafe { stack.pop_u32() } as usize;
-                // Overflow is not possible in the next line on 64-bit machines.
-                let parameter_end = parameter_start + parameter_len as usize;
-                let amount = unsafe { stack.pop_u64() };
-                let receive_name_len = unsafe { stack.pop_u32() } as usize;
-                let receive_name_start = unsafe { stack.pop_u32() } as usize;
-                // Overflow is not possible in the next line on 64-bit machines.
-                let receive_name_end = receive_name_start + receive_name_len;
-                let addr_subindex = unsafe { stack.pop_u64() };
-                let addr_index = unsafe { stack.pop_u64() };
-                ensure!(parameter_end <= memory.len(), "Illegal memory access.");
-                ensure!(receive_name_end <= memory.len(), "Illegal memory access.");
-                let res = self.outcomes.send(
-                    addr_index,
-                    addr_subindex,
-                    &memory[receive_name_start..receive_name_end],
-                    amount,
-                    &memory[parameter_start..parameter_end],
-                )?;
-                stack.push_value(res);
-            }
-            ReceiveOnlyFunc::CombineAnd => {
-                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
-                let right = unsafe { stack.pop_u32() };
-                let left = unsafe { stack.pop_u32() };
-                let res = self.outcomes.combine_and(left, right)?;
-                stack.push_value(res);
-            }
-            ReceiveOnlyFunc::CombineOr => {
-                self.energy.tick_energy(constants::BASE_ACTION_COST)?;
-                let right = unsafe { stack.pop_u32() };
-                let left = unsafe { stack.pop_u32() };
-                let res = self.outcomes.combine_or(left, right)?;
-                stack.push_value(res);
-            }
-            ReceiveOnlyFunc::GetReceiveInvoker => {
-                let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start + 32 <= memory.len(), "Illegal memory access for receive invoker.");
-                (&mut memory[start..start + 32]).write_all(self.receive_ctx.invoker()?.as_ref())?;
-            }
-            ReceiveOnlyFunc::GetReceiveSelfAddress => {
-                let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start + 16 <= memory.len(), "Illegal memory access for receive owner.");
-                (&mut memory[start..start + 8])
-                    .write_all(&self.receive_ctx.self_address()?.index.to_le_bytes())?;
-                (&mut memory[start + 8..start + 16])
-                    .write_all(&self.receive_ctx.self_address()?.subindex.to_le_bytes())?;
-            }
-            ReceiveOnlyFunc::GetReceiveSelfBalance => {
-                stack.push_value(self.receive_ctx.self_balance()?.micro_gtu);
-            }
-            ReceiveOnlyFunc::GetReceiveSender => {
-                let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start < memory.len(), "Illegal memory access for receive sender.");
-                self.receive_ctx
-                    .sender()?
-                    .serial::<&mut [u8]>(&mut &mut memory[start..])
-                    .map_err(|_| anyhow!("Memory out of bounds."))?;
-            }
-            ReceiveOnlyFunc::GetReceiveOwner => {
-                let start = unsafe { stack.pop_u32() } as usize;
-                ensure!(start + 32 <= memory.len(), "Illegal memory access for receive owner.");
-                (&mut memory[start..start + 32]).write_all(self.receive_ctx.owner()?.as_ref())?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -696,23 +805,73 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => {
-                let amount = unsafe { stack.pop_u64() };
-                self.energy.tick_energy(amount)?;
-            }
-            ImportFunc::TrackCall => {
-                if let Some(fr) = self.activation_frames.checked_sub(1) {
-                    self.activation_frames = fr
-                } else {
-                    bail!("Too many nested functions.")
+            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
+            ImportFunc::TrackCall => host::track_call(&mut self.activation_frames)?,
+            ImportFunc::TrackReturn => host::track_return(&mut self.activation_frames),
+            ImportFunc::ChargeMemoryAlloc => host::charge_memory_alloc(stack, &mut self.energy)?,
+            ImportFunc::Common(cf) => match cf {
+                CommonFunc::GetParameterSize => {
+                    host::get_parameter_size(stack, self.param.as_ref().len() as u32)
                 }
-            }
-            ImportFunc::TrackReturn => self.activation_frames += 1,
-            ImportFunc::ChargeMemoryAlloc => {
-                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })?
-            }
-            ImportFunc::Common(cf) => call_common(self, cf, memory, stack)?,
-            ImportFunc::ReceiveOnly(cro) => self.call_receive_only(cro, memory, stack)?,
+                CommonFunc::GetParameterSection => host::get_parameter_section(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    self.param.as_ref(),
+                ),
+                CommonFunc::GetPolicySection => host::get_policy_section(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    self.receive_ctx.sender_policies(),
+                ),
+                CommonFunc::LogEvent => {
+                    host::log_event(memory, stack, &mut self.energy, &mut self.logs)
+                }
+                CommonFunc::LoadState => {
+                    host::load_state(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::WriteState => {
+                    host::write_state(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::ResizeState => {
+                    host::resize_state(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateSize => host::state_size(stack, &mut self.state),
+                CommonFunc::GetSlotTime => host::get_slot_time(stack, self.receive_ctx.metadata()),
+            }?,
+            ImportFunc::ReceiveOnly(rof) => match rof {
+                ReceiveOnlyFunc::Accept => {
+                    host::accept(stack, &mut self.energy, &mut self.outcomes)
+                }
+                ReceiveOnlyFunc::SimpleTransfer => {
+                    host::simple_transfer(memory, stack, &mut self.energy, &mut self.outcomes)
+                }
+                ReceiveOnlyFunc::Send => {
+                    host::send(memory, stack, &mut self.energy, &mut self.outcomes)
+                }
+                ReceiveOnlyFunc::CombineAnd => {
+                    host::combine_and(stack, &mut self.energy, &mut self.outcomes)
+                }
+                ReceiveOnlyFunc::CombineOr => {
+                    host::combine_or(stack, &mut self.energy, &mut self.outcomes)
+                }
+                ReceiveOnlyFunc::GetReceiveInvoker => {
+                    host::get_receive_invoker(memory, stack, self.receive_ctx.invoker())
+                }
+                ReceiveOnlyFunc::GetReceiveSelfAddress => {
+                    host::get_receive_self_address(memory, stack, self.receive_ctx.self_address())
+                }
+                ReceiveOnlyFunc::GetReceiveSelfBalance => {
+                    host::get_receive_self_balance(stack, self.receive_ctx.self_balance())
+                }
+                ReceiveOnlyFunc::GetReceiveSender => {
+                    host::get_receive_sender(memory, stack, self.receive_ctx.sender())
+                }
+                ReceiveOnlyFunc::GetReceiveOwner => {
+                    host::get_receive_owner(memory, stack, self.receive_ctx.owner())
+                }
+            }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 bail!("Not implemented for receive.");
             }
