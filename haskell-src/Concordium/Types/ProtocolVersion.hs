@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
@@ -68,7 +68,7 @@ instance FromJSON ProtocolVersion where
 
 -- |Type class for relating type-level 'ProtocolVersion's with
 -- term level 'SProtocolVersion's.
-class IsProtocolVersion (pv :: ProtocolVersion) where
+class IsAccountVersion (AccountVersionFor pv) => IsProtocolVersion (pv :: ProtocolVersion) where
     -- |The singleton associated with the protocol version.
     protocolVersion :: SProtocolVersion pv
 
@@ -106,3 +106,43 @@ promoteProtocolVersion P1 = SomeProtocolVersion SP1
 promoteProtocolVersion P2 = SomeProtocolVersion SP2
 promoteProtocolVersion P3 = SomeProtocolVersion SP3
 promoteProtocolVersion P4 = SomeProtocolVersion SP4
+
+-- * Account versions
+
+-- |A data kind used for parametrising account-related types.
+-- This is used rather than 'ProtocolVersion' to coalesce cases where different protocol versions
+-- share the same account format.
+data AccountVersion
+    = -- |Account version used in P1, P2, and P3.
+      AccountV0
+    | -- |Account version used in P4. Adds stake delegation.
+      AccountV1
+
+-- |A singleton type corresponding to 'SAccountVersion'.
+data SAccountVersion (av :: AccountVersion) where
+    SAccountV0 :: SAccountVersion 'AccountV0
+    SAccountV1 :: SAccountVersion 'AccountV1
+
+-- |Projection of 'ProtocolVersion' to 'AccountVersion'.
+type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
+    AccountVersionFor 'P1 = 'AccountV0
+    AccountVersionFor 'P2 = 'AccountV0
+    AccountVersionFor 'P3 = 'AccountV0
+    AccountVersionFor 'P4 = 'AccountV1
+
+-- |Projection of 'SProtocolVersion' to 'SAccountVersion'.
+accountVersionFor :: SProtocolVersion pv -> SAccountVersion (AccountVersionFor pv)
+accountVersionFor SP1 = SAccountV0
+accountVersionFor SP2 = SAccountV0
+accountVersionFor SP3 = SAccountV0
+accountVersionFor SP4 = SAccountV1
+
+class IsAccountVersion (av :: AccountVersion) where
+    -- |The singleton associated with the account version
+    accountVersion :: SAccountVersion av
+
+instance IsAccountVersion 'AccountV0 where
+    accountVersion = SAccountV0
+
+instance IsAccountVersion 'AccountV1 where
+    accountVersion = SAccountV1

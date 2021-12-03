@@ -28,6 +28,10 @@ module Concordium.Types (
   complementRewardFraction,
   takeFraction,
   fractionToRational,
+  CommissionRates(..),
+  finalizationCommission,
+  bakingCommission,
+  transactionCommission,
   -- * Time units
   Duration(..),
   durationToNominalDiffTime,
@@ -483,6 +487,41 @@ takeFraction (RewardFraction f) = takeFractionFromPartsPerHundredThousands f
 fractionToRational :: RewardFraction -> Rational
 fractionToRational (RewardFraction f) = partsPerHundredThousandsToRational f
 
+-- |The commission rates charged by a pool owner.
+data CommissionRates = CommissionRates
+    { -- |Fraction of finalization rewards charged by the pool owner.
+      _finalizationCommission :: RewardFraction,
+      -- |Fraction of baking rewards charged by the pool owner.
+      _bakingCommission :: RewardFraction,
+      -- |Fraction of transaction rewards charged by the pool owner.
+      _transactionCommission :: RewardFraction
+    }
+    deriving (Eq, Show)
+
+instance S.Serialize CommissionRates where
+  put CommissionRates{..} = do
+    S.put _finalizationCommission
+    S.put _bakingCommission
+    S.put _transactionCommission
+  get = do
+    _finalizationCommission <- S.get
+    _bakingCommission <- S.get
+    _transactionCommission <- S.get
+    return CommissionRates{..}
+
+instance ToJSON CommissionRates where
+  toJSON CommissionRates{..} = object [
+      "finalizationCommission" AE..= _finalizationCommission,
+      "bakingCommission" AE..= _bakingCommission,
+      "transactionCommission" AE..= _transactionCommission
+      ]
+
+instance FromJSON CommissionRates where
+  parseJSON = withObject "CommissionRates" $ \o -> do
+    _finalizationCommission <- o .: "finalizationCommission"
+    _bakingCommission <- o .: "bakingCommission"
+    _transactionCommission <- o .: "transactionCommission"
+    return CommissionRates{..}
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -954,3 +993,4 @@ instance Hashable AccountAddressEq where
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
+makeLenses ''CommissionRates

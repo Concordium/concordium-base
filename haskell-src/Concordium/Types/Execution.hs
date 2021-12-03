@@ -87,6 +87,10 @@ instance S.Serialize OpenStatus where
     2 -> return ClosedForAll
     _ -> fail "Invalid OpenStatus"
 
+-- The JSON encoding of 'OpenStatus' is as the string values "openForAll",
+-- "closedForNew" and "closedForAll".
+$(deriveJSON defaultOptions{constructorTagModifier=firstLower} ''OpenStatus)
+
 -- |The pool to which a delegator may delegate.
 data DelegationTarget
   = DelegateToLPool
@@ -129,6 +133,17 @@ instance S.Serialize UrlText where
       case T.decodeUtf8' bytes of
         Left e -> fail (show e)
         Right r -> return (UrlText r)
+
+instance AE.ToJSON UrlText where
+  toJSON (UrlText t) = AE.toJSON t
+  toEncoding (UrlText t) = AE.toEncoding t
+
+instance AE.FromJSON UrlText where
+  parseJSON = AE.withText "URL" $ \t -> do
+    let len = BS.length (T.encodeUtf8 t)
+    when (len > fromIntegral maxUrlTextLength) $
+      fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
+    return (UrlText t)
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
