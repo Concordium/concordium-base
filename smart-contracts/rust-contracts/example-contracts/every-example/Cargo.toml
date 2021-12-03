@@ -7,14 +7,15 @@ license = "MPL-2.0"
 license-file = "../../../LICENSE-MPL-2.0"
 
 [dependencies]
+context-test = {path = "../context-test"}
 counter = {path = "../counter"}
 erc20 = {path = "../erc20"}
 escrow = {path = "../escrow"}
 rate-limited = {path = "../rate-limited"}
 fib = {path = "../fib"}
 lockup = {path = "../lockup"}
-two-step-transfer = {git = "https://github.com/Concordium/concordium-rust-smart-contracts", branch = "main"}
 simple-game = {path = "../simple-game"}
+use-all-host-functions = {path = "../use-all-host-functions"}
 
 [lib]
 crate-type = ["cdylib", "rlib"]

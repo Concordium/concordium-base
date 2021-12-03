@@ -31,8 +31,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "concordium-contracts-common"
-version = "1.0.1"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts.git?branch=main#0063d091a138a1dc77fcc57f665fe27681f934b0"
+version = "2.0.0"
 dependencies = [
  "fnv",
  "hashbrown",
@@ -40,8 +39,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-std"
-version = "1.0.0"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts.git?branch=main#0063d091a138a1dc77fcc57f665fe27681f934b0"
+version = "2.0.0"
 dependencies = [
  "concordium-contracts-common",
  "concordium-std-derive",
@@ -50,8 +48,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-std-derive"
-version = "1.0.0"
-source = "git+https://github.com/Concordium/concordium-rust-smart-contracts.git?branch=main#0063d091a138a1dc77fcc57f665fe27681f934b0"
+version = "2.0.0"
 dependencies = [
  "concordium-contracts-common",
  "proc-macro2",
