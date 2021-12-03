@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 
 module Generators where
 
@@ -489,10 +490,10 @@ genMemo = do
 genBakerId :: Gen BakerId
 genBakerId = BakerId . AccountIndex <$> arbitrary
 
-instance Arbitrary Event where
-    arbitrary =
+genEvent :: SProtocolVersion pv -> Gen Event
+genEvent spv =
         oneof
-            [ ModuleDeployed <$> genModuleRef,
+            ([ ModuleDeployed <$> genModuleRef,
               ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> listOf genContractEvent,
               Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> listOf genContractEvent,
               Transferred <$> genAddress <*> genAmount <*> genAddress,
@@ -509,13 +510,18 @@ instance Arbitrary Event where
               EncryptedAmountsRemoved <$> genAccountAddress <*> genEncryptedAmount <*> genEncryptedAmount <*> (EncryptedAmountAggIndex <$> arbitrary),
               AmountAddedByDecryption <$> genAccountAddress <*> genAmount,
               EncryptedSelfAmountAdded <$> genAccountAddress <*> genEncryptedAmount <*> genAmount,
-              UpdateEnqueued <$> genTransactionTime <*> genUpdatePayload,
+              UpdateEnqueued <$> genTransactionTime <*> genUpdatePayload (chainParametersVersionFor spv),
               genTransferredWithSchedule,
               genCredentialsUpdated,
-              DataRegistered <$> genRegisteredData,
-              TransferMemo <$> genMemo
-            ]
+              DataRegistered <$> genRegisteredData
+            ] ++ maybeMemo)
       where
+        maybeMemo = if supportMemo then [TransferMemo <$> genMemo] else []
+        supportMemo = case spv of
+                SP1 -> False
+                SP2 -> True
+                SP3 -> True
+                SP4 -> True
         genBakerAdded = do
             ebaBakerId <- genBakerId
             ebaAccount <- genAccountAddress
@@ -590,15 +596,15 @@ instance Arbitrary RejectReason where
               return NotAllowedToHandleEncrypted
             ]
 
-instance Arbitrary ValidResult where
-    arbitrary =
+genValidResult :: SProtocolVersion spv -> Gen ValidResult
+genValidResult spv =
         oneof
-            [ TxSuccess <$> arbitrary,
+            [ TxSuccess <$> (liftArbitrary $ genEvent spv),
               TxReject <$> arbitrary
             ]
 
-instance Arbitrary TransactionSummary where
-    arbitrary = do
+genTransactionSummary :: SProtocolVersion spv -> Gen TransactionSummary
+genTransactionSummary spv = do
         tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
         tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
         tsCost <- genAmount
@@ -609,7 +615,7 @@ instance Arbitrary TransactionSummary where
                   TSTCredentialDeploymentTransaction <$> elements [Initial, Normal],
                   TSTUpdateTransaction <$> arbitraryBoundedEnum
                 ]
-        tsResult <- arbitrary
+        tsResult <- genValidResult spv
         tsIndex <- TransactionIndex <$> arbitrary
         return TransactionSummary{..}
 
@@ -697,8 +703,8 @@ genBlockItem =
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = makeElectionDifficulty <$> arbitrary `suchThat` (< 100000)
 
-genAuthorizations :: Gen Authorizations
-genAuthorizations = do
+genAuthorizations :: SChainParametersVersion cpv -> Gen (Authorizations cpv)
+genAuthorizations scpv = do
     size <- getSize
     nKeys <- choose (1, min 65535 (1 + size))
     asKeys <- Vec.fromList . fmap correspondingVerifyKey <$> vectorOf nKeys genSigSchemeKeyPair
@@ -719,6 +725,11 @@ genAuthorizations = do
     asBakerStakeThreshold <- genAccessStructure
     asAddAnonymityRevoker <- genAccessStructure
     asAddIdentityProvider <- genAccessStructure
+    let genAccessStructureForCPV1 = case scpv of 
+            SCPV0 -> return AccessStructureForCPV1None
+            SCPV1 -> AccessStructureForCPV1Some <$> genAccessStructure
+    asCooldownParameters <- genAccessStructureForCPV1
+    asTimeParameters <- genAccessStructureForCPV1
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -786,67 +797,94 @@ genHigherLevelKeys = do
     hlkThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral nKeys)
     return HigherLevelKeys{..}
 
-genRootUpdate :: Gen RootUpdate
-genRootUpdate =
+genRootUpdate :: SChainParametersVersion cpv -> Gen (RootUpdate cpv)
+genRootUpdate scpv =
     oneof
         [ RootKeysRootUpdate <$> genHigherLevelKeys,
           Level1KeysRootUpdate <$> genHigherLevelKeys,
-          Level2KeysRootUpdate <$> genAuthorizations
+          Level2KeysRootUpdate <$> genAuthorizations scpv
         ]
 
-genLevel1Update :: Gen Level1Update
-genLevel1Update =
+genLevel1Update :: SChainParametersVersion cpv -> Gen (Level1Update cpv)
+genLevel1Update scpv =
     oneof
         [ Level1KeysLevel1Update <$> genHigherLevelKeys,
-          Level2KeysLevel1Update <$> genAuthorizations
+          Level2KeysLevel1Update <$> genAuthorizations scpv
         ]
 
-genLevel2UpdatePayload :: Gen UpdatePayload
-genLevel2UpdatePayload =
-    oneof
-        [ ProtocolUpdatePayload <$> genProtocolUpdate,
-          ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
-          EuroPerEnergyUpdatePayload <$> genExchangeRate,
-          MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
-          FoundationAccountUpdatePayload <$> genAccountAddress,
-          MintDistributionUpdatePayload <$> genMintDistribution,
-          TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
-          GASRewardsUpdatePayload <$> genGASRewards,
-          BakerStakeThresholdUpdatePayload <$> arbitrary
-        ]
+genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
+genLevel2UpdatePayload scpv =
+    case scpv of
+        SCPV0 -> 
+            oneof
+                [ ProtocolUpdatePayload <$> genProtocolUpdate,
+                ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
+                EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                FoundationAccountUpdatePayload <$> genAccountAddress,
+                MintDistributionUpdatePayload <$> genMintDistribution,
+                TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                GASRewardsUpdatePayload <$> genGASRewards,
+                BakerStakeThresholdUpdatePayload <$> genPoolParametersV0
+                ]
+        SCPV1 -> 
+            oneof
+                [ ProtocolUpdatePayload <$> genProtocolUpdate,
+                ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
+                EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                FoundationAccountUpdatePayload <$> genAccountAddress,
+                MintDistributionUpdatePayload <$> genMintDistribution,
+                TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                GASRewardsUpdatePayload <$> genGASRewards,
+                CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
+                PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
+                TimeParametersCPV1UpdatePayload <$> genTimeParametersV1
+                ]
 
-genUpdatePayload :: Gen UpdatePayload
-genUpdatePayload =
-    oneof
-        [ genLevel2UpdatePayload,
-          RootUpdatePayload <$> genRootUpdate,
-          Level1UpdatePayload <$> genLevel1Update
-        ]
+genUpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
+genUpdatePayload scpv = case scpv of
+    SCPV0 -> 
+        oneof
+            [ genLevel2UpdatePayload scpv,
+            RootCPV0UpdatePayload <$> genRootUpdate scpv,
+            Level1CPV0UpdatePayload <$> genLevel1Update scpv
+            ]
+    SCPV1 -> 
+        oneof
+            [ genLevel2UpdatePayload scpv,
+            RootCPV1UpdatePayload <$> genRootUpdate scpv,
+            Level1CPV1UpdatePayload <$> genLevel1Update scpv
+            ]
 
-genRawUpdateInstruction :: Gen RawUpdateInstruction
-genRawUpdateInstruction = do
+genRawUpdateInstruction :: SChainParametersVersion cpv -> Gen RawUpdateInstruction
+genRawUpdateInstruction scpv = do
     ruiSeqNumber <- Nonce <$> arbitrary
     ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
     ruiTimeout <- TransactionTime <$> arbitrary
-    ruiPayload <- genUpdatePayload
+    ruiPayload <- genUpdatePayload scpv
     return RawUpdateInstruction{..}
 
-genLevel2RawUpdateInstruction :: Gen RawUpdateInstruction
-genLevel2RawUpdateInstruction = do
+genLevel2RawUpdateInstruction :: SChainParametersVersion cpv -> Gen RawUpdateInstruction
+genLevel2RawUpdateInstruction scpv = do
     ruiSeqNumber <- Nonce <$> arbitrary
     ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
     ruiTimeout <- TransactionTime <$> arbitrary
-    ruiPayload <- genLevel2UpdatePayload
+    ruiPayload <- genLevel2UpdatePayload scpv
     return RawUpdateInstruction{..}
 
 -- |Generate an 'Authorizations' structure and the list of key pairs.
 -- The threshold for each access structure is specified.
 genAuthorizationsAndKeys ::
+    -- |Chain parameter version
+    SChainParametersVersion cpv ->
     -- |Threshold for each access structure
     UpdateKeysThreshold ->
-    Gen (Authorizations, [KeyPair])
-genAuthorizationsAndKeys thr = do
-    let nKeys = fromIntegral thr * 12
+    Gen (Authorizations cpv, [KeyPair])
+genAuthorizationsAndKeys scpv thr = do
+    let nKeys = case scpv of 
+            SCPV0 -> fromIntegral thr * 12
+            SCPV1 -> fromIntegral thr * 14
     kps <- vectorOf nKeys genSigSchemeKeyPair
     let asKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     let genAccessStructure = do
@@ -865,6 +903,11 @@ genAuthorizationsAndKeys thr = do
     asBakerStakeThreshold <- genAccessStructure
     asAddAnonymityRevoker <- genAccessStructure
     asAddIdentityProvider <- genAccessStructure
+    let genAccessStructureForCPV1 = case scpv of 
+            SCPV0 -> return AccessStructureForCPV1None
+            SCPV1 -> AccessStructureForCPV1Some <$> genAccessStructure
+    asCooldownParameters <- genAccessStructureForCPV1
+    asTimeParameters <- genAccessStructureForCPV1
     return (Authorizations{..}, kps)
 
 genLevel1Keys ::
@@ -883,9 +926,9 @@ genRootKeys thr = do
     let hlkKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     return (HigherLevelKeys{hlkThreshold = thr, ..}, kps)
 
-genKeyCollection :: UpdateKeysThreshold -> Gen (UpdateKeysCollection, [KeyPair], [KeyPair], [KeyPair])
-genKeyCollection thr = do
+genKeyCollection :: SChainParametersVersion cpv -> UpdateKeysThreshold -> Gen (UpdateKeysCollection cpv, [KeyPair], [KeyPair], [KeyPair])
+genKeyCollection scpv thr = do
     (rootKeys, a) <- genRootKeys thr
     (level1Keys, b) <- genLevel1Keys thr
-    (level2Keys, c) <- genAuthorizationsAndKeys thr
+    (level2Keys, c) <- genAuthorizationsAndKeys scpv thr
     return (UpdateKeysCollection{..}, a, b, c)

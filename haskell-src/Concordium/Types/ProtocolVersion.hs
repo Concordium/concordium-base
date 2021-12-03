@@ -80,7 +80,7 @@ instance FromJSON ProtocolVersion where
 
 -- |Type class for relating type-level 'ProtocolVersion's with
 -- term level 'SProtocolVersion's.
-class IsProtocolVersion (pv :: ProtocolVersion) where
+class IsChainParametersVersion (ChainParametersVersionFor pv) => IsProtocolVersion (pv :: ProtocolVersion) where
     -- |The singleton associated with the protocol version.
     protocolVersion :: SProtocolVersion pv
 
@@ -108,8 +108,9 @@ demoteProtocolVersion SP3 = P3
 demoteProtocolVersion SP4 = P4
 
 -- |An existentially quantified protocol version.
-data SomeProtocolVersion where
+data SomeProtocolVersion where 
     SomeProtocolVersion :: (IsProtocolVersion pv) => SProtocolVersion pv -> SomeProtocolVersion
+
 
 -- |Promote a 'ProtocolVersion' to an 'SProtocolVersion'. This is wrapped in the existential
 -- type 'SomeProtocolVersion'.
@@ -118,3 +119,41 @@ promoteProtocolVersion P1 = SomeProtocolVersion SP1
 promoteProtocolVersion P2 = SomeProtocolVersion SP2
 promoteProtocolVersion P3 = SomeProtocolVersion SP3
 promoteProtocolVersion P4 = SomeProtocolVersion SP4
+
+data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
+    deriving (Eq, Show)
+
+type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParametersVersion where
+    ChainParametersVersionFor 'P1 = 'ChainParametersV0
+    ChainParametersVersionFor 'P2 = 'ChainParametersV0
+    ChainParametersVersionFor 'P3 = 'ChainParametersV0
+    ChainParametersVersionFor 'P4 = 'ChainParametersV1
+
+data SChainParametersVersion (cpv :: ChainParametersVersion) where
+    SCPV0 :: SChainParametersVersion 'ChainParametersV0
+    SCPV1 :: SChainParametersVersion 'ChainParametersV1
+
+-- |Type class for relating type-level 'ChainParametersVersion's with
+-- term level 'SChainParameters's.
+class IsChainParametersVersion (cpv :: ChainParametersVersion) where
+    -- |The singleton associated with the protocol version.
+    chainParametersVersion :: SChainParametersVersion cpv
+
+instance IsChainParametersVersion 'ChainParametersV0 where
+    chainParametersVersion = SCPV0
+    {-# INLINE chainParametersVersion #-}
+
+instance IsChainParametersVersion 'ChainParametersV1 where
+    chainParametersVersion = SCPV1
+    {-# INLINE chainParametersVersion #-}
+
+chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
+chainParametersVersionFor spv = case spv of 
+    SP1 -> SCPV0
+    SP2 -> SCPV0
+    SP3 -> SCPV0
+    SP4 -> SCPV1
+
+demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
+demoteChainParameterVersion SCPV0 = ChainParametersV0
+demoteChainParameterVersion SCPV1 = ChainParametersV1

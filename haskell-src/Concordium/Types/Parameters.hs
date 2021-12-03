@@ -7,49 +7,180 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
+-- {-# LANGUAGE TemplateHaskell #-}
 
 module Concordium.Types.Parameters where
 
 import Control.Monad
 import qualified Data.Aeson as AE
 import Data.Aeson.Types
+import Data.Aeson.TH
 import Data.Ratio
 import Data.Serialize
 import Data.Word
+import Data.Maybe
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
-import Concordium.Types.Updates (
-    HasRewardParameters (rewardParameters),
-    RewardParameters,
- )
-
-data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
-    deriving (Show)
-
-type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParametersVersion where
-    ChainParametersVersionFor 'P1 = 'ChainParametersV0
-    ChainParametersVersionFor 'P2 = 'ChainParametersV0
-    ChainParametersVersionFor 'P3 = 'ChainParametersV0
-    ChainParametersVersionFor 'P4 = 'ChainParametersV1
-
-data SChainParametersVersion (cpv :: ChainParametersVersion) where
-    SCPV0 :: SChainParametersVersion 'ChainParametersV0
-    SCPV1 :: SChainParametersVersion 'ChainParametersV1
-
-chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
-chainParametersVersionFor spv = case spv of 
-    SP1 -> SCPV0
-    SP2 -> SCPV0
-    SP3 -> SCPV0
-    SP4 -> SCPV1
-
+import Concordium.Utils
+import Data.Aeson (ToJSON)
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
+
+-- |The minting rate and the distribution of newly-minted GTU
+-- among bakers, finalizers, and the foundation account.
+-- It must be the case that
+-- @_mdBakingReward + _mdFinalizationReward <= 1@.
+-- The remaining amount is the platform development charge.
+data MintDistribution = MintDistribution {
+    -- |Mint rate per slot
+    _mdMintPerSlot :: !MintRate,
+    -- |BakingRewMintFrac: the fraction allocated to baker rewards
+    _mdBakingReward :: !RewardFraction,
+    -- |FinRewMintFrac: the fraction allocated to finalization rewards
+    _mdFinalizationReward :: !RewardFraction
+} deriving (Eq, Show)
+makeClassy ''MintDistribution
+
+instance ToJSON MintDistribution where
+  toJSON MintDistribution{..} = object [
+      "mintPerSlot" AE..= _mdMintPerSlot,
+      "bakingReward" AE..= _mdBakingReward,
+      "finalizationReward" AE..= _mdFinalizationReward
+    ]
+instance FromJSON MintDistribution where
+  parseJSON = withObject "MintDistribution" $ \v -> do
+    _mdMintPerSlot <- v .: "mintPerSlot"
+    _mdBakingReward <- v .: "bakingReward"
+    _mdFinalizationReward <- v .: "finalizationReward"
+    unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
+    return MintDistribution{..}
+
+instance Serialize MintDistribution where
+  put MintDistribution{..} = put _mdMintPerSlot >> put _mdBakingReward >> put _mdFinalizationReward
+  get = do
+    _mdMintPerSlot <- get
+    _mdBakingReward <- get
+    _mdFinalizationReward <- get
+    unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
+    return MintDistribution{..}
+
+instance HashableTo Hash.Hash MintDistribution where
+  getHash = Hash.hash . encode
+
+instance Monad m => MHashableTo m Hash.Hash MintDistribution
+
+-- |The distribution of block transaction fees among the block
+-- baker, the GAS account, and the foundation account.  It
+-- must be the case that @_tfdBaker + _tfdGASAccount <= 1@.
+-- The remaining amount is the TransChargeFrac (paid to the
+-- foundation account).
+data TransactionFeeDistribution = TransactionFeeDistribution {
+    -- |BakerTransFrac: the fraction allocated to the baker
+    _tfdBaker :: !RewardFraction,
+    -- |The fraction allocated to the GAS account
+    _tfdGASAccount :: !RewardFraction
+} deriving (Eq, Show)
+makeClassy ''TransactionFeeDistribution
+
+instance ToJSON TransactionFeeDistribution where
+  toJSON TransactionFeeDistribution{..} = object [
+      "baker" AE..= _tfdBaker,
+      "gasAccount" AE..= _tfdGASAccount
+    ]
+instance FromJSON TransactionFeeDistribution where
+  parseJSON = withObject "TransactionFeeDistribution" $ \v -> do
+    _tfdBaker <- v .: "baker"
+    _tfdGASAccount <- v .: "gasAccount"
+    unless (isJust (_tfdBaker `addRewardFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
+    return TransactionFeeDistribution{..}
+
+instance Serialize TransactionFeeDistribution where
+  put TransactionFeeDistribution{..} = put _tfdBaker >> put _tfdGASAccount
+  get = do
+    _tfdBaker <- get
+    _tfdGASAccount <- get
+    unless (isJust (_tfdBaker `addRewardFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
+    return TransactionFeeDistribution{..}
+
+instance HashableTo Hash.Hash TransactionFeeDistribution where
+  getHash = Hash.hash . encode
+
+instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
+
+data GASRewards = GASRewards {
+  -- |BakerPrevTransFrac: fraction paid to baker
+  _gasBaker :: !RewardFraction,
+  -- |FeeAddFinalisationProof: fraction paid for including a
+  -- finalization proof in a block.
+  _gasFinalizationProof :: !RewardFraction,
+  -- |FeeAccountCreation: fraction paid for including each
+  -- account creation transaction in a block.
+  _gasAccountCreation :: !RewardFraction,
+  -- |FeeUpdate: fraction paid for including an update
+  -- transaction in a block.
+  _gasChainUpdate :: !RewardFraction
+} deriving (Eq, Show)
+makeClassy ''GASRewards
+
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
+
+instance Serialize GASRewards where
+  put GASRewards{..} = do
+    put _gasBaker
+    put _gasFinalizationProof
+    put _gasAccountCreation
+    put _gasChainUpdate
+  get = do
+    _gasBaker <- get
+    _gasFinalizationProof <- get
+    _gasAccountCreation <- get
+    _gasChainUpdate <- get
+    return GASRewards{..}
+
+instance HashableTo Hash.Hash GASRewards where
+  getHash = Hash.hash . encode
+
+instance Monad m => MHashableTo m Hash.Hash GASRewards
+
+-- |Parameters affecting rewards.
+-- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
+data RewardParameters = RewardParameters {
+    -- |Distribution of newly-minted GTUs.
+    _rpMintDistribution :: !MintDistribution,
+    -- |Distribution of transaction fees.
+    _rpTransactionFeeDistribution :: !TransactionFeeDistribution,
+    -- |Rewards paid from the GAS account.
+    _rpGASRewards :: !GASRewards
+} deriving (Eq, Show)
+makeClassy ''RewardParameters
+
+instance HasMintDistribution RewardParameters where
+  mintDistribution = rpMintDistribution
+
+instance HasTransactionFeeDistribution RewardParameters where
+  transactionFeeDistribution = rpTransactionFeeDistribution
+
+instance HasGASRewards RewardParameters where
+  gASRewards = rpGASRewards
+
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 3} ''RewardParameters)
+
+instance Serialize RewardParameters where
+  put RewardParameters{..} = do
+    put _rpMintDistribution
+    put _rpTransactionFeeDistribution
+    put _rpGASRewards
+  get = do
+    _rpMintDistribution <- get
+    _rpTransactionFeeDistribution <- get
+    _rpGASRewards <- get
+    return RewardParameters{..}
+
 
 data ExchangeRates = ExchangeRates
     { -- |Euro:Energy rate.
@@ -127,6 +258,27 @@ data CooldownParameters cpv where
       _cpDelegatorCooldown :: !RewardPeriod
     } -> CooldownParameters 'ChainParametersV1
 
+instance ToJSON (CooldownParameters cpv) where
+  toJSON CooldownParametersV0{..} = 
+        object [
+            "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs
+        ]
+  toJSON CooldownParametersV1{..} = 
+        object [
+            "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown,
+            "delegatorCooldown" AE..= _cpDelegatorCooldown
+        ]
+
+parseCooldownParametersJSON :: forall cpv.  IsChainParametersVersion cpv => Value -> Parser (CooldownParameters cpv)
+parseCooldownParametersJSON = case chainParametersVersion @cpv of 
+  SCPV0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
+  SCPV1 -> withObject "CooldownParametersV1" $ \v -> CooldownParametersV1 <$> v .: "poolOwnerCooldown"
+                                                                          <*> v .: "delegatorCooldown"
+
+instance IsChainParametersVersion cpv => FromJSON (CooldownParameters cpv) where
+  parseJSON = parseCooldownParametersJSON
+
+
 -- |Lens for '_cpBakerExtraCooldownEpochs'
 {-# INLINE cpBakerExtraCooldownEpochs #-}
 cpBakerExtraCooldownEpochs :: Lens' (CooldownParameters 'ChainParametersV0) Epoch
@@ -155,10 +307,17 @@ putCooldownParameters CooldownParametersV1{..} = do
         put _cpPoolOwnerCooldown
         put _cpDelegatorCooldown
 
-getCooldownParameters :: SChainParametersVersion cpv -> Get (CooldownParameters cpv)
-getCooldownParameters scpv = case scpv of
+instance HashableTo Hash.Hash (CooldownParameters cpv) where
+    getHash = Hash.hash . runPut . putCooldownParameters
+
+getCooldownParameters :: forall cpv. IsChainParametersVersion cpv => Get (CooldownParameters cpv)
+getCooldownParameters = case chainParametersVersion @cpv of
     SCPV0 -> CooldownParametersV0 <$> get
     SCPV1 -> CooldownParametersV1 <$> get <*> get
+
+instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) where
+  put = putCooldownParameters 
+  get = getCooldownParameters
 
 data TimeParameters cpv where
     TimeParametersV0 :: TimeParameters 'ChainParametersV0
@@ -177,10 +336,26 @@ putTimeParameters TimeParametersV0 = return ()
 putTimeParameters TimeParametersV1{..} = do
         put _tpRewardPeriodLength
 
-getTimeParameters :: SChainParametersVersion cpv -> Get (TimeParameters cpv)
-getTimeParameters scpv = case scpv of
+instance HashableTo Hash.Hash (TimeParameters cpv) where
+    getHash = Hash.hash . runPut . putTimeParameters
+
+getTimeParameters :: forall cpv. IsChainParametersVersion cpv => Get (TimeParameters cpv)
+getTimeParameters = case chainParametersVersion @cpv of
     SCPV0 -> return TimeParametersV0
     SCPV1 -> TimeParametersV1 <$> get
+
+instance IsChainParametersVersion cpv => Serialize (TimeParameters cpv) where
+  put = putTimeParameters
+  get = getTimeParameters
+
+instance ToJSON (TimeParameters 'ChainParametersV1) where
+  toJSON TimeParametersV1{..} = 
+        object [
+            "rewardPeriodLength" AE..= _tpRewardPeriodLength
+        ]
+
+instance FromJSON (TimeParameters 'ChainParametersV1) where
+  parseJSON = withObject "TimeParametersV1" $ \v -> TimeParametersV1 <$> v .: "rewardPeriodLength"
 
 deriving instance Eq (TimeParameters cpv)
 deriving instance Show (TimeParameters cpv)
@@ -216,8 +391,12 @@ instance ToJSON a => ToJSON (InclusiveRange a) where
             "max" AE..= irMax
         ]
 
-instance FromJSON a => FromJSON (InclusiveRange a) where
-    parseJSON = withObject "InclusiveRange" $ \v -> InclusiveRange <$> v .: "min" <*> v .: "max"
+instance (FromJSON a, Ord a) => FromJSON (InclusiveRange a) where
+    parseJSON = withObject "InclusiveRange" $ \v ->  do 
+      irMin <- v .: "min"
+      irMax <- v .: "max"
+      when (irMin > irMax) $ fail "Invalid interval. Left endpoint cannot be bigger than right endpoint."
+      return InclusiveRange{..}
 
 instance (Serialize a, Ord a) => Serialize (InclusiveRange a) where
     put InclusiveRange{..} = do
@@ -245,7 +424,7 @@ data CommissionRanges = CommissionRanges
     deriving (Eq, Show)
 makeLenses ''CommissionRanges
 
-instance Serialize (CommissionRanges) where
+instance Serialize CommissionRanges where
     put CommissionRanges{..} = do
         put _finalizationCommissionRange
         put _bakingCommissionRange
@@ -273,6 +452,46 @@ data PoolParameters cpv where
       -- to equity capital.
       _ppLeverageBound :: !LeverageFactor
     } -> PoolParameters 'ChainParametersV1
+
+instance ToJSON (PoolParameters cpv) where
+  toJSON PoolParametersV0{..} = 
+        object [
+            "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold
+        ]
+  toJSON PoolParametersV1{..} = 
+        object [
+            "finalizationCommissionLPool" AE..= _finalizationCommission _ppLPoolCommissions,
+            "bakingCommissionLPool" AE..= _bakingCommission _ppLPoolCommissions,
+            "transactionCommissionLPool" AE..= _transactionCommission _ppLPoolCommissions,
+            "finalizationCommissionRange" AE..= _finalizationCommissionRange _ppCommissionBounds,
+            "bakingCommissionRange" AE..= _bakingCommissionRange _ppCommissionBounds,
+            "transactionCommissionRange" AE..= _transactionCommissionRange _ppCommissionBounds,
+            "minimumEquityCapital" AE..= _ppMinimumEquityCapital,
+            "minimumFinalizationCapital" AE..= _ppMinimumFinalizationCapital,
+            "capitalBound" AE..= _ppCapitalBound,
+            "leverageBound" AE..= _ppLeverageBound
+        ]
+
+parsePoolParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (PoolParameters cpv)
+parsePoolParametersJSON = case chainParametersVersion @cpv of 
+  SCPV0 -> withObject "CooldownParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
+  SCPV1 -> withObject "CooldownParametersV1" $ \v -> do
+    _finalizationCommission <- v .: "finalizationCommissionLPool"
+    _bakingCommission <- v .: "bakingCommissionLPool"
+    _transactionCommission <- v .: "transactionCommissionLPool"
+    _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+    _bakingCommissionRange <- v .: "bakingCommissionRange"
+    _transactionCommissionRange <- v .: "transactionCommissionRange"
+    _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
+    _ppMinimumFinalizationCapital <- v .: "minimumFinalizationCapital"
+    _ppCapitalBound <- v .: "capitalBound"
+    _ppLeverageBound <- v .: "leverageBound"
+    let _ppLPoolCommissions = CommissionRates{..}
+    let _ppCommissionBounds = CommissionRanges{..}
+    return PoolParametersV1{..}
+
+instance IsChainParametersVersion cpv => FromJSON (PoolParameters cpv) where
+  parseJSON = parsePoolParametersJSON
 
 -- |Lens for '_ppBakerStakeThreshold'
 {-# INLINE ppBakerStakeThreshold #-}
@@ -327,10 +546,17 @@ putPoolParameters PoolParametersV1{..} = do
         put _ppCapitalBound
         put _ppLeverageBound
 
-getPoolParameters :: SChainParametersVersion cpv -> Get (PoolParameters cpv)
-getPoolParameters scpv = case scpv of
+instance HashableTo Hash.Hash (PoolParameters cpv) where
+    getHash = Hash.hash . runPut . putPoolParameters
+
+getPoolParameters :: forall cpv. IsChainParametersVersion cpv => Get (PoolParameters cpv)
+getPoolParameters = case chainParametersVersion @cpv of
     SCPV0 -> PoolParametersV0 <$> get
     SCPV1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get <*> get
+
+instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
+  put = putPoolParameters
+  get = getPoolParameters
 
 deriving instance Eq (PoolParameters cpv)
 deriving instance Show (PoolParameters cpv)
@@ -485,8 +711,13 @@ putChainParameters ChainParameters{..} = do
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
 
-getChainParameters :: SChainParametersVersion cpv -> Get (ChainParameters' cpv)
-getChainParameters scpv = ChainParameters <$> get <*> get <*> (getCooldownParameters scpv) <*> (getTimeParameters scpv) <*> get <*> get <*> get <*> (getPoolParameters scpv)
+getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
+getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <*> getTimeParameters <*> get <*> get <*> get <*> getPoolParameters
+
+instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
+  put = putChainParameters
+  get = getChainParameters
+
 
 instance HashableTo Hash.Hash (ChainParameters' cpv) where
     getHash = Hash.hash . runPut . putChainParameters
@@ -530,14 +761,14 @@ parseJSONForCPV1 =
             <*> v .: "leverageBound"
             <*> v .: "rewardPeriodLength"
 
-instance FromJSON (ChainParameters' 'ChainParametersV0) where
-    parseJSON = parseJSONForCPV0
+instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
+    parseJSON = case chainParametersVersion @cpv of
+      SCPV0 -> parseJSONForCPV0
+      SCPV1 -> parseJSONForCPV1
 
-instance FromJSON (ChainParameters' 'ChainParametersV1) where
-    parseJSON = parseJSONForCPV1
-
-instance ToJSON (ChainParameters' 'ChainParametersV0) where
-    toJSON ChainParameters{..} =
+instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cpv) where
+    toJSON ChainParameters{..} = case chainParametersVersion @cpv of
+      SCPV0 -> 
         object
             [ "electionDifficulty" AE..= _cpElectionDifficulty,
               "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
@@ -548,9 +779,7 @@ instance ToJSON (ChainParameters' 'ChainParametersV0) where
               "foundationAccountIndex" AE..= _cpFoundationAccount,
               "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold _cpPoolParameters
             ]
-
-instance ToJSON (ChainParameters' 'ChainParametersV1) where
-    toJSON ChainParameters{..} =
+      SCPV1 ->
         object
             [ "electionDifficulty" AE..= _cpElectionDifficulty,
               "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
@@ -572,7 +801,6 @@ instance ToJSON (ChainParameters' 'ChainParametersV1) where
               "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
               "rewardPeriodLength" AE..= _tpRewardPeriodLength _cpTimeParameters
             ]
-
 
 -- |Parameters that affect finalization.
 data FinalizationParameters = FinalizationParameters

@@ -14,10 +14,10 @@ import Concordium.Types.ProtocolVersion
 
 import Generators
 
-checkPutGetIsIdentity :: SProtocolVersion pv -> ChainParameters pv -> Property
+checkPutGetIsIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> ChainParameters pv -> Property
 checkPutGetIsIdentity spv cp = do
     let putBs = S.runPut $ putChainParameters cp
-    case S.runGet (getChainParameters (chainParametersVersionFor spv)) putBs of
+    case S.runGet getChainParameters putBs of
         Left err -> counterexample err False
         Right getCp -> cp === getCp
 

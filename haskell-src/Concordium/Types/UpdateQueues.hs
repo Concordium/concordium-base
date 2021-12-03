@@ -1,9 +1,10 @@
-{-# LANGUAGE TemplateHaskell, BangPatterns, DeriveFunctor, OverloadedStrings, ScopedTypeVariables, TypeApplications, KindSignatures, DataKinds, TypeFamilies, GADTs #-}
+{-# LANGUAGE TemplateHaskell, BangPatterns, DeriveFunctor, OverloadedStrings, ScopedTypeVariables, TypeApplications, KindSignatures, DataKinds, TypeFamilies, GADTs, StandaloneDeriving #-}
 -- |Implementation of the chain update mechanism: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
 module Concordium.Types.UpdateQueues where
 
 import Control.Monad
 import Data.Aeson as AE
+import Data.Aeson.Types as AE
 import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.Serialize
@@ -27,6 +28,31 @@ data UpdateQueue e = UpdateQueue {
     _uqQueue :: ![(TransactionTime, e)]
 } deriving (Show, Functor, Eq)
 makeLenses ''UpdateQueue
+
+data UpdateQueueForCPV1 (cpv :: ChainParametersVersion) e where
+  UpdateQueueForCPV1None :: UpdateQueueForCPV1 'ChainParametersV0 e
+  UpdateQueueForCPV1Some :: !(UpdateQueue e) -> UpdateQueueForCPV1 'ChainParametersV1 e
+
+updateQueueForCPV1 :: forall cpv e. IsChainParametersVersion cpv => UpdateQueue e -> UpdateQueueForCPV1 cpv e
+updateQueueForCPV1 uq = case chainParametersVersion @cpv of
+    SCPV0 -> UpdateQueueForCPV1None
+    SCPV1 -> UpdateQueueForCPV1Some uq
+
+noneOrEmptyQueueForCPV1 :: forall cpv e. IsChainParametersVersion cpv => UpdateQueueForCPV1 cpv e
+noneOrEmptyQueueForCPV1 = updateQueueForCPV1 emptyUpdateQueue
+
+
+deriving instance Eq e => Eq (UpdateQueueForCPV1 cpv e)
+deriving instance Show e => Show (UpdateQueueForCPV1 cpv e)
+
+putUpdateQueueForCPV1 :: (Serialize e) => Putter (UpdateQueueForCPV1 cpv e)
+putUpdateQueueForCPV1 UpdateQueueForCPV1None = return ()
+putUpdateQueueForCPV1 (UpdateQueueForCPV1Some uq) = putUpdateQueueV0 uq
+
+getUpdateQueueForCPV1 :: forall cpv e. (Serialize e, IsChainParametersVersion cpv) => Get (UpdateQueueForCPV1 cpv e)
+getUpdateQueueForCPV1 = case chainParametersVersion @cpv of
+  SCPV0 -> return UpdateQueueForCPV1None
+  SCPV1 -> UpdateQueueForCPV1Some <$> getUpdateQueueV0
 
 instance HashableTo H.Hash e => HashableTo H.Hash (UpdateQueue e) where
     getHash UpdateQueue{..} = H.hash $ runPut $ do
@@ -92,13 +118,13 @@ enqueue !t !e = (uqNextSequenceNumber +~ 1)
             . (uqQueue %~ \q -> let !r = takeWhile ((< t) . fst) q in r ++ [(t, e)])
 
 -- |Update queues for all on-chain update types.
-data PendingUpdates = PendingUpdates {
+data PendingUpdates cpv = PendingUpdates {
     -- |Updates to the root keys.
     _pRootKeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys RootKeysKind)),
     -- |Updates to the level 1 keys.
     _pLevel1KeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys Level1KeysKind)),
     -- |Updates to the level 2 keys.
-    _pLevel2KeysUpdateQueue :: !(UpdateQueue Authorizations),
+    _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations cpv)),
     -- |Protocol updates.
     _pProtocolQueue :: !(UpdateQueue ProtocolUpdate),
     -- |Updates to the election difficulty parameter.
@@ -115,16 +141,20 @@ data PendingUpdates = PendingUpdates {
     _pTransactionFeeDistributionQueue :: !(UpdateQueue TransactionFeeDistribution),
     -- |Updates to the GAS rewards.
     _pGASRewardsQueue :: !(UpdateQueue GASRewards),
-    -- |Updates to the baker minimum threshold.
-    _pBakerStakeThresholdQueue :: !(UpdateQueue Amount),
+    -- |Updates pool parameters.
+    _pPoolParametersQueue :: !(UpdateQueue (PoolParameters cpv)),
     -- |Adds a new anonymity revoker.
     _pAddAnonymityRevokerQueue :: !(UpdateQueue ARS.ArInfo),
     -- |Adds a new identity provider.
-    _pAddIdentityProviderQueue :: !(UpdateQueue IPS.IpInfo)
+    _pAddIdentityProviderQueue :: !(UpdateQueue IPS.IpInfo),
+    -- |Updates cooldown parameters
+    _pCooldownParametersQueue :: !(UpdateQueueForCPV1 cpv (CooldownParameters 'ChainParametersV1)),
+    -- |Updates time parameters.
+    _pTimeParametersQueue :: !(UpdateQueueForCPV1 cpv (TimeParameters 'ChainParametersV1))
 } deriving (Show, Eq)
 makeLenses ''PendingUpdates
 
-instance HashableTo H.Hash PendingUpdates where
+instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) where
     getHash PendingUpdates{..} = H.hash $
             hsh _pRootKeysUpdateQueue
             <> hsh _pLevel1KeysUpdateQueue
@@ -137,15 +167,22 @@ instance HashableTo H.Hash PendingUpdates where
             <> hsh _pMintDistributionQueue
             <> hsh _pTransactionFeeDistributionQueue
             <> hsh _pGASRewardsQueue
-            <> hsh _pBakerStakeThresholdQueue
+            <> hsh _pPoolParametersQueue
             <> hsh _pAddAnonymityRevokerQueue
             <> hsh _pAddIdentityProviderQueue
+            <> hshMaybe _pCooldownParametersQueue
+            <> hshMaybe _pTimeParametersQueue
         where
             hsh :: HashableTo H.Hash a => a -> BS.ByteString
             hsh = H.hashToByteString . getHash
+            hshMaybe :: (HashableTo H.Hash e, IsChainParametersVersion cpv) =>
+             UpdateQueueForCPV1 cpv e -> BS.ByteString
+            hshMaybe UpdateQueueForCPV1None = BS.empty
+            hshMaybe (UpdateQueueForCPV1Some uq) = hsh uq
+
 
 -- |Serialize the pending updates.
-putPendingUpdatesV0 :: Putter PendingUpdates
+putPendingUpdatesV0 :: IsChainParametersVersion cpv => Putter (PendingUpdates cpv)
 putPendingUpdatesV0 PendingUpdates{..} = do
         putUpdateQueueV0 _pRootKeysUpdateQueue
         putUpdateQueueV0 _pLevel1KeysUpdateQueue
@@ -158,12 +195,14 @@ putPendingUpdatesV0 PendingUpdates{..} = do
         putUpdateQueueV0 _pMintDistributionQueue
         putUpdateQueueV0 _pTransactionFeeDistributionQueue
         putUpdateQueueV0 _pGASRewardsQueue
-        putUpdateQueueV0 _pBakerStakeThresholdQueue
+        putUpdateQueueV0 _pPoolParametersQueue
         putUpdateQueueV0 _pAddAnonymityRevokerQueue
         putUpdateQueueV0 _pAddIdentityProviderQueue
+        putUpdateQueueForCPV1 _pCooldownParametersQueue
+        putUpdateQueueForCPV1 _pTimeParametersQueue
 
 -- |Deserialize pending updates.
-getPendingUpdatesV0 :: Get PendingUpdates
+getPendingUpdatesV0 :: IsChainParametersVersion cpv => Get (PendingUpdates cpv)
 getPendingUpdatesV0 = do
         _pRootKeysUpdateQueue <- getUpdateQueueV0
         _pLevel1KeysUpdateQueue <- getUpdateQueueV0
@@ -176,32 +215,59 @@ getPendingUpdatesV0 = do
         _pMintDistributionQueue <- getUpdateQueueV0
         _pTransactionFeeDistributionQueue <- getUpdateQueueV0
         _pGASRewardsQueue <- getUpdateQueueV0
-        _pBakerStakeThresholdQueue <- getUpdateQueueV0
+        _pPoolParametersQueue <- getUpdateQueueV0
         _pAddAnonymityRevokerQueue <- getUpdateQueueV0
         _pAddIdentityProviderQueue <- getUpdateQueueV0
-
+        _pCooldownParametersQueue <- getUpdateQueueForCPV1
+        _pTimeParametersQueue <- getUpdateQueueForCPV1
         return PendingUpdates{..}
 
-instance ToJSON PendingUpdates where
-    toJSON PendingUpdates{..} = object [
-            "rootKeys" AE..= _pRootKeysUpdateQueue,
-            "level1Keys" AE..= _pLevel1KeysUpdateQueue,
-            "level2Keys" AE..= _pLevel2KeysUpdateQueue,
-            "protocol" AE..= _pProtocolQueue,
-            "electionDifficulty" AE..= _pElectionDifficultyQueue,
-            "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
-            "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
-            "foundationAccount" AE..= _pFoundationAccountQueue,
-            "mintDistribution" AE..= _pMintDistributionQueue,
-            "transactionFeeDistribution" AE..= _pTransactionFeeDistributionQueue,
-            "gasRewards" AE..= _pGASRewardsQueue,
-            "bakerStakeThreshold" AE..= _pBakerStakeThresholdQueue,
-            "addAnonymityRevoker" AE..= _pAddAnonymityRevokerQueue,
-            "addIdentityProvider" AE..= _pAddIdentityProviderQueue
-        ]
+pendingUpdatesV0ToJSON :: PendingUpdates 'ChainParametersV0 -> Value
+pendingUpdatesV0ToJSON PendingUpdates{..} = object [
+        "rootKeys" AE..= _pRootKeysUpdateQueue,
+        "level1Keys" AE..= _pLevel1KeysUpdateQueue,
+        "level2Keys" AE..= _pLevel2KeysUpdateQueue,
+        "protocol" AE..= _pProtocolQueue,
+        "electionDifficulty" AE..= _pElectionDifficultyQueue,
+        "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
+        "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
+        "foundationAccount" AE..= _pFoundationAccountQueue,
+        "mintDistribution" AE..= _pMintDistributionQueue,
+        "transactionFeeDistribution" AE..= _pTransactionFeeDistributionQueue,
+        "gasRewards" AE..= _pGASRewardsQueue,
+        "bakerStakeThreshold" AE..= _pPoolParametersQueue,
+        "addAnonymityRevoker" AE..= _pAddAnonymityRevokerQueue,
+        "addIdentityProvider" AE..= _pAddIdentityProviderQueue
+    ]
 
-instance FromJSON PendingUpdates where
-    parseJSON = withObject "PendingUpdates" $ \o -> do
+pendingUpdatesV1ToJSON :: PendingUpdates 'ChainParametersV1 -> Value
+pendingUpdatesV1ToJSON PendingUpdates{_pCooldownParametersQueue = UpdateQueueForCPV1Some cpq,
+    _pTimeParametersQueue = UpdateQueueForCPV1Some tpq, ..} = object [
+        "rootKeys" AE..= _pRootKeysUpdateQueue,
+        "level1Keys" AE..= _pLevel1KeysUpdateQueue,
+        "level2Keys" AE..= _pLevel2KeysUpdateQueue,
+        "protocol" AE..= _pProtocolQueue,
+        "electionDifficulty" AE..= _pElectionDifficultyQueue,
+        "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
+        "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
+        "foundationAccount" AE..= _pFoundationAccountQueue,
+        "mintDistribution" AE..= _pMintDistributionQueue,
+        "transactionFeeDistribution" AE..= _pTransactionFeeDistributionQueue,
+        "gasRewards" AE..= _pGASRewardsQueue,
+        "poolParameters" AE..= _pPoolParametersQueue,
+        "addAnonymityRevoker" AE..= _pAddAnonymityRevokerQueue,
+        "addIdentityProvider" AE..= _pAddIdentityProviderQueue,
+        "cooldownParameters" AE..= cpq,
+        "timeParameters" AE..= tpq
+    ]
+
+instance IsChainParametersVersion cpv => ToJSON (PendingUpdates cpv) where
+    toJSON = case chainParametersVersion @cpv of
+        SCPV0 -> pendingUpdatesV0ToJSON
+        SCPV1 -> pendingUpdatesV1ToJSON
+
+parsePendingUpdatesV0 ::Value -> AE.Parser (PendingUpdates 'ChainParametersV0)
+parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
         _pRootKeysUpdateQueue <- o AE..: "rootKeys"
         _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
         _pLevel2KeysUpdateQueue <- o AE..: "level2Keys"
@@ -213,13 +279,42 @@ instance FromJSON PendingUpdates where
         _pMintDistributionQueue <- o AE..: "mintDistribution"
         _pTransactionFeeDistributionQueue <- o AE..: "transactionFeeDistribution"
         _pGASRewardsQueue <- o AE..: "gasRewards"
-        _pBakerStakeThresholdQueue <- o AE..: "bakerStakeThreshold"
+        _pPoolParametersQueue <- o AE..: "bakerStakeThreshold"
         _pAddAnonymityRevokerQueue <- o AE..: "addAnonymityRevoker"
         _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
+        let _pCooldownParametersQueue = UpdateQueueForCPV1None
+        let _pTimeParametersQueue = UpdateQueueForCPV1None
         return PendingUpdates{..}
 
+parsePendingUpdatesV1 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV1)
+parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
+        _pRootKeysUpdateQueue <- o AE..: "rootKeys"
+        _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
+        _pLevel2KeysUpdateQueue <- o AE..: "level2Keys"
+        _pProtocolQueue <- o AE..: "protocol"
+        _pElectionDifficultyQueue <- o AE..: "electionDifficulty"
+        _pEuroPerEnergyQueue <- o AE..: "euroPerEnergy"
+        _pMicroGTUPerEuroQueue <- o AE..: "microGTUPerEuro"
+        _pFoundationAccountQueue <- o AE..: "foundationAccount"
+        _pMintDistributionQueue <- o AE..: "mintDistribution"
+        _pTransactionFeeDistributionQueue <- o AE..: "transactionFeeDistribution"
+        _pGASRewardsQueue <- o AE..: "gasRewards"
+        _pPoolParametersQueue <- o AE..: "poolParameters"
+        _pAddAnonymityRevokerQueue <- o AE..: "addAnonymityRevoker"
+        _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
+        cooldownQueue <- o AE..: "cooldownParameters"
+        timeQueue <- o AE..: "timeParameters"
+        let _pCooldownParametersQueue = UpdateQueueForCPV1Some cooldownQueue
+        let _pTimeParametersQueue = UpdateQueueForCPV1Some timeQueue
+        return PendingUpdates{..}
+
+instance IsChainParametersVersion cpv => FromJSON (PendingUpdates cpv) where
+    parseJSON = case chainParametersVersion @cpv of
+        SCPV0 -> parsePendingUpdatesV0
+        SCPV1 -> parsePendingUpdatesV1
+
 -- |Initial pending updates with empty queues.
-emptyPendingUpdates :: PendingUpdates
+emptyPendingUpdates :: forall cpv. IsChainParametersVersion cpv => PendingUpdates cpv
 emptyPendingUpdates = PendingUpdates
         emptyUpdateQueue
         emptyUpdateQueue
@@ -235,21 +330,23 @@ emptyPendingUpdates = PendingUpdates
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
+        noneOrEmptyQueueForCPV1
+        noneOrEmptyQueueForCPV1
 
 -- |Current state of updatable parameters and update queues.
 data Updates (pv :: ProtocolVersion) = Updates {
     -- |Current update authorizations.
-    _currentKeyCollection :: !(Hashed UpdateKeysCollection),
+    _currentKeyCollection :: !(Hashed (UpdateKeysCollection (ChainParametersVersionFor pv))),
     -- |Current protocol update.
     _currentProtocolUpdate :: !(Maybe ProtocolUpdate),
     -- |Current chain parameters.
     _currentParameters :: !(ChainParameters pv),
     -- |Pending updates.
-    _pendingUpdates :: !PendingUpdates
+    _pendingUpdates :: !(PendingUpdates (ChainParametersVersionFor pv))
 } deriving (Show, Eq)
 makeClassy ''Updates
 
-instance HashableTo H.Hash (Updates cpv) where
+instance IsProtocolVersion pv => HashableTo H.Hash (Updates pv) where
     getHash Updates{..} = H.hash $
             hsh _currentKeyCollection
             <> case _currentProtocolUpdate of
@@ -262,7 +359,7 @@ instance HashableTo H.Hash (Updates cpv) where
             hsh = H.hashToByteString . getHash
 
 -- |Serialize 'Updates' in V0 format.
-putUpdatesV0 :: Putter (Updates pv)
+putUpdatesV0 :: IsProtocolVersion pv => Putter (Updates pv)
 putUpdatesV0 Updates{..} = do
         put (_currentKeyCollection ^. unhashed)
         case _currentProtocolUpdate of
@@ -279,7 +376,7 @@ getUpdatesV0 = do
             0 -> return Nothing
             1 -> Just <$> get
             _ -> fail "Invalid Updates"
-        _currentParameters <- getChainParameters $ chainParametersVersionFor $ protocolVersion @pv
+        _currentParameters <- getChainParameters
         _pendingUpdates <- getPendingUpdatesV0
         return Updates{..}
 
@@ -306,7 +403,7 @@ instance forall pv. IsProtocolVersion pv => FromJSON (Updates pv) where
 
 -- |An initial 'Updates' with the given initial 'Authorizations'
 -- and 'ChainParameters'.
-initialUpdates :: UpdateKeysCollection -> ChainParameters pv -> Updates pv
+initialUpdates :: IsProtocolVersion pv => UpdateKeysCollection (ChainParametersVersionFor pv) -> ChainParameters pv -> Updates pv
 initialUpdates initialKeyCollection _currentParameters = Updates {
         _currentKeyCollection = makeHashed initialKeyCollection,
         _currentProtocolUpdate = Nothing,

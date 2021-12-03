@@ -35,18 +35,20 @@ dummyTime :: TransactionTime
 dummyTime = 37
 
 -- |Check V0 serialization of block items.
-checkBlockItem :: BlockItem -> Property
-checkBlockItem bi = 
-    case runGet (getBlockItemV0 (wmdArrivalTime bi)) bs of
+checkBlockItem :: SProtocolVersion pv -> BlockItem -> Property
+checkBlockItem spv bi = 
+    case runGet (getBlockItemV0 spv (wmdArrivalTime bi)) bs of
       Left err -> counterexample err False
       Right bi' -> QC.label (groupIntoSize (BS.length bs)) $ bi === bi'
   where
-    bs = encode $ wmdData bi
+    bs = runPut . putBareBlockItemV0 $ wmdData bi
 
-testBlockItem :: Property
-testBlockItem = forAll genBlockItem checkBlockItem
+testBlockItem ::  SProtocolVersion pv -> Property
+testBlockItem spv = forAll genBlockItem $ checkBlockItem spv
 tests :: Spec
 tests = parallel $ do
   specify "Transaction serialization with size = 100." $ withMaxSuccess 1000 $ testTransaction 100
   specify "Transaction serialization with size = 1000." $ withMaxSuccess 1000 $ testTransaction 1000
-  specify "BlockItem serialization." $ withMaxSuccess 1000 $ testBlockItem
+  specify "BlockItem serialization in P1." $ withMaxSuccess 1000 $ testBlockItem SP1
+  specify "BlockItem serialization in P2." $ withMaxSuccess 1000 $ testBlockItem SP2
+  specify "BlockItem serialization in P3." $ withMaxSuccess 1000 $ testBlockItem SP3

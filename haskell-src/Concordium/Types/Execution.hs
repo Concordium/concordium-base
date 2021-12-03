@@ -903,118 +903,121 @@ data Event =
 
   deriving (Show, Generic, Eq)
 
-instance S.Serialize Event where
-  put = \case ModuleDeployed mref ->
-                S.putWord8 0 <>
-                S.put mref
-              ContractInitialized{..} ->
-                S.putWord8 1 <>
-                S.put ecRef <>
-                S.put ecAddress <>
-                S.put ecAmount <>
-                S.put ecInitName <>
-                putListOf S.put ecEvents
-              Updated{..} ->
-                S.putWord8 2 <>
-                S.put euAddress <>
-                S.put euInstigator <>
-                S.put euAmount <>
-                S.put euMessage <>
-                S.put euReceiveName <>
-                putListOf S.put euEvents
-              Transferred{..} ->
-                S.putWord8 3 <>
-                S.put etFrom <>
-                S.put etAmount <>
-                S.put etTo
-              AccountCreated addr ->
-                S.putWord8 4 <>
-                S.put addr
-              CredentialDeployed{..} ->
-                S.putWord8 5 <>
-                S.put ecdRegId <>
-                S.put ecdAccount
-              BakerAdded {..} ->
-                S.putWord8 6 <>
-                S.put ebaBakerId <>
-                S.put ebaAccount <>
-                S.put ebaSignKey <>
-                S.put ebaElectionKey <>
-                S.put ebaAggregationKey <>
-                S.put ebaStake <>
-                putBool ebaRestakeEarnings
-              BakerRemoved {..} ->
-                S.putWord8 7 <>
-                S.put ebrBakerId <>
-                S.put ebrAccount
-              BakerStakeIncreased {..} ->
-                S.putWord8 8 <>
-                S.put ebsiBakerId <>
-                S.put ebsiAccount <>
-                S.put ebsiNewStake
-              BakerStakeDecreased {..} ->
-                S.putWord8 9 <>
-                S.put ebsiBakerId <>
-                S.put ebsiAccount <>
-                S.put ebsiNewStake
-              BakerSetRestakeEarnings {..} ->
-                S.putWord8 10 <>
-                S.put ebsreBakerId <>
-                S.put ebsreAccount <>
-                putBool ebsreRestakeEarnings
-              BakerKeysUpdated {..} ->
-                S.putWord8 11 <>
-                S.put ebkuBakerId <>
-                S.put ebkuAccount <>
-                S.put ebkuSignKey <>
-                S.put ebkuElectionKey <>
-                S.put ebkuAggregationKey
-              CredentialKeysUpdated {..} ->
-                S.putWord8 12 <>
-                S.put ckuCredId
-              NewEncryptedAmount{..} ->
-                S.putWord8 13 <>
-                S.put neaAccount <>
-                S.put neaNewIndex <>
-                S.put neaEncryptedAmount
-              EncryptedAmountsRemoved{..} ->
-                S.putWord8 14 <>
-                S.put earAccount <>
-                S.put earNewAmount <>
-                S.put earInputAmount <>
-                S.put earUpToIndex
-              AmountAddedByDecryption {..} ->
-                S.putWord8 15 <>
-                S.put aabdAccount <>
-                S.put aabdAmount
-              EncryptedSelfAmountAdded{..} ->
-                S.putWord8 16 <>
-                S.put eaaAccount <>
-                S.put eaaNewAmount <>
-                S.put eaaAmount
-              UpdateEnqueued {..} ->
-                S.putWord8 17 <>
-                S.put ueEffectiveTime <>
-                S.put uePayload
-              TransferredWithSchedule {..} ->
-                S.putWord8 18 <>
-                S.put etwsFrom <>
-                S.put etwsTo <>
-                putListOf S.put etwsAmount
-              CredentialsUpdated {..} ->
-                S.putWord8 19 <>
-                S.put cuAccount <>
-                putListOf S.put cuNewCredIds <>
-                putListOf S.put cuRemovedCredIds <>
-                S.put cuNewThreshold
-              DataRegistered {..} ->
-                S.putWord8 20 <>
-                S.put drData
-              TransferMemo {..} ->
-                S.putWord8 21 <>
-                S.put tmMemo
+putEvent :: S.Putter Event
+putEvent = \case
+  ModuleDeployed mref ->
+    S.putWord8 0 <>
+    S.put mref
+  ContractInitialized{..} ->
+    S.putWord8 1 <>
+    S.put ecRef <>
+    S.put ecAddress <>
+    S.put ecAmount <>
+    S.put ecInitName <>
+    putListOf S.put ecEvents
+  Updated{..} ->
+    S.putWord8 2 <>
+    S.put euAddress <>
+    S.put euInstigator <>
+    S.put euAmount <>
+    S.put euMessage <>
+    S.put euReceiveName <>
+    putListOf S.put euEvents
+  Transferred{..} ->
+    S.putWord8 3 <>
+    S.put etFrom <>
+    S.put etAmount <>
+    S.put etTo
+  AccountCreated addr ->
+    S.putWord8 4 <>
+    S.put addr
+  CredentialDeployed{..} ->
+    S.putWord8 5 <>
+    S.put ecdRegId <>
+    S.put ecdAccount
+  BakerAdded {..} ->
+    S.putWord8 6 <>
+    S.put ebaBakerId <>
+    S.put ebaAccount <>
+    S.put ebaSignKey <>
+    S.put ebaElectionKey <>
+    S.put ebaAggregationKey <>
+    S.put ebaStake <>
+    putBool ebaRestakeEarnings
+  BakerRemoved {..} ->
+    S.putWord8 7 <>
+    S.put ebrBakerId <>
+    S.put ebrAccount
+  BakerStakeIncreased {..} ->
+    S.putWord8 8 <>
+    S.put ebsiBakerId <>
+    S.put ebsiAccount <>
+    S.put ebsiNewStake
+  BakerStakeDecreased {..} ->
+    S.putWord8 9 <>
+    S.put ebsiBakerId <>
+    S.put ebsiAccount <>
+    S.put ebsiNewStake
+  BakerSetRestakeEarnings {..} ->
+    S.putWord8 10 <>
+    S.put ebsreBakerId <>
+    S.put ebsreAccount <>
+    putBool ebsreRestakeEarnings
+  BakerKeysUpdated {..} ->
+    S.putWord8 11 <>
+    S.put ebkuBakerId <>
+    S.put ebkuAccount <>
+    S.put ebkuSignKey <>
+    S.put ebkuElectionKey <>
+    S.put ebkuAggregationKey
+  CredentialKeysUpdated {..} ->
+    S.putWord8 12 <>
+    S.put ckuCredId
+  NewEncryptedAmount{..} ->
+    S.putWord8 13 <>
+    S.put neaAccount <>
+    S.put neaNewIndex <>
+    S.put neaEncryptedAmount
+  EncryptedAmountsRemoved{..} ->
+    S.putWord8 14 <>
+    S.put earAccount <>
+    S.put earNewAmount <>
+    S.put earInputAmount <>
+    S.put earUpToIndex
+  AmountAddedByDecryption {..} ->
+    S.putWord8 15 <>
+    S.put aabdAccount <>
+    S.put aabdAmount
+  EncryptedSelfAmountAdded{..} ->
+    S.putWord8 16 <>
+    S.put eaaAccount <>
+    S.put eaaNewAmount <>
+    S.put eaaAmount
+  UpdateEnqueued {..} ->
+    S.putWord8 17 <>
+    S.put ueEffectiveTime <>
+    putUpdatePayload uePayload
+  TransferredWithSchedule {..} ->
+    S.putWord8 18 <>
+    S.put etwsFrom <>
+    S.put etwsTo <>
+    putListOf S.put etwsAmount
+  CredentialsUpdated {..} ->
+    S.putWord8 19 <>
+    S.put cuAccount <>
+    putListOf S.put cuNewCredIds <>
+    putListOf S.put cuRemovedCredIds <>
+    S.put cuNewThreshold
+  DataRegistered {..} ->
+    S.putWord8 20 <>
+    S.put drData
+  TransferMemo {..} ->
+    S.putWord8 21 <>
+    S.put tmMemo
 
-  get = S.getWord8 >>= \case
+getEvent :: SProtocolVersion pv -> S.Get Event
+getEvent spv = 
+  S.getWord8 >>= \case
     0 -> do
       mref <- S.get
       return (ModuleDeployed mref)
@@ -1105,7 +1108,7 @@ instance S.Serialize Event where
       return EncryptedSelfAmountAdded{..}
     17 -> do
       ueEffectiveTime  <- S.get
-      uePayload <- S.get
+      uePayload <- getUpdatePayload spv
       return UpdateEnqueued {..}
     18 -> do
       etwsFrom  <- S.get
@@ -1121,10 +1124,16 @@ instance S.Serialize Event where
     20 -> do
       drData <- S.get
       return DataRegistered {..}
-    21 -> do
+    21 | supportMemo -> do
       tmMemo <- S.get
       return  TransferMemo {..}
     n -> fail $ "Unrecognized event tag: " ++ show n
+    where
+      supportMemo = case spv of
+          SP1 -> False
+          SP2 -> True
+          SP3 -> True
+          SP4 -> True
 
 
 
@@ -1174,12 +1183,13 @@ type TransactionSummary = TransactionSummary' ValidResult
 data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
   deriving(Show, Generic, Eq)
 
-instance S.Serialize ValidResult where
-  put TxSuccess{..} = S.putWord8 0 <> putListOf S.put vrEvents
-  put TxReject{..} = S.putWord8 1 <> S.put vrRejectReason
+putValidResult :: S.Putter ValidResult
+putValidResult TxSuccess{..} = S.putWord8 0 <> putListOf putEvent vrEvents
+putValidResult TxReject{..} = S.putWord8 1 <> S.put vrRejectReason
 
-  get = S.getWord8 >>= \case
-    0 -> TxSuccess <$> getListOf S.get
+getValidResult :: SProtocolVersion pv -> S.Get ValidResult
+getValidResult spv = S.getWord8 >>= \case
+    0 -> TxSuccess <$> getListOf (getEvent spv)
     1 -> TxReject <$> S.get
     n -> fail $ "Unrecognized ValidResult tag: " ++ show n
 
@@ -1194,23 +1204,24 @@ instance S.Serialize TransactionSummaryType where
     2 -> TSTUpdateTransaction <$> S.get
     _ -> fail "Unsupported transaction summary type."
 
-instance S.Serialize TransactionSummary where
-  put TransactionSummary {..} =
+putTransactionSummary :: S.Putter TransactionSummary
+putTransactionSummary TransactionSummary {..} =
     putMaybe S.put tsSender <>
     S.put tsHash <>
     S.put tsCost <>
     S.put tsEnergyCost <>
     S.put tsType <>
-    S.put tsResult <>
+    putValidResult tsResult <>
     S.put tsIndex
 
-  get = do
+getTransactionSummary :: SProtocolVersion pv -> S.Get TransactionSummary
+getTransactionSummary spv = do
     tsSender <- getMaybe S.get
     tsHash <- S.get
     tsCost <- S.get
     tsEnergyCost <- S.get
     tsType <- S.get
-    tsResult <- S.get
+    tsResult <- getValidResult spv
     tsIndex <- S.get
     return TransactionSummary {..}
 

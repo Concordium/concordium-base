@@ -142,11 +142,11 @@ makeGenesisChainParametersV1
         _ppLPoolCommissions = CommissionRates{..}
         _ppCommissionBounds = CommissionRanges{..}
 
-instance FromJSON (GenesisChainParameters' 'ChainParametersV0) where
-    parseJSON = parseJSONForGCPV0
+instance IsChainParametersVersion cpv => FromJSON (GenesisChainParameters' cpv) where
+    parseJSON = case chainParametersVersion @cpv of 
+      SCPV0 -> parseJSONForGCPV0
+      SCPV1 -> parseJSONForGCPV1
 
-instance FromJSON (GenesisChainParameters' 'ChainParametersV1) where
-    parseJSON = parseJSONForGCPV1
 
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
 parseJSONForGCPV0 = 
@@ -254,7 +254,7 @@ data GenesisParameters pv = GenesisParameters
     , -- |Maximum total energy that can be consumed by the transactions in a block
       gpMaxBlockEnergy :: Energy
     , -- |The collection of update keys for performing updates
-      gpUpdateKeys :: UpdateKeysCollection
+      gpUpdateKeys :: UpdateKeysCollection (ChainParametersVersionFor pv)
     , -- |The initial (updatable) chain parameters
       gpChainParameters :: GenesisChainParameters pv
     }
@@ -281,9 +281,7 @@ instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) wher
         mapM_ validateBaker (zip [0..] gpInitialAccounts)
         gpMaxBlockEnergy <- v .: "maxBlockEnergy"
         gpUpdateKeys <- v .: "updateKeys"
-        gpChainParameters <- case chainParametersVersionFor $ protocolVersion @pv of
-          SCPV0 -> v .: "chainParameters"
-          SCPV1 -> v .: "chainParameters"
+        gpChainParameters <- v .: "chainParameters"
         let facct = gcpFoundationAccount gpChainParameters
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $
             fail $ "Foundation account (" ++ show facct ++ ") is not in initialAccounts"

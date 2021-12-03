@@ -260,7 +260,7 @@ addMetadata f time a = WithMetadata {
     wmdArrivalTime = time
   }
   where
-    bs = S.encode (f a)
+    bs = S.runPut $ putBareBlockItem (f a)
 
 fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
 fromAccountTransaction wmdArrivalTime wmdData =
@@ -330,16 +330,17 @@ instance HashableTo TransactionHash BareBlockItem where
 
 type BlockItem = WithMetadata BareBlockItem
 
-instance S.Serialize BareBlockItem  where
-  put NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
-  put CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
-  put ChainUpdate{..} = S.put UpdateInstructionKind <> S.put biUpdate
+putBareBlockItem :: S.Putter BareBlockItem 
+putBareBlockItem NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
+putBareBlockItem CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
+putBareBlockItem ChainUpdate{..} = S.put UpdateInstructionKind <> putUpdateInstruction biUpdate
 
-  get = S.label "BareBlockItem" $
-    S.get >>= \case
-    AccountTransactionKind -> NormalTransaction <$> S.get
-    CredentialDeploymentKind -> CredentialDeployment <$> S.get
-    UpdateInstructionKind -> ChainUpdate <$> S.get
+getBareBlockItem :: SProtocolVersion pv -> S.Get BareBlockItem
+getBareBlockItem spv = S.label "BareBlockItem" $
+  S.get >>= \case
+  AccountTransactionKind -> NormalTransaction <$> S.get
+  CredentialDeploymentKind -> CredentialDeployment <$> S.get
+  UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
 
 -- |Datatypes which have an expiry, which here we set to mean the latest time
 -- the item can be included in a block.
@@ -416,7 +417,7 @@ putBlockItemV0 = putBareBlockItemV0 . wmdData
 
 -- |Serialize a bare block item according to the V0 format, without the metadata.
 putBareBlockItemV0 :: BareBlockItem -> S.Put
-putBareBlockItemV0 = S.put
+putBareBlockItemV0 = putBareBlockItem
 
 ---------------------------------
 -- * 'TransactionHash' functions
@@ -427,7 +428,7 @@ transactionHashFromBytes :: BS.ByteString -> TransactionHashV0
 transactionHashFromBytes = TransactionHashV0 . H.hash
 
 transactionHashFromBareBlockItem :: BareBlockItem -> TransactionHashV0
-transactionHashFromBareBlockItem = transactionHashFromBytes . S.encode
+transactionHashFromBareBlockItem = transactionHashFromBytes . S.runPut . putBareBlockItem
 
 -------------------
 -- * Serialization
@@ -441,24 +442,26 @@ transactionHashFromBareBlockItem = transactionHashFromBytes . S.encode
 --
 -- * @SPEC: <$DOCS/Versioning#binary-format>
 -- * @SPEC: <$DOCS/Versioning>
-getExactVersionedBlockItem :: TransactionTime
+getExactVersionedBlockItem :: SProtocolVersion spv 
+                           -> TransactionTime
                            -- ^Timestamp for when the item is received, used to
                            -- construct the metadata.
                            -> S.Get BlockItem
-getExactVersionedBlockItem time = do
+getExactVersionedBlockItem spv time = do
     version <- S.get :: S.Get Version
     case version of
-      0 -> getBlockItemV0 time
+      0 -> getBlockItemV0 spv time
       _ -> fail $ "Unsupported block item version " ++ show version ++ "."
 
 -- |Get a block item according to V0 format, reconstructing metadata.
 --
 -- * @SPEC: <$DOCS/Transactions#v0-format>
 -- * @SPEC: <$DOCS/Versioning>
-getBlockItemV0 :: TransactionTime -- ^Timestamp of when the item arrived.
+getBlockItemV0 :: SProtocolVersion spv
+             -> TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
-getBlockItemV0 time = S.label "getBlockItemV0" $ do
-    (bbi, bytes) <- getWithBytes S.get
+getBlockItemV0 spv time = S.label "getBlockItemV0" $ do
+    (bbi, bytes) <- getWithBytes $ getBareBlockItem spv
     return WithMetadata{
         wmdData = bbi,
         wmdSize = BS.length bytes,
@@ -718,16 +721,18 @@ instance Show TransactionOutcomes where
     show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
 
 -- FIXME: More consistent serialization.
-instance S.Serialize TransactionOutcomes where
-    put TransactionOutcomes{..} = do
-        S.put (Vec.toList outcomeValues)
-        S.put _outcomeSpecial
-    get = TransactionOutcomes <$> (Vec.fromList <$> S.get) <*> S.get
+putTransactionOutcomes :: S.Putter TransactionOutcomes
+putTransactionOutcomes TransactionOutcomes{..} = do
+    putListOf putTransactionSummary (Vec.toList outcomeValues)
+    S.put _outcomeSpecial
+
+getTransactionOutcomes :: SProtocolVersion pv -> S.Get TransactionOutcomes
+getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
 
 -- TODO: fix this to use an lfmb tree. Potentially change storage type to the tree in blockstate too.
 -- Does this need to be domain seperated? (Would require serialisation changes?)
 instance HashableTo TransactionOutcomesHashV0 TransactionOutcomes where
-    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.encode transactionoutcomes
+    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
 emptyTransactionOutcomes :: TransactionOutcomes
 emptyTransactionOutcomes = TransactionOutcomes Vec.empty Seq.empty

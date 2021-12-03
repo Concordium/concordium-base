@@ -45,31 +45,43 @@ readHigherAuthDetails = maybeReader $ \s -> case reads s of
     _ -> Nothing
   _ -> Nothing
 
+data CommonUpdateKeys = CommonUpdateKeys {
+    -- |Number of keys to generate
+    cukKeyCount :: Word16,
+    -- |Name of authorization file to generate
+    cukAuthorizationFile :: FilePath,
+    -- |Directory to generate key files
+    cukKeyPath :: FilePath,
+    -- |Threshold and number of root keys to generate
+    cukRootKeys :: HigherAuthDetails,
+    -- |Threshold and number of level 1 keys to generate
+    cukLevel1Keys :: HigherAuthDetails,
+    -- |Key indices (and thresholds) to use for each update type
+    cukEmergency :: AuthDetails,
+    cukProtocol :: AuthDetails,
+    cukElectionDifficulty :: AuthDetails,
+    cukEuroEnergy :: AuthDetails,
+    cukGTUEuro :: AuthDetails,
+    cukFoundationAccount :: AuthDetails,
+    cukMintDistribution :: AuthDetails,
+    cukTransactionFeeDistribution :: AuthDetails,
+    cukGASRewards :: AuthDetails,
+    cukBakerStakeThreshold :: AuthDetails,
+    cukAddAnonymityRevoker :: AuthDetails,
+    cukAddIdentityProvider :: AuthDetails
+} deriving (Show)
+
 data GenerateUpdateKeys
-    = GenerateUpdateKeys {
-        -- |Number of keys to generate
-        gukKeyCount :: Word16,
-        -- |Name of authorization file to generate
-        gukAuthorizationFile :: FilePath,
-        -- |Directory to generate key files
-        gukKeyPath :: FilePath,
-        -- |Threshold and number of root keys to generate
-        gukRootKeys :: HigherAuthDetails,
-        -- |Threshold and number of level 1 keys to generate
-        gukLevel1Keys :: HigherAuthDetails,
-        -- |Key indices (and thresholds) to use for each update type
-        gukEmergency :: AuthDetails,
-        gukProtocol :: AuthDetails,
-        gukElectionDifficulty :: AuthDetails,
-        gukEuroEnergy :: AuthDetails,
-        gukGTUEuro :: AuthDetails,
-        gukFoundationAccount :: AuthDetails,
-        gukMintDistribution :: AuthDetails,
-        gukTransactionFeeDistribution :: AuthDetails,
-        gukGASRewards :: AuthDetails,
-        gukBakerStakeThreshold :: AuthDetails,
-        gukAddAnonymityRevoker :: AuthDetails,
-        gukAddIdentityProvider :: AuthDetails
+    = GenerateUpdateKeysCPV0 {
+        -- |Common across chain parameters versions
+        gukCommon :: CommonUpdateKeys
+    }
+    | GenerateUpdateKeysCPV1 {
+        -- |Common across chain parameters versions
+        gukCommon :: CommonUpdateKeys,
+        -- |Key indices (and thresholds) to use for cooldown and time parameters
+        gukCooldownParameters :: AuthDetails,
+        gukTimeParameters :: AuthDetails
     } deriving (Show)
 
 readKeyList :: ReadM [Word16]
@@ -77,8 +89,8 @@ readKeyList = maybeReader $ \s -> case reads ("[" ++ s ++ "]") of
     ((l, "") : _) -> Just l
     _ -> Nothing
 
-parameters :: Parser GenerateUpdateKeys
-parameters = GenerateUpdateKeys
+commonParameters :: Parser CommonUpdateKeys
+commonParameters = CommonUpdateKeys
     <$> argument auto (metavar "NUM" <> help "Number of level 2 keys to generate")
     <*> strOption (metavar "FILE" <> long "keys-outfile" <> help "File name for generated authorization" <> value "update-keys.json" <> showDefault)
     <*> strOption (metavar "PATH" <> long "keys-outdir" <> help "Path to output generated keys" <> value "." <> showDefault)
@@ -96,6 +108,9 @@ parameters = GenerateUpdateKeys
     <*> option readAuthDetails (metavar "ACSTR" <> long "baker-minimum-threshold" <> help "Baker minimum threshold access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "add-anonymity-revoker" <> help "Add anonymity revoker access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "add-identity-provider" <> help "Add identity provider access structure")
+
+parameters :: Parser GenerateUpdateKeys
+parameters = GenerateUpdateKeysCPV0 <$> commonParameters
 
 main :: IO ()
 main = customExecParser p opts >>= generateKeys
@@ -115,30 +130,63 @@ main = customExecParser p opts >>= generateKeys
         p = prefs showHelpOnEmpty
 
 generateKeys :: GenerateUpdateKeys -> IO ()
-generateKeys GenerateUpdateKeys{..} = do
-        when (gukKeyCount == 0) $ die "At least one level 2 key is required."
-        asEmergency <- makeAS gukEmergency "Emergency update access structure"
-        asProtocol <- makeAS gukProtocol "Protocol update access structure"
-        asParamElectionDifficulty <- makeAS gukElectionDifficulty "Election difficulty update access structure"
-        asParamEuroPerEnergy <- makeAS gukEuroEnergy "Euro-energy rate update access structure"
-        asParamMicroGTUPerEuro <- makeAS gukGTUEuro "GTU-Euro rate update access structure"
-        asParamFoundationAccount <- makeAS gukFoundationAccount "Foundation account update access structure"
-        asParamMintDistribution <- makeAS gukMintDistribution "Mint distribution update access structure"
-        asParamTransactionFeeDistribution <- makeAS gukTransactionFeeDistribution "Transaction fee distribution update access structure"
-        asParamGASRewards <- makeAS gukGASRewards "GAS rewards update access structure"
-        asBakerStakeThreshold <- makeAS gukBakerStakeThreshold "Baker minimum threshold access structure"
-        asAddAnonymityRevoker <- makeAS gukAddAnonymityRevoker "Add anonymity revoker access structure"
-        asAddIdentityProvider <- makeAS gukAddIdentityProvider "Add identity provider access structure"
+generateKeys guk = case guk of
+    GenerateUpdateKeysCPV0{gukCommon=CommonUpdateKeys{..}} -> do
+        let makeAS = makeASf cukKeyCount
+        let makeHAS = makeHASf cukKeyPath
+        let makeKey = makeKeyf cukKeyPath
+        when (cukKeyCount == 0) $ die "At least one level 2 key is required."
+        asEmergency <- makeAS cukEmergency "Emergency update access structure"
+        asProtocol <- makeAS cukProtocol "Protocol update access structure"
+        asParamElectionDifficulty <- makeAS cukElectionDifficulty "Election difficulty update access structure"
+        asParamEuroPerEnergy <- makeAS cukEuroEnergy "Euro-energy rate update access structure"
+        asParamMicroGTUPerEuro <- makeAS cukGTUEuro "GTU-Euro rate update access structure"
+        asParamFoundationAccount <- makeAS cukFoundationAccount "Foundation account update access structure"
+        asParamMintDistribution <- makeAS cukMintDistribution "Mint distribution update access structure"
+        asParamTransactionFeeDistribution <- makeAS cukTransactionFeeDistribution "Transaction fee distribution update access structure"
+        asParamGASRewards <- makeAS cukGASRewards "GAS rewards update access structure"
+        asBakerStakeThreshold <- makeAS cukBakerStakeThreshold "Baker minimum threshold access structure"
+        asAddAnonymityRevoker <- makeAS cukAddAnonymityRevoker "Add anonymity revoker access structure"
+        asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
+        asCooldownParameters <- pure AccessStructureForCPV1None
+        asTimeParameters <- pure AccessStructureForCPV1None
         putStrLn "Generating keys..."
-        asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..gukKeyCount-1]]
-        rootKeys <- makeHAS gukRootKeys "root-key" "Root key structure"
-        level1Keys <- makeHAS gukLevel1Keys "level1-key" "Level 1 key structure"
+        asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..cukKeyCount-1]]
+        rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"
+        level1Keys <- makeHAS cukLevel1Keys "level1-key" "Level 1 key structure"
         let keyCollection = UpdateKeysCollection {level2Keys = Authorizations{..},..}
-        LBS.writeFile gukAuthorizationFile (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} keyCollection)
+        LBS.writeFile cukAuthorizationFile (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} keyCollection)
+    GenerateUpdateKeysCPV1{gukCommon=CommonUpdateKeys{..},..} -> do
+        let makeAS = makeASf cukKeyCount
+        let makeHAS = makeHASf cukKeyPath
+        let makeKey = makeKeyf cukKeyPath
+        when (cukKeyCount == 0) $ die "At least one level 2 key is required."
+        asEmergency <- makeAS cukEmergency "Emergency update access structure"
+        asProtocol <- makeAS cukProtocol "Protocol update access structure"
+        asParamElectionDifficulty <- makeAS cukElectionDifficulty "Election difficulty update access structure"
+        asParamEuroPerEnergy <- makeAS cukEuroEnergy "Euro-energy rate update access structure"
+        asParamMicroGTUPerEuro <- makeAS cukGTUEuro "GTU-Euro rate update access structure"
+        asParamFoundationAccount <- makeAS cukFoundationAccount "Foundation account update access structure"
+        asParamMintDistribution <- makeAS cukMintDistribution "Mint distribution update access structure"
+        asParamTransactionFeeDistribution <- makeAS cukTransactionFeeDistribution "Transaction fee distribution update access structure"
+        asParamGASRewards <- makeAS cukGASRewards "GAS rewards update access structure"
+        asBakerStakeThreshold <- makeAS cukBakerStakeThreshold "Baker minimum threshold access structure"
+        asAddAnonymityRevoker <- makeAS cukAddAnonymityRevoker "Add anonymity revoker access structure"
+        asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
+        cooldownParameters <- makeAS gukCooldownParameters "Add identity provider access structure"
+        timeParameters <- makeAS gukCooldownParameters "Add identity provider access structure"
+        let asCooldownParameters = AccessStructureForCPV1Some cooldownParameters
+        let asTimeParameters = AccessStructureForCPV1Some timeParameters
+        putStrLn "Generating keys..."
+        asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..cukKeyCount-1]]
+        rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"
+        level1Keys <- makeHAS cukLevel1Keys "level1-key" "Level 1 key structure"
+        let keyCollection = UpdateKeysCollection {level2Keys = Authorizations{..},..}
+        LBS.writeFile cukAuthorizationFile (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} keyCollection)
     where
         keyComp = AE.keyOrder ["keys","emergency","protocol","electionDifficulty","euroPerEnergy","microGTUPerEuro","schemeId"]
                     <> compare
-        makeAS AuthDetails{..} desc = do
+        makeASf keyCount AuthDetails{..} desc = do
             let accessPublicKeys = Set.fromList adKeys
                 nKeys = Set.size accessPublicKeys
                 -- maxKey should only be evaluated after determining accessPublicKeys to have at least one
@@ -147,13 +195,13 @@ generateKeys GenerateUpdateKeys{..} = do
             when (adThreshold < 1) $ die (desc ++ ": threshold must be at least 1")
             when (nKeys < 1) $ die (desc ++ ": number of keys provided must be at least 1")
             when (fromIntegral adThreshold > nKeys) $ die (desc ++ ": threshold (" ++ show adThreshold ++ ") cannot exceed number of keys (" ++ show nKeys ++ ")")
-            when (maxKey >= gukKeyCount) $ die (desc ++ ": key index " ++ show maxKey ++ " is out of bounds. Maximal index is " ++ show (gukKeyCount - 1))
+            when (maxKey >= keyCount) $ die (desc ++ ": key index " ++ show maxKey ++ " is out of bounds. Maximal index is " ++ show (keyCount - 1))
             return AccessStructure{accessThreshold= UpdateKeysThreshold adThreshold,..}
-        makeHAS HigherAuthDetails{..} name desc = do
+        makeHASf keyPath HigherAuthDetails{..} name desc = do
           when (hadThreshold > hadNumKeys) $ die (desc ++ ": threshold (" ++ show hadThreshold ++ ") cannot exceed number of keys (" ++ show hadNumKeys ++ ")")
-          hlkKeys <- Vec.fromList <$> sequence [ makeKey k name | k <- [0..hadNumKeys-1] ]
+          hlkKeys <- Vec.fromList <$> sequence [ makeKeyf keyPath k name | k <- [0..hadNumKeys-1] ]
           return HigherLevelKeys{hlkThreshold = UpdateKeysThreshold hadThreshold,..}
-        makeKey k desc = do
+        makeKeyf keyPath k desc = do
             kp <- newKeyPair Ed25519
-            LBS.writeFile (gukKeyPath </> (desc ++ "-" ++ show k ++ ".json")) (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} kp)
+            LBS.writeFile (keyPath </> (desc ++ "-" ++ show k ++ ".json")) (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} kp)
             return (correspondingVerifyKey kp)
