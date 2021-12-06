@@ -52,3 +52,4 @@ tests = parallel $ do
   specify "BlockItem serialization in P1." $ withMaxSuccess 1000 $ testBlockItem SP1
   specify "BlockItem serialization in P2." $ withMaxSuccess 1000 $ testBlockItem SP2
   specify "BlockItem serialization in P3." $ withMaxSuccess 1000 $ testBlockItem SP3
+  specify "BlockItem serialization in P4." $ withMaxSuccess 1000 $ testBlockItem SP4
