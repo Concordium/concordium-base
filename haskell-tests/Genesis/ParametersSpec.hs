@@ -8,7 +8,6 @@ import Test.QuickCheck
 
 import qualified Data.Aeson as AE
 
-import Concordium.Types.Parameters
 import Concordium.Types.ProtocolVersion
 import Concordium.Genesis.Parameters
 

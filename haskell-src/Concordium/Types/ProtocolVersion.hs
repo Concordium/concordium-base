@@ -108,9 +108,8 @@ demoteProtocolVersion SP3 = P3
 demoteProtocolVersion SP4 = P4
 
 -- |An existentially quantified protocol version.
-data SomeProtocolVersion where 
+data SomeProtocolVersion where
     SomeProtocolVersion :: (IsProtocolVersion pv) => SProtocolVersion pv -> SomeProtocolVersion
-
 
 -- |Promote a 'ProtocolVersion' to an 'SProtocolVersion'. This is wrapped in the existential
 -- type 'SomeProtocolVersion'.
@@ -148,7 +147,7 @@ instance IsChainParametersVersion 'ChainParametersV1 where
     {-# INLINE chainParametersVersion #-}
 
 chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
-chainParametersVersionFor spv = case spv of 
+chainParametersVersionFor spv = case spv of
     SP1 -> SCPV0
     SP2 -> SCPV0
     SP3 -> SCPV0

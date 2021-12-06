@@ -330,7 +330,7 @@ instance HashableTo TransactionHash BareBlockItem where
 
 type BlockItem = WithMetadata BareBlockItem
 
-putBareBlockItem :: S.Putter BareBlockItem 
+putBareBlockItem :: S.Putter BareBlockItem
 putBareBlockItem NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
 putBareBlockItem CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
 putBareBlockItem ChainUpdate{..} = S.put UpdateInstructionKind <> putUpdateInstruction biUpdate
@@ -442,7 +442,7 @@ transactionHashFromBareBlockItem = transactionHashFromBytes . S.runPut . putBare
 --
 -- * @SPEC: <$DOCS/Versioning#binary-format>
 -- * @SPEC: <$DOCS/Versioning>
-getExactVersionedBlockItem :: SProtocolVersion spv 
+getExactVersionedBlockItem :: SProtocolVersion spv
                            -> TransactionTime
                            -- ^Timestamp for when the item is received, used to
                            -- construct the metadata.
@@ -458,8 +458,8 @@ getExactVersionedBlockItem spv time = do
 -- * @SPEC: <$DOCS/Transactions#v0-format>
 -- * @SPEC: <$DOCS/Versioning>
 getBlockItemV0 :: SProtocolVersion spv
-             -> TransactionTime -- ^Timestamp of when the item arrived.
-             -> S.Get BlockItem
+               -> TransactionTime -- ^Timestamp of when the item arrived.
+               -> S.Get BlockItem
 getBlockItemV0 spv time = S.label "getBlockItemV0" $ do
     (bbi, bytes) <- getWithBytes $ getBareBlockItem spv
     return WithMetadata{

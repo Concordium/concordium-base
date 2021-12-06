@@ -122,10 +122,6 @@ instance Serialize AccessStructure where
         when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
 
--- type family AccessStructureForCPV1 (cpv :: ChainParametersVersion) where
---   AccessStructureForCPV1 'ChainParametersV0 = ()
---   AccessStructureForCPV1 'ChainParametersV1 = AccessStructure
-
 data AccessStructureForCPV1 (cpv :: ChainParametersVersion) where
   AccessStructureForCPV1None :: AccessStructureForCPV1 'ChainParametersV0
   AccessStructureForCPV1Some :: !AccessStructure -> AccessStructureForCPV1 'ChainParametersV1
@@ -180,7 +176,6 @@ data Authorizations cpv = Authorizations {
 deriving instance Eq (Authorizations cpv)
 deriving instance Show (Authorizations cpv)
 
-
 putAuthorizations :: Putter (Authorizations cpv)
 putAuthorizations Authorizations{..} = do
         putWord16be (fromIntegral (Vec.length asKeys))
@@ -223,9 +218,9 @@ getAuthorizations = label "deserialization update authorizations" $ do
         asBakerStakeThreshold <- getChecked
         asAddAnonymityRevoker <- getChecked
         asAddIdentityProvider <- getChecked
-        (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of 
+        (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
           SCPV0 -> return (AccessStructureForCPV1None, AccessStructureForCPV1None)
-          SCPV1 -> do 
+          SCPV1 -> do
             cp <- getChecked
             tp <- getChecked
             return (AccessStructureForCPV1Some cp, AccessStructureForCPV1Some tp)
@@ -265,9 +260,9 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
         asBakerStakeThreshold <- parseAS "bakerStakeThreshold"
         asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
         asAddIdentityProvider <- parseAS "addIdentityProvider"
-        (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of 
+        (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
           SCPV0 -> return (AccessStructureForCPV1None, AccessStructureForCPV1None)
-          SCPV1 -> do 
+          SCPV1 -> do
             cp <- parseAS "cooldownParameters"
             tp <- parseAS "timeParameters"
             return (AccessStructureForCPV1Some cp, AccessStructureForCPV1Some tp)
@@ -291,17 +286,16 @@ instance AE.ToJSON (Authorizations cpv) where
                 "bakerStakeThreshold" AE..= t asBakerStakeThreshold,
                 "addAnonymityRevoker" AE..= t asAddAnonymityRevoker,
                 "addIdentityProvider" AE..= t asAddIdentityProvider
-                
             ] ++ cooldownParameters ++ timeParameters)
         where
             t AccessStructure{..} = AE.object [
                     "authorizedKeys" AE..= accessPublicKeys,
                     "threshold" AE..= accessThreshold
                 ]
-            cooldownParameters = case asCooldownParameters of 
+            cooldownParameters = case asCooldownParameters of
                   AccessStructureForCPV1None -> []
                   AccessStructureForCPV1Some as -> ["cooldownParameters" AE..= t as]
-            timeParameters = case asTimeParameters of 
+            timeParameters = case asTimeParameters of
                   AccessStructureForCPV1None -> []
                   AccessStructureForCPV1Some as -> ["timeParameters" AE..= t as]
 
@@ -368,29 +362,6 @@ data RootUpdate cpv =
   | Level2KeysRootUpdate {
     l2kruAuthorizations :: !(Authorizations cpv)
   }
-  -- ^Update the Level 1 keys
-  -- | Level2KeysRootUpdateV1 {
-  --   l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
-  -- }
-  -- ^Update the level 2 keys
-
-
--- data RootUpdate cpv where
---   RootKeysRootUpdate :: forall cpv. {
---     rkruKeys :: !(HigherLevelKeys RootKeysKind)
---   } -> RootUpdate cpv
---   -- ^Update the root keys
---   Level1KeysRootUpdate :: forall cpv. {
---     l1kruKeys :: !(HigherLevelKeys Level1KeysKind)
---   } -> RootUpdate cpv
---   -- ^Update the Level 1 keys
---   Level2KeysRootUpdateV0 :: {
---     l2kruAuthorizationsV0 :: !(Authorizations 'ChainParametersV0)
---   } -> RootUpdate 'ChainParametersV0
---   -- ^Update the Level 1 keys
---   Level2KeysRootUpdateV1 :: {
---     l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
---   } -> RootUpdate 'ChainParametersV1
 
 deriving instance Eq (RootUpdate cpv)
 deriving instance Show (RootUpdate cpv)
@@ -463,7 +434,7 @@ data Level1Update cpv =
   }
   | Level2KeysLevel1Update {
     l2kl1uAuthorizations :: !(Authorizations cpv)
-  } 
+  }
 
 deriving instance Eq (Level1Update cpv)
 deriving instance Show (Level1Update cpv)
@@ -570,8 +541,6 @@ instance AE.FromJSON ProtocolUpdate where
             unless (BS.null garbage) $ fail "Unable to parse \"specificationAuxiliaryData\" as Base-16"
             return ProtocolUpdate{..}
 
-
-
 -------------------------
 -- * Keys collection
 -------------------------
@@ -608,13 +577,6 @@ instance IsChainParametersVersion cpv => AE.FromJSON (UpdateKeysCollection cpv) 
     level1Keys <- v .: "level1Keys"
     level2Keys <- v .: "level2Keys"
     return UpdateKeysCollection{..}
-  
--- instance AE.FromJSON (UpdateKeysCollection 'ChainParametersV1) where
---   parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
---     rootKeys <- v .: "rootKeys"
---     level1Keys <- v .: "level1Keys"
---     level2Keys <- v .: "level2Keys"
---     return UpdateKeysCollection{..}
 
 instance AE.ToJSON (UpdateKeysCollection cpv) where
   toJSON UpdateKeysCollection{..} = AE.object [
@@ -687,7 +649,7 @@ instance Serialize UpdateType where
     put UpdateAddIdentityProvider = putWord8 14
     put UpdateCooldownParametersCPV1 = putWord8 15
     put UpdatePoolParametersCPV1 = putWord8 16
-    put UpdateTimeParametersCPV1 = putWord8 17 
+    put UpdateTimeParametersCPV1 = putWord8 17
     get = getWord8 >>= \case
         1 -> return UpdateProtocol
         2 -> return UpdateElectionDifficulty
