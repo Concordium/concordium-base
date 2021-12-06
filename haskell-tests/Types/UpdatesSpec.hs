@@ -136,23 +136,30 @@ tests = parallel $ do
     specify "UpdatePayload serialization in P1" $ withMaxSuccess 1000 $ testSerializeUpdatePayload SP1
     specify "UpdatePayload serialization in P2" $ withMaxSuccess 1000 $ testSerializeUpdatePayload SP2
     specify "UpdatePayload serialization in P3" $ withMaxSuccess 1000 $ testSerializeUpdatePayload SP3
+    specify "UpdatePayload serialization in P4" $ withMaxSuccess 1000 $ testSerializeUpdatePayload SP4
     specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV0
     specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV1
     specify "Valid update instructions in P1" $ withMaxSuccess 1000 (testUpdateInstruction SP1 makeKeysGood True)
     specify "Valid update instructions in P2" $ withMaxSuccess 1000 (testUpdateInstruction SP2 makeKeysGood True)
     specify "Valid update instructions in P3" $ withMaxSuccess 1000 (testUpdateInstruction SP3 makeKeysGood True)
+    specify "Valid update instructions in P4" $ withMaxSuccess 1000 (testUpdateInstruction SP4 makeKeysGood True)
     specify "Valid update instructions, extraneous signatures in P1" $ withMaxSuccess 1000 (testUpdateInstruction SP1 (combineKeys makeKeysOther makeKeysGood) False)
     specify "Valid update instructions, extraneous signatures in P2" $ withMaxSuccess 1000 (testUpdateInstruction SP2 (combineKeys makeKeysOther makeKeysGood) False)
     specify "Valid update instructions, extraneous signatures in P3" $ withMaxSuccess 1000 (testUpdateInstruction SP3 (combineKeys makeKeysOther makeKeysGood) False)
+    specify "Valid update instructions, extraneous signatures in P4" $ withMaxSuccess 1000 (testUpdateInstruction SP4 (combineKeys makeKeysOther makeKeysGood) False)
     specify "Update instructions, too few good in P1" $ withMaxSuccess 1000 (testUpdateInstruction SP1 makeKeysFewGood False)
     specify "Update instructions, too few good in P2" $ withMaxSuccess 1000 (testUpdateInstruction SP2 makeKeysFewGood False)
     specify "Update instructions, too few good in P3" $ withMaxSuccess 1000 (testUpdateInstruction SP3 makeKeysFewGood False)
+    specify "Update instructions, too few good in P4" $ withMaxSuccess 1000 (testUpdateInstruction SP4 makeKeysFewGood False)
     specify "Update instructions, too few good, extraneous signatures in P1" $ withMaxSuccess 1000 (testUpdateInstruction SP1 (combineKeys makeKeysOther makeKeysFewGood) False)
     specify "Update instructions, too few good, extraneous signatures in P2" $ withMaxSuccess 1000 (testUpdateInstruction SP2 (combineKeys makeKeysOther makeKeysFewGood) False)
     specify "Update instructions, too few good, extraneous signatures in P3" $ withMaxSuccess 1000 (testUpdateInstruction SP3 (combineKeys makeKeysOther makeKeysFewGood) False)
+    specify "Update instructions, too few good, extraneous signatures in P4" $ withMaxSuccess 1000 (testUpdateInstruction SP4 (combineKeys makeKeysOther makeKeysFewGood) False)
     specify "Update instructions, enough good, one bad in P1" $ withMaxSuccess 1000 (testUpdateInstruction SP1 (combineKeys makeKeyInvalid makeKeysGood) False)
     specify "Update instructions, enough good, one bad in P2" $ withMaxSuccess 1000 (testUpdateInstruction SP2 (combineKeys makeKeyInvalid makeKeysGood) False)
     specify "Update instructions, enough good, one bad in P3" $ withMaxSuccess 1000 (testUpdateInstruction SP3 (combineKeys makeKeyInvalid makeKeysGood) False)
+    specify "Update instructions, enough good, one bad in P4" $ withMaxSuccess 1000 (testUpdateInstruction SP4 (combineKeys makeKeyInvalid makeKeysGood) False)
     specify "Update instructions, enough good, one bad (bad index) in P1" $ withMaxSuccess 1000 (testUpdateInstruction SP1 (combineKeys makeKeyBadIndex makeKeysGood) False)
     specify "Update instructions, enough good, one bad (bad index) in P2" $ withMaxSuccess 1000 (testUpdateInstruction SP2 (combineKeys makeKeyBadIndex makeKeysGood) False)
     specify "Update instructions, enough good, one bad (bad index) in P3" $ withMaxSuccess 1000 (testUpdateInstruction SP3 (combineKeys makeKeyBadIndex makeKeysGood) False)
+    specify "Update instructions, enough good, one bad (bad index) in P4" $ withMaxSuccess 1000 (testUpdateInstruction SP4 (combineKeys makeKeyBadIndex makeKeysGood) False)
