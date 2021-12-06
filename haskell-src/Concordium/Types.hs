@@ -72,6 +72,8 @@ module Concordium.Types (
 
   -- * Addresses
   Address(..),
+  UrlText(..),
+  maxUrlTextLength,
 
   -- * Registered Data
   RegisteredData(..),
@@ -184,6 +186,7 @@ import Data.Hashable (Hashable (..))
 import Data.Word
 import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Bits
 import Data.Ratio
@@ -194,6 +197,9 @@ import Data.Aeson.TH
 
 import Data.Time
 import Data.Time.Clock.POSIX
+
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
@@ -293,6 +299,34 @@ takeFractionFromPartsPerHundredThousands f = fromInteger . (`div` 100000) . (toI
 
 partsPerHundredThousandsToRational :: PartsPerHundredThousands -> Rational
 partsPerHundredThousandsToRational f = toInteger (partsPerHundredThousand f) % 100000
+
+-- |A unicode representation of a Url.
+-- The Utf8 encoding of the Url must be at most 'maxUrlTextLength' bytes.
+newtype UrlText = UrlText T.Text
+  deriving newtype (Eq, Show)
+
+-- |The maximum allowed length of a 'UrlText' in bytes (Utf8 encoded).
+maxUrlTextLength :: Word16
+maxUrlTextLength = 2048
+
+instance S.Serialize UrlText where
+  put (UrlText url)
+    | len <= fromIntegral maxUrlTextLength = do
+      S.putWord16be (fromIntegral len)
+      S.putByteString enc
+    | otherwise = error "UrlText is too long"
+    where
+      enc = T.encodeUtf8 url
+      len = BS.length enc
+  get = do
+      len <- S.getWord16be
+      when (len > maxUrlTextLength) $
+        fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
+      bytes <- S.getByteString (fromIntegral len)
+      case T.decodeUtf8' bytes of
+        Left e -> fail (show e)
+        Right r -> return (UrlText r)
+
 
 -- |Due to limitations on the ledger, there has to be some restriction on the
 -- precision of the input for updating ElectionDifficult. For this purpose,

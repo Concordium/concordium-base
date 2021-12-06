@@ -24,8 +24,6 @@ import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 import Concordium.Utils.Serialization
 import qualified Data.Set as Set
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 
@@ -102,33 +100,6 @@ instance S.Serialize DelegationTarget where
     0 -> return DelegateToLPool
     1 -> DelegateToBaker <$> S.get
     _ -> fail "Invalid DelegationTarget"
-
--- |The maximum allowed length of a 'UrlText' in bytes (Utf8 encoded).
-maxUrlTextLength :: Word16
-maxUrlTextLength = 2048
-
--- |A unicode representation of a Url.
--- The Utf8 encoding of the Url must be at most 'maxUrlTextLength' bytes.
-newtype UrlText = UrlText T.Text
-  deriving newtype (Eq, Show)
-
-instance S.Serialize UrlText where
-  put (UrlText url)
-    | len <= fromIntegral maxUrlTextLength = do
-      S.putWord16be (fromIntegral len)
-      S.putByteString enc
-    | otherwise = error "UrlText is too long"
-    where 
-      enc = T.encodeUtf8 url
-      len = BS.length enc
-  get = do
-      len <- S.getWord16be
-      when (len > maxUrlTextLength) $
-        fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
-      bytes <- S.getByteString (fromIntegral len)
-      case T.decodeUtf8' bytes of
-        Left e -> fail (show e)
-        Right r -> return (UrlText r)
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --

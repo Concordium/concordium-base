@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Queries where
@@ -210,6 +211,11 @@ data BlockSummary = forall pv.
       bsUpdates :: !(Updates pv)
     }
 
+-- |Get 'Updates' from 'BlockSummary', with continuation to avoid "escaped type variables".
+{-# INLINE bsWithUpdates #-}
+bsWithUpdates :: BlockSummary -> (forall pv. SProtocolVersion pv -> Updates pv -> a) -> a
+bsWithUpdates BlockSummary{..} = \k -> k protocolVersion bsUpdates
+
 instance Show BlockSummary where
     showsPrec prec BlockSummary{bsUpdates = bsUpdates :: Updates pv, ..} = do
         showParen (prec > 11) $
@@ -238,8 +244,13 @@ instance ToJSON BlockSummary where
 instance FromJSON BlockSummary where
     parseJSON =
         withObject "BlockSummary" $ \v -> do
-            pv <- v .: "protocolVersion"
-            parse (promoteProtocolVersion pv) v
+            -- We have added the "protocolVersion" field in protocol version 4, so in order to parse
+            -- blocks summaries from older protocols, we allow this field to not exist. If the field
+            -- does not exist, then we proceed like the previous protocol (version 3).
+            mpv <- v .:? "protocolVersion"
+            case mpv of
+                Nothing -> parse (promoteProtocolVersion P3) v
+                Just pv -> parse (promoteProtocolVersion pv) v
       where
         parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
         parse (SomeProtocolVersion (_ :: SProtocolVersion pv)) v =
