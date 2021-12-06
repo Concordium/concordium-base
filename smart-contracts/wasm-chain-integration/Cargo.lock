@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "1.0.1"
+version = "2.0.0"
 dependencies = [
  "base58check",
  "chrono",
@@ -891,7 +891,7 @@ checksum = "0237232789cf037d5480773fe568aac745bfe2afbc11a863e97901780a6b47cc"
 
 [[package]]
 name = "wasm-chain-integration"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -925,7 +925,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-transform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "concordium-contracts-common",

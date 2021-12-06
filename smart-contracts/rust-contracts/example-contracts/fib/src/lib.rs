@@ -56,7 +56,7 @@ fn contract_receive_calc_fib<A: HasActions>(
     amount: Amount,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    state.result = fib(amount.micro_gtu);
+    state.result = fib(amount.micro_ccd);
     Ok(A::accept())
 }
 

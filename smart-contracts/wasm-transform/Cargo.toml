@@ -1,6 +1,6 @@
 [package]
 name = "wasm-transform"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../LICENSE-MPL-2.0"
@@ -17,7 +17,7 @@ derive_more = "0.99"
 
 
 [dependencies.concordium-contracts-common]
-version = "1.0"
+version = "2.0"
 path = "../concordium-contracts-common"
 features = ["derive-serde"]
 

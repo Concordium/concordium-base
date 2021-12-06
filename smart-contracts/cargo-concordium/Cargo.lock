@@ -118,7 +118,7 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "cargo-concordium"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "ansi_term 0.12.1",
  "anyhow",
@@ -190,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "1.0.1"
+version = "2.0.0"
 dependencies = [
  "base58check",
  "chrono",
@@ -957,7 +957,7 @@ checksum = "0237232789cf037d5480773fe568aac745bfe2afbc11a863e97901780a6b47cc"
 
 [[package]]
 name = "wasm-chain-integration"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "concordium-contracts-common",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-transform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "concordium-contracts-common",

@@ -523,7 +523,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 index:    0,
                 subindex: 0,
             },
-            self_balance: Amount::from_gtu(1000),
+            self_balance: Amount::from_ccd(1000),
             sender: Address::Account(owner),
             owner,
             sender_policies: &[],

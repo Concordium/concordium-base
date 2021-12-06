@@ -58,7 +58,7 @@ impl Arbitrary for DeterministicInterpreterInput {
                     index:    10,
                     subindex: 5,
                 },
-                self_balance:    Amount::from_gtu(1),
+                self_balance:    Amount::from_ccd(1),
                 sender:          Account(AccountAddress([7; ACCOUNT_ADDRESS_SIZE])),
                 owner:           AccountAddress([6; ACCOUNT_ADDRESS_SIZE]),
                 sender_policies: Vec::new(),

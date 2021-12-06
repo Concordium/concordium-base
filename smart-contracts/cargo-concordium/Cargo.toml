@@ -1,6 +1,6 @@
 [package]
 name = "cargo-concordium"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../LICENSE-APACHE"
@@ -31,6 +31,6 @@ path = "../wasm-chain-integration/"
 criterion = "0.3"
 
 [dependencies.concordium-contracts-common]
-version = "1.0"
+version = "2.0"
 path = "../concordium-contracts-common"
 features = ["derive-serde", "std"]

@@ -671,7 +671,7 @@ pub(crate) mod host {
         stack: &mut machine::RuntimeStack,
         self_balance: ExecResult<Amount>,
     ) -> machine::RunResult<()> {
-        stack.push_value(self_balance?.micro_gtu);
+        stack.push_value(self_balance?.micro_ccd);
         Ok(())
     }
 

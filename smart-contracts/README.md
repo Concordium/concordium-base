@@ -46,9 +46,19 @@ The list of currently implemented contracts is as follows:
   - bringing in complex dependencies (containers, sha2, hex encoding)
   - more complex state, that is only partially updated.
 - [escrow](./rust-contracts/example-contracts/escrow) a toy escrow contract which allows a buyer to submit a deposit which is held until the buyer is satisfied that they have received their goods, or an arbiter makes a judgement as a result of either the buyer or seller raising a dispute.
-- [lockup](./rust-contracts/example-contracts/lockup) a contract which implements a GTU lockup, where those GTU vest over a pre-determined schedule, and vested GTU can be withdrawn by any one of potentially several account holders. The contract also allows for a set of accounts to have the power to veto the vesting of future GTU, e.g. for cases where an employee's vesting schedule is contingent on their continued employment.
+- [lockup](./rust-contracts/example-contracts/lockup) a contract which implements a CCD lockup, where those CCD vest over a pre-determined schedule, and vested CCD can be withdrawn by any one of potentially several account holders. The contract also allows for a set of accounts to have the power to veto the vesting of future CCD, e.g. for cases where an employee's vesting schedule is contingent on their continued employment.
 - [erc20](./rust-contracts/example-contracts/erc20) an implementation of the [token standard](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md) popular in Ethereum used by other applications, such as wallets.
 
+### When updating **concordium-rust-smart-contracts** dependency
+
+The examples all depend on the libraries implemented in [concordium-rust-smart-contracts](https://github.com/Concordium/concordium-rust-smart-contracts). When working on these in tandem, it might make sense to change the dependencies in the `Cargo.toml` of the respective smart contract, to point at the local dev version of the libraries:
+
+```toml
+[dependencies.concordium-std]
+# git = "https://github.com/Concordium/concordium-rust-smart-contracts.git"
+# branch = "main"
+path = "path/to/dev/concordium-rust-smart-contracts"
+```
 
 ## Compiling smart contracts to Wasm
 

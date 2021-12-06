@@ -130,7 +130,7 @@ fn contribute<A: HasActions>(
     let num_contributions: u32 = state.get()?;
     // Ensure that you have to contribute more tokens the later you are to the
     // game. The scaling is arbitrarily linear.
-    ensure!(amount.micro_gtu > u64::from(num_contributions) * 10); // Amount too small, rejecting contribution.
+    ensure!(amount.micro_ccd > u64::from(num_contributions) * 10); // Amount too small, rejecting contribution.
                                                                    // Try to get the parameter (which should be exactly 32-bytes for this to
                                                                    // succeed).
     let cont: Contribution = ctx.parameter_cursor().get()?;
@@ -266,7 +266,7 @@ fn finalize<A: HasActions>(
             total -= to_transfer;
             // Send to each account in the list until there is something to send.
             let send = rest.iter().rev().try_fold(send, |acc, (addr, _)| {
-                if total.micro_gtu > 0 {
+                if total.micro_ccd > 0 {
                     let (to_transfer, _remainder) = total.quotient_remainder(2);
                     logger.log::<AccountAddress>(addr).ok()?;
                     total -= to_transfer;
