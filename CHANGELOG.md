@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased changes
+- Update references to token to match token name (CCD).
 
 ## concordium-contracts-common 1.0.1 (2021-10-08)
 - Fix deserialization of arrays.
