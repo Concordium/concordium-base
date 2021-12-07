@@ -366,6 +366,40 @@ impl Deserial for OwnedReceiveName {
     }
 }
 
+impl Serial for OwnedEntrypointName {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.0.len() as u16;
+        len.serial(out)?;
+        serial_vector_no_length(self.0.as_bytes(), out)
+    }
+}
+
+impl Deserial for OwnedEntrypointName {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let bytes = deserial_vector_no_length(source, len as usize)?;
+        let name = String::from_utf8(bytes).map_err(|_| ParseError::default())?;
+        let owned_entrypoint_name = Self::new(name).map_err(|_| ParseError::default())?;
+        Ok(owned_entrypoint_name)
+    }
+}
+
+impl Serial for OwnedParameter {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.0.len() as u16;
+        len.serial(out)?;
+        out.write_all(&self.0)
+    }
+}
+
+impl Deserial for OwnedParameter {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let bytes = deserial_vector_no_length(source, len as usize)?;
+        Ok(Self(bytes))
+    }
+}
+
 impl Serial for ChainMetadata {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.slot_time.serial(out) }
 }
