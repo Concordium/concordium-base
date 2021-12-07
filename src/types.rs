@@ -848,6 +848,40 @@ impl OwnedReceiveName {
     pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
 }
 
+/// An entrypoint name (owned version). Expected format:
+/// "<func_name>" where
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct OwnedEntrypointName(pub String);
+
+impl OwnedEntrypointName {
+    /// Create a new name and check the format. See [is_valid_entrypoint_name]
+    /// for the expected format.
+    pub fn new(name: String) -> Result<Self, NewReceiveNameError> {
+        is_valid_entrypoint_name(&name)?;
+        Ok(Self(name))
+    }
+}
+
+/// Parameter to the init function or entrypoint.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct OwnedParameter(pub Vec<u8>);
+
+/// Check whether the given string is a valid contract entrypoint name.
+/// This is the case if and only if
+/// - the string is no more than [constants::MAX_FUNC_NAME_SIZE][m] bytes
+/// - all characters are ascii alphanumeric or punctuation characters.
+///
+/// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
+pub fn is_valid_entrypoint_name(name: &str) -> Result<(), NewReceiveNameError> {
+    if name.len() > constants::MAX_FUNC_NAME_SIZE {
+        return Err(NewReceiveNameError::TooLong);
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+        return Err(NewReceiveNameError::InvalidCharacters);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewReceiveNameError {
     MissingDotSeparator,
@@ -882,7 +916,8 @@ pub type SlotTime = Timestamp;
     derive(SerdeSerialize, SerdeDeserialize),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
+#[derive(Debug)]
 pub struct ChainMetadata {
     pub slot_time: SlotTime,
 }
