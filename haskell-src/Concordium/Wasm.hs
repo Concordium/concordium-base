@@ -50,13 +50,6 @@ module Concordium.Wasm (
   WasmModule(..),
   getModuleRef,
 
-  -- ** Instrumented module
-  --
-  -- | An instrumented module is a processed module that is ready to be
-  -- instantiated and run.
-  ModuleArtifact(..),
-  InstrumentedModule(..),
-
   -- *** Methods
   --
   -- | A contract has one init method and several receive methods. A module can
@@ -68,9 +61,6 @@ module Concordium.Wasm (
   isValidReceiveName,
   contractAndFunctionName,
   Parameter(..),
-
-  -- *** Module interface
-  ModuleInterface(..),
 
   -- *** Contract state
   ContractState(..),
@@ -184,37 +174,6 @@ instance HashableTo H.Hash WasmModule where
 
 --------------------------------------------------------------------------------
 
--- | A processed module artifact ready for execution.
-newtype ModuleArtifact = ModuleArtifact { artifact :: ByteString }
-    deriving (Eq, Show)
-
-instance Serialize ModuleArtifact where
-  put ma = putWord32be (fromIntegral (BS.length (artifact ma))) <>
-           putByteString (artifact ma)
-
-  get = do
-    len <- getWord32be
-    ModuleArtifact <$> getByteString (fromIntegral len)
-
--- |Web assembly module in binary format, instrumented with whatever it needs to
--- be instrumented with, and preprocessed to an executable format, ready to be
--- instantiated and run.
-data InstrumentedModule = InstrumentedWasmModule {
-  -- |Version of the Wasm standard and on-chain API this module corresponds to.
-  imWasmVersion :: !Word32,
-  -- |Source in binary wasm format.
-  imWasmArtifact :: !ModuleArtifact
-  } deriving(Eq, Show)
-
-instance Serialize InstrumentedModule where
-  put InstrumentedWasmModule{..} = do
-    putWord32be imWasmVersion
-    put imWasmArtifact
-
-  get = InstrumentedWasmModule <$> getWord32be <*> get
-
---------------------------------------------------------------------------------
-
 -- |Name of an init method inside a module.
 newtype InitName = InitName { initName :: Text }
     deriving(Eq, Show, Ord)
@@ -308,36 +267,6 @@ instance Serialize Parameter where
     Parameter <$> getShortByteString (fromIntegral len)
 
 --------------------------------------------------------------------------------
-
--- |A Wasm module interface with exposed entry-points.
-data ModuleInterface = ModuleInterface {
-  -- |Reference of the module on the chain.
-  miModuleRef :: !ModuleRef,
-  -- |Init methods exposed by this module.
-  -- They should each be exposed with a type Amount -> Word32
-  miExposedInit :: !(Set.Set InitName),
-  -- |Receive methods exposed by this module, indexed by contract name.
-  -- They should each be exposed with a type Amount -> Word32
-  miExposedReceive :: !(Map.Map InitName (Set.Set ReceiveName)),
-  -- |Module source in binary format, instrumented with whatever it needs to be instrumented with.
-  miModule :: !InstrumentedModule,
-  miModuleSize :: !Word64
-  } deriving(Eq, Show)
-
-instance Serialize ModuleInterface where
-  get = do
-    miModuleRef <- get
-    miExposedInit <- getSafeSetOf get
-    miExposedReceive <- getSafeMapOf get (getSafeSetOf get)
-    miModule <- get
-    miModuleSize <- getWord64be
-    return ModuleInterface {..}
-  put ModuleInterface{..} = do
-    put miModuleRef
-    putSafeSetOf put miExposedInit
-    putSafeMapOf put (putSafeSetOf put) miExposedReceive
-    put miModule
-    putWord64be miModuleSize
 
 -- |State of a smart contract. In general we don't know anything other than
 -- it is a sequence of bytes.
