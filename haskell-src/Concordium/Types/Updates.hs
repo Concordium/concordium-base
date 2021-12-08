@@ -122,21 +122,7 @@ instance Serialize AccessStructure where
         when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
 
-data AccessStructureForCPV1 (cpv :: ChainParametersVersion) where
-  AccessStructureForCPV1None :: AccessStructureForCPV1 'ChainParametersV0
-  AccessStructureForCPV1Some :: !AccessStructure -> AccessStructureForCPV1 'ChainParametersV1
-
-deriving instance Eq (AccessStructureForCPV1 cpv)
-deriving instance Show (AccessStructureForCPV1 cpv)
-
-putAccessStructureForCPV1 :: Putter (AccessStructureForCPV1 cpv)
-putAccessStructureForCPV1 AccessStructureForCPV1None = return ()
-putAccessStructureForCPV1 (AccessStructureForCPV1Some as) = put as
-
-getAccessStructureForCPV1 :: SChainParametersVersion cpv -> Get (AccessStructureForCPV1 cpv)
-getAccessStructureForCPV1 scpv = case scpv of
-  SCPV0 -> return AccessStructureForCPV1None
-  SCPV1 -> AccessStructureForCPV1Some <$> get
+type AccessStructureForCPV1 cpv = JustForCPV1 cpv AccessStructure
 
 -- |The set of keys authorized for chain updates, together with
 -- access structures determining which keys are authorized for
@@ -176,7 +162,7 @@ data Authorizations cpv = Authorizations {
 deriving instance Eq (Authorizations cpv)
 deriving instance Show (Authorizations cpv)
 
-putAuthorizations :: Putter (Authorizations cpv)
+putAuthorizations :: IsChainParametersVersion cpv => Putter (Authorizations cpv)
 putAuthorizations Authorizations{..} = do
         putWord16be (fromIntegral (Vec.length asKeys))
         mapM_ put asKeys
@@ -192,8 +178,8 @@ putAuthorizations Authorizations{..} = do
         put asBakerStakeThreshold
         put asAddAnonymityRevoker
         put asAddIdentityProvider
-        putAccessStructureForCPV1 asCooldownParameters
-        putAccessStructureForCPV1 asTimeParameters
+        put asCooldownParameters
+        put asTimeParameters
 
 getAuthorizations :: forall cpv. IsChainParametersVersion cpv => Get (Authorizations cpv)
 getAuthorizations = label "deserialization update authorizations" $ do
@@ -219,21 +205,21 @@ getAuthorizations = label "deserialization update authorizations" $ do
         asAddAnonymityRevoker <- getChecked
         asAddIdentityProvider <- getChecked
         (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
-          SCPV0 -> return (AccessStructureForCPV1None, AccessStructureForCPV1None)
+          SCPV0 -> return (NothingForCPV1, NothingForCPV1)
           SCPV1 -> do
             cp <- getChecked
             tp <- getChecked
-            return (AccessStructureForCPV1Some cp, AccessStructureForCPV1Some tp)
+            return (JustCPV1ForCPV1 cp, JustCPV1ForCPV1 tp)
         return Authorizations{..}
 
 instance IsChainParametersVersion cpv => Serialize (Authorizations cpv) where
   put = putAuthorizations
   get = getAuthorizations
 
-instance HashableTo SHA256.Hash (Authorizations cpv) where
+instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (Authorizations cpv) where
     getHash a = SHA256.hash $ "Authorizations" <> runPut (putAuthorizations a)
 
-instance Monad m => MHashableTo m SHA256.Hash (Authorizations cpv)
+instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (Authorizations cpv)
 
 parseAuthorizationsJSON :: forall cpv. IsChainParametersVersion cpv => AE.Value -> AE.Parser (Authorizations cpv)
 parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
@@ -261,11 +247,11 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
         asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
         asAddIdentityProvider <- parseAS "addIdentityProvider"
         (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
-          SCPV0 -> return (AccessStructureForCPV1None, AccessStructureForCPV1None)
+          SCPV0 -> return (NothingForCPV1, NothingForCPV1)
           SCPV1 -> do
             cp <- parseAS "cooldownParameters"
             tp <- parseAS "timeParameters"
-            return (AccessStructureForCPV1Some cp, AccessStructureForCPV1Some tp)
+            return (JustCPV1ForCPV1 cp, JustCPV1ForCPV1 tp)
         return Authorizations{..}
 
 instance IsChainParametersVersion cpv => AE.FromJSON (Authorizations cpv) where
@@ -293,11 +279,11 @@ instance AE.ToJSON (Authorizations cpv) where
                     "threshold" AE..= accessThreshold
                 ]
             cooldownParameters = case asCooldownParameters of
-                  AccessStructureForCPV1None -> []
-                  AccessStructureForCPV1Some as -> ["cooldownParameters" AE..= t as]
+                  NothingForCPV1 -> []
+                  JustCPV1ForCPV1 as -> ["cooldownParameters" AE..= t as]
             timeParameters = case asTimeParameters of
-                  AccessStructureForCPV1None -> []
-                  AccessStructureForCPV1Some as -> ["timeParameters" AE..= t as]
+                  NothingForCPV1 -> []
+                  JustCPV1ForCPV1 as -> ["timeParameters" AE..= t as]
 
 -----------------
 -- * Higher Level keys (Root and Level 1 keys)
@@ -561,7 +547,7 @@ data UpdateKeysCollection cpv = UpdateKeysCollection {
   level2Keys :: !(Authorizations cpv)
   } deriving (Eq, Show)
 
-putUpdateKeysCollection :: Putter (UpdateKeysCollection cpv)
+putUpdateKeysCollection :: IsChainParametersVersion cpv => Putter (UpdateKeysCollection cpv)
 putUpdateKeysCollection UpdateKeysCollection{..} = do
   put rootKeys
   put level1Keys
@@ -574,10 +560,10 @@ instance IsChainParametersVersion cpv => Serialize (UpdateKeysCollection cpv) wh
   put = putUpdateKeysCollection
   get = getUpdateKeysCollection
 
-instance HashableTo SHA256.Hash (UpdateKeysCollection cpv) where
+instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (UpdateKeysCollection cpv) where
   getHash = SHA256.hash . runPut . putUpdateKeysCollection
 
-instance Monad m => MHashableTo m SHA256.Hash (UpdateKeysCollection cpv) where
+instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (UpdateKeysCollection cpv)
 
 instance IsChainParametersVersion cpv => AE.FromJSON (UpdateKeysCollection cpv) where
   parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
@@ -850,8 +836,8 @@ extractKeysIndices p =
         f' v = h . v . level2Keys
         g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0..(fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
         h :: AccessStructureForCPV1 cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
-        h (AccessStructureForCPV1Some AccessStructure{..}) = (accessPublicKeys, accessThreshold)
-        h AccessStructureForCPV1None = (Set.empty, 1) 
+        h (JustCPV1ForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
+        h NothingForCPV1 = (Set.empty, 1)
           -- The latter case happens if the UpdateKeysCollection is used with chain parameter version 0 but the update payload is
           -- is a cooldown paramater update or a time parameter update, which only exists in chain parameter version 1.
           -- Therefore, the empty set with threshold 1 is returned so that checkEnoughKeys will return false in this case.
