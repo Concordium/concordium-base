@@ -64,9 +64,7 @@ testUpdateInstruction spv keyGen isValid =
   let p = ruiPayload rui
   keysToSign <- case p of
              RootUpdatePayload{} -> f p kc rootK
-             RootCPV1UpdatePayload{} -> f p kc rootK
              Level1UpdatePayload{} -> f p kc level1K
-             Level1CPV1UpdatePayload{} -> f p kc level1K
              _ -> f p kc level2K
   let ui = makeUpdateInstruction rui keysToSign
   return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate kc ui)

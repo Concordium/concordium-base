@@ -350,7 +350,7 @@ instance Monad m => MHashableTo m SHA256.Hash (HigherLevelKeys a) where
 
 -- |Root updates are the highest kind of updates. They can update every other
 -- set of keys, even themselves. They can only be performed by Root level keys.
-data RootUpdate (cpv :: ChainParametersVersion) =
+data RootUpdate =
   RootKeysRootUpdate {
     rkruKeys :: !(HigherLevelKeys RootKeysKind)
   }
@@ -360,13 +360,16 @@ data RootUpdate (cpv :: ChainParametersVersion) =
   }
   -- ^Update the Level 1 keys
   | Level2KeysRootUpdate {
-    l2kruAuthorizations :: !(Authorizations cpv)
+    l2kruAuthorizations :: !(Authorizations 'ChainParametersV0)
   }
+  -- ^Update the Level 2 keys in chain parameters version 0
+  | Level2KeysRootUpdateV1 {
+    l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
+  }
+  -- ^Update the level 2 keys in chain parameters version 1
+  deriving (Eq, Show)
 
-deriving instance Eq (RootUpdate cpv)
-deriving instance Show (RootUpdate cpv)
-
-putRootUpdate :: Putter (RootUpdate cpv)
+putRootUpdate :: Putter RootUpdate
 putRootUpdate RootKeysRootUpdate{..} = do
     putWord8 0
     put rkruKeys
@@ -391,7 +394,6 @@ getRootUpdate scpv = label "RootUpdate" $ do
     _ -> fail $ "Unknown variant: " ++ show variant
     where
       isCPV cpv = cpv == demoteChainParameterVersion scpv
-
 
 instance AE.FromJSON RootUpdate where
   parseJSON = AE.withObject "RootUpdate" $ \o -> do
@@ -427,12 +429,15 @@ instance AE.ToJSON RootUpdate where
 
 -- |Level 1 updates are the intermediate update kind. They can update themselves
 -- or level 2 keys. They can only be performed by Level 1 keys.
-data Level1Update (cpv :: ChainParametersVersion) =
+data Level1Update =
   Level1KeysLevel1Update {
     l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
   }
   | Level2KeysLevel1Update {
-    l2kl1uAuthorizations :: !(Authorizations cpv)
+    l2kl1uAuthorizations :: !(Authorizations 'ChainParametersV0)
+  }
+  | Level2KeysLevel1UpdateV1 {
+    l2kl1uAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
   }
 
 deriving instance Eq Level1Update
@@ -733,13 +738,9 @@ data UpdatePayload
     -- ^Update the GAS rewards
     | BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
     -- ^Update the minimum amount to register as a baker with chain parameter version 0
-    | RootUpdatePayload !(RootUpdate 'ChainParametersV0)
-    -- ^Root level updates for chain parameters version 0
-    | RootCPV1UpdatePayload !(RootUpdate 'ChainParametersV1)
+    | RootUpdatePayload !RootUpdate
     -- ^Root level updates for chain parameters version 1
-    | Level1UpdatePayload !(Level1Update 'ChainParametersV0)
-    -- ^Level 1 update for chain parameters version 0
-    | Level1CPV1UpdatePayload !(Level1Update 'ChainParametersV1)
+    | Level1UpdatePayload !Level1Update
     -- ^Level 1 update for chain parameters version 1
     | AddAnonymityRevokerUpdatePayload !ArInfo
     | AddIdentityProviderUpdatePayload !IpInfo
@@ -782,8 +783,8 @@ getUpdatePayload spv =
     7 -> TransactionFeeDistributionUpdatePayload <$> get
     8 -> GASRewardsUpdatePayload <$> get
     9 | isCPV ChainParametersV0 -> BakerStakeThresholdUpdatePayload <$> getPoolParameters 
-    10 | isCPV ChainParametersV0 -> RootUpdatePayload <$> getRootUpdate
-    11 | isCPV ChainParametersV0 -> Level1UpdatePayload <$> getLevel1Update
+    10 -> RootUpdatePayload <$> getRootUpdate scpv
+    11 -> Level1UpdatePayload <$> getLevel1Update scpv
     12 -> AddAnonymityRevokerUpdatePayload <$> get
     13 -> AddIdentityProviderUpdatePayload <$> get
     14 | isCPV ChainParametersV1 -> CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
@@ -818,15 +819,12 @@ updateType CooldownParametersCPV1UpdatePayload{} = UpdateCooldownParametersCPV1
 updateType PoolParametersCPV1UpdatePayload{} = UpdatePoolParametersCPV1
 updateType TimeParametersCPV1UpdatePayload{} = UpdateTimeParametersCPV1
 updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
-updateType (RootCPV1UpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
-updateType (RootCPV1UpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
-updateType (RootCPV1UpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
-updateType (Level1CPV1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
-updateType (Level1CPV1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -842,9 +840,7 @@ extractKeysIndices p =
     GASRewardsUpdatePayload{} -> f asParamGASRewards
     BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold
     RootUpdatePayload{} -> g rootKeys
-    RootCPV1UpdatePayload{} -> g rootKeys
     Level1UpdatePayload{} -> g level1Keys
-    Level1CPV1UpdatePayload{} -> g level1Keys
     AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
     AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
     CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
@@ -866,9 +862,7 @@ extractPubKeys :: UpdatePayload -> UpdateKeysCollection cpv -> Vec.Vector Update
 extractPubKeys p =
   case p of
     RootUpdatePayload{} -> hlkKeys . rootKeys
-    RootCPV1UpdatePayload{} -> hlkKeys . rootKeys
     Level1UpdatePayload{} -> hlkKeys . level1Keys
-    Level1CPV1UpdatePayload{} -> hlkKeys . level1Keys
     _ -> asKeys . level2Keys
 
 -- |Check that an access structure authorizes the given key set, this means particularly
