@@ -95,9 +95,19 @@ $(deriveJSON defaultOptions{constructorTagModifier=firstLower} ''OpenStatus)
 data DelegationTarget
   = DelegateToLPool
   -- ^Delegate to the lock-up pool (L-pool).
-  | DelegateToBaker !BakerId
+  | DelegateToBaker {targetBaker :: !BakerId}
   -- ^Delegate to a specific baker.
   deriving (Eq, Show)
+
+instance AE.ToJSON DelegationTarget where
+  toJSON DelegateToLPool = AE.object ["delegateType" .= AE.String "L-Pool"]
+  toJSON (DelegateToBaker bid) = AE.object ["delegateType" .= AE.String "Baker", "bakerId" .= bid]
+
+instance AE.FromJSON DelegationTarget where
+  parseJSON = AE.withObject "DelegationTarget" $ \o -> o .: "delegateType" >>= \case
+    (AE.String "L-Pool") -> return DelegateToLPool
+    (AE.String "Baker") -> DelegateToBaker <$> o .: "bakerId"
+    _ -> fail "Unsupported delegationType"
 
 instance S.Serialize DelegationTarget where
   put DelegateToLPool = S.putWord8 0

@@ -64,6 +64,7 @@ module Concordium.Types.Accounts (
     getAccountStakeHash,
     AccountInfo (..),
     AccountStakingInfo (..),
+    toAccountStakingInfo,
     AccountStakingDelegationInfo (..),
 ) where
 
@@ -433,10 +434,38 @@ data AccountStakingInfo
       AccountStakingDelegated
         { asiStakedAmount :: !Amount,
           asiStakeEarnings :: !Bool,
-          asiDelegationTarget :: !BakerId,
+          asiDelegationTarget :: !DelegationTarget,
           asiDelegationPendingChange :: !(StakePendingChange' UTCTime)
         }
     deriving (Eq, Show)
+
+toAccountStakingInfo :: (Epoch -> UTCTime) -> AccountStake av -> AccountStakingInfo
+toAccountStakingInfo _ AccountStakeNone = AccountStakingNone
+toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
+    AccountStakingBaker
+        { asiStakedAmount = _stakedAmount,
+          asiStakeEarnings = _stakeEarnings,
+          asiBakerInfo = _accountBakerInfo ^. bakerInfo,
+          asiPendingChange = pcTime <$> _bakerPendingChange,
+          asiPoolInfo = case _accountBakerInfo of
+            BakerInfoExV0{} -> Nothing
+            BakerInfoExV1{..} -> Just _bieBakerPoolInfo
+        }
+  where
+    -- TODO: Check this logic is correct.
+    pcTime (PendingChangeEffectiveV0 e) = epochConv e
+    pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
+toAccountStakingInfo _ (AccountStakeDelegate AccountDelegationV1{..}) =
+    AccountStakingDelegated
+        { asiStakedAmount = _delegationStakedAmount,
+          asiStakeEarnings = _delegationStakeEarnings,
+          asiDelegationTarget = _delegationTarget,
+          asiDelegationPendingChange = pcTime <$> _delegationPendingChange
+        }
+  where
+    -- TODO: Check this logic is correct.
+    pcTime :: PendingChangeEffective 'AccountV1 -> UTCTime
+    pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
 
 pendingChangeToJSON :: KeyValue kv => StakePendingChange' UTCTime -> [kv]
 pendingChangeToJSON NoChange = []
