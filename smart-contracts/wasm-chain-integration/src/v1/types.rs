@@ -1,10 +1,13 @@
+use super::{InitHost, Interrupt, ParameterVec, ReceiveHost};
+use crate::{resumption::InterruptedState, type_matches, v0};
 use anyhow::bail;
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
-use concordium_contracts_common::*;
-use derive_more::{AsRef, From, Into};
+use concordium_contracts_common::{
+    self, AccountAddress, Address, Amount, ChainMetadata, ContractAddress, Cursor, Get, ParseError,
+    ParseResult,
+};
 use serde::Deserialize as SerdeDeserialize;
-use std::collections::LinkedList;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
@@ -19,22 +22,34 @@ pub const MAX_EXPORT_NAME_LEN: usize = 100;
 /// Chain context accessible to the init methods.
 ///
 /// TODO: We could optimize this to be initialized lazily
-#[derive(SerdeDeserialize)]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
+#[derive(Debug, SerdeDeserialize)]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
 #[serde(rename_all = "camelCase")]
-pub struct InitContext<Policies = Vec<OwnedPolicy>> {
+pub struct InitContext<Policies = v0::OwnedPolicyBytes> {
     pub metadata:        ChainMetadata,
     pub init_origin:     AccountAddress,
     pub sender_policies: Policies,
 }
 
+/// Convert from a borrowed variant to the owned one. This clones the slice into
+/// a vector.
+impl<'a> From<InitContext<v0::PolicyBytes<'a>>> for InitContext<v0::OwnedPolicyBytes> {
+    fn from(borrowed: InitContext<v0::PolicyBytes<'a>>) -> Self {
+        Self {
+            metadata:        borrowed.metadata,
+            init_origin:     borrowed.init_origin,
+            sender_policies: borrowed.sender_policies.into(),
+        }
+    }
+}
+
 /// Chain context accessible to the receive methods.
 ///
 /// TODO: We could optimize this to be initialized lazily.
-#[derive(SerdeDeserialize)]
+#[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
-pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
+pub struct ReceiveContext<Policies = v0::OwnedPolicyBytes> {
     pub metadata:        ChainMetadata,
     pub invoker:         AccountAddress,  //32 bytes
     pub self_address:    ContractAddress, // 16 bytes
@@ -42,6 +57,22 @@ pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
     pub sender:          Address,         // 9 or 33 bytes
     pub owner:           AccountAddress,  // 32 bytes
     pub sender_policies: Policies,
+}
+
+/// Convert from a borrowed variant to the owned one. This clones the slice into
+/// a vector.
+impl<'a> From<ReceiveContext<v0::PolicyBytes<'a>>> for ReceiveContext<v0::OwnedPolicyBytes> {
+    fn from(borrowed: ReceiveContext<v0::PolicyBytes<'a>>) -> Self {
+        Self {
+            metadata:        borrowed.metadata,
+            invoker:         borrowed.invoker,
+            self_address:    borrowed.self_address,
+            self_balance:    borrowed.self_balance,
+            sender:          borrowed.sender,
+            owner:           borrowed.owner,
+            sender_policies: borrowed.sender_policies.into(),
+        }
+    }
 }
 
 impl<Policies> InitContext<Policies> {
@@ -110,211 +141,158 @@ pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[
     }
 }
 
-/// Smart contract state.
-#[derive(Clone, Debug, From, Into, AsRef)]
-pub struct State {
-    pub state: Vec<u8>,
-}
+/// State of the suspedned execution of the init function.
+/// This retains both the module that is executed, as well the host.
+pub type InitInterruptedState<R> = InterruptedState<
+    ProcessedImports,
+    R,
+    InitHost<ParameterVec, InitContext<v0::OwnedPolicyBytes>>,
+>;
 
-#[derive(Clone, Debug, Default)]
-/// Structure to support logging of events from smart contracts.
-pub struct Logs {
-    pub logs: LinkedList<Vec<u8>>,
-}
+pub type ReturnValue = Vec<u8>;
 
 #[derive(Debug)]
-pub enum InitResult {
+pub enum InitResult<R> {
     Success {
-        state:            State,
-        logs:             Logs,
+        state:            v0::State,
+        logs:             v0::Logs,
+        return_value:     ReturnValue,
         remaining_energy: u64,
+    },
+    Interrupt {
+        remaining_energy: u64,
+        config:           Box<InitInterruptedState<R>>,
+        interrupt:        Interrupt,
     },
     Reject {
         reason:           i32,
+        return_value:     ReturnValue,
         remaining_energy: u64,
     },
     OutOfEnergy,
 }
 
-impl InitResult {
-    pub fn to_bytes(&self) -> Vec<u8> {
+impl<R> InitResult<R> {
+    pub(crate) fn extract(
+        self,
+    ) -> (Vec<u8>, Option<Box<InitInterruptedState<R>>>, Option<ReturnValue>) {
         match self {
-            InitResult::OutOfEnergy => vec![0],
+            InitResult::OutOfEnergy => (vec![0], None, None),
             InitResult::Reject {
                 reason,
+                return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
                 out.push(1);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, None, Some(return_value))
+            }
+            InitResult::Interrupt {
+                remaining_energy,
+                config,
+                interrupt,
+            } => {
+                let mut out = vec![2];
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                let state = config.host.state.as_ref();
+                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
+                out.extend_from_slice(&state);
+                interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
+                (out, Some(config), None)
             }
             InitResult::Success {
                 state,
                 logs,
+                return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
-                out.push(2);
+                out.push(3);
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, None, Some(return_value))
             }
         }
     }
 }
 
-/// Data that accompanies the send action.
-#[derive(Debug)]
-pub struct SendAction {
-    pub to_addr:   ContractAddress,
-    pub name:      Vec<u8>,
-    pub amount:    u64,
-    pub parameter: Vec<u8>,
-}
-
-/// Data that accompanies the simple transfer action.
-#[derive(Debug)]
-pub struct SimpleTransferAction {
-    pub to_addr: AccountAddress, // 32 bytes
-    pub amount:  u64,            // 8 bytes
-}
-
-/// Actions produced by running a receive function.
-/// NB: The first two variants are deliberately using an Rc as opposed to just
-/// inlining the SendAction/SimpleTransferAction. The reason for this is that
-/// the variants have quite a big size difference, and we do not wish to
-/// allocate 80 bytes for each Accept action, which would happen if we did not
-/// use an indirection via an Rc.
-///
-/// Rc was chosen instead of the Box because we sometimes need to clone values
-/// of this type.
-#[derive(Clone, Debug)]
-pub enum Action {
-    Send {
-        data: std::rc::Rc<SendAction>,
-    },
-    SimpleTransfer {
-        data: std::rc::Rc<SimpleTransferAction>,
-    },
-    And {
-        l: u32,
-        r: u32,
-    },
-    Or {
-        l: u32,
-        r: u32,
-    },
-    Accept,
-}
-
-/// This is not implementing serialize because that is currently set-up for
-/// little-endian only, and we need big-endian for interoperability with the
-/// rest of the system.
-impl Action {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        use Action::*;
-        match self {
-            Send {
-                data,
-            } => {
-                let name_len = data.name.len();
-                let param_len = data.parameter.len();
-                let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
-                out.push(0);
-                out.extend_from_slice(&data.to_addr.index.to_be_bytes());
-                out.extend_from_slice(&data.to_addr.subindex.to_be_bytes());
-                out.extend_from_slice(&(name_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.name);
-                out.extend_from_slice(&data.amount.to_be_bytes());
-                out.extend_from_slice(&(param_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.parameter);
-                out
-            }
-            SimpleTransfer {
-                data,
-            } => {
-                let mut out = Vec::with_capacity(1 + 32 + 8);
-                out.push(1);
-                out.extend_from_slice(&data.to_addr.0);
-                out.extend_from_slice(&data.amount.to_be_bytes());
-                out
-            }
-            Or {
-                l,
-                r,
-            } => {
-                let mut out = Vec::with_capacity(9);
-                out.push(2);
-                out.extend_from_slice(&l.to_be_bytes());
-                out.extend_from_slice(&r.to_be_bytes());
-                out
-            }
-            And {
-                l,
-                r,
-            } => {
-                let mut out = Vec::with_capacity(9);
-                out.push(3);
-                out.extend_from_slice(&l.to_be_bytes());
-                out.extend_from_slice(&r.to_be_bytes());
-                out
-            }
-            Accept => vec![4],
-        }
-    }
-}
+/// State of the suspedned execution of the receive function.
+/// This retains both the module that is executed, as well the host.
+pub type ReceiveInterruptedState<R> = InterruptedState<
+    ProcessedImports,
+    R,
+    ReceiveHost<ParameterVec, ReceiveContext<v0::OwnedPolicyBytes>>,
+>;
 
 #[derive(Debug)]
-pub enum ReceiveResult {
+pub enum ReceiveResult<R> {
     Success {
-        state:            State,
-        logs:             Logs,
-        actions:          Vec<Action>,
+        state:            v0::State,
+        logs:             v0::Logs,
+        return_value:     ReturnValue,
         remaining_energy: u64,
+    },
+    Interrupt {
+        remaining_energy: u64,
+        config:           Box<ReceiveInterruptedState<R>>,
+        interrupt:        Interrupt,
     },
     Reject {
         reason:           i32,
+        return_value:     ReturnValue,
         remaining_energy: u64,
     },
     OutOfEnergy,
 }
 
-impl ReceiveResult {
-    pub fn to_bytes(&self) -> Vec<u8> {
+impl<R> ReceiveResult<R> {
+    pub(crate) fn extract(
+        self,
+    ) -> (Vec<u8>, Option<Box<ReceiveInterruptedState<R>>>, Option<ReturnValue>) {
         use ReceiveResult::*;
         match self {
-            OutOfEnergy => vec![0],
+            OutOfEnergy => (vec![0], None, None),
             Reject {
                 reason,
+                return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
                 out.push(1);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, None, Some(return_value))
+            }
+            Interrupt {
+                remaining_energy,
+                config,
+                interrupt,
+            } => {
+                let mut out = vec![2];
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                let state = config.host.state.as_ref();
+                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
+                out.extend_from_slice(&state);
+                interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
+                (out, Some(config), None)
             }
             Success {
                 state,
                 logs,
-                actions,
+                return_value,
                 remaining_energy,
             } => {
-                let mut out = vec![2];
+                let mut out = vec![3];
                 let state = &state.state;
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);
                 out.extend_from_slice(&logs.to_bytes());
-                out.extend_from_slice(&(actions.len() as u32).to_be_bytes());
-                for a in actions.iter() {
-                    out.extend_from_slice(&a.to_bytes());
-                }
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, None, Some(return_value))
             }
         }
     }
@@ -323,6 +301,7 @@ impl ReceiveResult {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum CommonFunc {
+    Invoke,
     GetParameterSize,
     GetParameterSection,
     GetPolicySection,
@@ -332,6 +311,7 @@ pub enum CommonFunc {
     ResizeState,
     StateSize,
     GetSlotTime,
+    WriteOutput,
 }
 
 #[repr(u8)]
@@ -343,11 +323,6 @@ pub enum InitOnlyFunc {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum ReceiveOnlyFunc {
-    Accept,
-    SimpleTransfer,
-    Send,
-    CombineAnd,
-    CombineOr,
     GetReceiveInvoker,
     GetReceiveSelfAddress,
     GetReceiveSelfBalance,
@@ -395,16 +370,13 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             11 => Ok(ImportFunc::Common(CommonFunc::StateSize)),
             12 => Ok(ImportFunc::Common(CommonFunc::GetSlotTime)),
             13 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
-            14 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Accept)),
-            15 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::SimpleTransfer)),
-            16 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Send)),
-            17 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd)),
-            18 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr)),
             19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
             20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
             21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
             22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
+            24 => Ok(ImportFunc::Common(CommonFunc::Invoke)),
+            25 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
@@ -427,16 +399,13 @@ impl Output for ImportFunc {
                 CommonFunc::ResizeState => 10,
                 CommonFunc::StateSize => 11,
                 CommonFunc::GetSlotTime => 12,
+                CommonFunc::Invoke => 24,
+                CommonFunc::WriteOutput => 25,
             },
             ImportFunc::InitOnly(io) => match io {
                 InitOnlyFunc::GetInitOrigin => 13,
             },
             ImportFunc::ReceiveOnly(ro) => match ro {
-                ReceiveOnlyFunc::Accept => 14,
-                ReceiveOnlyFunc::SimpleTransfer => 15,
-                ReceiveOnlyFunc::Send => 16,
-                ReceiveOnlyFunc::CombineAnd => 17,
-                ReceiveOnlyFunc::CombineOr => 18,
                 ReceiveOnlyFunc::GetReceiveInvoker => 19,
                 ReceiveOnlyFunc::GetReceiveSelfAddress => 20,
                 ReceiveOnlyFunc::GetReceiveSelfBalance => 21,
@@ -477,6 +446,8 @@ impl Output for ProcessedImports {
 
 pub struct ConcordiumAllowedImports;
 
+// TODO: Log event could just be another invoke.
+
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
     fn validate_import_function(
         &self,
@@ -485,20 +456,16 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
         item_name: &Name,
         ty: &FunctionType,
     ) -> bool {
-        use crate::type_matches;
         use ValueType::*;
         if duplicate {
             return false;
         };
         if mod_name.name == "concordium" {
             match item_name.name.as_ref() {
-                "accept" => type_matches!(ty => []; I32),
-                "simple_transfer" => type_matches!(ty => [I32, I64]; I32),
-                "send" => type_matches!(ty => [I64, I64, I32, I32, I64, I32, I32]; I32),
-                "combine_and" => type_matches!(ty => [I32, I32]; I32),
-                "combine_or" => type_matches!(ty => [I32, I32]; I32),
-                "get_parameter_size" => type_matches!(ty => []; I32),
-                "get_parameter_section" => type_matches!(ty => [I32, I32, I32]; I32),
+                "invoke" => type_matches!(ty => [I32, I32, I32]; I32),
+                "write_output" => type_matches!(ty => [I32, I32, I32]; I32),
+                "get_parameter_size" => type_matches!(ty => [I32]; I32),
+                "get_parameter_section" => type_matches!(ty => [I32, I32, I32, I32]; I32),
                 "get_policy_section" => type_matches!(ty => [I32, I32, I32]; I32),
                 "log_event" => type_matches!(ty => [I32, I32]; I32),
                 "load_state" => type_matches!(ty => [I32, I32, I32]; I32),
@@ -560,11 +527,8 @@ impl TryFromImport for ProcessedImports {
             }
         } else if m.name == "concordium" {
             match import.item_name.name.as_ref() {
-                "accept" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Accept),
-                "simple_transfer" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::SimpleTransfer),
-                "send" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Send),
-                "combine_and" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd),
-                "combine_or" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr),
+                "write_output" => ImportFunc::Common(CommonFunc::WriteOutput),
+                "invoke" => ImportFunc::Common(CommonFunc::Invoke),
                 "get_parameter_size" => ImportFunc::Common(CommonFunc::GetParameterSize),
                 "get_parameter_section" => ImportFunc::Common(CommonFunc::GetParameterSection),
                 "get_policy_section" => ImportFunc::Common(CommonFunc::GetPolicySection),

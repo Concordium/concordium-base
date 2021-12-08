@@ -64,6 +64,17 @@ pub struct RunConfig {
     max_memory:       usize,
 }
 
+impl RunConfig {
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Push a value to the configuration's stack. This is typically used when
+    /// the interrupt produced a response.
+    pub fn push_value<F>(&mut self, f: F)
+    where
+        StackValue: From<F>, {
+        self.stack.push_value(f)
+    }
+}
+
 #[derive(Debug)]
 pub enum ExecutionOutcome<Interrupt> {
     /// Execution was successful and the function terminated normally.
@@ -78,7 +89,7 @@ pub enum ExecutionOutcome<Interrupt> {
     /// is no resulting value since execution did not complete.
     Interrupted {
         reason: Interrupt,
-        state:  RunConfig,
+        config: RunConfig,
     },
 }
 
@@ -631,7 +642,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         if let Some(reason) = host.call(f, &mut memory, &mut stack)? {
                             return Ok(ExecutionOutcome::Interrupted {
                                 reason,
-                                state: RunConfig {
+                                config: RunConfig {
                                     pc,
                                     instructions_idx,
                                     function_frames,
@@ -687,7 +698,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             if let Some(reason) = host.call(f, &mut memory, &mut stack)? {
                                 return Ok(ExecutionOutcome::Interrupted {
                                     reason,
-                                    state: RunConfig {
+                                    config: RunConfig {
                                         pc,
                                         instructions_idx,
                                         function_frames,

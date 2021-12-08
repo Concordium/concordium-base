@@ -1,7 +1,8 @@
 use anyhow::anyhow;
 use concordium_contracts_common::{
-    AccountAddress, Address, Amount, ContractAddress, OwnedPolicy, SlotTime,
+    AccountAddress, Address, Amount, ContractAddress, OwnedPolicy, Serial, SlotTime,
 };
+use serde::Deserialize;
 use wasm_chain_integration::{v0, ExecResult};
 
 /// A chain metadata with an optional field.
@@ -29,13 +30,12 @@ pub(crate) struct InitContextOpt {
     #[serde(default)]
     metadata:        ChainMetadataOpt,
     init_origin:     Option<AccountAddress>,
-    sender_policies: Option<Vec<OwnedPolicy>>,
+    #[serde(deserialize_with = "deserialize_policy_bytes_from_json")]
+    sender_policies: Option<v0::OwnedPolicyBytes>,
 }
 
 impl v0::HasInitContext for InitContextOpt {
     type MetadataType = ChainMetadataOpt;
-    type PolicyBytesType = Vec<u8>;
-    type PolicyType = Vec<OwnedPolicy>;
 
     fn metadata(&self) -> &Self::MetadataType { &self.metadata }
 
@@ -43,8 +43,8 @@ impl v0::HasInitContext for InitContextOpt {
         unwrap_ctx_field(self.init_origin.as_ref(), "initOrigin")
     }
 
-    fn sender_policies(&self) -> ExecResult<&Self::PolicyType> {
-        unwrap_ctx_field(self.sender_policies.as_ref(), "senderPolicies")
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        unwrap_ctx_field(self.sender_policies.as_ref().map(Vec::as_ref), "senderPolicies")
     }
 }
 
@@ -64,13 +64,12 @@ pub(crate) struct ReceiveContextOpt {
     pub(crate) self_balance: Option<Amount>,
     sender:                  Option<Address>,
     owner:                   Option<AccountAddress>,
-    sender_policies:         Option<Vec<OwnedPolicy>>,
+    #[serde(deserialize_with = "deserialize_policy_bytes_from_json")]
+    sender_policies:         Option<v0::OwnedPolicyBytes>,
 }
 
 impl v0::HasReceiveContext for ReceiveContextOpt {
     type MetadataType = ChainMetadataOpt;
-    type PolicyBytesType = Vec<u8>;
-    type PolicyType = Vec<OwnedPolicy>;
 
     fn metadata(&self) -> &Self::MetadataType { &self.metadata }
 
@@ -92,8 +91,8 @@ impl v0::HasReceiveContext for ReceiveContextOpt {
         unwrap_ctx_field(self.owner.as_ref(), "owner")
     }
 
-    fn sender_policies(&self) -> ExecResult<&Self::PolicyType> {
-        unwrap_ctx_field(self.sender_policies.as_ref(), "senderPolicies")
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        unwrap_ctx_field(self.sender_policies.as_ref().map(Vec::as_ref), "senderPolicies")
     }
 }
 
@@ -106,5 +105,27 @@ fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> ExecResult<A> {
              fields the contract uses.",
             name,
         )),
+    }
+}
+
+fn deserialize_policy_bytes_from_json<'de, D: serde::de::Deserializer<'de>>(
+    des: D,
+) -> Result<Option<v0::OwnedPolicyBytes>, D::Error> {
+    let policies = Option::<Vec<OwnedPolicy>>::deserialize(des)?;
+    // FIXME: Figure out whether we can define a serialization instance in
+    // contracts-common instead of duplicating this here.
+    if let Some(policies) = policies {
+        let mut out = Vec::new();
+        let len = policies.len() as u16;
+        len.serial(&mut out).expect("Cannot fail writing to vec.");
+        for policy in policies.iter() {
+            let bytes = concordium_contracts_common::to_bytes(policy);
+            let internal_len = bytes.len() as u16;
+            internal_len.serial(&mut out).expect("Cannot fail writing to vec.");
+            out.extend_from_slice(&bytes);
+        }
+        Ok(Some(out))
+    } else {
+        Ok(None)
     }
 }

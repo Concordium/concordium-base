@@ -4,16 +4,44 @@ pub mod fuzz;
 pub mod resumption;
 pub mod utils;
 pub mod v0;
+pub mod v1;
 #[cfg(test)]
 mod validation_tests;
-
 use anyhow::bail;
+use derive_more::{From, Into};
+
+macro_rules! type_matches {
+    ($goal:expr => $params:expr) => {
+        $goal.result.is_none() && $params == $goal.parameters.as_slice()
+    };
+    ($goal:expr => []; $result:expr) => {
+        $goal.result == Some($result) && $goal.parameters.is_empty()
+    };
+    ($goal:expr => $params:expr; $result:expr) => {
+        $goal.result == Some($result) && $params == $goal.parameters.as_slice()
+    };
+}
+pub(crate) use type_matches;
+
+// After refactoring to have a common dependency with crypto, replace this
+// with the version from crypto.
+macro_rules! slice_from_c_bytes {
+    ($cstr:expr, $length:expr) => {
+        if $length != 0 {
+            assert!(!$cstr.is_null(), "Null pointer in `slice_from_c_bytes`.");
+            std::slice::from_raw_parts($cstr, $length)
+        } else {
+            &[]
+        }
+    };
+}
+pub(crate) use slice_from_c_bytes;
 
 /// Result of contract execution. This is just a wrapper around
 /// [anyhow::Result].
 pub type ExecResult<A> = anyhow::Result<A>;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, From, Into)]
 /// Interpreter energy used to count execution steps in the interpreter.
 /// This energy is converted to NRG by the scheduler.
 pub struct InterpreterEnergy {

@@ -961,7 +961,9 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "concordium-contracts-common",
+ "derive_more",
  "libc",
+ "num_enum",
  "serde",
  "wasm-transform",
 ]

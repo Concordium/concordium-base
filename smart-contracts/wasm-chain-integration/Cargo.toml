@@ -18,6 +18,9 @@ fuzz-coverage = ["wasm-transform/fuzz-coverage"]
 libc = "0.2"
 anyhow = "1.0.33"
 serde = "1.0"
+num_enum = "0.5"
+derive_more = "0.99"
+
 arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
 wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
 wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main", optional = true }
