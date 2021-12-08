@@ -41,6 +41,8 @@ updateQueueForCPV1 uq = case chainParametersVersion @cpv of
 noneOrEmptyQueueForCPV1 :: forall cpv e. IsChainParametersVersion cpv => UpdateQueueForCPV1 cpv e
 noneOrEmptyQueueForCPV1 = updateQueueForCPV1 emptyUpdateQueue
 
+someUpdateQueueForCPV1 :: UpdateQueueForCPV1 'ChainParametersV1 a -> UpdateQueue a
+someUpdateQueueForCPV1 (UpdateQueueForCPV1Some uq) = uq
 
 deriving instance Eq e => Eq (UpdateQueueForCPV1 cpv e)
 deriving instance Show e => Show (UpdateQueueForCPV1 cpv e)
@@ -147,9 +149,9 @@ data PendingUpdates cpv = PendingUpdates {
     _pAddAnonymityRevokerQueue :: !(UpdateQueue ARS.ArInfo),
     -- |Adds a new identity provider.
     _pAddIdentityProviderQueue :: !(UpdateQueue IPS.IpInfo),
-    -- |Updates cooldown parameters
+    -- |Updates to cooldown parameters for chain parameters version 1.
     _pCooldownParametersQueue :: !(UpdateQueueForCPV1 cpv (CooldownParameters 'ChainParametersV1)),
-    -- |Updates time parameters.
+    -- |Updates to time parameters for chain parameters version 1.
     _pTimeParametersQueue :: !(UpdateQueueForCPV1 cpv (TimeParameters 'ChainParametersV1))
 } deriving (Show, Eq)
 makeLenses ''PendingUpdates
@@ -333,19 +335,21 @@ emptyPendingUpdates = PendingUpdates
         noneOrEmptyQueueForCPV1
 
 -- |Current state of updatable parameters and update queues.
-data Updates (pv :: ProtocolVersion) = Updates {
+data Updates' (cpv :: ChainParametersVersion) = Updates {
     -- |Current update authorizations.
-    _currentKeyCollection :: !(Hashed (UpdateKeysCollection (ChainParametersVersionFor pv))),
+    _currentKeyCollection :: !(Hashed (UpdateKeysCollection cpv)),
     -- |Current protocol update.
     _currentProtocolUpdate :: !(Maybe ProtocolUpdate),
     -- |Current chain parameters.
-    _currentParameters :: !(ChainParameters pv),
+    _currentParameters :: !(ChainParameters' cpv),
     -- |Pending updates.
-    _pendingUpdates :: !(PendingUpdates (ChainParametersVersionFor pv))
+    _pendingUpdates :: !(PendingUpdates cpv)
 } deriving (Show, Eq)
-makeClassy ''Updates
+makeClassy ''Updates'
 
-instance HashableTo H.Hash (Updates pv) where
+type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv)
+
+instance HashableTo H.Hash (Updates' cpv) where
     getHash Updates{..} = H.hash $
             hsh _currentKeyCollection
             <> case _currentProtocolUpdate of
@@ -358,7 +362,7 @@ instance HashableTo H.Hash (Updates pv) where
             hsh = H.hashToByteString . getHash
 
 -- |Serialize 'Updates' in V0 format.
-putUpdatesV0 :: IsProtocolVersion pv => Putter (Updates pv)
+putUpdatesV0 :: IsChainParametersVersion cpv => Putter (Updates' cpv)
 putUpdatesV0 Updates{..} = do
         put (_currentKeyCollection ^. unhashed)
         case _currentProtocolUpdate of
@@ -368,7 +372,7 @@ putUpdatesV0 Updates{..} = do
         putPendingUpdatesV0 _pendingUpdates
 
 -- |Deserialize 'Updates' in V0 format.
-getUpdatesV0 :: forall pv. IsProtocolVersion pv => Get (Updates pv)
+getUpdatesV0 :: IsChainParametersVersion cpv => Get (Updates' cpv)
 getUpdatesV0 = do
         _currentKeyCollection <- makeHashed <$> get
         _currentProtocolUpdate <- getWord8 >>= \case
@@ -379,22 +383,22 @@ getUpdatesV0 = do
         _pendingUpdates <- getPendingUpdatesV0
         return Updates{..}
 
-instance forall pv. IsProtocolVersion pv => ToJSON (Updates pv) where
+instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
     toJSON Updates{..} = object $ [
             "keys" AE..= _unhashed _currentKeyCollection,
             chainParametersJSON,
             "updateQueues" AE..= _pendingUpdates
         ] <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
       where
-        chainParametersJSON = case chainParametersVersionFor $ protocolVersion @pv of
+        chainParametersJSON = case chainParametersVersion @cpv of
             SCPV0 -> "chainParameters" AE..= _currentParameters
             SCPV1 -> "chainParameters" AE..= _currentParameters
 
-instance forall pv. IsProtocolVersion pv => FromJSON (Updates pv) where
+instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) where
     parseJSON = withObject "Updates" $ \o -> do
         _currentKeyCollection <- makeHashed <$> o AE..: "keys"
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
-        _currentParameters <- case chainParametersVersionFor $ protocolVersion @pv of
+        _currentParameters <- case chainParametersVersion @cpv of
           SCPV0 -> o AE..: "chainParameters"
           SCPV1 -> o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"
@@ -402,7 +406,11 @@ instance forall pv. IsProtocolVersion pv => FromJSON (Updates pv) where
 
 -- |An initial 'Updates' with the given initial 'Authorizations'
 -- and 'ChainParameters'.
-initialUpdates :: IsProtocolVersion pv => UpdateKeysCollection (ChainParametersVersionFor pv) -> ChainParameters pv -> Updates pv
+initialUpdates
+    :: IsChainParametersVersion cpv
+    => UpdateKeysCollection cpv
+    -> ChainParameters' cpv
+    -> Updates' cpv
 initialUpdates initialKeyCollection _currentParameters = Updates {
         _currentKeyCollection = makeHashed initialKeyCollection,
         _currentProtocolUpdate = Nothing,

@@ -848,11 +848,19 @@ genLevel2UpdatePayload scpv =
 
 genUpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
 genUpdatePayload scpv = 
-        oneof
-            [ genLevel2UpdatePayload scpv,
-            RootUpdatePayload <$> genRootUpdate scpv,
-            Level1UpdatePayload <$> genLevel1Update scpv
-            ]
+    case scpv of
+        SCPV0 ->
+            oneof
+                [ genLevel2UpdatePayload scpv,
+                RootUpdatePayload <$> genRootUpdate scpv,
+                Level1UpdatePayload <$> genLevel1Update scpv
+                ]
+        SCPV1 -> 
+            oneof
+                [ genLevel2UpdatePayload scpv,
+                RootCPV1UpdatePayload <$> genRootUpdate scpv,
+                Level1CPV1UpdatePayload <$> genLevel1Update scpv
+                ]
 
 genRawUpdateInstruction :: SChainParametersVersion cpv -> Gen RawUpdateInstruction
 genRawUpdateInstruction scpv = do

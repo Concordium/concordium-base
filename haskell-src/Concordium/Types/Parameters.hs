@@ -308,6 +308,8 @@ putCooldownParameters CooldownParametersV1{..} = do
 instance HashableTo Hash.Hash (CooldownParameters cpv) where
     getHash = Hash.hash . runPut . putCooldownParameters
 
+instance Monad m => MHashableTo m Hash.Hash (CooldownParameters cpv)
+
 getCooldownParameters :: forall cpv. IsChainParametersVersion cpv => Get (CooldownParameters cpv)
 getCooldownParameters = case chainParametersVersion @cpv of
     SCPV0 -> CooldownParametersV0 <$> get
@@ -336,6 +338,8 @@ putTimeParameters TimeParametersV1{..} = do
 
 instance HashableTo Hash.Hash (TimeParameters cpv) where
     getHash = Hash.hash . runPut . putTimeParameters
+
+instance Monad m => MHashableTo m Hash.Hash (TimeParameters cpv)
 
 getTimeParameters :: forall cpv. IsChainParametersVersion cpv => Get (TimeParameters cpv)
 getTimeParameters = case chainParametersVersion @cpv of
@@ -547,6 +551,8 @@ putPoolParameters PoolParametersV1{..} = do
 instance HashableTo Hash.Hash (PoolParameters cpv) where
     getHash = Hash.hash . runPut . putPoolParameters
 
+instance Monad m => MHashableTo m Hash.Hash (PoolParameters cpv)
+
 getPoolParameters :: forall cpv. IsChainParametersVersion cpv => Get (PoolParameters cpv)
 getPoolParameters = case chainParametersVersion @cpv of
     SCPV0 -> PoolParametersV0 <$> get
@@ -690,7 +696,6 @@ makeChainParametersV1
         _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
         _ppLPoolCommissions = CommissionRates{..}
         _ppCommissionBounds = CommissionRanges{..}
-        
 
 instance HasExchangeRates (ChainParameters' cpv) where
     exchangeRates = cpExchangeRates
@@ -715,7 +720,6 @@ getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
   put = putChainParameters
   get = getChainParameters
-
 
 instance HashableTo Hash.Hash (ChainParameters' cpv) where
     getHash = Hash.hash . runPut . putChainParameters

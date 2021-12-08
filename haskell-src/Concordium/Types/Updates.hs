@@ -732,16 +732,23 @@ data UpdatePayload
     | GASRewardsUpdatePayload !GASRewards
     -- ^Update the GAS rewards
     | BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
-    -- ^Update the minimum amount to register as a baker
-    | RootUpdatePayload !RootUpdate
-    -- ^Root level updates
-    | Level1UpdatePayload !Level1Update
-    -- ^Level 1 update
+    -- ^Update the minimum amount to register as a baker with chain parameter version 0
+    | RootUpdatePayload !(RootUpdate 'ChainParametersV0)
+    -- ^Root level updates for chain parameters version 0
+    | RootCPV1UpdatePayload !(RootUpdate 'ChainParametersV1)
+    -- ^Root level updates for chain parameters version 1
+    | Level1UpdatePayload !(Level1Update 'ChainParametersV0)
+    -- ^Level 1 update for chain parameters version 0
+    | Level1CPV1UpdatePayload !(Level1Update 'ChainParametersV1)
+    -- ^Level 1 update for chain parameters version 1
     | AddAnonymityRevokerUpdatePayload !ArInfo
     | AddIdentityProviderUpdatePayload !IpInfo
     | CooldownParametersCPV1UpdatePayload !(CooldownParameters 'ChainParametersV1)
+    -- ^Cooldown parameters with chain parameter version 1
     | PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
+    -- ^Pool parameters with chain parameter version 1
     | TimeParametersCPV1UpdatePayload !(TimeParameters 'ChainParametersV1)
+    -- ^Time parameters with chain parameter version 1
     deriving (Eq, Show)
 
 
@@ -775,8 +782,8 @@ getUpdatePayload spv =
     7 -> TransactionFeeDistributionUpdatePayload <$> get
     8 -> GASRewardsUpdatePayload <$> get
     9 | isCPV ChainParametersV0 -> BakerStakeThresholdUpdatePayload <$> getPoolParameters 
-    10 -> RootUpdatePayload <$> getRootUpdate scpv
-    11 -> Level1UpdatePayload <$> getLevel1Update scpv
+    10 | isCPV ChainParametersV0 -> RootUpdatePayload <$> getRootUpdate
+    11 | isCPV ChainParametersV0 -> Level1UpdatePayload <$> getLevel1Update
     12 -> AddAnonymityRevokerUpdatePayload <$> get
     13 -> AddIdentityProviderUpdatePayload <$> get
     14 | isCPV ChainParametersV1 -> CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
@@ -811,12 +818,15 @@ updateType CooldownParametersCPV1UpdatePayload{} = UpdateCooldownParametersCPV1
 updateType PoolParametersCPV1UpdatePayload{} = UpdatePoolParametersCPV1
 updateType TimeParametersCPV1UpdatePayload{} = UpdateTimeParametersCPV1
 updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
+updateType (RootCPV1UpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
+updateType (RootCPV1UpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
-updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
+updateType (RootCPV1UpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
+updateType (Level1CPV1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
-updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
+updateType (Level1CPV1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -832,7 +842,9 @@ extractKeysIndices p =
     GASRewardsUpdatePayload{} -> f asParamGASRewards
     BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold
     RootUpdatePayload{} -> g rootKeys
+    RootCPV1UpdatePayload{} -> g rootKeys
     Level1UpdatePayload{} -> g level1Keys
+    Level1CPV1UpdatePayload{} -> g level1Keys
     AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
     AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
     CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
@@ -854,7 +866,9 @@ extractPubKeys :: UpdatePayload -> UpdateKeysCollection cpv -> Vec.Vector Update
 extractPubKeys p =
   case p of
     RootUpdatePayload{} -> hlkKeys . rootKeys
+    RootCPV1UpdatePayload{} -> hlkKeys . rootKeys
     Level1UpdatePayload{} -> hlkKeys . level1Keys
+    Level1CPV1UpdatePayload{} -> hlkKeys . level1Keys
     _ -> asKeys . level2Keys
 
 -- |Check that an access structure authorizes the given key set, this means particularly

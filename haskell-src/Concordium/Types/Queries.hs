@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Queries where
@@ -208,19 +209,20 @@ data BlockSummary = forall pv.
       -- |Details of the finalization record in the block (if any)
       bsFinalizationData :: !(Maybe FinalizationSummary),
       -- |Details of the update queues and chain parameters as of the block
-      bsUpdates :: !(Updates pv)
+      bsUpdates :: !(Updates pv),
+      -- |Protocol version proxy
+      bsProtocolVersion :: SProtocolVersion pv
     }
 
 -- |Get 'Updates' from 'BlockSummary', with continuation to avoid "escaped type variables".
 {-# INLINE bsWithUpdates #-}
 bsWithUpdates :: BlockSummary -> (forall pv. SProtocolVersion pv -> Updates pv -> a) -> a
-bsWithUpdates BlockSummary{..} = \k -> k protocolVersion bsUpdates
+bsWithUpdates BlockSummary{..} = \k -> k bsProtocolVersion bsUpdates
 
 instance Show BlockSummary where
-    showsPrec prec BlockSummary{bsUpdates = bsUpdates :: Updates pv, ..} = do
+    showsPrec prec BlockSummary{..} = do
         showParen (prec > 11) $
-            showString "BlockSummary @"
-                . showsPrec 11 (demoteProtocolVersion (protocolVersion @pv))
+            showString "BlockSummary "
                 . showString " {bsTransactionSummaries = "
                 . showsPrec 0 bsTransactionSummaries
                 . showString ",bsSpecialEvents = "
@@ -229,17 +231,27 @@ instance Show BlockSummary where
                 . showsPrec 0 bsFinalizationData
                 . showString ",bsUpdates = "
                 . showsPrec 0 bsUpdates
+                . showString ",bsProtocolVersion = "
+                . showsPrec 0 (demoteProtocolVersion bsProtocolVersion)
                 . showString "}"
 
 instance ToJSON BlockSummary where
-    toJSON BlockSummary{bsUpdates = bsUpdates :: Updates pv, ..} =
-        object
+    toJSON BlockSummary{..} =
+        object (commonFields ++ versionField)
+        where
+          commonFields =
             [ "transactionSummaries" .= bsTransactionSummaries,
               "specialEvents" .= bsSpecialEvents,
               "finalizationData" .= bsFinalizationData,
-              "updates" .= bsUpdates,
-              "protocolVersion" .= demoteProtocolVersion (protocolVersion @pv)
-            ]
+              "updates" .= bsUpdates ]
+
+          -- The version field has been added in protocol version 4. For backwards compatibility,
+          -- we will not include that field in JSON for versions < 4.
+          versionField = case bsProtocolVersion of
+            SP1 -> []
+            SP2 -> []
+            SP3 -> []
+            SP4 -> ["protocolVersion" .= demoteProtocolVersion bsProtocolVersion]
 
 instance FromJSON BlockSummary where
     parseJSON =
@@ -253,12 +265,13 @@ instance FromJSON BlockSummary where
                 Just pv -> parse (promoteProtocolVersion pv) v
       where
         parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
-        parse (SomeProtocolVersion (_ :: SProtocolVersion pv)) v =
+        parse (SomeProtocolVersion (spv :: SProtocolVersion pv)) v =
             BlockSummary
                 <$> v .: "transactionSummaries"
                 <*> v .: "specialEvents"
                 <*> v .: "finalizationData"
                 <*> (v .: "updates" :: Parser (Updates pv))
+                <*> pure spv
 
 data RewardStatus = RewardStatus
     { -- |The total GTU in existence
