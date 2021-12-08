@@ -59,7 +59,7 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
 /// Address of an account. Textual representation uses base58check encoding with
 /// version byte 1.
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
@@ -88,6 +88,10 @@ impl std::str::FromStr for AccountAddress {
 
 impl AsRef<[u8; 32]> for AccountAddress {
     fn as_ref(&self) -> &[u8; 32] { &self.0 }
+}
+
+impl AsMut<[u8; 32]> for AccountAddress {
+    fn as_mut(&mut self) -> &mut [u8; 32] { &mut self.0 }
 }
 
 impl SerdeSerialize for AccountAddress {
@@ -378,7 +382,7 @@ pub struct AttributeTag(pub u8);
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 13] = [
+pub const ATTRIBUTE_NAMES: [&str; 14] = [
     "firstName",
     "lastName",
     "sex",
@@ -392,7 +396,11 @@ pub const ATTRIBUTE_NAMES: [&str; 13] = [
     "idDocExpiresAt",
     "nationalIdNo",
     "taxIdNo",
+    "lei",
 ];
+
+/// Attribute tag for the LEI attribute.
+pub const ATTRIBUTE_TAG_LEI: AttributeTag = AttributeTag(13);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(transparent)]
@@ -418,7 +426,11 @@ impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == v.0) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(anyhow!("{} tag unknown.", v.0))
+            match v.0.strip_prefix("UNNAMED#").and_then(|x| x.parse().ok()) {
+                Some(num) if num < 254 => Ok(AttributeTag(num)), // 254 is the capacity of the
+                // BLS curve field
+                _ => Err(anyhow!("Unrecognized attribute tag.")),
+            }
         }
     }
 }
@@ -429,7 +441,7 @@ impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
         if v_usize < ATTRIBUTE_NAMES.len() {
             AttributeStringTag(ATTRIBUTE_NAMES[v_usize].to_owned())
         } else {
-            AttributeStringTag("UNKNOWN".to_owned())
+            AttributeStringTag(format!("UNNAMED#{}", v.0))
         }
     }
 }
@@ -483,6 +495,10 @@ pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Seri
 pub struct YearMonth {
     pub year:  u16,
     pub month: u8,
+}
+
+impl ToString for YearMonth {
+    fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
 }
 
 impl SerdeSerialize for YearMonth {
@@ -1393,7 +1409,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub cred_id:       C,
+    pub cred_id:       CredId<C>,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -1429,7 +1445,7 @@ pub struct InitialCredentialDeploymentValues<C: Curve, AttributeType: Attribute<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub reg_id:       C,
+    pub reg_id:       CredId<C>,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     #[serde(rename = "ipIdentity")]
@@ -1514,6 +1530,21 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
         #[serde(rename = "commitments")]
         commitments: CredentialDeploymentCommitments<C>,
     },
+}
+
+/// Type of credential registration IDs.
+pub type CredId<C> = C;
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>>
+    AccountCredentialWithoutProofs<C, AttributeType>
+{
+    /// Return the credential registration ID of the account credential.
+    pub fn cred_id(&self) -> &CredId<C> {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => &icdv.reg_id,
+            AccountCredentialWithoutProofs::Normal { cdv, .. } => &cdv.cred_id,
+        }
+    }
 }
 
 /// This is the CredentialDeploymentInfo structure, that instead of containing

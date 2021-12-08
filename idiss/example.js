@@ -52,4 +52,5 @@ if (res instanceof Error) {
 } else {
     console.log(res)
 }
+console.log(validator.version())
 console.log("DONE");

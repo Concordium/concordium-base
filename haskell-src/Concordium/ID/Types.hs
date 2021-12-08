@@ -42,6 +42,7 @@ import Concordium.Crypto.FFIDataTypes
 import Concordium.ID.Parameters
 import Concordium.Common.Time
 import qualified Concordium.Crypto.SHA256 as SHA256
+import Concordium.Types.HashableTo
 
 accountAddressSize :: Int
 accountAddressSize = 32
@@ -153,6 +154,9 @@ data AccountInformation = AccountInformation {
   aiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
   aiThreshold :: !AccountThreshold 
 } deriving(Eq, Show, Ord)
+
+instance HashableTo SHA256.Hash AccountInformation where
+  getHash = SHA256.hash . encode
 
 getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
 getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
@@ -349,7 +353,8 @@ attributeNames = ["firstName",
                   "idDocIssuedAt",
                   "idDocExpiresAt",
                   "nationalIdNo",
-                  "taxIdNo"
+                  "taxIdNo",
+                  "lei"
                  ]
 
 mapping :: Map.Map Text.Text AttributeTag
@@ -364,16 +369,18 @@ instance FromJSONKey AttributeTag where
   fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
 
 instance ToJSONKey AttributeTag where
-  toJSONKey = toJSONKeyText $ (\tag -> fromMaybe "UNKNOWN" $ Map.lookup tag invMapping)
+  toJSONKey = toJSONKeyText $ (\tag -> fromMaybe (Text.pack ("UNNAMED#" ++ show tag)) $ Map.lookup tag invMapping)
 
 instance FromJSON AttributeTag where
-  parseJSON = withText "Attribute name" $ \text ->do
+  parseJSON = withText "Attribute name" $ \text -> do
         case Map.lookup text mapping of
           Just x -> return x
-          Nothing -> fail $ "Attribute " ++ Text.unpack text ++ " does not exist."
+          Nothing -> case Text.stripPrefix "UNNAMED#" text >>= Text.readMaybe . Text.unpack of
+            Just tag | tag < 254 -> return $ AttributeTag tag -- 254 is the capacity of the field defined by the BLS curve.
+            _ -> fail "Unsupported tag."
 
 instance ToJSON AttributeTag where
-  toJSON tag = maybe "UNKNOWN" toJSON $ Map.lookup tag invMapping
+  toJSON tag = maybe (String (Text.pack ("UNNAMED#" ++ show tag))) toJSON $ Map.lookup tag invMapping
 
 data Policy = Policy {
   -- |Validity of this credential.
