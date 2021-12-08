@@ -26,7 +26,6 @@ import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils
-import Data.Aeson (ToJSON)
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext

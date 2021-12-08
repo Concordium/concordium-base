@@ -154,7 +154,7 @@ data PendingUpdates cpv = PendingUpdates {
 } deriving (Show, Eq)
 makeLenses ''PendingUpdates
 
-instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) where
+instance HashableTo H.Hash (PendingUpdates cpv) where
     getHash PendingUpdates{..} = H.hash $
             hsh _pRootKeysUpdateQueue
             <> hsh _pLevel1KeysUpdateQueue
@@ -175,8 +175,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
         where
             hsh :: HashableTo H.Hash a => a -> BS.ByteString
             hsh = H.hashToByteString . getHash
-            hshMaybe :: (HashableTo H.Hash e, IsChainParametersVersion cpv) =>
-             UpdateQueueForCPV1 cpv e -> BS.ByteString
+            hshMaybe :: HashableTo H.Hash e => UpdateQueueForCPV1 cpv e -> BS.ByteString
             hshMaybe UpdateQueueForCPV1None = BS.empty
             hshMaybe (UpdateQueueForCPV1Some uq) = hsh uq
 
@@ -346,7 +345,7 @@ data Updates (pv :: ProtocolVersion) = Updates {
 } deriving (Show, Eq)
 makeClassy ''Updates
 
-instance IsProtocolVersion pv => HashableTo H.Hash (Updates pv) where
+instance HashableTo H.Hash (Updates pv) where
     getHash Updates{..} = H.hash $
             hsh _currentKeyCollection
             <> case _currentProtocolUpdate of
