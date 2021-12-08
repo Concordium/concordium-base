@@ -797,19 +797,23 @@ genHigherLevelKeys = do
     hlkThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral nKeys)
     return HigherLevelKeys{..}
 
-genRootUpdate :: SChainParametersVersion cpv -> Gen (RootUpdate cpv)
+genRootUpdate :: SChainParametersVersion cpv -> Gen RootUpdate
 genRootUpdate scpv =
     oneof
         [ RootKeysRootUpdate <$> genHigherLevelKeys,
           Level1KeysRootUpdate <$> genHigherLevelKeys,
-          Level2KeysRootUpdate <$> genAuthorizations scpv
+          case scpv of
+              SCPV0 -> Level2KeysRootUpdate <$> genAuthorizations scpv
+              SCPV1 -> Level2KeysRootUpdateV1 <$> genAuthorizations scpv
         ]
 
-genLevel1Update :: SChainParametersVersion cpv -> Gen (Level1Update cpv)
+genLevel1Update :: SChainParametersVersion cpv -> Gen Level1Update
 genLevel1Update scpv =
     oneof
         [ Level1KeysLevel1Update <$> genHigherLevelKeys,
-          Level2KeysLevel1Update <$> genAuthorizations scpv
+          case scpv of
+              SCPV0 -> Level2KeysLevel1Update <$> genAuthorizations scpv
+              SCPV1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations scpv
         ]
 
 genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
@@ -843,18 +847,11 @@ genLevel2UpdatePayload scpv =
                 ]
 
 genUpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
-genUpdatePayload scpv = case scpv of
-    SCPV0 -> 
+genUpdatePayload scpv = 
         oneof
             [ genLevel2UpdatePayload scpv,
-            RootCPV0UpdatePayload <$> genRootUpdate scpv,
-            Level1CPV0UpdatePayload <$> genLevel1Update scpv
-            ]
-    SCPV1 -> 
-        oneof
-            [ genLevel2UpdatePayload scpv,
-            RootCPV1UpdatePayload <$> genRootUpdate scpv,
-            Level1CPV1UpdatePayload <$> genLevel1Update scpv
+            RootUpdatePayload <$> genRootUpdate scpv,
+            Level1UpdatePayload <$> genLevel1Update scpv
             ]
 
 genRawUpdateInstruction :: SChainParametersVersion cpv -> Gen RawUpdateInstruction

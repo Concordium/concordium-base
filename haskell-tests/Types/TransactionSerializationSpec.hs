@@ -47,9 +47,9 @@ testBlockItem ::  SProtocolVersion pv -> Property
 testBlockItem spv = forAll genBlockItem $ checkBlockItem spv
 tests :: Spec
 tests = parallel $ do
-  specify "Transaction serialization with size = 100." $ withMaxSuccess 1000 $ testTransaction 100
-  specify "Transaction serialization with size = 1000." $ withMaxSuccess 1000 $ testTransaction 1000
-  specify "BlockItem serialization in P1." $ withMaxSuccess 1000 $ testBlockItem SP1
-  specify "BlockItem serialization in P2." $ withMaxSuccess 1000 $ testBlockItem SP2
-  specify "BlockItem serialization in P3." $ withMaxSuccess 1000 $ testBlockItem SP3
-  specify "BlockItem serialization in P4." $ withMaxSuccess 1000 $ testBlockItem SP4
+  specify "Transaction serialization with size = 100." $ withMaxSuccess 10 $ testTransaction 100
+  specify "Transaction serialization with size = 1000." $ withMaxSuccess 10 $ testTransaction 1000
+  specify "BlockItem serialization in P1." $ withMaxSuccess 10 $ testBlockItem SP1
+  specify "BlockItem serialization in P2." $ withMaxSuccess 10 $ testBlockItem SP2
+  specify "BlockItem serialization in P3." $ withMaxSuccess 10 $ testBlockItem SP3
+  specify "BlockItem serialization in P4." $ withMaxSuccess 10 $ testBlockItem SP4

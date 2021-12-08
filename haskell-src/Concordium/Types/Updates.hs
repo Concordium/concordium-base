@@ -356,7 +356,7 @@ instance Monad m => MHashableTo m SHA256.Hash (HigherLevelKeys a) where
 
 -- |Root updates are the highest kind of updates. They can update every other
 -- set of keys, even themselves. They can only be performed by Root level keys.
-data RootUpdate cpv =
+data RootUpdate =
   RootKeysRootUpdate {
     rkruKeys :: !(HigherLevelKeys RootKeysKind)
   }
@@ -366,36 +366,18 @@ data RootUpdate cpv =
   }
   -- ^Update the Level 1 keys
   | Level2KeysRootUpdate {
-    l2kruAuthorizations :: !(Authorizations cpv)
+    l2kruAuthorizations :: !(Authorizations 'ChainParametersV0)
   }
-  -- ^Update the Level 1 keys
-  -- | Level2KeysRootUpdateV1 {
-  --   l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
-  -- }
-  -- ^Update the level 2 keys
+  -- ^Update the Level 2 keys in chain parameters version 0
+  | Level2KeysRootUpdateV1 {
+    l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
+  }
+  -- ^Update the level 2 keys  in chain parameters version 1
 
+deriving instance Eq RootUpdate
+deriving instance Show RootUpdate
 
--- data RootUpdate cpv where
---   RootKeysRootUpdate :: forall cpv. {
---     rkruKeys :: !(HigherLevelKeys RootKeysKind)
---   } -> RootUpdate cpv
---   -- ^Update the root keys
---   Level1KeysRootUpdate :: forall cpv. {
---     l1kruKeys :: !(HigherLevelKeys Level1KeysKind)
---   } -> RootUpdate cpv
---   -- ^Update the Level 1 keys
---   Level2KeysRootUpdateV0 :: {
---     l2kruAuthorizationsV0 :: !(Authorizations 'ChainParametersV0)
---   } -> RootUpdate 'ChainParametersV0
---   -- ^Update the Level 1 keys
---   Level2KeysRootUpdateV1 :: {
---     l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
---   } -> RootUpdate 'ChainParametersV1
-
-deriving instance Eq (RootUpdate cpv)
-deriving instance Show (RootUpdate cpv)
-
-putRootUpdate :: Putter (RootUpdate cpv)
+putRootUpdate :: Putter RootUpdate
 putRootUpdate RootKeysRootUpdate{..} = do
     putWord8 0
     put rkruKeys
@@ -405,39 +387,34 @@ putRootUpdate Level1KeysRootUpdate{..} = do
 putRootUpdate Level2KeysRootUpdate{..} = do
   putWord8 2
   putAuthorizations l2kruAuthorizations
+putRootUpdate Level2KeysRootUpdateV1{..} = do
+  putWord8 3
+  putAuthorizations l2kruAuthorizationsV1
 
-getRootUpdate :: IsChainParametersVersion cpv => Get (RootUpdate cpv)
-getRootUpdate = label "RootUpdate" $ do
+getRootUpdate :: SChainParametersVersion cpv -> Get RootUpdate
+getRootUpdate scpv = label "RootUpdate" $ do
   variant <- getWord8
   case variant of
     0 -> RootKeysRootUpdate <$> get
     1 -> Level1KeysRootUpdate <$> get
-    2 -> Level2KeysRootUpdate <$> get
+    2 | isCPV ChainParametersV0 -> Level2KeysRootUpdate <$> getAuthorizations
+    3 | isCPV ChainParametersV1 -> Level2KeysRootUpdateV1 <$> getAuthorizations
     _ -> fail $ "Unknown variant: " ++ show variant
+    where
+      isCPV cpv = cpv == demoteChainParameterVersion scpv
 
-instance IsChainParametersVersion cpv => Serialize (RootUpdate cpv) where
-  put = putRootUpdate
-  get = getRootUpdate
 
-instance AE.FromJSON (RootUpdate 'ChainParametersV0) where
+instance AE.FromJSON RootUpdate where
   parseJSON = AE.withObject "RootUpdate" $ \o -> do
     variant :: Text <- o .: "typeOfUpdate"
     case variant of
          "rootKeysUpdate" -> RootKeysRootUpdate <$> o .: "updatePayload"
          "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
          "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
+         "level2KeysUpdateV1" -> Level2KeysRootUpdateV1 <$> o .: "updatePayload"
          _ -> fail $ "Unknown variant: " ++ show variant
 
-instance AE.FromJSON (RootUpdate 'ChainParametersV1) where
-  parseJSON = AE.withObject "RootUpdateV1" $ \o -> do
-    variant :: Text <- o .: "typeOfUpdate"
-    case variant of
-         "rootKeysUpdate" -> RootKeysRootUpdate <$> o .: "updatePayload"
-         "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
-         "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
-         _ -> fail $ "Unknown variant: " ++ show variant
-
-instance AE.ToJSON (RootUpdate cpv) where
+instance AE.ToJSON RootUpdate where
   toJSON RootKeysRootUpdate{..} =
     AE.object [ "typeOfUpdate" AE..= ("rootKeysUpdate" :: Text),
                 "updatePayload" AE..= rkruKeys
@@ -450,6 +427,10 @@ instance AE.ToJSON (RootUpdate cpv) where
     AE.object [ "typeOfUpdate" AE..= ("level2KeysUpdate" :: Text),
                 "updatePayload" AE..= l2kruAuthorizations
               ]
+  toJSON Level2KeysRootUpdateV1{..} =
+    AE.object [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
+                "updatePayload" AE..= l2kruAuthorizationsV1
+              ]
 
 --------------------
 -- * Level 1 updates
@@ -457,49 +438,52 @@ instance AE.ToJSON (RootUpdate cpv) where
 
 -- |Level 1 updates are the intermediate update kind. They can update themselves
 -- or level 2 keys. They can only be performed by Level 1 keys.
-data Level1Update cpv =
+data Level1Update =
   Level1KeysLevel1Update {
     l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
   }
   | Level2KeysLevel1Update {
-    l2kl1uAuthorizations :: !(Authorizations cpv)
+    l2kl1uAuthorizations :: !(Authorizations 'ChainParametersV0)
+  } 
+  | Level2KeysLevel1UpdateV1 {
+    l2kl1uAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
   } 
 
-deriving instance Eq (Level1Update cpv)
-deriving instance Show (Level1Update cpv)
+deriving instance Eq Level1Update
+deriving instance Show Level1Update
 
-putLevel1Update :: Putter (Level1Update cpv)
+putLevel1Update :: Putter Level1Update
 putLevel1Update Level1KeysLevel1Update{..} = do
   putWord8 0
   put l1kl1uKeys
 putLevel1Update Level2KeysLevel1Update{..} = do
   putWord8 1
   putAuthorizations l2kl1uAuthorizations
+putLevel1Update Level2KeysLevel1UpdateV1{..} = do
+  putWord8 2
+  putAuthorizations l2kl1uAuthorizationsV1
 
-getLevel1Update :: IsChainParametersVersion cpv => Get (Level1Update cpv)
-getLevel1Update = label "Level1Update" $ do
+getLevel1Update :: SChainParametersVersion scpv -> Get Level1Update
+getLevel1Update scpv = label "Level1Update" $ do
     variant <- getWord8
     case variant of
       0 -> Level1KeysLevel1Update <$> get
-      1 -> Level2KeysLevel1Update <$> getAuthorizations
+      1| isCPV ChainParametersV0 -> Level2KeysLevel1Update <$> getAuthorizations
+      2| isCPV ChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
       _ -> fail $ "Unknown variant: " ++ show variant
+      where
+        isCPV cpv = cpv == demoteChainParameterVersion scpv
 
-instance AE.FromJSON (Level1Update 'ChainParametersV0) where
+instance AE.FromJSON Level1Update where
   parseJSON = AE.withObject "Level1Update" $ \o -> do
     variant :: Text <- o .: "typeOfUpdate"
     case variant of
       "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
       "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
-      _ -> fail $ "Unknown variant: " ++ show variant
-instance AE.FromJSON (Level1Update 'ChainParametersV1) where
-  parseJSON = AE.withObject "Level1Update" $ \o -> do
-    variant :: Text <- o .: "typeOfUpdate"
-    case variant of
-      "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
-      "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
+      "level2KeysUpdateV1" -> Level2KeysLevel1UpdateV1 <$> o .: "updatePayload"
       _ -> fail $ "Unknown variant: " ++ show variant
 
-instance AE.ToJSON (Level1Update cpv) where
+instance AE.ToJSON Level1Update where
   toJSON Level1KeysLevel1Update{..} =
     AE.object [ "typeOfUpdate" AE..= ("level1KeysUpdate" :: Text),
                 "updatePayload" AE..= l1kl1uKeys
@@ -507,6 +491,10 @@ instance AE.ToJSON (Level1Update cpv) where
   toJSON Level2KeysLevel1Update{..} =
     AE.object [ "typeOfUpdate" AE..= ("level2KeysUpdate" :: Text),
                 "updatePayload" AE..= l2kl1uAuthorizations
+              ]
+  toJSON Level2KeysLevel1UpdateV1{..} =
+    AE.object [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
+                "updatePayload" AE..= l2kl1uAuthorizationsV1
               ]
 
 ----------------------
@@ -608,13 +596,6 @@ instance IsChainParametersVersion cpv => AE.FromJSON (UpdateKeysCollection cpv) 
     level1Keys <- v .: "level1Keys"
     level2Keys <- v .: "level2Keys"
     return UpdateKeysCollection{..}
-  
--- instance AE.FromJSON (UpdateKeysCollection 'ChainParametersV1) where
---   parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
---     rootKeys <- v .: "rootKeys"
---     level1Keys <- v .: "level1Keys"
---     level2Keys <- v .: "level2Keys"
---     return UpdateKeysCollection{..}
 
 instance AE.ToJSON (UpdateKeysCollection cpv) where
   toJSON UpdateKeysCollection{..} = AE.object [
@@ -767,13 +748,10 @@ data UpdatePayload
     | GASRewardsUpdatePayload !GASRewards
     -- ^Update the GAS rewards
     | BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
-    -- ^Update the minimum amount to register as a baker with chain parameter version 0
-    | RootCPV0UpdatePayload !(RootUpdate 'ChainParametersV0)
-    -- ^Update the minimum amount to register as a baker with chain parameter version 1
-    | RootCPV1UpdatePayload !(RootUpdate 'ChainParametersV1)
+    -- ^Update the minimum amount to register as a baker
+    | RootUpdatePayload !RootUpdate
     -- ^Root level updates
-    | Level1CPV0UpdatePayload !(Level1Update 'ChainParametersV0)
-    | Level1CPV1UpdatePayload !(Level1Update 'ChainParametersV1)
+    | Level1UpdatePayload !Level1Update
     -- ^Level 1 update
     | AddAnonymityRevokerUpdatePayload !ArInfo
     | AddIdentityProviderUpdatePayload !IpInfo
@@ -793,15 +771,13 @@ putUpdatePayload (MintDistributionUpdatePayload u) = putWord8 6 >> put u
 putUpdatePayload (TransactionFeeDistributionUpdatePayload u) = putWord8 7 >> put u
 putUpdatePayload (GASRewardsUpdatePayload u) = putWord8 8 >> put u
 putUpdatePayload (BakerStakeThresholdUpdatePayload u) = putWord8 9 >> putPoolParameters u
-putUpdatePayload (RootCPV0UpdatePayload u) = putWord8 10 >> putRootUpdate u
-putUpdatePayload (Level1CPV0UpdatePayload u) = putWord8 11 >> putLevel1Update u
+putUpdatePayload (RootUpdatePayload u) = putWord8 10 >> putRootUpdate u
+putUpdatePayload (Level1UpdatePayload u) = putWord8 11 >> putLevel1Update u
 putUpdatePayload (AddAnonymityRevokerUpdatePayload u) = putWord8 12 >> put u
 putUpdatePayload (AddIdentityProviderUpdatePayload u) = putWord8 13 >> put u
 putUpdatePayload (CooldownParametersCPV1UpdatePayload u) = putWord8 14 >> putCooldownParameters u
 putUpdatePayload (PoolParametersCPV1UpdatePayload u) = putWord8 15 >> putPoolParameters u
-putUpdatePayload (TimeParametersCPV1UpdatePayload u) = putWord8 16 >> putTimeParameters u 
-putUpdatePayload (RootCPV1UpdatePayload u) = putWord8 17 >> putRootUpdate u
-putUpdatePayload (Level1CPV1UpdatePayload u) = putWord8 18 >> putLevel1Update u
+putUpdatePayload (TimeParametersCPV1UpdatePayload u) = putWord8 16 >> putTimeParameters u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv = 
@@ -815,15 +791,13 @@ getUpdatePayload spv =
     7 -> TransactionFeeDistributionUpdatePayload <$> get
     8 -> GASRewardsUpdatePayload <$> get
     9 | isCPV ChainParametersV0 -> BakerStakeThresholdUpdatePayload <$> getPoolParameters 
-    10 | isCPV ChainParametersV0 -> RootCPV0UpdatePayload <$> getRootUpdate
-    11 | isCPV ChainParametersV0 -> Level1CPV0UpdatePayload <$> getLevel1Update
+    10 -> RootUpdatePayload <$> getRootUpdate scpv
+    11 -> Level1UpdatePayload <$> getLevel1Update scpv
     12 -> AddAnonymityRevokerUpdatePayload <$> get
     13 -> AddIdentityProviderUpdatePayload <$> get
     14 | isCPV ChainParametersV1 -> CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
     15 | isCPV ChainParametersV1 -> PoolParametersCPV1UpdatePayload <$> getPoolParameters
     16 | isCPV ChainParametersV1 -> TimeParametersCPV1UpdatePayload <$> getTimeParameters
-    17 | isCPV ChainParametersV1 -> RootCPV1UpdatePayload <$> getRootUpdate
-    18 | isCPV ChainParametersV1 -> Level1CPV1UpdatePayload <$> getLevel1Update
     x -> fail $ "Unknown update payload kind: " ++ show x
     where
       isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -852,16 +826,13 @@ updateType AddIdentityProviderUpdatePayload{} = UpdateAddIdentityProvider
 updateType CooldownParametersCPV1UpdatePayload{} = UpdateCooldownParametersCPV1
 updateType PoolParametersCPV1UpdatePayload{} = UpdatePoolParametersCPV1
 updateType TimeParametersCPV1UpdatePayload{} = UpdateTimeParametersCPV1
-updateType (RootCPV0UpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
-updateType (RootCPV1UpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
-updateType (RootCPV0UpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
-updateType (RootCPV1UpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
-updateType (RootCPV0UpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
-updateType (RootCPV1UpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
-updateType (Level1CPV0UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
-updateType (Level1CPV1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
-updateType (Level1CPV0UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
-updateType (Level1CPV1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
+updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
+updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
+updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -876,10 +847,8 @@ extractKeysIndices p =
     TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
     GASRewardsUpdatePayload{} -> f asParamGASRewards
     BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold
-    RootCPV0UpdatePayload{} -> g rootKeys
-    RootCPV1UpdatePayload{} -> g rootKeys
-    Level1CPV0UpdatePayload{} -> g level1Keys
-    Level1CPV1UpdatePayload{} -> g level1Keys
+    RootUpdatePayload{} -> g rootKeys
+    Level1UpdatePayload{} -> g level1Keys
     AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
     AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
     CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
@@ -900,10 +869,8 @@ extractKeysIndices p =
 extractPubKeys :: UpdatePayload -> UpdateKeysCollection cpv -> Vec.Vector UpdatePublicKey
 extractPubKeys p =
   case p of
-    RootCPV0UpdatePayload{} -> hlkKeys . rootKeys
-    RootCPV1UpdatePayload{} -> hlkKeys . rootKeys
-    Level1CPV0UpdatePayload{} -> hlkKeys . level1Keys
-    Level1CPV1UpdatePayload{} -> hlkKeys . level1Keys
+    RootUpdatePayload{} -> hlkKeys . rootKeys
+    Level1UpdatePayload{} -> hlkKeys . level1Keys
     _ -> asKeys . level2Keys
 
 -- |Check that an access structure authorizes the given key set, this means particularly
