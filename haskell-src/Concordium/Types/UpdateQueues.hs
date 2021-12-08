@@ -175,8 +175,7 @@ instance HashableTo H.Hash (PendingUpdates cpv) where
         where
             hsh :: HashableTo H.Hash a => a -> BS.ByteString
             hsh = H.hashToByteString . getHash
-            hshMaybe :: HashableTo H.Hash e =>
-             UpdateQueueForCPV1 cpv e -> BS.ByteString
+            hshMaybe :: HashableTo H.Hash e => UpdateQueueForCPV1 cpv e -> BS.ByteString
             hshMaybe UpdateQueueForCPV1None = BS.empty
             hshMaybe (UpdateQueueForCPV1Some uq) = hsh uq
 
