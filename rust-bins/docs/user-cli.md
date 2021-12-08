@@ -59,7 +59,9 @@ where `credential.json` is the file obtained in the previous step.
 
 # Import created accounts into concordium-client
 
-If the `account-keys.json` file **is not encrypted** it can be imported into concordium-client with the command
+The account keys are primarily meant for clients to integrate into their key management solution and their software, e.g., an exchange integrating their trading platform with the Concordium chain.
+
+However if the `account-keys.json` file **is not encrypted** it can be imported into concordium-client with the command
 ```console
  concordium-client config account import account-keys.json --format=genesis --name my-account
  ```
