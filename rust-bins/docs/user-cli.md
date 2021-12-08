@@ -67,7 +67,7 @@ However if the `account-keys.json` file **is not encrypted** it can be imported 
  ```
  where the `--name` option is optional, and if given, will name the account according to the given value, "my-account" in the example above.
  
-If the `account-keys.json` file is encrypted then it must first be decrypted.
+If the `account-keys.json` file is encrypted then it must first be decrypted. This can be done with the `utils` tool which is documented in the [developer documentation](https://developer.concordium.software/en/mainnet/net/references/developer-tools.html)
 
 The initial account keys **cannot** be directly imported into concordium-client.
 
