@@ -12,6 +12,7 @@
 module Concordium.Types.ProtocolVersion.JustForCPV1 (
     JustForCPV1 (..),
     justForCPV1,
+    maybeForCPV1
 ) where
 
 import Data.Serialize
@@ -31,6 +32,28 @@ deriving instance Show a => Show (JustForCPV1 cpv a)
 -- |Project the value from @JustForCPV1 'ChainParametersV1 a@.
 justForCPV1 :: JustForCPV1 'ChainParametersV1 a -> a
 justForCPV1 (JustCPV1ForCPV1 a) = a
+
+maybeForCPV1 :: b -> (a -> b) -> JustForCPV1 cpv a -> b
+maybeForCPV1 b _ NothingForCPV1 = b
+maybeForCPV1 _ f (JustCPV1ForCPV1 a) = f a
+
+instance Functor (JustForCPV1 cpv) where
+    fmap _ NothingForCPV1 = NothingForCPV1
+    fmap f (JustCPV1ForCPV1 a) = JustCPV1ForCPV1 (f a)
+
+instance Foldable (JustForCPV1 cpv) where
+    foldr _ b NothingForCPV1 = b
+    foldr f b (JustCPV1ForCPV1 a) = f a b
+
+    foldl _ b NothingForCPV1 = b
+    foldl f b (JustCPV1ForCPV1 a) = f b a
+
+    foldMap _ NothingForCPV1 = mempty
+    foldMap f (JustCPV1ForCPV1 a) = f a
+
+instance Traversable (JustForCPV1 cpv) where
+    traverse _ NothingForCPV1 = pure NothingForCPV1
+    traverse f (JustCPV1ForCPV1 a) = JustCPV1ForCPV1 <$> f a
 
 instance
     (Serialize a, IsChainParametersVersion cpv) =>
