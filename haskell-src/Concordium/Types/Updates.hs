@@ -602,8 +602,8 @@ data UpdateType
     -- ^Update the distribution of transaction fees
     | UpdateGASRewards
     -- ^Update the GAS rewards
-    | UpdateBakerStakeThreshold
-    -- ^Minimum amount to register as a baker
+    | UpdatePoolParameters
+    -- ^Update for pool parameters (previously baker stake threshold).
     | UpdateAddAnonymityRevoker
     -- ^Add new anonymity revoker
     | UpdateAddIdentityProvider
@@ -613,9 +613,11 @@ data UpdateType
     | UpdateLevel1Keys
     -- ^Update the level 1 keys
     | UpdateLevel2Keys
-    | UpdateCooldownParametersCPV1
-    | UpdatePoolParametersCPV1
-    | UpdateTimeParametersCPV1
+    -- ^Update the level 2 keys
+    | UpdateCooldownParameters
+    -- ^Update for cooldown parameters, but not used by chain parameter version 0
+    | UpdateTimeParameters
+    -- ^Update for time parameters, but not used by chain parameter version 0
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -635,15 +637,14 @@ instance Serialize UpdateType where
     put UpdateMintDistribution = putWord8 6
     put UpdateTransactionFeeDistribution = putWord8 7
     put UpdateGASRewards = putWord8 8
-    put UpdateBakerStakeThreshold = putWord8 9
+    put UpdatePoolParameters = putWord8 9
     put UpdateRootKeys = putWord8 10
     put UpdateLevel1Keys = putWord8 11
     put UpdateLevel2Keys = putWord8 12
     put UpdateAddAnonymityRevoker = putWord8 13
     put UpdateAddIdentityProvider = putWord8 14
-    put UpdateCooldownParametersCPV1 = putWord8 15
-    put UpdatePoolParametersCPV1 = putWord8 16
-    put UpdateTimeParametersCPV1 = putWord8 17
+    put UpdateCooldownParameters = putWord8 15
+    put UpdateTimeParameters = putWord8 16
     get = getWord8 >>= \case
         1 -> return UpdateProtocol
         2 -> return UpdateElectionDifficulty
@@ -653,15 +654,14 @@ instance Serialize UpdateType where
         6 -> return UpdateMintDistribution
         7 -> return UpdateTransactionFeeDistribution
         8 -> return UpdateGASRewards
-        9 -> return UpdateBakerStakeThreshold
+        9 -> return UpdatePoolParameters
         10 -> return UpdateRootKeys
         11 -> return UpdateLevel1Keys
         12 -> return UpdateLevel2Keys
         13 -> return UpdateAddAnonymityRevoker
         14 -> return UpdateAddIdentityProvider
-        15 -> return UpdateCooldownParametersCPV1
-        16 -> return UpdatePoolParametersCPV1
-        17 -> return UpdateTimeParametersCPV1
+        15 -> return UpdateCooldownParameters
+        16 -> return UpdateTimeParameters
         n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -798,12 +798,12 @@ updateType FoundationAccountUpdatePayload{} = UpdateFoundationAccount
 updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
-updateType BakerStakeThresholdUpdatePayload{} = UpdateBakerStakeThreshold
+updateType BakerStakeThresholdUpdatePayload{} = UpdatePoolParameters
 updateType AddAnonymityRevokerUpdatePayload{} = UpdateAddAnonymityRevoker
 updateType AddIdentityProviderUpdatePayload{} = UpdateAddIdentityProvider
-updateType CooldownParametersCPV1UpdatePayload{} = UpdateCooldownParametersCPV1
-updateType PoolParametersCPV1UpdatePayload{} = UpdatePoolParametersCPV1
-updateType TimeParametersCPV1UpdatePayload{} = UpdateTimeParametersCPV1
+updateType CooldownParametersCPV1UpdatePayload{} = UpdateCooldownParameters
+updateType PoolParametersCPV1UpdatePayload{} = UpdatePoolParameters
+updateType TimeParametersCPV1UpdatePayload{} = UpdateTimeParameters
 updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
