@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -154,3 +155,9 @@ pvGenesisBlockHash (PVGenesisData gd) = genesisBlockHash gd
 -- |Helper function to project the protocol version out of 'PVGenesisData'.
 pvProtocolVersion :: PVGenesisData -> ProtocolVersion
 pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion (protocolVersion @pv)
+
+data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) where
+    -- |No state migration is performed.
+    StateMigrationParametersTrivial :: StateMigrationParameters p p
+    -- |The state is migrated from protocol version 'P3' to 'P4'.
+    StateMigrationParametersP3ToP4 :: P4.StateMigrationParametersP3toP4 -> StateMigrationParameters 'P3 'P4

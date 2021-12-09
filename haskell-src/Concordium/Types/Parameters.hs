@@ -362,26 +362,6 @@ instance FromJSON (TimeParameters 'ChainParametersV1) where
 deriving instance Eq (TimeParameters cpv)
 deriving instance Show (TimeParameters cpv)
 
--- |The commission rates charged by a pool owner.
-data CommissionRates = CommissionRates
-    { -- |Fraction of finalization rewards charged by the pool owner.
-      _finalizationCommission :: RewardFraction,
-      -- |Fraction of baking rewards charged by the pool owner.
-      _bakingCommission :: RewardFraction,
-      -- |Fraction of transaction rewards charged by the pool owner.
-      _transactionCommission :: RewardFraction
-    }
-    deriving (Eq, Show)
-
-makeLenses ''CommissionRates
-
-instance Serialize CommissionRates where
-    put CommissionRates{..} = do
-        put _finalizationCommission
-        put _bakingCommission
-        put _transactionCommission
-    get = CommissionRates <$> get <*> get <*> get
-
 -- |A range that includes both endpoints.
 data InclusiveRange a = InclusiveRange {irMin :: !a, irMax :: !a}
     deriving (Eq, Show)

@@ -20,9 +20,9 @@
 -- and should have an instance for each constructor of 'ProtocolVersion'.
 module Concordium.Types.ProtocolVersion where
 
-import Data.Serialize
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Serialize
 import Data.Word
 import GHC.TypeNats
 
@@ -70,17 +70,21 @@ instance Serialize ProtocolVersion where
     get = protocolVersionFromWord64 =<< getWord64be
 
 instance ToJSON ProtocolVersion where
-  toJSON = toJSON . protocolVersionToWord64
+    toJSON = toJSON . protocolVersionToWord64
 
 instance FromJSON ProtocolVersion where
-  parseJSON v = prependFailure "Protocol version" $ do
-      x <- parseJSON v
-      protocolVersionFromWord64 x
-
+    parseJSON v = prependFailure "Protocol version" $ do
+        x <- parseJSON v
+        protocolVersionFromWord64 x
 
 -- |Type class for relating type-level 'ProtocolVersion's with
 -- term level 'SProtocolVersion's.
-class IsChainParametersVersion (ChainParametersVersionFor pv) => IsProtocolVersion (pv :: ProtocolVersion) where
+class
+    ( IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAccountVersion (AccountVersionFor pv)
+    ) =>
+    IsProtocolVersion (pv :: ProtocolVersion)
+    where
     -- |The singleton associated with the protocol version.
     protocolVersion :: SProtocolVersion pv
 
@@ -156,3 +160,42 @@ chainParametersVersionFor spv = case spv of
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
 demoteChainParameterVersion SCPV0 = ChainParametersV0
 demoteChainParameterVersion SCPV1 = ChainParametersV1
+-- * Account versions
+
+-- |A data kind used for parametrising account-related types.
+-- This is used rather than 'ProtocolVersion' to coalesce cases where different protocol versions
+-- share the same account format.
+data AccountVersion
+    = -- |Account version used in P1, P2, and P3.
+      AccountV0
+    | -- |Account version used in P4. Adds stake delegation.
+      AccountV1
+
+-- |A singleton type corresponding to 'SAccountVersion'.
+data SAccountVersion (av :: AccountVersion) where
+    SAccountV0 :: SAccountVersion 'AccountV0
+    SAccountV1 :: SAccountVersion 'AccountV1
+
+-- |Projection of 'ProtocolVersion' to 'AccountVersion'.
+type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
+    AccountVersionFor 'P1 = 'AccountV0
+    AccountVersionFor 'P2 = 'AccountV0
+    AccountVersionFor 'P3 = 'AccountV0
+    AccountVersionFor 'P4 = 'AccountV1
+
+-- |Projection of 'SProtocolVersion' to 'SAccountVersion'.
+accountVersionFor :: SProtocolVersion pv -> SAccountVersion (AccountVersionFor pv)
+accountVersionFor SP1 = SAccountV0
+accountVersionFor SP2 = SAccountV0
+accountVersionFor SP3 = SAccountV0
+accountVersionFor SP4 = SAccountV1
+
+class IsAccountVersion (av :: AccountVersion) where
+    -- |The singleton associated with the account version
+    accountVersion :: SAccountVersion av
+
+instance IsAccountVersion 'AccountV0 where
+    accountVersion = SAccountV0
+
+instance IsAccountVersion 'AccountV1 where
+    accountVersion = SAccountV1
