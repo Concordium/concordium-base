@@ -176,8 +176,8 @@ generateKeys guk = case guk of
         asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
         cooldownParameters <- makeAS gukCooldownParameters "Add identity provider access structure"
         timeParameters <- makeAS gukCooldownParameters "Add identity provider access structure"
-        let asCooldownParameters = JustCPV1ForCPV1 cooldownParameters
-        let asTimeParameters = JustCPV1ForCPV1 timeParameters
+        let asCooldownParameters = JustForCPV1 cooldownParameters
+        let asTimeParameters = JustForCPV1 timeParameters
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..cukKeyCount-1]]
         rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"

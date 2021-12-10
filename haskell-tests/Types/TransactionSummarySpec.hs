@@ -19,7 +19,7 @@ testTransactionTypesSerialIdentity = mapM_ testEncDec transactionTypes
 
 
 -- |Test that decoding is the inverse of encoding for 'Event's.
-testEventSerializationIdentity :: SProtocolVersion pv -> Property
+testEventSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testEventSerializationIdentity spv = forAll (genEvent spv) $ \e -> runGet (getEvent spv) (runPut $ putEvent e) === Right e
 
 
@@ -29,12 +29,12 @@ testRejectReasonSerializationIdentity e = decode (encode e) === Right e
 
 
 -- |Test that decoding is the inverse of encoding for 'ValidResult's.
-testValidResultSerializationIdentity :: SProtocolVersion pv -> Property
+testValidResultSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testValidResultSerializationIdentity spv = forAll (genValidResult spv) $ \e -> runGet (getValidResult spv) (runPut $ putValidResult e) === Right e
 
 
 -- |Test that decoding is the inverse of encoding for 'TransactionSummary's.
-testTransactionSummarySerializationIdentity :: SProtocolVersion pv -> Property
+testTransactionSummarySerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testTransactionSummarySerializationIdentity spv = forAll (genTransactionSummary spv) $ \e ->  runGet (getTransactionSummary spv) (runPut $ putTransactionSummary e) === Right e
 
 tests :: Spec

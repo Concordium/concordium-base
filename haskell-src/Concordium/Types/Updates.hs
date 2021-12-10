@@ -209,7 +209,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
           SCPV1 -> do
             cp <- getChecked
             tp <- getChecked
-            return (JustCPV1ForCPV1 cp, JustCPV1ForCPV1 tp)
+            return (JustForCPV1 cp, JustForCPV1 tp)
         return Authorizations{..}
 
 instance IsChainParametersVersion cpv => Serialize (Authorizations cpv) where
@@ -251,7 +251,7 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
           SCPV1 -> do
             cp <- parseAS "cooldownParameters"
             tp <- parseAS "timeParameters"
-            return (JustCPV1ForCPV1 cp, JustCPV1ForCPV1 tp)
+            return (JustForCPV1 cp, JustForCPV1 tp)
         return Authorizations{..}
 
 instance IsChainParametersVersion cpv => AE.FromJSON (Authorizations cpv) where
@@ -280,10 +280,10 @@ instance AE.ToJSON (Authorizations cpv) where
                 ]
             cooldownParameters = case asCooldownParameters of
                   NothingForCPV1 -> []
-                  JustCPV1ForCPV1 as -> ["cooldownParameters" AE..= t as]
+                  JustForCPV1 as -> ["cooldownParameters" AE..= t as]
             timeParameters = case asTimeParameters of
                   NothingForCPV1 -> []
-                  JustCPV1ForCPV1 as -> ["timeParameters" AE..= t as]
+                  JustForCPV1 as -> ["timeParameters" AE..= t as]
 
 -----------------
 -- * Higher Level keys (Root and Level 1 keys)
@@ -836,7 +836,7 @@ extractKeysIndices p =
         f' v = h . v . level2Keys
         g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0..(fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
         h :: AccessStructureForCPV1 cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
-        h (JustCPV1ForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
+        h (JustForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
         h NothingForCPV1 = (Set.empty, 1)
           -- The latter case happens if the UpdateKeysCollection is used with chain parameter version 0 but the update payload is
           -- is a cooldown paramater update or a time parameter update, which only exists in chain parameter version 1.

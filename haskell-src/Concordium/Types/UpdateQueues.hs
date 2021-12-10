@@ -32,22 +32,14 @@ makeLenses ''UpdateQueue
 type UpdateQueueForCPV1 (cpv :: ChainParametersVersion) e =
   JustForCPV1 cpv (UpdateQueue e)
 
-updateQueueForCPV1 :: forall cpv e. IsChainParametersVersion cpv => UpdateQueue e -> UpdateQueueForCPV1 cpv e
-updateQueueForCPV1 uq = case chainParametersVersion @cpv of
-    SCPV0 -> NothingForCPV1
-    SCPV1 -> JustCPV1ForCPV1 uq
-
-noneOrEmptyQueueForCPV1 :: forall cpv e. IsChainParametersVersion cpv => UpdateQueueForCPV1 cpv e
-noneOrEmptyQueueForCPV1 = updateQueueForCPV1 emptyUpdateQueue
-
 putUpdateQueueForCPV1 :: (Serialize e) => Putter (UpdateQueueForCPV1 cpv e)
 putUpdateQueueForCPV1 NothingForCPV1 = return ()
-putUpdateQueueForCPV1 (JustCPV1ForCPV1 uq) = putUpdateQueueV0 uq
+putUpdateQueueForCPV1 (JustForCPV1 uq) = putUpdateQueueV0 uq
 
 getUpdateQueueForCPV1 :: forall cpv e. (Serialize e, IsChainParametersVersion cpv) => Get (UpdateQueueForCPV1 cpv e)
 getUpdateQueueForCPV1 = case chainParametersVersion @cpv of
   SCPV0 -> return NothingForCPV1
-  SCPV1 -> JustCPV1ForCPV1 <$> getUpdateQueueV0
+  SCPV1 -> JustForCPV1 <$> getUpdateQueueV0
 
 instance HashableTo H.Hash e => HashableTo H.Hash (UpdateQueue e) where
     getHash UpdateQueue{..} = H.hash $ runPut $ do
@@ -172,7 +164,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
             hsh = H.hashToByteString . getHash
             hshMaybe :: HashableTo H.Hash e => UpdateQueueForCPV1 cpv e -> BS.ByteString
             hshMaybe NothingForCPV1 = BS.empty
-            hshMaybe (JustCPV1ForCPV1 uq) = hsh uq
+            hshMaybe (JustForCPV1 uq) = hsh uq
 
 
 -- |Serialize the pending updates.
@@ -235,8 +227,8 @@ pendingUpdatesV0ToJSON PendingUpdates{..} = object [
     ]
 
 pendingUpdatesV1ToJSON :: PendingUpdates 'ChainParametersV1 -> Value
-pendingUpdatesV1ToJSON PendingUpdates{_pCooldownParametersQueue = JustCPV1ForCPV1 cpq,
-    _pTimeParametersQueue = JustCPV1ForCPV1 tpq, ..} = object [
+pendingUpdatesV1ToJSON PendingUpdates{_pCooldownParametersQueue = JustForCPV1 cpq,
+    _pTimeParametersQueue = JustForCPV1 tpq, ..} = object [
         "rootKeys" AE..= _pRootKeysUpdateQueue,
         "level1Keys" AE..= _pLevel1KeysUpdateQueue,
         "level2Keys" AE..= _pLevel2KeysUpdateQueue,
@@ -298,8 +290,8 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
         _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
         cooldownQueue <- o AE..: "cooldownParameters"
         timeQueue <- o AE..: "timeParameters"
-        let _pCooldownParametersQueue = JustCPV1ForCPV1 cooldownQueue
-        let _pTimeParametersQueue = JustCPV1ForCPV1 timeQueue
+        let _pCooldownParametersQueue = JustForCPV1 cooldownQueue
+        let _pTimeParametersQueue = JustForCPV1 timeQueue
         return PendingUpdates{..}
 
 instance IsChainParametersVersion cpv => FromJSON (PendingUpdates cpv) where
@@ -324,8 +316,8 @@ emptyPendingUpdates = PendingUpdates
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
-        noneOrEmptyQueueForCPV1
-        noneOrEmptyQueueForCPV1
+        (justForCPV1 emptyUpdateQueue)
+        (justForCPV1 emptyUpdateQueue)
 
 -- |Current state of updatable parameters and update queues.
 data Updates' (cpv :: ChainParametersVersion) = Updates {
