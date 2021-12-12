@@ -2,19 +2,17 @@
 mod ffi;
 mod types;
 
-use crate::{
-    constants, resumption::InterruptedState, v0, ExecResult, InterpreterEnergy, OutOfEnergy,
-};
+use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, SlotTime,
 };
 use machine::Value;
-use std::{io::Write, sync::Arc};
+use std::{borrow::Borrow, io::Write, sync::Arc};
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
-    machine::{self, ExecutionOutcome},
+    machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
 };
 
@@ -421,7 +419,7 @@ mod host {
 impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports>
     for InitHost<ParamType, Ctx>
 {
-    type Interrupt = Interrupt;
+    type Interrupt = NoInterrupt;
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
@@ -443,12 +441,6 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
             ImportFunc::Common(cf) => match cf {
-                CommonFunc::Invoke => {
-                    // TODO: This early return is a bit ugly. It would be better to change the type
-                    // of all the functions to return the right type directly,
-                    // avoiding this special return.
-                    return host::invoke(memory, stack, &mut self.energy);
-                }
                 CommonFunc::WriteOutput => host::write_return_value(
                     memory,
                     stack,
@@ -516,9 +508,6 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
             ImportFunc::Common(cf) => match cf {
-                CommonFunc::Invoke => {
-                    return host::invoke(memory, stack, &mut self.energy);
-                }
                 CommonFunc::WriteOutput => host::write_return_value(
                     memory,
                     stack,
@@ -553,6 +542,9 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
                 }
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
+                ReceiveOnlyFunc::Invoke => {
+                    return host::invoke(memory, stack, &mut self.energy);
+                }
                 ReceiveOnlyFunc::GetReceiveInvoker => {
                     v0::host::get_receive_invoker(memory, stack, self.receive_ctx.invoker())
                 }
@@ -590,13 +582,13 @@ pub type ParameterVec = Vec<u8>;
 
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<Policy: AsRef<[u8]>, R: RunnableCode>(
-    artifact: Arc<Artifact<ProcessedImports, R>>,
+    artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     amount: u64,
     init_ctx: InitContext<Policy>,
     init_name: &str,
     param: ParameterRef,
     energy: u64,
-) -> ExecResult<InitResult<R>>
+) -> ExecResult<InitResult>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let mut host = InitHost {
@@ -611,15 +603,14 @@ where
         init_ctx,
     };
 
-    let result = artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]);
-    process_init_result(artifact, host, result)
+    let result = artifact.borrow().run(&mut host, init_name, &[Value::I64(amount as i64)]);
+    process_init_result(host, result)
 }
 
-fn process_init_result<Param, Policy: AsRef<[u8]>, R: RunnableCode>(
-    artifact: Arc<Artifact<ProcessedImports, R>>,
+fn process_init_result<Param, Policy: AsRef<[u8]>>(
     host: InitHost<Param, InitContext<Policy>>,
-    result: machine::RunResult<ExecutionOutcome<Interrupt>>,
-) -> ExecResult<InitResult<R>>
+    result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
+) -> ExecResult<InitResult>
 where
     InitHost<ParameterVec, InitContext<v0::OwnedPolicyBytes>>:
         From<InitHost<Param, InitContext<Policy>>>, {
@@ -654,19 +645,8 @@ where
         }
         Ok(ExecutionOutcome::Interrupted {
             reason,
-            config,
-        }) => {
-            let remaining_energy = host.energy.energy;
-            Ok(InitResult::Interrupt {
-                remaining_energy,
-                config: Box::new(InterruptedState {
-                    host: host.into(),
-                    artifact,
-                    config,
-                }),
-                interrupt: reason,
-            })
-        }
+            config: _,
+        }) => match reason {},
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(InitResult::OutOfEnergy)
@@ -692,38 +672,6 @@ pub enum InvokeResponse {
     },
 }
 
-/// Invokes an init-function from a given artifact
-pub fn resume_init(
-    mut interrupted_state: InitInterruptedState<CompiledFunction>,
-    response: InvokeResponse,  // response from the call
-    energy: InterpreterEnergy, // remaining energy for execution
-) -> ExecResult<InitResult<CompiledFunction>> {
-    interrupted_state.host.energy = energy;
-    let response = match response {
-        InvokeResponse::Success {
-            new_state,
-            data,
-        } => {
-            interrupted_state.host.state = new_state;
-            interrupted_state.host.parameters.push(data);
-            0i32
-        }
-        InvokeResponse::Failure {
-            code,
-            data,
-        } => {
-            // state did not change
-            interrupted_state.host.parameters.push(data);
-            code
-        }
-    };
-    // push the response from the invoke
-    interrupted_state.config.push_value(response);
-    let mut host = interrupted_state.host;
-    let result = interrupted_state.artifact.run_config(&mut host, interrupted_state.config);
-    process_init_result(interrupted_state.artifact, host, result)
-}
-
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_artifact<'a, Policy: AsRef<[u8]>>(
@@ -733,11 +681,11 @@ pub fn invoke_init_from_artifact<'a, Policy: AsRef<[u8]>>(
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
-) -> ExecResult<InitResult<CompiledFunctionBytes<'a>>>
+) -> ExecResult<InitResult>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
 /// Invokes an init-function from Wasm module bytes
@@ -749,11 +697,11 @@ pub fn invoke_init_from_source<Policy: AsRef<[u8]>>(
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
-) -> ExecResult<InitResult<CompiledFunction>>
+) -> ExecResult<InitResult>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
@@ -767,11 +715,11 @@ pub fn invoke_init_with_metering_from_source<Policy: AsRef<[u8]>>(
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
-) -> ExecResult<InitResult<CompiledFunction>>
+) -> ExecResult<InitResult>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
 fn process_receive_result<Param, R: RunnableCode, Policy>(
