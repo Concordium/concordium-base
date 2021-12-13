@@ -716,8 +716,8 @@ data UpdatePayload
     -- ^Update the microGTU-per-euro parameter
     | FoundationAccountUpdatePayload !AccountAddress
     -- ^Update the address of the foundation account
-    | MintDistributionUpdatePayload !MintDistribution
-    -- ^Update the distribution of newly minted GTU
+    | MintDistributionUpdatePayload !(MintDistribution 'ChainParametersV0)
+    -- ^Update the distribution of newly minted GTU in chain parameters version 0
     | TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
     -- ^Update the distribution of transaction fees
     | GASRewardsUpdatePayload !GASRewards
@@ -736,6 +736,8 @@ data UpdatePayload
     -- ^Pool parameters with chain parameter version 1
     | TimeParametersCPV1UpdatePayload !(TimeParameters 'ChainParametersV1)
     -- ^Time parameters with chain parameter version 1
+    | MintDistributionCPV1UpdatePayload !(MintDistribution 'ChainParametersV1)
+    -- ^Update the distribution of newly minted GTU in chain parameters version 1
     deriving (Eq, Show)
 
 
@@ -756,6 +758,7 @@ putUpdatePayload (AddIdentityProviderUpdatePayload u) = putWord8 13 >> put u
 putUpdatePayload (CooldownParametersCPV1UpdatePayload u) = putWord8 14 >> putCooldownParameters u
 putUpdatePayload (PoolParametersCPV1UpdatePayload u) = putWord8 15 >> putPoolParameters u
 putUpdatePayload (TimeParametersCPV1UpdatePayload u) = putWord8 16 >> putTimeParameters u
+putUpdatePayload (MintDistributionCPV1UpdatePayload u) = putWord8 17 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv = 
@@ -765,7 +768,7 @@ getUpdatePayload spv =
     3 -> EuroPerEnergyUpdatePayload <$> get
     4 -> MicroGTUPerEuroUpdatePayload <$> get
     5 -> FoundationAccountUpdatePayload <$> get
-    6 -> MintDistributionUpdatePayload <$> get
+    6 | isCPV ChainParametersV0 -> MintDistributionUpdatePayload <$> get
     7 -> TransactionFeeDistributionUpdatePayload <$> get
     8 -> GASRewardsUpdatePayload <$> get
     9 | isCPV ChainParametersV0 -> BakerStakeThresholdUpdatePayload <$> getPoolParameters 
@@ -776,6 +779,7 @@ getUpdatePayload spv =
     14 | isCPV ChainParametersV1 -> CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
     15 | isCPV ChainParametersV1 -> PoolParametersCPV1UpdatePayload <$> getPoolParameters
     16 | isCPV ChainParametersV1 -> TimeParametersCPV1UpdatePayload <$> getTimeParameters
+    17 | isCPV ChainParametersV1 -> MintDistributionCPV1UpdatePayload <$> get
     x -> fail $ "Unknown update payload kind: " ++ show x
     where
       isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -804,6 +808,7 @@ updateType AddIdentityProviderUpdatePayload{} = UpdateAddIdentityProvider
 updateType CooldownParametersCPV1UpdatePayload{} = UpdateCooldownParameters
 updateType PoolParametersCPV1UpdatePayload{} = UpdatePoolParameters
 updateType TimeParametersCPV1UpdatePayload{} = UpdateTimeParameters
+updateType MintDistributionCPV1UpdatePayload{} = UpdateMintDistribution
 updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
@@ -822,6 +827,7 @@ extractKeysIndices p =
     MicroGTUPerEuroUpdatePayload{} -> f asParamMicroGTUPerEuro
     FoundationAccountUpdatePayload{} -> f asParamFoundationAccount
     MintDistributionUpdatePayload{} -> f asParamMintDistribution
+    MintDistributionCPV1UpdatePayload{} -> f asParamMintDistribution
     TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
     GASRewardsUpdatePayload{} -> f asParamGASRewards
     BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold

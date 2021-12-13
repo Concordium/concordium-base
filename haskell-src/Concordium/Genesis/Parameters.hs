@@ -27,7 +27,7 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- that may be created in one block.
       gcpAccountCreationLimit :: !CredentialsPerBlockLimit
     , -- |Reward parameters.
-      gcpRewardParameters :: !RewardParameters
+      gcpRewardParameters :: !(RewardParameters cpv)
     , -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress
     , -- |Minimum threshold required for registering as a baker.
@@ -50,7 +50,7 @@ makeGenesisChainParametersV0 ::
     -- |Account creation limit
     CredentialsPerBlockLimit ->
     -- |Reward parameters
-    RewardParameters ->
+    RewardParameters 'ChainParametersV0 ->
     -- |Foundation account
     AccountAddress ->
     -- |Minimum threshold required for registering as a baker
@@ -87,7 +87,7 @@ makeGenesisChainParametersV1 ::
     -- |Account creation limit
     CredentialsPerBlockLimit ->
     -- |Reward parameters
-    RewardParameters ->
+    RewardParameters 'ChainParametersV1 ->
     -- |Foundation account
     AccountAddress ->
     -- |Fraction of finalization rewards charged by the L-Pool.

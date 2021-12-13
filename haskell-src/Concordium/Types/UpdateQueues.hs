@@ -123,7 +123,7 @@ data PendingUpdates cpv = PendingUpdates {
     -- |Updates to the foundation account.
     _pFoundationAccountQueue :: !(UpdateQueue AccountIndex),
     -- |Updates to the mint distribution.
-    _pMintDistributionQueue :: !(UpdateQueue MintDistribution),
+    _pMintDistributionQueue :: !(UpdateQueue (MintDistribution cpv)),
     -- |Updates to the transaction fee distribution.
     _pTransactionFeeDistributionQueue :: !(UpdateQueue TransactionFeeDistribution),
     -- |Updates to the GAS rewards.

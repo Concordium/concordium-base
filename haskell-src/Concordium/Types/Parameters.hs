@@ -29,14 +29,34 @@ import Concordium.Utils
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
+data MintPerSlotForCPV0 cpv where
+  MintPerSlotForCPV0Some :: {_mpsMintPerSlot :: !MintRate} -> MintPerSlotForCPV0 'ChainParametersV0
+  MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1
+
+instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) where
+  put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
+  put MintPerSlotForCPV0None = return ()
+  get = case chainParametersVersion @cpv of
+    SCPV0 -> MintPerSlotForCPV0Some <$> get 
+    SCPV1 -> return MintPerSlotForCPV0None
+
+-- |Lens for '_mpsMintPerSlot'
+{-# INLINE mpsMintPerSlot #-}
+mpsMintPerSlot :: Lens' (MintPerSlotForCPV0 'ChainParametersV0) MintRate
+mpsMintPerSlot =
+  lens _mpsMintPerSlot (\mps x -> mps{_mpsMintPerSlot = x})
+
+deriving instance Eq (MintPerSlotForCPV0 cpv)
+deriving instance Show (MintPerSlotForCPV0 cpv)
+
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
 -- It must be the case that
 -- @_mdBakingReward + _mdFinalizationReward <= 1@.
 -- The remaining amount is the platform development charge.
-data MintDistribution = MintDistribution {
+data MintDistribution cpv = MintDistribution {
     -- |Mint rate per slot
-    _mdMintPerSlot :: !MintRate,
+    _mdMintPerSlot :: !(MintPerSlotForCPV0 cpv),
     -- |BakingRewMintFrac: the fraction allocated to baker rewards
     _mdBakingReward :: !RewardFraction,
     -- |FinRewMintFrac: the fraction allocated to finalization rewards
@@ -44,21 +64,27 @@ data MintDistribution = MintDistribution {
 } deriving (Eq, Show)
 makeClassy ''MintDistribution
 
-instance ToJSON MintDistribution where
-  toJSON MintDistribution{..} = object [
-      "mintPerSlot" AE..= _mdMintPerSlot,
+instance ToJSON (MintDistribution cpv) where
+  toJSON MintDistribution{..} = object (mintPerSlot ++ [
       "bakingReward" AE..= _mdBakingReward,
       "finalizationReward" AE..= _mdFinalizationReward
-    ]
-instance FromJSON MintDistribution where
+    ]) where 
+      mintPerSlot = case _mdMintPerSlot of 
+        MintPerSlotForCPV0Some{..} -> ["mintPerSlot" AE..= _mpsMintPerSlot]
+        MintPerSlotForCPV0None -> []
+
+instance IsChainParametersVersion cpv => FromJSON (MintDistribution cpv) where
   parseJSON = withObject "MintDistribution" $ \v -> do
-    _mdMintPerSlot <- v .: "mintPerSlot"
+    _mdMintPerSlot <- case chainParametersVersion @cpv of
+      SCPV0 -> MintPerSlotForCPV0Some <$> v .: "mintPerSlot"
+      SCPV1 -> return MintPerSlotForCPV0None
+
     _mdBakingReward <- v .: "bakingReward"
     _mdFinalizationReward <- v .: "finalizationReward"
     unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
     return MintDistribution{..}
 
-instance Serialize MintDistribution where
+instance IsChainParametersVersion cpv => Serialize (MintDistribution cpv) where
   put MintDistribution{..} = put _mdMintPerSlot >> put _mdBakingReward >> put _mdFinalizationReward
   get = do
     _mdMintPerSlot <- get
@@ -67,10 +93,10 @@ instance Serialize MintDistribution where
     unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
     return MintDistribution{..}
 
-instance HashableTo Hash.Hash MintDistribution where
+instance IsChainParametersVersion cpv => HashableTo Hash.Hash (MintDistribution cpv) where
   getHash = Hash.hash . encode
 
-instance Monad m => MHashableTo m Hash.Hash MintDistribution
+instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
 
 -- |The distribution of block transaction fees among the block
 -- baker, the GAS account, and the foundation account.  It
@@ -147,9 +173,9 @@ instance Monad m => MHashableTo m Hash.Hash GASRewards
 
 -- |Parameters affecting rewards.
 -- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
-data RewardParameters = RewardParameters {
+data RewardParameters cpv = RewardParameters {
     -- |Distribution of newly-minted GTUs.
-    _rpMintDistribution :: !MintDistribution,
+    _rpMintDistribution :: !(MintDistribution cpv),
     -- |Distribution of transaction fees.
     _rpTransactionFeeDistribution :: !TransactionFeeDistribution,
     -- |Rewards paid from the GAS account.
@@ -157,18 +183,30 @@ data RewardParameters = RewardParameters {
 } deriving (Eq, Show)
 makeClassy ''RewardParameters
 
-instance HasMintDistribution RewardParameters where
+instance HasMintDistribution (RewardParameters cpv) cpv where
   mintDistribution = rpMintDistribution
 
-instance HasTransactionFeeDistribution RewardParameters where
+instance HasTransactionFeeDistribution (RewardParameters cpv) where
   transactionFeeDistribution = rpTransactionFeeDistribution
 
-instance HasGASRewards RewardParameters where
+instance HasGASRewards (RewardParameters cpv) where
   gASRewards = rpGASRewards
 
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 3} ''RewardParameters)
+instance AE.ToJSON (RewardParameters cpv) where
+  toJSON RewardParameters{..} = object [
+      "mintDistribution" AE..= _rpMintDistribution,
+      "transactionFeeDistribution" AE..= _rpTransactionFeeDistribution,
+      "gASRewards" AE..= _rpGASRewards
+    ]
 
-instance Serialize RewardParameters where
+instance IsChainParametersVersion cpv => AE.FromJSON (RewardParameters cpv) where
+  parseJSON = withObject "RewardParameters" $ \v -> do
+    _rpMintDistribution <- v .: "mintDistribution" 
+    _rpTransactionFeeDistribution <- v .: "transactionFeeDistribution"
+    _rpGASRewards <- v .: "gASRewards"
+    return RewardParameters{..}
+
+instance IsChainParametersVersion cpv => Serialize (RewardParameters cpv) where
   put RewardParameters{..} = do
     put _rpMintDistribution
     put _rpTransactionFeeDistribution
@@ -559,7 +597,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       -- that may be created in one block.
       _cpAccountCreationLimit :: !CredentialsPerBlockLimit,
       -- |Reward parameters.
-      _cpRewardParameters :: !RewardParameters,
+      _cpRewardParameters :: !(RewardParameters cpv),
       -- |Foundation account index.
       _cpFoundationAccount :: !AccountIndex,
       -- |Minimum threshold required for registering as a baker.
@@ -584,7 +622,7 @@ makeChainParametersV0 ::
     -- |Account creation limit
     CredentialsPerBlockLimit ->
     -- |Reward parameters
-    RewardParameters ->
+    RewardParameters 'ChainParametersV0 ->
     -- |Foundation account
     AccountIndex ->
     -- |Minimum threshold required for registering as a baker
@@ -621,7 +659,7 @@ makeChainParametersV1 ::
     -- |Account creation limit
     CredentialsPerBlockLimit ->
     -- |Reward parameters
-    RewardParameters ->
+    RewardParameters 'ChainParametersV1 ->
     -- |Foundation account
     AccountIndex ->
     -- |Fraction of finalization rewards charged by the L-Pool.
@@ -680,10 +718,10 @@ makeChainParametersV1
 instance HasExchangeRates (ChainParameters' cpv) where
     exchangeRates = cpExchangeRates
 
-instance HasRewardParameters (ChainParameters' cpv) where
+instance HasRewardParameters (ChainParameters' cpv) cpv where
     rewardParameters = cpRewardParameters
 
-putChainParameters :: Putter (ChainParameters' cpv)
+putChainParameters :: IsChainParametersVersion cpv => Putter (ChainParameters' cpv)
 putChainParameters ChainParameters{..} = do
     put _cpElectionDifficulty
     put _cpExchangeRates
@@ -701,10 +739,10 @@ instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
   put = putChainParameters
   get = getChainParameters
 
-instance HashableTo Hash.Hash (ChainParameters' cpv) where
+instance IsChainParametersVersion cpv => HashableTo Hash.Hash (ChainParameters' cpv) where
     getHash = Hash.hash . runPut . putChainParameters
 
-instance Monad m => MHashableTo m Hash.Hash (ChainParameters' cpv)
+instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (ChainParameters' cpv)
 
 parseJSONForCPV0 :: Value -> Parser (ChainParameters' 'ChainParametersV0)
 parseJSONForCPV0 = 
