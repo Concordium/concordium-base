@@ -7,6 +7,7 @@ use concordium_contracts_common::{
     self, AccountAddress, Address, Amount, ChainMetadata, ContractAddress, Cursor, Get, ParseError,
     ParseResult,
 };
+use libc::size_t;
 use serde::Deserialize as SerdeDeserialize;
 use wasm_transform::{
     artifact::TryFromImport,
@@ -154,7 +155,6 @@ pub type ReturnValue = Vec<u8>;
 #[derive(Debug)]
 pub enum InitResult<R> {
     Success {
-        state:            v0::State,
         logs:             v0::Logs,
         return_value:     ReturnValue,
         remaining_energy: u64,
@@ -196,22 +196,16 @@ impl<R> InitResult<R> {
             } => {
                 let mut out = vec![2];
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                let state = config.host.state.as_ref();
-                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
-                out.extend_from_slice(&state);
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
                 (out, Some(config), None)
             }
             InitResult::Success {
-                state,
                 logs,
                 return_value,
                 remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
+                let mut out = Vec::with_capacity(5 + 8);
                 out.push(3);
-                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
-                out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 (out, None, Some(return_value))
@@ -220,7 +214,7 @@ impl<R> InitResult<R> {
     }
 }
 
-/// State of the suspedned execution of the receive function.
+/// State of the suspended execution of the receive function.
 /// This retains both the module that is executed, as well the host.
 pub type ReceiveInterruptedState<R> = InterruptedState<
     ProcessedImports,
@@ -231,7 +225,6 @@ pub type ReceiveInterruptedState<R> = InterruptedState<
 #[derive(Debug)]
 pub enum ReceiveResult<R> {
     Success {
-        state:            v0::State,
         logs:             v0::Logs,
         return_value:     ReturnValue,
         remaining_energy: u64,
@@ -274,22 +267,15 @@ impl<R> ReceiveResult<R> {
             } => {
                 let mut out = vec![2];
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                let state = config.host.state.as_ref();
-                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
-                out.extend_from_slice(&state);
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
                 (out, Some(config), None)
             }
             Success {
-                state,
                 logs,
                 return_value,
                 remaining_energy,
             } => {
                 let mut out = vec![3];
-                let state = &state.state;
-                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
-                out.extend_from_slice(&state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 (out, None, Some(return_value))
@@ -306,12 +292,20 @@ pub enum CommonFunc {
     GetParameterSection,
     GetPolicySection,
     LogEvent,
-    LoadState,
-    WriteState,
-    ResizeState,
-    StateSize,
     GetSlotTime,
     WriteOutput,
+    StateLookupEntry,
+    StateCreateEntry,
+    StateDeleteEntry,
+    StateDeletePrefix,
+    StateIterator,
+    StateIteratorNext,
+    StateEntryRead,
+    StateEntryWrite,
+    StateEntrySize,
+    StateEntryResize,
+    StateEntryKeyRead,
+    StateEntryKeySize,
 }
 
 #[repr(u8)]
@@ -364,19 +358,27 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             5 => Ok(ImportFunc::Common(CommonFunc::GetParameterSection)),
             6 => Ok(ImportFunc::Common(CommonFunc::GetPolicySection)),
             7 => Ok(ImportFunc::Common(CommonFunc::LogEvent)),
-            8 => Ok(ImportFunc::Common(CommonFunc::LoadState)),
-            9 => Ok(ImportFunc::Common(CommonFunc::WriteState)),
-            10 => Ok(ImportFunc::Common(CommonFunc::ResizeState)),
-            11 => Ok(ImportFunc::Common(CommonFunc::StateSize)),
-            12 => Ok(ImportFunc::Common(CommonFunc::GetSlotTime)),
-            13 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
-            19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
-            20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
-            21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
-            22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
-            23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
-            24 => Ok(ImportFunc::Common(CommonFunc::Invoke)),
-            25 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
+            8 => Ok(ImportFunc::Common(CommonFunc::GetSlotTime)),
+            9 => Ok(ImportFunc::Common(CommonFunc::StateLookupEntry)),
+            10 => Ok(ImportFunc::Common(CommonFunc::StateCreateEntry)),
+            11 => Ok(ImportFunc::Common(CommonFunc::StateDeleteEntry)),
+            12 => Ok(ImportFunc::Common(CommonFunc::StateDeletePrefix)),
+            13 => Ok(ImportFunc::Common(CommonFunc::StateIterator)),
+            14 => Ok(ImportFunc::Common(CommonFunc::StateIteratorNext)),
+            15 => Ok(ImportFunc::Common(CommonFunc::StateEntryRead)),
+            16 => Ok(ImportFunc::Common(CommonFunc::StateEntryWrite)),
+            17 => Ok(ImportFunc::Common(CommonFunc::StateEntrySize)),
+            18 => Ok(ImportFunc::Common(CommonFunc::StateEntryResize)),
+            19 => Ok(ImportFunc::Common(CommonFunc::StateEntryKeyRead)),
+            20 => Ok(ImportFunc::Common(CommonFunc::StateEntryKeySize)),
+            21 => Ok(ImportFunc::Common(CommonFunc::Invoke)),
+            22 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
+            23 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
+            24 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
+            25 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
+            26 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
+            27 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
+            28 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
@@ -394,23 +396,31 @@ impl Output for ImportFunc {
                 CommonFunc::GetParameterSection => 5,
                 CommonFunc::GetPolicySection => 6,
                 CommonFunc::LogEvent => 7,
-                CommonFunc::LoadState => 8,
-                CommonFunc::WriteState => 9,
-                CommonFunc::ResizeState => 10,
-                CommonFunc::StateSize => 11,
-                CommonFunc::GetSlotTime => 12,
-                CommonFunc::Invoke => 24,
-                CommonFunc::WriteOutput => 25,
+                CommonFunc::GetSlotTime => 8,
+                CommonFunc::StateLookupEntry => 9,
+                CommonFunc::StateCreateEntry => 10,
+                CommonFunc::StateDeleteEntry => 11,
+                CommonFunc::StateDeletePrefix => 12,
+                CommonFunc::StateIterator => 13,
+                CommonFunc::StateIteratorNext => 14,
+                CommonFunc::StateEntryRead => 15,
+                CommonFunc::StateEntryWrite => 16,
+                CommonFunc::StateEntrySize => 17,
+                CommonFunc::StateEntryResize => 18,
+                CommonFunc::StateEntryKeyRead => 19,
+                CommonFunc::StateEntryKeySize => 20,
+                CommonFunc::Invoke => 21,
+                CommonFunc::WriteOutput => 22,
             },
             ImportFunc::InitOnly(io) => match io {
-                InitOnlyFunc::GetInitOrigin => 13,
+                InitOnlyFunc::GetInitOrigin => 23,
             },
             ImportFunc::ReceiveOnly(ro) => match ro {
-                ReceiveOnlyFunc::GetReceiveInvoker => 19,
-                ReceiveOnlyFunc::GetReceiveSelfAddress => 20,
-                ReceiveOnlyFunc::GetReceiveSelfBalance => 21,
-                ReceiveOnlyFunc::GetReceiveSender => 22,
-                ReceiveOnlyFunc::GetReceiveOwner => 23,
+                ReceiveOnlyFunc::GetReceiveInvoker => 24,
+                ReceiveOnlyFunc::GetReceiveSelfAddress => 25,
+                ReceiveOnlyFunc::GetReceiveSelfBalance => 26,
+                ReceiveOnlyFunc::GetReceiveSender => 27,
+                ReceiveOnlyFunc::GetReceiveOwner => 28,
             },
         };
         tag.output(out)
@@ -468,10 +478,6 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "get_parameter_section" => type_matches!(ty => [I32, I32, I32, I32]; I32),
                 "get_policy_section" => type_matches!(ty => [I32, I32, I32]; I32),
                 "log_event" => type_matches!(ty => [I32, I32]; I32),
-                "load_state" => type_matches!(ty => [I32, I32, I32]; I32),
-                "write_state" => type_matches!(ty => [I32, I32, I32]; I32),
-                "resize_state" => type_matches!(ty => [I32]; I32),
-                "state_size" => type_matches!(ty => []; I32),
                 "get_init_origin" => type_matches!(ty => [I32]),
                 "get_receive_invoker" => type_matches!(ty => [I32]),
                 "get_receive_self_address" => type_matches!(ty => [I32]),
@@ -479,6 +485,18 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "get_receive_sender" => type_matches!(ty => [I32]),
                 "get_receive_owner" => type_matches!(ty => [I32]),
                 "get_slot_time" => type_matches!(ty => []; I64),
+                "state_lookup_entry" => type_matches!(ty => [I32, I32]; I64),
+                "state_create_entry" => type_matches!(ty => [I32, I32]; I32),
+                "state_delete_entry" => type_matches!(ty => [I32]; I32),
+                "state_delete_prefix" => type_matches!(ty => [I32, I32]; I32),
+                "state_iterator" => type_matches!(ty => [I32, I32]; I32),
+                "state_iterator_next" => type_matches!(ty => [I32]; I64),
+                "state_entry_read" => type_matches!(ty => [I32, I32, I32, I32]; I32),
+                "state_entry_write" => type_matches!(ty => [I32, I32, I32, I32]; I32),
+                "state_entry_size" => type_matches!(ty => [I32]; I32),
+                "state_entry_resize" => type_matches!(ty => [I32, I32]; I32),
+                "state_entry_key_read" => type_matches!(ty => [I32, I32, I32, I32]; I32),
+                "state_entry_key_size" => type_matches!(ty => [I32]; I32),
                 _ => false,
             }
         } else {
@@ -533,10 +551,6 @@ impl TryFromImport for ProcessedImports {
                 "get_parameter_section" => ImportFunc::Common(CommonFunc::GetParameterSection),
                 "get_policy_section" => ImportFunc::Common(CommonFunc::GetPolicySection),
                 "log_event" => ImportFunc::Common(CommonFunc::LogEvent),
-                "load_state" => ImportFunc::Common(CommonFunc::LoadState),
-                "write_state" => ImportFunc::Common(CommonFunc::WriteState),
-                "resize_state" => ImportFunc::Common(CommonFunc::ResizeState),
-                "state_size" => ImportFunc::Common(CommonFunc::StateSize),
                 "get_init_origin" => ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin),
                 "get_receive_invoker" => {
                     ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)
@@ -550,6 +564,18 @@ impl TryFromImport for ProcessedImports {
                 "get_receive_sender" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender),
                 "get_receive_owner" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner),
                 "get_slot_time" => ImportFunc::Common(CommonFunc::GetSlotTime),
+                "state_lookup_entry" => ImportFunc::Common(CommonFunc::StateLookupEntry),
+                "state_create_entry" => ImportFunc::Common(CommonFunc::StateCreateEntry),
+                "state_delete_entry" => ImportFunc::Common(CommonFunc::StateDeleteEntry),
+                "state_delete_prefix" => ImportFunc::Common(CommonFunc::StateDeletePrefix),
+                "state_iterator" => ImportFunc::Common(CommonFunc::StateIterator),
+                "state_iterator_next" => ImportFunc::Common(CommonFunc::StateIteratorNext),
+                "state_entry_read" => ImportFunc::Common(CommonFunc::StateEntryRead),
+                "state_entry_write" => ImportFunc::Common(CommonFunc::StateEntryWrite),
+                "state_entry_size" => ImportFunc::Common(CommonFunc::StateEntrySize),
+                "state_entry_resize" => ImportFunc::Common(CommonFunc::StateEntryResize),
+                "state_entry_key_read" => ImportFunc::Common(CommonFunc::StateEntryKeyRead),
+                "state_entry_key_size" => ImportFunc::Common(CommonFunc::StateEntryKeySize),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {
@@ -570,4 +596,161 @@ impl TryFromImport for ProcessedImports {
     }
 
     fn ty(&self) -> &FunctionType { &self.ty }
+}
+
+/// Collection of function pointer provided by consensus to read and manipulate
+/// the state of an instance.
+#[derive(Debug)]
+#[repr(C)]
+pub struct InstanceStateCallbacksFFI {
+    lookup_entry:
+        extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> *const InstanceStateEntryFFI, /* TODO: Should be some encoding of Option<InstanceStateEntryFFI> */
+    create_entry:
+        extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> *const InstanceStateEntryFFI,
+    delete_entry:   extern "C" fn(*const InstanceStateEntryFFI) -> u32,
+    delete_prefix:  extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> u32,
+    iterator: extern "C" fn(
+        *const InstanceStateFFI,
+        *const u8,
+        size_t,
+    ) -> *const InstanceStateIteratorFFI,
+    iterator_next:  extern "C" fn(*const InstanceStateIteratorFFI) -> *const InstanceStateEntryFFI, /* TODO: Should be some encoding of Option<InstanceStateEntryFFI> */
+    entry_read:     extern "C" fn(*const InstanceStateEntryFFI, *mut u8, size_t, u32) -> u32,
+    entry_write:    extern "C" fn(*const InstanceStateEntryFFI, *const u8, size_t, u32) -> u32,
+    entry_size:     extern "C" fn(*const InstanceStateEntryFFI) -> u32,
+    entry_resize:   extern "C" fn(*const InstanceStateEntryFFI, u32) -> u32,
+    entry_key_read: extern "C" fn(*const InstanceStateEntryFFI, *mut u8, size_t, u32) -> u32,
+    entry_key_size: extern "C" fn(*const InstanceStateEntryFFI) -> u32,
+}
+
+/// Opaque type for the instance state and is mutated using the function
+/// pointers found in InstanceStateCallbacks.
+#[derive(Debug)]
+#[repr(C)]
+pub struct InstanceStateFFI {
+    private: [u8; 0],
+}
+
+/// Opaque type for an entry in the instance state.
+#[derive(Debug)]
+#[repr(C)]
+pub struct InstanceStateEntryFFI {
+    private: [u8; 0],
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct InstanceStateIteratorFFI {
+    private: [u8; 0],
+}
+
+/// Wrapper for the opaque pointers to the state of the instance managed by
+/// Consensus.
+#[derive(Debug)]
+pub struct InstanceState {
+    /// Collection of function pointers for manipulating the instance state in
+    /// consensus.
+    callbacks: InstanceStateCallbacksFFI,
+    /// Opaque pointer to the state of the instance in consensus.
+    state_ptr: *const InstanceStateFFI,
+    /// List of known entry opaque pointers in consensus.
+    /// An entry is exposed in the Wasm host function as an index in this list.
+    entries:   Vec<*const InstanceStateEntryFFI>,
+    /// List of known iterator opaque pointers in consensus.
+    /// An iterator is exposed in the Wasm host function as an index in this
+    /// list.
+    iterators: Vec<*const InstanceStateIteratorFFI>,
+}
+
+pub type InstanceStateEntry = u32;
+pub type InstanceStateIterator = u32;
+
+impl InstanceState {
+    pub fn new(
+        callbacks: InstanceStateCallbacksFFI,
+        state_ptr: *const InstanceStateFFI,
+    ) -> InstanceState {
+        InstanceState {
+            callbacks,
+            state_ptr,
+            entries: Vec::new(),
+            iterators: Vec::new(),
+        }
+    }
+
+    pub fn lookup_entry(&mut self, key: &[u8]) -> i64 {
+        let entry_ptr =
+            (self.callbacks.lookup_entry)(self.state_ptr, key.as_ptr(), key.len() as size_t);
+        // TODO: decode the response, which is some .Option
+        self.entries.push(entry_ptr);
+        let index = self.entries.len() as u32;
+        index.into()
+    }
+
+    pub fn create_entry(&mut self, key: &[u8]) -> InstanceStateEntry {
+        let entry_ptr =
+            (self.callbacks.create_entry)(self.state_ptr, key.as_ptr(), key.len() as size_t);
+        self.entries.push(entry_ptr);
+        self.entries.len() as u32 // TODO: Is it safe to cast?
+    }
+
+    pub fn delete_entry(&self, entry: InstanceStateEntry) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.delete_entry)(entry)
+    }
+
+    pub fn delete_prefix(&self, key: &[u8]) -> u32 {
+        (self.callbacks.delete_prefix)(self.state_ptr, key.as_ptr(), key.len() as size_t)
+    }
+
+    pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIterator {
+        let iter_ptr =
+            (self.callbacks.iterator)(self.state_ptr, prefix.as_ptr(), prefix.len() as size_t);
+        self.iterators.push(iter_ptr);
+        self.iterators.len() as u32
+    }
+
+    pub fn iterator_next(&mut self, iter: InstanceStateIterator) -> i64 {
+        let iter_ptr = self.iterators[iter as usize];
+        let entry_ptr = (self.callbacks.iterator_next)(iter_ptr);
+        // TODO: decode the response, which is some Option
+        self.entries.push(entry_ptr);
+        let entry_index = self.entries.len() as u32;
+        entry_index.into()
+    }
+
+    pub fn entry_read(&mut self, entry: InstanceStateEntry, dest: &mut [u8], offset: u32) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.entry_read)(entry, dest.as_mut_ptr(), dest.len() as size_t, offset)
+    }
+
+    pub fn entry_write(&mut self, entry: InstanceStateEntry, src: &[u8], offset: u32) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.entry_write)(entry, src.as_ptr(), src.len() as size_t, offset)
+    }
+
+    pub fn entry_size(&mut self, entry: InstanceStateEntry) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.entry_size)(entry)
+    }
+
+    pub fn entry_resize(&mut self, entry: InstanceStateEntry, new_size: u32) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.entry_resize)(entry, new_size)
+    }
+
+    pub fn entry_key_read(
+        &mut self,
+        entry: InstanceStateEntry,
+        dest: &mut [u8],
+        offset: u32,
+    ) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.entry_key_read)(entry, dest.as_mut_ptr(), dest.len() as size_t, offset)
+    }
+
+    pub fn entry_key_size(&mut self, entry: InstanceStateEntry) -> u32 {
+        let entry = self.entries[entry as usize];
+        (self.callbacks.entry_key_size)(entry)
+    }
 }

@@ -29,6 +29,8 @@ unsafe extern "C" fn call_init_v1(
     // there is no output config, and to a Box(config) otherwise.
     output_config: *mut *mut InitInterruptedState<CompiledFunction>,
     output_len: *mut size_t,
+    instance_state_ptr: *const InstanceStateFFI,
+    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| {
@@ -37,9 +39,19 @@ unsafe extern "C" fn call_init_v1(
         let init_ctx =
             deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len as usize))
                 .expect("Precondition violation: invalid init ctx given by host.");
+        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
+        let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(artifact.clone(), amount, init_ctx, name, parameter, energy);
+                let res = invoke_init(
+                    artifact.clone(),
+                    amount,
+                    init_ctx,
+                    name,
+                    parameter,
+                    energy,
+                    instance_state,
+                );
                 match res {
                     Ok(result) => {
                         let (mut out, config, return_value) = result.extract();
@@ -79,14 +91,14 @@ unsafe extern "C" fn call_receive_v1(
     amount: u64,
     receive_name: *const u8,
     receive_name_len: size_t,
-    state_bytes: *const u8,
-    state_bytes_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
     energy: u64,
     output_return_value: *mut *mut Vec<u8>,
     output_config: *mut *mut ReceiveInterruptedState<CompiledFunction>,
     output_len: *mut size_t,
+    instance_state_ptr: *const InstanceStateFFI,
+    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| {
@@ -96,18 +108,19 @@ unsafe extern "C" fn call_receive_v1(
         ))
         .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
-        let state = slice_from_c_bytes!(state_bytes, state_bytes_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
+        let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive(
                     artifact.clone(),
                     amount,
                     receive_ctx,
-                    state,
                     name,
                     parameter,
                     energy,
+                    instance_state,
                 );
                 match res {
                     Ok(result) => {
@@ -204,14 +217,13 @@ unsafe extern "C" fn resume_init_v1(
     config_ptr: *mut *mut InitInterruptedState<CompiledFunction>, /* mutable pointer, we will
                                                                    * mutate this, either to a
                                                                    * new state or null */
-    state_bytes: *const u8, /* (potentially) updated state of the contract, or null if
-                             * response_status < 0 */
-    state_bytes_len: size_t,
     response_status: i32,   // whether the call succeeded or not.
     response: *mut Vec<u8>, // response from the call.
     energy: u64,            // remaining energy available for execution
     output_return_value: *mut *mut Vec<u8>,
     output_len: *mut size_t,
+    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
+    instance_state_ptr: *const InstanceStateFFI,
 ) -> *mut u8 {
     let config = Box::from_raw(*config_ptr);
 
@@ -227,7 +239,8 @@ unsafe extern "C" fn resume_init_v1(
             data,
         }
     } else {
-        let new_state = slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
+        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
+        let new_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
         InvokeResponse::Success {
             new_state,
             data,

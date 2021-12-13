@@ -76,7 +76,7 @@ pub struct InitHost<ParamType, Ctx> {
     /// Logs produced during execution.
     pub logs:              v0::Logs,
     /// The contract's state.
-    pub state:             v0::State,
+    pub state:             InstanceState,
     /// The response from the call.
     pub return_value:      ReturnValue,
     /// The parameter to the init method, as well as any responses from
@@ -112,7 +112,7 @@ pub struct ReceiveHost<ParamType, Ctx> {
     /// Logs produced during execution.
     pub logs:              v0::Logs,
     /// The contract's state.
-    pub state:             v0::State,
+    pub state:             InstanceState,
     /// Return value from execution.
     pub return_value:      ReturnValue,
     /// The parameter to the receive method.
@@ -414,6 +414,205 @@ mod host {
         }
         Ok(())
     }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_lookup_entry(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() } as usize;
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        // TODO: tick energy
+        let key_end = key_start + key_len;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let result_entry_index = state.lookup_entry(key);
+        stack.push_value(result_entry_index);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_create_entry(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() } as usize;
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        let key_end = key_start + key_len;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let entry_index = state.create_entry(key);
+        // TODO: tick energy
+        stack.push_value(entry_index);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_delete_entry(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let result = state.delete_entry(entry_index);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_delete_prefix(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() } as usize;
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        // TODO: tick energy
+        let key_end = key_start + key_len;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let result = state.delete_prefix(key);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_iterator(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let prefix_len = unsafe { stack.pop_u32() } as usize;
+        let prefix_start = unsafe { stack.pop_u32() } as usize;
+        // TODO: tick energy
+        let prefix_end = prefix_start + prefix_len;
+        ensure!(prefix_end <= memory.len(), "Illegal memory access.");
+        if prefix_end > memory.len() {}
+        let prefix = &memory[prefix_start..prefix_end];
+        let iterator_index = state.iterator(prefix);
+        stack.push_value(iterator_index);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_iterator_next(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let iter_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let next_entry_index = state.iterator_next(iter_index);
+        stack.push_value(next_entry_index);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_entry_read(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let dest_start = unsafe { stack.pop_u32() } as usize;
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let dest_end = dest_start + length as usize;
+        ensure!(dest_end <= memory.len(), "Illegal memory access.");
+        let dest = &mut memory[dest_start..dest_end];
+        let result = state.entry_read(entry_index, dest, offset);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_entry_write(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let source_start = unsafe { stack.pop_u32() } as usize;
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let source_end = source_start + length as usize;
+        ensure!(source_end <= memory.len(), "Illegal memory access.");
+        let source = &memory[source_start..source_end];
+        let result = state.entry_write(entry_index, source, offset);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_entry_size(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let result = state.entry_size(entry_index);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_entry_resize(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let new_size = unsafe { stack.pop_u32() };
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let result = state.entry_resize(entry_index, new_size);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_entry_key_read(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let dest_start = unsafe { stack.pop_u32() } as usize;
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let dest_end = dest_start + length as usize;
+        ensure!(dest_end <= memory.len(), "Illegal memory access.");
+        let dest = &mut memory[dest_start..dest_end];
+        let result = state.entry_key_read(entry_index, dest, offset);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_entry_key_size(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState,
+    ) -> machine::RunResult<()> {
+        let entry_index = unsafe { stack.pop_u32() };
+        // TODO: tick energy
+        let result = state.entry_key_size(entry_index);
+        stack.push_value(result);
+        Ok(())
+    }
 }
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
@@ -468,17 +667,43 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
                 CommonFunc::LogEvent => {
                     v0::host::log_event(memory, stack, &mut self.energy, &mut self.logs)
                 }
-                CommonFunc::LoadState => {
-                    v0::host::load_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::WriteState => {
-                    v0::host::write_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::ResizeState => {
-                    v0::host::resize_state(stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::StateSize => v0::host::state_size(stack, &mut self.state),
                 CommonFunc::GetSlotTime => v0::host::get_slot_time(stack, self.init_ctx.metadata()),
+                CommonFunc::StateLookupEntry => {
+                    host::state_lookup_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateCreateEntry => {
+                    host::state_create_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeleteEntry => {
+                    host::state_delete_entry(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeletePrefix => {
+                    host::state_delete_prefix(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIterator => {
+                    host::state_iterator(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorNext => {
+                    host::state_iterator_next(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryRead => {
+                    host::state_entry_read(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryWrite => {
+                    host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntrySize => {
+                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryResize => {
+                    host::state_entry_resize(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryKeySize => {
+                    host::state_entry_key_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryKeyRead => {
+                    host::state_entry_key_read(memory, stack, &mut self.energy, &mut self.state)
+                }
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 v0::host::get_init_origin(memory, stack, self.init_ctx.init_origin())?
@@ -538,18 +763,44 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
                 CommonFunc::LogEvent => {
                     v0::host::log_event(memory, stack, &mut self.energy, &mut self.logs)
                 }
-                CommonFunc::LoadState => {
-                    v0::host::load_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::WriteState => {
-                    v0::host::write_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::ResizeState => {
-                    v0::host::resize_state(stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::StateSize => v0::host::state_size(stack, &mut self.state),
                 CommonFunc::GetSlotTime => {
                     v0::host::get_slot_time(stack, self.receive_ctx.metadata())
+                }
+                CommonFunc::StateLookupEntry => {
+                    host::state_lookup_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateCreateEntry => {
+                    host::state_create_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeleteEntry => {
+                    host::state_delete_entry(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeletePrefix => {
+                    host::state_delete_prefix(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIterator => {
+                    host::state_iterator(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorNext => {
+                    host::state_iterator_next(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryRead => {
+                    host::state_entry_read(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryWrite => {
+                    host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntrySize => {
+                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryResize => {
+                    host::state_entry_resize(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryKeySize => {
+                    host::state_entry_key_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryKeyRead => {
+                    host::state_entry_key_read(memory, stack, &mut self.energy, &mut self.state)
                 }
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
@@ -596,6 +847,7 @@ pub fn invoke_init<Policy: AsRef<[u8]>, R: RunnableCode>(
     init_name: &str,
     param: ParameterRef,
     energy: u64,
+    state: InstanceState,
 ) -> ExecResult<InitResult<R>>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
@@ -605,7 +857,7 @@ where
         },
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
-        state: v0::State::new(None),
+        state,
         return_value: Vec::new(),
         parameters: vec![param],
         init_ctx,
@@ -636,7 +888,6 @@ where
             if let Some(Value::I32(n)) = result {
                 if n == 0 {
                     Ok(InitResult::Success {
-                        state: host.state,
                         logs: host.logs,
                         return_value: host.return_value,
                         remaining_energy,
@@ -681,7 +932,7 @@ where
 pub enum InvokeResponse {
     /// Execution was successful, and the state changed.
     Success {
-        new_state: v0::State,
+        new_state: InstanceState,
         data:      ParameterVec,
     },
     /// Execution was not successful. The state did not change
@@ -733,11 +984,12 @@ pub fn invoke_init_from_artifact<'a, Policy: AsRef<[u8]>>(
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
+    state: InstanceState,
 ) -> ExecResult<InitResult<CompiledFunctionBytes<'a>>>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy)
+    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy, state)
 }
 
 /// Invokes an init-function from Wasm module bytes
@@ -749,11 +1001,12 @@ pub fn invoke_init_from_source<Policy: AsRef<[u8]>>(
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
+    state: InstanceState,
 ) -> ExecResult<InitResult<CompiledFunction>>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy)
+    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy, state)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
@@ -767,11 +1020,12 @@ pub fn invoke_init_with_metering_from_source<Policy: AsRef<[u8]>>(
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
+    state: InstanceState,
 ) -> ExecResult<InitResult<CompiledFunction>>
 where
     InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy)
+    invoke_init(Arc::new(artifact), amount, init_ctx, init_name, parameter, energy, state)
 }
 
 fn process_receive_result<Param, R: RunnableCode, Policy>(
@@ -792,7 +1046,6 @@ where
                 if n >= 0 {
                     Ok(ReceiveResult::Success {
                         logs: host.logs,
-                        state: host.state,
                         return_value: host.return_value,
                         remaining_energy,
                     })
@@ -840,10 +1093,10 @@ pub fn invoke_receive<R: RunnableCode, Policy: AsRef<[u8]>>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
     amount: u64,
     receive_ctx: ReceiveContext<Policy>,
-    current_state: &[u8],
     receive_name: &str,
     param: ParameterRef,
     energy: u64,
+    instance_state: InstanceState,
 ) -> ExecResult<ReceiveResult<R>>
 where
     ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
@@ -853,7 +1106,7 @@ where
         },
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
-        state: v0::State::new(Some(current_state)),
+        state: instance_state,
         return_value: Vec::new(),
         parameters: vec![param],
         receive_ctx,
@@ -911,10 +1164,10 @@ pub fn invoke_receive_from_artifact<'a, Policy: AsRef<[u8]>>(
     artifact_bytes: &'a [u8],
     amount: u64,
     receive_ctx: ReceiveContext<Policy>,
-    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
+    instance_state: InstanceState,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>>>
 where
     ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
@@ -923,10 +1176,10 @@ where
         Arc::new(artifact),
         amount,
         receive_ctx,
-        current_state,
         receive_name,
         parameter,
         energy,
+        instance_state,
     )
 }
 
@@ -936,10 +1189,10 @@ pub fn invoke_receive_from_source<Policy: AsRef<[u8]>>(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: ReceiveContext<Policy>,
-    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
+    instance_state: InstanceState,
 ) -> ExecResult<ReceiveResult<CompiledFunction>>
 where
     ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
@@ -948,10 +1201,10 @@ where
         Arc::new(artifact),
         amount,
         receive_ctx,
-        current_state,
         receive_name,
         parameter,
         energy,
+        instance_state,
     )
 }
 
@@ -962,10 +1215,10 @@ pub fn invoke_receive_with_metering_from_source<Policy: AsRef<[u8]>>(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: ReceiveContext<Policy>,
-    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
+    instance_state: InstanceState,
 ) -> ExecResult<ReceiveResult<CompiledFunction>>
 where
     ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
@@ -974,9 +1227,9 @@ where
         Arc::new(artifact),
         amount,
         receive_ctx,
-        current_state,
         receive_name,
         parameter,
         energy,
+        instance_state,
     )
 }
