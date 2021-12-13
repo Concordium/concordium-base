@@ -37,7 +37,7 @@ instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) wher
   put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
   put MintPerSlotForCPV0None = return ()
   get = case chainParametersVersion @cpv of
-    SCPV0 -> MintPerSlotForCPV0Some <$> get 
+    SCPV0 -> MintPerSlotForCPV0Some <$> get
     SCPV1 -> return MintPerSlotForCPV0None
 
 -- |Lens for '_mpsMintPerSlot'
@@ -68,8 +68,8 @@ instance ToJSON (MintDistribution cpv) where
   toJSON MintDistribution{..} = object (mintPerSlot ++ [
       "bakingReward" AE..= _mdBakingReward,
       "finalizationReward" AE..= _mdFinalizationReward
-    ]) where 
-      mintPerSlot = case _mdMintPerSlot of 
+    ]) where
+      mintPerSlot = case _mdMintPerSlot of
         MintPerSlotForCPV0Some{..} -> ["mintPerSlot" AE..= _mpsMintPerSlot]
         MintPerSlotForCPV0None -> []
 
@@ -201,7 +201,7 @@ instance AE.ToJSON (RewardParameters cpv) where
 
 instance IsChainParametersVersion cpv => AE.FromJSON (RewardParameters cpv) where
   parseJSON = withObject "RewardParameters" $ \v -> do
-    _rpMintDistribution <- v .: "mintDistribution" 
+    _rpMintDistribution <- v .: "mintDistribution"
     _rpTransactionFeeDistribution <- v .: "transactionFeeDistribution"
     _rpGASRewards <- v .: "gASRewards"
     return RewardParameters{..}
@@ -295,18 +295,18 @@ data CooldownParameters cpv where
     } -> CooldownParameters 'ChainParametersV1
 
 instance ToJSON (CooldownParameters cpv) where
-  toJSON CooldownParametersV0{..} = 
+  toJSON CooldownParametersV0{..} =
         object [
             "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs
         ]
-  toJSON CooldownParametersV1{..} = 
+  toJSON CooldownParametersV1{..} =
         object [
             "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown,
             "delegatorCooldown" AE..= _cpDelegatorCooldown
         ]
 
 parseCooldownParametersJSON :: forall cpv.  IsChainParametersVersion cpv => Value -> Parser (CooldownParameters cpv)
-parseCooldownParametersJSON = case chainParametersVersion @cpv of 
+parseCooldownParametersJSON = case chainParametersVersion @cpv of
   SCPV0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
   SCPV1 -> withObject "CooldownParametersV1" $ \v -> CooldownParametersV1 <$> v .: "poolOwnerCooldown"
                                                                           <*> v .: "delegatorCooldown"
@@ -332,7 +332,7 @@ cpPoolOwnerCooldown =
 cpDelegatorCooldown :: Lens' (CooldownParameters 'ChainParametersV1) RewardPeriod
 cpDelegatorCooldown =
   lens _cpDelegatorCooldown (\cp x -> cp{_cpDelegatorCooldown = x})
-    
+
 deriving instance Eq (CooldownParameters cpv)
 deriving instance Show (CooldownParameters cpv)
 
@@ -354,7 +354,7 @@ getCooldownParameters = case chainParametersVersion @cpv of
     SCPV1 -> CooldownParametersV1 <$> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) where
-  put = putCooldownParameters 
+  put = putCooldownParameters
   get = getCooldownParameters
 
 data TimeParameters cpv where
@@ -389,7 +389,7 @@ instance IsChainParametersVersion cpv => Serialize (TimeParameters cpv) where
   get = getTimeParameters
 
 instance ToJSON (TimeParameters 'ChainParametersV1) where
-  toJSON TimeParametersV1{..} = 
+  toJSON TimeParametersV1{..} =
         object [
             "rewardPeriodLength" AE..= _tpRewardPeriodLength
         ]
@@ -405,14 +405,14 @@ data InclusiveRange a = InclusiveRange {irMin :: !a, irMax :: !a}
     deriving (Eq, Show)
 
 instance ToJSON a => ToJSON (InclusiveRange a) where
-    toJSON InclusiveRange{..} = 
+    toJSON InclusiveRange{..} =
         object [
             "min" AE..= irMin,
             "max" AE..= irMax
         ]
 
 instance (FromJSON a, Ord a) => FromJSON (InclusiveRange a) where
-    parseJSON = withObject "InclusiveRange" $ \v ->  do 
+    parseJSON = withObject "InclusiveRange" $ \v ->  do
       irMin <- v .: "min"
       irMax <- v .: "max"
       when (irMin > irMax) $ fail "Invalid interval. Left endpoint cannot be bigger than right endpoint."
@@ -474,11 +474,11 @@ data PoolParameters cpv where
     } -> PoolParameters 'ChainParametersV1
 
 instance ToJSON (PoolParameters cpv) where
-  toJSON PoolParametersV0{..} = 
+  toJSON PoolParametersV0{..} =
         object [
             "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold
         ]
-  toJSON PoolParametersV1{..} = 
+  toJSON PoolParametersV1{..} =
         object [
             "finalizationCommissionLPool" AE..= _finalizationCommission _ppLPoolCommissions,
             "bakingCommissionLPool" AE..= _bakingCommission _ppLPoolCommissions,
@@ -493,7 +493,7 @@ instance ToJSON (PoolParameters cpv) where
         ]
 
 parsePoolParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (PoolParameters cpv)
-parsePoolParametersJSON = case chainParametersVersion @cpv of 
+parsePoolParametersJSON = case chainParametersVersion @cpv of
   SCPV0 -> withObject "CooldownParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
   SCPV1 -> withObject "CooldownParametersV1" $ \v -> do
     _finalizationCommission <- v .: "finalizationCommissionLPool"
@@ -610,7 +610,7 @@ makeLenses ''ChainParameters'
 type ChainParameters pv = ChainParameters' (ChainParametersVersionFor pv)
 
 -- |Constructor for chain parameters.
-makeChainParametersV0 :: 
+makeChainParametersV0 ::
     -- |Election difficulty
     ElectionDifficulty ->
     -- |Euro:Energy rate
@@ -675,10 +675,10 @@ makeChainParametersV1 ::
     -- |The range of allowed transaction commisions for normal pools.
     InclusiveRange RewardFraction ->
     -- |Minimum equity capital required for a new baker.
-    Amount -> 
+    Amount ->
     -- |Minimum fraction of the total supply required for a baker to qualify
     -- as a finalizer.
-    RewardFraction -> 
+    RewardFraction ->
     -- |Maximum fraction of the total supply of that a new baker can have.
     RewardFraction ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
@@ -687,7 +687,7 @@ makeChainParametersV1 ::
     -- |Length of a payday in epochs.
     RewardPeriodLength ->
     ChainParameters' 'ChainParametersV1
-makeChainParametersV1 
+makeChainParametersV1
     _cpElectionDifficulty
     _cpEuroPerEnergy
     _cpMicroGTUPerEuro
@@ -745,7 +745,7 @@ instance IsChainParametersVersion cpv => HashableTo Hash.Hash (ChainParameters' 
 instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (ChainParameters' cpv)
 
 parseJSONForCPV0 :: Value -> Parser (ChainParameters' 'ChainParametersV0)
-parseJSONForCPV0 = 
+parseJSONForCPV0 =
     withObject "ChainParameters" $ \v ->
         makeChainParametersV0
             <$> v .: "electionDifficulty"
@@ -758,7 +758,7 @@ parseJSONForCPV0 =
             <*> v .: "minimumThresholdForBaking"
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
-parseJSONForCPV1 = 
+parseJSONForCPV1 =
     withObject "ChainParametersV1" $ \v ->
         makeChainParametersV1
             <$> v .: "electionDifficulty"
@@ -788,7 +788,7 @@ instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' 
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cpv) where
     toJSON ChainParameters{..} = case chainParametersVersion @cpv of
-      SCPV0 -> 
+      SCPV0 ->
         object
             [ "electionDifficulty" AE..= _cpElectionDifficulty,
               "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
