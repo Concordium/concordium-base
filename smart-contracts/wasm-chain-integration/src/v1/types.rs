@@ -603,24 +603,26 @@ impl TryFromImport for ProcessedImports {
 #[derive(Debug)]
 #[repr(C)]
 pub struct InstanceStateCallbacksFFI {
+    /// Lookup a key in the instance state, will return a null pointer if no
+    /// entry is found.
     lookup_entry:
-        extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> *const InstanceStateEntryFFI, /* TODO: Should be some encoding of Option<InstanceStateEntryFFI> */
+        extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> *const InstanceStateEntryFFI,
+    /// Create/override with an empty entry at the provided key.
     create_entry:
         extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> *const InstanceStateEntryFFI,
-    delete_entry:   extern "C" fn(*const InstanceStateEntryFFI) -> u32,
-    delete_prefix:  extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> u32,
+    delete_entry:  extern "C" fn(*const InstanceStateEntryFFI) -> u32,
+    delete_prefix: extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> u32,
     iterator: extern "C" fn(
         *const InstanceStateFFI,
         *const u8,
         size_t,
     ) -> *const InstanceStateIteratorFFI,
-    iterator_next:  extern "C" fn(*const InstanceStateIteratorFFI) -> *const InstanceStateEntryFFI, /* TODO: Should be some encoding of Option<InstanceStateEntryFFI> */
-    entry_read:     extern "C" fn(*const InstanceStateEntryFFI, *mut u8, size_t, u32) -> u32,
-    entry_write:    extern "C" fn(*const InstanceStateEntryFFI, *const u8, size_t, u32) -> u32,
-    entry_size:     extern "C" fn(*const InstanceStateEntryFFI) -> u32,
-    entry_resize:   extern "C" fn(*const InstanceStateEntryFFI, u32) -> u32,
-    entry_key_read: extern "C" fn(*const InstanceStateEntryFFI, *mut u8, size_t, u32) -> u32,
-    entry_key_size: extern "C" fn(*const InstanceStateEntryFFI) -> u32,
+    iterator_next:
+        extern "C" fn(*const InstanceStateIteratorFFI) -> *const InstanceStateIteratorNextFFI,
+    entry_read:    extern "C" fn(*const InstanceStateEntryFFI, *mut u8, size_t, u32) -> u32,
+    entry_write:   extern "C" fn(*const InstanceStateEntryFFI, *const u8, size_t, u32) -> u32,
+    entry_size:    extern "C" fn(*const InstanceStateEntryFFI) -> u32,
+    entry_resize:  extern "C" fn(*const InstanceStateEntryFFI, u32) -> u32,
 }
 
 /// Opaque type for the instance state and is mutated using the function
@@ -638,10 +640,21 @@ pub struct InstanceStateEntryFFI {
     private: [u8; 0],
 }
 
+/// Opaque type for an iterator in the instance state.
 #[derive(Debug)]
 #[repr(C)]
 pub struct InstanceStateIteratorFFI {
     private: [u8; 0],
+}
+
+/// FFI type for the next value in an iterator
+#[derive(Debug)]
+#[repr(C)]
+pub struct InstanceStateIteratorNextFFI {
+    /// Raw pointer to the next entry
+    entry_ptr: *const InstanceStateEntryFFI,
+    /// Key for the next entry
+    key:       Vec<u8>,
 }
 
 /// Wrapper for the opaque pointers to the state of the instance managed by
@@ -655,7 +668,7 @@ pub struct InstanceState {
     state_ptr: *const InstanceStateFFI,
     /// List of known entry opaque pointers in consensus.
     /// An entry is exposed in the Wasm host function as an index in this list.
-    entries:   Vec<*const InstanceStateEntryFFI>,
+    entries:   Vec<(Vec<u8>, *const InstanceStateEntryFFI)>,
     /// List of known iterator opaque pointers in consensus.
     /// An iterator is exposed in the Wasm host function as an index in this
     /// list.
@@ -664,6 +677,8 @@ pub struct InstanceState {
 
 pub type InstanceStateEntry = u32;
 pub type InstanceStateIterator = u32;
+
+pub type StateResult<A> = anyhow::Result<A>;
 
 impl InstanceState {
     pub fn new(
@@ -678,25 +693,27 @@ impl InstanceState {
         }
     }
 
-    pub fn lookup_entry(&mut self, key: &[u8]) -> i64 {
+    pub fn lookup_entry(&mut self, key: &[u8]) -> Option<InstanceStateEntry> {
         let entry_ptr =
             (self.callbacks.lookup_entry)(self.state_ptr, key.as_ptr(), key.len() as size_t);
-        // TODO: decode the response, which is some .Option
-        self.entries.push(entry_ptr);
+        if entry_ptr.is_null() {
+            return None;
+        }
+        self.entries.push((key.to_vec(), entry_ptr));
         let index = self.entries.len() as u32;
-        index.into()
+        Some(index)
     }
 
     pub fn create_entry(&mut self, key: &[u8]) -> InstanceStateEntry {
         let entry_ptr =
             (self.callbacks.create_entry)(self.state_ptr, key.as_ptr(), key.len() as size_t);
-        self.entries.push(entry_ptr);
-        self.entries.len() as u32 // TODO: Is it safe to cast?
+        self.entries.push((key.to_vec(), entry_ptr));
+        self.entries.len() as u32
     }
 
-    pub fn delete_entry(&self, entry: InstanceStateEntry) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.delete_entry)(entry)
+    pub fn delete_entry(&self, entry: InstanceStateEntry) -> StateResult<u32> {
+        let entry = &self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        Ok((self.callbacks.delete_entry)(entry.1))
     }
 
     pub fn delete_prefix(&self, key: &[u8]) -> u32 {
@@ -710,33 +727,50 @@ impl InstanceState {
         self.iterators.len() as u32
     }
 
-    pub fn iterator_next(&mut self, iter: InstanceStateIterator) -> i64 {
-        let iter_ptr = self.iterators[iter as usize];
-        let entry_ptr = (self.callbacks.iterator_next)(iter_ptr);
-        // TODO: decode the response, which is some Option
-        self.entries.push(entry_ptr);
+    pub fn iterator_next(
+        &mut self,
+        iter: InstanceStateIterator,
+    ) -> StateResult<Option<InstanceStateEntry>> {
+        let iter_ptr =
+            *self.iterators.get(iter as usize).ok_or(anyhow::anyhow!("Invalid iterator"))?;
+        let iter_next_ptr = (self.callbacks.iterator_next)(iter_ptr);
+        if iter_next_ptr.is_null() {
+            return Ok(None);
+        }
+        let iter_next = unsafe { std::ptr::read(iter_next_ptr) };
+        self.entries.push((iter_next.key, iter_next.entry_ptr));
         let entry_index = self.entries.len() as u32;
-        entry_index.into()
+        Ok(Some(entry_index))
     }
 
-    pub fn entry_read(&mut self, entry: InstanceStateEntry, dest: &mut [u8], offset: u32) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.entry_read)(entry, dest.as_mut_ptr(), dest.len() as size_t, offset)
+    pub fn entry_read(
+        &mut self,
+        entry: InstanceStateEntry,
+        dest: &mut [u8],
+        offset: u32,
+    ) -> StateResult<u32> {
+        let entry = &self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        Ok((self.callbacks.entry_read)(entry.1, dest.as_mut_ptr(), dest.len() as size_t, offset))
     }
 
-    pub fn entry_write(&mut self, entry: InstanceStateEntry, src: &[u8], offset: u32) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.entry_write)(entry, src.as_ptr(), src.len() as size_t, offset)
+    pub fn entry_write(
+        &mut self,
+        entry: InstanceStateEntry,
+        src: &[u8],
+        offset: u32,
+    ) -> StateResult<u32> {
+        let entry = &self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        Ok((self.callbacks.entry_write)(entry.1, src.as_ptr(), src.len() as size_t, offset))
     }
 
-    pub fn entry_size(&mut self, entry: InstanceStateEntry) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.entry_size)(entry)
+    pub fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
+        let entry = &self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        Ok((self.callbacks.entry_size)(entry.1))
     }
 
-    pub fn entry_resize(&mut self, entry: InstanceStateEntry, new_size: u32) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.entry_resize)(entry, new_size)
+    pub fn entry_resize(&mut self, entry: InstanceStateEntry, new_size: u32) -> StateResult<u32> {
+        let entry = &self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        Ok((self.callbacks.entry_resize)(entry.1, new_size))
     }
 
     pub fn entry_key_read(
@@ -744,13 +778,18 @@ impl InstanceState {
         entry: InstanceStateEntry,
         dest: &mut [u8],
         offset: u32,
-    ) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.entry_key_read)(entry, dest.as_mut_ptr(), dest.len() as size_t, offset)
+    ) -> StateResult<u32> {
+        let entry = self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        let entry_key = &entry.0;
+        let start_src = offset as usize;
+        let end_src = start_src + dest.len();
+        dest.copy_from_slice(&entry_key[start_src..end_src]);
+        Ok(entry_key.len() as u32)
     }
 
-    pub fn entry_key_size(&mut self, entry: InstanceStateEntry) -> u32 {
-        let entry = self.entries[entry as usize];
-        (self.callbacks.entry_key_size)(entry)
+    pub fn entry_key_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
+        let entry = self.entries.get(entry as usize).ok_or(anyhow::anyhow!("Invalid entry"))?;
+        let entry_key = &entry.0;
+        Ok(entry_key.len() as u32)
     }
 }

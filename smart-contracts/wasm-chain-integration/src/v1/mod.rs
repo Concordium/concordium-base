@@ -422,14 +422,18 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
-        let key_len = unsafe { stack.pop_u32() } as usize;
+        let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
-        // TODO: tick energy
-        let key_end = key_start + key_len;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::traverse_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let result_entry_index = state.lookup_entry(key);
-        stack.push_value(result_entry_index);
+        let result = if let Some(entry_index) = state.lookup_entry(key) {
+            i64::from(entry_index)
+        } else {
+            -1i64
+        };
+        stack.push_value(result);
         Ok(())
     }
 
@@ -440,13 +444,13 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
-        let key_len = unsafe { stack.pop_u32() } as usize;
+        let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
-        let key_end = key_start + key_len;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::modify_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let entry_index = state.create_entry(key);
-        // TODO: tick energy
         stack.push_value(entry_index);
         Ok(())
     }
@@ -458,8 +462,9 @@ mod host {
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
-        let result = state.delete_entry(entry_index);
+        let key_len = state.entry_key_size(entry_index)?;
+        energy.tick_energy(constants::modify_key_cost(key_len))?;
+        let result = state.delete_entry(entry_index)?;
         stack.push_value(result);
         Ok(())
     }
@@ -471,10 +476,10 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
-        let key_len = unsafe { stack.pop_u32() } as usize;
+        let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
-        // TODO: tick energy
-        let key_end = key_start + key_len;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::modify_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let result = state.delete_prefix(key);
@@ -489,10 +494,10 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
-        let prefix_len = unsafe { stack.pop_u32() } as usize;
+        let prefix_len = unsafe { stack.pop_u32() };
         let prefix_start = unsafe { stack.pop_u32() } as usize;
-        // TODO: tick energy
-        let prefix_end = prefix_start + prefix_len;
+        let prefix_end = prefix_start + prefix_len as usize;
+        energy.tick_energy(constants::traverse_key_cost(prefix_len))?;
         ensure!(prefix_end <= memory.len(), "Illegal memory access.");
         if prefix_end > memory.len() {}
         let prefix = &memory[prefix_start..prefix_end];
@@ -508,9 +513,14 @@ mod host {
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let iter_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
-        let next_entry_index = state.iterator_next(iter_index);
-        stack.push_value(next_entry_index);
+        let result = if let Some(next_entry_index) = state.iterator_next(iter_index)? {
+            let key_len = state.entry_key_size(next_entry_index)?;
+            energy.tick_energy(constants::traverse_key_cost(key_len))?;
+            next_entry_index.into()
+        } else {
+            -1i64
+        };
+        stack.push_value(result);
         Ok(())
     }
 
@@ -525,11 +535,11 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let dest_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_read(entry_index, dest, offset);
+        let result = state.entry_read(entry_index, dest, offset)?;
         stack.push_value(result);
         Ok(())
     }
@@ -545,11 +555,11 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let source_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
+        energy.tick_energy(constants::copy_to_host_cost(length))?;
         let source_end = source_start + length as usize;
         ensure!(source_end <= memory.len(), "Illegal memory access.");
         let source = &memory[source_start..source_end];
-        let result = state.entry_write(entry_index, source, offset);
+        let result = state.entry_write(entry_index, source, offset)?;
         stack.push_value(result);
         Ok(())
     }
@@ -557,12 +567,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub fn state_entry_size(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
-        let result = state.entry_size(entry_index);
+        let result = state.entry_size(entry_index)?;
         stack.push_value(result);
         Ok(())
     }
@@ -575,8 +583,11 @@ mod host {
     ) -> machine::RunResult<()> {
         let new_size = unsafe { stack.pop_u32() };
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
-        let result = state.entry_resize(entry_index, new_size);
+        let current_size = state.entry_size(entry_index)?;
+        if new_size > current_size {
+            energy.tick_energy(constants::additional_state_size_cost(new_size - current_size))?;
+        }
+        let result = state.entry_resize(entry_index, new_size)?;
         stack.push_value(result);
         Ok(())
     }
@@ -592,11 +603,11 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let dest_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_key_read(entry_index, dest, offset);
+        let result = state.entry_key_read(entry_index, dest, offset)?;
         stack.push_value(result);
         Ok(())
     }
@@ -604,12 +615,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub fn state_entry_key_size(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u32() };
-        // TODO: tick energy
-        let result = state.entry_key_size(entry_index);
+        let result = state.entry_key_size(entry_index)?;
         stack.push_value(result);
         Ok(())
     }
@@ -692,15 +701,11 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
                 CommonFunc::StateEntryWrite => {
                     host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
                 }
-                CommonFunc::StateEntrySize => {
-                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
-                }
+                CommonFunc::StateEntrySize => host::state_entry_size(stack, &mut self.state),
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }
-                CommonFunc::StateEntryKeySize => {
-                    host::state_entry_key_size(stack, &mut self.energy, &mut self.state)
-                }
+                CommonFunc::StateEntryKeySize => host::state_entry_key_size(stack, &mut self.state),
                 CommonFunc::StateEntryKeyRead => {
                     host::state_entry_key_read(memory, stack, &mut self.energy, &mut self.state)
                 }
@@ -790,15 +795,11 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
                 CommonFunc::StateEntryWrite => {
                     host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
                 }
-                CommonFunc::StateEntrySize => {
-                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
-                }
+                CommonFunc::StateEntrySize => host::state_entry_size(stack, &mut self.state),
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }
-                CommonFunc::StateEntryKeySize => {
-                    host::state_entry_key_size(stack, &mut self.energy, &mut self.state)
-                }
+                CommonFunc::StateEntryKeySize => host::state_entry_key_size(stack, &mut self.state),
                 CommonFunc::StateEntryKeyRead => {
                     host::state_entry_key_read(memory, stack, &mut self.energy, &mut self.state)
                 }

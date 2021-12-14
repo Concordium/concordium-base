@@ -66,6 +66,19 @@ pub fn action_send_cost(x: u32) -> u64 {
     BASE_SEND_ACTION_COST + 1000 * u64::from(x)
 }
 
+/// Cost of traversing a key in the instance state.
+#[inline(always)]
+pub fn traverse_key_cost(key_len: u32) -> u64 {
+    BASE_STATE_COST + copy_to_host_cost(key_len) + u64::from(key_len)
+}
+
+/// Cost of updating/inserting an entry in the instance state.
+#[inline(always)]
+pub fn modify_key_cost(key_len: u32) -> u64 { 2 * traverse_key_cost(key_len) }
+
+/// Cost of accessing the instance state.
+pub const BASE_STATE_COST: u64 = 10;
+
 /// Cost of allocation of one page of memory in relation to execution cost.
 /// FIXME: It is unclear whether this is really necessary with the hard limit we
 /// have on memory use.
