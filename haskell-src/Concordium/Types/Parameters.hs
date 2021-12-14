@@ -360,7 +360,8 @@ instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) wher
 data TimeParameters cpv where
     TimeParametersV0 :: TimeParameters 'ChainParametersV0
     TimeParametersV1 :: {
-         _tpRewardPeriodLength :: RewardPeriodLength
+         _tpRewardPeriodLength :: RewardPeriodLength,
+         _tpMintPerPayday :: !MintRate
     } -> TimeParameters 'ChainParametersV1
 
 -- |Lens for '_tpRewardPeriodLength'
@@ -373,6 +374,7 @@ putTimeParameters :: Putter (TimeParameters cpv)
 putTimeParameters TimeParametersV0 = return ()
 putTimeParameters TimeParametersV1{..} = do
         put _tpRewardPeriodLength
+        put _tpMintPerPayday
 
 instance HashableTo Hash.Hash (TimeParameters cpv) where
     getHash = Hash.hash . runPut . putTimeParameters
@@ -382,7 +384,7 @@ instance Monad m => MHashableTo m Hash.Hash (TimeParameters cpv)
 getTimeParameters :: forall cpv. IsChainParametersVersion cpv => Get (TimeParameters cpv)
 getTimeParameters = case chainParametersVersion @cpv of
     SCPV0 -> return TimeParametersV0
-    SCPV1 -> TimeParametersV1 <$> get
+    SCPV1 -> TimeParametersV1 <$> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (TimeParameters cpv) where
   put = putTimeParameters
@@ -391,11 +393,13 @@ instance IsChainParametersVersion cpv => Serialize (TimeParameters cpv) where
 instance ToJSON (TimeParameters 'ChainParametersV1) where
   toJSON TimeParametersV1{..} =
         object [
-            "rewardPeriodLength" AE..= _tpRewardPeriodLength
+            "rewardPeriodLength" AE..= _tpRewardPeriodLength,
+            "mintPerPayday" AE..= _tpMintPerPayday
         ]
 
 instance FromJSON (TimeParameters 'ChainParametersV1) where
-  parseJSON = withObject "TimeParametersV1" $ \v -> TimeParametersV1 <$> v .: "rewardPeriodLength"
+  parseJSON = withObject "TimeParametersV1" $ \v ->
+    TimeParametersV1 <$> v .: "rewardPeriodLength" <*> v .: "mintPerPayday"
 
 deriving instance Eq (TimeParameters cpv)
 deriving instance Show (TimeParameters cpv)
@@ -686,6 +690,8 @@ makeChainParametersV1 ::
     LeverageFactor ->
     -- |Length of a payday in epochs.
     RewardPeriodLength ->
+    -- |Mint rate calculated per payday.
+    MintRate ->
     ChainParameters' 'ChainParametersV1
 makeChainParametersV1
     _cpElectionDifficulty
@@ -706,7 +712,8 @@ makeChainParametersV1
     _ppMinimumFinalizationCapital
     _ppCapitalBound
     _ppLeverageBound
-    _tpRewardPeriodLength = ChainParameters{..}
+    _tpRewardPeriodLength
+    _tpMintPerPayday = ChainParameters{..}
       where
         _cpCooldownParameters = CooldownParametersV1{..}
         _cpTimeParameters = TimeParametersV1{..}
@@ -780,6 +787,7 @@ parseJSONForCPV1 =
             <*> v .: "capitalBound"
             <*> v .: "leverageBound"
             <*> v .: "rewardPeriodLength"
+            <*> v .: "mintPerPayday"
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of
@@ -819,7 +827,8 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
               "minimumFinalizationCapital" AE..= _ppMinimumFinalizationCapital _cpPoolParameters,
               "capitalBound" AE..= _ppCapitalBound _cpPoolParameters,
               "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
-              "rewardPeriodLength" AE..= _tpRewardPeriodLength _cpTimeParameters
+              "rewardPeriodLength" AE..= _tpRewardPeriodLength _cpTimeParameters,
+              "mintPerPayday" AE..= _tpMintPerPayday _cpTimeParameters
             ]
 
 -- |Parameters that affect finalization.

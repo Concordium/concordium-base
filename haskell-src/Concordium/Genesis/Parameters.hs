@@ -113,6 +113,8 @@ makeGenesisChainParametersV1 ::
     LeverageFactor ->
     -- |Length of a payday in epochs.
     RewardPeriodLength ->
+    -- |Mint rate calculated per payday.
+    MintRate ->
     GenesisChainParameters' 'ChainParametersV1
 makeGenesisChainParametersV1 
     gcpElectionDifficulty
@@ -133,7 +135,8 @@ makeGenesisChainParametersV1
     _ppMinimumFinalizationCapital
     _ppCapitalBound
     _ppLeverageBound
-    _tpRewardPeriodLength = GenesisChainParameters{..}
+    _tpRewardPeriodLength
+    _tpMintPerPayday = GenesisChainParameters{..}
       where
         gcpCooldownParameters = CooldownParametersV1{..}
         gcpTimeParameters = TimeParametersV1{..}
@@ -184,6 +187,7 @@ parseJSONForGCPV1 =
             <*> v .: "capitalBound"
             <*> v .: "leverageBound"
             <*> v .: "rewardPeriodLength"
+            <*> v .: "mintPerPayday"
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
     toJSON GenesisChainParameters{..} =
@@ -219,7 +223,8 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
               "minimumFinalizationCapital" AE..= _ppMinimumFinalizationCapital gcpPoolParameters,
               "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
               "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
-              "rewardPeriodLength" AE..= _tpRewardPeriodLength gcpTimeParameters
+              "rewardPeriodLength" AE..= _tpRewardPeriodLength gcpTimeParameters,
+              "mintPerPayday" AE..= _tpMintPerPayday gcpTimeParameters
             ]
 
 -- | 'GenesisParameters' provides a convenient abstraction for

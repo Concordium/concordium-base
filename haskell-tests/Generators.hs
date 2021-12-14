@@ -349,7 +349,7 @@ genChainParametersV0 = do
     _cpCooldownParameters <- genCooldownParametersV0
     _cpTimeParameters <- genTimeParametersV0
     _cpAccountCreationLimit <- arbitrary
-    _cpRewardParameters <- genRewardParameters
+    _cpRewardParameters <- genRewardParameters SCPV0
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV0
     return ChainParameters{..}
@@ -361,7 +361,7 @@ genChainParametersV1 = do
     _cpCooldownParameters <- genCooldownParametersV1
     _cpTimeParameters <- genTimeParametersV1
     _cpAccountCreationLimit <- arbitrary
-    _cpRewardParameters <- genRewardParameters
+    _cpRewardParameters <- genRewardParameters SCPV1
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     return ChainParameters{..}
@@ -373,7 +373,7 @@ genGenesisChainParametersV0 = do
     gcpCooldownParameters <- genCooldownParametersV0
     gcpTimeParameters <- genTimeParametersV0
     gcpAccountCreationLimit <- arbitrary
-    gcpRewardParameters <- genRewardParameters
+    gcpRewardParameters <- genRewardParameters SCPV0
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV0
     return GenesisChainParameters{..}
@@ -385,7 +385,7 @@ genGenesisChainParametersV1 = do
     gcpCooldownParameters <- genCooldownParametersV1
     gcpTimeParameters <- genTimeParametersV1
     gcpAccountCreationLimit <- arbitrary
-    gcpRewardParameters <- genRewardParameters
+    gcpRewardParameters <- genRewardParameters SCPV1
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     return GenesisChainParameters{..}
@@ -401,7 +401,7 @@ genTimeParametersV0 :: Gen (TimeParameters 'ChainParametersV0)
 genTimeParametersV0 = return TimeParametersV0
 
 genTimeParametersV1 :: Gen (TimeParameters 'ChainParametersV1)
-genTimeParametersV1 = TimeParametersV1 <$> (RewardPeriodLength <$> arbitrary)
+genTimeParametersV1 = TimeParametersV1 <$> (RewardPeriodLength <$> arbitrary) <*> genMintRate
 
 genPoolParametersV0 :: Gen (PoolParameters 'ChainParametersV0)
 genPoolParametersV0 = PoolParametersV0 <$> arbitrary
@@ -416,9 +416,9 @@ genPoolParametersV1 = do
     _ppLeverageBound <- genLeverageFactor
     return PoolParametersV1{..}
 
-genRewardParameters :: Gen RewardParameters
-genRewardParameters = do
-    _rpMintDistribution <- genMintDistribution
+genRewardParameters :: SChainParametersVersion cpv -> Gen (RewardParameters cpv)
+genRewardParameters scpv = do
+    _rpMintDistribution <- genMintDistribution scpv
     _rpTransactionFeeDistribution <- genTransactionFeeDistribution
     _rpGASRewards <- genGASRewards
     return RewardParameters{..}
@@ -763,9 +763,11 @@ genEnergyRate = max <*> negate <$> arbitrary
 genExchangeRates :: Gen ExchangeRates
 genExchangeRates = makeExchangeRates <$> genExchangeRate <*> genExchangeRate
 
-genMintDistribution :: Gen MintDistribution
-genMintDistribution = do
-    _mdMintPerSlot <- genMintRate
+genMintDistribution :: SChainParametersVersion cpv -> Gen (MintDistribution cpv)
+genMintDistribution scpv = do
+    _mdMintPerSlot <- case scpv of
+        SCPV0 -> MintPerSlotForCPV0Some <$> genMintRate
+        SCPV1 -> return MintPerSlotForCPV0None
     bf <- choose (0, 100000)
     ff <- choose (0, 100000 - bf)
     let _mdBakingReward = makeRewardFraction bf
@@ -825,7 +827,7 @@ genLevel2UpdatePayload scpv =
                 EuroPerEnergyUpdatePayload <$> genExchangeRate,
                 MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
                 FoundationAccountUpdatePayload <$> genAccountAddress,
-                MintDistributionUpdatePayload <$> genMintDistribution,
+                MintDistributionUpdatePayload <$> genMintDistribution scpv,
                 TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
                 GASRewardsUpdatePayload <$> genGASRewards,
                 BakerStakeThresholdUpdatePayload <$> genPoolParametersV0
@@ -837,7 +839,7 @@ genLevel2UpdatePayload scpv =
                 EuroPerEnergyUpdatePayload <$> genExchangeRate,
                 MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
                 FoundationAccountUpdatePayload <$> genAccountAddress,
-                MintDistributionUpdatePayload <$> genMintDistribution,
+                MintDistributionCPV1UpdatePayload <$> genMintDistribution scpv,
                 TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
                 GASRewardsUpdatePayload <$> genGASRewards,
                 CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
