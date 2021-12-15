@@ -25,9 +25,6 @@ unsafe extern "C" fn call_init_v1(
     param_bytes_len: size_t,
     energy: u64,
     output_return_value: *mut *mut Vec<u8>,
-    // we use Box for single ownership. This will be set to null if
-    // there is no output config, and to a Box(config) otherwise.
-    output_config: *mut *mut InitInterruptedState<CompiledFunction>,
     output_len: *mut size_t,
     instance_state_ptr: *const InstanceStateFFI,
     instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
@@ -44,7 +41,7 @@ unsafe extern "C" fn call_init_v1(
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
-                    artifact.clone(),
+                    artifact.as_ref(),
                     amount,
                     init_ctx,
                     name,
@@ -54,16 +51,11 @@ unsafe extern "C" fn call_init_v1(
                 );
                 match res {
                     Ok(result) => {
-                        let (mut out, config, return_value) = result.extract();
+                        let (mut out, return_value) = result.extract();
                         out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
                         std::mem::forget(out);
-                        if let Some(config) = config {
-                            *output_config = Box::into_raw(config);
-                        } else {
-                            *output_config = std::ptr::null_mut();
-                        }
                         if let Some(return_value) = return_value {
                             *output_return_value = Box::into_raw(Box::new(return_value));
                         } else {
@@ -211,65 +203,71 @@ unsafe extern "C" fn validate_and_process_v1(
     }
 }
 
-#[no_mangle]
-// TODO: Use catch-unwind
-unsafe extern "C" fn resume_init_v1(
-    config_ptr: *mut *mut InitInterruptedState<CompiledFunction>, /* mutable pointer, we will
-                                                                   * mutate this, either to a
-                                                                   * new state or null */
-    response_status: i32,   // whether the call succeeded or not.
-    response: *mut Vec<u8>, // response from the call.
-    energy: u64,            // remaining energy available for execution
-    output_return_value: *mut *mut Vec<u8>,
-    output_len: *mut size_t,
-    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
-    instance_state_ptr: *const InstanceStateFFI,
-) -> *mut u8 {
-    let config = Box::from_raw(*config_ptr);
+// #[no_mangle]
+// // TODO: Use catch-unwind
+// unsafe extern "C" fn resume_init_v1(
+//     config_ptr: *mut *mut InitInterruptedState<CompiledFunction>, /* mutable
+// pointer, we will
+//                                                                    * mutate this, either to a
+//                                                                    * new state or null */
+//     state_bytes: *const u8, /* (potentially) updated state of the contract,
+// or null if
+//                              * response_status < 0 */
+//     state_bytes_len: size_t,
+//     response_status: i32,   // whether the call succeeded or not.
+//     response: *mut Vec<u8>, // response from the call.
+//     energy: u64,            // remaining energy available for execution
+//     output_return_value: *mut *mut Vec<u8>,
+//     output_len: *mut size_t,
+//     instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
+//     instance_state_ptr: *const InstanceStateFFI,
+// ) -> *mut u8 {
+//     let config = Box::from_raw(*config_ptr);
 
-    let data = {
-        let mut response_data = Box::from_raw(response);
-        let data = std::mem::take(response_data.as_mut()); // write empty vector to the pointer.
-        Box::into_raw(response_data); // make it safe to reclaim
-        data
-    };
-    let response = if response_status < 0 {
-        InvokeResponse::Failure {
-            code: response_status,
-            data,
-        }
-    } else {
-        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
-        let new_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
-        InvokeResponse::Success {
-            new_state,
-            data,
-        }
-    };
-    let res = resume_init(*config, response, energy.into());
-    // FIXME: Reduce duplication with call_init.
-    match res {
-        Ok(result) => {
-            let (mut out, config, return_value) = result.extract();
-            out.shrink_to_fit();
-            *output_len = out.len() as size_t;
-            let ptr = out.as_mut_ptr();
-            std::mem::forget(out);
-            if let Some(config) = config {
-                *config_ptr = Box::into_raw(config);
-            } else {
-                *config_ptr = std::ptr::null_mut();
-            }
-            if let Some(return_value) = return_value {
-                *output_return_value = Box::into_raw(Box::new(return_value));
-            } else {
-                *output_return_value = std::ptr::null_mut();
-            }
-            ptr
-        }
-        Err(_trap) => std::ptr::null_mut(),
-    }
-}
+//     let data = {
+//         let mut response_data = Box::from_raw(response);
+//         let data = std::mem::take(response_data.as_mut()); // write empty
+// vector to the pointer.         Box::into_raw(response_data); // make it safe
+// to reclaim         data
+//     };
+//     let response = if response_status < 0 {
+//         InvokeResponse::Failure {
+//             code: response_status,
+//             data,
+//         }
+//     } else {
+//       let instance_state_callbacks =
+// std::ptr::read(instance_state_callbacks_ptr);       let new_state =
+// InstanceState::new(instance_state_callbacks, instance_state_ptr);
+//       InvokeResponse::Success {
+//           new_state,
+//           data,
+//       }
+//     };
+//     let res = resume_init(*config, response, energy.into());
+//     // FIXME: Reduce duplication with call_init.
+//     match res {
+//         Ok(result) => {
+//             let (mut out, config, return_value) = result.extract();
+//             out.shrink_to_fit();
+//             *output_len = out.len() as size_t;
+//             let ptr = out.as_mut_ptr();
+//             std::mem::forget(out);
+//             if let Some(config) = config {
+//                 *config_ptr = Box::into_raw(config);
+//             } else {
+//                 *config_ptr = std::ptr::null_mut();
+//             }
+//             if let Some(return_value) = return_value {
+//                 *output_return_value = Box::into_raw(Box::new(return_value));
+//             } else {
+//                 *output_return_value = std::ptr::null_mut();
+//             }
+//             ptr
+//         }
+//         Err(_trap) => std::ptr::null_mut(),
+//     }
+// }
 
 // # Administrative functions.
 
@@ -293,6 +291,22 @@ unsafe extern "C" fn box_vec_u8_free(vec_ptr: *mut Vec<u8>) {
     if !vec_ptr.is_null() {
         // consume the vector
         Box::from_raw(vec_ptr);
+    }
+}
+
+#[no_mangle]
+/// # Safety
+/// This function is safe provided the supplied pointer is
+/// constructed with [Box::into_raw].
+unsafe extern "C" fn receive_interrupted_state_free(
+    ptr_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
+) {
+    if !ptr_ptr.is_null() {
+        if !(*ptr_ptr).is_null() {
+            let _: Box<ReceiveInterruptedState<CompiledFunction>> = Box::from_raw(*ptr_ptr); // drop
+                                                                                             // and store null so that future calls (which there should not be any) are safe.
+            *ptr_ptr = std::ptr::null_mut();
+        }
     }
 }
 
