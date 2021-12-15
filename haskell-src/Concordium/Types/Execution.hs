@@ -115,6 +115,37 @@ instance S.Serialize DelegationTarget where
     1 -> DelegateToBaker <$> S.get
     _ -> fail "Invalid DelegationTarget"
 
+-- |A collection of baker keys with correspnding proofs.
+data BakerKeysWithProofs =
+  BakerKeysWithProofs {
+    -- |Public key to verify the baker has won the election.
+    bkwpElectionVerifyKey :: !BakerElectionVerifyKey,
+    -- |Public key to verify block signatures signed by the baker.
+    bkwpSignatureVerifyKey :: !BakerSignVerifyKey,
+    -- |Public key to verify aggregate signatures in which the baker participates.
+    bkwpAggregationVerifyKey :: !BakerAggregationVerifyKey,
+    -- |Proof that the baker owns the private key corresponding to the
+    -- signature verification key.
+    bkwpProofSig :: !Dlog25519Proof,
+    -- |Proof that the baker owns the private key corresponding to the
+    -- election verification key.
+    bkwpProofElection :: !Dlog25519Proof,
+    -- |Proof that the baker owns the private key corresponding to the aggregation key.
+    bkwpProofAggregation :: !BakerAggregationProof
+  }
+  deriving (Eq, Show)
+
+instance S.Serialize BakerKeysWithProofs where
+  put BakerKeysWithProofs{..} = do
+    S.put bkwpElectionVerifyKey
+    S.put bkwpSignatureVerifyKey
+    S.put bkwpAggregationVerifyKey
+    S.put bkwpProofSig
+    S.put bkwpProofElection
+    S.put bkwpProofAggregation
+
+  get = BakerKeysWithProofs <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
+
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
@@ -274,15 +305,8 @@ data Payload =
       cbRestakeEarnings :: !(Maybe Bool),
       -- |Whether the pool is open for delegators
       cbOpenForDelegation :: !(Maybe OpenStatus),
-      -- |Public key to verify block signatures signed by the baker, with a proof of knowledge of
-      -- the secret key.
-      cbSignatureVerifyKey :: !(Maybe (BakerSignVerifyKey, Dlog25519Proof)),
-      -- |Public key to verify the baker has won the election, with a proof of knowledge of the
-      -- secret key.
-      cbElectionVerifyKey :: !(Maybe (BakerElectionVerifyKey, Dlog25519Proof)),
-      -- |Public key to verify aggregate signatures in which the baker participates, with a proof
-      -- of knowledge of the secret key.
-      cbAggregationVerifyKey :: !(Maybe (BakerAggregationVerifyKey, BakerAggregationProof)),
+      -- |The key/proof pairs to verify baker.
+      cbKeysWithProofs :: !(Maybe BakerKeysWithProofs),
       -- |The URL referencing the baker's metadata.
       cbMetadataURL :: !(Maybe UrlText),
       -- |The commission the pool owner takes on transaction fees.
@@ -467,9 +491,7 @@ putPayload ConfigureBaker{..} = do
     mapM_ S.put cbCapital
     mapM_ S.put cbRestakeEarnings
     mapM_ S.put cbOpenForDelegation
-    mapM_ S.put cbSignatureVerifyKey
-    mapM_ S.put cbElectionVerifyKey
-    mapM_ S.put cbAggregationVerifyKey
+    mapM_ S.put cbKeysWithProofs
     mapM_ S.put cbMetadataURL
     mapM_ S.put cbTransactionFeeCommission
     mapM_ S.put cbBakingRewardCommission
@@ -479,13 +501,11 @@ putPayload ConfigureBaker{..} = do
       bitFor 0 cbCapital .|.
       bitFor 1 cbRestakeEarnings .|.
       bitFor 2 cbOpenForDelegation .|.
-      bitFor 3 cbSignatureVerifyKey .|.
-      bitFor 4 cbElectionVerifyKey .|.
-      bitFor 5 cbAggregationVerifyKey .|.
-      bitFor 6 cbMetadataURL .|.
-      bitFor 7 cbTransactionFeeCommission .|.
-      bitFor 8 cbBakingRewardCommission .|.
-      bitFor 9 cbFinalizationRewardCommission
+      bitFor 3 cbKeysWithProofs .|.
+      bitFor 4 cbMetadataURL .|.
+      bitFor 5 cbTransactionFeeCommission .|.
+      bitFor 6 cbBakingRewardCommission .|.
+      bitFor 7 cbFinalizationRewardCommission
 putPayload ConfigureDelegation{..} = do
     S.putWord8 26
     S.putWord16be bitmap
@@ -627,13 +647,11 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               cbCapital <- maybeGet 0
               cbRestakeEarnings <- maybeGet 1
               cbOpenForDelegation <- maybeGet 2
-              cbSignatureVerifyKey <- maybeGet 3
-              cbElectionVerifyKey <- maybeGet 4
-              cbAggregationVerifyKey <- maybeGet 5
-              cbMetadataURL <- maybeGet 6
-              cbTransactionFeeCommission <- maybeGet 7
-              cbBakingRewardCommission <- maybeGet 8
-              cbFinalizationRewardCommission <- maybeGet 9
+              cbKeysWithProofs <- maybeGet 3
+              cbMetadataURL <- maybeGet 4
+              cbTransactionFeeCommission <- maybeGet 5
+              cbBakingRewardCommission <- maybeGet 6
+              cbFinalizationRewardCommission <- maybeGet 7
               return ConfigureBaker{..}
             26 | supportDelegation -> S.label "ConfigureDelgation" $ do
               bitmap <- S.getWord16be
@@ -658,7 +676,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
           SP2 -> False
           SP3 -> False
           SP4 -> True
-        configureBakerBitMask = 0b0000001111111111
+        configureBakerBitMask = 0b0000000011111111
         configureDelegationBitMask = 0b0000000000000111
 
 -- |Builds a set from a list of ascending elements.
@@ -1279,6 +1297,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NotAllowedToReceiveEncrypted
                   -- |The account is not allowed to send encrypted transfers (or transfer from/to public to/from encrypted)
                   | NotAllowedToHandleEncrypted
+                  -- |A configure baker transaction is missing one or more arguments in order to add a baker.
+                  | MissingBakerAddParameters
+                  -- |A configure baker transaction to remove baker is passed unexpected arguments.
+                  | UnexpectedBakerRemoveParameters
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -1337,6 +1359,8 @@ instance S.Serialize RejectReason where
     NotAllowedMultipleCredentials -> S.putWord8 38
     NotAllowedToReceiveEncrypted -> S.putWord8 39
     NotAllowedToHandleEncrypted -> S.putWord8 40
+    MissingBakerAddParameters ->  S.putWord8 41
+    UnexpectedBakerRemoveParameters -> S.putWord8 42
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -1387,6 +1411,8 @@ instance S.Serialize RejectReason where
     38 -> return NotAllowedMultipleCredentials
     39 -> return NotAllowedToReceiveEncrypted
     40 -> return NotAllowedToHandleEncrypted
+    41 -> return MissingBakerAddParameters
+    42 -> return UnexpectedBakerRemoveParameters
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 

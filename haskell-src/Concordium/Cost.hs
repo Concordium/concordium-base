@@ -94,6 +94,14 @@ scheduledTransferCost n = fromIntegral n * (300 + 64)
 addBakerCost :: Energy
 addBakerCost = 4050
 
+-- |C_t for configure baker when keys are not present
+configureBakerCostWithoutKeys :: Energy
+configureBakerCostWithoutKeys = 300
+
+-- |C_t for configure baker when one or more keys are present
+configureBakerCostWithKey :: Energy
+configureBakerCostWithKey = 300
+
 -- |C_t for updating baker keys
 updateBakerKeysCost :: Energy
 updateBakerKeysCost = 4050
