@@ -436,7 +436,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
         };
         if mod_name.name == "concordium" {
             match item_name.name.as_ref() {
-                "invoke" => type_matches!(ty => [I32, I32, I32]; I32),
+                "invoke" => type_matches!(ty => [I32, I32, I32]; I64),
                 "write_output" => type_matches!(ty => [I32, I32, I32]; I32),
                 "get_parameter_size" => type_matches!(ty => [I32]; I32),
                 "get_parameter_section" => type_matches!(ty => [I32, I32, I32, I32]; I32),

@@ -667,7 +667,7 @@ pub enum InvokeResponse {
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
     Failure {
-        code: i32,
+        code: i64,
         data: ParameterVec,
     },
 }
@@ -824,7 +824,7 @@ pub fn resume_receive(
         } => {
             interrupted_state.host.state = new_state;
             interrupted_state.host.parameters.push(data);
-            0i32
+            0i64
         }
         InvokeResponse::Failure {
             code,
