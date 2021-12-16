@@ -498,8 +498,8 @@ instance ToJSON (PoolParameters cpv) where
 
 parsePoolParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (PoolParameters cpv)
 parsePoolParametersJSON = case chainParametersVersion @cpv of
-  SCPV0 -> withObject "CooldownParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
-  SCPV1 -> withObject "CooldownParametersV1" $ \v -> do
+  SCPV0 -> withObject "PoolParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
+  SCPV1 -> withObject "PoolParametersV1" $ \v -> do
     _finalizationCommission <- v .: "finalizationCommissionLPool"
     _bakingCommission <- v .: "bakingCommissionLPool"
     _transactionCommission <- v .: "transactionCommissionLPool"
