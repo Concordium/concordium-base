@@ -848,6 +848,24 @@ impl OwnedReceiveName {
     pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
 }
 
+/// An entrypoint name (borrowed version). Expected format:
+/// "<func_name>" where
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct EntrypointName<'a>(pub(crate) &'a str);
+
+impl<'a> EntrypointName<'a> {
+    /// Create a new name and check the format. See [is_valid_entrypoint_name]
+    /// for the expected format.
+    pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
+        is_valid_entrypoint_name(name)?;
+        Ok(Self(name))
+    }
+}
+
+impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
+    fn from(epn: EntrypointName<'a>) -> Self { Self(String::from(epn.0)) }
+}
+
 /// An entrypoint name (owned version). Expected format:
 /// "<func_name>" where
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -860,6 +878,8 @@ impl OwnedEntrypointName {
         is_valid_entrypoint_name(&name)?;
         Ok(Self(name))
     }
+
+    pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
 }
 
 /// Parameter to the init function or entrypoint.
