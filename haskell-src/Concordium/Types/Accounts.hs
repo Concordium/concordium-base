@@ -266,7 +266,7 @@ data AccountBaker (av :: AccountVersion) = AccountBaker
 
 makeLenses ''AccountBaker
 
-instance HasBakerInfo (AccountBaker 'AccountV0) where
+instance HasBakerInfo (AccountBaker av) where
     bakerInfo = accountBakerInfo . bakerInfo
 
 -- |Serialize an 'AccountBaker'
