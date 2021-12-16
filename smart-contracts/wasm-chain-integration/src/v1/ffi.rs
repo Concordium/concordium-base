@@ -290,8 +290,9 @@ unsafe extern "C" fn receive_interrupted_state_free(
     ptr_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
 ) {
     if !ptr_ptr.is_null() && !(*ptr_ptr).is_null() {
-        let _: Box<ReceiveInterruptedState<CompiledFunction>> = Box::from_raw(*ptr_ptr); // drop
-                                                                                         // and store null so that future calls (which there should not be any) are safe.
+        // drop
+        let _: Box<ReceiveInterruptedState<CompiledFunction>> = Box::from_raw(*ptr_ptr);
+        // and store null so that future calls (which there should not be any) are safe.
         *ptr_ptr = std::ptr::null_mut();
     }
 }
