@@ -366,11 +366,17 @@ impl Deserial for OwnedReceiveName {
     }
 }
 
-impl Serial for OwnedEntrypointName {
+impl<'a> Serial for EntrypointName<'a> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.0.len() as u16;
         len.serial(out)?;
         serial_vector_no_length(self.0.as_bytes(), out)
+    }
+}
+
+impl Serial for OwnedEntrypointName {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_entrypoint_name().serial(out)
     }
 }
 
