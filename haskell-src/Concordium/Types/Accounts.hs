@@ -42,6 +42,8 @@ module Concordium.Types.Accounts (
     -- |The details of the pool associated with a baker
     bakerPoolInfo,
     BakerInfoEx (..),
+    bieBakerInfo,
+    bieBakerPoolInfo,
     PendingChangeEffective (..),
     StakePendingChange' (..),
     StakePendingChange,
@@ -73,7 +75,7 @@ import Data.Aeson.Types (Parser)
 import qualified Data.Map as Map
 import Data.Serialize
 import Data.Time
-import Lens.Micro.Platform (makeClassy, makeLenses, (^.))
+import Lens.Micro.Platform (makeClassy, makeLenses, (^.), Lens', lens)
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -170,6 +172,18 @@ data BakerInfoEx (av :: AccountVersion) where
 
 deriving instance Eq (BakerInfoEx av)
 deriving instance Show (BakerInfoEx av)
+
+-- |Lens for '_bieBakerInfo'
+{-# INLINE bieBakerInfo #-}
+bieBakerInfo :: Lens' (BakerInfoEx 'AccountV1) BakerInfo
+bieBakerInfo =
+  lens _bieBakerInfo (\bie x -> bie{_bieBakerInfo = x})
+
+-- |Lens for '_bieBakerPoolInfo'
+{-# INLINE bieBakerPoolInfo #-}
+bieBakerPoolInfo :: Lens' (BakerInfoEx 'AccountV1) BakerPoolInfo
+bieBakerPoolInfo =
+  lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
 instance forall av. IsAccountVersion av => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
