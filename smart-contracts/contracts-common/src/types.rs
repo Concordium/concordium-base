@@ -854,6 +854,9 @@ impl OwnedReceiveName {
 pub struct EntrypointName<'a>(pub(crate) &'a str);
 
 impl<'a> EntrypointName<'a> {
+    /// Size of the name in bytes.
+    pub fn size(&self) -> u32 { self.0.as_bytes().len() as u32 }
+
     /// Create a new name and check the format. See [is_valid_entrypoint_name]
     /// for the expected format.
     pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
@@ -883,8 +886,16 @@ impl OwnedEntrypointName {
 }
 
 /// Parameter to the init function or entrypoint.
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct Parameter<'a>(pub &'a [u8]);
+
+/// Parameter to the init function or entrypoint. Owned version.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct OwnedParameter(pub Vec<u8>);
+
+impl OwnedParameter {
+    pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
+}
 
 /// Check whether the given string is a valid contract entrypoint name.
 /// This is the case if and only if

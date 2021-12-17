@@ -390,11 +390,17 @@ impl Deserial for OwnedEntrypointName {
     }
 }
 
-impl Serial for OwnedParameter {
+impl<'a> Serial for Parameter<'a> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.0.len() as u16;
         len.serial(out)?;
         out.write_all(&self.0)
+    }
+}
+
+impl Serial for OwnedParameter {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_parameter().serial(out)
     }
 }
 
