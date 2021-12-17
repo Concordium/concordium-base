@@ -667,7 +667,7 @@ pub enum InvokeResponse {
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
     Failure {
-        code: i64,
+        code: u64,
         data: ParameterVec,
     },
 }
@@ -823,16 +823,39 @@ pub fn resume_receive(
             data,
         } => {
             interrupted_state.host.state = new_state;
+            let len = interrupted_state.host.parameters.len();
+            if len > 0xff_ffff {
+                bail!("Too many calls.")
+            }
             interrupted_state.host.parameters.push(data);
-            0i64
+            // return the index of the parameter to retrieve.
+            (len as u64) << 40
         }
         InvokeResponse::Failure {
             code,
             data,
         } => {
             // state did not change
-            interrupted_state.host.parameters.push(data);
-            code
+            let len = interrupted_state.host.parameters.len();
+            if len > 0xff_ffff {
+                bail!("Too many calls.")
+            }
+            if code & 0x0000_00ff_0000_0000 != 0 {
+                // this is an environment error. No return value is produced.
+                code & 0x0000_00ff_0000_0000
+            } else {
+                let len = interrupted_state.host.parameters.len();
+                if len > 0xff_ffff {
+                    bail!("Too many calls.")
+                }
+                if code & 0x0000_0000_ffff_ffff == 0 {
+                    bail!("Host violated precondition. If err")
+                }
+                interrupted_state.host.parameters.push(data);
+                // return the index of the parameter to retrieve.
+                // The return value is present since this was a logic error.
+                (len as u64) << 40 | 0x0000_0000_ffff_ffff
+            }
         }
     };
     // push the response from the invoke

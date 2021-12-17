@@ -192,69 +192,76 @@ unsafe extern "C" fn validate_and_process_v1(
 
 #[no_mangle]
 // TODO: Signal whether the state was updated.
-// TODO: Use catch-unwind
 unsafe extern "C" fn resume_receive_v1(
-    config_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>, /* mutable pointer, we will
-                                                                      * mutate this, either to a
-                                                                      * new state or null */
-    state_bytes: *const u8, /* (potentially) updated state of the contract,
-                            or null if response_status < 0 */
+    // mutable pointer, we will mutate this, either to a new state or null
+    config_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
+    // (potentially) updated state of the contract, or null if response_status is an error
+    state_bytes: *const u8,
     state_bytes_len: size_t,
-    response_status: i64,   // whether the call succeeded or not.
-    response: *mut Vec<u8>, // response from the call.
-    energy: u64,            // remaining energy available for execution
+    // whether the call succeeded or not.
+    response_status: u64,
+    // response from the call.
+    response: *mut Vec<u8>,
+    // remaining energy available for execution
+    energy: u64,
     output_return_value: *mut *mut Vec<u8>,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let config = Box::from_raw(*config_ptr);
+    let res = std::panic::catch_unwind(|| {
+        let config = Box::from_raw(*config_ptr);
 
-    let data = {
-        if response.is_null() {
-            Vec::new() // TODO: Figure out whether this is OK, or whether we
-                       // should be even more strict and not have any response
-                       // at all
+        let data = {
+            if response.is_null() {
+                Vec::new() // TODO: Figure out whether this is OK, or whether we
+                           // should be even more strict and not have any
+                           // response at all
+            } else {
+                let mut response_data = Box::from_raw(response);
+                let data = std::mem::take(response_data.as_mut()); // write empty vector to the pointer.
+                Box::into_raw(response_data); // make it safe to reclaim data
+                data
+            }
+        };
+        // NB: This must match the response encoding in V1.hs in consensus
+        let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
+            InvokeResponse::Failure {
+                code: response_status & !0xffff_ff00_0000_0000,
+                data, /* FIXME: This response is not always used. It would be better to handle
+                       * this here and not in the host function. */
+            }
         } else {
-            let mut response_data = Box::from_raw(response);
-            let data = std::mem::take(response_data.as_mut()); // write empty vector to the pointer.
-            Box::into_raw(response_data); // make it safe to reclaim data
-            data
-        }
-    };
-    let response = if response_status < 0 {
-        InvokeResponse::Failure {
-            code: response_status,
-            data,
-        }
-    } else {
-        let new_state = slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
-        InvokeResponse::Success {
-            new_state,
-            data,
-        }
-    };
-    let res = resume_receive(*config, response, energy.into());
-    // FIXME: Reduce duplication with call_receive
-    match res {
-        Ok(result) => {
-            let (mut out, config, return_value) = result.extract();
-            out.shrink_to_fit();
-            *output_len = out.len() as size_t;
-            let ptr = out.as_mut_ptr();
-            std::mem::forget(out);
-            if let Some(config) = config {
-                *config_ptr = Box::into_raw(config);
-            } else {
-                *config_ptr = std::ptr::null_mut();
+            let new_state =
+                slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
+            InvokeResponse::Success {
+                new_state,
+                data,
             }
-            if let Some(return_value) = return_value {
-                *output_return_value = Box::into_raw(Box::new(return_value));
-            } else {
-                *output_return_value = std::ptr::null_mut();
+        };
+        let res = resume_receive(*config, response, energy.into());
+        // FIXME: Reduce duplication with call_receive
+        match res {
+            Ok(result) => {
+                let (mut out, config, return_value) = result.extract();
+                out.shrink_to_fit();
+                *output_len = out.len() as size_t;
+                let ptr = out.as_mut_ptr();
+                std::mem::forget(out);
+                if let Some(config) = config {
+                    *config_ptr = Box::into_raw(config);
+                } else {
+                    *config_ptr = std::ptr::null_mut();
+                }
+                if let Some(return_value) = return_value {
+                    *output_return_value = Box::into_raw(Box::new(return_value));
+                } else {
+                    *output_return_value = std::ptr::null_mut();
+                }
+                ptr
             }
-            ptr
+            Err(_trap) => std::ptr::null_mut(),
         }
-        Err(_trap) => std::ptr::null_mut(),
-    }
+    });
+    res.unwrap_or_else(|_| std::ptr::null_mut())
 }
 
 // # Administrative functions.
