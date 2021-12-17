@@ -903,6 +903,51 @@ data Event =
                -- | The memo.
                tmMemo :: !Memo
            }
+           -- | Updated open status for a baker pool
+           | BakerSetOpenStatus {
+              -- |Baker's id
+              ebsosBakerId :: !BakerId,
+              -- |Baker account
+              ebsosAccount :: !AccountAddress,
+              -- |The open status.
+              ebsosOpenStatus :: !OpenStatus
+           }
+           -- | Updated metadata url for baker pool
+           | BakerSetMetadataURL {
+              -- |Baker's id
+              ebsmuBakerId :: !BakerId,
+              -- |Baker account
+              ebsmuAccount :: !AccountAddress,
+              -- | The URL.
+              ebsmuMetadataURL :: !UrlText
+           }
+           -- | Updated transaction fee commission for baker pool
+           | BakerSetTransactionFeeCommission {
+              -- |Baker's id
+              ebstfcBakerId :: !BakerId,
+              -- |Baker account
+              ebstfcAccount :: !AccountAddress,
+              -- |The transaction fee commission.
+              ebstfcTransactionFeeCommission :: !RewardFraction
+           }
+           -- | Updated transaction fee commission for baker pool
+           | BakerSetBakingRewardCommision {
+              -- |Baker's id
+              ebsbrcBakerId :: !BakerId,
+              -- |Baker account
+              ebsbrcAccount :: !AccountAddress,
+              -- |The baking reward commission
+              ebsbrcBakingRewardCommission :: !RewardFraction
+           }
+           -- | Updated transaction fee commission for baker pool
+           | BakerSetFinalizationRewardCommision {
+              -- |Baker's id
+              ebsfrcBakerId :: !BakerId,
+              -- |Baker account
+              ebsfrcAccount :: !AccountAddress,
+              -- |The finalization reward commission
+              ebsfrcFinalizationRewardCommission :: !RewardFraction
+           }
 
   deriving (Show, Generic, Eq)
 
@@ -1017,9 +1062,34 @@ putEvent = \case
   TransferMemo {..} ->
     S.putWord8 21 <>
     S.put tmMemo
+  BakerSetOpenStatus {..} ->
+    S.putWord8 22 <>
+    S.put ebsosBakerId <>
+    S.put ebsosAccount <>
+    S.put ebsosOpenStatus
+  BakerSetMetadataURL {..} ->
+    S.putWord8 23 <>
+    S.put ebsmuBakerId <>
+    S.put ebsmuAccount <>
+    S.put ebsmuMetadataURL
+  BakerSetTransactionFeeCommission {..} ->
+    S.putWord8 24 <>
+    S.put ebstfcBakerId <>
+    S.put ebstfcAccount <>
+    S.put ebstfcTransactionFeeCommission
+  BakerSetBakingRewardCommision {..} ->
+    S.putWord8 25 <>
+    S.put ebsbrcBakerId <>
+    S.put ebsbrcAccount <>
+    S.put ebsbrcBakingRewardCommission
+  BakerSetFinalizationRewardCommision {..} ->
+    S.putWord8 26 <>
+    S.put ebsfrcBakerId <>
+    S.put ebsfrcAccount <>
+    S.put ebsfrcFinalizationRewardCommission
 
 getEvent :: SProtocolVersion pv -> S.Get Event
-getEvent spv = 
+getEvent spv =
   S.getWord8 >>= \case
     0 -> do
       mref <- S.get
@@ -1130,12 +1200,42 @@ getEvent spv =
     21 | supportMemo -> do
       tmMemo <- S.get
       return  TransferMemo {..}
+    22 | supportDelegation -> do
+      ebsosBakerId <- S.get
+      ebsosAccount <- S.get
+      ebsosOpenStatus <- S.get
+      return  BakerSetOpenStatus {..}
+    23 | supportDelegation -> do
+      ebsmuBakerId <- S.get
+      ebsmuAccount <- S.get
+      ebsmuMetadataURL <- S.get
+      return  BakerSetMetadataURL {..}
+    24 | supportDelegation -> do
+      ebstfcBakerId <- S.get
+      ebstfcAccount <- S.get
+      ebstfcTransactionFeeCommission <- S.get
+      return  BakerSetTransactionFeeCommission {..}
+    25 | supportDelegation -> do
+      ebsbrcBakerId <- S.get
+      ebsbrcAccount <- S.get
+      ebsbrcBakingRewardCommission <- S.get
+      return  BakerSetBakingRewardCommision {..}
+    26 | supportDelegation -> do
+      ebsfrcBakerId <- S.get
+      ebsfrcAccount <- S.get
+      ebsfrcFinalizationRewardCommission <- S.get
+      return  BakerSetFinalizationRewardCommision {..}
     n -> fail $ "Unrecognized event tag: " ++ show n
     where
       supportMemo = case spv of
           SP1 -> False
           SP2 -> True
           SP3 -> True
+          SP4 -> True
+      supportDelegation = case spv of
+          SP1 -> False
+          SP2 -> False
+          SP3 -> False
           SP4 -> True
 
 
@@ -1301,6 +1401,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | MissingBakerAddParameters
                   -- |A configure baker transaction to remove baker is passed unexpected arguments.
                   | UnexpectedBakerRemoveParameters
+                  -- |Not all baker commissions are within allowed ranges
+                  | CommissionsNotInRangeForBaking
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -1361,6 +1463,7 @@ instance S.Serialize RejectReason where
     NotAllowedToHandleEncrypted -> S.putWord8 40
     MissingBakerAddParameters ->  S.putWord8 41
     UnexpectedBakerRemoveParameters -> S.putWord8 42
+    CommissionsNotInRangeForBaking -> S.putWord8 43
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -1413,6 +1516,7 @@ instance S.Serialize RejectReason where
     40 -> return NotAllowedToHandleEncrypted
     41 -> return MissingBakerAddParameters
     42 -> return UnexpectedBakerRemoveParameters
+    43 -> return CommissionsNotInRangeForBaking
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 
