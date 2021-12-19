@@ -930,8 +930,8 @@ data Event =
               -- |The transaction fee commission.
               ebstfcTransactionFeeCommission :: !RewardFraction
            }
-           -- | Updated transaction fee commission for baker pool
-           | BakerSetBakingRewardCommision {
+           -- | Updated baking reward commission for baker pool
+           | BakerSetBakingRewardCommission {
               -- |Baker's id
               ebsbrcBakerId :: !BakerId,
               -- |Baker account
@@ -939,8 +939,8 @@ data Event =
               -- |The baking reward commission
               ebsbrcBakingRewardCommission :: !RewardFraction
            }
-           -- | Updated transaction fee commission for baker pool
-           | BakerSetFinalizationRewardCommision {
+           -- | Updated finalization reward commission for baker pool
+           | BakerSetFinalizationRewardCommission {
               -- |Baker's id
               ebsfrcBakerId :: !BakerId,
               -- |Baker account
@@ -1077,12 +1077,12 @@ putEvent = \case
     S.put ebstfcBakerId <>
     S.put ebstfcAccount <>
     S.put ebstfcTransactionFeeCommission
-  BakerSetBakingRewardCommision {..} ->
+  BakerSetBakingRewardCommission {..} ->
     S.putWord8 25 <>
     S.put ebsbrcBakerId <>
     S.put ebsbrcAccount <>
     S.put ebsbrcBakingRewardCommission
-  BakerSetFinalizationRewardCommision {..} ->
+  BakerSetFinalizationRewardCommission {..} ->
     S.putWord8 26 <>
     S.put ebsfrcBakerId <>
     S.put ebsfrcAccount <>
@@ -1219,12 +1219,12 @@ getEvent spv =
       ebsbrcBakerId <- S.get
       ebsbrcAccount <- S.get
       ebsbrcBakingRewardCommission <- S.get
-      return  BakerSetBakingRewardCommision {..}
+      return  BakerSetBakingRewardCommission {..}
     26 | supportDelegation -> do
       ebsfrcBakerId <- S.get
       ebsfrcAccount <- S.get
       ebsfrcFinalizationRewardCommission <- S.get
-      return  BakerSetFinalizationRewardCommision {..}
+      return  BakerSetFinalizationRewardCommission {..}
     n -> fail $ "Unrecognized event tag: " ++ show n
     where
       supportMemo = case spv of
@@ -1403,6 +1403,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | UnexpectedBakerRemoveParameters
                   -- |Not all baker commissions are within allowed ranges
                   | CommissionsNotInRangeForBaking
+                  -- ^Tried to add baker for an account that already has a delegator
+                  | AlreadyADelegator !BakerId
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -1464,6 +1466,7 @@ instance S.Serialize RejectReason where
     MissingBakerAddParameters ->  S.putWord8 41
     UnexpectedBakerRemoveParameters -> S.putWord8 42
     CommissionsNotInRangeForBaking -> S.putWord8 43
+    AlreadyADelegator bid -> S.putWord8 44 <> S.put bid
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -1517,6 +1520,7 @@ instance S.Serialize RejectReason where
     41 -> return MissingBakerAddParameters
     42 -> return UnexpectedBakerRemoveParameters
     43 -> return CommissionsNotInRangeForBaking
+    44 -> AlreadyADelegator <$> S.get
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 
