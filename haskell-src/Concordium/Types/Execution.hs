@@ -948,6 +948,50 @@ data Event =
               -- |The finalization reward commission
               ebsfrcFinalizationRewardCommission :: !RewardFraction
            }
+           | DelegationStakeIncreased {
+              -- |Delegator's id
+              edsiDelegatorId :: !DelegatorId,
+              -- |Delegator account
+              edsiAccount :: !AccountAddress,
+              -- |New stake
+              edsiNewStake :: !Amount
+           }
+           | DelegationStakeDecreased {
+              -- |Delegator's id
+              edsdDelegatorId :: !DelegatorId,
+              -- |Delegator account
+              edsdAccount :: !AccountAddress,
+              -- |New stake
+              edsdNewStake :: !Amount
+           }
+           | DelegationSetRestakeEarnings {
+              -- |Delegator's id
+              edsreDelegatorId :: !DelegatorId,
+              -- |Delegator account
+              edsreAccount :: !AccountAddress,
+              -- |Whether earnings will be restaked
+              edsreRestakeEarnings :: !Bool
+           }
+           | DelegationSetDelegationTarget {
+              -- |Delegator's id
+              edsdtDelegatorId :: !DelegatorId,
+              -- |Delegator account
+              edsdtAccount :: !AccountAddress,
+              -- |New delegation target
+              edsdtDelegationTarget :: !DelegationTarget
+           }
+           | DelegationAdded {
+              -- |Delegator's id
+              edaDelegatorId :: !DelegatorId,
+              -- |Delegator account
+              edaAccount :: !AccountAddress
+           }
+           | DelegationRemoved {
+              -- |Delegator's id
+              edrDelegatorId :: !DelegatorId,
+              -- |Delegator account
+              edrAccount :: !AccountAddress
+           }
   deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
@@ -1086,6 +1130,34 @@ putEvent = \case
     S.put ebsfrcBakerId <>
     S.put ebsfrcAccount <>
     S.put ebsfrcFinalizationRewardCommission
+  DelegationStakeIncreased{..} ->
+    S.putWord8 27 <>
+    S.put edsiDelegatorId <>
+    S.put edsiAccount <>
+    S.put edsiNewStake
+  DelegationStakeDecreased{..} ->
+    S.putWord8 28 <>
+    S.put edsdDelegatorId <>
+    S.put edsdAccount <>
+    S.put edsdNewStake
+  DelegationSetRestakeEarnings{..} ->
+    S.putWord8 29 <>
+    S.put edsreDelegatorId <>
+    S.put edsreAccount <>
+    S.put edsreRestakeEarnings
+  DelegationSetDelegationTarget{..} ->
+    S.putWord8 30 <>
+    S.put edsdtDelegatorId <>
+    S.put edsdtAccount <>
+    S.put edsdtDelegationTarget
+  DelegationAdded{..} ->
+    S.putWord8 31 <>
+    S.put edaDelegatorId <>
+    S.put edaAccount
+  DelegationRemoved{..} ->
+    S.putWord8 32 <>
+    S.put edrDelegatorId <>
+    S.put edrAccount
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1224,6 +1296,34 @@ getEvent spv =
       ebsfrcAccount <- S.get
       ebsfrcFinalizationRewardCommission <- S.get
       return  BakerSetFinalizationRewardCommission {..}
+    27 | supportDelegation -> do
+        edsiDelegatorId <- S.get
+        edsiAccount <- S.get
+        edsiNewStake <- S.get
+        return DelegationStakeIncreased{..}
+    28 | supportDelegation -> do
+        edsdDelegatorId <- S.get
+        edsdAccount <- S.get
+        edsdNewStake <- S.get
+        return DelegationStakeDecreased{..}
+    29 | supportDelegation -> do
+        edsreDelegatorId <- S.get
+        edsreAccount <- S.get
+        edsreRestakeEarnings <- S.get
+        return DelegationSetRestakeEarnings{..}
+    30 | supportDelegation -> do
+        edsdtDelegatorId <- S.get
+        edsdtAccount <- S.get
+        edsdtDelegationTarget <- S.get
+        return DelegationSetDelegationTarget{..}
+    31 | supportDelegation -> do
+        edaDelegatorId <- S.get
+        edaAccount <- S.get
+        return DelegationAdded{..}
+    32 | supportDelegation -> do
+        edrDelegatorId <- S.get
+        edrAccount <- S.get
+        return DelegationRemoved{..}
     n -> fail $ "Unrecognized event tag: " ++ show n
     where
       supportMemo = case spv of
@@ -1236,8 +1336,6 @@ getEvent spv =
           SP2 -> False
           SP3 -> False
           SP4 -> True
-
-
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
@@ -1351,7 +1449,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | AlreadyABaker !BakerId -- ^Tried to add baker/delegator for an account that already has a baker
-                  | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
+                  | NotABaker !AccountAddress -- ^Account is not a baker account
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | StakeUnderMinimumThresholdForBaking -- ^The amount provided is under the threshold required for becoming a baker
                   | BakerInCooldown -- ^The change could not be made because the baker is in cooldown for another change
@@ -1410,6 +1508,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | MissingDelegationAddParameters
                   -- |A configure delegation transaction to remove delegation is passed unexpected arguments.
                   | UnexpectedDelegationRemoveParameters
+                  -- |The change could not be made because the delegator is in cooldown
+                  | DelegatorInCooldown
+                  -- |Account is not a delegation account
+                  | NotADelegator !AccountAddress
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -1475,6 +1577,8 @@ instance S.Serialize RejectReason where
     InsufficientBalanceForDelegationStake -> S.putWord8 45
     MissingDelegationAddParameters -> S.putWord8 46
     UnexpectedDelegationRemoveParameters -> S.putWord8 47
+    DelegatorInCooldown -> S.putWord8 48
+    NotADelegator addr -> S.putWord8 49 <> S.put addr
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -1532,6 +1636,8 @@ instance S.Serialize RejectReason where
     45 -> return InsufficientBalanceForDelegationStake
     46 -> return MissingDelegationAddParameters
     47 -> return UnexpectedDelegationRemoveParameters
+    48 -> return DelegatorInCooldown
+    49 -> NotADelegator <$> S.get
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 

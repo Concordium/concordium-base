@@ -59,6 +59,11 @@ module Concordium.Types.Accounts (
     putAccountBaker,
     getAccountBaker,
     AccountDelegation (..),
+    delegationIdentity,
+    delegationStakedAmount,
+    delegationStakeEarnings,
+    delegationTarget,
+    delegationPendingChange,
     AccountStake (..),
     getAccountStake,
     putAccountStake,
@@ -296,7 +301,8 @@ getAccountBaker = do
 
 data AccountDelegation (av :: AccountVersion) where
     AccountDelegationV1 ::
-        { _delegationStakedAmount :: !Amount,
+        { _delegationIdentity :: !DelegatorId,
+          _delegationStakedAmount :: !Amount,
           _delegationStakeEarnings :: !Bool,
           _delegationTarget :: !DelegationTarget,
           _delegationPendingChange :: !(StakePendingChange 'AccountV1)
@@ -306,8 +312,34 @@ data AccountDelegation (av :: AccountVersion) where
 deriving instance Eq (AccountDelegation av)
 deriving instance Show (AccountDelegation av)
 
+-- |Lens for '_delegationIdentity'
+{-# INLINE delegationIdentity #-}
+delegationIdentity :: Lens' (AccountDelegation 'AccountV1) DelegatorId
+delegationIdentity = lens _delegationIdentity (\ad x -> ad{_delegationIdentity = x})
+
+-- |Lens for '_delegationStakedAmount'
+{-# INLINE delegationStakedAmount #-}
+delegationStakedAmount :: Lens' (AccountDelegation 'AccountV1) Amount
+delegationStakedAmount = lens _delegationStakedAmount (\ad x -> ad{_delegationStakedAmount = x})
+
+-- |Lens for '_delegationStakeEarnings'
+{-# INLINE delegationStakeEarnings #-}
+delegationStakeEarnings :: Lens' (AccountDelegation 'AccountV1) Bool
+delegationStakeEarnings = lens _delegationStakeEarnings (\ad x -> ad{_delegationStakeEarnings = x})
+
+-- |Lens for '_delegationTarget'
+{-# INLINE delegationTarget #-}
+delegationTarget :: Lens' (AccountDelegation 'AccountV1) DelegationTarget
+delegationTarget = lens _delegationTarget (\ad x -> ad{_delegationTarget = x})
+
+-- |Lens for '_delegationPendingChange'
+{-# INLINE delegationPendingChange #-}
+delegationPendingChange :: Lens' (AccountDelegation 'AccountV1) (StakePendingChange 'AccountV1)
+delegationPendingChange = lens _delegationPendingChange (\ad x -> ad{_delegationPendingChange = x})
+
 instance forall av. IsAccountVersion av => Serialize (AccountDelegation av) where
     put AccountDelegationV1{..} = do
+        put _delegationIdentity
         put _delegationStakedAmount
         put _delegationStakeEarnings
         put _delegationTarget
@@ -315,6 +347,7 @@ instance forall av. IsAccountVersion av => Serialize (AccountDelegation av) wher
     get = case accountVersion @av of
         SAccountV0 -> fail "Cannot get account delegation in this protocol version"
         SAccountV1 -> do
+            _delegationIdentity <- get
             _delegationStakedAmount <- get
             _delegationStakeEarnings <- get
             _delegationTarget <- get

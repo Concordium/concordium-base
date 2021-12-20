@@ -104,6 +104,7 @@ module Concordium.Types (
   BakerSignVerifyKey,
   LeadershipElectionNonce,
   BakerId(..),
+  DelegatorId(..),
   -- ** Block elements
   BlockNonce,
   BlockSignature,
@@ -238,6 +239,9 @@ instance (Show a) => Show (Hashed a) where
 
 -- * Types related to bakers.
 newtype BakerId = BakerId AccountIndex
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
+
+newtype DelegatorId = DelegatorId AccountIndex
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
 type LeadershipElectionNonce = Hash.Hash
