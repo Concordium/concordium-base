@@ -948,7 +948,6 @@ data Event =
               -- |The finalization reward commission
               ebsfrcFinalizationRewardCommission :: !RewardFraction
            }
-
   deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
@@ -1351,7 +1350,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                                       parameter :: !Wasm.Parameter}
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
-                  | AlreadyABaker !BakerId -- ^Tried to add baker for an account that already has a baker
+                  | AlreadyABaker !BakerId -- ^Tried to add baker/delegator for an account that already has a baker
                   | NotABaker !AccountAddress -- ^Tried to remove a baker for an account that has no baker
                   | InsufficientBalanceForBakerStake -- ^The amount on the account was insufficient to cover the proposed stake
                   | StakeUnderMinimumThresholdForBaking -- ^The amount provided is under the threshold required for becoming a baker
@@ -1403,8 +1402,14 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | UnexpectedBakerRemoveParameters
                   -- |Not all baker commissions are within allowed ranges
                   | CommissionsNotInRangeForBaking
-                  -- ^Tried to add baker for an account that already has a delegator
-                  | AlreadyADelegator !BakerId
+                  -- |Tried to add baker for an account that already has a delegator
+                  | AlreadyADelegator
+                  -- |The amount on the account was insufficient to cover the proposed stake
+                  | InsufficientBalanceForDelegationStake
+                  -- |A configure delegation transaction is missing one or more arguments in order to add a delegator.
+                  | MissingDelegationAddParameters
+                  -- |A configure delegation transaction to remove delegation is passed unexpected arguments.
+                  | UnexpectedDelegationRemoveParameters
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -1466,7 +1471,10 @@ instance S.Serialize RejectReason where
     MissingBakerAddParameters ->  S.putWord8 41
     UnexpectedBakerRemoveParameters -> S.putWord8 42
     CommissionsNotInRangeForBaking -> S.putWord8 43
-    AlreadyADelegator bid -> S.putWord8 44 <> S.put bid
+    AlreadyADelegator -> S.putWord8 44
+    InsufficientBalanceForDelegationStake -> S.putWord8 45
+    MissingDelegationAddParameters -> S.putWord8 46
+    UnexpectedDelegationRemoveParameters -> S.putWord8 47
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -1520,7 +1528,10 @@ instance S.Serialize RejectReason where
     41 -> return MissingBakerAddParameters
     42 -> return UnexpectedBakerRemoveParameters
     43 -> return CommissionsNotInRangeForBaking
-    44 -> AlreadyADelegator <$> S.get
+    44 -> return AlreadyADelegator
+    45 -> return InsufficientBalanceForDelegationStake
+    46 -> return MissingDelegationAddParameters
+    47 -> return UnexpectedDelegationRemoveParameters
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 
