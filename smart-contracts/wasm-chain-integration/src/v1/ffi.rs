@@ -109,8 +109,9 @@ unsafe extern "C" fn call_receive_v1(
                         let ptr = out.as_mut_ptr();
                         std::mem::forget(out);
                         if let Some(config) = config {
-                            *output_config = Box::into_raw(config);
+                            std::ptr::replace(output_config, Box::into_raw(config));
                         } else {
+                            // make sure to set it to null to make the finalizer work correctly.
                             *output_config = std::ptr::null_mut();
                         }
                         if let Some(return_value) = return_value {
@@ -208,8 +209,6 @@ unsafe extern "C" fn resume_receive_v1(
     output_len: *mut size_t,
 ) -> *mut u8 {
     let res = std::panic::catch_unwind(|| {
-        let config = Box::from_raw(*config_ptr);
-
         let data = {
             if response.is_null() {
                 Vec::new() // TODO: Figure out whether this is OK, or whether we
@@ -250,20 +249,23 @@ unsafe extern "C" fn resume_receive_v1(
                 data,
             }
         };
-        let res = resume_receive(*config, response, energy.into());
+        // mark the interrupted state as consumed in case any panics happen from here to
+        // the end. this means the state is in a consistent state and the
+        // finalizer (`receive_interrupted_state_free`) will not end up double
+        // freeing.
+        let config = std::ptr::replace(config_ptr, std::ptr::null_mut());
+        let res = resume_receive(Box::from_raw(config), response, energy.into());
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {
-                let (mut out, config, return_value) = result.extract();
+                let (mut out, new_config, return_value) = result.extract();
                 out.shrink_to_fit();
                 *output_len = out.len() as size_t;
                 let ptr = out.as_mut_ptr();
                 std::mem::forget(out);
-                if let Some(config) = config {
-                    *config_ptr = Box::into_raw(config);
-                } else {
-                    *config_ptr = std::ptr::null_mut();
-                }
+                if let Some(config) = new_config {
+                    std::ptr::replace(config_ptr, Box::into_raw(config));
+                } // otherwise leave config_ptr pointing to null
                 if let Some(return_value) = return_value {
                     *output_return_value = Box::into_raw(Box::new(return_value));
                 } else {

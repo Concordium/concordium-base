@@ -812,7 +812,7 @@ where
 }
 
 pub fn resume_receive(
-    mut interrupted_state: ReceiveInterruptedState<CompiledFunction>,
+    mut interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
