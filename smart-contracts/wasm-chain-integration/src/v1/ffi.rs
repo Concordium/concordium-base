@@ -13,6 +13,8 @@ use wasm_transform::{
 /// it concurrently since these functions are called from Haskell.
 type ArtifactV1 = OwnedArtifact<ProcessedImports>;
 
+type ReturnValue = Vec<u8>;
+
 #[no_mangle]
 unsafe extern "C" fn call_init_v1(
     artifact_ptr: *const ArtifactV1,
@@ -24,7 +26,7 @@ unsafe extern "C" fn call_init_v1(
     param_bytes: *const u8,
     param_bytes_len: size_t,
     energy: u64,
-    output_return_value: *mut *mut Vec<u8>,
+    output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
@@ -76,7 +78,7 @@ unsafe extern "C" fn call_receive_v1(
     param_bytes: *const u8,
     param_bytes_len: size_t,
     energy: u64,
-    output_return_value: *mut *mut Vec<u8>,
+    output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedState<CompiledFunction>,
     output_len: *mut size_t,
 ) -> *mut u8 {
@@ -202,10 +204,10 @@ unsafe extern "C" fn resume_receive_v1(
     // whether the call succeeded or not.
     response_status: u64,
     // response from the call.
-    response: *mut Vec<u8>,
+    response: *mut ReturnValue,
     // remaining energy available for execution
     energy: u64,
-    output_return_value: *mut *mut Vec<u8>,
+    output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let res = std::panic::catch_unwind(|| {
@@ -363,4 +365,24 @@ unsafe extern "C" fn artifact_v1_from_bytes(
     } else {
         std::ptr::null()
     }
+}
+
+#[no_mangle]
+/// Convert the return value to a byte array that will be managed externally.
+/// To avoid memory leaks the return byte array must be deallocated using
+/// rs_free_array_len.
+///
+/// # Safety
+/// This function is safe provided the return value is construted using
+/// Box::into_raw.
+unsafe extern "C" fn return_value_to_byte_array(
+    rv_ptr: *mut Vec<u8>,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let mut bytes = (&mut *rv_ptr).clone();
+    bytes.shrink_to_fit();
+    *output_len = bytes.len() as size_t;
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
 }
