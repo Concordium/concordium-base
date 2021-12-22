@@ -109,7 +109,6 @@ import Data.Hashable
 import Data.Int (Int32)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
-import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text(Text)
 import qualified Data.Text.Encoding as Text
