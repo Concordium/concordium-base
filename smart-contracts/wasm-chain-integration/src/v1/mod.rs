@@ -668,7 +668,7 @@ pub enum InvokeResponse {
     /// and the contract responded with the given error code and data.
     Failure {
         code: u64,
-        data: ParameterVec,
+        data: Option<ParameterVec>,
     },
 }
 
@@ -836,25 +836,16 @@ pub fn resume_receive(
             data,
         } => {
             // state did not change
-            let len = interrupted_state.host.parameters.len();
-            if len > 0xff_ffff {
-                bail!("Too many calls.")
-            }
-            if code & 0x0000_00ff_0000_0000 != 0 {
-                // this is an environment error. No return value is produced.
-                code & 0x0000_00ff_0000_0000
-            } else {
+            if let Some(data) = data {
                 let len = interrupted_state.host.parameters.len();
                 if len > 0xff_ffff {
                     bail!("Too many calls.")
                 }
-                if code & 0x0000_0000_ffff_ffff == 0 {
-                    bail!("Host violated precondition. If err")
-                }
                 interrupted_state.host.parameters.push(data);
                 // return the index of the parameter to retrieve.
-                // The return value is present since this was a logic error.
-                (len as u64) << 40 | 0x0000_0000_ffff_ffff
+                (len as u64) << 40 | code
+            } else {
+                code
             }
         }
     };

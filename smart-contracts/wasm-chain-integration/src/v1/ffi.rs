@@ -223,11 +223,24 @@ unsafe extern "C" fn resume_receive_v1(
             }
         };
         // NB: This must match the response encoding in V1.hs in consensus
+        // If the first 3 bytes are all set that indicates an error.
         let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
-            InvokeResponse::Failure {
-                code: response_status & !0xffff_ff00_0000_0000,
-                data, /* FIXME: This response is not always used. It would be better to handle
-                       * this here and not in the host function. */
+            if response_status & 0x0000_00ff_0000_0000 != 0 {
+                // this is an environment error. No return value is produced.
+                InvokeResponse::Failure {
+                    code: response_status & !0x0000_00ff_0000_0000,
+                    data: None,
+                }
+            } else {
+                // The return value is present since this was a logic error.
+                if response_status & 0x0000_0000_ffff_ffff == 0 {
+                    // Host violated precondition. There must be a non-zero error code.
+                    return std::ptr::null_mut();
+                }
+                InvokeResponse::Failure {
+                    code: response_status & 0x0000_0000_ffff_ffff,
+                    data: Some(data),
+                }
             }
         } else {
             let new_state =
@@ -261,7 +274,7 @@ unsafe extern "C" fn resume_receive_v1(
             Err(_trap) => std::ptr::null_mut(),
         }
     });
-    res.unwrap_or_else(|_| std::ptr::null_mut())
+    res.unwrap_or(std::ptr::null_mut())
 }
 
 // # Administrative functions.
