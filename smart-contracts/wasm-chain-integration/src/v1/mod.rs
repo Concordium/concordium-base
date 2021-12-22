@@ -662,7 +662,8 @@ pub enum InvokeResponse {
     /// Execution was successful, and the state changed.
     Success {
         new_state: v0::State,
-        data:      ParameterVec,
+        // Some calls do not have any return values, such as transfers.
+        data:      Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
@@ -823,13 +824,20 @@ pub fn resume_receive(
             data,
         } => {
             interrupted_state.host.state = new_state;
-            let len = interrupted_state.host.parameters.len();
-            if len > 0xff_ffff {
-                bail!("Too many calls.")
+            if let Some(data) = data {
+                let len = interrupted_state.host.parameters.len();
+                if len > 0xff_ffff {
+                    bail!("Too many calls.")
+                }
+                interrupted_state.host.parameters.push(data);
+                // return the index of the parameter to retrieve.
+                (len as u64) << 40
+            } else {
+                0 // 0 indicates that there is no new response. This works
+                  // because if there is a response
+                  // len must be at least 1 since every contract starts by being
+                  // called with a parameter
             }
-            interrupted_state.host.parameters.push(data);
-            // return the index of the parameter to retrieve.
-            (len as u64) << 40
         }
         InvokeResponse::Failure {
             code,

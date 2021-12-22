@@ -213,14 +213,12 @@ unsafe extern "C" fn resume_receive_v1(
     let res = std::panic::catch_unwind(|| {
         let data = {
             if response.is_null() {
-                Vec::new() // TODO: Figure out whether this is OK, or whether we
-                           // should be even more strict and not have any
-                           // response at all
+                None
             } else {
                 let mut response_data = Box::from_raw(response);
                 let data = std::mem::take(response_data.as_mut()); // write empty vector to the pointer.
                 Box::into_raw(response_data); // make it safe to reclaim data
-                data
+                Some(data)
             }
         };
         // NB: This must match the response encoding in V1.hs in consensus
@@ -240,7 +238,7 @@ unsafe extern "C" fn resume_receive_v1(
                 }
                 InvokeResponse::Failure {
                     code: response_status & 0x0000_0000_ffff_ffff,
-                    data: Some(data),
+                    data,
                 }
             }
         } else {
