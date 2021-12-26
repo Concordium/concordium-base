@@ -61,6 +61,7 @@ module Concordium.Wasm (
   isValidReceiveName,
   contractAndFunctionName,
   Parameter(..),
+  emptyParameter,
 
   -- *** Contract state
   ContractState(..),
@@ -257,6 +258,10 @@ instance Serialize ReceiveName where
 newtype Parameter = Parameter { parameter :: ShortByteString }
     deriving(Eq, Show)
     deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
+
+-- |Parameter of size 0.
+emptyParameter :: Parameter
+emptyParameter = Parameter BSS.empty
 
 instance Serialize Parameter where
   put = putShortByteStringWord16 . parameter
