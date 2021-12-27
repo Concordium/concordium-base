@@ -237,26 +237,33 @@ genPayloadConfigureBaker = do
     cbCapital <- arbitrary
     cbRestakeEarnings <- arbitrary
     cbOpenForDelegation <- liftArbitrary $ elements [OpenForAll, ClosedForNew, ClosedForAll]
-    cbSignatureVerifyKey <-
-        liftArbitrary $
-            (,) <$> (BlockSig.verifyKey <$> genBlockKeyPair) <*> genDlogProof
-    cbElectionVerifyKey <-
-        liftArbitrary $
-            (,) <$> (VRF.publicKey <$> arbitrary) <*> genDlogProof
-    cbAggregationVerifyKey <- liftArbitrary genAggregationVerifyKeyAndProof
+    cbKeysWithProofs <- liftArbitrary $ do
+        sigPair <- (,) <$> (BlockSig.verifyKey <$> genBlockKeyPair) <*> genDlogProof
+        elecPair <- (,) <$> (VRF.publicKey <$> arbitrary) <*> genDlogProof
+        aggPair <- genAggregationVerifyKeyAndProof
+        return BakerKeysWithProofs{
+            bkwpElectionVerifyKey = fst elecPair,
+            bkwpProofElection = snd elecPair,
+            bkwpSignatureVerifyKey = fst sigPair,
+            bkwpProofSig = snd sigPair,
+            bkwpAggregationVerifyKey = fst aggPair,
+            bkwpProofAggregation = snd aggPair
+        }
     cbMetadataURL <- liftArbitrary genUrlText
     cbTransactionFeeCommission <- liftArbitrary genRewardFraction
     cbBakingRewardCommission <- liftArbitrary genRewardFraction
     cbFinalizationRewardCommission <- liftArbitrary genRewardFraction
     return ConfigureBaker{..}
 
+genDelegationTarget :: Gen DelegationTarget
+genDelegationTarget =
+    oneof [return DelegateToLPool, DelegateToBaker . BakerId . AccountIndex <$> arbitrary]
+
 genPayloadConfigureDelegation :: Gen Payload
 genPayloadConfigureDelegation = do
     cdCapital <- arbitrary
     cdRestakeEarnings <- arbitrary
-    cdDelegationTarget <-
-        liftArbitrary $
-            oneof [return DelegateToLPool, DelegateToBaker . BakerId . AccountIndex <$> arbitrary]
+    cdDelegationTarget <- liftArbitrary $ genDelegationTarget
     return ConfigureDelegation{..}
 
 genCredentialId :: Gen CredentialRegistrationID
@@ -451,6 +458,9 @@ transactionTypes =
 instance Arbitrary TransactionType where
     arbitrary = elements transactionTypes
 
+instance Arbitrary OpenStatus where
+    arbitrary = elements [OpenForAll, ClosedForNew, ClosedForAll]
+
 genEncryptedAmount :: Gen EncryptedAmount
 genEncryptedAmount = EncryptedAmount <$> genElgamalCipher <*> genElgamalCipher
 
@@ -492,6 +502,9 @@ genMemo = do
 genBakerId :: Gen BakerId
 genBakerId = BakerId . AccountIndex <$> arbitrary
 
+genDelegatorId :: Gen DelegatorId
+genDelegatorId = DelegatorId . AccountIndex <$> arbitrary
+
 genEvent :: IsProtocolVersion pv => SProtocolVersion pv -> Gen Event
 genEvent spv =
         oneof
@@ -516,13 +529,34 @@ genEvent spv =
               genTransferredWithSchedule,
               genCredentialsUpdated,
               DataRegistered <$> genRegisteredData
-            ] ++ maybeMemo)
+            ] ++ maybeMemo ++ maybeDelegationEvents)
       where
         maybeMemo = if supportMemo then [TransferMemo <$> genMemo] else []
         supportMemo = case spv of
                 SP1 -> False
                 SP2 -> True
                 SP3 -> True
+                SP4 -> True
+        maybeDelegationEvents =
+                if supportDelegation then
+                    [BakerSetOpenStatus <$> genBakerId <*> genAccountAddress <*> arbitrary,
+                     BakerSetMetadataURL <$> genBakerId <*> genAccountAddress <*> genUrlText,
+                     BakerSetTransactionFeeCommission <$> genBakerId <*> genAccountAddress <*> genRewardFraction,
+                     BakerSetBakingRewardCommission <$> genBakerId <*> genAccountAddress <*> genRewardFraction,
+                     BakerSetFinalizationRewardCommission <$> genBakerId <*> genAccountAddress <*> genRewardFraction,
+                     DelegationStakeIncreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
+                     DelegationStakeDecreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
+                     DelegationSetRestakeEarnings <$> genDelegatorId <*> genAccountAddress <*> arbitrary,
+                     DelegationSetDelegationTarget <$> genDelegatorId <*> genAccountAddress <*> genDelegationTarget,
+                     DelegationAdded <$> genDelegatorId <*> genAccountAddress,
+                     DelegationRemoved <$> genDelegatorId <*> genAccountAddress
+                    ]
+                else
+                    []
+        supportDelegation = case spv of
+                SP1 -> False
+                SP2 -> False
+                SP3 -> False
                 SP4 -> True
         genBakerAdded = do
             ebaBakerId <- genBakerId
@@ -595,7 +629,16 @@ instance Arbitrary RejectReason where
               return CredentialHolderDidNotSign,
               return NotAllowedMultipleCredentials,
               return NotAllowedToReceiveEncrypted,
-              return NotAllowedToHandleEncrypted
+              return NotAllowedToHandleEncrypted,
+              return MissingBakerAddParameters,
+              return UnexpectedBakerRemoveParameters,
+              return CommissionsNotInRangeForBaking,
+              return AlreadyADelegator,
+              return InsufficientBalanceForDelegationStake,
+              return MissingDelegationAddParameters,
+              return UnexpectedDelegationRemoveParameters,
+              return DelegatorInCooldown,
+              NotADelegator <$> genAccountAddress
             ]
 
 genValidResult :: IsProtocolVersion pv => SProtocolVersion pv -> Gen ValidResult

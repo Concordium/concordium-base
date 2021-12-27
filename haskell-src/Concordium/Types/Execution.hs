@@ -120,16 +120,16 @@ data BakerKeysWithProofs =
   BakerKeysWithProofs {
     -- |Public key to verify the baker has won the election.
     bkwpElectionVerifyKey :: !BakerElectionVerifyKey,
-    -- |Public key to verify block signatures signed by the baker.
-    bkwpSignatureVerifyKey :: !BakerSignVerifyKey,
-    -- |Public key to verify aggregate signatures in which the baker participates.
-    bkwpAggregationVerifyKey :: !BakerAggregationVerifyKey,
-    -- |Proof that the baker owns the private key corresponding to the
-    -- signature verification key.
-    bkwpProofSig :: !Dlog25519Proof,
     -- |Proof that the baker owns the private key corresponding to the
     -- election verification key.
     bkwpProofElection :: !Dlog25519Proof,
+    -- |Public key to verify block signatures signed by the baker.
+    bkwpSignatureVerifyKey :: !BakerSignVerifyKey,
+    -- |Proof that the baker owns the private key corresponding to the
+    -- signature verification key.
+    bkwpProofSig :: !Dlog25519Proof,
+    -- |Public key to verify aggregate signatures in which the baker participates.
+    bkwpAggregationVerifyKey :: !BakerAggregationVerifyKey,
     -- |Proof that the baker owns the private key corresponding to the aggregation key.
     bkwpProofAggregation :: !BakerAggregationProof
   }
@@ -138,10 +138,10 @@ data BakerKeysWithProofs =
 instance S.Serialize BakerKeysWithProofs where
   put BakerKeysWithProofs{..} = do
     S.put bkwpElectionVerifyKey
-    S.put bkwpSignatureVerifyKey
-    S.put bkwpAggregationVerifyKey
-    S.put bkwpProofSig
     S.put bkwpProofElection
+    S.put bkwpSignatureVerifyKey
+    S.put bkwpProofSig
+    S.put bkwpAggregationVerifyKey
     S.put bkwpProofAggregation
 
   get = BakerKeysWithProofs <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
