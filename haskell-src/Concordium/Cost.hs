@@ -98,9 +98,9 @@ addBakerCost = 4050
 configureBakerCostWithoutKeys :: Energy
 configureBakerCostWithoutKeys = 300
 
--- |C_t for configure baker when one or more keys are present
-configureBakerCostWithKey :: Energy
-configureBakerCostWithKey = 300
+-- |C_t for configure baker when keys are present
+configureBakerCostWithKeys :: Energy
+configureBakerCostWithKeys = 300
 
 -- |C_t for updating baker keys
 updateBakerKeysCost :: Energy
@@ -117,6 +117,10 @@ updateBakerRestakeCost = 300
 -- |C_t for removing a baker
 removeBakerCost :: Energy
 removeBakerCost = 300
+
+-- |C_t for configure delegation
+configureDelegationCost :: Energy
+configureDelegationCost = 300
 
 -- |C_t for updating account credentials
 updateCredentialsCost ::
