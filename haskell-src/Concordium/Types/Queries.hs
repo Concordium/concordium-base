@@ -216,7 +216,7 @@ data BlockSummary = forall pv.
 
 -- |Get 'Updates' from 'BlockSummary', with continuation to avoid "escaped type variables".
 {-# INLINE bsWithUpdates #-}
-bsWithUpdates :: BlockSummary -> (forall pv. SProtocolVersion pv -> Updates pv -> a) -> a
+bsWithUpdates :: BlockSummary -> (forall pv. IsProtocolVersion pv => SProtocolVersion pv -> Updates pv -> a) -> a
 bsWithUpdates BlockSummary{..} = \k -> k bsProtocolVersion bsUpdates
 
 instance Show BlockSummary where
