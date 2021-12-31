@@ -100,7 +100,7 @@ configureBakerCostWithoutKeys = 300
 
 -- |C_t for configure baker when keys are present
 configureBakerCostWithKeys :: Energy
-configureBakerCostWithKeys = 300
+configureBakerCostWithKeys = 4050
 
 -- |C_t for updating baker keys
 updateBakerKeysCost :: Energy
