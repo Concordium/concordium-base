@@ -5,7 +5,7 @@ mod types;
 use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{
-    AccountAddress, Address, Amount, ChainMetadata, ContractAddress, OwnedReceiveName, SlotTime,
+    AccountAddress, Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, SlotTime,
 };
 use machine::Value;
 use std::{borrow::Borrow, io::Write, sync::Arc};
@@ -27,7 +27,7 @@ pub enum Interrupt {
     Call {
         address:   ContractAddress,
         parameter: ParameterVec,
-        name:      OwnedReceiveName,
+        name:      OwnedEntrypointName,
         amount:    Amount,
     },
 }
@@ -55,8 +55,8 @@ impl Interrupt {
                 out.write_all(&address.subindex.to_be_bytes())?;
                 out.write_all(&(parameter.len() as u16).to_be_bytes())?;
                 out.write_all(&parameter)?;
-                out.write_all(&(name.get_chain_name().as_bytes().len() as u16).to_be_bytes())?;
-                out.write_all(&name.get_chain_name().as_bytes())?;
+                out.write_all(&(name.0.as_bytes().len() as u16).to_be_bytes())?;
+                out.write_all(&name.0.as_bytes())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
                 Ok(())
             }
