@@ -60,6 +60,9 @@ module Concordium.Wasm (
   ReceiveName(..),
   isValidReceiveName,
   contractAndFunctionName,
+  EntrypointName(..),
+  isValidEntrypointName,
+  makeReceiveName,
   Parameter(..),
   emptyParameter,
 
@@ -228,6 +231,38 @@ isValidReceiveName proposal =
       hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
       hasDot = Text.any (== '.') proposal
   in hasValidLength && hasValidCharacters && hasDot
+
+-- |Name of the entrypoint, i.e., the part of the receive name after the dot.
+newtype EntrypointName = EntrypointName { entrypointName :: Text }
+    deriving (Eq, Show, Ord)
+    deriving(AE.ToJSON) via Text
+
+-- |Check whether the given text is a valid entrypoint name.
+-- This is the case if
+--
+-- * length is <= maxFuncNameSize
+-- * all characters are valid ascii characters in alphanumeric or punctuation classes
+isValidEntrypointName :: Text -> Bool
+isValidEntrypointName proposal =
+  -- The limit is specified in bytes, but Text.length returns the number of chars.
+  -- This is not a problem, as we only allow ASCII.
+  let hasValidLength = Text.length proposal <= maxFuncNameSize
+      hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+  in hasValidLength && hasValidCharacters
+
+instance Serialize EntrypointName where
+  put = putByteStringWord16 . Text.encodeUtf8 . entrypointName
+  get = do
+    bs <- getByteStringWord16
+    case Text.decodeUtf8' bs of
+      Left _ -> fail "Not a valid utf-8 encoding."
+      Right t | isValidEntrypointName t -> return (EntrypointName t)
+              | otherwise -> fail $ "Not a valid entrypoint name: " ++ Text.unpack t
+
+
+-- |Make a receive name from an init name and an entrypoint name.
+makeReceiveName :: InitName -> EntrypointName -> ReceiveName
+makeReceiveName iName EntrypointName{..} = ReceiveName (initContractName iName <> "." <> entrypointName)
 
 -- |Extract the contract name from the init function name.
 initContractName :: InitName -> Text
