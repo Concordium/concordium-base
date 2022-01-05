@@ -258,10 +258,16 @@ mod host {
 
     // Parse the call arguments. This is using the serialization as defined in the
     // smart contracts code since the arguments will be written by a smart
-    // contract.
-    fn parse_call_args(cursor: &mut Cursor<&[u8]>) -> ParseResult<Interrupt> {
+    // contract. Returns Ok(None) if there is insufficient energy.
+    fn parse_call_args(
+        energy: &mut InterpreterEnergy,
+        cursor: &mut Cursor<&[u8]>,
+    ) -> ParseResult<Result<Interrupt, OutOfEnergy>> {
         let address = cursor.get()?;
         let parameter_len: u16 = cursor.get()?;
+        if energy.tick_energy(constants::copy_to_host_cost(parameter_len.into())).is_err() {
+            return Ok(Err(OutOfEnergy));
+        }
         let start = cursor.offset;
         let end = cursor.offset + parameter_len as usize;
         if end > cursor.data.len() {
@@ -271,12 +277,12 @@ mod host {
         cursor.offset = end;
         let name = cursor.get()?;
         let amount = cursor.get()?;
-        Ok(Interrupt::Call {
+        Ok(Ok(Interrupt::Call {
             address,
             parameter,
             name,
             amount,
-        })
+        }))
     }
 
     /// Write to the return value.
@@ -325,7 +331,7 @@ mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<Option<Interrupt>> {
-        // TODO: Charge energy
+        energy.tick_energy(constants::INVOKE_BASE_COST)?;
         let length = unsafe { stack.pop_u32() } as usize; // length of the instruction payload in memory
         let start = unsafe { stack.pop_u32() } as usize; // start of the instruction payload in memory
         let tag = unsafe { stack.pop_u32() }; // tag of the instruction
@@ -356,12 +362,10 @@ mod host {
             CALL_TAG => {
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
                 let mut cursor = Cursor::new(&memory[start..start + length]);
-                match parse_call_args(&mut cursor) {
-                    Ok(i) => Ok(i.into()),
-                    Err(_) => {
-                        stack.push_value(-1i32);
-                        Ok(None)
-                    }
+                match parse_call_args(energy, &mut cursor) {
+                    Ok(Ok(i)) => Ok(Some(i)),
+                    Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
+                    Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
             }
             c => bail!("Illegal instruction code {}.", c),
