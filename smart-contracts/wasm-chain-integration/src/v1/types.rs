@@ -212,6 +212,7 @@ pub enum ReceiveResult<R> {
     },
     Interrupt {
         remaining_energy: u64,
+        logs: v0::Logs,
         config:           Box<ReceiveInterruptedState<R>>,
         interrupt:        Interrupt,
     },
@@ -257,6 +258,7 @@ impl<R> ReceiveResult<R> {
             }
             Interrupt {
                 remaining_energy,
+                logs,
                 config,
                 interrupt,
             } => {
@@ -265,6 +267,7 @@ impl<R> ReceiveResult<R> {
                 let state = config.host.state.as_ref();
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);
+                out.extend_from_slice(&logs.to_bytes());
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
                 (out, Some(config), None)
             }

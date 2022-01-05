@@ -725,7 +725,7 @@ where
 
 fn process_receive_result<Param, R: RunnableCode, Policy>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
-    host: ReceiveHost<Param, ReceiveContext<Policy>>,
+    mut host: ReceiveHost<Param, ReceiveContext<Policy>>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
 ) -> ExecResult<ReceiveResult<R>>
 where
@@ -764,8 +764,13 @@ where
             config,
         }) => {
             let remaining_energy = host.energy.energy;
+            // logs are returned per section that is executed.
+            // So here we set the host logs to empty and return any
+            // existing logs.
+            let logs = std::mem::take(&mut host.logs);
             Ok(ReceiveResult::Interrupt {
                 remaining_energy,
+                logs,
                 config: Box::new(ReceiveInterruptedState {
                     host: host.into(),
                     artifact,
