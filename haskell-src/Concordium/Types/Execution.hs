@@ -540,7 +540,7 @@ data Event =
                -- TODO: We could include initial state hash here.
                -- Including the whole state is likely not a good idea.
                }
-           -- |The given contract was updated.
+           -- |The given V0 contract was updated.
            | Updated {
                -- |Address of the contract that was updated.
                euAddress :: !ContractAddress,
@@ -714,6 +714,13 @@ data Event =
                -- | The memo.
                tmMemo :: !Memo
            }
+           -- | Contract invocation was interrupted. This only applies to V1 contracts.
+           | Interrupted {
+               -- |Address of the contract that was interrupted.
+               erAddress :: !ContractAddress,
+               -- |Partial event log generated in the execution before the interrupt.
+               erEvents :: ![Wasm.ContractEvent]
+               }
 
   deriving (Show, Generic, Eq)
 
@@ -827,6 +834,10 @@ instance S.Serialize Event where
               TransferMemo {..} ->
                 S.putWord8 21 <>
                 S.put tmMemo
+              Interrupted {..} ->
+                S.putWord8 22 <>
+                S.put erAddress <>
+                putListOf S.put erEvents
 
   get = S.getWord8 >>= \case
     0 -> do
@@ -938,6 +949,10 @@ instance S.Serialize Event where
     21 -> do
       tmMemo <- S.get
       return  TransferMemo {..}
+    22 -> do
+      erAddress <- S.get
+      erEvents <- getListOf S.get
+      return Interrupted{..}
     n -> fail $ "Unrecognized event tag: " ++ show n
 
 
