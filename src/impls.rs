@@ -26,6 +26,16 @@ impl<X: Deserial, Y: Deserial> Deserial for (X, Y) {
     }
 }
 
+impl Serial for () {
+    #[inline(always)]
+    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
+}
+
+impl Deserial for () {
+    #[inline(always)]
+    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(()) }
+}
+
 impl Serial for u8 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u8(*self) }
 }
