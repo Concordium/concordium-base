@@ -717,9 +717,16 @@ data Event =
            -- | Contract invocation was interrupted. This only applies to V1 contracts.
            | Interrupted {
                -- |Address of the contract that was interrupted.
-               erAddress :: !ContractAddress,
+               iAddress :: !ContractAddress,
                -- |Partial event log generated in the execution before the interrupt.
-               erEvents :: ![Wasm.ContractEvent]
+               iEvents :: ![Wasm.ContractEvent]
+               }
+           -- | Contract execution resumed. This only applies to V1 contracts.
+           | Resumed {
+               -- |Address of the contract that was interrupted.
+               rAddress :: !ContractAddress,
+               -- |Whether the operation succeeded.
+               rSuccess :: !Bool
                }
 
   deriving (Show, Generic, Eq)
@@ -836,8 +843,12 @@ instance S.Serialize Event where
                 S.put tmMemo
               Interrupted {..} ->
                 S.putWord8 22 <>
-                S.put erAddress <>
-                putListOf S.put erEvents
+                S.put iAddress <>
+                putListOf S.put iEvents
+              Resumed {..} ->
+                S.putWord8 23 <>
+                S.put rAddress <>
+                putBool rSuccess
 
   get = S.getWord8 >>= \case
     0 -> do
@@ -950,9 +961,13 @@ instance S.Serialize Event where
       tmMemo <- S.get
       return  TransferMemo {..}
     22 -> do
-      erAddress <- S.get
-      erEvents <- getListOf S.get
+      iAddress <- S.get
+      iEvents <- getListOf S.get
       return Interrupted{..}
+    23 -> do
+      rAddress <- S.get
+      rSuccess <- getBool
+      return Resumed{..}
     n -> fail $ "Unrecognized event tag: " ++ show n
 
 
