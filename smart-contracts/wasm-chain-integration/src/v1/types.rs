@@ -212,13 +212,16 @@ pub enum ReceiveResult<R> {
     },
     Interrupt {
         remaining_energy: u64,
-        logs: v0::Logs,
+        logs:             v0::Logs,
         config:           Box<ReceiveInterruptedState<R>>,
         interrupt:        Interrupt,
     },
     Reject {
         reason:           i32,
         return_value:     ReturnValue,
+        remaining_energy: u64,
+    },
+    Trap {
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -231,13 +234,20 @@ impl<R> ReceiveResult<R> {
         use ReceiveResult::*;
         match self {
             OutOfEnergy => (vec![0], None, None),
+            Trap {
+                remaining_energy,
+            } => {
+                let mut out = vec![1; 9];
+                out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
+                (out, None, None)
+            }
             Reject {
                 reason,
                 return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
-                out.push(1);
+                out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 (out, None, Some(return_value))
@@ -248,7 +258,7 @@ impl<R> ReceiveResult<R> {
                 return_value,
                 remaining_energy,
             } => {
-                let mut out = vec![2];
+                let mut out = vec![3];
                 let state = &state.state;
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);
@@ -262,7 +272,7 @@ impl<R> ReceiveResult<R> {
                 config,
                 interrupt,
             } => {
-                let mut out = vec![3];
+                let mut out = vec![4];
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 let state = config.host.state.as_ref();
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());

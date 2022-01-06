@@ -787,7 +787,9 @@ where
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(ReceiveResult::OutOfEnergy)
             } else {
-                Err(e)
+                Ok(ReceiveResult::Trap {
+                    remaining_energy: host.energy.energy,
+                })
             }
         }
     }
