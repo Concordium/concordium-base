@@ -863,6 +863,15 @@ impl<'a> EntrypointName<'a> {
         is_valid_entrypoint_name(name)?;
         Ok(Self(name))
     }
+
+    /// Create a new name. **This does not check the format and is therefore
+    /// unsafe.** It is provided for convenience since sometimes it is
+    /// statically clear that the format is satisfied.
+    pub fn new_unchecked(name: &'a str) -> Self { Self(name) }
+}
+
+impl<'a> From<EntrypointName<'a>> for &'a str {
+    fn from(en: EntrypointName<'a>) -> Self { en.0 }
 }
 
 impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
@@ -872,7 +881,11 @@ impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
 /// An entrypoint name (owned version). Expected format:
 /// "<func_name>" where
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct OwnedEntrypointName(pub String);
+pub struct OwnedEntrypointName(pub(crate) String);
+
+impl From<OwnedEntrypointName> for String {
+    fn from(oen: OwnedEntrypointName) -> Self { oen.0 }
+}
 
 impl OwnedEntrypointName {
     /// Create a new name and check the format. See [is_valid_entrypoint_name]
@@ -881,6 +894,11 @@ impl OwnedEntrypointName {
         is_valid_entrypoint_name(&name)?;
         Ok(Self(name))
     }
+
+    /// Create a new name. **This does not check the format and is therefore
+    /// unsafe.** It is provided for convenience since sometimes it is
+    /// statically clear that the format is satisfied.
+    pub fn new_unchecked(name: String) -> Self { Self(name) }
 
     pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
 }
@@ -904,7 +922,7 @@ impl OwnedParameter {
 ///
 /// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
 pub fn is_valid_entrypoint_name(name: &str) -> Result<(), NewReceiveNameError> {
-    if name.len() > constants::MAX_FUNC_NAME_SIZE {
+    if name.as_bytes().len() > constants::MAX_FUNC_NAME_SIZE {
         return Err(NewReceiveNameError::TooLong);
     }
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
