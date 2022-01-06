@@ -49,6 +49,8 @@ mpsMintPerSlot =
 deriving instance Eq (MintPerSlotForCPV0 cpv)
 deriving instance Show (MintPerSlotForCPV0 cpv)
 
+-- TODO: change this to a GADT:
+
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
 -- It must be the case that

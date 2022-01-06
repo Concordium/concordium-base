@@ -1512,6 +1512,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | DelegatorInCooldown
                   -- |Account is not a delegation account
                   | NotADelegator !AccountAddress
+                  -- |Delegation target is not a baker
+                  | DelegationTargetNotABaker !BakerId
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -1579,6 +1581,7 @@ instance S.Serialize RejectReason where
     UnexpectedDelegationRemoveParameters -> S.putWord8 47
     DelegatorInCooldown -> S.putWord8 48
     NotADelegator addr -> S.putWord8 49 <> S.put addr
+    DelegationTargetNotABaker bid -> S.putWord8 50 <> S.put bid
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -1638,6 +1641,7 @@ instance S.Serialize RejectReason where
     47 -> return UnexpectedDelegationRemoveParameters
     48 -> return DelegatorInCooldown
     49 -> NotADelegator <$> S.get
+    50 -> DelegationTargetNotABaker <$> S.get
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 
@@ -1692,6 +1696,9 @@ addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerify
 addBakerChallenge addr elec sign agg = "addBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
 
 -- |Generate the challenge for updating a baker's keys.
--- This is currently identical to 'addBakerChallenge'.
 updateBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
 updateBakerKeyChallenge addr elec sign agg = "updateBakerKeys" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
+
+-- |Generate the challenge for configuring a baker's keys.
+configureBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
+configureBakerKeyChallenge addr elec sign agg = "configureBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
