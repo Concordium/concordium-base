@@ -81,12 +81,12 @@ pub fn build_contract(
 
     // We output a versioned module that can be directly deployed to the chain,
     // i.e., the exact data that needs to go into the transaction. This starts with
-    // the version number in big endian.
+    // the version number in big endian. The remaining 4 bytes are a placeholder for
+    // length.
     let mut output_bytes = match version {
-        WasmVersion::V0 => vec![0, 0, 0, 0],
-        WasmVersion::V1 => vec![0, 0, 0, 1],
+        WasmVersion::V0 => vec![0, 0, 0, 0, 0, 0, 0, 0],
+        WasmVersion::V1 => vec![0, 0, 0, 1, 0, 0, 0, 0],
     };
-
     // Embed schema custom section
     if let Some(schema) = embed_schema {
         let schema_bytes = to_bytes(schema);
@@ -101,6 +101,10 @@ pub fn build_contract(
     } else {
         skeleton.output(&mut output_bytes)?;
     }
+    // write the size of the actual module to conform to serialization expected on
+    // the chain
+    let data_size = (output_bytes.len() - 8) as u32;
+    (&mut output_bytes[4..8]).copy_from_slice(&data_size.to_be_bytes());
 
     let out_filename = out.unwrap_or_else(|| {
         let extension = match version {
