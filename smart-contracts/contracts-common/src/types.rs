@@ -870,6 +870,10 @@ impl<'a> EntrypointName<'a> {
     pub fn new_unchecked(name: &'a str) -> Self { Self(name) }
 }
 
+impl<'a> fmt::Display for EntrypointName<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
+}
+
 impl<'a> From<EntrypointName<'a>> for &'a str {
     fn from(en: EntrypointName<'a>) -> Self { en.0 }
 }
@@ -882,6 +886,10 @@ impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
 /// "<func_name>" where
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct OwnedEntrypointName(pub(crate) String);
+
+impl fmt::Display for OwnedEntrypointName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.as_entrypoint_name().fmt(f) }
+}
 
 impl From<OwnedEntrypointName> for String {
     fn from(oen: OwnedEntrypointName) -> Self { oen.0 }
