@@ -26,6 +26,16 @@ impl<X: Deserial, Y: Deserial> Deserial for (X, Y) {
     }
 }
 
+impl Serial for () {
+    #[inline(always)]
+    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
+}
+
+impl Deserial for () {
+    #[inline(always)]
+    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(()) }
+}
+
 impl Serial for u8 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u8(*self) }
 }
@@ -363,6 +373,52 @@ impl Deserial for OwnedReceiveName {
         let name = String::from_utf8(bytes).map_err(|_| ParseError::default())?;
         let owned_receive_name = OwnedReceiveName::new(name).map_err(|_| ParseError::default())?;
         Ok(owned_receive_name)
+    }
+}
+
+impl<'a> Serial for EntrypointName<'a> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.0.len() as u16;
+        len.serial(out)?;
+        serial_vector_no_length(self.0.as_bytes(), out)
+    }
+}
+
+impl Serial for OwnedEntrypointName {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_entrypoint_name().serial(out)
+    }
+}
+
+impl Deserial for OwnedEntrypointName {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let bytes = deserial_vector_no_length(source, len as usize)?;
+        let name = String::from_utf8(bytes).map_err(|_| ParseError::default())?;
+        let owned_entrypoint_name = Self::new(name).map_err(|_| ParseError::default())?;
+        Ok(owned_entrypoint_name)
+    }
+}
+
+impl<'a> Serial for Parameter<'a> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.0.len() as u16;
+        len.serial(out)?;
+        out.write_all(&self.0)
+    }
+}
+
+impl Serial for OwnedParameter {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_parameter().serial(out)
+    }
+}
+
+impl Deserial for OwnedParameter {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let bytes = deserial_vector_no_length(source, len as usize)?;
+        Ok(Self(bytes))
     }
 }
 
