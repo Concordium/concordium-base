@@ -630,8 +630,10 @@ pub struct InstanceStateIteratorFFI {
 pub struct InstanceStateIteratorNextFFI {
     /// Raw pointer to the next entry
     entry_ptr: *const InstanceStateEntryFFI,
-    /// Key for the next entry
-    key:       Vec<u8>,
+    /// Length of the key
+    key_len:   size_t,
+    /// Pointer to the key for the next entry
+    key_ptr:   *const u8,
 }
 
 /// Wrapper for the opaque pointers to the state of the instance managed by
@@ -715,7 +717,9 @@ impl InstanceState {
             return Ok(None);
         }
         let iter_next = unsafe { std::ptr::read(iter_next_ptr) };
-        self.entries.push((iter_next.key, iter_next.entry_ptr));
+        let key_len = iter_next.key_len as usize;
+        let key = unsafe { std::slice::from_raw_parts(iter_next.key_ptr, key_len) };
+        self.entries.push((key.to_vec(), iter_next.entry_ptr));
         let entry_index = self.entries.len() as u32;
         Ok(Some(entry_index))
     }
