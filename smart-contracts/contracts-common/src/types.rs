@@ -848,6 +848,97 @@ impl OwnedReceiveName {
     pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
 }
 
+/// An entrypoint name (borrowed version). Expected format:
+/// "<func_name>" where
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct EntrypointName<'a>(pub(crate) &'a str);
+
+impl<'a> EntrypointName<'a> {
+    /// Size of the name in bytes.
+    pub fn size(&self) -> u32 { self.0.as_bytes().len() as u32 }
+
+    /// Create a new name and check the format. See [is_valid_entrypoint_name]
+    /// for the expected format.
+    pub fn new(name: &'a str) -> Result<Self, NewReceiveNameError> {
+        is_valid_entrypoint_name(name)?;
+        Ok(Self(name))
+    }
+
+    /// Create a new name. **This does not check the format and is therefore
+    /// unsafe.** It is provided for convenience since sometimes it is
+    /// statically clear that the format is satisfied.
+    pub fn new_unchecked(name: &'a str) -> Self { Self(name) }
+}
+
+impl<'a> fmt::Display for EntrypointName<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
+}
+
+impl<'a> From<EntrypointName<'a>> for &'a str {
+    fn from(en: EntrypointName<'a>) -> Self { en.0 }
+}
+
+impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
+    fn from(epn: EntrypointName<'a>) -> Self { Self(String::from(epn.0)) }
+}
+
+/// An entrypoint name (owned version). Expected format:
+/// "<func_name>" where
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct OwnedEntrypointName(pub(crate) String);
+
+impl fmt::Display for OwnedEntrypointName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.as_entrypoint_name().fmt(f) }
+}
+
+impl From<OwnedEntrypointName> for String {
+    fn from(oen: OwnedEntrypointName) -> Self { oen.0 }
+}
+
+impl OwnedEntrypointName {
+    /// Create a new name and check the format. See [is_valid_entrypoint_name]
+    /// for the expected format.
+    pub fn new(name: String) -> Result<Self, NewReceiveNameError> {
+        is_valid_entrypoint_name(&name)?;
+        Ok(Self(name))
+    }
+
+    /// Create a new name. **This does not check the format and is therefore
+    /// unsafe.** It is provided for convenience since sometimes it is
+    /// statically clear that the format is satisfied.
+    pub fn new_unchecked(name: String) -> Self { Self(name) }
+
+    pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
+}
+
+/// Parameter to the init function or entrypoint.
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct Parameter<'a>(pub &'a [u8]);
+
+/// Parameter to the init function or entrypoint. Owned version.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct OwnedParameter(pub Vec<u8>);
+
+impl OwnedParameter {
+    pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
+}
+
+/// Check whether the given string is a valid contract entrypoint name.
+/// This is the case if and only if
+/// - the string is no more than [constants::MAX_FUNC_NAME_SIZE][m] bytes
+/// - all characters are ascii alphanumeric or punctuation characters.
+///
+/// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
+pub fn is_valid_entrypoint_name(name: &str) -> Result<(), NewReceiveNameError> {
+    if name.as_bytes().len() > constants::MAX_FUNC_NAME_SIZE {
+        return Err(NewReceiveNameError::TooLong);
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
+        return Err(NewReceiveNameError::InvalidCharacters);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewReceiveNameError {
     MissingDotSeparator,
@@ -882,7 +973,8 @@ pub type SlotTime = Timestamp;
     derive(SerdeSerialize, SerdeDeserialize),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
+#[derive(Debug)]
 pub struct ChainMetadata {
     pub slot_time: SlotTime,
 }

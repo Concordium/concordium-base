@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Introduce Entrypoint and Parameter types, and their owned versions.
+
 ## concordium-contracts-common 2.0.0 (2022-01-05)
 
 - Update references to token to match token name (CCD).
