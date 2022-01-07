@@ -664,10 +664,11 @@ where
 
 /// Response from an invoke call.
 pub enum InvokeResponse {
-    /// Execution was successful, and the state changed.
+    /// Execution was successful, and the state potentially changed.
     Success {
-        new_state: v0::State,
-        // Some calls do not have any return values, such as transfers.
+        /// New state, if it changed.
+        new_state: Option<v0::State>,
+        /// Some calls do not have any return values, such as transfers.
         data:      Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
@@ -835,20 +836,29 @@ pub fn resume_receive(
             new_state,
             data,
         } => {
-            interrupted_state.host.state = new_state;
+            // the response value is constructed by setting the last 5 bytes to 0
+            // for the first 3 bytes, the first bit is 1 if the state changed, and 0
+            // otherwise the remaining bits are the index of the parameter.
+            let tag = if let Some(new_state) = new_state {
+                interrupted_state.host.state = new_state;
+                0b1000_0000_0000_0000_0000_0000u64
+            } else {
+                0
+            };
             if let Some(data) = data {
                 let len = interrupted_state.host.parameters.len();
-                if len > 0xff_ffff {
+                if len > 0b0111_1111_1111_1111_1111_1111 {
                     bail!("Too many calls.")
                 }
                 interrupted_state.host.parameters.push(data);
                 // return the index of the parameter to retrieve.
-                (len as u64) << 40
+                (len as u64 | tag) << 40
             } else {
-                0 // 0 indicates that there is no new response. This works
-                  // because if there is a response
-                  // len must be at least 1 since every contract starts by being
-                  // called with a parameter
+                // modulo the tag, 0 indicates that there is no new response. This works
+                // because if there is a response
+                // len must be at least 1 since every contract starts by being
+                // called with a parameter
+                tag << 40
             }
         }
         InvokeResponse::Failure {
@@ -858,7 +868,7 @@ pub fn resume_receive(
             // state did not change
             if let Some(data) = data {
                 let len = interrupted_state.host.parameters.len();
-                if len > 0xff_ffff {
+                if len > 0b0111_1111_1111_1111_1111_1111 {
                     bail!("Too many calls.")
                 }
                 interrupted_state.host.parameters.push(data);

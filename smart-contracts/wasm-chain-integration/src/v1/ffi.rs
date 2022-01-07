@@ -198,6 +198,8 @@ unsafe extern "C" fn validate_and_process_v1(
 unsafe extern "C" fn resume_receive_v1(
     // mutable pointer, we will mutate this, either to a new state or null
     config_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
+    // whether the state has been updated (non-zero) or not (zero)
+    new_state_tag: u8,
     // (potentially) updated state of the contract, or null if response_status is an error
     state_bytes: *const u8,
     state_bytes_len: size_t,
@@ -242,11 +244,18 @@ unsafe extern "C" fn resume_receive_v1(
                 }
             }
         } else {
-            let new_state =
-                slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
-            InvokeResponse::Success {
-                new_state,
-                data,
+            if new_state_tag == 0 {
+                InvokeResponse::Success {
+                    new_state: None,
+                    data,
+                }
+            } else {
+                let new_state =
+                    slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
+                InvokeResponse::Success {
+                    new_state: Some(new_state),
+                    data,
+                }
             }
         };
         // mark the interrupted state as consumed in case any panics happen from here to
