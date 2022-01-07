@@ -55,8 +55,9 @@ impl Interrupt {
                 out.write_all(&address.subindex.to_be_bytes())?;
                 out.write_all(&(parameter.len() as u16).to_be_bytes())?;
                 out.write_all(&parameter)?;
-                out.write_all(&(name.0.as_bytes().len() as u16).to_be_bytes())?;
-                out.write_all(&name.0.as_bytes())?;
+                let name_str: &str = name.as_entrypoint_name().into();
+                out.write_all(&(name_str.as_bytes().len() as u16).to_be_bytes())?;
+                out.write_all(&name_str.as_bytes())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
                 Ok(())
             }
