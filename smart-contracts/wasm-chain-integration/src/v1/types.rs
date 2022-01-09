@@ -208,12 +208,16 @@ pub enum ReceiveResult<R> {
     },
     Interrupt {
         remaining_energy: u64,
+        logs:             v0::Logs,
         config:           Box<ReceiveInterruptedState<R>>,
         interrupt:        Interrupt,
     },
     Reject {
         reason:           i32,
         return_value:     ReturnValue,
+        remaining_energy: u64,
+    },
+    Trap {
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -226,13 +230,20 @@ impl<R> ReceiveResult<R> {
         use ReceiveResult::*;
         match self {
             OutOfEnergy => (vec![0], None, None),
+            Trap {
+                remaining_energy,
+            } => {
+                let mut out = vec![1; 9];
+                out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
+                (out, None, None)
+            }
             Reject {
                 reason,
                 return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
-                out.push(1);
+                out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 (out, None, Some(return_value))
@@ -242,18 +253,20 @@ impl<R> ReceiveResult<R> {
                 return_value,
                 remaining_energy,
             } => {
-                let mut out = vec![2];
+                let mut out = vec![3];
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 (out, None, Some(return_value))
             }
             Interrupt {
                 remaining_energy,
+                logs,
                 config,
                 interrupt,
             } => {
-                let mut out = vec![3];
+                let mut out = vec![4];
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&logs.to_bytes());
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
                 (out, Some(config), None)
             }
@@ -449,7 +462,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
         };
         if mod_name.name == "concordium" {
             match item_name.name.as_ref() {
-                "invoke" => type_matches!(ty => [I32, I32, I32]; I32),
+                "invoke" => type_matches!(ty => [I32, I32, I32]; I64),
                 "write_output" => type_matches!(ty => [I32, I32, I32]; I32),
                 "get_parameter_size" => type_matches!(ty => [I32]; I32),
                 "get_parameter_section" => type_matches!(ty => [I32, I32, I32, I32]; I32),

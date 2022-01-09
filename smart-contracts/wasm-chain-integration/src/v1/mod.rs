@@ -55,8 +55,9 @@ impl Interrupt {
                 out.write_all(&address.subindex.to_be_bytes())?;
                 out.write_all(&(parameter.len() as u16).to_be_bytes())?;
                 out.write_all(&parameter)?;
-                out.write_all(&(name.0.as_bytes().len() as u16).to_be_bytes())?;
-                out.write_all(&name.0.as_bytes())?;
+                let name_str: &str = name.as_entrypoint_name().into();
+                out.write_all(&(name_str.as_bytes().len() as u16).to_be_bytes())?;
+                out.write_all(&name_str.as_bytes())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
                 Ok(())
             }
@@ -258,10 +259,16 @@ mod host {
 
     // Parse the call arguments. This is using the serialization as defined in the
     // smart contracts code since the arguments will be written by a smart
-    // contract.
-    fn parse_call_args(cursor: &mut Cursor<&[u8]>) -> ParseResult<Interrupt> {
+    // contract. Returns Ok(None) if there is insufficient energy.
+    fn parse_call_args(
+        energy: &mut InterpreterEnergy,
+        cursor: &mut Cursor<&[u8]>,
+    ) -> ParseResult<Result<Interrupt, OutOfEnergy>> {
         let address = cursor.get()?;
-        let parameter_len: u32 = cursor.get()?;
+        let parameter_len: u16 = cursor.get()?;
+        if energy.tick_energy(constants::copy_to_host_cost(parameter_len.into())).is_err() {
+            return Ok(Err(OutOfEnergy));
+        }
         let start = cursor.offset;
         let end = cursor.offset + parameter_len as usize;
         if end > cursor.data.len() {
@@ -271,12 +278,12 @@ mod host {
         cursor.offset = end;
         let name = cursor.get()?;
         let amount = cursor.get()?;
-        Ok(Interrupt::Call {
+        Ok(Ok(Interrupt::Call {
             address,
             parameter,
             name,
             amount,
-        })
+        }))
     }
 
     /// Write to the return value.
@@ -325,7 +332,7 @@ mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<Option<Interrupt>> {
-        // TODO: Charge energy
+        energy.tick_energy(constants::INVOKE_BASE_COST)?;
         let length = unsafe { stack.pop_u32() } as usize; // length of the instruction payload in memory
         let start = unsafe { stack.pop_u32() } as usize; // start of the instruction payload in memory
         let tag = unsafe { stack.pop_u32() }; // tag of the instruction
@@ -356,12 +363,10 @@ mod host {
             CALL_TAG => {
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
                 let mut cursor = Cursor::new(&memory[start..start + length]);
-                match parse_call_args(&mut cursor) {
-                    Ok(i) => Ok(i.into()),
-                    Err(_) => {
-                        stack.push_value(-1i32);
-                        Ok(None)
-                    }
+                match parse_call_args(energy, &mut cursor) {
+                    Ok(Ok(i)) => Ok(Some(i)),
+                    Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
+                    Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
             }
             c => bail!("Illegal instruction code {}.", c),
@@ -911,16 +916,18 @@ where
 
 /// Response from an invoke call.
 pub enum InvokeResponse {
-    /// Execution was successful, and the state changed.
+    /// Execution was successful, and the state potentially changed.
     Success {
-        new_state: InstanceState,
-        data:      ParameterVec,
+        /// New state, if it changed.
+        new_state: Option<InstanceState>,
+        /// Some calls do not have any return values, such as transfers.
+        data:      Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
     Failure {
-        code: i32,
-        data: ParameterVec,
+        code: u64,
+        data: Option<ParameterVec>,
     },
 }
 
@@ -979,7 +986,7 @@ where
 
 fn process_receive_result<Param, R: RunnableCode, Policy>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
-    host: ReceiveHost<Param, ReceiveContext<Policy>>,
+    mut host: ReceiveHost<Param, ReceiveContext<Policy>>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
 ) -> ExecResult<ReceiveResult<R>>
 where
@@ -1017,8 +1024,13 @@ where
             config,
         }) => {
             let remaining_energy = host.energy.energy;
+            // logs are returned per section that is executed.
+            // So here we set the host logs to empty and return any
+            // existing logs.
+            let logs = std::mem::take(&mut host.logs);
             Ok(ReceiveResult::Interrupt {
                 remaining_energy,
+                logs,
                 config: Box::new(ReceiveInterruptedState {
                     host: host.into(),
                     artifact,
@@ -1031,7 +1043,9 @@ where
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(ReceiveResult::OutOfEnergy)
             } else {
-                Err(e)
+                Ok(ReceiveResult::Trap {
+                    remaining_energy: host.energy.energy,
+                })
             }
         }
     }
@@ -1066,7 +1080,7 @@ where
 }
 
 pub fn resume_receive(
-    mut interrupted_state: ReceiveInterruptedState<CompiledFunction>,
+    mut interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
@@ -1076,17 +1090,47 @@ pub fn resume_receive(
             new_state,
             data,
         } => {
-            interrupted_state.host.state = new_state;
-            interrupted_state.host.parameters.push(data);
-            0i32
+            // the response value is constructed by setting the last 5 bytes to 0
+            // for the first 3 bytes, the first bit is 1 if the state changed, and 0
+            // otherwise the remaining bits are the index of the parameter.
+            let tag = if let Some(new_state) = new_state {
+                interrupted_state.host.state = new_state;
+                0b1000_0000_0000_0000_0000_0000u64
+            } else {
+                0
+            };
+            if let Some(data) = data {
+                let len = interrupted_state.host.parameters.len();
+                if len > 0b0111_1111_1111_1111_1111_1111 {
+                    bail!("Too many calls.")
+                }
+                interrupted_state.host.parameters.push(data);
+                // return the index of the parameter to retrieve.
+                (len as u64 | tag) << 40
+            } else {
+                // modulo the tag, 0 indicates that there is no new response. This works
+                // because if there is a response
+                // len must be at least 1 since every contract starts by being
+                // called with a parameter
+                tag << 40
+            }
         }
         InvokeResponse::Failure {
             code,
             data,
         } => {
             // state did not change
-            interrupted_state.host.parameters.push(data);
-            code
+            if let Some(data) = data {
+                let len = interrupted_state.host.parameters.len();
+                if len > 0b0111_1111_1111_1111_1111_1111 {
+                    bail!("Too many calls.")
+                }
+                interrupted_state.host.parameters.push(data);
+                // return the index of the parameter to retrieve.
+                (len as u64) << 40 | code
+            } else {
+                code
+            }
         }
     };
     // push the response from the invoke

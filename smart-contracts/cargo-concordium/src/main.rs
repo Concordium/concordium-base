@@ -58,6 +58,14 @@ enum Command {
         )]
         out:          Option<PathBuf>,
         #[structopt(
+            name = "version",
+            long = "version",
+            short = "v",
+            help = "Build a module of the given version.",
+            default_value = "V1"
+        )]
+        version:      WasmVersion,
+        #[structopt(
             raw = true,
             help = "Extra arguments passed to `cargo build` when building Wasm module."
         )]
@@ -105,6 +113,7 @@ struct Runner {
     #[structopt(
         name = "parameter-bin",
         long = "parameter-bin",
+        conflicts_with = "parameter-json",
         help = "Path to a binary file with a parameter to invoke the method with. Parameter \
                 defaults to an empty array if this is not given."
     )]
@@ -554,6 +563,7 @@ pub fn main() -> anyhow::Result<()> {
             schema_embed,
             schema_out,
             out,
+            version,
             cargo_args,
         } => {
             let build_schema = schema_embed || schema_out.is_some();
@@ -565,9 +575,9 @@ pub fn main() -> anyhow::Result<()> {
                 None
             };
             let byte_len = if schema_embed {
-                build_contract(&schema_opt, out, &cargo_args)
+                build_contract(version, &schema_opt, out, &cargo_args)
             } else {
-                build_contract(&None, out, &cargo_args)
+                build_contract(version, &None, out, &cargo_args)
             }
             .context("Could not build smart contract.")?;
             if let Some(module_schema) = &schema_opt {

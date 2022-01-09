@@ -7,18 +7,37 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
 };
-use wasm_chain_integration::{utils, v0};
+use wasm_chain_integration::{utils, v0, v1};
 use wasm_transform::{
     output::{write_custom_section, Output},
     parse::parse_skeleton,
-    types::{CustomSection, Name},
+    types::CustomSection,
     utils::strip,
     validate::validate_module,
 };
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
+#[derive(Debug, Clone, Copy)]
+pub enum WasmVersion {
+    V0,
+    V1,
+}
+
+impl std::str::FromStr for WasmVersion {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "V0" => Ok(WasmVersion::V0),
+            "V1" => Ok(WasmVersion::V1),
+            _ => anyhow::bail!("Unsupported version: '{}'. Only 'V0' and 'V1' are supported.", s),
+        }
+    }
+}
+
 pub fn build_contract(
+    version: WasmVersion,
     embed_schema: &Option<schema::Module>,
     out: Option<PathBuf>,
     cargo_args: &[String],
@@ -53,20 +72,27 @@ pub fn build_contract(
 
     // Remove all custom sections to reduce the size of the module
     strip(&mut skeleton);
+    match version {
+        WasmVersion::V0 => validate_module(&v0::ConcordiumAllowedImports, &skeleton)
+            .context("Could not validate resulting smart contract module as a V0 contract.")?,
+        WasmVersion::V1 => validate_module(&v1::ConcordiumAllowedImports, &skeleton)
+            .context("Could not validate resulting smart contract module as a V1 contract.")?,
+    };
 
-    validate_module(&v0::ConcordiumAllowedImports, &skeleton)
-        .context("Could not validate resulting smart contract module.")?;
-
-    let mut output_bytes = Vec::new();
-
+    // We output a versioned module that can be directly deployed to the chain,
+    // i.e., the exact data that needs to go into the transaction. This starts with
+    // the version number in big endian. The remaining 4 bytes are a placeholder for
+    // length.
+    let mut output_bytes = match version {
+        WasmVersion::V0 => vec![0, 0, 0, 0, 0, 0, 0, 0],
+        WasmVersion::V1 => vec![0, 0, 0, 1, 0, 0, 0, 0],
+    };
     // Embed schema custom section
     if let Some(schema) = embed_schema {
         let schema_bytes = to_bytes(schema);
 
         let custom_section = CustomSection {
-            name:     Name {
-                name: String::from("concordium-schema-v1"),
-            },
+            name:     "concordium-schema-v1".into(),
             contents: &schema_bytes,
         };
 
@@ -75,8 +101,18 @@ pub fn build_contract(
     } else {
         skeleton.output(&mut output_bytes)?;
     }
+    // write the size of the actual module to conform to serialization expected on
+    // the chain
+    let data_size = (output_bytes.len() - 8) as u32;
+    (&mut output_bytes[4..8]).copy_from_slice(&data_size.to_be_bytes());
 
-    let out_filename = out.unwrap_or_else(|| PathBuf::from(filename));
+    let out_filename = out.unwrap_or_else(|| {
+        let extension = match version {
+            WasmVersion::V0 => "v0",
+            WasmVersion::V1 => "v1",
+        };
+        PathBuf::from(format!("{}.{}", filename, extension))
+    });
     let total_module_len = output_bytes.len();
     fs::write(out_filename, output_bytes)?;
     Ok(total_module_len)

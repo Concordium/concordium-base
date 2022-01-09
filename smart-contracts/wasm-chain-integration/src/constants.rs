@@ -84,3 +84,8 @@ pub const BASE_STATE_COST: u64 = 10;
 /// have on memory use.
 /// If we keep it, the cost must be analyzed and put into perspective
 pub const MEMORY_COST_FACTOR: u32 = 100;
+
+/// Cost of the invoke action. This is just the base cost to cover
+/// administrative costs of an invoke. Specific costs of the action are charged
+/// later by the scheduler.
+pub const INVOKE_BASE_COST: u64 = 500; // currently set as log event base cost. Revise based on benchmarks.
