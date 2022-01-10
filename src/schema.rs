@@ -42,15 +42,24 @@ pub struct Module {
 /// Describes all the schemas of a smart contract.
 #[derive(Debug, Clone)]
 pub struct Contract {
-    pub state:   Option<Type>,
-    pub init:    Option<Type>,
-    pub receive: BTreeMap<String, Type>,
+    pub init:    Option<FunctionSchema>,
+    pub receive: BTreeMap<String, FunctionSchema>,
+}
+
+/// Describes the schema of an init or a receive function.
+#[derive(Debug, Clone)]
+pub enum FunctionSchema {
+    Parameter(Type),
+    ReturnValue(Type),
+    Both {
+        parameter:    Type,
+        return_value: Type,
+    },
 }
 
 impl Contract {
     pub fn empty() -> Contract {
         Contract {
-            state:   None,
             init:    None,
             receive: BTreeMap::new(),
         }
@@ -291,7 +300,6 @@ impl Deserial for Module {
 
 impl Serial for Contract {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.state.serial(out)?;
         self.init.serial(out)?;
         self.receive.serial(out)?;
         Ok(())
@@ -300,15 +308,51 @@ impl Serial for Contract {
 
 impl Deserial for Contract {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let state = source.get()?;
         let init = source.get()?;
         let len: u32 = source.get()?;
         let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
         Ok(Contract {
-            state,
             init,
             receive,
         })
+    }
+}
+
+impl Serial for FunctionSchema {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            FunctionSchema::Parameter(parameter) => {
+                out.write_u8(0)?;
+                parameter.serial(out)
+            }
+            FunctionSchema::ReturnValue(return_value) => {
+                out.write_u8(1)?;
+                return_value.serial(out)
+            }
+            FunctionSchema::Both {
+                parameter,
+                return_value,
+            } => {
+                out.write_u8(2)?;
+                parameter.serial(out)?;
+                return_value.serial(out)
+            }
+        }
+    }
+}
+
+impl Deserial for FunctionSchema {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let idx = source.read_u8()?;
+        match idx {
+            0 => Ok(FunctionSchema::Parameter(source.get()?)),
+            1 => Ok(FunctionSchema::ReturnValue(source.get()?)),
+            2 => Ok(FunctionSchema::Both {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+            }),
+            _ => Err(ParseError::default()),
+        }
     }
 }
 
