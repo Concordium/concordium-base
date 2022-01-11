@@ -6,6 +6,7 @@ use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::bls12_381::{
     Fq12, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
 };
+use std::convert::TryFrom;
 
 use crate::serialize::*;
 
@@ -194,7 +195,7 @@ impl Deserial for Signature {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; SIGNATURE_LENGTH];
         source.read_exact(&mut buf)?;
-        Ok(Signature::from(buf))
+        Ok(Signature::try_from(buf)?)
     }
 }
 
