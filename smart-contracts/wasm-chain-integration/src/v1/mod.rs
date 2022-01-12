@@ -8,7 +8,7 @@ use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, SlotTime,
 };
 use machine::Value;
-use std::{borrow::Borrow, io::Write, sync::Arc};
+use std::{borrow::Borrow, convert::TryFrom, io::Write, sync::Arc};
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
@@ -431,11 +431,7 @@ mod host {
         energy.tick_energy(constants::traverse_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let result = if let Some(entry_index) = state.lookup_entry(key) {
-            i64::from(entry_index)
-        } else {
-            -1i64
-        };
+        let result = state.lookup_entry(key);
         stack.push_value(result);
         Ok(())
     }
@@ -465,9 +461,9 @@ mod host {
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u32() };
-        let key_len = state.entry_key_size(entry_index)?;
+        let key_len = state.entry_key_size(entry_index);
         energy.tick_energy(constants::modify_key_cost(key_len))?;
-        let result = state.delete_entry(entry_index)?;
+        let result = state.delete_entry(entry_index);
         stack.push_value(result);
         Ok(())
     }
@@ -516,14 +512,13 @@ mod host {
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let iter_index = unsafe { stack.pop_u32() };
-        let result = if let Some(next_entry_index) = state.iterator_next(iter_index)? {
-            let key_len = state.entry_key_size(next_entry_index)?;
+        let entry_option = state.iterator_next(iter_index);
+        if entry_option >= 0 {
+            let entry = u32::try_from(entry_option)?;
+            let key_len = state.entry_key_size(entry);
             energy.tick_energy(constants::traverse_key_cost(key_len))?;
-            next_entry_index.into()
-        } else {
-            -1i64
-        };
-        stack.push_value(result);
+        }
+        stack.push_value(entry_option);
         Ok(())
     }
 
@@ -542,7 +537,7 @@ mod host {
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_read(entry_index, dest, offset)?;
+        let result = state.entry_read(entry_index, dest, offset);
         stack.push_value(result);
         Ok(())
     }
@@ -562,7 +557,7 @@ mod host {
         let source_end = source_start + length as usize;
         ensure!(source_end <= memory.len(), "Illegal memory access.");
         let source = &memory[source_start..source_end];
-        let result = state.entry_write(entry_index, source, offset)?;
+        let result = state.entry_write(entry_index, source, offset);
         stack.push_value(result);
         Ok(())
     }
@@ -573,7 +568,7 @@ mod host {
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u32() };
-        let result = state.entry_size(entry_index)?;
+        let result = state.entry_size(entry_index);
         stack.push_value(result);
         Ok(())
     }
@@ -586,11 +581,11 @@ mod host {
     ) -> machine::RunResult<()> {
         let new_size = unsafe { stack.pop_u32() };
         let entry_index = unsafe { stack.pop_u32() };
-        let current_size = state.entry_size(entry_index)?;
+        let current_size = state.entry_size(entry_index);
         if new_size > current_size {
             energy.tick_energy(constants::additional_state_size_cost(new_size - current_size))?;
         }
-        let result = state.entry_resize(entry_index, new_size)?;
+        let result = state.entry_resize(entry_index, new_size);
         stack.push_value(result);
         Ok(())
     }
@@ -610,7 +605,7 @@ mod host {
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_key_read(entry_index, dest, offset)?;
+        let result = state.entry_key_read(entry_index, dest, offset);
         stack.push_value(result);
         Ok(())
     }
@@ -621,7 +616,7 @@ mod host {
         state: &mut InstanceState,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u32() };
-        let result = state.entry_key_size(entry_index)?;
+        let result = state.entry_key_size(entry_index);
         stack.push_value(result);
         Ok(())
     }

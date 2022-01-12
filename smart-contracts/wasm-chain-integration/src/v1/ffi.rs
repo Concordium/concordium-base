@@ -221,8 +221,8 @@ unsafe extern "C" fn resume_receive_v1(
     energy: u64,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
-    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
     instance_state_ptr: *const InstanceStateFFI,
+    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
 ) -> *mut u8 {
     let res = std::panic::catch_unwind(|| {
         let data = {
