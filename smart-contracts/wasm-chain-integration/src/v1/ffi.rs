@@ -256,18 +256,9 @@ unsafe extern "C" fn resume_receive_v1(
                 }
             }
         } else {
-            if new_state_tag == 0 {
-                InvokeResponse::Success {
-                    new_state: None,
-                    data,
-                }
-            } else {
-                let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
-                let new_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
-                InvokeResponse::Success {
-                    new_state: Some(new_state),
-                    data,
-                }
+            InvokeResponse::Success {
+                new_state: new_state_tag == 1,
+                data,
             }
         };
         // mark the interrupted state as consumed in case any panics happen from here to
@@ -275,7 +266,9 @@ unsafe extern "C" fn resume_receive_v1(
         // finalizer (`receive_interrupted_state_free`) will not end up double
         // freeing.
         let config = std::ptr::replace(config_ptr, std::ptr::null_mut());
-        let res = resume_receive(Box::from_raw(config), response, energy.into());
+        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
+        let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
+        let res = resume_receive(Box::from_raw(config), response, energy.into(), instance_state);
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {
