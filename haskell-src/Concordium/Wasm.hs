@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, GADTs, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE DerivingVia, GADTs, ScopedTypeVariables, OverloadedStrings, DataKinds, KindSignatures, TypeApplications #-}
 {-|
 Module      : Concordium.Wasm
 Description : Types used in the smart contract framework.
@@ -35,7 +35,8 @@ execution is successful, then an 'ActionsTree' is returned together with the new
 module Concordium.Wasm (
   -- * Constants
   maxParameterLen,
-  maxWasmModuleSize,
+  maxWasmModuleSizeV0,
+  maxWasmModuleSizeV1,
 
   -- * Modules
   -- ** Binary module
@@ -48,7 +49,12 @@ module Concordium.Wasm (
   unsafeUseModuleSourceAsCStringLen,
   moduleSourceLength,
   WasmModule(..),
+  WasmModuleV(..),
   getModuleRef,
+  WasmVersion(..),
+  IsWasmVersion(..),
+  SWasmVersion(..),
+  V0, V1,
 
   -- *** Methods
   --
@@ -131,49 +137,118 @@ import Concordium.Utils.Serialization
 
 --------------------------------------------------------------------------------
 
+-- |Supported versions of Wasm modules. This version defines available host
+-- functions, their semantics, and limitations of contracts.
+data WasmVersion = V0 | V1
+  deriving(Eq, Show)
+
+instance Serialize WasmVersion where
+  put V0 = putWord32be 0
+  put V1 = putWord32be 1
+
+  get = getWord32be >>= \case
+    0 -> return V0
+    1 -> return V1
+    n -> fail $ "Unrecognized Wasm version " ++ show n
+
+-- |These type aliases are provided for convenience to avoid having to enable
+-- DataKinds everywhere we need wasm version.
+type V0 = 'V0
+type V1 = 'V1
+
+-- |Boilerplate to allow using the supplied version type parameter as a term.
+data SWasmVersion (v :: WasmVersion) where
+  SV0 :: SWasmVersion 'V0
+  SV1 :: SWasmVersion 'V1
+
+-- A typeclass that allows to pass SWasmVersion implicitly to computations via a
+-- constraint.
+class IsWasmVersion (v :: WasmVersion) where
+  getWasmVersion :: SWasmVersion v
+
+instance IsWasmVersion 'V0 where
+  getWasmVersion = SV0
+
+instance IsWasmVersion 'V1 where
+  getWasmVersion = SV1
+
+
 -- | The source of a contract in binary wasm format.
-newtype ModuleSource = ModuleSource { moduleSource :: ByteString }
+newtype ModuleSource (v :: WasmVersion) = ModuleSource { moduleSource :: ByteString }
   deriving (Eq, Show)
 
-instance Serialize ModuleSource where
+instance Serialize (ModuleSource V0)  where
   get = do
     len <- getWord32be
-    unless (len <= maxWasmModuleSize) $ fail "Maximum module size exceeded."
+    unless (len <= maxWasmModuleSizeV0) $ fail "Maximum module size exceeded."
     ModuleSource <$> getByteString (fromIntegral len)
   put = putByteStringWord32 . moduleSource
 
-unsafeUseModuleSourceAsCStringLen :: ModuleSource -> (CStringLen -> IO a) -> IO a
+instance Serialize (ModuleSource V1)  where
+  get = do
+    len <- getWord32be
+    unless (len <= maxWasmModuleSizeV1) $ fail "Maximum module size exceeded."
+    ModuleSource <$> getByteString (fromIntegral len)
+  put = putByteStringWord32 . moduleSource
+
+unsafeUseModuleSourceAsCStringLen :: ModuleSource v -> (CStringLen -> IO a) -> IO a
 unsafeUseModuleSourceAsCStringLen = unsafeUseAsCStringLen . moduleSource
 
-moduleSourceLength :: ModuleSource -> Word64
+moduleSourceLength :: ModuleSource v -> Word64
 moduleSourceLength = fromIntegral . BS.length . moduleSource
 
--- |Web assembly module in binary format.
-data WasmModule = WasmModule {
-  -- |Version of the Wasm standard and on-chain API this module corresponds to.
-  wasmVersion :: !Word32,
-  -- |Source in binary wasm format.
-  wasmSource :: !ModuleSource
-  } deriving(Eq, Show)
+-- |A versioned module source. The serialization instance of this type, in contrast to ModuleSource,
+-- records the version that was used.
+newtype WasmModuleV (v :: WasmVersion) = WasmModuleV { wmvSource :: ModuleSource v }
+    deriving (Eq, Show)
 
-getModuleRef :: WasmModule -> ModuleRef
-getModuleRef wm = ModuleRef (getHash wm)
+instance IsWasmVersion v => Serialize (WasmModuleV v) where
+  put (WasmModuleV wasmSource) = case getWasmVersion @v of
+    SV0 -> put V0 <> put wasmSource
+    SV1 -> put V1 <> put wasmSource
+
+  get = case getWasmVersion @v of
+    SV0 -> get >>= \case
+      V0 -> WasmModuleV <$> get
+      _ -> fail "Expecting a V0 module."
+    SV1 -> get >>= \case
+      V1 -> WasmModuleV <$> get
+      _ -> fail "Expecting a V1 module."
+
+-- |A module of either version 0 or 1.
+data WasmModule =
+  WasmModuleV0 (WasmModuleV V0)
+  | WasmModuleV1 (WasmModuleV V1)
+  deriving(Eq, Show)
+
+getModuleRef :: forall v . IsWasmVersion v => WasmModuleV v -> ModuleRef
+getModuleRef wm = case getWasmVersion @v of
+  SV0 -> ModuleRef (getHash wm)
+  SV1 -> ModuleRef (getHash wm)
 
 instance Serialize WasmModule where
-  put WasmModule{..} =
-    putWord32be wasmVersion <>
+  put (WasmModuleV0 wasmSource) =
+    put wasmSource
+  put (WasmModuleV1 wasmSource) =
     put wasmSource
 
   get = do
-    wasmVersion <- getWord32be
-    unless (wasmVersion <= 1) $ fail $ "Unsupported Wasm module version: " ++ show wasmVersion
-    wasmSource <- get
-    return WasmModule{..}
+    get >>= \case
+      V0 -> WasmModuleV0 . WasmModuleV <$> get
+      V1 -> WasmModuleV1 . WasmModuleV <$> get
 
 instance HashableTo H.Hash WasmModule where
-  -- Hash the serialization directly, perhaps this needs to be revisited in the
-  -- future.
-  getHash wm = H.hash (encode wm)
+  -- Hash the serialization directly.
+  getHash (WasmModuleV0 wm) = getHash wm
+  getHash (WasmModuleV1 wm) = getHash wm
+
+instance HashableTo H.Hash (WasmModuleV V0) where
+  -- Hash the serialization directly.
+  getHash (WasmModuleV wm) = H.hash (encode V0 <> encode wm)
+
+instance HashableTo H.Hash (WasmModuleV V1) where
+  -- Hash the serialization directly.
+  getHash (WasmModuleV wm) = H.hash (encode V1 <> encode wm)
 
 --------------------------------------------------------------------------------
 

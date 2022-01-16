@@ -22,9 +22,13 @@ maxPayloadSize = 100 * 1024 -- 100kB
 maxParameterLen :: Word16
 maxParameterLen = 1024
 
--- |Maximum module size.
-maxWasmModuleSize :: Word32
-maxWasmModuleSize = 65536 -- 64kB
+-- |Maximum module size of a V0 module.
+maxWasmModuleSizeV0 :: Word32
+maxWasmModuleSizeV0 = 65536 -- 64kB
+
+-- |Maximum module size of a V1 module.
+maxWasmModuleSizeV1 :: Word32
+maxWasmModuleSizeV1 = 8 * 65536 -- 512kB
 
 -- |Maximum byte size of function names.
 -- Must stay in sync with MAX_FUNC_NAME_SIZE from wasm-transform.
