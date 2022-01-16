@@ -486,15 +486,23 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 .as_ref()
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
-        let correct_type =
-            ty.parameters.as_slice() == [ValueType::I64] && ty.result == Some(ValueType::I32);
-        valid_name
-            && correct_type
-            && if item_name.as_ref().starts_with("init_") {
-                !item_name.as_ref().contains('.')
-            } else {
-                item_name.as_ref().contains('.')
-            }
+        // we don't allow non-ascii names and names with weird characters since they
+        // complicate matters elsewhere
+        if !valid_name {
+            return false;
+        }
+        let either_init_or_receive_name = if item_name.as_ref().starts_with("init_") {
+            !item_name.as_ref().contains('.')
+        } else {
+            item_name.as_ref().contains('.')
+        };
+        if either_init_or_receive_name {
+            // if it is an init or receive name then check that the type is correct
+            ty.parameters.as_slice() == [ValueType::I64] && ty.result == Some(ValueType::I32)
+        } else {
+            // otherwise we do not care about the type
+            true
+        }
     }
 }
 
