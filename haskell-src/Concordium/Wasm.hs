@@ -144,14 +144,28 @@ import Concordium.Utils.Serialization
 data WasmVersion = V0 | V1
   deriving(Eq, Show)
 
+wasmVersionToWord :: WasmVersion -> Word32
+wasmVersionToWord V0 = 0
+wasmVersionToWord V1 = 1
+
 instance Serialize WasmVersion where
-  put V0 = putWord32be 0
-  put V1 = putWord32be 1
+  put = putWord32be . wasmVersionToWord
 
   get = getWord32be >>= \case
     0 -> return V0
     1 -> return V1
     n -> fail $ "Unrecognized Wasm version " ++ show n
+
+instance AE.ToJSON WasmVersion where
+  toJSON = AE.toJSON . wasmVersionToWord
+
+instance AE.FromJSON WasmVersion where
+  parseJSON v = do
+    word <- AE.parseJSON v
+    case word :: Word32 of
+      0 -> return V0
+      1 -> return V1
+      _ -> fail $ "Unsupported Wasm version " ++ show word
 
 -- |These type aliases are provided for convenience to avoid having to enable
 -- DataKinds everywhere we need wasm version.

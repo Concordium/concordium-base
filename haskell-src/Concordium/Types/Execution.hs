@@ -540,7 +540,7 @@ data Event =
                -- TODO: We could include initial state hash here.
                -- Including the whole state is likely not a good idea.
                }
-           -- |The given V0 contract was updated.
+           -- |The given contract was updated.
            | Updated {
                -- |Address of the contract that was updated.
                euAddress :: !ContractAddress,
