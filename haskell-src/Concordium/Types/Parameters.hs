@@ -435,8 +435,14 @@ instance (Serialize a, Ord a) => Serialize (InclusiveRange a) where
         return InclusiveRange{..}
 
 -- |Determine if a value is in a given 'InclusiveRange'.
-isInRange :: (Ord a) => a -> InclusiveRange a -> Bool
+isInRange :: Ord a => a -> InclusiveRange a -> Bool
 isInRange v InclusiveRange{..} = irMin <= v && v <= irMax
+
+closestInRange :: Ord a => a -> InclusiveRange a -> a
+closestInRange v r
+  | isInRange v r = v
+  | v < irMin r = irMin r
+  | otherwise = irMax r
 
 -- |Ranges of allowed commision values that pools may choose from.
 data CommissionRanges = CommissionRanges
