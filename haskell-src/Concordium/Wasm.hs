@@ -49,6 +49,8 @@ module Concordium.Wasm (
   unsafeUseModuleSourceAsCStringLen,
   moduleSourceLength,
   WasmModule(..),
+  getModuleSource,
+  getVersion,
   WasmModuleV(..),
   getModuleRef,
   WasmVersion(..),
@@ -196,6 +198,18 @@ unsafeUseModuleSourceAsCStringLen = unsafeUseAsCStringLen . moduleSource
 
 moduleSourceLength :: ModuleSource v -> Word64
 moduleSourceLength = fromIntegral . BS.length . moduleSource
+
+-- |Get the WasmVersion of a WasmModule.
+getVersion :: WasmModule -> WasmVersion
+getVersion = \case
+  WasmModuleV0 _ -> V0
+  WasmModuleV1 _ -> V1
+
+-- |Get the raw ModuleSource from a WasmModule.
+getModuleSource :: WasmModule -> ByteString
+getModuleSource = \case
+  WasmModuleV0 wmv -> moduleSource . wmvSource $ wmv
+  WasmModuleV1 wmv -> moduleSource . wmvSource $ wmv
 
 -- |A versioned module source. The serialization instance of this type, in contrast to ModuleSource,
 -- records the version that was used.
