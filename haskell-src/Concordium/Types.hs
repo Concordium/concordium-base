@@ -119,6 +119,7 @@ module Concordium.Types (
   putEncodedPayload,
   getEncodedPayload,
   payloadSize,
+  validatePayloadSize,
   TransactionSignHashV0(..),
   TransactionSignHash,
   transactionSignHashToByteString,
@@ -805,15 +806,16 @@ getIncomingAmountsList AccountEncryptedAmount{..} =
 newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
     deriving (Eq, Show, Ord, Num, Real, Enum, Integral, FromJSON, ToJSON) via Word32
 
+-- |Check that the payload size is within bounds of what the protocol version allows.
+validatePayloadSize :: SProtocolVersion pv -> PayloadSize -> Bool
+validatePayloadSize spv PayloadSize{..} = thePayloadSize <= maxPayloadSize spv
+
 -- |Serialization format as specified
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-header>
 instance S.Serialize PayloadSize where
   put (PayloadSize n) = S.putWord32be n
-  get = do
-    thePayloadSize <- S.getWord32be
-    when (thePayloadSize > maxPayloadSize) $ fail "Payload size exceeds maximum transaction payload size."
-    return PayloadSize{..}
+  get = PayloadSize <$> S.getWord32be
 
 -- |Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }

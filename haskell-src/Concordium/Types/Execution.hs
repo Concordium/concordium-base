@@ -1264,6 +1264,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
                  | InvalidUpdateTime -- ^The update timeout is later than the effective time
                  | ExceedsMaxCredentialDeployments -- ^The block contains more than the limit of credential deployments
+                 | InvalidPayloadSize -- ^Payload size exceeds maximum allowed for the protocol version.
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind

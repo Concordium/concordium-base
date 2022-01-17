@@ -3,6 +3,7 @@ module Types.TransactionGen where
 
 import Test.QuickCheck
 
+import Concordium.Types.ProtocolVersion
 import Concordium.Types.Transactions
 import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.FFIDataTypes
@@ -44,7 +45,7 @@ genAccountAddress = AccountAddress . FBS.pack <$> vector accountAddressSize
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
   thSender <- genAccountAddress
-  thPayloadSize <- PayloadSize <$> choose (0, maxPayloadSize)
+  thPayloadSize <- PayloadSize <$> choose (0, maxPayloadSize SP4)
   thNonce <- Nonce <$> arbitrary
   thEnergyAmount <- Energy <$> arbitrary
   thExpiry <- TransactionTime <$> arbitrary
