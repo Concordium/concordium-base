@@ -92,7 +92,10 @@ pub fn build_contract(
         let schema_bytes = to_bytes(schema);
 
         let custom_section = CustomSection {
-            name:     "concordium-schema-v1".into(),
+            name:     match version {
+                WasmVersion::V0 => "concordium-schema-v1".into(),
+                WasmVersion::V1 => "concordium-schema-v2".into(),
+            },
             contents: &schema_bytes,
         };
 

@@ -241,7 +241,7 @@ unsafe extern "C" fn resume_receive_v1(
             if response_status & 0x0000_00ff_0000_0000 != 0 {
                 // this is an environment error. No return value is produced.
                 InvokeResponse::Failure {
-                    code: response_status & !0x0000_00ff_0000_0000,
+                    code: response_status & 0x0000_00ff_0000_0000,
                     data: None,
                 }
             } else {

@@ -165,33 +165,25 @@ pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<R
     Ok(out)
 }
 
-/// Tries to generate a state schema and schemas for parameters of methods.
+/// Tries to generate schemas for parameters and return values of methods.
+/// TODO: Should also work with V0 contracts (where the schema_functions return
+/// schema::Type (for parameter), and there is a state_schema function).
 pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Module> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
     for name in artifact.export.keys() {
-        if let Some(contract_name) = name.as_ref().strip_prefix("concordium_schema_state_") {
-            let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-
-            // Get the mutable reference to the contract schema, or make a new empty one if
-            // an entry does not yet exist.
-            let contract_schema = contract_schemas
-                .entry(contract_name.to_owned())
-                .or_insert_with(schema::Contract::empty);
-
-            contract_schema.state = Some(schema_type);
-        } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
-                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
 
                 let contract_schema = contract_schemas
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::Contract::empty);
-                contract_schema.init = Some(schema_type);
+                contract_schema.init = Some(function_schema);
             } else if rest.contains('.') {
-                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
 
                 // Generates receive-function parameter schema type
                 let split_name: Vec<_> = rest.splitn(2, '.').collect();
@@ -202,7 +194,7 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::Contract::empty);
 
-                contract_schema.receive.insert(function_name.to_owned(), schema_type);
+                contract_schema.receive.insert(function_name.to_owned(), function_schema);
             } else {
                 // do nothing, some other function that is neither init nor
                 // receive.
@@ -215,12 +207,14 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
     })
 }
 
-/// Runs the given schema function and reads the resulting schema from memory,
-/// attempting to parse it as a type. If this fails, an error is returned.
+/// Runs the given schema function and reads the resulting function schema from
+/// memory, attempting to parse it. If this fails, an error is returned.
+/// TODO: Should also work with V0 contracts, where it returns schema::Type
+/// instead of schema::FunctionSchema.
 fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     artifact: &Artifact<I, C>,
     schema_fn_name: &str,
-) -> ExecResult<schema::Type> {
+) -> ExecResult<schema::FunctionSchema> {
     let (ptr, memory) = if let machine::ExecutionOutcome::Success {
         result: Some(Value::I32(ptr)),
         memory,
@@ -239,8 +233,8 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     // Read the schema with offset of the u32
     ensure!(ptr + 4 + len as usize <= memory.len(), "Illegal memory access when reading schema.");
     let schema_bytes = &memory[ptr + 4..ptr + 4 + len as usize];
-    schema::Type::deserial(&mut Cursor::new(schema_bytes))
-        .map_err(|_| anyhow!("Failed deserialising the schema."))
+    schema::FunctionSchema::deserial(&mut Cursor::new(schema_bytes))
+        .map_err(|_| anyhow!("Failed deserialising the function schema."))
 }
 
 /// Get the init methods of the module.
