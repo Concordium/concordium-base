@@ -74,6 +74,7 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
+      Concordium.Types.InvokeContract
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
