@@ -49,6 +49,17 @@ instance AE.FromJSON ContractContext where
     ccEnergy <- obj AE..:? "energy" AE..!= 10_000_000
     return ContractContext{..}
 
+instance AE.ToJSON ContractContext where
+  toJSON ContractContext{..} = AE.object $ [
+    "contract" AE..= ccContract,
+    "amount" AE..= ccAmount,
+    "method" AE..= ccMethod,
+    "parameter" AE..= ccParameter,
+    "energy" AE..= ccEnergy
+    ] ++ case ccInvoker of
+           Nothing -> []
+           Just invoker -> [("invoker", AE.toJSON invoker)]
+
 data InvokeContractResult =
   -- |Contract execution failed for the given reason.
   Failure {
@@ -67,18 +78,38 @@ data InvokeContractResult =
       rcrUsedEnergy :: !Energy
       }
 
+instance AE.FromJSON InvokeContractResult where
+  parseJSON = AE.withObject "InvokeContractResult" $ \obj -> do
+    tag <- obj AE..: "tag"
+    case tag of
+      "failure" -> do
+        rcrReason <- obj AE..: "reason"
+        rcrUsedEnergy <- obj AE..: "usedEnergy"
+        return Failure{..}
+      "success" -> do
+        rv <- obj AE..:? "returnValue"
+        rcrReturnValue <- decodeReturnValue rv
+        rcrEvents <- obj AE..: "events"
+        rcrUsedEnergy <- obj AE..: "usedEnergy"
+        return Success{..}
+      _ -> fail $ "Invalid tag: " ++ tag
+    where decodeReturnValue rv = case BS16.decode . Text.encodeUtf8 <$> rv of
+            Nothing -> return Nothing
+            Just (bs, unparsed) ->
+              if BS.null unparsed
+                then return (Just bs)
+                else fail $ "Failed decoding return value from base16."
+
 instance AE.ToJSON InvokeContractResult where
   toJSON Failure{..} = AE.object [
     "tag" AE..= AE.String "failure",
     "reason" AE..= rcrReason,
     "usedEnergy" AE..= rcrUsedEnergy
     ]
-  toJSON Success{..} = AE.object [
+  toJSON Success{..} = AE.object $ [
     "tag" AE..= AE.String "success",
-    ("returnValue",
-     case rcrReturnValue of
-      Nothing -> AE.Null
-      Just rv -> AE.String . Text.decodeUtf8 . BS16.encode $ rv),
     "events" AE..= rcrEvents,
     "usedEnergy" AE..= rcrUsedEnergy
-    ]
+    ] ++ case rcrReturnValue of
+           Nothing -> []
+           Just rv -> [("returnValue", AE.String . Text.decodeUtf8 . BS16.encode $ rv)]
