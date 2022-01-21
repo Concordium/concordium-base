@@ -865,8 +865,8 @@ fn handle_create_credential(cc: CreateCredential) {
         let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
         let mut randomness = BTreeMap::new();
-        // NB: We insert the reference to the credential here so as to avoid cloning
-        // (which is not implemented for the type)
+        // we insert a credential without proofs, to be compatible with the genesis
+        // tool, and concordium-client import.
         credentials.insert(ki, cdi_no_proofs);
         randomness.insert(ki, &commitments_randomness);
         (Versioned::new(VERSION_0, credentials), randomness)
