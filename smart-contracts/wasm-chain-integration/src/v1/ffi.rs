@@ -244,21 +244,19 @@ unsafe extern "C" fn resume_receive_v1(
                     data,
                 }
             }
+        } else if new_state_tag == 0 {
+            InvokeResponse::Success {
+                new_state: None,
+                new_balance: Amount::from_micro_ccd(new_amount),
+                data,
+            }
         } else {
-            if new_state_tag == 0 {
-                InvokeResponse::Success {
-                    new_state: None,
-                    new_balance: Amount::from_micro_ccd(new_amount),
-                    data,
-                }
-            } else {
-                let new_state =
-                    slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
-                InvokeResponse::Success {
-                    new_state: Some(new_state),
-                    new_balance: Amount::from_micro_ccd(new_amount),
-                    data,
-                }
+            let new_state =
+                slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
+            InvokeResponse::Success {
+                new_state: Some(new_state),
+                new_balance: Amount::from_micro_ccd(new_amount),
+                data,
             }
         };
         // mark the interrupted state as consumed in case any panics happen from here to
@@ -389,7 +387,7 @@ unsafe extern "C" fn return_value_to_byte_array(
     rv_ptr: *mut Vec<u8>,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let mut bytes = (&mut *rv_ptr).clone();
+    let mut bytes = (&*rv_ptr).clone();
     bytes.shrink_to_fit();
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
