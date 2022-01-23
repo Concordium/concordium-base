@@ -667,9 +667,11 @@ pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {
         /// New state, if it changed.
-        new_state: Option<v0::State>,
+        new_state:   Option<v0::State>,
+        /// Balance after the execution of the interrupt.
+        new_balance: Amount,
         /// Some calls do not have any return values, such as transfers.
-        data:      Option<ParameterVec>,
+        data:        Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
@@ -834,8 +836,10 @@ pub fn resume_receive(
     let response = match response {
         InvokeResponse::Success {
             new_state,
+            new_balance,
             data,
         } => {
+            interrupted_state.host.receive_ctx.self_balance = new_balance;
             // the response value is constructed by setting the last 5 bytes to 0
             // for the first 3 bytes, the first bit is 1 if the state changed, and 0
             // otherwise the remaining bits are the index of the parameter.

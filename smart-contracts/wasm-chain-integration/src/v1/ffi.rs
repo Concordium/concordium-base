@@ -203,6 +203,7 @@ unsafe extern "C" fn resume_receive_v1(
     // (potentially) updated state of the contract, or null if response_status is an error
     state_bytes: *const u8,
     state_bytes_len: size_t,
+    new_amount: u64,
     // whether the call succeeded or not.
     response_status: u64,
     // response from the call.
@@ -247,6 +248,7 @@ unsafe extern "C" fn resume_receive_v1(
             if new_state_tag == 0 {
                 InvokeResponse::Success {
                     new_state: None,
+                    new_balance: Amount::from_micro_ccd(new_amount),
                     data,
                 }
             } else {
@@ -254,6 +256,7 @@ unsafe extern "C" fn resume_receive_v1(
                     slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
                 InvokeResponse::Success {
                     new_state: Some(new_state),
+                    new_balance: Amount::from_micro_ccd(new_amount),
                     data,
                 }
             }
