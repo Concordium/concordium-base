@@ -1515,7 +1515,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   -- |Delegation target is not a baker
                   | DelegationTargetNotABaker !BakerId
                   -- |The amount would result in pool capital higher than the maximum threshold
-                  | StakeOverMaximumThresholdForBaking
+                  | StakeOverMaximumThresholdForPool
                   -- |The amount would result in pool with a too high fraction of delegated capital.
                   | PoolWouldBecomeOverDelegated
     deriving (Show, Eq, Generic)
@@ -1586,7 +1586,7 @@ instance S.Serialize RejectReason where
     DelegatorInCooldown -> S.putWord8 48
     NotADelegator addr -> S.putWord8 49 <> S.put addr
     DelegationTargetNotABaker bid -> S.putWord8 50 <> S.put bid
-    StakeOverMaximumThresholdForBaking -> S.putWord8 51
+    StakeOverMaximumThresholdForPool -> S.putWord8 51
     PoolWouldBecomeOverDelegated -> S.putWord8 52
 
   get = S.getWord8 >>= \case
@@ -1648,7 +1648,7 @@ instance S.Serialize RejectReason where
     48 -> return DelegatorInCooldown
     49 -> NotADelegator <$> S.get
     50 -> DelegationTargetNotABaker <$> S.get
-    51 -> return StakeOverMaximumThresholdForBaking
+    51 -> return StakeOverMaximumThresholdForPool
     52 -> return PoolWouldBecomeOverDelegated
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
