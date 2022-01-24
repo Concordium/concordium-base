@@ -310,11 +310,11 @@ data Payload =
       -- |The URL referencing the baker's metadata.
       cbMetadataURL :: !(Maybe UrlText),
       -- |The commission the pool owner takes on transaction fees.
-      cbTransactionFeeCommission :: !(Maybe RewardFraction),
+      cbTransactionFeeCommission :: !(Maybe AmountFraction),
       -- |The commission the pool owner takes on baking rewards.
-      cbBakingRewardCommission :: !(Maybe RewardFraction),
+      cbBakingRewardCommission :: !(Maybe AmountFraction),
       -- |The commission the pool owner takes on finalization rewards.
-      cbFinalizationRewardCommission :: !(Maybe RewardFraction)
+      cbFinalizationRewardCommission :: !(Maybe AmountFraction)
   }
   -- | Configure an account's stake delegation.
   | ConfigureDelegation {
@@ -928,7 +928,7 @@ data Event =
               -- |Baker account
               ebstfcAccount :: !AccountAddress,
               -- |The transaction fee commission.
-              ebstfcTransactionFeeCommission :: !RewardFraction
+              ebstfcTransactionFeeCommission :: !AmountFraction
            }
            -- | Updated baking reward commission for baker pool
            | BakerSetBakingRewardCommission {
@@ -937,7 +937,7 @@ data Event =
               -- |Baker account
               ebsbrcAccount :: !AccountAddress,
               -- |The baking reward commission
-              ebsbrcBakingRewardCommission :: !RewardFraction
+              ebsbrcBakingRewardCommission :: !AmountFraction
            }
            -- | Updated finalization reward commission for baker pool
            | BakerSetFinalizationRewardCommission {
@@ -946,7 +946,7 @@ data Event =
               -- |Baker account
               ebsfrcAccount :: !AccountAddress,
               -- |The finalization reward commission
-              ebsfrcFinalizationRewardCommission :: !RewardFraction
+              ebsfrcFinalizationRewardCommission :: !AmountFraction
            }
            | DelegationStakeIncreased {
               -- |Delegator's id

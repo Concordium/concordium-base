@@ -60,9 +60,9 @@ data MintDistribution cpv = MintDistribution {
     -- |Mint rate per slot
     _mdMintPerSlot :: !(MintPerSlotForCPV0 cpv),
     -- |BakingRewMintFrac: the fraction allocated to baker rewards
-    _mdBakingReward :: !RewardFraction,
+    _mdBakingReward :: !AmountFraction,
     -- |FinRewMintFrac: the fraction allocated to finalization rewards
-    _mdFinalizationReward :: !RewardFraction
+    _mdFinalizationReward :: !AmountFraction
 } deriving (Eq, Show)
 makeClassy ''MintDistribution
 
@@ -83,7 +83,7 @@ instance IsChainParametersVersion cpv => FromJSON (MintDistribution cpv) where
 
     _mdBakingReward <- v .: "bakingReward"
     _mdFinalizationReward <- v .: "finalizationReward"
-    unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
+    unless (isJust (_mdBakingReward `addAmountFraction` _mdFinalizationReward)) $ fail "Amount fractions exceed 100%"
     return MintDistribution{..}
 
 instance IsChainParametersVersion cpv => Serialize (MintDistribution cpv) where
@@ -92,7 +92,7 @@ instance IsChainParametersVersion cpv => Serialize (MintDistribution cpv) where
     _mdMintPerSlot <- get
     _mdBakingReward <- get
     _mdFinalizationReward <- get
-    unless (isJust (_mdBakingReward `addRewardFraction` _mdFinalizationReward)) $ fail "Reward fractions exceed 100%"
+    unless (isJust (_mdBakingReward `addAmountFraction` _mdFinalizationReward)) $ fail "Amount fractions exceed 100%"
     return MintDistribution{..}
 
 instance IsChainParametersVersion cpv => HashableTo Hash.Hash (MintDistribution cpv) where
@@ -107,9 +107,9 @@ instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (Min
 -- foundation account).
 data TransactionFeeDistribution = TransactionFeeDistribution {
     -- |BakerTransFrac: the fraction allocated to the baker
-    _tfdBaker :: !RewardFraction,
+    _tfdBaker :: !AmountFraction,
     -- |The fraction allocated to the GAS account
-    _tfdGASAccount :: !RewardFraction
+    _tfdGASAccount :: !AmountFraction
 } deriving (Eq, Show)
 makeClassy ''TransactionFeeDistribution
 
@@ -122,7 +122,7 @@ instance FromJSON TransactionFeeDistribution where
   parseJSON = withObject "TransactionFeeDistribution" $ \v -> do
     _tfdBaker <- v .: "baker"
     _tfdGASAccount <- v .: "gasAccount"
-    unless (isJust (_tfdBaker `addRewardFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
+    unless (isJust (_tfdBaker `addAmountFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
     return TransactionFeeDistribution{..}
 
 instance Serialize TransactionFeeDistribution where
@@ -130,7 +130,7 @@ instance Serialize TransactionFeeDistribution where
   get = do
     _tfdBaker <- get
     _tfdGASAccount <- get
-    unless (isJust (_tfdBaker `addRewardFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
+    unless (isJust (_tfdBaker `addAmountFraction` _tfdGASAccount)) $ fail "Transaction fee fractions exceed 100%"
     return TransactionFeeDistribution{..}
 
 instance HashableTo Hash.Hash TransactionFeeDistribution where
@@ -140,16 +140,16 @@ instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 
 data GASRewards = GASRewards {
   -- |BakerPrevTransFrac: fraction paid to baker
-  _gasBaker :: !RewardFraction,
+  _gasBaker :: !AmountFraction,
   -- |FeeAddFinalisationProof: fraction paid for including a
   -- finalization proof in a block.
-  _gasFinalizationProof :: !RewardFraction,
+  _gasFinalizationProof :: !AmountFraction,
   -- |FeeAccountCreation: fraction paid for including each
   -- account creation transaction in a block.
-  _gasAccountCreation :: !RewardFraction,
+  _gasAccountCreation :: !AmountFraction,
   -- |FeeUpdate: fraction paid for including an update
   -- transaction in a block.
-  _gasChainUpdate :: !RewardFraction
+  _gasChainUpdate :: !AmountFraction
 } deriving (Eq, Show)
 makeClassy ''GASRewards
 
@@ -447,11 +447,11 @@ closestInRange v r
 -- |Ranges of allowed commision values that pools may choose from.
 data CommissionRanges = CommissionRanges
     { -- |The range of allowed finalization commisions.
-      _finalizationCommissionRange :: !(InclusiveRange RewardFraction),
+      _finalizationCommissionRange :: !(InclusiveRange AmountFraction),
       -- |The range of allowed baker commisions.
-      _bakingCommissionRange :: !(InclusiveRange RewardFraction),
+      _bakingCommissionRange :: !(InclusiveRange AmountFraction),
       -- |The range of allowed transaction commisions.
-      _transactionCommissionRange :: !(InclusiveRange RewardFraction)
+      _transactionCommissionRange :: !(InclusiveRange AmountFraction)
     }
     deriving (Eq, Show)
 makeLenses ''CommissionRanges
@@ -477,9 +477,9 @@ data PoolParameters cpv where
       _ppMinimumEquityCapital :: !Amount,
       -- |Minimum fraction of the total supply required for a baker to qualify
       -- as a finalizer.
-      _ppMinimumFinalizationCapital :: !RewardFraction,
+      _ppMinimumFinalizationCapital :: !AmountFraction,
       -- |Maximum fraction of the total supply of that a new baker can have.
-      _ppCapitalBound :: !RewardFraction,
+      _ppCapitalBound :: !AmountFraction,
       -- |The maximum leverage that a baker can have as a ratio of total stake
       -- to equity capital.
       _ppLeverageBound :: !LeverageFactor
@@ -551,13 +551,13 @@ ppMinimumEquityCapital =
 
 -- |Lens for '_ppMinimumFinalizationCapital'
 {-# INLINE ppMinimumFinalizationCapital #-}
-ppMinimumFinalizationCapital :: Lens' (PoolParameters 'ChainParametersV1) RewardFraction
+ppMinimumFinalizationCapital :: Lens' (PoolParameters 'ChainParametersV1) AmountFraction
 ppMinimumFinalizationCapital =
   lens _ppMinimumFinalizationCapital (\pp x -> pp{_ppMinimumFinalizationCapital = x})
 
 -- |Lens for '_ppCapitalBound'
 {-# INLINE ppCapitalBound #-}
-ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) RewardFraction
+ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) AmountFraction
 ppCapitalBound =
   lens _ppCapitalBound (\pp x -> pp{_ppCapitalBound = x})
 
@@ -675,24 +675,24 @@ makeChainParametersV1 ::
     -- |Foundation account
     AccountIndex ->
     -- |Fraction of finalization rewards charged by the L-Pool.
-    RewardFraction ->
+    AmountFraction ->
     -- |Fraction of baking rewards charged by the L-pool.
-    RewardFraction ->
+    AmountFraction ->
     -- |Fraction of transaction rewards charged by the L-pool.
-    RewardFraction ->
+    AmountFraction ->
     -- |The range of allowed finalization commisions for normal pools.
-    InclusiveRange RewardFraction ->
+    InclusiveRange AmountFraction ->
     -- |The range of allowed baker commisions for normal pools.
-    InclusiveRange RewardFraction ->
+    InclusiveRange AmountFraction ->
     -- |The range of allowed transaction commisions for normal pools.
-    InclusiveRange RewardFraction ->
+    InclusiveRange AmountFraction ->
     -- |Minimum equity capital required for a new baker.
     Amount ->
     -- |Minimum fraction of the total supply required for a baker to qualify
     -- as a finalizer.
-    RewardFraction ->
+    AmountFraction ->
     -- |Maximum fraction of the total supply of that a new baker can have.
-    RewardFraction ->
+    AmountFraction ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
     -- to equity capital.
     LeverageFactor ->

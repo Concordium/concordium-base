@@ -280,10 +280,10 @@ test-suite test
       Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec
       Types.AddressesSpec
+      Types.AmountFraction
       Types.AmountSpec
       Types.ParametersSpec
       Types.PayloadSerializationSpec
-      Types.RewardTypes
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec

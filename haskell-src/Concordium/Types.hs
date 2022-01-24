@@ -21,11 +21,11 @@ module Concordium.Types (
   -- * Mint and reward rates
   MintRate(..),
   mintAmount,
-  RewardFraction(..),
-  makeRewardFraction,
-  addRewardFraction,
+  AmountFraction(..),
+  makeAmountFraction,
+  addAmountFraction,
   hundredThousand,
-  complementRewardFraction,
+  complementAmountFraction,
   takeFraction,
   fractionToRational,
   CommissionRates(..),
@@ -255,7 +255,7 @@ type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 
 -- |A wrapper type over units that are measured as parts per 100000.
--- This wrapper will be used by both @RewardFraction@ and @ElectionDifficulty@.
+-- This wrapper will be used by both @AmountFraction@ and @ElectionDifficulty@.
 -- It was agreed in tokenomics discussions to be sufficient.
 newtype PartsPerHundredThousands = PartsPerHundredThousands { partsPerHundredThousand :: Word32 }
   deriving newtype (Eq, Ord, Num, Real, Enum, Integral)
@@ -514,41 +514,38 @@ mintAmount :: MintRate -> Amount -> Amount
 {-# INLINE mintAmount #-}
 mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
 
--- TODO: Rename to make this more general
--- |A fraction in [0,1], represented as parts per 100000.
--- This resolution (thousandths of a percent) was agreed in tokenomics discussions
--- to be sufficient.
-newtype RewardFraction = RewardFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
+-- |A fraction in [0,1] of an 'Amount', represented as parts per 100000.
+newtype AmountFraction = AmountFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
   deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize)
 
-makeRewardFraction
+makeAmountFraction
    :: Word32
-   -> RewardFraction
-makeRewardFraction = RewardFraction . makePartsPerHundredThousands
+   -> AmountFraction
+makeAmountFraction = AmountFraction . makePartsPerHundredThousands
 
-addRewardFraction :: RewardFraction -> RewardFraction -> Maybe RewardFraction
-addRewardFraction (RewardFraction a) (RewardFraction b) = RewardFraction <$> addPartsPerHundredThousands a b
+addAmountFraction :: AmountFraction -> AmountFraction -> Maybe AmountFraction
+addAmountFraction (AmountFraction a) (AmountFraction b) = AmountFraction <$> addPartsPerHundredThousands a b
 
 -- |Compute @1 - f@.
-complementRewardFraction :: RewardFraction -> RewardFraction
-complementRewardFraction (RewardFraction f) = RewardFraction $ complementPartsPerHundredThousands f
+complementAmountFraction :: AmountFraction -> AmountFraction
+complementAmountFraction (AmountFraction f) = AmountFraction $ complementPartsPerHundredThousands f
 
 -- |Compute a fraction of an amount.
 -- The amount is rounded down to the nearest microGTU.
-takeFraction :: RewardFraction -> Amount -> Amount
-takeFraction (RewardFraction f) = takeFractionFromPartsPerHundredThousands f
+takeFraction :: AmountFraction -> Amount -> Amount
+takeFraction (AmountFraction f) = takeFractionFromPartsPerHundredThousands f
 
-fractionToRational :: RewardFraction -> Rational
-fractionToRational (RewardFraction f) = partsPerHundredThousandsToRational f
+fractionToRational :: AmountFraction -> Rational
+fractionToRational (AmountFraction f) = partsPerHundredThousandsToRational f
 
 -- |The commission rates charged by a pool owner.
 data CommissionRates = CommissionRates
     { -- |Fraction of finalization rewards charged by the pool owner.
-      _finalizationCommission :: RewardFraction,
+      _finalizationCommission :: AmountFraction,
       -- |Fraction of baking rewards charged by the pool owner.
-      _bakingCommission :: RewardFraction,
+      _bakingCommission :: AmountFraction,
       -- |Fraction of transaction rewards charged by the pool owner.
-      _transactionCommission :: RewardFraction
+      _transactionCommission :: AmountFraction
     }
     deriving (Eq, Show)
 

@@ -112,12 +112,12 @@ genUrlText =
             (Text.pack <$> scale (min (fromIntegral maxUrlTextLength)) (listOf arbitrary))
             ((<= fromIntegral maxUrlTextLength) . BS.length . TE.encodeUtf8)
 
-genRewardFraction :: Gen RewardFraction
-genRewardFraction = makeRewardFraction <$> arbitrary `suchThat` (<= 100000)
+genAmountFraction :: Gen AmountFraction
+genAmountFraction = makeAmountFraction <$> arbitrary `suchThat` (<= 100000)
 
-genInclusiveRangeOfRewardFraction :: Gen (InclusiveRange RewardFraction)
-genInclusiveRangeOfRewardFraction = do
-    (irMin, irMax) <- ((,) <$> genRewardFraction <*> genRewardFraction)
+genInclusiveRangeOfAmountFraction :: Gen (InclusiveRange AmountFraction)
+genInclusiveRangeOfAmountFraction = do
+    (irMin, irMax) <- ((,) <$> genAmountFraction <*> genAmountFraction)
                         `suchThat` (\(i0, i1) -> i0 <= i1)
     return InclusiveRange{..}
 
@@ -250,9 +250,9 @@ genPayloadConfigureBaker = do
             bkwpProofAggregation = snd aggPair
         }
     cbMetadataURL <- liftArbitrary genUrlText
-    cbTransactionFeeCommission <- liftArbitrary genRewardFraction
-    cbBakingRewardCommission <- liftArbitrary genRewardFraction
-    cbFinalizationRewardCommission <- liftArbitrary genRewardFraction
+    cbTransactionFeeCommission <- liftArbitrary genAmountFraction
+    cbBakingRewardCommission <- liftArbitrary genAmountFraction
+    cbFinalizationRewardCommission <- liftArbitrary genAmountFraction
     return ConfigureBaker{..}
 
 genDelegationTarget :: Gen DelegationTarget
@@ -341,13 +341,13 @@ genCredentialDeploymentInformation = do
 
 genCommissionRates :: Gen CommissionRates
 genCommissionRates =
-    CommissionRates <$> genRewardFraction <*> genRewardFraction <*> genRewardFraction
+    CommissionRates <$> genAmountFraction <*> genAmountFraction <*> genAmountFraction
 
 genCommissionRanges :: Gen CommissionRanges
 genCommissionRanges =
-    CommissionRanges <$> genInclusiveRangeOfRewardFraction
-                     <*> genInclusiveRangeOfRewardFraction
-                     <*> genInclusiveRangeOfRewardFraction
+    CommissionRanges <$> genInclusiveRangeOfAmountFraction
+                     <*> genInclusiveRangeOfAmountFraction
+                     <*> genInclusiveRangeOfAmountFraction
 
 genChainParametersV0 :: Gen (ChainParameters' 'ChainParametersV0)
 genChainParametersV0 = do
@@ -418,8 +418,8 @@ genPoolParametersV1 = do
     _ppLPoolCommissions <- genCommissionRates
     _ppCommissionBounds <- genCommissionRanges
     _ppMinimumEquityCapital <- genAmount
-    _ppMinimumFinalizationCapital <- genRewardFraction
-    _ppCapitalBound <- genRewardFraction
+    _ppMinimumFinalizationCapital <- genAmountFraction
+    _ppCapitalBound <- genAmountFraction
     _ppLeverageBound <- genLeverageFactor
     return PoolParametersV1{..}
 
@@ -541,9 +541,9 @@ genEvent spv =
                 if supportDelegation then
                     [BakerSetOpenStatus <$> genBakerId <*> genAccountAddress <*> arbitrary,
                      BakerSetMetadataURL <$> genBakerId <*> genAccountAddress <*> genUrlText,
-                     BakerSetTransactionFeeCommission <$> genBakerId <*> genAccountAddress <*> genRewardFraction,
-                     BakerSetBakingRewardCommission <$> genBakerId <*> genAccountAddress <*> genRewardFraction,
-                     BakerSetFinalizationRewardCommission <$> genBakerId <*> genAccountAddress <*> genRewardFraction,
+                     BakerSetTransactionFeeCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
+                     BakerSetBakingRewardCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
+                     BakerSetFinalizationRewardCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
                      DelegationStakeIncreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
                      DelegationStakeDecreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
                      DelegationSetRestakeEarnings <$> genDelegatorId <*> genAccountAddress <*> arbitrary,
@@ -813,24 +813,24 @@ genMintDistribution scpv = do
         SCPV1 -> return MintPerSlotForCPV0None
     bf <- choose (0, 100000)
     ff <- choose (0, 100000 - bf)
-    let _mdBakingReward = makeRewardFraction bf
-        _mdFinalizationReward = makeRewardFraction ff
+    let _mdBakingReward = makeAmountFraction bf
+        _mdFinalizationReward = makeAmountFraction ff
     return MintDistribution{..}
 
 genTransactionFeeDistribution :: Gen TransactionFeeDistribution
 genTransactionFeeDistribution = do
     bf <- choose (0, 100000)
     gf <- choose (0, 100000 - bf)
-    let _tfdBaker = makeRewardFraction bf
-        _tfdGASAccount = makeRewardFraction gf
+    let _tfdBaker = makeAmountFraction bf
+        _tfdGASAccount = makeAmountFraction gf
     return TransactionFeeDistribution{..}
 
 genGASRewards :: Gen GASRewards
 genGASRewards = do
-    _gasBaker <- makeRewardFraction <$> choose (0, 100000)
-    _gasFinalizationProof <- makeRewardFraction <$> choose (0, 100000)
-    _gasAccountCreation <- makeRewardFraction <$> choose (0, 100000)
-    _gasChainUpdate <- makeRewardFraction <$> choose (0, 100000)
+    _gasBaker <- makeAmountFraction <$> choose (0, 100000)
+    _gasFinalizationProof <- makeAmountFraction <$> choose (0, 100000)
+    _gasAccountCreation <- makeAmountFraction <$> choose (0, 100000)
+    _gasChainUpdate <- makeAmountFraction <$> choose (0, 100000)
     return GASRewards{..}
 
 genHigherLevelKeys :: Gen (HigherLevelKeys a)

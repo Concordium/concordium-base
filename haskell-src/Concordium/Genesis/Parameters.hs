@@ -91,23 +91,24 @@ makeGenesisChainParametersV1 ::
     -- |Foundation account
     AccountAddress ->
     -- |Fraction of finalization rewards charged by the L-Pool.
-    RewardFraction ->
+    AmountFraction ->
     -- |Fraction of baking rewards charged by the L-pool.
-    RewardFraction ->
+    AmountFraction ->
     -- |Fraction of transaction rewards charged by the L-pool.
-    RewardFraction ->
-    -- |Bounds on the commission rates that may be charged by bakers.
-    -- TODO: Document these
-    InclusiveRange RewardFraction ->
-    InclusiveRange RewardFraction ->
-    InclusiveRange RewardFraction ->
+    AmountFraction ->
+    -- |The range of allowed finalization commisions for normal pools.
+    InclusiveRange AmountFraction ->
+    -- |The range of allowed baker commisions for normal pools.
+    InclusiveRange AmountFraction ->
+    -- |The range of allowed transaction commisions for normal pools.
+    InclusiveRange AmountFraction ->
     -- |Minimum equity capital required for a new baker.
     Amount -> 
     -- |Minimum fraction of the total supply required for a baker to qualify
     -- as a finalizer.
-    RewardFraction -> 
+    AmountFraction -> 
     -- |Maximum fraction of the total supply of that a new baker can have.
-    RewardFraction ->
+    AmountFraction ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
     -- to equity capital.
     LeverageFactor ->
