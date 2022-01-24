@@ -310,7 +310,7 @@ impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
     fn sender_policies(&self) -> ExecResult<&[u8]> { (*self).sender_policies() }
 }
 
-impl<'a> HasReceiveContext for ReceiveContext<&'a [u8]> {
+impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
     type MetadataType = ChainMetadata;
 
     fn metadata(&self) -> &Self::MetadataType { &self.metadata }
@@ -325,7 +325,7 @@ impl<'a> HasReceiveContext for ReceiveContext<&'a [u8]> {
 
     fn owner(&self) -> ExecResult<&AccountAddress> { Ok(&self.owner) }
 
-    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(&self.sender_policies) }
+    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.sender_policies.as_ref()) }
 }
 
 pub trait HasChainMetadata {
@@ -835,13 +835,7 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
     }
 }
 
-pub type Parameter<'a> = &'a [u8];
-
-pub type PolicyBytes<'a> = &'a [u8];
-
-pub type OwnedPolicyBytes = Vec<u8>;
-
-/// Invokes an init-function from a given artifact
+/// Invokes an init-function from a given artifact.
 pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     artifact: &Artifact<ProcessedImports, C>,
     amount: u64,

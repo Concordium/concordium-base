@@ -1,12 +1,14 @@
 use anyhow::bail;
-use concordium_contracts_common::{Address, Amount, ChainMetadata, ContractAddress, Timestamp};
+use concordium_contracts_common::{
+    Address, Amount, ChainMetadata, ContractAddress, Parameter, Timestamp,
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
     constants::MAX_ACTIVATION_FRAMES,
     utils::TestHost,
     v0::{
-        ConcordiumAllowedImports, InitContext, InitHost, Logs, Outcome, Parameter, PolicyBytes,
+        ConcordiumAllowedImports, InitContext, InitHost, Logs, Outcome, PolicyBytes,
         ProcessedImports, ReceiveContext, ReceiveHost, State,
     },
     InterpreterEnergy,
@@ -537,7 +539,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 activation_frames: MAX_ACTIVATION_FRAMES,
                 logs:              Logs::new(),
                 state:             State::new(None),
-                param:             &[],
+                param:             Parameter::from(&[] as &[u8]),
                 init_ctx:          &init_ctx,
             }
         };
@@ -577,13 +579,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             }
         };
 
-        let run_receive = |state, params, name, args| {
+        let run_receive = |state, params: &'static [u8], name, args| {
             // since we move the rest of the variables we must first take a reference to
             // only move the reference to the artifact making this closure copyable.
             let artifact = &artifact;
             move |b: &mut criterion::Bencher| {
                 b.iter(|| {
-                    let mut host = setup_receive_host(State::new(state), params);
+                    let mut host = setup_receive_host(State::new(state), params.into());
                     let r = artifact
                         .run(&mut host, name, args)
                         .expect_err("Execution should fail due to out of energy.");

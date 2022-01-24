@@ -16,6 +16,10 @@ use wasm_transform::{
 /// Maximum length, in bytes, of an export function name.
 pub const MAX_EXPORT_NAME_LEN: usize = 100;
 
+pub type PolicyBytes<'a> = &'a [u8];
+
+pub type OwnedPolicyBytes = Vec<u8>;
+
 /// Chain context accessible to the init methods.
 ///
 /// TODO: We could optimize this to be initialized lazily
@@ -28,12 +32,24 @@ pub struct InitContext<Policies = Vec<OwnedPolicy>> {
     pub sender_policies: Policies,
 }
 
+/// Convert from a borrowed variant to the owned one. This clones the slice into
+/// a vector.
+impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
+    fn from(borrowed: InitContext<PolicyBytes<'a>>) -> Self {
+        Self {
+            metadata:        borrowed.metadata,
+            init_origin:     borrowed.init_origin,
+            sender_policies: borrowed.sender_policies.into(),
+        }
+    }
+}
+
 /// Chain context accessible to the receive methods.
 ///
 /// TODO: We could optimize this to be initialized lazily.
-#[derive(SerdeDeserialize)]
+#[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
 pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
     pub metadata:        ChainMetadata,
     pub invoker:         AccountAddress,  //32 bytes
@@ -42,6 +58,22 @@ pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
     pub sender:          Address,         // 9 or 33 bytes
     pub owner:           AccountAddress,  // 32 bytes
     pub sender_policies: Policies,
+}
+
+/// Convert from a borrowed variant to the owned one. This clones the slice into
+/// a vector.
+impl<'a> From<ReceiveContext<PolicyBytes<'a>>> for ReceiveContext<OwnedPolicyBytes> {
+    fn from(borrowed: ReceiveContext<PolicyBytes<'a>>) -> Self {
+        Self {
+            metadata:        borrowed.metadata,
+            invoker:         borrowed.invoker,
+            self_address:    borrowed.self_address,
+            self_balance:    borrowed.self_balance,
+            sender:          borrowed.sender,
+            owner:           borrowed.owner,
+            sender_policies: borrowed.sender_policies.into(),
+        }
+    }
 }
 
 impl<Policies> InitContext<Policies> {
