@@ -379,6 +379,14 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
   where go start = G.getWord8 >>= \case
             0 -> do
               dmMod <- S.get
+              -- in protocol 1..3 only version 0 modules were supported
+              -- and this was checked during serialization
+              let onlyVersion0 = case spv of
+                    SP1 -> True
+                    SP2 -> True
+                    SP3 -> True
+                    _ -> False
+              when (onlyVersion0 && Wasm.getVersion dmMod /= Wasm.V0) $ fail "Unsupported Wasm version"
               return DeployModule{..}
             1 -> do
               icAmount <- S.get
