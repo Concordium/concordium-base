@@ -33,20 +33,36 @@ pub trait SchemaType {
     fn get_type() -> crate::schema::Type;
 }
 
-/// Contains all the contract schemas for a module
+/// Contains all the contract schemas for a V0 module
 #[derive(Debug, Clone)]
-pub struct Module {
-    pub contracts: BTreeMap<String, Contract>,
+pub struct ModuleV0 {
+    pub contracts: BTreeMap<String, ContractV0>,
 }
 
-/// Describes all the schemas of a smart contract.
+/// Contains all the contract schemas for a V1 module
 #[derive(Debug, Clone)]
-pub struct Contract {
+pub struct ModuleV1 {
+    pub contracts: BTreeMap<String, ContractV1>,
+}
+
+/// Describes all the schemas of a V0 smart contract.
+/// The [Default] instance produces an empty schema.
+#[derive(Debug, Default, Clone)]
+pub struct ContractV0 {
+    pub state:   Option<Type>,
+    pub init:    Option<Type>,
+    pub receive: BTreeMap<String, Type>,
+}
+
+/// Describes all the schemas of a V1 smart contract.
+#[derive(Debug, Default, Clone)]
+/// The [Default] instance produces an empty schema.
+pub struct ContractV1 {
     pub init:    Option<FunctionSchema>,
     pub receive: BTreeMap<String, FunctionSchema>,
 }
 
-/// Describes the schema of an init or a receive function.
+/// Describes the schema of an init or a receive function for V1 contracts.
 #[derive(Debug, Clone)]
 pub enum FunctionSchema {
     Parameter(Type),
@@ -55,15 +71,6 @@ pub enum FunctionSchema {
         parameter:    Type,
         return_value: Type,
     },
-}
-
-impl Contract {
-    pub fn empty() -> Contract {
-        Contract {
-            init:    None,
-            receive: BTreeMap::new(),
-        }
-    }
 }
 
 /// Schema for the fields of a struct or some enum variant.
@@ -281,24 +288,50 @@ impl Deserial for Fields {
     }
 }
 
-impl Serial for Module {
+impl Serial for ModuleV0 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.contracts.serial(out)?;
         Ok(())
     }
 }
 
-impl Deserial for Module {
+impl Serial for ModuleV1 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.contracts.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Deserial for ModuleV0 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
         let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(Module {
+        Ok(ModuleV0 {
             contracts,
         })
     }
 }
 
-impl Serial for Contract {
+impl Deserial for ModuleV1 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ModuleV1 {
+            contracts,
+        })
+    }
+}
+
+impl Serial for ContractV0 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.state.serial(out)?;
+        self.init.serial(out)?;
+        self.receive.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Serial for ContractV1 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.init.serial(out)?;
         self.receive.serial(out)?;
@@ -306,12 +339,26 @@ impl Serial for Contract {
     }
 }
 
-impl Deserial for Contract {
+impl Deserial for ContractV0 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let state = source.get()?;
+        let init = source.get()?;
+        let len: u32 = source.get()?;
+        let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ContractV0 {
+            state,
+            init,
+            receive,
+        })
+    }
+}
+
+impl Deserial for ContractV1 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let init = source.get()?;
         let len: u32 = source.get()?;
         let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
-        Ok(Contract {
+        Ok(ContractV1 {
             init,
             receive,
         })
