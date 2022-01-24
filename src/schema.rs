@@ -73,6 +73,32 @@ pub enum FunctionSchema {
     },
 }
 
+impl FunctionSchema {
+    /// Extract the parameter schema if it exists.
+    pub fn parameter(&self) -> Option<&Type> {
+        match self {
+            FunctionSchema::Parameter(ty) => Some(ty),
+            FunctionSchema::ReturnValue(_) => None,
+            FunctionSchema::Both {
+                parameter,
+                ..
+            } => Some(parameter),
+        }
+    }
+
+    /// Extract the return value schema if it exists.
+    pub fn return_value(&self) -> Option<&Type> {
+        match self {
+            FunctionSchema::Parameter(_) => None,
+            FunctionSchema::ReturnValue(rv) => Some(rv),
+            FunctionSchema::Both {
+                return_value,
+                ..
+            } => Some(return_value),
+        }
+    }
+}
+
 /// Schema for the fields of a struct or some enum variant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
