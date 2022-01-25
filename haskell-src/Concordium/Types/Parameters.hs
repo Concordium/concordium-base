@@ -465,6 +465,10 @@ instance Serialize CommissionRanges where
 
 type LeverageFactor = Ratio Word64
 
+-- |Apply a leverage factor to a capital amount.
+applyLeverageFactor :: LeverageFactor -> Amount -> Amount
+applyLeverageFactor leverage (Amount amt) = Amount (truncate (leverage * (amt % 1)))
+
 data PoolParameters cpv where
     PoolParametersV0 :: { -- |Minimum threshold required for registering as a baker.
       _ppBakerStakeThreshold :: Amount
