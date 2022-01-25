@@ -268,15 +268,17 @@ pub fn main() -> anyhow::Result<()> {
             let wasm_version = utils::WasmVersion::read(&mut cursor)
                 .context("Could not read module version from the supplied module file.")?;
 
-            let inner = cursor.into_inner();
-            let module = if inner.len() < 8 {
-                bail!("The supplied module is too small and therefore invalid.")
-            } else {
-                &inner[8..] // we know that the source has at least 8 bytes,
-                            // which should be the wasm version and the
-                            // module size.
+            let len = {
+                let mut buf = [0u8; 4];
+                cursor.read_exact(&mut buf).context("Could not parse supplied module.")?;
+                u32::from_be_bytes(buf)
             };
-
+            let module = &cursor.into_inner()[8..];
+            ensure!(
+                module.len() == len as usize,
+                "Could no parse the supplied module. The specified length does not match the size \
+                 of the provided data."
+            );
             match wasm_version {
                 utils::WasmVersion::V0 => handle_run_v0(run_cmd, module)?,
                 utils::WasmVersion::V1 => handle_run_v1(run_cmd, module)?,
@@ -788,9 +790,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 } => {
                     eprintln!("Init call succeeded. The following logs were produced:");
                     print_result(state, logs)?;
-                    eprintln!("The following return value was returned.");
+                    eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
                 }
                 v1::InitResult::Reject {
                     remaining_energy,
@@ -798,9 +800,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     return_value,
                 } => {
                     eprintln!("Init call rejected with reason {}.", reason);
-                    eprintln!("The following return value was return.");
+                    eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
                 }
                 v1::InitResult::OutOfEnergy => {
                     eprintln!("Init call terminated with out of energy.")
@@ -866,9 +868,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 } => {
                     eprintln!("Receive method succeeded. The following logs were produced.");
                     print_result(state, logs)?;
-                    eprintln!("The following return value was returned.");
+                    eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
                 }
                 v1::ReceiveResult::Reject {
                     remaining_energy,
@@ -876,9 +878,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     return_value,
                 } => {
                     eprintln!("Receive call rejected with reason {}", reason);
-                    eprintln!("The following return value was returned.");
+                    eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
                 }
                 v1::ReceiveResult::OutOfEnergy => {
                     eprintln!("Receive call terminated with: out of energy.")
@@ -917,11 +919,12 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
                 v1::ReceiveResult::Trap {
                     remaining_energy,
+                    error,
                 } => {
-                    eprintln!(
+                    return Err(error.context(format!(
                         "Execution triggered a runtime error after spending {} interpreter energy.",
                         runner.energy - remaining_energy
-                    );
+                    )));
                 }
             }
         }

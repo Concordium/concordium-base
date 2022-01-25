@@ -661,11 +661,12 @@ where
                 interrupt: reason,
             })
         }
-        Err(e) => {
-            if e.downcast_ref::<OutOfEnergy>().is_some() {
+        Err(error) => {
+            if error.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(ReceiveResult::OutOfEnergy)
             } else {
                 Ok(ReceiveResult::Trap {
+                    error,
                     remaining_energy: host.energy.energy,
                 })
             }

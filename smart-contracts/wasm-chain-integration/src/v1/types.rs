@@ -92,6 +92,8 @@ pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
         remaining_energy: u64,
     },
     Trap {
+        error:            anyhow::Error, /* this error is here so that we can print it in
+                                          * cargo-concordium */
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -106,6 +108,7 @@ impl<R> ReceiveResult<R> {
             OutOfEnergy => (vec![0], None, None),
             Trap {
                 remaining_energy,
+                .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
                 out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
