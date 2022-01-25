@@ -267,7 +267,15 @@ pub fn main() -> anyhow::Result<()> {
             let mut cursor = std::io::Cursor::new(&versioned_module[..]);
             let wasm_version = utils::WasmVersion::read(&mut cursor)
                 .context("Could not read module version from the supplied module file.")?;
-            let module = &cursor.into_inner()[4..]; // we know that the source has at least 4 bytes since we read the version.
+
+            let inner = cursor.into_inner();
+            let module = if inner.len() < 8 {
+                bail!("The supplied module is too small and therefore invalid.")
+            } else {
+                &inner[8..] // we know that the source has at least 8 bytes,
+                            // which should be the wasm version and the
+                            // module size.
+            };
 
             match wasm_version {
                 utils::WasmVersion::V0 => handle_run_v0(run_cmd, module)?,
