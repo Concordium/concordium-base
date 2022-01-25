@@ -38,7 +38,7 @@ instance BasicGenesisData GenesisDataP4 where
     gdEpochLength = genesisEpochLength . _core
     {-# INLINE gdEpochLength #-}
 
--- |Deserialize genesis data in the V5 format.
+-- |Deserialize genesis data in the V6 format.
 getGenesisDataV6 :: Get GenesisDataP4
 getGenesisDataV6 =
     getWord8 >>= \case
