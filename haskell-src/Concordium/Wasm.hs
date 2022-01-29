@@ -104,7 +104,10 @@ module Concordium.Wasm (
   SuccessfulResultData(..),
   getSuccessfulResultData,
   -- *** Failed execution
-  ContractExecutionFailure(..)
+  ContractExecutionFailure(..),
+
+  -- |Instance queries
+  InstanceInfo(..)
   ) where
 
 import Control.Monad
@@ -119,6 +122,7 @@ import Data.Char (isPunctuation, isAlphaNum, isAscii)
 import qualified Data.HashMap.Strict as HM
 import Data.Hashable
 import Data.Int (Int32)
+import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Serialize
 import qualified Data.Text as Text
@@ -666,3 +670,45 @@ data ContractExecutionFailure =
   ContractReject { rejectReason :: Int32 } -- ^Contract decided to terminate execution.
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
+
+-- |Data about the contract that is returned by a node query.
+data InstanceInfo = InstanceInfoV0 {
+  iiModel :: !ContractState,
+  iiOwner :: !AccountAddress,
+  iiAmount :: !Amount,
+  iiMethods :: !(Set.Set ReceiveName),
+  iiName :: !InitName,
+  iiSourceModule :: !ModuleRef
+  }
+  | InstanceInfoV1 {
+  iiOwner :: !AccountAddress,
+  iiAmount :: !Amount,
+  iiMethods :: !(Set.Set ReceiveName),
+  iiName :: !InitName,
+  iiSourceModule :: !ModuleRef
+  }
+
+-- |Helper function for JSON encoding an 'Instance'.
+instancePairs :: AE.KeyValue kv => InstanceInfo -> [kv]
+{-# INLINE instancePairs #-}
+instancePairs InstanceInfoV0{..} =
+    [ "model" AE..= iiModel,
+      "owner" AE..= iiOwner,
+      "amount" AE..= iiAmount,
+      "methods" AE..= iiMethods,
+      "name" AE..= iiName,
+      "sourceModule" AE..= iiSourceModule,
+      "version" AE..= V0
+    ]
+instancePairs InstanceInfoV1{..} =
+    [ "owner" AE..= iiOwner,
+      "amount" AE..= iiAmount,
+      "methods" AE..= iiMethods,
+      "name" AE..= iiName,
+      "sourceModule" AE..= iiSourceModule,
+      "version" AE..= V1
+    ]
+
+instance AE.ToJSON InstanceInfo where
+    toJSON inst = AE.object $ instancePairs inst
+    toEncoding inst = AE.pairs $ mconcat $ instancePairs inst
