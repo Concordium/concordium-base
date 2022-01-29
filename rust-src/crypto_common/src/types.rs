@@ -38,6 +38,33 @@ pub struct CredentialIndex {
     pub index: u8,
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum DelegationTarget {
+    #[serde(rename = "delegateToLPool")]
+    DelegateToLPool,
+    #[serde(rename = "delegateToBaker")]
+    DelegateToBaker {
+        #[serde(rename = "targetBaker")]
+        target_baker: u64,
+    },
+}
+
+impl Serial for DelegationTarget {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match *self {
+            DelegationTarget::DelegateToLPool => out
+                .write_u8(0)
+                .expect("Writing to a buffer should not fail."),
+            DelegationTarget::DelegateToBaker { target_baker } => {
+                out.write_u8(1)
+                    .expect("Writing to a buffer should not fail.");
+                target_baker.serial(out)
+            }
+        }
+    }
+}
+
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// An amount of GTU. The lowest expressible amount is 1microGTU. The string

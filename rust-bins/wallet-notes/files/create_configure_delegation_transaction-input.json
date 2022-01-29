@@ -1,0 +1,35 @@
+{
+    "from": "3ZFGxLtnUUSJGW2WqjMh1DDjxyq5rnytCwkSqxFTpsWSFdQnNn",
+    "to": "4a3wqcAdVz7QC34rxyXNzRwYMgBKPBNYWfyTBnjAaLpeR6H3pR",
+    "expiry": 1585699200,
+    "nonce": 1,
+    "keys": {
+      "keys": {
+        "0": {
+          "keys": {
+            "0": {
+              "signKey": "64ba478c8c33ed3722ad4c5cab1b4376ff16c5fac2400695d53f0a416f2ec2a1",
+              "verifyKey": "62d162afce2b9d2cb20f4486ced04537c32f0e6b8a0e033d067ca05a22615054"
+            },
+            "1": {
+              "signKey": "76dd1512865cc3729b4a495cada741b889872b7308e5b61f7e2f71382e8d5395",
+              "verifyKey": "c2cde026f8c8482b8730d0571dcab27bed59c3ef11532d3a62cdd8d1bb7fbf94"
+            },
+            "2": {
+              "signKey": "ebb2fab346b0c7d8e51f63292f11e1d8f59c3f86629012ab454339e5ec60cfeb",
+              "verifyKey": "0e818bf96c12a1cc086bf3808f8a0553e948f2d10084f4f307c10b1fe865cd39"
+            }
+          },
+          "threshold": 2
+        }
+      },
+      "threshold": 1
+    },
+    "energy": 1000,
+    "capital": "1000000",
+    "restakeEarnings": true,
+    "delegationTarget": {
+        "type": "delegateToBaker",
+        "targetBaker": 100
+    }
+  }

@@ -2,7 +2,7 @@
 extern crate serde_json;
 use anyhow::{bail, ensure};
 use crypto_common::{
-    types::{Amount, KeyIndex, Memo, Signature, TransactionSignature},
+    types::{Amount, DelegationTarget, KeyIndex, Memo, Signature, TransactionSignature},
     *,
 };
 use dodis_yampolskiy_prf as prf;
@@ -174,6 +174,66 @@ fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
             payload.put(&ctx_to);
         }
         payload.put(&amount);
+
+        make_transaction_bytes(&ctx, &payload)
+    };
+
+    let signatures = make_signatures(ctx.keys, &hash);
+
+    let response = json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
+}
+
+fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+
+    let ctx: TransferContext = from_value(v.clone())?;
+
+    let maybe_capital: Option<Amount> = match v.get("capital") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_restake_earnings: Option<bool> = match v.get("restakeEarnings") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_delegation_target: Option<DelegationTarget> = match v.get("delegationTarget") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let mut bitmap: u16 = 0b0000000000000000;
+    if maybe_capital.is_some() {
+        bitmap |= 0b0000000000000100;
+    }
+
+    if maybe_restake_earnings.is_some() {
+        bitmap |= 0b0000000000000010;
+    }
+
+    if maybe_delegation_target.is_some() {
+        bitmap |= 0b0000000000000001;
+    }
+
+    let (hash, body) = {
+        let mut payload = Vec::new();
+        payload.put(&26u8); // transaction type is configure delegation
+        payload.put(&bitmap);
+        if let Some(capital) = maybe_capital {
+            payload.put(&capital);
+        }
+        if let Some(restake_earnings) = maybe_restake_earnings {
+            payload.put(&restake_earnings);
+        }
+        if let Some(delegation_target) = maybe_delegation_target {
+            payload.put(&delegation_target);
+        }
 
         make_transaction_bytes(&ctx, &payload)
     };
@@ -627,6 +687,21 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_transfer -> create_transfer_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_configure_delegation_transaction -> create_configure_delegation_transaction_aux);
+
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
     /// UTF8-encoded string. The input string should contain the JSON payload of an
