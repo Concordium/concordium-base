@@ -631,8 +631,17 @@ instance Serialize UpdateKeysCollection where
     put level2Keys
   get = UpdateKeysCollection <$> get <*> get <*> get
 
+-- |SHA256 hashing instance for `UpdateKeysCollection`
+-- Security considerations: It is crucial to use a cryptographic secure hash instance for `UpdateKeysCollection`.
+-- The caller must be able to use the resulting hash in security critical application code.
+-- Currently the computed hash is used to short circuit the signature verification check of transactions. 
 instance HashableTo SHA256.Hash UpdateKeysCollection where
   getHash = SHA256.hash . encode
+
+-- |Check that the update keys collection matches the given SHA256 hash.
+-- Note. See above for more information.
+matchesUpdateKeysCollection :: UpdateKeysCollection -> SHA256.Hash -> Bool
+matchesUpdateKeysCollection ukc h = getHash ukc == h  
 
 instance Monad m => MHashableTo m SHA256.Hash UpdateKeysCollection where
 
