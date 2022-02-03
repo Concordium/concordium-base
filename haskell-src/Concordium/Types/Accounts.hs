@@ -578,7 +578,7 @@ accountStakingInfoFromJSON obj = do
             _bakerAggregationVerifyKey <- bkr .: "bakerAggregationVerifyKey"
             let asiBakerInfo = BakerInfo{..}
             asiPendingChange <- pendingChangeFromJSON bkr
-            asiPoolInfo <- bkr .:? "poolInfo"
+            asiPoolInfo <- bkr .:? "bakerPoolInfo"
             return AccountStakingBaker{..}
         (Nothing, Just dlg) -> do
             asiStakedAmount <- dlg .: "stakedAmount"
