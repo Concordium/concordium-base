@@ -3,13 +3,6 @@ use crate::{resumption::InterruptedState, type_matches, v0};
 use anyhow::bail;
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
-use concordium_contracts_common::{
-    self, AccountAddress, Address, Amount, ChainMetadata, ContractAddress, Cursor, Get, ParseError,
-    ParseResult,
-};
-use libc::size_t;
-use serde::Deserialize as SerdeDeserialize;
-use std::convert::TryInto;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
@@ -20,128 +13,6 @@ use wasm_transform::{
 
 /// Maximum length, in bytes, of an export function name.
 pub const MAX_EXPORT_NAME_LEN: usize = 100;
-
-/// Chain context accessible to the init methods.
-///
-/// TODO: We could optimize this to be initialized lazily
-#[derive(Debug, SerdeDeserialize)]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
-#[serde(rename_all = "camelCase")]
-pub struct InitContext<Policies = v0::OwnedPolicyBytes> {
-    pub metadata:        ChainMetadata,
-    pub init_origin:     AccountAddress,
-    pub sender_policies: Policies,
-}
-
-/// Convert from a borrowed variant to the owned one. This clones the slice into
-/// a vector.
-impl<'a> From<InitContext<v0::PolicyBytes<'a>>> for InitContext<v0::OwnedPolicyBytes> {
-    fn from(borrowed: InitContext<v0::PolicyBytes<'a>>) -> Self {
-        Self {
-            metadata:        borrowed.metadata,
-            init_origin:     borrowed.init_origin,
-            sender_policies: borrowed.sender_policies.into(),
-        }
-    }
-}
-
-/// Chain context accessible to the receive methods.
-///
-/// TODO: We could optimize this to be initialized lazily.
-#[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
-pub struct ReceiveContext<Policies = v0::OwnedPolicyBytes> {
-    pub metadata:        ChainMetadata,
-    pub invoker:         AccountAddress,  //32 bytes
-    pub self_address:    ContractAddress, // 16 bytes
-    pub self_balance:    Amount,          // 8 bytes
-    pub sender:          Address,         // 9 or 33 bytes
-    pub owner:           AccountAddress,  // 32 bytes
-    pub sender_policies: Policies,
-}
-
-/// Convert from a borrowed variant to the owned one. This clones the slice into
-/// a vector.
-impl<'a> From<ReceiveContext<v0::PolicyBytes<'a>>> for ReceiveContext<v0::OwnedPolicyBytes> {
-    fn from(borrowed: ReceiveContext<v0::PolicyBytes<'a>>) -> Self {
-        Self {
-            metadata:        borrowed.metadata,
-            invoker:         borrowed.invoker,
-            self_address:    borrowed.self_address,
-            self_balance:    borrowed.self_balance,
-            sender:          borrowed.sender,
-            owner:           borrowed.owner,
-            sender_policies: borrowed.sender_policies.into(),
-        }
-    }
-}
-
-impl<Policies> InitContext<Policies> {
-    pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
-
-    /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
-}
-
-impl<Policies> ReceiveContext<Policies> {
-    pub fn sender(&self) -> &Address { &self.sender }
-
-    /// Who invoked this transaction.
-    pub fn invoker(&self) -> &AccountAddress { &self.invoker }
-
-    /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
-
-    /// Who is the owner of this contract.
-    pub fn owner(&self) -> &AccountAddress { &self.owner }
-
-    /// Balance on the smart contract when it was invoked.
-    pub fn self_balance(&self) -> Amount { self.self_balance }
-
-    /// Address of the smart contract.
-    pub fn self_address(&self) -> &ContractAddress { &self.self_address }
-}
-
-pub(crate) fn deserial_receive_context(source: &[u8]) -> ParseResult<ReceiveContext<&[u8]>> {
-    let mut cursor = Cursor::new(source);
-    let metadata = cursor.get()?;
-    let invoker = cursor.get()?;
-    let self_address = cursor.get()?;
-    let self_balance = cursor.get()?;
-    let sender = cursor.get()?;
-    let owner = cursor.get()?;
-    if cursor.offset <= source.len() {
-        let sender_policies = &source[cursor.offset..];
-        Ok(ReceiveContext {
-            metadata,
-            invoker,
-            self_address,
-            self_balance,
-            sender,
-            owner,
-            sender_policies,
-        })
-    } else {
-        Err(ParseError {})
-    }
-}
-
-pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[u8]>> {
-    let mut cursor = Cursor::new(source);
-    let metadata = cursor.get()?;
-    let init_origin = cursor.get()?;
-    if cursor.offset <= source.len() {
-        let sender_policies = &source[cursor.offset..];
-        Ok(InitContext {
-            metadata,
-            init_origin,
-            sender_policies,
-        })
-    } else {
-        Err(ParseError {})
-    }
-}
 
 pub type ReturnValue = Vec<u8>;
 
@@ -194,14 +65,11 @@ impl InitResult {
 
 /// State of the suspended execution of the receive function.
 /// This retains both the module that is executed, as well the host.
-pub type ReceiveInterruptedState<R> = InterruptedState<
-    ProcessedImports,
-    R,
-    ReceiveHost<ParameterVec, ReceiveContext<v0::OwnedPolicyBytes>>,
->;
+pub type ReceiveInterruptedState<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> =
+    InterruptedState<ProcessedImports, R, ReceiveHost<ParameterVec, Ctx>>;
 
 #[derive(Debug)]
-pub enum ReceiveResult<R> {
+pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
     Success {
         logs:             v0::Logs,
         return_value:     ReturnValue,
@@ -210,7 +78,7 @@ pub enum ReceiveResult<R> {
     Interrupt {
         remaining_energy: u64,
         logs:             v0::Logs,
-        config:           Box<ReceiveInterruptedState<R>>,
+        config:           Box<ReceiveInterruptedState<R, Ctx>>,
         interrupt:        Interrupt,
     },
     Reject {
@@ -219,6 +87,8 @@ pub enum ReceiveResult<R> {
         remaining_energy: u64,
     },
     Trap {
+        error:            anyhow::Error, /* this error is here so that we can print it in
+                                          * cargo-concordium */
         remaining_energy: u64,
     },
     OutOfEnergy,
@@ -233,6 +103,7 @@ impl<R> ReceiveResult<R> {
             OutOfEnergy => (vec![0], None, None),
             Trap {
                 remaining_energy,
+                .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
                 out[1..].copy_from_slice(&remaining_energy.to_be_bytes());

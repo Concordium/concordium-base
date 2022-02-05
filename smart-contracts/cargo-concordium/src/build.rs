@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
 };
-use wasm_chain_integration::{utils, v0, v1};
+use wasm_chain_integration::{utils, v0, v1, ExecResult};
 use wasm_transform::{
     output::{write_custom_section, Output},
     parse::parse_skeleton,
@@ -18,30 +18,65 @@ use wasm_transform::{
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
-#[derive(Debug, Clone, Copy)]
-pub enum WasmVersion {
-    V0,
-    V1,
+pub enum ModuleSchema {
+    V0(schema::ModuleV0),
+    V1(schema::ModuleV1),
 }
 
-impl std::str::FromStr for WasmVersion {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "V0" => Ok(WasmVersion::V0),
-            "V1" => Ok(WasmVersion::V1),
-            _ => anyhow::bail!("Unsupported version: '{}'. Only 'V0' and 'V1' are supported.", s),
-        }
-    }
-}
-
+/// Build a contract and its schema.
+/// If build_schema is set then the return value will contain the schema of the
+/// version specified.
 pub fn build_contract(
-    version: WasmVersion,
-    embed_schema: &Option<schema::Module>,
+    version: utils::WasmVersion,
+    build_schema: Option<bool>, /* if none do not build. If Some(true) then embed, otherwise
+                                 * just build and return */
     out: Option<PathBuf>,
     cargo_args: &[String],
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<(usize, Option<ModuleSchema>)> {
+    #[allow(unused_assignments)]
+    // This assignment is not actually unused. It is used via the custom_section which retains a
+    // reference to this vector, which is why it has to be here. This is a bit ugly, but not as
+    // ugly as alternatives.
+    let mut schema_bytes = Vec::new();
+    let schema = match version {
+        utils::WasmVersion::V0 => {
+            if build_schema.is_some() {
+                let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v0)
+                    .context("Could not build module schema.")?;
+                if build_schema == Some(true) {
+                    schema_bytes = to_bytes(&schema);
+                    let custom_section = CustomSection {
+                        name:     "concordium-schema-v1".into(),
+                        contents: &schema_bytes,
+                    };
+                    Some((Some(custom_section), ModuleSchema::V0(schema)))
+                } else {
+                    Some((None, ModuleSchema::V0(schema)))
+                }
+            } else {
+                None
+            }
+        }
+        utils::WasmVersion::V1 => {
+            if build_schema.is_some() {
+                let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v1)
+                    .context("Could not build module schema.")?;
+                if build_schema == Some(true) {
+                    schema_bytes = to_bytes(&schema);
+                    let custom_section = CustomSection {
+                        name:     "concordium-schema-v2".into(),
+                        contents: &schema_bytes,
+                    };
+                    Some((Some(custom_section), ModuleSchema::V1(schema)))
+                } else {
+                    Some((None, ModuleSchema::V1(schema)))
+                }
+            } else {
+                None
+            }
+        }
+    };
+
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
@@ -73,9 +108,9 @@ pub fn build_contract(
     // Remove all custom sections to reduce the size of the module
     strip(&mut skeleton);
     match version {
-        WasmVersion::V0 => validate_module(&v0::ConcordiumAllowedImports, &skeleton)
+        utils::WasmVersion::V0 => validate_module(&v0::ConcordiumAllowedImports, &skeleton)
             .context("Could not validate resulting smart contract module as a V0 contract.")?,
-        WasmVersion::V1 => validate_module(&v1::ConcordiumAllowedImports, &skeleton)
+        utils::WasmVersion::V1 => validate_module(&v1::ConcordiumAllowedImports, &skeleton)
             .context("Could not validate resulting smart contract module as a V1 contract.")?,
     };
 
@@ -84,26 +119,20 @@ pub fn build_contract(
     // the version number in big endian. The remaining 4 bytes are a placeholder for
     // length.
     let mut output_bytes = match version {
-        WasmVersion::V0 => vec![0, 0, 0, 0, 0, 0, 0, 0],
-        WasmVersion::V1 => vec![0, 0, 0, 1, 0, 0, 0, 0],
+        utils::WasmVersion::V0 => vec![0, 0, 0, 0, 0, 0, 0, 0],
+        utils::WasmVersion::V1 => vec![0, 0, 0, 1, 0, 0, 0, 0],
     };
     // Embed schema custom section
-    if let Some(schema) = embed_schema {
-        let schema_bytes = to_bytes(schema);
-
-        let custom_section = CustomSection {
-            name:     match version {
-                WasmVersion::V0 => "concordium-schema-v1".into(),
-                WasmVersion::V1 => "concordium-schema-v2".into(),
-            },
-            contents: &schema_bytes,
-        };
-
+    let return_schema = if let Some((custom_section, schema)) = schema {
         skeleton.output(&mut output_bytes)?;
-        write_custom_section(&mut output_bytes, &custom_section)?;
+        if let Some(custom_section) = custom_section {
+            write_custom_section(&mut output_bytes, &custom_section)?;
+        }
+        Some(schema)
     } else {
         skeleton.output(&mut output_bytes)?;
-    }
+        None
+    };
     // write the size of the actual module to conform to serialization expected on
     // the chain
     let data_size = (output_bytes.len() - 8) as u32;
@@ -111,19 +140,22 @@ pub fn build_contract(
 
     let out_filename = out.unwrap_or_else(|| {
         let extension = match version {
-            WasmVersion::V0 => "v0",
-            WasmVersion::V1 => "v1",
+            utils::WasmVersion::V0 => "v0",
+            utils::WasmVersion::V1 => "v1",
         };
         PathBuf::from(format!("{}.{}", filename, extension))
     });
     let total_module_len = output_bytes.len();
     fs::write(out_filename, output_bytes)?;
-    Ok(total_module_len)
+    Ok((total_module_len, return_schema))
 }
 
 /// Generates the contract schema by compiling with the 'build-schema' feature
 /// Then extracts the schema from the schema build
-pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Module> {
+pub fn build_contract_schema<A>(
+    cargo_args: &[String],
+    generate_schema: impl FnOnce(&[u8]) -> ExecResult<A>,
+) -> anyhow::Result<A> {
     let manifest = Manifest::from_path("Cargo.toml").context("Could not read Cargo.toml.")?;
     let package = manifest.package.context("Manifest needs to specify [package]")?;
 
@@ -150,8 +182,8 @@ pub fn build_contract_schema(cargo_args: &[String]) -> anyhow::Result<schema::Mo
 
     let wasm =
         std::fs::read(filename).context("Could not read cargo build contract schema output.")?;
-    let schema = utils::generate_contract_schema(&wasm)
-        .context("Could not generate module schema from Wasm module.")?;
+    let schema =
+        generate_schema(&wasm).context("Could not generate module schema from Wasm module.")?;
     Ok(schema)
 }
 

@@ -4,9 +4,7 @@ mod types;
 
 use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
-use concordium_contracts_common::{
-    AccountAddress, Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, SlotTime,
-};
+use concordium_contracts_common::{AccountAddress, Amount, ContractAddress, OwnedEntrypointName};
 use machine::Value;
 use std::{borrow::Borrow, convert::TryFrom, io::Write, sync::Arc};
 pub use types::*;
@@ -134,118 +132,6 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<ReceiveHost<ParameterRef<'a>, Ctx1>>
             receive_ctx:       host.receive_ctx.into(),
         }
     }
-}
-
-/// Types which can act as init contexts.
-///
-/// Used to enable partial JSON contexts when simulating contracts with
-/// cargo-concordium.
-///
-/// We have two implementations:
-///  - `InitContext`, which is used on-chain and always returns `Ok(..)`.
-///  - `InitContextOpt`, which is used during simulation with cargo-concordium
-///    and returns `Ok(..)` for fields supplied in a JSON context, and `Err(..)`
-///    otherwise.
-pub trait HasInitContext {
-    type MetadataType: v0::HasChainMetadata;
-
-    fn metadata(&self) -> &Self::MetadataType;
-    fn init_origin(&self) -> ExecResult<&AccountAddress>;
-    fn sender_policies(&self) -> ExecResult<&[u8]>;
-}
-
-/// Generic implementation for all references to types that already implement
-/// HasInitContext. This allows using InitContext as well as &InitContext in the
-/// init host, depending on whether we want to transfer ownership of the context
-/// or not.
-impl<'a, X: HasInitContext> HasInitContext for &'a X {
-    type MetadataType = X::MetadataType;
-
-    fn metadata(&self) -> &Self::MetadataType { (*self).metadata() }
-
-    fn init_origin(&self) -> ExecResult<&AccountAddress> { (*self).init_origin() }
-
-    fn sender_policies(&self) -> ExecResult<&[u8]> { (*self).sender_policies() }
-}
-
-impl<X: AsRef<[u8]>> HasInitContext for InitContext<X> {
-    type MetadataType = ChainMetadata;
-
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
-
-    fn init_origin(&self) -> ExecResult<&AccountAddress> { Ok(&self.init_origin) }
-
-    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.sender_policies.as_ref()) }
-}
-
-/// Types which can act as receive contexts.
-///
-/// Used to enable partial JSON contexts when simulating contracts with
-/// cargo-concordium.
-///
-/// We have two implementations:
-///  - `ReceiveContext`, which is used on-chain and always returns `Ok(..)`.
-///  - `ReceiveContextOpt`, which is used during simulation with
-///    cargo-concordium and returns `Ok(..)` for fields supplied in a JSON
-///    context, and `Err(..)` otherwise.
-pub trait HasReceiveContext {
-    type MetadataType: v0::HasChainMetadata;
-
-    fn metadata(&self) -> &Self::MetadataType;
-    fn invoker(&self) -> ExecResult<&AccountAddress>;
-    fn self_address(&self) -> ExecResult<&ContractAddress>;
-    fn self_balance(&self) -> ExecResult<Amount>;
-    fn sender(&self) -> ExecResult<&Address>;
-    fn owner(&self) -> ExecResult<&AccountAddress>;
-    fn sender_policies(&self) -> ExecResult<&[u8]>;
-}
-
-/// Generic implementation for all references to types that already implement
-/// HasReceiveContext. This allows using ReceiveContext as well as
-/// &ReceiveContext in the receive host, depending on whether we want to
-/// transfer ownership of the context or not.
-impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
-    type MetadataType = X::MetadataType;
-
-    fn metadata(&self) -> &Self::MetadataType { (*self).metadata() }
-
-    fn invoker(&self) -> ExecResult<&AccountAddress> { (*self).invoker() }
-
-    fn self_address(&self) -> ExecResult<&ContractAddress> { (*self).self_address() }
-
-    fn self_balance(&self) -> ExecResult<Amount> { (*self).self_balance() }
-
-    fn sender(&self) -> ExecResult<&Address> { (*self).sender() }
-
-    fn owner(&self) -> ExecResult<&AccountAddress> { (*self).owner() }
-
-    fn sender_policies(&self) -> ExecResult<&[u8]> { (*self).sender_policies() }
-}
-
-impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
-    type MetadataType = ChainMetadata;
-
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
-
-    fn invoker(&self) -> ExecResult<&AccountAddress> { Ok(&self.invoker) }
-
-    fn self_address(&self) -> ExecResult<&ContractAddress> { Ok(&self.self_address) }
-
-    fn self_balance(&self) -> ExecResult<Amount> { Ok(self.self_balance) }
-
-    fn sender(&self) -> ExecResult<&Address> { Ok(&self.sender) }
-
-    fn owner(&self) -> ExecResult<&AccountAddress> { Ok(&self.owner) }
-
-    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.sender_policies.as_ref()) }
-}
-
-pub trait HasChainMetadata {
-    fn slot_time(&self) -> ExecResult<SlotTime>;
-}
-
-impl HasChainMetadata for ChainMetadata {
-    fn slot_time(&self) -> ExecResult<SlotTime> { Ok(self.slot_time) }
 }
 
 /// v1 host functions.
@@ -624,7 +510,7 @@ mod host {
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
-impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports>
+impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImports>
     for InitHost<ParamType, Ctx>
 {
     type Interrupt = NoInterrupt;
@@ -713,7 +599,7 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
     }
 }
 
-impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImports>
+impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<ProcessedImports>
     for ReceiveHost<ParamType, Ctx>
 {
     type Interrupt = Interrupt;
@@ -833,10 +719,10 @@ pub type ParameterRef<'a> = &'a [u8];
 pub type ParameterVec = Vec<u8>;
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<Policy: AsRef<[u8]>, R: RunnableCode>(
+pub fn invoke_init<R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     amount: u64,
-    init_ctx: InitContext<Policy>,
+    init_ctx: impl v0::HasInitContext,
     init_name: &str,
     param: ParameterRef,
     energy: u64,
@@ -860,13 +746,10 @@ where
     process_init_result(host, result)
 }
 
-fn process_init_result<Param, Policy: AsRef<[u8]>>(
-    host: InitHost<Param, InitContext<Policy>>,
+fn process_init_result<Param, Ctx>(
+    host: InitHost<Param, Ctx>,
     result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
-) -> ExecResult<InitResult>
-where
-    InitHost<ParameterVec, InitContext<v0::OwnedPolicyBytes>>:
-        From<InitHost<Param, InitContext<Policy>>>, {
+) -> ExecResult<InitResult> {
     match result {
         Ok(ExecutionOutcome::Success {
             result,
@@ -915,8 +798,10 @@ pub enum InvokeResponse {
     Success {
         /// New state, if it changed.
         new_state: bool,
+        /// Balance after the execution of the interrupt.
+        new_balance: Amount,
         /// Some calls do not have any return values, such as transfers.
-        data:      Option<ParameterVec>,
+        data:        Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
@@ -928,34 +813,30 @@ pub enum InvokeResponse {
 
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<'a, Policy: AsRef<[u8]>>(
+pub fn invoke_init_from_artifact<'a>(
     artifact_bytes: &'a [u8],
     amount: u64,
-    init_ctx: InitContext<Policy>,
+    init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
     state: InstanceState,
-) -> ExecResult<InitResult>
-where
-    InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
+) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
 }
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source<Policy: AsRef<[u8]>>(
+pub fn invoke_init_from_source(
     source_bytes: &[u8],
     amount: u64,
-    init_ctx: InitContext<Policy>,
+    init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
     state: InstanceState,
-) -> ExecResult<InitResult>
-where
-    InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
+) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
 }
@@ -964,29 +845,26 @@ where
 /// accounting instructions inserted before the init function is called.
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source<Policy: AsRef<[u8]>>(
+pub fn invoke_init_with_metering_from_source(
     source_bytes: &[u8],
     amount: u64,
-    init_ctx: InitContext<Policy>,
+    init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
     state: InstanceState,
-) -> ExecResult<InitResult>
-where
-    InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
+) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
 }
 
-fn process_receive_result<Param, R: RunnableCode, Policy>(
+fn process_receive_result<Param, R: RunnableCode, Ctx1, Ctx2>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
-    mut host: ReceiveHost<Param, ReceiveContext<Policy>>,
+    mut host: ReceiveHost<Param, Ctx1>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
-) -> ExecResult<ReceiveResult<R>>
+) -> ExecResult<ReceiveResult<R, Ctx2>>
 where
-    ReceiveHost<ParameterVec, ReceiveContext<v0::OwnedPolicyBytes>>:
-        From<ReceiveHost<Param, ReceiveContext<Policy>>>, {
+    ReceiveHost<ParameterVec, Ctx2>: From<ReceiveHost<Param, Ctx1>>, {
     match result {
         Ok(ExecutionOutcome::Success {
             result,
@@ -1034,11 +912,12 @@ where
                 interrupt: reason,
             })
         }
-        Err(e) => {
-            if e.downcast_ref::<OutOfEnergy>().is_some() {
+        Err(error) => {
+            if error.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(ReceiveResult::OutOfEnergy)
             } else {
                 Ok(ReceiveResult::Trap {
+                    error,
                     remaining_energy: host.energy.energy,
                 })
             }
@@ -1047,17 +926,15 @@ where
 }
 
 /// Invokes an receive-function from a given artifact
-pub fn invoke_receive<R: RunnableCode, Policy: AsRef<[u8]>>(
+pub fn invoke_receive<R: RunnableCode, Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
     amount: u64,
-    receive_ctx: ReceiveContext<Policy>,
+    receive_ctx: Ctx1,
     receive_name: &str,
     param: ParameterRef,
     energy: u64,
     instance_state: InstanceState,
-) -> ExecResult<ReceiveResult<R>>
-where
-    ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
+) -> ExecResult<ReceiveResult<R, Ctx2>> {
     let mut host = ReceiveHost {
         energy: InterpreterEnergy {
             energy,
@@ -1085,8 +962,10 @@ pub fn resume_receive(
     let response = match response {
         InvokeResponse::Success {
             new_state,
+            new_balance,
             data,
         } => {
+            interrupted_state.host.receive_ctx.self_balance = new_balance;
             // the response value is constructed by setting the last 5 bytes to 0
             // for the first 3 bytes, the first bit is 1 if the state changed, and 0
             // otherwise the remaining bits are the index of the parameter.
@@ -1149,17 +1028,15 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
 
 /// Invokes an receive-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_from_artifact<'a, Policy: AsRef<[u8]>>(
+pub fn invoke_receive_from_artifact<'a, Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
     artifact_bytes: &'a [u8],
     amount: u64,
-    receive_ctx: ReceiveContext<Policy>,
+    receive_ctx: Ctx1,
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
     instance_state: InstanceState,
-) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>>>
-where
-    ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
+) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
         Arc::new(artifact),
@@ -1174,17 +1051,16 @@ where
 
 /// Invokes an receive-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_from_source<Policy: AsRef<[u8]>>(
+pub fn invoke_receive_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
     source_bytes: &[u8],
     amount: u64,
-    receive_ctx: ReceiveContext<Policy>,
+    receive_ctx: Ctx1,
+    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
     instance_state: InstanceState,
-) -> ExecResult<ReceiveResult<CompiledFunction>>
-where
-    ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
+) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
         Arc::new(artifact),
@@ -1200,17 +1076,16 @@ where
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_with_metering_from_source<Policy: AsRef<[u8]>>(
+pub fn invoke_receive_with_metering_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
     source_bytes: &[u8],
     amount: u64,
-    receive_ctx: ReceiveContext<Policy>,
+    receive_ctx: Ctx1,
+    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
     instance_state: InstanceState,
-) -> ExecResult<ReceiveResult<CompiledFunction>>
-where
-    ReceiveContext<v0::OwnedPolicyBytes>: From<ReceiveContext<Policy>>, {
+) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
         Arc::new(artifact),

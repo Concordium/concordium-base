@@ -35,9 +35,11 @@ unsafe extern "C" fn call_init_v1(
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
-        let init_ctx =
-            deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len as usize))
-                .expect("Precondition violation: invalid init ctx given by host.");
+        let init_ctx = v0::deserial_init_context(slice_from_c_bytes!(
+            init_ctx_bytes,
+            init_ctx_bytes_len as usize
+        ))
+        .expect("Precondition violation: invalid init ctx given by host.");
         let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
         let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
         match std::str::from_utf8(init_name) {
@@ -96,7 +98,7 @@ unsafe extern "C" fn call_receive_v1(
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| {
-        let receive_ctx = deserial_receive_context(slice_from_c_bytes!(
+        let receive_ctx = v0::deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
             receive_ctx_bytes_len as usize
         ))
@@ -213,6 +215,7 @@ unsafe extern "C" fn resume_receive_v1(
     config_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
     // whether the state has been updated (non-zero) or not (zero)
     new_state_tag: u8,
+    new_amount: u64,
     // whether the call succeeded or not.
     response_status: u64,
     // response from the call.
@@ -255,9 +258,16 @@ unsafe extern "C" fn resume_receive_v1(
                     data,
                 }
             }
+        } else if new_state_tag == 0 {
+            InvokeResponse::Success {
+                new_state: None,
+                new_balance: Amount::from_micro_ccd(new_amount),
+                data,
+            }
         } else {
             InvokeResponse::Success {
                 new_state: new_state_tag == 1,
+                new_balance: Amount::from_micro_ccd(new_amount),
                 data,
             }
         };
@@ -391,7 +401,7 @@ unsafe extern "C" fn return_value_to_byte_array(
     rv_ptr: *mut Vec<u8>,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let mut bytes = (&mut *rv_ptr).clone();
+    let mut bytes = (&*rv_ptr).clone();
     bytes.shrink_to_fit();
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
