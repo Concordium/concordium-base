@@ -1,5 +1,9 @@
 use crate::{slice_from_c_bytes, v1::*};
 use libc::size_t;
+use rust_trie::{
+    low_level::{Loadable, Reference},
+    MutableState, PersistentState,
+};
 use std::sync::Arc;
 use wasm_transform::{
     artifact::{CompiledFunction, OwnedArtifact},
@@ -17,6 +21,7 @@ type ReturnValue = Vec<u8>;
 
 #[no_mangle]
 unsafe extern "C" fn call_init_v1(
+    loader: LoadCallBack, // This is not really needed since nothing is loaded.
     artifact_ptr: *const ArtifactV1,
     init_ctx_bytes: *const u8,
     init_ctx_bytes_len: size_t,
@@ -28,8 +33,7 @@ unsafe extern "C" fn call_init_v1(
     energy: u64,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
-    instance_state_ptr: *const InstanceStateFFI,
-    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
+    output_state_ptr: *mut *mut MutableState,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| {
@@ -40,8 +44,8 @@ unsafe extern "C" fn call_init_v1(
             init_ctx_bytes_len as usize
         ))
         .expect("Precondition violation: invalid init ctx given by host.");
-        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
-        let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
+        let mut initial_state = PersistentState::Empty.thaw();
+        let instance_state = InstanceState::new(0, loader, initial_state.get_inner());
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
@@ -60,8 +64,12 @@ unsafe extern "C" fn call_init_v1(
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
                         std::mem::forget(out);
-                        if let Some(return_value) = return_value {
+                        if let Some((success, return_value)) = return_value {
                             *output_return_value = Box::into_raw(Box::new(return_value));
+                            if success {
+                                // the lock has been dropped at this point
+                                *output_state_ptr = Box::into_raw(Box::new(initial_state));
+                            }
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
@@ -81,20 +89,20 @@ unsafe extern "C" fn call_init_v1(
 
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
+    loader: LoadCallBack,
     artifact_ptr: *const ArtifactV1,
     receive_ctx_bytes: *const u8,
     receive_ctx_bytes_len: size_t,
     amount: u64,
     receive_name: *const u8,
     receive_name_len: size_t,
+    state_ptr_ptr: *mut *mut MutableState,
     param_bytes: *const u8,
     param_bytes_len: size_t,
     energy: u64,
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedState<CompiledFunction>,
     output_len: *mut size_t,
-    instance_state_ptr: *const InstanceStateFFI,
-    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| {
@@ -105,8 +113,10 @@ unsafe extern "C" fn call_receive_v1(
         .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
-        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
-        let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
+        let state_ptr = *state_ptr_ptr;
+        let mut state = (&mut *state_ptr).make_fresh_generation();
+        let inner = state.get_inner();
+        let instance_state = InstanceState::new(0, loader, inner);
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive(
@@ -120,7 +130,7 @@ unsafe extern "C" fn call_receive_v1(
                 );
                 match res {
                     Ok(result) => {
-                        let (mut out, config, return_value) = result.extract();
+                        let (mut out, store_state, config, return_value) = result.extract();
                         out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
@@ -135,6 +145,9 @@ unsafe extern "C" fn call_receive_v1(
                             *output_return_value = Box::into_raw(Box::new(return_value));
                         } else {
                             *output_return_value = std::ptr::null_mut();
+                        }
+                        if store_state {
+                            *state_ptr_ptr = Box::into_raw(Box::new(state))
                         }
                         ptr
                     }
@@ -211,10 +224,12 @@ unsafe extern "C" fn validate_and_process_v1(
 #[no_mangle]
 // TODO: Signal whether the state was updated.
 unsafe extern "C" fn resume_receive_v1(
+    loader: LoadCallBack,
     // mutable pointer, we will mutate this, either to a new state or null
     config_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
     // whether the state has been updated (non-zero) or not (zero)
     new_state_tag: u8,
+    state_ptr_ptr: *mut *mut MutableState,
     new_amount: u64,
     // whether the call succeeded or not.
     response_status: u64,
@@ -224,8 +239,6 @@ unsafe extern "C" fn resume_receive_v1(
     energy: u64,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
-    instance_state_ptr: *const InstanceStateFFI,
-    instance_state_callbacks_ptr: *const InstanceStateCallbacksFFI,
 ) -> *mut u8 {
     let res = std::panic::catch_unwind(|| {
         let data = {
@@ -260,13 +273,13 @@ unsafe extern "C" fn resume_receive_v1(
             }
         } else if new_state_tag == 0 {
             InvokeResponse::Success {
-                new_state: None,
+                new_state: false,
                 new_balance: Amount::from_micro_ccd(new_amount),
                 data,
             }
         } else {
             InvokeResponse::Success {
-                new_state: new_state_tag == 1,
+                new_state: true,
                 new_balance: Amount::from_micro_ccd(new_amount),
                 data,
             }
@@ -276,13 +289,22 @@ unsafe extern "C" fn resume_receive_v1(
         // finalizer (`receive_interrupted_state_free`) will not end up double
         // freeing.
         let config = std::ptr::replace(config_ptr, std::ptr::null_mut());
-        let instance_state_callbacks = std::ptr::read(instance_state_callbacks_ptr);
-        let instance_state = InstanceState::new(instance_state_callbacks, instance_state_ptr);
-        let res = resume_receive(Box::from_raw(config), response, energy.into(), instance_state);
+        // since we will never roll back past this point, other than to the beginning of
+        // execution, we do not need to make a new generation for checkpoint
+        // reasons. We are not the owner of the state, so we make a clone of it.
+        // The clone is cheap since this is reference counted.
+        let state_ref = &mut **state_ptr_ptr;
+        let mut state = state_ref.clone();
+        // it is important to invalidate all previous iterators and entries we have
+        // given out. so we start a new generation.
+        let config = Box::from_raw(config);
+        let instance_state =
+            InstanceState::new(config.host.latest_generation + 1, loader, state.get_inner());
+        let res = resume_receive(config, response, energy.into(), instance_state);
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {
-                let (mut out, new_config, return_value) = result.extract();
+                let (mut out, store_state, new_config, return_value) = result.extract();
                 out.shrink_to_fit();
                 *output_len = out.len() as size_t;
                 let ptr = out.as_mut_ptr();
@@ -294,6 +316,9 @@ unsafe extern "C" fn resume_receive_v1(
                     *output_return_value = Box::into_raw(Box::new(return_value));
                 } else {
                     *output_return_value = std::ptr::null_mut();
+                }
+                if store_state {
+                    *state_ptr_ptr = Box::into_raw(Box::new(state))
                 }
                 ptr
             }
@@ -407,4 +432,95 @@ unsafe extern "C" fn return_value_to_byte_array(
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
     ptr
+}
+
+type LoadCallBack = extern "C" fn(Reference) -> *mut Vec<u8>;
+type StoreCallBack = extern "C" fn(data: *const u8, len: libc::size_t) -> Reference;
+
+#[no_mangle]
+extern "C" fn load_persistent_tree_v1(
+    mut loader: LoadCallBack,
+    location: Reference,
+) -> *mut PersistentState {
+    let tree = PersistentState::load_from_location(&mut loader, location);
+    match tree {
+        Ok(tree) => Box::into_raw(Box::new(tree)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+extern "C" fn store_persistent_tree_v1(
+    mut writer: StoreCallBack,
+    tree: *mut PersistentState,
+) -> Reference {
+    let tree = unsafe { &mut *tree };
+    match tree.store_update(&mut writer) {
+        Ok(r) => r,
+        Err(_) => unreachable!(
+            "Storing the tree can only fail if the writer fails. This is assumed not to happen."
+        ),
+    }
+}
+
+#[no_mangle]
+extern "C" fn free_persistent_state_v1(tree: *mut PersistentState) {
+    unsafe { Box::from_raw(tree) };
+}
+
+#[no_mangle]
+extern "C" fn free_mutable_state_v1(tree: *mut MutableState) { unsafe { Box::from_raw(tree) }; }
+
+#[no_mangle]
+extern "C" fn freeze_mutable_state_v1(
+    mut loader: LoadCallBack,
+    tree: *mut MutableState,
+    hash_buf: *mut u8,
+) -> *mut PersistentState {
+    let tree = unsafe { &mut *tree };
+    let persistent = tree.freeze(&mut loader);
+    let hash = persistent.hash();
+    let hash: &[u8] = hash.as_ref();
+    unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
+    Box::into_raw(Box::new(persistent))
+}
+
+#[no_mangle]
+extern "C" fn thaw_persistent_state_v1(tree: *mut PersistentState) -> *mut MutableState {
+    let tree = unsafe { &*tree };
+    Box::into_raw(Box::new(tree.thaw()))
+}
+
+#[no_mangle]
+extern "C" fn get_new_state_size_v1(tree: *mut MutableState) -> u64 { todo!() }
+
+#[no_mangle]
+extern "C" fn cache_persistent_state_v1(mut loader: LoadCallBack, tree: *mut PersistentState) {
+    let tree = unsafe { &mut *tree };
+    tree.cache(&mut loader)
+}
+
+#[no_mangle]
+extern "C" fn hash_persistent_state_v1(tree: *mut PersistentState, hash_buf: *mut u8) {
+    let tree = unsafe { &mut *tree };
+    let hash = tree.hash();
+    let hash: &[u8] = hash.as_ref();
+    unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
+}
+
+#[no_mangle]
+extern "C" fn serialize_persistent_state_v1(
+    loader: LoadCallBack,
+    tree: *mut PersistentState,
+    out_len: *mut size_t,
+) -> *mut u8 {
+    todo!()
+}
+
+#[no_mangle]
+extern "C" fn deserialize_persistent_state_v1(
+    source: *const u8,
+    len: size_t,
+) -> *mut PersistentState {
+    todo!()
 }

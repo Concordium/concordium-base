@@ -6,7 +6,8 @@ use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{AccountAddress, Amount, ContractAddress, OwnedEntrypointName};
 use machine::Value;
-use std::{borrow::Borrow, convert::TryFrom, io::Write, sync::Arc};
+use rust_trie::FlatLoadable;
+use std::{borrow::Borrow, io::Write, sync::Arc};
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
@@ -64,7 +65,7 @@ impl Interrupt {
 }
 
 #[derive(Debug)]
-pub struct InitHost<ParamType, Ctx> {
+pub struct InitHost<'a, BackingStore, ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -73,7 +74,7 @@ pub struct InitHost<ParamType, Ctx> {
     /// Logs produced during execution.
     pub logs:              v0::Logs,
     /// The contract's state.
-    pub state:             InstanceState,
+    pub state:             InstanceState<'a, BackingStore>,
     /// The response from the call.
     pub return_value:      ReturnValue,
     /// The parameter to the init method, as well as any responses from
@@ -83,10 +84,11 @@ pub struct InitHost<ParamType, Ctx> {
     pub init_ctx:          Ctx,
 }
 
-impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<InitHost<ParameterRef<'a>, Ctx1>>
-    for InitHost<ParameterVec, Ctx2>
+impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
+    From<InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>>
+    for InitHost<'b, BackingStore, ParameterVec, Ctx2>
 {
-    fn from(host: InitHost<ParameterRef<'a>, Ctx1>) -> Self {
+    fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>) -> Self {
         Self {
             energy:            host.energy,
             activation_frames: host.activation_frames,
@@ -100,36 +102,41 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<InitHost<ParameterRef<'a>, Ctx1>>
 }
 
 #[derive(Debug)]
-pub struct ReceiveHost<ParamType, Ctx> {
-    /// Remaining energy for execution.
-    pub energy:            InterpreterEnergy,
+pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
+    pub energy:    InterpreterEnergy,
+    pub stateless: StateLessReceiveHost<ParamType, Ctx>,
+    pub state:     InstanceState<'a, BackingStore>,
+}
+
+#[derive(Debug)]
+pub struct StateLessReceiveHost<ParamType, Ctx> {
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames: u32,
     /// Logs produced during execution.
     pub logs:              v0::Logs,
-    /// The contract's state.
-    pub state:             InstanceState,
     /// Return value from execution.
     pub return_value:      ReturnValue,
     /// The parameter to the receive method.
     pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
     pub receive_ctx:       Ctx,
+    /// Latest generation that was used. This is incremented on each resume to
+    /// invalidate all entries and iterators from before the out-call.
+    pub latest_generation: u32,
 }
 
-impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<ReceiveHost<ParameterRef<'a>, Ctx1>>
-    for ReceiveHost<ParameterVec, Ctx2>
+impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx1>>
+    for StateLessReceiveHost<ParameterVec, Ctx2>
 {
-    fn from(host: ReceiveHost<ParameterRef<'a>, Ctx1>) -> Self {
+    fn from(host: StateLessReceiveHost<ParameterRef<'a>, Ctx1>) -> Self {
         Self {
-            energy:            host.energy,
             activation_frames: host.activation_frames,
             logs:              host.logs,
-            state:             host.state,
             return_value:      host.return_value,
             parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
             receive_ctx:       host.receive_ctx.into(),
+            latest_generation: host.latest_generation,
         }
     }
 }
@@ -137,6 +144,7 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<ReceiveHost<ParameterRef<'a>, Ctx1>>
 /// v1 host functions.
 mod host {
     use concordium_contracts_common::{Cursor, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE};
+    use rust_trie::FlatLoadable;
 
     use super::*;
 
@@ -305,11 +313,11 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_lookup_entry(
+    pub fn state_lookup_entry<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
@@ -318,16 +326,16 @@ mod host {
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let result = state.lookup_entry(key);
-        stack.push_value(result);
+        stack.push_value(u64::from(result));
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_create_entry(
+    pub fn state_create_entry<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
@@ -336,173 +344,165 @@ mod host {
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let entry_index = state.create_entry(key);
-        stack.push_value(entry_index);
+        stack.push_value(u64::from(entry_index));
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_delete_entry(
+    pub fn state_delete_entry<'a, BackingStore: FlatLoadable>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        let entry_index = unsafe { stack.pop_u32() };
-        let key_len = state.entry_key_size(entry_index)?;
-        energy.tick_energy(constants::modify_key_cost(key_len))?;
-        let result = state.delete_entry(entry_index)?;
+        // TODO: Charge cost.
+        let entry_index = unsafe { stack.pop_u64() };
+        let result = state.delete_entry(InstanceStateEntry::from(entry_index))?;
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_delete_prefix(
+    pub fn state_delete_prefix<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
+        // TODO: Charge.
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
-        energy.tick_energy(constants::modify_key_cost(key_len))?;
+        // this cannot overflow on 64-bit platforms, so it is safe to just add
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let result = state.delete_prefix(key)?;
+        let result = state.delete_prefix(key);
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_iterator(
+    pub fn state_iterator<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
+        // TODO: Charge.
         let prefix_len = unsafe { stack.pop_u32() };
         let prefix_start = unsafe { stack.pop_u32() } as usize;
         let prefix_end = prefix_start + prefix_len as usize;
-        energy.tick_energy(constants::traverse_key_cost(prefix_len))?;
         ensure!(prefix_end <= memory.len(), "Illegal memory access.");
-        if prefix_end > memory.len() {}
         let prefix = &memory[prefix_start..prefix_end];
         let iterator_index = state.iterator(prefix);
-        stack.push_value(iterator_index);
+        stack.push_value(u64::from(iterator_index));
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_iterator_next(
+    pub fn state_iterator_next<'a, BackingStore: FlatLoadable>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        let iter_index = unsafe { stack.pop_u32() };
-        let entry_option = state.iterator_next(iter_index)?;
-        if entry_option >= 0 {
-            let entry = u32::try_from(entry_option)?;
-            let key_len = state.entry_key_size(entry)?;
-            energy.tick_energy(constants::traverse_key_cost(key_len))?;
-        }
-        stack.push_value(entry_option);
+        // TODO: Charge cost.
+        let iter_index = unsafe { stack.pop_u64() };
+        let entry_option = state.iterator_next(InstanceStateIterator::from(iter_index))?;
+        stack.push_value(u64::from(entry_option));
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_read(
+    pub fn state_entry_read<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let dest_start = unsafe { stack.pop_u32() } as usize;
-        let entry_index = unsafe { stack.pop_u32() };
+        let entry_index = unsafe { stack.pop_u64() };
         energy.tick_energy(constants::copy_from_host_cost(length))?;
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_read(entry_index, dest, offset)?;
+        let result = state.entry_read(InstanceStateEntry::from(entry_index), dest, offset)?;
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_write(
+    pub fn state_entry_write<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let source_start = unsafe { stack.pop_u32() } as usize;
-        let entry_index = unsafe { stack.pop_u32() };
+        let entry_index = unsafe { stack.pop_u64() };
         energy.tick_energy(constants::copy_to_host_cost(length))?;
         let source_end = source_start + length as usize;
         ensure!(source_end <= memory.len(), "Illegal memory access.");
         let source = &memory[source_start..source_end];
-        let result = state.entry_write(entry_index, source, offset)?;
+        let result = state.entry_write(InstanceStateEntry::from(entry_index), source, offset)?;
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_size(
+    pub fn state_entry_size<'a, BackingStore: FlatLoadable>(
         stack: &mut machine::RuntimeStack,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        let entry_index = unsafe { stack.pop_u32() };
-        let result = state.entry_size(entry_index)?;
+        let entry_index = unsafe { stack.pop_u64() };
+        let result = state.entry_size(InstanceStateEntry::from(entry_index))?;
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_resize(
+    pub fn state_entry_resize<'a, BackingStore: FlatLoadable>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
+        // TODO: Charge cost
         let new_size = unsafe { stack.pop_u32() };
-        let entry_index = unsafe { stack.pop_u32() };
-        let current_size = state.entry_size(entry_index)?;
-        if new_size > current_size {
-            energy.tick_energy(constants::additional_state_size_cost(new_size - current_size))?;
-        }
-        let result = state.entry_resize(entry_index, new_size)?;
+        let entry_index = unsafe { stack.pop_u64() };
+        let result = state.entry_resize(InstanceStateEntry::from(entry_index), new_size)?;
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_key_read(
+    pub fn state_entry_key_read<'a, BackingStore: FlatLoadable>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let dest_start = unsafe { stack.pop_u32() } as usize;
-        let entry_index = unsafe { stack.pop_u32() };
+        let entry_index = unsafe { stack.pop_u64() };
         energy.tick_energy(constants::copy_from_host_cost(length))?;
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_key_read(entry_index, dest, offset)?;
+        let result = state.entry_key_read(InstanceStateEntry::from(entry_index), dest, offset)?;
         stack.push_value(result);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_key_size(
+    pub fn state_entry_key_size<'a, BackingStore: FlatLoadable>(
         stack: &mut machine::RuntimeStack,
-        state: &mut InstanceState,
+        state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        let entry_index = unsafe { stack.pop_u32() };
-        let result = state.entry_key_size(entry_index)?;
+        let entry_index = unsafe { stack.pop_u64() };
+        let result = state.entry_key_size(InstanceStateEntry::from(entry_index))?;
         stack.push_value(result);
         Ok(())
     }
@@ -510,8 +510,8 @@ mod host {
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
-impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImports>
-    for InitHost<ParamType, Ctx>
+impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext>
+    machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = NoInterrupt;
 
@@ -599,8 +599,8 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImp
     }
 }
 
-impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<ProcessedImports>
-    for ReceiveHost<ParamType, Ctx>
+impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext>
+    machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = Interrupt;
 
@@ -618,8 +618,10 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<Processed
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         match f.tag {
             ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => v0::host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => v0::host::track_return(&mut self.activation_frames),
+            ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
+            ImportFunc::TrackReturn => {
+                v0::host::track_return(&mut self.stateless.activation_frames)
+            }
             ImportFunc::ChargeMemoryAlloc => {
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
@@ -628,23 +630,28 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<Processed
                     memory,
                     stack,
                     &mut self.energy,
-                    &mut self.return_value,
+                    &mut self.stateless.return_value,
                 ),
-                CommonFunc::GetParameterSize => host::get_parameter_size(stack, &self.parameters),
-                CommonFunc::GetParameterSection => {
-                    host::get_parameter_section(memory, stack, &mut self.energy, &self.parameters)
+                CommonFunc::GetParameterSize => {
+                    host::get_parameter_size(stack, &self.stateless.parameters)
                 }
+                CommonFunc::GetParameterSection => host::get_parameter_section(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &self.stateless.parameters,
+                ),
                 CommonFunc::GetPolicySection => v0::host::get_policy_section(
                     memory,
                     stack,
                     &mut self.energy,
-                    self.receive_ctx.sender_policies(),
+                    self.stateless.receive_ctx.sender_policies(),
                 ),
                 CommonFunc::LogEvent => {
-                    v0::host::log_event(memory, stack, &mut self.energy, &mut self.logs)
+                    v0::host::log_event(memory, stack, &mut self.energy, &mut self.stateless.logs)
                 }
                 CommonFunc::GetSlotTime => {
-                    v0::host::get_slot_time(stack, self.receive_ctx.metadata())
+                    v0::host::get_slot_time(stack, self.stateless.receive_ctx.metadata())
                 }
                 CommonFunc::StateLookupEntry => {
                     host::state_lookup_entry(memory, stack, &mut self.energy, &mut self.state)
@@ -683,22 +690,25 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<Processed
                 ReceiveOnlyFunc::Invoke => {
                     return host::invoke(memory, stack, &mut self.energy);
                 }
-                ReceiveOnlyFunc::GetReceiveInvoker => {
-                    v0::host::get_receive_invoker(memory, stack, self.receive_ctx.invoker())
-                }
+                ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
+                    memory,
+                    stack,
+                    self.stateless.receive_ctx.invoker(),
+                ),
                 ReceiveOnlyFunc::GetReceiveSelfAddress => v0::host::get_receive_self_address(
                     memory,
                     stack,
-                    self.receive_ctx.self_address(),
+                    self.stateless.receive_ctx.self_address(),
                 ),
-                ReceiveOnlyFunc::GetReceiveSelfBalance => {
-                    v0::host::get_receive_self_balance(stack, self.receive_ctx.self_balance())
-                }
+                ReceiveOnlyFunc::GetReceiveSelfBalance => v0::host::get_receive_self_balance(
+                    stack,
+                    self.stateless.receive_ctx.self_balance(),
+                ),
                 ReceiveOnlyFunc::GetReceiveSender => {
-                    v0::host::get_receive_sender(memory, stack, self.receive_ctx.sender())
+                    v0::host::get_receive_sender(memory, stack, self.stateless.receive_ctx.sender())
                 }
                 ReceiveOnlyFunc::GetReceiveOwner => {
-                    v0::host::get_receive_owner(memory, stack, self.receive_ctx.owner())
+                    v0::host::get_receive_owner(memory, stack, self.stateless.receive_ctx.owner())
                 }
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
@@ -719,17 +729,15 @@ pub type ParameterRef<'a> = &'a [u8];
 pub type ParameterVec = Vec<u8>;
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<R: RunnableCode>(
+pub fn invoke_init<'a, BackingStore: FlatLoadable, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     param: ParameterRef,
     energy: u64,
-    state: InstanceState,
-) -> ExecResult<InitResult>
-where
-    InitContext<v0::OwnedPolicyBytes>: From<InitContext<Policy>>, {
+    state: InstanceState<'a, BackingStore>,
+) -> ExecResult<InitResult> {
     let mut host = InitHost {
         energy: InterpreterEnergy {
             energy,
@@ -746,8 +754,8 @@ where
     process_init_result(host, result)
 }
 
-fn process_init_result<Param, Ctx>(
-    host: InitHost<Param, Ctx>,
+fn process_init_result<'a, BackingStore: FlatLoadable, Param, Ctx>(
+    host: InitHost<'a, BackingStore, Param, Ctx>,
     result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
 ) -> ExecResult<InitResult> {
     match result {
@@ -797,7 +805,7 @@ pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {
         /// New state, if it changed.
-        new_state: bool,
+        new_state:   bool,
         /// Balance after the execution of the interrupt.
         new_balance: Amount,
         /// Some calls do not have any return values, such as transfers.
@@ -813,14 +821,14 @@ pub enum InvokeResponse {
 
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<'a>(
+pub fn invoke_init_from_artifact<'a, 'b, BackingStore: FlatLoadable>(
     artifact_bytes: &'a [u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
-    state: InstanceState,
+    state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
@@ -828,14 +836,14 @@ pub fn invoke_init_from_artifact<'a>(
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source(
+pub fn invoke_init_from_source<'b, BackingStore: FlatLoadable>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
-    state: InstanceState,
+    state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
@@ -845,26 +853,27 @@ pub fn invoke_init_from_source(
 /// accounting instructions inserted before the init function is called.
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source(
+pub fn invoke_init_with_metering_from_source<'b, BackingStore: FlatLoadable>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: u64,
-    state: InstanceState,
+    state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
 }
 
-fn process_receive_result<Param, R: RunnableCode, Ctx1, Ctx2>(
+fn process_receive_result<'a, BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
-    mut host: ReceiveHost<Param, Ctx1>,
+    host: ReceiveHost<'a, BackingStore, Param, Ctx1>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>>
 where
-    ReceiveHost<ParameterVec, Ctx2>: From<ReceiveHost<Param, Ctx1>>, {
+    StateLessReceiveHost<ParameterVec, Ctx2>: From<StateLessReceiveHost<Param, Ctx1>>, {
+    let mut stateless = host.stateless;
     match result {
         Ok(ExecutionOutcome::Success {
             result,
@@ -874,14 +883,14 @@ where
             if let Some(Value::I32(n)) = result {
                 if n >= 0 {
                     Ok(ReceiveResult::Success {
-                        logs: host.logs,
-                        return_value: host.return_value,
+                        logs: stateless.logs,
+                        return_value: stateless.return_value,
                         remaining_energy,
                     })
                 } else {
                     Ok(ReceiveResult::Reject {
                         reason: reason_from_wasm_error_code(n)?,
-                        return_value: host.return_value,
+                        return_value: stateless.return_value,
                         remaining_energy,
                     })
                 }
@@ -900,12 +909,12 @@ where
             // logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
             // existing logs.
-            let logs = std::mem::take(&mut host.logs);
+            let logs = std::mem::take(&mut stateless.logs);
             Ok(ReceiveResult::Interrupt {
                 remaining_energy,
                 logs,
                 config: Box::new(ReceiveInterruptedState {
-                    host: host.into(),
+                    host: stateless.into(),
                     artifact,
                     config,
                 }),
@@ -926,46 +935,60 @@ where
 }
 
 /// Invokes an receive-function from a given artifact
-pub fn invoke_receive<R: RunnableCode, Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive<
+    'b,
+    BackingStore: FlatLoadable,
+    R: RunnableCode,
+    Ctx1: v0::HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
     amount: u64,
     receive_ctx: Ctx1,
     receive_name: &str,
     param: ParameterRef,
     energy: u64,
-    instance_state: InstanceState,
+    instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>> {
     let mut host = ReceiveHost {
-        energy: InterpreterEnergy {
+        energy:    InterpreterEnergy {
             energy,
         },
-        activation_frames: constants::MAX_ACTIVATION_FRAMES,
-        logs: v0::Logs::new(),
-        state: instance_state,
-        return_value: Vec::new(),
-        parameters: vec![param],
-        receive_ctx,
+        stateless: StateLessReceiveHost {
+            activation_frames: constants::MAX_ACTIVATION_FRAMES,
+            logs: v0::Logs::new(),
+            return_value: Vec::new(),
+            parameters: vec![param],
+            latest_generation: 0,
+            receive_ctx,
+        },
+        state:     instance_state,
     };
 
     let result = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]);
     process_receive_result(artifact, host, result)
 }
 
-pub fn resume_receive(
-    mut interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
-    response: InvokeResponse,      // response from the call
-    energy: InterpreterEnergy,     // remaining energy for execution
-    instance_state: InstanceState, // New instance state
+pub fn resume_receive<'b, BackingStore: FlatLoadable>(
+    interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
+    response: InvokeResponse,  // response from the call
+    energy: InterpreterEnergy, // remaining energy for execution
+    instance_state: InstanceState<'b, BackingStore>, // New instance state
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
-    interrupted_state.host.energy = energy;
-    interrupted_state.host.state = instance_state;
+    let mut host = ReceiveHost {
+        stateless: interrupted_state.host,
+        energy,
+        state: instance_state,
+    };
+    // invalidate previous entries and iterators.
+    host.stateless.latest_generation += 1;
     let response = match response {
         InvokeResponse::Success {
             new_state,
             new_balance,
             data,
         } => {
-            interrupted_state.host.receive_ctx.self_balance = new_balance;
+            host.stateless.receive_ctx.self_balance = new_balance;
             // the response value is constructed by setting the last 5 bytes to 0
             // for the first 3 bytes, the first bit is 1 if the state changed, and 0
             // otherwise the remaining bits are the index of the parameter.
@@ -975,11 +998,11 @@ pub fn resume_receive(
                 0
             };
             if let Some(data) = data {
-                let len = interrupted_state.host.parameters.len();
+                let len = host.stateless.parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
                     bail!("Too many calls.")
                 }
-                interrupted_state.host.parameters.push(data);
+                host.stateless.parameters.push(data);
                 // return the index of the parameter to retrieve.
                 (len as u64 | tag) << 40
             } else {
@@ -996,11 +1019,11 @@ pub fn resume_receive(
         } => {
             // state did not change
             if let Some(data) = data {
-                let len = interrupted_state.host.parameters.len();
+                let len = host.stateless.parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
                     bail!("Too many calls.")
                 }
-                interrupted_state.host.parameters.push(data);
+                host.stateless.parameters.push(data);
                 // return the index of the parameter to retrieve.
                 (len as u64) << 40 | code
             } else {
@@ -1009,9 +1032,9 @@ pub fn resume_receive(
         }
     };
     // push the response from the invoke
-    interrupted_state.config.push_value(response);
-    let mut host = interrupted_state.host;
-    let result = interrupted_state.artifact.run_config(&mut host, interrupted_state.config);
+    let mut config = interrupted_state.config;
+    config.push_value(response);
+    let result = interrupted_state.artifact.run_config(&mut host, config);
     process_receive_result(interrupted_state.artifact, host, result)
 }
 
@@ -1028,14 +1051,20 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
 
 /// Invokes an receive-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_from_artifact<'a, Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive_from_artifact<
+    'a,
+    'b,
+    BackingStore: FlatLoadable,
+    Ctx1: v0::HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     artifact_bytes: &'a [u8],
     amount: u64,
     receive_ctx: Ctx1,
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
-    instance_state: InstanceState,
+    instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
@@ -1051,15 +1080,19 @@ pub fn invoke_receive_from_artifact<'a, Ctx1: v0::HasReceiveContext, Ctx2: From<
 
 /// Invokes an receive-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive_from_source<
+    'b,
+    BackingStore: FlatLoadable,
+    Ctx1: v0::HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
-    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
-    instance_state: InstanceState,
+    instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
@@ -1076,15 +1109,19 @@ pub fn invoke_receive_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_with_metering_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive_with_metering_from_source<
+    'b,
+    BackingStore: FlatLoadable,
+    Ctx1: v0::HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
-    current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
     energy: u64,
-    instance_state: InstanceState,
+    instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(

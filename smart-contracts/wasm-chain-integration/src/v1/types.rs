@@ -1,8 +1,12 @@
-use super::{Interrupt, ParameterVec, ReceiveHost};
+use std::io::Write;
+
+use super::{Interrupt, ParameterVec, StateLessReceiveHost};
 use crate::{resumption::InterruptedState, type_matches, v0};
-use anyhow::bail;
+use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
+use derive_more::{From, Into};
+use rust_trie as trie;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
@@ -34,7 +38,7 @@ pub enum InitResult {
 impl InitResult {
     /// Extract the
     #[cfg(feature = "enable-ffi")]
-    pub(crate) fn extract(self) -> (Vec<u8>, Option<ReturnValue>) {
+    pub(crate) fn extract(self) -> (Vec<u8>, Option<(bool, ReturnValue)>) {
         match self {
             InitResult::OutOfEnergy => (vec![0], None),
             InitResult::Reject {
@@ -46,7 +50,7 @@ impl InitResult {
                 out.push(1);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, Some(return_value))
+                (out, Some((false, return_value)))
             }
             InitResult::Success {
                 logs,
@@ -57,7 +61,7 @@ impl InitResult {
                 out.push(2);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, Some(return_value))
+                (out, Some((true, return_value)))
             }
         }
     }
@@ -66,7 +70,7 @@ impl InitResult {
 /// State of the suspended execution of the receive function.
 /// This retains both the module that is executed, as well the host.
 pub type ReceiveInterruptedState<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> =
-    InterruptedState<ProcessedImports, R, ReceiveHost<ParameterVec, Ctx>>;
+    InterruptedState<ProcessedImports, R, StateLessReceiveHost<ParameterVec, Ctx>>;
 
 #[derive(Debug)]
 pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
@@ -97,17 +101,17 @@ pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
 impl<R> ReceiveResult<R> {
     pub(crate) fn extract(
         self,
-    ) -> (Vec<u8>, Option<Box<ReceiveInterruptedState<R>>>, Option<ReturnValue>) {
+    ) -> (Vec<u8>, bool, Option<Box<ReceiveInterruptedState<R>>>, Option<ReturnValue>) {
         use ReceiveResult::*;
         match self {
-            OutOfEnergy => (vec![0], None, None),
+            OutOfEnergy => (vec![0], false, None, None),
             Trap {
                 remaining_energy,
                 .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
                 out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
-                (out, None, None)
+                (out, false, None, None)
             }
             Reject {
                 reason,
@@ -118,7 +122,7 @@ impl<R> ReceiveResult<R> {
                 out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, None, Some(return_value))
+                (out, false, None, Some(return_value))
             }
             Success {
                 logs,
@@ -128,7 +132,7 @@ impl<R> ReceiveResult<R> {
                 let mut out = vec![3];
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, None, Some(return_value))
+                (out, true, None, Some(return_value))
             }
             Interrupt {
                 remaining_energy,
@@ -140,7 +144,7 @@ impl<R> ReceiveResult<R> {
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out.extend_from_slice(&logs.to_bytes());
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
-                (out, Some(config), None)
+                (out, true, Some(config), None)
             }
         }
     }
@@ -349,16 +353,16 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "get_slot_time" => type_matches!(ty => []; I64),
                 "state_lookup_entry" => type_matches!(ty => [I32, I32]; I64),
                 "state_create_entry" => type_matches!(ty => [I32, I32]; I32),
-                "state_delete_entry" => type_matches!(ty => [I32]; I32),
+                "state_delete_entry" => type_matches!(ty => [I64]; I32),
                 "state_delete_prefix" => type_matches!(ty => [I32, I32]; I32),
                 "state_iterate_prefix" => type_matches!(ty => [I32, I32]; I32),
                 "state_iterator_next" => type_matches!(ty => [I32]; I64),
-                "state_entry_read" => type_matches!(ty => [I32, I32, I32, I32]; I32),
-                "state_entry_write" => type_matches!(ty => [I32, I32, I32, I32]; I32),
-                "state_entry_size" => type_matches!(ty => [I32]; I32),
-                "state_entry_resize" => type_matches!(ty => [I32, I32]; I32),
-                "state_entry_key_read" => type_matches!(ty => [I32, I32, I32, I32]; I32),
-                "state_entry_key_size" => type_matches!(ty => [I32]; I32),
+                "state_entry_read" => type_matches!(ty => [I64, I32, I32, I32]; I32),
+                "state_entry_write" => type_matches!(ty => [I64, I32, I32, I32]; I32),
+                "state_entry_size" => type_matches!(ty => [I64]; I32),
+                "state_entry_resize" => type_matches!(ty => [I64, I32]; I32),
+                "state_entry_key_read" => type_matches!(ty => [I64, I32, I32, I32]; I32),
+                "state_entry_key_size" => type_matches!(ty => [I64]; I32),
                 _ => false,
             }
         } else {
@@ -468,123 +472,228 @@ impl TryFromImport for ProcessedImports {
     fn ty(&self) -> &FunctionType { &self.ty }
 }
 
-/// Collection of function pointer provided by consensus to read and manipulate
-/// the state of an instance.
 #[derive(Debug)]
-#[repr(C)]
-pub struct InstanceStateCallbacksFFI {
-    /// Lookup a key in the instance state will return -1 if no entry exists for
-    /// the given key.
-    lookup_entry:
-        extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> InstanceStateEntryOption,
-    /// Create/override with an empty entry at the provided key.
-    create_entry:   extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> InstanceStateEntry,
-    /// Delete an entry, return 0 if the entry is not in the state before
-    /// deleting, 1 if the entry was deleted and 2 if the entry was invalid.
-    delete_entry:   extern "C" fn(*const InstanceStateFFI, InstanceStateEntry) -> u8,
-    /// Delete a prefix from the state, return 0 if nothing was deleted and 1 if
-    /// something was deleted
-    delete_prefix:  extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> u8,
-    /// Get an iterator for a prefix in the current state.
-    iterator: extern "C" fn(*const InstanceStateFFI, *const u8, size_t) -> InstanceStateIterator,
-    /// Get the next entry in an iterator, return -1 for no more entries, and -2
-    /// for invalid iterator.
-    iterator_next:  extern "C" fn(*const InstanceStateFFI, InstanceStateIterator) -> i64,
-    /// Read bytes from an entry, return -1 for invalid entry otherwise the
-    /// number of bytes being read.
-    entry_read:
-        extern "C" fn(*const InstanceStateFFI, InstanceStateEntry, *mut u8, size_t, u32) -> i64,
-    /// Write bytes to an entry, return -1 for invalid entry otherwise the
-    /// number of bytes being written.
-    entry_write:
-        extern "C" fn(*const InstanceStateFFI, InstanceStateEntry, *const u8, size_t, u32) -> i64,
-    /// Read the size of the bytes in an entry, return -1 for invalid entry
-    /// otherwise the number of bytes in the entry.
-    entry_size:     extern "C" fn(*const InstanceStateFFI, InstanceStateEntry) -> i64,
-    /// Resize size of an entry, return -1 for invalid entry otherwise the
-    /// previous size of the entry.
-    entry_resize:   extern "C" fn(*const InstanceStateFFI, InstanceStateEntry, u32) -> i64,
-    /// Read bytes from an entry's key, return -1 for invalid entry otherwise
-    /// the number of bytes being read.
-    entry_key_read:
-        extern "C" fn(*const InstanceStateFFI, InstanceStateEntry, *mut u8, size_t, u32) -> i64,
-    /// Read the size of the bytes in an entry's key, return -1 for invalid
-    /// entry otherwise the number of bytes in the key of the entry.
-    entry_key_size: extern "C" fn(*const InstanceStateFFI, InstanceStateEntry) -> i64,
-}
-
-/// Opaque type for the instance state and is mutated using the function
-/// pointers found in InstanceStateCallbacks.
-#[derive(Debug)]
-#[repr(C)]
-pub struct InstanceStateFFI {
-    private: [u8; 0],
+pub struct EntryWithKey {
+    id:  trie::EntryId,
+    key: Box<[u8]>, // FIXME: Use TinyVec here instead since most keys will be small.
 }
 
 /// Wrapper for the opaque pointers to the state of the instance managed by
 /// Consensus.
 #[derive(Debug)]
-pub struct InstanceState {
-    /// Collection of function pointers for manipulating the instance state in
-    /// consensus.
-    callbacks: InstanceStateCallbacksFFI,
+pub struct InstanceState<'a, BackingStore> {
+    /// The backing store that allows accessing any contract state that is not
+    /// in-memory yet.
+    backing_store:      BackingStore,
+    /// Current generation of the state.
+    current_generation: Generation,
+    entry_mapping:      Vec<Option<EntryWithKey>>, /* FIXME: This could be done more efficiently
+                                                    * by using a usize::MAX as deleted id */
+    iterators:          Vec<trie::Iterator>,
     /// Opaque pointer to the state of the instance in consensus.
-    state_ptr: *const InstanceStateFFI,
+    state_trie:         trie::StateTrie<'a>,
 }
 
-pub type InstanceStateEntry = u32;
-pub type InstanceStateEntryOption = i64;
-pub type InstanceStateIterator = u32;
+/// first bit is ignored, the next 31 indicate a generation,
+/// the final 32 indicates an index in the entry_mapping.
+#[derive(Debug, Clone, Copy, From, Into)]
+#[repr(transparent)]
+pub struct InstanceStateEntry {
+    index: u64,
+}
+
+pub type Generation = u32;
+
+impl InstanceStateEntry {
+    /// Return the current generation together with the index in the entry
+    /// mapping.
+    #[inline]
+    pub fn split(self) -> (Generation, usize) {
+        let idx = self.index & 0xffff_ffff;
+        let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
+        (generation as u32, idx as usize)
+    }
+
+    #[inline]
+    /// Construct a new index from a generation and index.
+    /// This assumes both value are small enough.
+    pub fn new(gen: Generation, idx: usize) -> Self {
+        Self {
+            index: u64::from(gen) << 32 | idx as u64,
+        }
+    }
+}
+
+impl InstanceStateEntryOption {
+    #[inline]
+    /// Construct a new index from a generation and index.
+    /// This assumes both value are small enough.
+    pub fn new(opt: Option<(Generation, usize)>) -> Self {
+        match opt {
+            None => Self {
+                index: 0,
+            },
+            Some((gen, idx)) => Self {
+                index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
+            },
+        }
+    }
+}
+
+/// if the first bit is 0 then this counts as None,
+/// otherwise the next 31 bits indicate the generation,
+/// and the remaining 32 the index in the entry mapping.
+#[derive(Debug, Clone, Copy, From, Into)]
+#[repr(transparent)]
+pub struct InstanceStateEntryOption {
+    index: u64,
+}
+/// Analogous to InstanceStateEntry.
+#[derive(Debug, Clone, Copy, From, Into)]
+#[repr(transparent)]
+pub struct InstanceStateIterator {
+    index: u64,
+}
+/// Analogous to InstanceStateEntryOption.
+#[derive(Debug, Clone, Copy, From, Into)]
+#[repr(transparent)]
+pub struct InstanceStateIteratorOption {
+    index: u64,
+}
+
+impl InstanceStateIterator {
+    /// Return the current generation together with the index in the entry
+    /// mapping.
+    #[inline]
+    pub fn split(self) -> (Generation, usize) {
+        let idx = self.index & 0xffff_ffff;
+        let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
+        (generation as u32, idx as usize)
+    }
+
+    #[inline]
+    /// Construct a new index from a generation and index.
+    /// This assumes both value are small enough.
+    pub fn new(gen: Generation, idx: usize) -> Self {
+        Self {
+            index: u64::from(gen) << 32 | idx as u64,
+        }
+    }
+}
+
+impl InstanceStateIteratorOption {
+    /// Construct a new index from a generation and index.
+    /// This assumes both value are small enough.
+    #[inline]
+    pub fn new(opt: Option<(Generation, usize)>) -> Self {
+        match opt {
+            None => Self {
+                index: 0,
+            },
+            Some((gen, idx)) => Self {
+                index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
+            },
+        }
+    }
+}
 
 pub type StateResult<A> = anyhow::Result<A>;
 
-impl InstanceState {
+impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     pub fn new(
-        callbacks: InstanceStateCallbacksFFI,
-        state_ptr: *const InstanceStateFFI,
-    ) -> InstanceState {
-        InstanceState {
-            callbacks,
-            state_ptr,
+        current_generation: u32,
+        backing_store: BackingStore,
+        state: &'a trie::MutableStateInner,
+    ) -> InstanceState<'a, BackingStore> {
+        Self {
+            current_generation,
+            backing_store,
+            state_trie: state.state.lock().unwrap(),
+            iterators: Vec::new(),
+            entry_mapping: Vec::new(),
         }
     }
 
     pub fn lookup_entry(&mut self, key: &[u8]) -> InstanceStateEntryOption {
-        (self.callbacks.lookup_entry)(self.state_ptr, key.as_ptr(), key.len() as size_t)
+        if let Some(id) = self.state_trie.get_entry(&mut self.backing_store, key) {
+            let idx = self.entry_mapping.len();
+            self.entry_mapping.push(Some(EntryWithKey {
+                id,
+                key: key.into(),
+            }));
+            InstanceStateEntryOption::new(Some((self.current_generation, idx)))
+        } else {
+            InstanceStateEntryOption::new(None)
+        }
     }
 
     pub fn create_entry(&mut self, key: &[u8]) -> InstanceStateEntry {
-        (self.callbacks.create_entry)(self.state_ptr, key.as_ptr(), key.len() as size_t)
+        let id = self.state_trie.insert(&mut self.backing_store, key, Vec::new()).0;
+        let idx = self.entry_mapping.len();
+        self.entry_mapping.push(Some(EntryWithKey {
+            id,
+            key: key.into(),
+        }));
+        InstanceStateEntry::new(self.current_generation, idx)
     }
 
-    pub fn delete_entry(&self, entry: InstanceStateEntry) -> StateResult<u32> {
-        match (self.callbacks.delete_entry)(self.state_ptr, entry) {
-            0 => Ok(0u32),
-            1 => Ok(1u32),
-            2 => Err(anyhow::anyhow!("Invalid state entry")),
-            _ => Err(anyhow::anyhow!("Invalid result")),
+    pub fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        let entry = if let Some(entry) = self.entry_mapping.get_mut(idx) {
+            if let Some(entry) = std::mem::take(entry) {
+                entry
+            } else {
+                return Ok(0);
+            }
+        } else {
+            return Ok(0);
+        };
+        if self.state_trie.delete(&mut self.backing_store, &entry.key).is_some() {
+            Ok(1)
+        } else {
+            Ok(0)
         }
     }
 
-    pub fn delete_prefix(&self, key: &[u8]) -> StateResult<u32> {
-        match (self.callbacks.delete_prefix)(self.state_ptr, key.as_ptr(), key.len() as size_t) {
-            0 => Ok(0),
-            1 => Ok(1),
-            _ => Err(anyhow::anyhow!("Invalid result")),
+    pub fn delete_prefix(&mut self, key: &[u8]) -> u32 {
+        if self.state_trie.delete_prefix(&mut self.backing_store, key).is_some() {
+            1
+        } else {
+            0
         }
     }
 
-    pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIterator {
-        (self.callbacks.iterator)(self.state_ptr, prefix.as_ptr(), prefix.len() as size_t)
+    pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIteratorOption {
+        if let Some(iter) = self.state_trie.iter(&mut self.backing_store, prefix) {
+            let iter_id = self.iterators.len();
+            self.iterators.push(iter);
+            InstanceStateIteratorOption::new(Some((self.current_generation, iter_id)))
+        } else {
+            InstanceStateIteratorOption::new(None)
+        }
     }
 
     pub fn iterator_next(
         &mut self,
         iter: InstanceStateIterator,
     ) -> StateResult<InstanceStateEntryOption> {
-        let result = (self.callbacks.iterator_next)(self.state_ptr, iter);
-        anyhow::ensure!(result != -2, "Invalid iterator");
-        Ok(result.try_into()?)
+        let (gen, idx) = iter.split();
+        ensure!(gen == self.current_generation, "Incorrect iterator generation.");
+        if let Some(iter) = self.iterators.get_mut(idx) {
+            if let Some(id) = self.state_trie.next(&mut self.backing_store, iter) {
+                let idx = self.entry_mapping.len();
+                self.entry_mapping.push(Some(EntryWithKey {
+                    id,
+                    key: iter.get_key().into(),
+                }));
+                Ok(InstanceStateEntryOption::new(Some((self.current_generation, idx))))
+            } else {
+                Ok(InstanceStateEntryOption::new(None))
+            }
+        } else {
+            bail!("Invalid iterator.")
+        }
     }
 
     pub fn entry_read(
@@ -593,15 +702,27 @@ impl InstanceState {
         dest: &mut [u8],
         offset: u32,
     ) -> StateResult<u32> {
-        let result = (self.callbacks.entry_read)(
-            self.state_ptr,
-            entry,
-            dest.as_mut_ptr(),
-            dest.len() as size_t,
-            offset,
-        );
-        anyhow::ensure!(result != -1, "Invalid entry");
-        Ok(result.try_into()?)
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            let res = self.state_trie.with_entry(entry.id, &mut self.backing_store, |v| {
+                let offset = offset as usize;
+                let num_copied = std::cmp::min(v.len().checked_sub(offset)?, dest.len());
+                &mut dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
+                Some(num_copied as u32)
+            });
+            if let Some(res) = res {
+                if let Some(res) = res {
+                    Ok(res)
+                } else {
+                    bail!("Offset is past end.");
+                }
+            } else {
+                bail!("Entry does not exist.");
+            }
+        } else {
+            bail!("Invalid entry.")
+        }
     }
 
     pub fn entry_write(
@@ -610,27 +731,55 @@ impl InstanceState {
         src: &[u8],
         offset: u32,
     ) -> StateResult<u32> {
-        let result = (self.callbacks.entry_write)(
-            self.state_ptr,
-            entry,
-            src.as_ptr(),
-            src.len() as size_t,
-            offset,
-        );
-        anyhow::ensure!(result != -1, "Invalid entry");
-        Ok(result.try_into()?)
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            if let Some(v) = self.state_trie.get_mut(entry.id, &mut self.backing_store) {
+                let offset = offset as usize;
+                ensure!(offset <= v.len(), "Cannot write past the len.");
+                let end = offset.checked_add(src.len()).context("Too much data.")?;
+                if v.len() < end {
+                    v.resize(end, 0u8);
+                }
+                (&mut v[offset..end]).write_all(src)?;
+                Ok(src.len() as u32)
+            } else {
+                bail!("Entry does not exist.");
+            }
+        } else {
+            bail!("Invalid entry.");
+        }
     }
 
     pub fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
-        let result = (self.callbacks.entry_size)(self.state_ptr, entry);
-        anyhow::ensure!(result != -1, "Invalid entry");
-        Ok(result.try_into()?)
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            let res =
+                self.state_trie.with_entry(entry.id, &mut self.backing_store, |v| v.len() as u32);
+            if let Some(res) = res {
+                Ok(res)
+            } else {
+                bail!("Entry does not exist.");
+            }
+        } else {
+            bail!("Invalid entry.");
+        }
     }
 
     pub fn entry_resize(&mut self, entry: InstanceStateEntry, new_size: u32) -> StateResult<u32> {
-        let result = (self.callbacks.entry_resize)(self.state_ptr, entry, new_size);
-        anyhow::ensure!(result != -1, "Invalid entry");
-        Ok(result.try_into()?)
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            if let Some(v) = self.state_trie.get_mut(entry.id, &mut self.backing_store) {
+                v.resize(new_size as usize, 0u8);
+                Ok(1)
+            } else {
+                bail!("Entry does not exist.");
+            }
+        } else {
+            bail!("Invalid entry.");
+        }
     }
 
     pub fn entry_key_read(
@@ -639,20 +788,28 @@ impl InstanceState {
         dest: &mut [u8],
         offset: u32,
     ) -> StateResult<u32> {
-        let result = (self.callbacks.entry_key_read)(
-            self.state_ptr,
-            entry,
-            dest.as_mut_ptr(),
-            dest.len() as size_t,
-            offset,
-        );
-        anyhow::ensure!(result != -1, "Invalid entry");
-        Ok(result.try_into()?)
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            let offset = offset as usize;
+            let num_copied = std::cmp::min(
+                entry.key.len().checked_sub(offset).context("Offset is past key.")?,
+                dest.len(),
+            );
+            &mut dest[0..num_copied].copy_from_slice(&entry.key[offset..offset + num_copied]);
+            Ok(num_copied as u32)
+        } else {
+            bail!("Invalid entry id.")
+        }
     }
 
     pub fn entry_key_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
-        let result = (self.callbacks.entry_key_size)(self.state_ptr, entry);
-        anyhow::ensure!(result != -1, "Invalid entry");
-        Ok(result.try_into()?)
+        let (gen, idx) = entry.split();
+        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
+        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            Ok(entry.key.len() as u32)
+        } else {
+            bail!("Invalid entry ID.")
+        }
     }
 }

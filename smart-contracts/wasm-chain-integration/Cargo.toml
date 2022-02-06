@@ -34,6 +34,9 @@ version = "2.0"
 path = "../concordium-contracts-common"
 features = ["derive-serde"]
 
+[dependencies.rust-trie]
+path = "../../rust-trie"
+
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
