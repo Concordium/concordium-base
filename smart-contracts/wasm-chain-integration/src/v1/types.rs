@@ -351,7 +351,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "get_receive_owner" => type_matches!(ty => [I32]),
                 "get_slot_time" => type_matches!(ty => []; I64),
                 "state_lookup_entry" => type_matches!(ty => [I32, I32]; I64),
-                "state_create_entry" => type_matches!(ty => [I32, I32]; I32),
+                "state_create_entry" => type_matches!(ty => [I32, I32]; I64),
                 "state_delete_entry" => type_matches!(ty => [I64]; I32),
                 "state_delete_prefix" => type_matches!(ty => [I32, I32]; I32),
                 "state_iterate_prefix" => type_matches!(ty => [I32, I32]; I32),
