@@ -51,6 +51,7 @@ module Concordium.Wasm (
   WasmModule(..),
   getModuleSource,
   getVersion,
+  demoteWasmVersion,
   WasmModuleV(..),
   getModuleRef,
   WasmVersion(..),
@@ -192,6 +193,9 @@ instance IsWasmVersion 'V0 where
 instance IsWasmVersion 'V1 where
   getWasmVersion = SV1
 
+demoteWasmVersion :: SWasmVersion v -> WasmVersion
+demoteWasmVersion SV0 = V0
+demoteWasmVersion SV1 = V1
 
 -- | The source of a contract in binary wasm format.
 newtype ModuleSource (v :: WasmVersion) = ModuleSource { moduleSource :: ByteString }
