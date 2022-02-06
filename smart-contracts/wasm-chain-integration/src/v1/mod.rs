@@ -1,13 +1,14 @@
 #[cfg(feature = "enable-ffi")]
 mod ffi;
+pub mod trie;
 mod types;
 
 use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{AccountAddress, Amount, ContractAddress, OwnedEntrypointName};
 use machine::Value;
-use rust_trie::FlatLoadable;
 use std::{borrow::Borrow, io::Write, sync::Arc};
+use trie::FlatLoadable;
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
@@ -143,10 +144,8 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
 
 /// v1 host functions.
 mod host {
-    use concordium_contracts_common::{Cursor, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE};
-    use rust_trie::FlatLoadable;
-
     use super::*;
+    use concordium_contracts_common::{Cursor, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE};
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;

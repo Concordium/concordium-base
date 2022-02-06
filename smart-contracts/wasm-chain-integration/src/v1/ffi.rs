@@ -1,9 +1,9 @@
-use crate::{slice_from_c_bytes, v1::*};
-use libc::size_t;
-use rust_trie::{
+use super::trie::{
     low_level::{Loadable, Reference},
     MutableState, PersistentState,
 };
+use crate::{slice_from_c_bytes, v1::*};
+use libc::size_t;
 use std::sync::Arc;
 use wasm_transform::{
     artifact::{CompiledFunction, OwnedArtifact},
@@ -523,4 +523,11 @@ extern "C" fn deserialize_persistent_state_v1(
     len: size_t,
 ) -> *mut PersistentState {
     todo!()
+}
+
+#[no_mangle]
+/// Take the byte array and copy it into a vector.
+/// The vector must be passed to Rust to be deallocated.
+extern "C" fn copy_to_vec_ffi(data: *const u8, len: libc::size_t) -> *mut Vec<u8> {
+    Box::into_raw(Box::new(unsafe { std::slice::from_raw_parts(data, len) }.to_vec()))
 }

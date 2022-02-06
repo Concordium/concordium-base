@@ -1,12 +1,11 @@
 use std::io::Write;
 
-use super::{Interrupt, ParameterVec, StateLessReceiveHost};
+use super::{trie, Interrupt, ParameterVec, StateLessReceiveHost};
 use crate::{resumption::InterruptedState, type_matches, v0};
 use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use derive_more::{From, Into};
-use rust_trie as trie;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
