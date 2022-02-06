@@ -753,8 +753,8 @@ pub fn invoke_init<'a, BackingStore: FlatLoadable, R: RunnableCode>(
     process_init_result(host, result)
 }
 
-fn process_init_result<'a, BackingStore: FlatLoadable, Param, Ctx>(
-    host: InitHost<'a, BackingStore, Param, Ctx>,
+fn process_init_result<BackingStore: FlatLoadable, Param, Ctx>(
+    host: InitHost<'_, BackingStore, Param, Ctx>,
     result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
 ) -> ExecResult<InitResult> {
     match result {
@@ -865,9 +865,9 @@ pub fn invoke_init_with_metering_from_source<'b, BackingStore: FlatLoadable>(
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
 }
 
-fn process_receive_result<'a, BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(
+fn process_receive_result<BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
-    host: ReceiveHost<'a, BackingStore, Param, Ctx1>,
+    host: ReceiveHost<'_, BackingStore, Param, Ctx1>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>>
 where
@@ -968,11 +968,11 @@ pub fn invoke_receive<
     process_receive_result(artifact, host, result)
 }
 
-pub fn resume_receive<'b, BackingStore: FlatLoadable>(
+pub fn resume_receive<BackingStore: FlatLoadable>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
-    instance_state: InstanceState<'b, BackingStore>, // New instance state
+    instance_state: InstanceState<'_, BackingStore>, // New instance state
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
     let mut host = ReceiveHost {
         stateless: interrupted_state.host,

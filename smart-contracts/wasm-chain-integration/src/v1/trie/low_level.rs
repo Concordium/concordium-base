@@ -1538,15 +1538,13 @@ impl<V> MutableTrie<V> {
         let mut reachable = Vec::new();
         while let Some(idx) = reachable_stack.pop() {
             reachable.push(idx);
-            match &owned_nodes[idx].children {
-                ChildrenCow::Borrowed(_) => reachable.push(idx),
-                ChildrenCow::Owned {
-                    value,
-                    ..
-                } => {
-                    for c in value.iter() {
-                        reachable_stack.push(c.index());
-                    }
+            if let ChildrenCow::Owned {
+                value,
+                ..
+            } = &owned_nodes[idx].children
+            {
+                for c in value.iter() {
+                    reachable_stack.push(c.index());
                 }
             }
         }

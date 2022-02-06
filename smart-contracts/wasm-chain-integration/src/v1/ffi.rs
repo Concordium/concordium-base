@@ -68,7 +68,8 @@ unsafe extern "C" fn call_init_v1(
                             *output_return_value = Box::into_raw(Box::new(return_value));
                             if success {
                                 // the lock has been dropped at this point
-                                *output_state_ptr = Box::into_raw(Box::new(initial_state));
+                                let initial_state = Box::into_raw(Box::new(initial_state));
+                                *output_state_ptr = initial_state;
                             }
                         } else {
                             *output_return_value = std::ptr::null_mut();
@@ -113,7 +114,7 @@ unsafe extern "C" fn call_receive_v1(
         .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
-        let state_ptr = *state_ptr_ptr;
+        let state_ptr = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         let mut state = (&mut *state_ptr).make_fresh_generation();
         let inner = state.get_inner();
         let instance_state = InstanceState::new(0, loader, inner);
@@ -147,7 +148,8 @@ unsafe extern "C" fn call_receive_v1(
                             *output_return_value = std::ptr::null_mut();
                         }
                         if store_state {
-                            *state_ptr_ptr = Box::into_raw(Box::new(state))
+                            let new_state = Box::into_raw(Box::new(state));
+                            *state_ptr_ptr = new_state;
                         }
                         ptr
                     }
@@ -488,11 +490,15 @@ extern "C" fn freeze_mutable_state_v1(
 #[no_mangle]
 extern "C" fn thaw_persistent_state_v1(tree: *mut PersistentState) -> *mut MutableState {
     let tree = unsafe { &*tree };
-    Box::into_raw(Box::new(tree.thaw()))
+    let thawed = tree.thaw();
+    Box::into_raw(Box::new(thawed))
 }
 
 #[no_mangle]
-extern "C" fn get_new_state_size_v1(tree: *mut MutableState) -> u64 { todo!() }
+extern "C" fn get_new_state_size_v1(tree: *mut MutableState) -> u64 {
+    // TODO: Actually implement meaningfully
+    0
+}
 
 #[no_mangle]
 extern "C" fn cache_persistent_state_v1(mut loader: LoadCallBack, tree: *mut PersistentState) {

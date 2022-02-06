@@ -707,7 +707,7 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
             let res = self.state_trie.with_entry(entry.id, &mut self.backing_store, |v| {
                 let offset = offset as usize;
                 let num_copied = std::cmp::min(v.len().checked_sub(offset)?, dest.len());
-                &mut dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
+                dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
                 Some(num_copied as u32)
             });
             if let Some(res) = res {
@@ -720,7 +720,7 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
                 bail!("Entry does not exist.");
             }
         } else {
-            bail!("Invalid entry.")
+            bail!("Invalid entry.");
         }
     }
 
@@ -795,10 +795,10 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
                 entry.key.len().checked_sub(offset).context("Offset is past key.")?,
                 dest.len(),
             );
-            &mut dest[0..num_copied].copy_from_slice(&entry.key[offset..offset + num_copied]);
+            dest[0..num_copied].copy_from_slice(&entry.key[offset..offset + num_copied]);
             Ok(num_copied as u32)
         } else {
-            bail!("Invalid entry id.")
+            bail!("Invalid entry.");
         }
     }
 
@@ -808,7 +808,7 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
             Ok(entry.key.len() as u32)
         } else {
-            bail!("Invalid entry ID.")
+            bail!("Invalid entry.");
         }
     }
 }
