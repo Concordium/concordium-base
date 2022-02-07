@@ -1,6 +1,6 @@
 use super::low_level::{
-    FlatLoadable, FlatStorable, Hashed, LoadError, LoadResult, Loadable, MutableTrie, Node,
-    Reference, StoreResult,
+    Collector, FlatLoadable, FlatStorable, Hashed, LoadError, LoadResult, Loadable, MutableTrie,
+    Node, Reference, StoreResult,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -170,18 +170,24 @@ impl MutableState {
     }
 
     /// Make the state persistent. This leaves the mutable state empty.
-    pub fn freeze(&mut self, loader: &mut impl FlatLoadable) -> PersistentState {
-        match self.inner.as_mut() {
+    pub fn freeze<C: Collector<Value>>(
+        &mut self,
+        loader: &mut impl FlatLoadable,
+        collector: &mut C,
+    ) -> PersistentState {
+        let inner = self.inner.take();
+        match inner {
             Some(inner) => {
                 let mut trie = std::mem::replace(
                     &mut *inner.state.lock().expect("Another thread panicked."),
                     MutableTrie::empty(),
                 );
                 trie.normalize(inner.root);
-                match trie.freeze(loader) {
+                self.origin = match trie.freeze(loader, collector) {
                     Some(node) => PersistentState::Root(node),
                     None => PersistentState::Empty,
-                }
+                };
+                self.origin.clone()
             }
             None => self.origin.clone(),
         }

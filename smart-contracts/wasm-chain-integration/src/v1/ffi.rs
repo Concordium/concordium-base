@@ -1,5 +1,5 @@
 use super::trie::{
-    low_level::{Loadable, Reference},
+    low_level::{EmptyCollector, Loadable, Reference, SizeCollector},
     MutableState, PersistentState,
 };
 use crate::{slice_from_c_bytes, v1::*};
@@ -480,7 +480,7 @@ extern "C" fn freeze_mutable_state_v1(
     hash_buf: *mut u8,
 ) -> *mut PersistentState {
     let tree = unsafe { &mut *tree };
-    let persistent = tree.freeze(&mut loader);
+    let persistent = tree.freeze(&mut loader, &mut EmptyCollector);
     let hash = persistent.hash();
     let hash: &[u8] = hash.as_ref();
     unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
@@ -495,9 +495,14 @@ extern "C" fn thaw_persistent_state_v1(tree: *mut PersistentState) -> *mut Mutab
 }
 
 #[no_mangle]
-extern "C" fn get_new_state_size_v1(tree: *mut MutableState) -> u64 {
-    // TODO: Actually implement meaningfully
-    0
+/// Freeze the tree and get the new state size.
+/// The frozen tree is not returned, but it is stored in the "origin" field so
+/// that a call to freeze later on is essentially free.
+extern "C" fn get_new_state_size_v1(mut loader: LoadCallBack, tree: *mut MutableState) -> u64 {
+    let tree = unsafe { &mut *tree };
+    let mut collector = SizeCollector::default();
+    let _ = tree.freeze(&mut loader, &mut collector);
+    collector.collect()
 }
 
 #[no_mangle]

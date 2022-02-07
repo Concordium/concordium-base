@@ -22,7 +22,7 @@ fn prop_serialization_caches() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader) {
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -43,7 +43,7 @@ fn prop_serialization() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader) {
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -68,7 +68,7 @@ fn prop_serialization_preseves_hash() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader) {
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -99,7 +99,7 @@ fn prop_hash_independent_of_order() {
             inputs.sort_by(|(l, _), (r, _)| l.cmp(r));
             inputs.dedup_by(|(l, _), (r, _)| l == r);
             let (trie, mut loader) = make_mut_trie(inputs.clone());
-            let frozen = if let Some(t) = trie.freeze(&mut loader) {
+            let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
                 t
             } else {
                 ensure!(inputs.len() == 0, "Empty tree, but non-empty inputs.");
@@ -112,7 +112,7 @@ fn prop_hash_independent_of_order() {
                 inputs.swap(l % len, r % len);
             }
             let (trie_1, mut loader_1) = make_mut_trie(inputs.clone());
-            let frozen_1 = if let Some(t) = trie_1.freeze(&mut loader_1) {
+            let frozen_1 = if let Some(t) = trie_1.freeze(&mut loader_1, &mut EmptyCollector) {
                 t
             } else {
                 bail!("The first tree was not empty, but the second one is.");
@@ -293,7 +293,7 @@ fn prop_matches_reference_after_freeze_thaw() {
         let trie = if let Some(Hashed {
             data: trie,
             ..
-        }) = trie.freeze(&mut loader)
+        }) = trie.freeze(&mut loader, &mut EmptyCollector)
         {
             trie
         } else {

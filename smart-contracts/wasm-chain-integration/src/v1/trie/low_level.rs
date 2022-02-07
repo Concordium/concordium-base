@@ -12,6 +12,63 @@ use thiserror::*;
 
 const INLINE_CAPACITY: usize = 8;
 
+const INLINE_STEM_LENGTH: usize = 0b0011_1111;
+
+/// A type that can be used to collect auxiliary information while a mutable
+/// trie is being frozen. Particular use-cases of this are collecting the size
+/// of new data, as well as new persistent nodes.
+pub trait Collector<V> {
+    fn add_value(&mut self, data: &V);
+    fn add_path(&mut self, path: usize);
+    fn add_children(&mut self, num_children: usize);
+}
+/// Collector that does not collect anything.
+pub struct EmptyCollector;
+
+impl<V> Collector<V> for EmptyCollector {
+    #[inline(always)]
+    fn add_value(&mut self, _data: &V) {}
+
+    #[inline(always)]
+    fn add_path(&mut self, _path: usize) {}
+
+    #[inline(always)]
+    fn add_children(&mut self, _num_children: usize) {}
+}
+
+/// A collector that keeps track of how much additional data will be required to
+/// store the tree.
+#[derive(Default)]
+pub struct SizeCollector {
+    num_bytes: u64,
+}
+
+impl SizeCollector {
+    pub fn collect(self) -> u64 { self.num_bytes }
+}
+
+// TODO: Make sure this is adequate. There is a bit of overhead with size length
+// when se store data.
+impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
+    #[inline]
+    fn add_value(&mut self, data: &V) { self.num_bytes += data.as_ref().len() as u64; }
+
+    #[inline]
+    fn add_path(&mut self, path: usize) {
+        // 1 is for the tag of the value, 4 is for large key length.
+        if path <= INLINE_STEM_LENGTH {
+            self.num_bytes += 1 + path as u64;
+        } else {
+            self.num_bytes += 1 + 4 + path as u64;
+        }
+    }
+
+    fn add_children(&mut self, num_children: usize) {
+        // 1 for the key, 8 for the reference.
+        self.num_bytes += (num_children as u64) * (1 + 8)
+    }
+}
+
 #[repr(transparent)]
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
 /// Reference to a storage location where an item may be retrieved
@@ -692,12 +749,13 @@ enum ChildrenCow<V> {
     },
 }
 
-fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>>(
+fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
     borrowed_values: &mut [Link<Hashed<CachedRef<V>>>],
     owned_values: &mut [V],
     entries: &[Entry],
     mutable: Option<usize>,
     loader: &mut Ctx,
+    collector: &mut C,
 ) -> Option<Link<Hashed<CachedRef<V>>>> {
     let entry_idx = mutable?;
     match entries[entry_idx] {
@@ -710,6 +768,7 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>>(
             } else {
                 let value = std::mem::take(&mut owned_values[entry_idx]);
                 let hash = value.hash(loader);
+                collector.add_value(&value);
                 Some(Link::new(Hashed::new(hash, CachedRef::Memory {
                     value,
                 })))
@@ -719,6 +778,7 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>>(
             entry_idx,
         } => {
             let value = std::mem::take(&mut owned_values[entry_idx]);
+            collector.add_value(&value);
             let hash = value.hash(loader);
             Some(Link::new(Hashed::new(hash, CachedRef::Memory {
                 value,
@@ -1009,7 +1069,7 @@ impl<V: AsRef<[u8]>> Node<V> {
             };
             // if the first bit is 0 then the first byte encodes
             // path length + presence of value
-            if stem_len <= 0b0011_1111 {
+            if stem_len <= INLINE_STEM_LENGTH {
                 let tag = stem_len as u8 | value_mask;
                 buf.write_u8(tag)?;
             } else {
@@ -1525,7 +1585,11 @@ impl<V> MutableTrie<V> {
     /// TODO: It might be useful to return a list of new nodes so that they
     /// may be persisted quicker than traversing the tree again.
     /// Freeze the current generation. Returns None if the tree was empty.
-    pub fn freeze<Ctx: FlatLoadable>(self, loader: &mut Ctx) -> Option<Hashed<Node<V>>>
+    pub fn freeze<Ctx: FlatLoadable, C: Collector<V>>(
+        self,
+        loader: &mut Ctx,
+        collector: &mut C,
+    ) -> Option<Hashed<Node<V>>>
     where
         V: ToSHA256<Ctx> + Default, {
         let mut owned_nodes = self.nodes;
@@ -1551,19 +1615,24 @@ impl<V> MutableTrie<V> {
         // The 'reachable' array now has all reachable nodes in the order such that
         // a child of a node is always after the node itself. The root is at the
         // beginning of the array.
+        // Now traverse the nodes bottom up, right to left.
         let mut nodes = HashMap::new();
         for node_idx in reachable.into_iter().rev() {
             let node = std::mem::take(&mut owned_nodes[node_idx]);
             match node.children {
                 ChildrenCow::Borrowed(children) => {
+                    let value = freeze_value(
+                        &mut borrowed_values,
+                        &mut values,
+                        &entries,
+                        node.value,
+                        loader,
+                        collector,
+                    );
+                    collector.add_path(node.path.as_ref().len());
+                    collector.add_children(children.len());
                     let value = Node {
-                        value: freeze_value(
-                            &mut borrowed_values,
-                            &mut values,
-                            &entries,
-                            node.value,
-                            loader,
-                        ),
+                        value,
                         path: node.path,
                         children,
                     };
@@ -1584,14 +1653,18 @@ impl<V> MutableTrie<V> {
                             }),
                         ));
                     }
+                    let value = freeze_value(
+                        &mut borrowed_values,
+                        &mut values,
+                        &entries,
+                        node.value,
+                        loader,
+                        collector,
+                    );
+                    collector.add_path(node.path.as_ref().len());
+                    collector.add_children(children.len());
                     let new_node = Node {
-                        value: freeze_value(
-                            &mut borrowed_values,
-                            &mut values,
-                            &entries,
-                            node.value,
-                            loader,
-                        ),
+                        value,
                         path: node.path,
                         children,
                     };
