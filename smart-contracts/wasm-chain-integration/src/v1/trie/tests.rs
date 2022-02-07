@@ -37,13 +37,18 @@ fn prop_serialization_caches() {
 }
 
 #[test]
-/// Check that the mutable trie and its iterator match the reference
-/// implementation.
+/// Check that serialization computes the correct size, and that it can be
+/// deserialized.
 fn prop_serialization() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+        let mut collector = SizeCollector::default();
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut collector) {
+            // check that the computed size at least accounts for all the data
+            // keys are partially shared so we cannot easily bound those.
+            let data_size = reference.values().map(|v| v.len() as u64).sum::<u64>();
+            ensure!(collector.collect() > data_size);
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
