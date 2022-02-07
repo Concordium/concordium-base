@@ -17,8 +17,8 @@ fn make_mut_trie<A: AsRef<[u8]>>(
 }
 
 #[test]
-/// Check that serialization also caches the data.
-fn prop_serialization_caches() {
+/// Check that storing also caches the data.
+fn prop_storing_caches() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
@@ -37,9 +37,9 @@ fn prop_serialization_caches() {
 }
 
 #[test]
-/// Check that serialization computes the correct size, and that it can be
+/// Check that storing computes the correct size, and that it can be
 /// deserialized.
-fn prop_serialization() {
+fn prop_storing() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
@@ -68,8 +68,8 @@ fn prop_serialization() {
 }
 
 #[test]
-/// Check that the serialization preserves hash.
-fn prop_serialization_preseves_hash() {
+/// Check that the storing preserves hash.
+fn prop_storing_preseves_hash() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
