@@ -68,6 +68,46 @@ fn prop_storing() {
 }
 
 #[test]
+fn prop_serialization() {
+    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs);
+        let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        let mut out = Vec::new();
+        frozen.serialize(&mut loader, &mut out).context("Serialization failed.")?;
+        let mut source = std::io::Cursor::new(&out);
+        let deserialized =
+            Hashed::<Node<Vec<u8>>>::deserialize(&mut source).context("Failed to deserialize")?;
+        ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
+        let mut mutable = deserialized.data.make_mutable(0);
+        let mut iterator = if let Some(i) = mutable.iter(&mut loader, &[]) {
+            i
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        let reference_iter = reference.iter();
+        for (k, v) in reference_iter {
+            let entry =
+                mutable.next(&mut loader, &mut iterator).context("Trie iterator ends early.")?;
+            ensure!(
+                mutable.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
+                "Reference value does not match the trie value."
+            );
+            let it_key = iterator.get_key();
+            ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}.", it_key, k);
+        }
+        Ok(())
+    };
+    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
 /// Check that the storing preserves hash.
 fn prop_storing_preseves_hash() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {

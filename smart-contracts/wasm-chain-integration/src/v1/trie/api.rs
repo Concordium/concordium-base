@@ -53,6 +53,29 @@ impl PersistentState {
         self.store_update_buf(backing_store, &mut top)?;
         backing_store.store_raw(&top)
     }
+
+    pub fn serialize(
+        &self,
+        loader: &mut impl FlatLoadable,
+        out: &mut impl std::io::Write,
+    ) -> anyhow::Result<()> {
+        match self {
+            PersistentState::Empty => out.write_u8(0)?,
+            PersistentState::Root(ht) => {
+                out.write_u8(1)?;
+                ht.serialize(loader, out)?
+            }
+        }
+        Ok(())
+    }
+
+    pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self> {
+        match source.read_u8()? {
+            0 => Ok(Self::Empty),
+            1 => Ok(Self::Root(Hashed::<Node<_>>::deserialize(source)?)),
+            tag => anyhow::bail!("Invalid persistent tree tag: {}", tag),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

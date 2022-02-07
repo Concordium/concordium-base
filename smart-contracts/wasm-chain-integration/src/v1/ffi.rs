@@ -521,11 +521,22 @@ extern "C" fn hash_persistent_state_v1(tree: *mut PersistentState, hash_buf: *mu
 
 #[no_mangle]
 extern "C" fn serialize_persistent_state_v1(
-    loader: LoadCallBack,
+    mut loader: LoadCallBack,
     tree: *mut PersistentState,
     out_len: *mut size_t,
 ) -> *mut u8 {
-    todo!()
+    let tree = unsafe { &*tree };
+    let mut out = Vec::new();
+    match tree.serialize(&mut loader, &mut out) {
+        Ok(_) => {
+            out.shrink_to_fit();
+            unsafe { *out_len = out.len() as size_t };
+            let ptr = out.as_mut_ptr();
+            std::mem::forget(out);
+            ptr
+        }
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 #[no_mangle]
@@ -533,7 +544,13 @@ extern "C" fn deserialize_persistent_state_v1(
     source: *const u8,
     len: size_t,
 ) -> *mut PersistentState {
-    todo!()
+    let slice = unsafe { std::slice::from_raw_parts(source, len) };
+    let mut source = std::io::Cursor::new(slice);
+    match PersistentState::deserialize(&mut source) {
+        // make sure to consume the entire input.
+        Ok(state) if source.position() == len as u64 => Box::into_raw(Box::new(state)),
+        _ => std::ptr::null_mut(),
+    }
 }
 
 #[no_mangle]

@@ -2061,6 +2061,147 @@ impl<V> Node<V> {
     pub fn empty() -> Self { Self::default() }
 }
 
+impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
+    /// Serialize the node and its children into a byte array.
+    /// Note that this serializes the entire tree together with its children, so
+    /// it is different from store_update which only traverses the part of
+    /// the tree that is in memory.
+    pub fn serialize(
+        &self,
+        loader: &mut impl FlatLoadable,
+        out: &mut impl std::io::Write,
+    ) -> anyhow::Result<()> {
+        // this limits the tree size to 4 billion nodes.
+        let mut node_counter: u32 = 0;
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back((self.clone(), node_counter));
+        while let Some((node, idx)) = queue.pop_front() {
+            out.write_u32::<BigEndian>(node_counter - idx)?;
+            out.write_all(node.hash.as_ref())?;
+            let node = &node.data;
+            // FIXME: Make a function to do this since it is the same as in
+            // store_update_buf.
+            let stem_len = node.path.as_ref().len();
+            let value_mask: u8 = if node.value.is_none() {
+                0
+            } else {
+                0b0100_0000
+            };
+            // if the first bit is 0 then the first byte encodes
+            // path length + presence of value
+            if stem_len <= INLINE_STEM_LENGTH {
+                let tag = stem_len as u8 | value_mask;
+                out.write_u8(tag)?;
+            } else {
+                // TODO: We could optimize this as well by using variable-length encoding.
+                // But it probably does not matter in practice since paths should really always
+                // be < 64 in length.
+                let tag = 0b1000_0000 | value_mask;
+                out.write_u8(tag)?;
+                out.write_u32::<BigEndian>(stem_len as u32)?;
+            }
+            // store the path
+            out.write_all(node.path.as_ref())?;
+            // store the value
+            if let Some(v) = node.value.as_ref() {
+                let borrowed = v.borrow();
+                out.write_all(borrowed.hash.as_ref())?;
+                borrowed.data.use_value(loader, |v| {
+                    out.write_u32::<BigEndian>(v.as_ref().len() as u32)?;
+                    out.write_all(v.as_ref())
+                })?;
+            }
+            out.write_u16::<BigEndian>(node.children.len() as u16)?;
+            let parent_idx = node_counter;
+            for (key, child) in node.children.iter() {
+                out.write_u8(*key)?;
+                child.borrow().use_value(loader, |nd| queue.push_back((nd.clone(), parent_idx)));
+            }
+            node_counter += 1;
+        }
+        Ok(())
+    }
+
+    /// Serialize the node and its children into a byte array.
+    /// Note that this serializes the entire tree together with its children, so
+    /// it is different from store_update which only traverses the part of
+    /// the tree that is in memory.
+    pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self>
+    where
+        V: From<Vec<u8>>, {
+        let mut parents: Vec<Link<CachedRef<Hashed<Node<V>>>>> = Vec::new();
+        let mut todo = std::collections::VecDeque::new();
+        todo.push_back(0); // dummy initial value, will not be used.
+        while let Some(key) = todo.pop_front() {
+            let idx = source.read_u32::<BigEndian>()?;
+            let hash = Hash::read(source)?;
+            let tag = source.read_u8()?;
+            let path_len = if tag & 0b1000_0000 == 0 {
+                // stem length is encoded in the tag
+                u32::from(tag & 0b0011_1111)
+            } else {
+                // stem length follows as a u32
+                source.read_u32::<BigEndian>()?
+            };
+            let mut path = vec![0u8; path_len as usize];
+            source.read_exact(&mut path)?;
+            let path = Stem::from(path);
+            let value = if (tag & 0b100_0000) != 0 {
+                let value_hash = Hash::read(source)?;
+                let value_len = source.read_u32::<BigEndian>()?;
+                let mut val = vec![0u8; value_len as usize];
+                source.read_exact(&mut val)?;
+                Some(Link::new(Hashed::new(value_hash, CachedRef::Memory {
+                    value: val.into(),
+                })))
+            } else {
+                None
+            };
+            let num_children = source.read_u16::<BigEndian>()?;
+            let new_node = Link::new(CachedRef::Memory {
+                value: Hashed::new(hash, Node {
+                    value,
+                    path,
+                    children: Vec::new(),
+                }),
+            });
+            if idx > 0 {
+                let mut parent = parents[parents.len() - idx as usize].borrow_mut();
+                if let CachedRef::Memory {
+                    value,
+                } = &mut *parent
+                {
+                    value.data.children.push((key, new_node.clone()));
+                } else {
+                    // all values are allocated in this function, so in-memory.
+                    unsafe { std::hint::unreachable_unchecked() };
+                }
+            }
+            for _ in 0..num_children {
+                let key = source.read_u8()?;
+                todo.push_back(key);
+            }
+            parents.push(new_node);
+        }
+        if let Some(root) = parents.into_iter().nth(0) {
+            let rw = std::mem::take(&mut *root.borrow_mut());
+            if let CachedRef::Memory {
+                value,
+            } = rw
+            {
+                Ok(value)
+            } else {
+                // all values are allocated in this function, so in-memory.
+                unsafe { std::hint::unreachable_unchecked() };
+            }
+        } else {
+            // all values are allocated in this function, so in-memory, and there is at
+            // least one.
+            unsafe { std::hint::unreachable_unchecked() };
+        }
+    }
+}
+
 impl<V> Default for Node<V> {
     fn default() -> Self {
         Self {
