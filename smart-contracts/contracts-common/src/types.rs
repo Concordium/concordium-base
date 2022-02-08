@@ -915,9 +915,29 @@ impl OwnedEntrypointName {
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct Parameter<'a>(pub &'a [u8]);
 
+impl<'a> From<&'a [u8]> for Parameter<'a> {
+    #[inline(always)]
+    fn from(param: &'a [u8]) -> Self { Self(param) }
+}
+
+impl<'a> AsRef<[u8]> for Parameter<'a> {
+    #[inline(always)]
+    fn as_ref(&self) -> &[u8] { self.0 }
+}
+
 /// Parameter to the init function or entrypoint. Owned version.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct OwnedParameter(pub Vec<u8>);
+
+impl<'a> AsRef<[u8]> for OwnedParameter {
+    #[inline(always)]
+    fn as_ref(&self) -> &[u8] { self.0.as_ref() }
+}
+
+impl From<Vec<u8>> for OwnedParameter {
+    #[inline(always)]
+    fn from(param: Vec<u8>) -> Self { Self(param) }
+}
 
 impl OwnedParameter {
     pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
