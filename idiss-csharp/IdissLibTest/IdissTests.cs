@@ -46,6 +46,9 @@ namespace IdissLibTest
                 var expected = new AccountAddress("3XqeZafxX5vpcUb6hLW98gYwdMxAsPWG5CkkijW98ZMptvej3y");
                 Assert.AreEqual(result, expected);
                 var idCreation = Idiss.CreateIdentityObject(ipInfo, alist, request, expiry, ipKeys);
+                Assert.AreEqual(request.idObjectRequest.value.choiceArData.threshold,
+                                idCreation.arRecord.value.revocationThreshold,
+                                "AR record does not have the correct anonymity revocation threshold.");
             }
             catch (RequestValidationException e)
             {

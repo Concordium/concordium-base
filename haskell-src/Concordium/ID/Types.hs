@@ -155,8 +155,18 @@ data AccountInformation = AccountInformation {
   aiThreshold :: !AccountThreshold 
 } deriving(Eq, Show, Ord)
 
+
+-- |SHA256 hashing instance for `AccountInformation`
+-- Security considerations: It is crucial to use a cryptographic secure hash instance for `AccountInformation`.
+-- The caller must be able to use the resulting hash in security critical application code.
+-- Currently the computed hash is used to short circuit the signature verification check of transactions. 
 instance HashableTo SHA256.Hash AccountInformation where
   getHash = SHA256.hash . encode
+
+-- |Check that the account information matches the given SHA256 hash.
+-- Note. See above for more information.
+matchesAccountInformation :: AccountInformation -> SHA256.Hash -> Bool
+matchesAccountInformation ai h = getHash ai == h
 
 getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
 getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
