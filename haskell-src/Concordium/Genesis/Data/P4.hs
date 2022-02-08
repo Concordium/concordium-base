@@ -1,4 +1,4 @@
--- |This module defines the genesis data fromat for the 'P4' protocol version.
+-- |This module defines the genesis data format for the 'P4' protocol version.
 module Concordium.Genesis.Data.P4 where
 
 import Data.Serialize
@@ -61,7 +61,7 @@ putGenesisDataV6 GDP4Regenesis{..} = do
   putWord8 1
   putRegenesisData genesisRegenesis
 
--- |Deserialize genesis data with a version tag. The expected version tag is 5
+-- |Deserialize genesis data with a version tag. The expected version tag is 6
 -- and this must be distinct from version tags of other genesis data formats.
 getVersionedGenesisData :: Get GenesisDataP4
 getVersionedGenesisData =
@@ -70,7 +70,7 @@ getVersionedGenesisData =
         n -> fail $ "Unsupported genesis data version for P4 genesis: " ++ show n
 
 -- |Serialize genesis data with a version tag.
--- This will use the V5 format.
+-- This will use the V6 format.
 putVersionedGenesisData :: Putter GenesisDataP4
 putVersionedGenesisData gd = do
     putVersion 6
