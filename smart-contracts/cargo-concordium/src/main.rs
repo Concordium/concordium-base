@@ -7,7 +7,7 @@ use anyhow::{bail, ensure, Context};
 use clap::AppSettings;
 use concordium_contracts_common::{
     from_bytes,
-    schema::{FunctionSchema, Type},
+    schema::{Function, Type},
     to_bytes, Amount, Parameter,
 };
 use std::{
@@ -735,7 +735,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         }
         Ok(())
     };
-    let return_value_schema = contract_schema_func_opt.and_then(FunctionSchema::return_value);
+    let return_value_schema = contract_schema_func_opt.and_then(Function::return_value);
 
     let print_return_value = |rv: ReturnValue| {
         if let Some(schema) = return_value_schema {
@@ -754,7 +754,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         runner.parameter_bin_path.as_deref(),
         runner.parameter_json_path.as_deref(),
         contract_schema_opt.is_some(),
-        contract_schema_func_opt.and_then(FunctionSchema::parameter),
+        contract_schema_func_opt.and_then(Function::parameter),
     )
     .context("Could not get parameter.")?;
 
