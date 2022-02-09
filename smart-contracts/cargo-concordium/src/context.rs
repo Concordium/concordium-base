@@ -112,8 +112,10 @@ fn deserialize_policy_bytes_from_json<'de, D: serde::de::Deserializer<'de>>(
     des: D,
 ) -> Result<Option<v0::OwnedPolicyBytes>, D::Error> {
     let policies = Option::<Vec<OwnedPolicy>>::deserialize(des)?;
-    // FIXME: Figure out whether we can define a serialization instance in
-    // contracts-common instead of duplicating this here.
+    // It might be better to define a serialization instance in the future.
+    // Its a bit finicky since this is not the usual serialization, it prepends
+    // length of data so that data can be skipped and loaded lazily inside the
+    // contract.
     if let Some(policies) = policies {
         let mut out = Vec::new();
         let len = policies.len() as u16;

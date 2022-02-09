@@ -15,7 +15,7 @@ use wasm_transform::{
 };
 
 /// Interrupt triggered by the smart contract to execute an instruction on the
-/// host, either an account transfer, or a smart contract.
+/// host, either an account transfer or a smart contract call.
 #[derive(Debug)]
 pub enum Interrupt {
     Transfer {
@@ -64,6 +64,12 @@ impl Interrupt {
 }
 
 #[derive(Debug)]
+/// A host implementation that provides access to host information needed for
+/// execution of contract initialization functions. The "host" in this context
+/// refers to the Wasm concept of a host.
+/// This keeps track of the current state and logs, gives access to the context,
+/// and makes sure that execution stays within resource bounds dictated by
+/// allocated energy.
 pub struct InitHost<ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
@@ -76,9 +82,8 @@ pub struct InitHost<ParamType, Ctx> {
     pub state:             v0::State,
     /// The response from the call.
     pub return_value:      ReturnValue,
-    /// The parameter to the init method, as well as any responses from
-    /// calls to other contracts during execution.
-    pub parameters:        Vec<ParamType>,
+    /// The parameter to the init method.
+    pub parameter:         ParamType,
     /// The init context for this invocation.
     pub init_ctx:          Ctx,
 }
@@ -93,13 +98,19 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<InitHost<ParameterRef<'a>, Ctx1>>
             logs:              host.logs,
             state:             host.state,
             return_value:      host.return_value,
-            parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
+            parameter:         host.parameter.into(),
             init_ctx:          host.init_ctx.into(),
         }
     }
 }
 
 #[derive(Debug)]
+/// A host implementation that provides access to host information needed for
+/// execution of contract receive methods. The "host" in this context
+/// refers to the Wasm concept of a host.
+/// This keeps track of the current state and logs, gives access to the context,
+/// and makes sure that execution stays within resource bounds dictated by
+/// allocated energy.
 pub struct ReceiveHost<ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
@@ -112,7 +123,8 @@ pub struct ReceiveHost<ParamType, Ctx> {
     pub state:             v0::State,
     /// Return value from execution.
     pub return_value:      ReturnValue,
-    /// The parameter to the receive method.
+    /// The parameter to the receive method, as well as any responses from
+    /// calls to other contracts during execution.
     pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
     pub receive_ctx:       Ctx,
@@ -338,9 +350,9 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImp
                     &mut self.energy,
                     &mut self.return_value,
                 ),
-                CommonFunc::GetParameterSize => host::get_parameter_size(stack, &self.parameters),
+                CommonFunc::GetParameterSize => host::get_parameter_size(stack, &[&self.parameter]),
                 CommonFunc::GetParameterSection => {
-                    host::get_parameter_section(memory, stack, &mut self.energy, &self.parameters)
+                    host::get_parameter_section(memory, stack, &mut self.energy, &[&self.parameter])
                 }
                 CommonFunc::GetPolicySection => v0::host::get_policy_section(
                     memory,
@@ -477,18 +489,16 @@ pub fn invoke_init<R: RunnableCode>(
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    param: ParameterRef,
-    energy: u64,
+    parameter: ParameterRef,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
-        energy: InterpreterEnergy {
-            energy,
-        },
+        energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
         state: v0::State::new(None),
         return_value: Vec::new(),
-        parameters: vec![param],
+        parameter,
         init_ctx,
     };
 
@@ -570,7 +580,7 @@ pub fn invoke_init_from_artifact<'a>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
@@ -584,7 +594,7 @@ pub fn invoke_init_from_source(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
@@ -600,7 +610,7 @@ pub fn invoke_init_with_metering_from_source(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
@@ -682,12 +692,10 @@ pub fn invoke_receive<R: RunnableCode, Ctx1: v0::HasReceiveContext, Ctx2: From<C
     current_state: &[u8],
     receive_name: &str,
     param: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult<R, Ctx2>> {
     let mut host = ReceiveHost {
-        energy: InterpreterEnergy {
-            energy,
-        },
+        energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
         state: v0::State::new(Some(current_state)),
@@ -783,7 +791,7 @@ pub fn invoke_receive_from_artifact<'a, Ctx1: v0::HasReceiveContext, Ctx2: From<
     current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
@@ -806,7 +814,7 @@ pub fn invoke_receive_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>
     current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
@@ -830,7 +838,7 @@ pub fn invoke_receive_with_metering_from_source<Ctx1: v0::HasReceiveContext, Ctx
     current_state: &[u8],
     receive_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(

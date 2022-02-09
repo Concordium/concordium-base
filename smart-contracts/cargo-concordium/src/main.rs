@@ -19,6 +19,7 @@ use structopt::StructOpt;
 use wasm_chain_integration::{
     utils, v0,
     v1::{self, ReturnValue},
+    InterpreterEnergy,
 };
 
 mod build;
@@ -152,7 +153,7 @@ struct Runner {
                 them.",
         default_value = "1000000"
     )]
-    energy:              u64,
+    energy:              InterpreterEnergy,
 }
 
 #[derive(Debug, StructOpt)]
@@ -176,11 +177,7 @@ enum RunCommand {
         #[structopt(flatten)]
         runner:        Runner,
     },
-    #[structopt(
-        name = "update",
-        about = "Invoke a receive method of a
-module."
-    )]
+    #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
         #[structopt(
             name = "contract",
@@ -200,9 +197,8 @@ module."
         #[structopt(
             name = "state-json",
             long = "state-json",
-            help = "File with existing state of the contract in JSON,
-requires a schema is present either embedded or using
---schema."
+            help = "File with existing state of the contract in JSON, requires a schema is \
+                    present either embedded or using --schema."
         )]
         state_json_path: Option<PathBuf>,
         #[structopt(
@@ -214,8 +210,8 @@ requires a schema is present either embedded or using
         #[structopt(
             name = "balance",
             long = "balance",
-            help = "Balance on the contract at the time it is invoked.
-Overrides the balance in the receive context."
+            help = "Balance on the contract at the time it is invoked. Overrides the balance in \
+                    the receive context."
         )]
         balance:         Option<u64>,
         #[structopt(
@@ -276,8 +272,8 @@ pub fn main() -> anyhow::Result<()> {
             let module = &cursor.into_inner()[8..];
             ensure!(
                 module.len() == len as usize,
-                "Could no parse the supplied module. The specified length does not match the size \
-                 of the provided data."
+                "Could not parse the supplied module. The specified length does not match the \
+                 size of the provided data."
             );
             match wasm_version {
                 utils::WasmVersion::V0 => handle_run_v0(run_cmd, module)?,
@@ -299,11 +295,11 @@ pub fn main() -> anyhow::Result<()> {
             cargo_args,
         } => {
             let build_schema = if schema_embed {
-                Some(true)
+                SchemaBuildOptions::BuildAndEmbed
             } else if schema_out.is_some() {
-                Some(false)
+                SchemaBuildOptions::JustBuild
             } else {
-                None
+                SchemaBuildOptions::DoNotBuild
             };
             let (byte_len, schema) = build_contract(version, build_schema, out, &cargo_args)
                 .context("Could not build smart contract.")?;
@@ -350,7 +346,7 @@ pub fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Print the contract name and its entrypoints
+/// Print the summary of the contract schema.
 fn print_schema_info(contract_name: &str, len: usize) {
     eprintln!("\n     Contract schema: '{}' in total {} B.", contract_name, len,);
 }
@@ -362,6 +358,7 @@ fn get_colon_position<'a>(iter: impl Iterator<Item = &'a str>) -> usize {
     max_length_receive_opt.map_or(5, |m| m.max(5))
 }
 
+/// Print the contract name and its entrypoints
 fn print_contract_schema_v0(
     contract_name: &str,
     contract_schema: &concordium_contracts_common::schema::ContractV0,
@@ -391,6 +388,7 @@ fn print_contract_schema_v0(
     }
 }
 
+/// Print the contract name and its entrypoints
 fn print_contract_schema_v1(
     contract_name: &str,
     contract_schema: &concordium_contracts_common::schema::ContractV1,
@@ -441,7 +439,13 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     } else {
         let res = utils::get_embedded_schema_v0(module);
         if let Err(err) = &res {
-            eprintln!("{}", WARNING_STYLE.paint(format!("Could not use embedded schema: {}", err)));
+            eprintln!(
+                "{}",
+                WARNING_STYLE.paint(format!(
+                    "Could not use embedded schema: {}.\nPlease provide a path to a valid schema.",
+                    err
+                ))
+            );
         }
         res.ok()
     };
@@ -528,7 +532,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 Parameter::from(&parameter[..]),
                 runner.energy,
             )
-            .context("Invocation failed.")?;
+            .context("Initialization failed due to a runtime error.")?;
             match res {
                 v0::InitResult::Success {
                     logs,
@@ -537,14 +541,20 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 } => {
                     eprintln!("Init call succeeded. The following logs were produced:");
                     print_result(state, logs)?;
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "Interpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v0::InitResult::Reject {
                     remaining_energy,
                     reason,
                 } => {
                     eprintln!("Init call rejected with reason {}.", reason);
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "Interpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v0::InitResult::OutOfEnergy => {
                     eprintln!("Init call terminated with out of energy.")
@@ -568,6 +578,8 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
                 None => ReceiveContextOpt::default(),
             };
+            // if the balance is set in the flag it overrides any balance that is set in the
+            // context.
             if let Some(balance) = balance {
                 receive_ctx.self_balance =
                     Some(concordium_contracts_common::Amount::from_micro_ccd(balance));
@@ -665,14 +677,20 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                         }
                     }
 
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "Interpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v0::ReceiveResult::Reject {
                     remaining_energy,
                     reason,
                 } => {
                     eprintln!("Receive call rejected with reason {}", reason);
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "Interpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v0::ReceiveResult::OutOfEnergy => {
                     eprintln!("Receive call terminated with: out of energy.")
@@ -707,7 +725,13 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     } else {
         let res = utils::get_embedded_schema_v1(module);
         if let Err(err) = &res {
-            eprintln!("{}", WARNING_STYLE.paint(format!("Could not use embedded schema: {}", err)));
+            eprintln!(
+                "{}",
+                WARNING_STYLE.paint(format!(
+                    "Could not use embedded schema: {}.\nPlease provide a path to a valid schema.",
+                    err
+                ))
+            );
         }
         res.ok()
     };
@@ -780,7 +804,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 &parameter,
                 runner.energy,
             )
-            .context("Invocation failed.")?;
+            .context("Initialization failed due to a runtime error.")?;
             match res {
                 v1::InitResult::Success {
                     logs,
@@ -792,7 +816,10 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     print_result(state, logs)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "\nInterpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v1::InitResult::Reject {
                     remaining_energy,
@@ -802,7 +829,10 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     eprintln!("Init call rejected with reason {}.", reason);
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "\nInterpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v1::InitResult::OutOfEnergy => {
                     eprintln!("Init call terminated with out of energy.")
@@ -825,6 +855,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
                 None => ReceiveContextOpt::default(),
             };
+            // if the balance is set in the flag it overrides any balance that is set in the
+            // context.
             if let Some(balance) = balance {
                 receive_ctx.self_balance =
                     Some(concordium_contracts_common::Amount::from_micro_ccd(balance));
@@ -870,7 +902,10 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     print_result(state, logs)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "\nInterpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v1::ReceiveResult::Reject {
                     remaining_energy,
@@ -880,7 +915,10 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     eprintln!("Receive call rejected with reason {}", reason);
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
-                    eprintln!("\nInterpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "\nInterpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v1::ReceiveResult::OutOfEnergy => {
                     eprintln!("Receive call terminated with: out of energy.")
@@ -915,7 +953,10 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                             address.index, address.subindex, name, amount, parameter
                         ),
                     }
-                    eprintln!("Interpreter energy spent is {}", runner.energy - remaining_energy)
+                    eprintln!(
+                        "Interpreter energy spent is {}",
+                        runner.energy.subtract(remaining_energy)
+                    )
                 }
                 v1::ReceiveResult::Trap {
                     remaining_energy,
@@ -923,7 +964,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 } => {
                     return Err(error.context(format!(
                         "Execution triggered a runtime error after spending {} interpreter energy.",
-                        runner.energy - remaining_energy
+                        runner.energy.subtract(remaining_energy)
                     )));
                 }
             }
@@ -944,9 +985,10 @@ fn get_parameter(
         fs::read(&param_file).context("Could not read parameter-bin file.")
     } else if let Some(param_file) = json_path {
         if !has_contract_schema {
-            Err(anyhow::anyhow!(
-                "No schema found for contract, a schema is required for using --parameter-json."
-            ))
+            bail!(
+                "No schema found for contract, a schema is required for using --parameter-json. \
+                 Either embed the schema in the module or provide it using the `--schema` option."
+            )
         } else {
             let parameter_schema = parameter_schema
                 .context("Contract schema did not contain a schema for this parameter.")?;

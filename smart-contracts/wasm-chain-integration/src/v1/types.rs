@@ -33,7 +33,10 @@ pub enum InitResult {
 }
 
 impl InitResult {
-    /// Extract the
+    /// Extract the result into a byte array and potentially a return value.
+    /// This is only meant to be used to pass the return value to foreign code.
+    /// When using this from Rust the consumer should inspect the [InitResult]
+    /// enum directly.
     #[cfg(feature = "enable-ffi")]
     pub(crate) fn extract(self) -> (Vec<u8>, Option<ReturnValue>) {
         match self {
@@ -67,39 +70,63 @@ impl InitResult {
     }
 }
 
-/// State of the suspedned execution of the receive function.
+/// State of the suspended execution of the receive function.
 /// This retains both the module that is executed, as well the host.
 pub type ReceiveInterruptedState<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> =
     InterruptedState<ProcessedImports, R, ReceiveHost<ParameterVec, Ctx>>;
 
 #[derive(Debug)]
+/// Result of execution of a receive function.
 pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
+    /// Execution terminated.
     Success {
+        /// The resulting state of the contract.
         state:            v0::State,
+        /// Logs produced since the last interrupt (or beginning of execution).
         logs:             v0::Logs,
+        /// Return value that was produced. There is always a return value,
+        /// although it might be empty.
         return_value:     ReturnValue,
+        /// Remaining interpreter energy.
         remaining_energy: u64,
     },
+    /// Execution triggered an operation.
     Interrupt {
+        /// Remaining interpreter energy.
         remaining_energy: u64,
+        /// Logs produced since the last interrupt (or beginning of execution).
         logs:             v0::Logs,
+        /// Stored execution state that can be used to resume execution.
         config:           Box<ReceiveInterruptedState<R, Ctx>>,
+        /// The operation that needs to be handled.
         interrupt:        Interrupt,
     },
+    /// Contract execution terminated with a "logic error", i.e., contract
+    /// decided to signal an error.
     Reject {
+        /// Return code.
         reason:           i32,
+        /// Return value, that may describe the error in more detail.
         return_value:     ReturnValue,
+        /// Remaining interpreter energy.
         remaining_energy: u64,
     },
+    /// Execution stopped due to a runtime error.
     Trap {
         error:            anyhow::Error, /* this error is here so that we can print it in
                                           * cargo-concordium */
         remaining_energy: u64,
     },
+    /// Execution consumed all available interpreter energy.
     OutOfEnergy,
 }
 
 impl<R> ReceiveResult<R> {
+    /// Extract the result into a byte array and potentially a return value.
+    /// This is only meant to be used to pass the return value to foreign code.
+    /// When using this from Rust the consumer should inspect the
+    /// [ReceiveResult] enum directly.
+    #[cfg(feature = "enable-ffi")]
     pub(crate) fn extract(
         self,
     ) -> (Vec<u8>, Option<Box<ReceiveInterruptedState<R>>>, Option<ReturnValue>) {
@@ -160,6 +187,8 @@ impl<R> ReceiveResult<R> {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+/// An enumeration of functions that can be used both by init and receive
+/// methods.
 pub enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
@@ -175,12 +204,14 @@ pub enum CommonFunc {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+/// An enumeration of functions that can be used only by init methods.
 pub enum InitOnlyFunc {
     GetInitOrigin,
 }
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+/// An enumeration of functions that can be used only by receive methods.
 pub enum ReceiveOnlyFunc {
     Invoke,
     GetReceiveInvoker,
@@ -194,7 +225,7 @@ pub enum ReceiveOnlyFunc {
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
 pub enum ImportFunc {
-    /// Chage for execution cost.
+    /// Charge for execution cost.
     ChargeEnergy,
     /// Track calling a function, increasing the activation frame count.
     TrackCall,
@@ -305,8 +336,6 @@ impl Output for ProcessedImports {
 }
 
 pub struct ConcordiumAllowedImports;
-
-// TODO: Log event could just be another invoke.
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
     fn validate_import_function(
