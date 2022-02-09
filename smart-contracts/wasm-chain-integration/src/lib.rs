@@ -15,20 +15,20 @@ use derive_more::{Display, From, Into};
 ///
 /// # Example 1
 /// ```rust
-/// type_matches!(ty => [I32, I64])
+/// type_matches!(ty => [I32, I64]) 
 /// ```
 /// The declared type `ty` must have **no return value** and parameters of types
 /// `I32` and `I64`
 ///
 /// # Example 2
 /// ```rust
-/// type_matches!(ty => []; I64)
+/// type_matches!(ty => []; I64) 
 /// ```
 /// The declared type `ty` must have return type I64 and no arguments.
 ///
 /// # Example 3
 /// ```rust
-/// type_matches!(ty => [I32, I64, I32]; I64)
+/// type_matches!(ty => [I32, I64, I32]; I64) 
 /// ```
 /// The declared type `ty` must have return type I64 and arguments of types
 /// `I32, I64, I32` in that order.
