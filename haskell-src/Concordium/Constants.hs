@@ -39,4 +39,3 @@ maxWasmModuleSizeV1 = 8 * 65536 -- 512kB
 -- Must stay in sync with MAX_FUNC_NAME_SIZE from wasm-transform.
 maxFuncNameSize :: Int
 maxFuncNameSize = 100
-
