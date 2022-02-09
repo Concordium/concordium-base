@@ -48,7 +48,7 @@ data ContractContext = ContractContext {
   }
 
 -- |This FromJSON instance defaults a number of values if they are not given
--- - energy defaults to maximum possible
+-- - energy defaults to 'defaultInvokeEnergy'
 -- - amount defaults to 0
 -- - parameter defaults to the empty one
 instance AE.FromJSON ContractContext where
