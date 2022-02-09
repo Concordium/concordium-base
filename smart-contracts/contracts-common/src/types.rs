@@ -950,7 +950,7 @@ impl OwnedParameter {
 ///
 /// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
 pub fn is_valid_entrypoint_name(name: &str) -> Result<(), NewReceiveNameError> {
-    if name.as_bytes().len() > constants::MAX_FUNC_NAME_SIZE {
+    if name.as_bytes().len() >= constants::MAX_FUNC_NAME_SIZE {
         return Err(NewReceiveNameError::TooLong);
     }
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation()) {
