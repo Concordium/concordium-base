@@ -543,11 +543,14 @@ fn process_init_result<Param, Ctx>(
             reason,
             config: _,
         }) => match reason {},
-        Err(e) => {
-            if e.downcast_ref::<OutOfEnergy>().is_some() {
+        Err(error) => {
+            if error.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(InitResult::OutOfEnergy)
             } else {
-                Err(e)
+                Ok(InitResult::Trap {
+                    error,
+                    remaining_energy: host.energy.energy,
+                })
             }
         }
     }

@@ -834,6 +834,15 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                         runner.energy.subtract(remaining_energy)
                     )
                 }
+                v1::InitResult::Trap {
+                    remaining_energy,
+                    error,
+                } => {
+                    return Err(error.context(format!(
+                        "Execution triggered a runtime error after spending {} interpreter energy.",
+                        runner.energy.subtract(remaining_energy)
+                    )));
+                }
                 v1::InitResult::OutOfEnergy => {
                     eprintln!("Init call terminated with out of energy.")
                 }

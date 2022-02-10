@@ -29,6 +29,12 @@ pub enum InitResult {
         return_value:     ReturnValue,
         remaining_energy: u64,
     },
+    /// Execution stopped due to a runtime error.
+    Trap {
+        error:            anyhow::Error, /* this error is here so that we can print it in
+                                          * cargo-concordium */
+        remaining_energy: u64,
+    },
     OutOfEnergy,
 }
 
@@ -41,13 +47,21 @@ impl InitResult {
     pub(crate) fn extract(self) -> (Vec<u8>, Option<ReturnValue>) {
         match self {
             InitResult::OutOfEnergy => (vec![0], None),
+            InitResult::Trap {
+                remaining_energy,
+                .. // ignore the error since it is not needed in ffi
+            } => {
+                let mut out = vec![1; 9];
+                out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
+                (out, None)
+            }
             InitResult::Reject {
                 reason,
                 return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
-                out.push(1);
+                out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 (out, Some(return_value))
@@ -59,7 +73,7 @@ impl InitResult {
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
-                out.push(2);
+                out.push(3);
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
