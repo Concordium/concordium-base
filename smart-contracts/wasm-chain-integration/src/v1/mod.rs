@@ -602,7 +602,6 @@ pub fn invoke_init_from_source(
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
-/// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source(
     source_bytes: &[u8],
