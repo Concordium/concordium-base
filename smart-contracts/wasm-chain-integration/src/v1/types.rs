@@ -164,12 +164,13 @@ pub enum CommonFunc {
     StateDeletePrefix,
     StateIteratePrefix,
     StateIteratorNext,
+    StateIteratorDelete,
+    StateIteratorKeySize,
+    StateIteratorKeyRead,
     StateEntryRead,
     StateEntryWrite,
     StateEntrySize,
     StateEntryResize,
-    StateEntryKeyRead,
-    StateEntryKeySize,
 }
 
 #[repr(u8)]
@@ -234,8 +235,6 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             16 => Ok(ImportFunc::Common(CommonFunc::StateEntryWrite)),
             17 => Ok(ImportFunc::Common(CommonFunc::StateEntrySize)),
             18 => Ok(ImportFunc::Common(CommonFunc::StateEntryResize)),
-            19 => Ok(ImportFunc::Common(CommonFunc::StateEntryKeyRead)),
-            20 => Ok(ImportFunc::Common(CommonFunc::StateEntryKeySize)),
             21 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
             22 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
             23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
@@ -268,24 +267,25 @@ impl Output for ImportFunc {
                 CommonFunc::StateDeletePrefix => 12,
                 CommonFunc::StateIteratePrefix => 13,
                 CommonFunc::StateIteratorNext => 14,
-                CommonFunc::StateEntryRead => 15,
-                CommonFunc::StateEntryWrite => 16,
-                CommonFunc::StateEntrySize => 17,
-                CommonFunc::StateEntryResize => 18,
-                CommonFunc::StateEntryKeyRead => 19,
-                CommonFunc::StateEntryKeySize => 20,
-                CommonFunc::WriteOutput => 21,
+                CommonFunc::StateIteratorDelete => 15,
+                CommonFunc::StateIteratorKeySize => 16,
+                CommonFunc::StateIteratorKeyRead => 17,
+                CommonFunc::StateEntryRead => 18,
+                CommonFunc::StateEntryWrite => 19,
+                CommonFunc::StateEntrySize => 20,
+                CommonFunc::StateEntryResize => 21,
+                CommonFunc::WriteOutput => 22,
             },
             ImportFunc::InitOnly(io) => match io {
-                InitOnlyFunc::GetInitOrigin => 22,
+                InitOnlyFunc::GetInitOrigin => 23,
             },
             ImportFunc::ReceiveOnly(ro) => match ro {
-                ReceiveOnlyFunc::GetReceiveInvoker => 23,
-                ReceiveOnlyFunc::GetReceiveSelfAddress => 24,
-                ReceiveOnlyFunc::GetReceiveSelfBalance => 25,
-                ReceiveOnlyFunc::GetReceiveSender => 26,
-                ReceiveOnlyFunc::GetReceiveOwner => 27,
-                ReceiveOnlyFunc::Invoke => 28,
+                ReceiveOnlyFunc::GetReceiveInvoker => 24,
+                ReceiveOnlyFunc::GetReceiveSelfAddress => 25,
+                ReceiveOnlyFunc::GetReceiveSelfBalance => 26,
+                ReceiveOnlyFunc::GetReceiveSender => 27,
+                ReceiveOnlyFunc::GetReceiveOwner => 28,
+                ReceiveOnlyFunc::Invoke => 29,
             },
         };
         tag.output(out)
@@ -355,7 +355,10 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "state_delete_entry" => type_matches!(ty => [I64]; I32),
                 "state_delete_prefix" => type_matches!(ty => [I32, I32]; I32),
                 "state_iterate_prefix" => type_matches!(ty => [I32, I32]; I32),
-                "state_iterator_next" => type_matches!(ty => [I32]; I64),
+                "state_iterator_next" => type_matches!(ty => [I64]; I64),
+                "state_iterator_delete" => type_matches!(ty => [I64]; I32),
+                "state_iterator_key_size" => type_matches!(ty => [I64]; I32),
+                "state_iterator_key_read" => type_matches!(ty => [I64, I32, I32, I32]; I32),
                 "state_entry_read" => type_matches!(ty => [I64, I32, I32, I32]; I32),
                 "state_entry_write" => type_matches!(ty => [I64, I32, I32, I32]; I32),
                 "state_entry_size" => type_matches!(ty => [I64]; I32),
@@ -443,12 +446,13 @@ impl TryFromImport for ProcessedImports {
                 "state_delete_prefix" => ImportFunc::Common(CommonFunc::StateDeletePrefix),
                 "state_iterate_prefix" => ImportFunc::Common(CommonFunc::StateIteratePrefix),
                 "state_iterator_next" => ImportFunc::Common(CommonFunc::StateIteratorNext),
+                "state_iterator_delete" => ImportFunc::Common(CommonFunc::StateIteratorDelete),
+                "state_iterator_key_size" => ImportFunc::Common(CommonFunc::StateIteratorKeySize),
+                "state_iterator_key_read" => ImportFunc::Common(CommonFunc::StateIteratorKeyRead),
                 "state_entry_read" => ImportFunc::Common(CommonFunc::StateEntryRead),
                 "state_entry_write" => ImportFunc::Common(CommonFunc::StateEntryWrite),
                 "state_entry_size" => ImportFunc::Common(CommonFunc::StateEntrySize),
                 "state_entry_resize" => ImportFunc::Common(CommonFunc::StateEntryResize),
-                "state_entry_key_read" => ImportFunc::Common(CommonFunc::StateEntryKeyRead),
-                "state_entry_key_size" => ImportFunc::Common(CommonFunc::StateEntryKeySize),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {
@@ -488,7 +492,7 @@ pub struct InstanceState<'a, BackingStore> {
     current_generation: Generation,
     entry_mapping:      Vec<Option<EntryWithKey>>, /* FIXME: This could be done more efficiently
                                                     * by using a usize::MAX as deleted id */
-    iterators:          Vec<trie::Iterator>,
+    iterators:          Vec<Option<trie::Iterator>>,
     /// Opaque pointer to the state of the instance in consensus.
     state_trie:         trie::StateTrie<'a>,
 }
@@ -626,14 +630,17 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn create_entry(&mut self, key: &[u8]) -> InstanceStateEntry {
-        let id = self.state_trie.insert(&mut self.backing_store, key, Vec::new()).0;
-        let idx = self.entry_mapping.len();
-        self.entry_mapping.push(Some(EntryWithKey {
-            id,
-            key: key.into(),
-        }));
-        InstanceStateEntry::new(self.current_generation, idx)
+    pub fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntry> {
+        if let Some(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
+            let idx = self.entry_mapping.len();
+            self.entry_mapping.push(Some(EntryWithKey {
+                id:  id.0,
+                key: key.into(),
+            }));
+            Ok(InstanceStateEntry::new(self.current_generation, idx))
+        } else {
+            bail!("Concurrent modification.")
+        }
     }
 
     pub fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
@@ -655,18 +662,18 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn delete_prefix(&mut self, key: &[u8]) -> u32 {
+    pub fn delete_prefix(&mut self, key: &[u8]) -> StateResult<u32> {
         if self.state_trie.delete_prefix(&mut self.backing_store, key).is_some() {
-            1
+            Ok(1)
         } else {
-            0
+            Ok(0)
         }
     }
 
     pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIteratorOption {
         if let Some(iter) = self.state_trie.iter(&mut self.backing_store, prefix) {
             let iter_id = self.iterators.len();
-            self.iterators.push(iter);
+            self.iterators.push(Some(iter));
             InstanceStateIteratorOption::new(Some((self.current_generation, iter_id)))
         } else {
             InstanceStateIteratorOption::new(None)
@@ -679,7 +686,7 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     ) -> StateResult<InstanceStateEntryOption> {
         let (gen, idx) = iter.split();
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
-        if let Some(iter) = self.iterators.get_mut(idx) {
+        if let Some(iter) = self.iterators.get_mut(idx).and_then(Option::as_mut) {
             if let Some(id) = self.state_trie.next(&mut self.backing_store, iter) {
                 let idx = self.entry_mapping.len();
                 self.entry_mapping.push(Some(EntryWithKey {
@@ -690,6 +697,58 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
             } else {
                 Ok(InstanceStateEntryOption::new(None))
             }
+        } else {
+            bail!("Invalid iterator.")
+        }
+    }
+
+    pub fn iterator_delete(&mut self, iter: InstanceStateIterator) -> StateResult<u32> {
+        let (gen, idx) = iter.split();
+        ensure!(gen == self.current_generation, "Incorrect iterator generation.");
+        match self.iterators.get_mut(idx) {
+            Some(iter) => match iter {
+                Some(existing_iter) => {
+                    // todo: unlock the nodes of the iterator.
+
+                    // Finally we remove the iterator by setting it to `None`.
+                    *iter = None;
+                    Ok(1)
+                }
+                // already deleted.
+                None => Ok(0),
+            },
+            // iterator did not exist.
+            None => Ok(0),
+        }
+    }
+
+    pub fn iterator_key_size(&mut self, iter: InstanceStateIterator) -> StateResult<u32> {
+        let (gen, idx) = iter.split();
+        ensure!(gen == self.current_generation, "Incorrect iterator generation.");
+        if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
+            Ok(iter.key.len() as u32)
+        } else {
+            bail!("Invalid iterator.")
+        }
+    }
+
+    pub fn iterator_key_read(
+        &mut self,
+        iter: InstanceStateIterator,
+        dest: &mut [u8],
+        offset: u32,
+    ) -> StateResult<u32> {
+        let (gen, idx) = iter.split();
+        ensure!(gen == self.current_generation, "Incorrect iterator generation.");
+        if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
+            let key = iter.get_key();
+            let offset = offset as usize;
+            let num_copied = std::cmp::min(
+                key.len().checked_sub(offset).context("Offset is past key.")?,
+                dest.len(),
+            );
+            dest[0..num_copied].copy_from_slice(&key[offset..offset + num_copied]);
+            Ok(0)
         } else {
             bail!("Invalid iterator.")
         }

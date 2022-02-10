@@ -342,7 +342,7 @@ mod host {
         energy.tick_energy(constants::modify_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let entry_index = state.create_entry(key);
+        let entry_index = state.create_entry(key)?;
         stack.push_value(u64::from(entry_index));
         Ok(())
     }
@@ -374,7 +374,7 @@ mod host {
         // this cannot overflow on 64-bit platforms, so it is safe to just add
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let result = state.delete_prefix(key);
+        let result = state.delete_prefix(key)?;
         stack.push_value(result);
         Ok(())
     }
@@ -407,6 +407,50 @@ mod host {
         let iter_index = unsafe { stack.pop_u64() };
         let entry_option = state.iterator_next(InstanceStateIterator::from(iter_index))?;
         stack.push_value(u64::from(entry_option));
+        Ok(())
+    }
+
+    pub fn state_iterator_delete<'a, BackingStore: FlatLoadable>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<'a, BackingStore>,
+    ) -> machine::RunResult<()> {
+        // TODO: Charge cost.
+        let iter = unsafe { stack.pop_u64() };
+        let result = state.iterator_delete(InstanceStateIterator::from(iter))?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    pub fn state_iterator_key_size<'a, BackingStore: FlatLoadable>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<'a, BackingStore>,
+    ) -> machine::RunResult<()> {
+        // TODO: Charge cost.
+        let iter = unsafe { stack.pop_u64() };
+        let result = state.iterator_key_size(InstanceStateIterator::from(iter))?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    pub fn state_iterator_key_read<'a, BackingStore: FlatLoadable>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<'a, BackingStore>,
+    ) -> machine::RunResult<()> {
+        // TODO: Charge cost.
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let start = unsafe { stack.pop_u32() } as usize;
+        let iter = unsafe { stack.pop_u64() };
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        let dest_end = start + length as usize;
+        ensure!(dest_end <= memory.len(), "Illegal memory access.");
+        let dest = &mut memory[start..dest_end];
+        let result = state.iterator_key_read(InstanceStateIterator::from(iter), dest, offset)?;
+        stack.push_value(result);
         Ok(())
     }
 
@@ -471,37 +515,6 @@ mod host {
         let new_size = unsafe { stack.pop_u32() };
         let entry_index = unsafe { stack.pop_u64() };
         let result = state.entry_resize(InstanceStateEntry::from(entry_index), new_size)?;
-        stack.push_value(result);
-        Ok(())
-    }
-
-    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_key_read<'a, BackingStore: FlatLoadable>(
-        memory: &mut Vec<u8>,
-        stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
-    ) -> machine::RunResult<()> {
-        let offset = unsafe { stack.pop_u32() };
-        let length = unsafe { stack.pop_u32() };
-        let dest_start = unsafe { stack.pop_u32() } as usize;
-        let entry_index = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::copy_from_host_cost(length))?;
-        let dest_end = dest_start + length as usize;
-        ensure!(dest_end <= memory.len(), "Illegal memory access.");
-        let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_key_read(InstanceStateEntry::from(entry_index), dest, offset)?;
-        stack.push_value(result);
-        Ok(())
-    }
-
-    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_key_size<'a, BackingStore: FlatLoadable>(
-        stack: &mut machine::RuntimeStack,
-        state: &mut InstanceState<'a, BackingStore>,
-    ) -> machine::RunResult<()> {
-        let entry_index = unsafe { stack.pop_u64() };
-        let result = state.entry_key_size(InstanceStateEntry::from(entry_index))?;
         stack.push_value(result);
         Ok(())
     }
@@ -572,6 +585,15 @@ impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasInitCon
                 CommonFunc::StateIteratorNext => {
                     host::state_iterator_next(stack, &mut self.energy, &mut self.state)
                 }
+                CommonFunc::StateIteratorDelete => {
+                    host::state_iterator_delete(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeySize => {
+                    host::state_iterator_key_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeyRead => {
+                    host::state_iterator_key_read(memory, stack, &mut self.energy, &mut self.state)
+                }
                 CommonFunc::StateEntryRead => {
                     host::state_entry_read(memory, stack, &mut self.energy, &mut self.state)
                 }
@@ -581,10 +603,6 @@ impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasInitCon
                 CommonFunc::StateEntrySize => host::state_entry_size(stack, &mut self.state),
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::StateEntryKeySize => host::state_entry_key_size(stack, &mut self.state),
-                CommonFunc::StateEntryKeyRead => {
-                    host::state_entry_key_read(memory, stack, &mut self.energy, &mut self.state)
                 }
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
@@ -670,6 +688,15 @@ impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasReceive
                 CommonFunc::StateIteratorNext => {
                     host::state_iterator_next(stack, &mut self.energy, &mut self.state)
                 }
+                CommonFunc::StateIteratorDelete => {
+                    host::state_iterator_delete(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeySize => {
+                    host::state_iterator_key_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeyRead => {
+                    host::state_iterator_key_read(memory, stack, &mut self.energy, &mut self.state)
+                }
                 CommonFunc::StateEntryRead => {
                     host::state_entry_read(memory, stack, &mut self.energy, &mut self.state)
                 }
@@ -679,10 +706,6 @@ impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasReceive
                 CommonFunc::StateEntrySize => host::state_entry_size(stack, &mut self.state),
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::StateEntryKeySize => host::state_entry_key_size(stack, &mut self.state),
-                CommonFunc::StateEntryKeyRead => {
-                    host::state_entry_key_read(memory, stack, &mut self.energy, &mut self.state)
                 }
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
