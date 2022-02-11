@@ -1,9 +1,9 @@
 //! Various utilities for testing and extraction of schemas.
 
 use crate::ExecResult;
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{schema, Cursor, Deserial, Get};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, default::Default};
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -11,6 +11,39 @@ use wasm_transform::{
     types::{ExportDescription, Module, Name},
     utils, validate,
 };
+
+#[derive(Debug, Clone, Copy)]
+pub enum WasmVersion {
+    V0,
+    V1,
+}
+
+impl std::str::FromStr for WasmVersion {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "V0" | "v0" => Ok(WasmVersion::V0),
+            "V1" | "v1" => Ok(WasmVersion::V1),
+            _ => anyhow::bail!("Unsupported version: '{}'. Only 'V0' and 'V1' are supported.", s),
+        }
+    }
+}
+
+impl WasmVersion {
+    /// Get the version from the cursor. This is not a Serial implementation
+    /// since it uses big-endian.
+    pub fn read(source: &mut std::io::Cursor<&[u8]>) -> anyhow::Result<WasmVersion> {
+        let mut data = [0u8; 4];
+        use std::io::Read;
+        source.read_exact(&mut data).context("Not enough data to read WasmVersion.")?;
+        match u32::from_be_bytes(data) {
+            0 => Ok(WasmVersion::V0),
+            1 => Ok(WasmVersion::V1),
+            n => bail!("Unsupported Wasm version {}.", n),
+        }
+    }
+}
 
 /// A host which traps for any function call.
 pub struct TrapHost;
@@ -165,8 +198,9 @@ pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<R
     Ok(out)
 }
 
-/// Tries to generate a state schema and schemas for parameters of methods.
-pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Module> {
+/// Tries to generate a state schema and schemas for parameters of methods of a
+/// V0 contract.
+pub fn generate_contract_schema_v0(module_bytes: &[u8]) -> ExecResult<schema::ModuleV0> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
@@ -179,7 +213,7 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
             // an entry does not yet exist.
             let contract_schema = contract_schemas
                 .entry(contract_name.to_owned())
-                .or_insert_with(schema::Contract::empty);
+                .or_insert_with(schema::ContractV0::default);
 
             contract_schema.state = Some(schema_type);
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
@@ -188,7 +222,7 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
 
                 let contract_schema = contract_schemas
                     .entry(contract_name.to_owned())
-                    .or_insert_with(schema::Contract::empty);
+                    .or_insert_with(schema::ContractV0::default);
                 contract_schema.init = Some(schema_type);
             } else if rest.contains('.') {
                 let schema_type = generate_schema_run(&artifact, name.as_ref())?;
@@ -200,7 +234,7 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
 
                 let contract_schema = contract_schemas
                     .entry(contract_name.to_owned())
-                    .or_insert_with(schema::Contract::empty);
+                    .or_insert_with(schema::ContractV0::default);
 
                 contract_schema.receive.insert(function_name.to_owned(), schema_type);
             } else {
@@ -210,17 +244,58 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
         }
     }
 
-    Ok(schema::Module {
+    Ok(schema::ModuleV0 {
         contracts: contract_schemas,
     })
 }
 
-/// Runs the given schema function and reads the resulting schema from memory,
-/// attempting to parse it as a type. If this fails, an error is returned.
-fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
+/// Tries to generate schemas for parameters and return values of methods for a
+/// V1 contract.
+pub fn generate_contract_schema_v1(module_bytes: &[u8]) -> ExecResult<schema::ModuleV1> {
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+
+    let mut contract_schemas = BTreeMap::new();
+
+    for name in artifact.export.keys() {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV1::default);
+                contract_schema.init = Some(function_schema);
+            } else if rest.contains('.') {
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
+
+                // Generates receive-function parameter schema type
+                let split_name: Vec<_> = rest.splitn(2, '.').collect();
+                let contract_name = split_name[0];
+                let function_name = split_name[1];
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV1::default);
+
+                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+            } else {
+                // do nothing, some other function that is neither init nor
+                // receive.
+            }
+        }
+    }
+
+    Ok(schema::ModuleV1 {
+        contracts: contract_schemas,
+    })
+}
+
+/// Runs the given schema function and reads the resulting function schema from
+/// memory, attempting to parse it. If this fails, an error is returned.
+fn generate_schema_run<I: TryFromImport, C: RunnableCode, SchemaType: Deserial>(
     artifact: &Artifact<I, C>,
     schema_fn_name: &str,
-) -> ExecResult<schema::Type> {
+) -> ExecResult<SchemaType> {
     let (ptr, memory) = if let machine::ExecutionOutcome::Success {
         result: Some(Value::I32(ptr)),
         memory,
@@ -228,7 +303,7 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     {
         (ptr as u32 as usize, memory)
     } else {
-        bail!("Schema derivation function malformed.")
+        bail!("Schema derivation function is malformed.")
     };
 
     // First we read an u32 which is the length of the serialized schema
@@ -239,7 +314,7 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     // Read the schema with offset of the u32
     ensure!(ptr + 4 + len as usize <= memory.len(), "Illegal memory access when reading schema.");
     let schema_bytes = &memory[ptr + 4..ptr + 4 + len as usize];
-    schema::Type::deserial(&mut Cursor::new(schema_bytes))
+    SchemaType::deserial(&mut Cursor::new(schema_bytes))
         .map_err(|_| anyhow!("Failed deserialising the schema."))
 }
 
@@ -276,12 +351,28 @@ pub fn get_receives(module: &Module) -> Vec<&Name> {
 }
 
 /// Get the embedded schema if it exists
-pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::Module> {
+pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::ModuleV0> {
     let skeleton = parse_skeleton(bytes)?;
     let mut schema_sections = Vec::new();
     for ucs in skeleton.custom.iter() {
         let cs = parse_custom(ucs)?;
         if cs.name.as_ref() == "concordium-schema-v1" {
+            schema_sections.push(cs)
+        }
+    }
+    let section =
+        schema_sections.first().ok_or_else(|| anyhow!("No schema found in the module"))?;
+    let source = &mut Cursor::new(section.contents);
+    source.get().map_err(|_| anyhow!("Failed parsing schema"))
+}
+
+/// Get the embedded schema if it exists
+pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::ModuleV1> {
+    let skeleton = parse_skeleton(bytes)?;
+    let mut schema_sections = Vec::new();
+    for ucs in skeleton.custom.iter() {
+        let cs = parse_custom(ucs)?;
+        if cs.name.as_ref() == "concordium-schema-v2" {
             schema_sections.push(cs)
         }
     }

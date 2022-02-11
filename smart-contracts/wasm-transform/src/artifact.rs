@@ -397,7 +397,7 @@ pub type OwnedArtifact<ImportFunc> = Artifact<ImportFunc, CompiledFunction>;
 /// Convert a borrowed artifact to an owned one. This allocates memory for all
 /// the code of the artifact so it should be used sparingly.
 impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<ImportFunc> {
-    fn from(a: Artifact<ImportFunc, CompiledFunctionBytes<'a>>) -> Self {
+    fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self {
         let Artifact {
             imports,
             ty,

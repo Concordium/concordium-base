@@ -1,4 +1,4 @@
-/// Maximum size of contract state in bytes.
+/// Maximum size of a V0 contract state in bytes.
 pub const MAX_CONTRACT_STATE: u32 = 16384; // 16kB
 
 /// Maximum number of nested function calls.
@@ -71,3 +71,8 @@ pub fn action_send_cost(x: u32) -> u64 {
 /// have on memory use.
 /// If we keep it, the cost must be analyzed and put into perspective
 pub const MEMORY_COST_FACTOR: u32 = 100;
+
+/// Cost of the invoke action. This is just the base cost to cover
+/// administrative costs of an invoke. Specific costs of the action are charged
+/// later by the scheduler.
+pub const INVOKE_BASE_COST: u64 = 500; // currently set as log event base cost. Revise based on benchmarks.

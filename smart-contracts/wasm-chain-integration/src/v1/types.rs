@@ -1,10 +1,8 @@
+use super::{Interrupt, ParameterVec, ReceiveHost};
+use crate::{resumption::InterruptedState, type_matches, v0};
 use anyhow::bail;
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
-use concordium_contracts_common::*;
-use derive_more::{AsRef, From, Into};
-use serde::Deserialize as SerdeDeserialize;
-use std::collections::LinkedList;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
@@ -16,337 +14,186 @@ use wasm_transform::{
 /// Maximum length, in bytes, of an export function name.
 pub const MAX_EXPORT_NAME_LEN: usize = 100;
 
-pub type PolicyBytes<'a> = &'a [u8];
-
-pub type OwnedPolicyBytes = Vec<u8>;
-
-/// Chain context accessible to the init methods.
-///
-/// TODO: We could optimize this to be initialized lazily
-#[derive(SerdeDeserialize)]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
-#[serde(rename_all = "camelCase")]
-pub struct InitContext<Policies = Vec<OwnedPolicy>> {
-    pub metadata:        ChainMetadata,
-    pub init_origin:     AccountAddress,
-    pub sender_policies: Policies,
-}
-
-/// Convert from a borrowed variant to the owned one. This clones the slice into
-/// a vector.
-impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
-    fn from(borrowed: InitContext<PolicyBytes<'a>>) -> Self {
-        Self {
-            metadata:        borrowed.metadata,
-            init_origin:     borrowed.init_origin,
-            sender_policies: borrowed.sender_policies.into(),
-        }
-    }
-}
-
-/// Chain context accessible to the receive methods.
-///
-/// TODO: We could optimize this to be initialized lazily.
-#[derive(SerdeDeserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
-pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
-    pub metadata:        ChainMetadata,
-    pub invoker:         AccountAddress,  //32 bytes
-    pub self_address:    ContractAddress, // 16 bytes
-    pub self_balance:    Amount,          // 8 bytes
-    pub sender:          Address,         // 9 or 33 bytes
-    pub owner:           AccountAddress,  // 32 bytes
-    pub sender_policies: Policies,
-}
-
-/// Convert from a borrowed variant to the owned one. This clones the slice into
-/// a vector.
-impl<'a> From<ReceiveContext<PolicyBytes<'a>>> for ReceiveContext<OwnedPolicyBytes> {
-    fn from(borrowed: ReceiveContext<PolicyBytes<'a>>) -> Self {
-        Self {
-            metadata:        borrowed.metadata,
-            invoker:         borrowed.invoker,
-            self_address:    borrowed.self_address,
-            self_balance:    borrowed.self_balance,
-            sender:          borrowed.sender,
-            owner:           borrowed.owner,
-            sender_policies: borrowed.sender_policies.into(),
-        }
-    }
-}
-
-impl<Policies> InitContext<Policies> {
-    pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
-
-    /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
-}
-
-impl<Policies> ReceiveContext<Policies> {
-    pub fn sender(&self) -> &Address { &self.sender }
-
-    /// Who invoked this transaction.
-    pub fn invoker(&self) -> &AccountAddress { &self.invoker }
-
-    /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
-
-    /// Who is the owner of this contract.
-    pub fn owner(&self) -> &AccountAddress { &self.owner }
-
-    /// Balance on the smart contract when it was invoked.
-    pub fn self_balance(&self) -> Amount { self.self_balance }
-
-    /// Address of the smart contract.
-    pub fn self_address(&self) -> &ContractAddress { &self.self_address }
-}
-
-pub(crate) fn deserial_receive_context(source: &[u8]) -> ParseResult<ReceiveContext<&[u8]>> {
-    let mut cursor = Cursor::new(source);
-    let metadata = cursor.get()?;
-    let invoker = cursor.get()?;
-    let self_address = cursor.get()?;
-    let self_balance = cursor.get()?;
-    let sender = cursor.get()?;
-    let owner = cursor.get()?;
-    if cursor.offset <= source.len() {
-        let sender_policies = &source[cursor.offset..];
-        Ok(ReceiveContext {
-            metadata,
-            invoker,
-            self_address,
-            self_balance,
-            sender,
-            owner,
-            sender_policies,
-        })
-    } else {
-        Err(ParseError {})
-    }
-}
-
-pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[u8]>> {
-    let mut cursor = Cursor::new(source);
-    let metadata = cursor.get()?;
-    let init_origin = cursor.get()?;
-    if cursor.offset <= source.len() {
-        let sender_policies = &source[cursor.offset..];
-        Ok(InitContext {
-            metadata,
-            init_origin,
-            sender_policies,
-        })
-    } else {
-        Err(ParseError {})
-    }
-}
-
-/// Smart contract state.
-#[derive(Clone, Debug, From, Into, AsRef)]
-pub struct State {
-    pub state: Vec<u8>,
-}
-
-#[derive(Clone, Debug, Default)]
-/// Structure to support logging of events from smart contracts.
-pub struct Logs {
-    pub logs: LinkedList<Vec<u8>>,
-}
+pub type ReturnValue = Vec<u8>;
 
 #[derive(Debug)]
 pub enum InitResult {
     Success {
-        state:            State,
-        logs:             Logs,
+        state:            v0::State,
+        logs:             v0::Logs,
+        return_value:     ReturnValue,
         remaining_energy: u64,
     },
     Reject {
         reason:           i32,
+        return_value:     ReturnValue,
+        remaining_energy: u64,
+    },
+    /// Execution stopped due to a runtime error.
+    Trap {
+        error:            anyhow::Error, /* this error is here so that we can print it in
+                                          * cargo-concordium */
         remaining_energy: u64,
     },
     OutOfEnergy,
 }
 
 impl InitResult {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    /// Extract the result into a byte array and potentially a return value.
+    /// This is only meant to be used to pass the return value to foreign code.
+    /// When using this from Rust the consumer should inspect the [InitResult]
+    /// enum directly.
+    #[cfg(feature = "enable-ffi")]
+    pub(crate) fn extract(self) -> (Vec<u8>, Option<ReturnValue>) {
         match self {
-            InitResult::OutOfEnergy => vec![0],
+            InitResult::OutOfEnergy => (vec![0], None),
+            InitResult::Trap {
+                remaining_energy,
+                .. // ignore the error since it is not needed in ffi
+            } => {
+                let mut out = vec![1; 9];
+                out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
+                (out, None)
+            }
             InitResult::Reject {
                 reason,
+                return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
-                out.push(1);
+                out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, Some(return_value))
             }
             InitResult::Success {
                 state,
                 logs,
+                return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
-                out.push(2);
+                out.push(3);
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, Some(return_value))
             }
         }
     }
 }
 
-/// Data that accompanies the send action.
-#[derive(Debug)]
-pub struct SendAction {
-    pub to_addr:   ContractAddress,
-    pub name:      Vec<u8>,
-    pub amount:    u64,
-    pub parameter: Vec<u8>,
-}
-
-/// Data that accompanies the simple transfer action.
-#[derive(Debug)]
-pub struct SimpleTransferAction {
-    pub to_addr: AccountAddress, // 32 bytes
-    pub amount:  u64,            // 8 bytes
-}
-
-/// Actions produced by running a receive function.
-/// NB: The first two variants are deliberately using an Rc as opposed to just
-/// inlining the SendAction/SimpleTransferAction. The reason for this is that
-/// the variants have quite a big size difference, and we do not wish to
-/// allocate 80 bytes for each Accept action, which would happen if we did not
-/// use an indirection via an Rc.
-///
-/// Rc was chosen instead of the Box because we sometimes need to clone values
-/// of this type.
-#[derive(Clone, Debug)]
-pub enum Action {
-    Send {
-        data: std::rc::Rc<SendAction>,
-    },
-    SimpleTransfer {
-        data: std::rc::Rc<SimpleTransferAction>,
-    },
-    And {
-        l: u32,
-        r: u32,
-    },
-    Or {
-        l: u32,
-        r: u32,
-    },
-    Accept,
-}
-
-/// This is not implementing serialize because that is currently set-up for
-/// little-endian only, and we need big-endian for interoperability with the
-/// rest of the system.
-impl Action {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        use Action::*;
-        match self {
-            Send {
-                data,
-            } => {
-                let name_len = data.name.len();
-                let param_len = data.parameter.len();
-                let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
-                out.push(0);
-                out.extend_from_slice(&data.to_addr.index.to_be_bytes());
-                out.extend_from_slice(&data.to_addr.subindex.to_be_bytes());
-                out.extend_from_slice(&(name_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.name);
-                out.extend_from_slice(&data.amount.to_be_bytes());
-                out.extend_from_slice(&(param_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.parameter);
-                out
-            }
-            SimpleTransfer {
-                data,
-            } => {
-                let mut out = Vec::with_capacity(1 + 32 + 8);
-                out.push(1);
-                out.extend_from_slice(&data.to_addr.0);
-                out.extend_from_slice(&data.amount.to_be_bytes());
-                out
-            }
-            Or {
-                l,
-                r,
-            } => {
-                let mut out = Vec::with_capacity(9);
-                out.push(2);
-                out.extend_from_slice(&l.to_be_bytes());
-                out.extend_from_slice(&r.to_be_bytes());
-                out
-            }
-            And {
-                l,
-                r,
-            } => {
-                let mut out = Vec::with_capacity(9);
-                out.push(3);
-                out.extend_from_slice(&l.to_be_bytes());
-                out.extend_from_slice(&r.to_be_bytes());
-                out
-            }
-            Accept => vec![4],
-        }
-    }
-}
+/// State of the suspended execution of the receive function.
+/// This retains both the module that is executed, as well the host.
+pub type ReceiveInterruptedState<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> =
+    InterruptedState<ProcessedImports, R, ReceiveHost<ParameterVec, Ctx>>;
 
 #[derive(Debug)]
-pub enum ReceiveResult {
+/// Result of execution of a receive function.
+pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
+    /// Execution terminated.
     Success {
-        state:            State,
-        logs:             Logs,
-        actions:          Vec<Action>,
+        /// The resulting state of the contract.
+        state:            v0::State,
+        /// Logs produced since the last interrupt (or beginning of execution).
+        logs:             v0::Logs,
+        /// Return value that was produced. There is always a return value,
+        /// although it might be empty.
+        return_value:     ReturnValue,
+        /// Remaining interpreter energy.
         remaining_energy: u64,
     },
+    /// Execution triggered an operation.
+    Interrupt {
+        /// Remaining interpreter energy.
+        remaining_energy: u64,
+        /// Logs produced since the last interrupt (or beginning of execution).
+        logs:             v0::Logs,
+        /// Stored execution state that can be used to resume execution.
+        config:           Box<ReceiveInterruptedState<R, Ctx>>,
+        /// The operation that needs to be handled.
+        interrupt:        Interrupt,
+    },
+    /// Contract execution terminated with a "logic error", i.e., contract
+    /// decided to signal an error.
     Reject {
+        /// Return code.
         reason:           i32,
+        /// Return value, that may describe the error in more detail.
+        return_value:     ReturnValue,
+        /// Remaining interpreter energy.
         remaining_energy: u64,
     },
+    /// Execution stopped due to a runtime error.
+    Trap {
+        error:            anyhow::Error, /* this error is here so that we can print it in
+                                          * cargo-concordium */
+        remaining_energy: u64,
+    },
+    /// Execution consumed all available interpreter energy.
     OutOfEnergy,
 }
 
-impl ReceiveResult {
-    pub fn to_bytes(&self) -> Vec<u8> {
+impl<R> ReceiveResult<R> {
+    /// Extract the result into a byte array and potentially a return value.
+    /// This is only meant to be used to pass the return value to foreign code.
+    /// When using this from Rust the consumer should inspect the
+    /// [ReceiveResult] enum directly.
+    #[cfg(feature = "enable-ffi")]
+    pub(crate) fn extract(
+        self,
+    ) -> (Vec<u8>, Option<Box<ReceiveInterruptedState<R>>>, Option<ReturnValue>) {
         use ReceiveResult::*;
         match self {
-            OutOfEnergy => vec![0],
+            OutOfEnergy => (vec![0], None, None),
+            Trap {
+                remaining_energy,
+                .. // ignore the error since it is not needed in ffi
+            } => {
+                let mut out = vec![1; 9];
+                out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
+                (out, None, None)
+            }
             Reject {
                 reason,
+                return_value,
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(13);
-                out.push(1);
+                out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, None, Some(return_value))
             }
             Success {
                 state,
                 logs,
-                actions,
+                return_value,
                 remaining_energy,
             } => {
-                let mut out = vec![2];
+                let mut out = vec![3];
                 let state = &state.state;
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);
                 out.extend_from_slice(&logs.to_bytes());
-                out.extend_from_slice(&(actions.len() as u32).to_be_bytes());
-                for a in actions.iter() {
-                    out.extend_from_slice(&a.to_bytes());
-                }
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                out
+                (out, None, Some(return_value))
+            }
+            Interrupt {
+                remaining_energy,
+                logs,
+                config,
+                interrupt,
+            } => {
+                let mut out = vec![4];
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                let state = config.host.state.as_ref();
+                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
+                out.extend_from_slice(&state);
+                out.extend_from_slice(&logs.to_bytes());
+                interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
+                (out, Some(config), None)
             }
         }
     }
@@ -354,6 +201,8 @@ impl ReceiveResult {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+/// An enumeration of functions that can be used both by init and receive
+/// methods.
 pub enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
@@ -364,22 +213,21 @@ pub enum CommonFunc {
     ResizeState,
     StateSize,
     GetSlotTime,
+    WriteOutput,
 }
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+/// An enumeration of functions that can be used only by init methods.
 pub enum InitOnlyFunc {
     GetInitOrigin,
 }
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+/// An enumeration of functions that can be used only by receive methods.
 pub enum ReceiveOnlyFunc {
-    Accept,
-    SimpleTransfer,
-    Send,
-    CombineAnd,
-    CombineOr,
+    Invoke,
     GetReceiveInvoker,
     GetReceiveSelfAddress,
     GetReceiveSelfBalance,
@@ -391,7 +239,7 @@ pub enum ReceiveOnlyFunc {
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
 pub enum ImportFunc {
-    /// Chage for execution cost.
+    /// Charge for execution cost.
     ChargeEnergy,
     /// Track calling a function, increasing the activation frame count.
     TrackCall,
@@ -427,16 +275,13 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             11 => Ok(ImportFunc::Common(CommonFunc::StateSize)),
             12 => Ok(ImportFunc::Common(CommonFunc::GetSlotTime)),
             13 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
-            14 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Accept)),
-            15 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::SimpleTransfer)),
-            16 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Send)),
-            17 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd)),
-            18 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr)),
             19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
             20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
             21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
             22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
+            24 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke)),
+            25 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
@@ -459,16 +304,13 @@ impl Output for ImportFunc {
                 CommonFunc::ResizeState => 10,
                 CommonFunc::StateSize => 11,
                 CommonFunc::GetSlotTime => 12,
+                CommonFunc::WriteOutput => 25,
             },
             ImportFunc::InitOnly(io) => match io {
                 InitOnlyFunc::GetInitOrigin => 13,
             },
             ImportFunc::ReceiveOnly(ro) => match ro {
-                ReceiveOnlyFunc::Accept => 14,
-                ReceiveOnlyFunc::SimpleTransfer => 15,
-                ReceiveOnlyFunc::Send => 16,
-                ReceiveOnlyFunc::CombineAnd => 17,
-                ReceiveOnlyFunc::CombineOr => 18,
+                ReceiveOnlyFunc::Invoke => 24,
                 ReceiveOnlyFunc::GetReceiveInvoker => 19,
                 ReceiveOnlyFunc::GetReceiveSelfAddress => 20,
                 ReceiveOnlyFunc::GetReceiveSelfBalance => 21,
@@ -517,20 +359,16 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
         item_name: &Name,
         ty: &FunctionType,
     ) -> bool {
-        use crate::type_matches;
         use ValueType::*;
         if duplicate {
             return false;
         };
         if mod_name.name == "concordium" {
             match item_name.name.as_ref() {
-                "accept" => type_matches!(ty => []; I32),
-                "simple_transfer" => type_matches!(ty => [I32, I64]; I32),
-                "send" => type_matches!(ty => [I64, I64, I32, I32, I64, I32, I32]; I32),
-                "combine_and" => type_matches!(ty => [I32, I32]; I32),
-                "combine_or" => type_matches!(ty => [I32, I32]; I32),
-                "get_parameter_size" => type_matches!(ty => []; I32),
-                "get_parameter_section" => type_matches!(ty => [I32, I32, I32]; I32),
+                "invoke" => type_matches!(ty => [I32, I32, I32]; I64),
+                "write_output" => type_matches!(ty => [I32, I32, I32]; I32),
+                "get_parameter_size" => type_matches!(ty => [I32]; I32),
+                "get_parameter_section" => type_matches!(ty => [I32, I32, I32, I32]; I32),
                 "get_policy_section" => type_matches!(ty => [I32, I32, I32]; I32),
                 "log_event" => type_matches!(ty => [I32, I32]; I32),
                 "load_state" => type_matches!(ty => [I32, I32, I32]; I32),
@@ -564,15 +402,23 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 .as_ref()
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
-        let correct_type =
-            ty.parameters.as_slice() == [ValueType::I64] && ty.result == Some(ValueType::I32);
-        valid_name
-            && correct_type
-            && if item_name.as_ref().starts_with("init_") {
-                !item_name.as_ref().contains('.')
-            } else {
-                item_name.as_ref().contains('.')
-            }
+        // we don't allow non-ascii names and names with weird characters since they
+        // complicate matters elsewhere
+        if !valid_name {
+            return false;
+        }
+        let either_init_or_receive_name = if item_name.as_ref().starts_with("init_") {
+            !item_name.as_ref().contains('.')
+        } else {
+            item_name.as_ref().contains('.')
+        };
+        if either_init_or_receive_name {
+            // if it is an init or receive name then check that the type is correct
+            ty.parameters.as_slice() == [ValueType::I64] && ty.result == Some(ValueType::I32)
+        } else {
+            // otherwise we do not care about the type
+            true
+        }
     }
 }
 
@@ -592,11 +438,8 @@ impl TryFromImport for ProcessedImports {
             }
         } else if m.name == "concordium" {
             match import.item_name.name.as_ref() {
-                "accept" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Accept),
-                "simple_transfer" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::SimpleTransfer),
-                "send" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Send),
-                "combine_and" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd),
-                "combine_or" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr),
+                "write_output" => ImportFunc::Common(CommonFunc::WriteOutput),
+                "invoke" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke),
                 "get_parameter_size" => ImportFunc::Common(CommonFunc::GetParameterSize),
                 "get_parameter_section" => ImportFunc::Common(CommonFunc::GetParameterSection),
                 "get_policy_section" => ImportFunc::Common(CommonFunc::GetPolicySection),

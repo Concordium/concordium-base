@@ -1,20 +1,7 @@
-use crate::v0::*;
+use crate::{slice_from_c_bytes, v0::*};
 use libc::size_t;
 use std::sync::Arc;
 use wasm_transform::{artifact::CompiledFunction, output::Output, utils::parse_artifact};
-
-// After refactoring to have a common dependency with crypto, replace this
-// with the version from crypto.
-macro_rules! slice_from_c_bytes {
-    ($cstr:expr, $length:expr) => {
-        if $length != 0 {
-            assert!(!$cstr.is_null(), "Null pointer in `slice_from_c_bytes`.");
-            std::slice::from_raw_parts($cstr, $length)
-        } else {
-            &[]
-        }
-    };
-}
 
 /// All functions in this module operate on an Arc<ArtifactV0>. The reason for
 /// choosing an Arc as opposed to Box or Rc is that we need to sometimes share
@@ -32,7 +19,7 @@ unsafe extern "C" fn call_init_v0(
     init_name_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
-    energy: u64,
+    energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
@@ -44,7 +31,14 @@ unsafe extern "C" fn call_init_v0(
                 .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(artifact.as_ref(), amount, init_ctx, name, parameter, energy);
+                let res = invoke_init(
+                    artifact.as_ref(),
+                    amount,
+                    init_ctx,
+                    name,
+                    parameter.into(),
+                    energy,
+                );
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
@@ -78,7 +72,7 @@ unsafe extern "C" fn call_receive_v0(
     state_bytes_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
-    energy: u64,
+    energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
@@ -99,7 +93,7 @@ unsafe extern "C" fn call_receive_v0(
                     receive_ctx,
                     state,
                     name,
-                    parameter,
+                    parameter.into(),
                     energy,
                 );
                 match res {
@@ -135,7 +129,7 @@ unsafe extern "C" fn call_receive_v0(
 /// - `artifact_out` a pointer where the pointer to the artifact will be
 ///   written.
 /// - `output_len` a pointer where the total length of the output will be
-///   written
+///   written.
 ///
 /// The return value is either a null pointer if validation fails, or a pointer
 /// to a byte array of length `*output_len`. The byte array starts with
@@ -185,11 +179,14 @@ unsafe extern "C" fn validate_and_process_v0(
 
 #[no_mangle]
 /// # Safety
-/// This function is safe provided the supplied pointer is not null and is
-/// constructed with [Arc::into_raw].
+/// This function is safe provided the supplied pointer is
+/// constructed with [Arc::into_raw] and for each [Arc::into_raw] this function
+/// is called only once.
 unsafe extern "C" fn artifact_v0_free(artifact_ptr: *const ArtifactV0) {
-    // decrease the reference count
-    Arc::from_raw(artifact_ptr);
+    if !artifact_ptr.is_null() {
+        // decrease the reference count
+        Arc::from_raw(artifact_ptr);
+    }
 }
 
 #[no_mangle]
