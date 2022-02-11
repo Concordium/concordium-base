@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, GADTs, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE DerivingVia, GADTs, ScopedTypeVariables, OverloadedStrings, DataKinds, KindSignatures, TypeApplications #-}
 {-|
 Module      : Concordium.Wasm
 Description : Types used in the smart contract framework.
@@ -35,7 +35,8 @@ execution is successful, then an 'ActionsTree' is returned together with the new
 module Concordium.Wasm (
   -- * Constants
   maxParameterLen,
-  maxWasmModuleSize,
+  maxWasmModuleSizeV0,
+  maxWasmModuleSizeV1,
 
   -- * Modules
   -- ** Binary module
@@ -48,7 +49,14 @@ module Concordium.Wasm (
   unsafeUseModuleSourceAsCStringLen,
   moduleSourceLength,
   WasmModule(..),
+  wasmVersion,
+  wasmSource,
+  WasmModuleV(..),
   getModuleRef,
+  WasmVersion(..),
+  IsWasmVersion(..),
+  SWasmVersion(..),
+  V0, V1,
 
   -- *** Methods
   --
@@ -60,7 +68,11 @@ module Concordium.Wasm (
   ReceiveName(..),
   isValidReceiveName,
   contractAndFunctionName,
+  EntrypointName(..),
+  isValidEntrypointName,
+  uncheckedMakeReceiveName,
   Parameter(..),
+  emptyParameter,
 
   -- *** Contract state
   ContractState(..),
@@ -109,7 +121,6 @@ import Data.Hashable
 import Data.Int (Int32)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
-import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text(Text)
 import qualified Data.Text.Encoding as Text
@@ -128,49 +139,151 @@ import Concordium.Utils.Serialization
 
 --------------------------------------------------------------------------------
 
+-- |Supported versions of Wasm modules. This version defines available host
+-- functions, their semantics, and limitations of contracts.
+data WasmVersion = V0 | V1
+  deriving(Eq, Show)
+
+-- |Map the WasmVersion to a 32-bit word for serialization.
+wasmVersionToWord :: WasmVersion -> Word32
+wasmVersionToWord V0 = 0
+wasmVersionToWord V1 = 1
+
+-- |Converse to 'wasmVersionToWord'.
+wordToWasmVersion :: Word32 -> Maybe WasmVersion
+wordToWasmVersion 0 = Just V0
+wordToWasmVersion 1 = Just V1
+wordToWasmVersion _ = Nothing
+
+instance Serialize WasmVersion where
+  put = putWord32be . wasmVersionToWord
+
+  get = do
+    w <- getWord32be
+    case wordToWasmVersion w of
+      Just wv -> return wv
+      Nothing -> fail $ "Unrecognized Wasm version number " ++ show w
+
+instance AE.ToJSON WasmVersion where
+  toJSON = AE.toJSON . wasmVersionToWord
+
+instance AE.FromJSON WasmVersion where
+  parseJSON v = do
+    word <- AE.parseJSON v
+    case wordToWasmVersion word of
+      Just wv -> return wv
+      Nothing -> fail $ "Unsupported Wasm version " ++ show word
+
+-- |These type aliases are provided for convenience to avoid having to enable
+-- DataKinds everywhere we need wasm version.
+type V0 = 'V0
+type V1 = 'V1
+
+-- |Boilerplate to allow using the supplied version type parameter as a term.
+data SWasmVersion (v :: WasmVersion) where
+  SV0 :: SWasmVersion 'V0
+  SV1 :: SWasmVersion 'V1
+
+-- A typeclass that allows to pass SWasmVersion implicitly to computations via a
+-- constraint.
+class IsWasmVersion (v :: WasmVersion) where
+  getWasmVersion :: SWasmVersion v
+
+instance IsWasmVersion 'V0 where
+  getWasmVersion = SV0
+
+instance IsWasmVersion 'V1 where
+  getWasmVersion = SV1
+
+
 -- | The source of a contract in binary wasm format.
-newtype ModuleSource = ModuleSource { moduleSource :: ByteString }
+newtype ModuleSource (v :: WasmVersion) = ModuleSource { moduleSource :: ByteString }
   deriving (Eq, Show)
 
-instance Serialize ModuleSource where
+instance Serialize (ModuleSource V0)  where
   get = do
     len <- getWord32be
-    unless (len <= maxWasmModuleSize) $ fail "Maximum module size exceeded."
+    unless (len <= maxWasmModuleSizeV0) $ fail "Maximum module size exceeded."
     ModuleSource <$> getByteString (fromIntegral len)
   put = putByteStringWord32 . moduleSource
 
-unsafeUseModuleSourceAsCStringLen :: ModuleSource -> (CStringLen -> IO a) -> IO a
+instance Serialize (ModuleSource V1)  where
+  get = do
+    len <- getWord32be
+    unless (len <= maxWasmModuleSizeV1) $ fail "Maximum module size exceeded."
+    ModuleSource <$> getByteString (fromIntegral len)
+  put = putByteStringWord32 . moduleSource
+
+unsafeUseModuleSourceAsCStringLen :: ModuleSource v -> (CStringLen -> IO a) -> IO a
 unsafeUseModuleSourceAsCStringLen = unsafeUseAsCStringLen . moduleSource
 
-moduleSourceLength :: ModuleSource -> Word64
+moduleSourceLength :: ModuleSource v -> Word64
 moduleSourceLength = fromIntegral . BS.length . moduleSource
 
--- |Web assembly module in binary format.
-data WasmModule = WasmModule {
-  -- |Version of the Wasm standard and on-chain API this module corresponds to.
-  wasmVersion :: !Word32,
-  -- |Source in binary wasm format.
-  wasmSource :: !ModuleSource
-  } deriving(Eq, Show)
+-- |A versioned module source. The serialization instance of this type, in contrast to ModuleSource,
+-- records the version that was used.
+newtype WasmModuleV (v :: WasmVersion) = WasmModuleV { wmvSource :: ModuleSource v }
+    deriving (Eq, Show)
 
-getModuleRef :: WasmModule -> ModuleRef
-getModuleRef wm = ModuleRef (getHash wm)
+instance IsWasmVersion v => Serialize (WasmModuleV v) where
+  put (WasmModuleV ws) = case getWasmVersion @v of
+    SV0 -> put V0 <> put ws
+    SV1 -> put V1 <> put ws
+
+  get = case getWasmVersion @v of
+    SV0 -> get >>= \case
+      V0 -> WasmModuleV <$> get
+      _ -> fail "Expecting a V0 module."
+    SV1 -> get >>= \case
+      V1 -> WasmModuleV <$> get
+      _ -> fail "Expecting a V1 module."
+
+-- |A module of either version 0 or 1.
+data WasmModule =
+  WasmModuleV0 (WasmModuleV V0)
+  | WasmModuleV1 (WasmModuleV V1)
+  deriving(Eq, Show)
+
+getModuleRef :: forall v . IsWasmVersion v => WasmModuleV v -> ModuleRef
+getModuleRef wm = case getWasmVersion @v of
+  SV0 -> ModuleRef (getHash wm)
+  SV1 -> ModuleRef (getHash wm)
+
+-- |Get the WasmVersion of a WasmModule.
+wasmVersion :: WasmModule -> WasmVersion
+wasmVersion = \case
+  WasmModuleV0 _ -> V0
+  WasmModuleV1 _ -> V1
+
+-- |Get the raw ModuleSource from a WasmModule.
+wasmSource :: WasmModule -> ByteString
+wasmSource = \case
+  WasmModuleV0 wmv -> moduleSource . wmvSource $ wmv
+  WasmModuleV1 wmv -> moduleSource . wmvSource $ wmv
 
 instance Serialize WasmModule where
-  put WasmModule{..} =
-    putWord32be wasmVersion <>
-    put wasmSource
+  put (WasmModuleV0 ws) =
+    put ws
+  put (WasmModuleV1 ws) =
+    put ws
 
   get = do
-    wasmVersion <- getWord32be
-    unless (wasmVersion == 0) $ fail "Unsupported Wasm module version."
-    wasmSource <- get
-    return WasmModule{..}
+    get >>= \case
+      V0 -> WasmModuleV0 . WasmModuleV <$> get
+      V1 -> WasmModuleV1 . WasmModuleV <$> get
 
 instance HashableTo H.Hash WasmModule where
-  -- Hash the serialization directly, perhaps this needs to be revisited in the
-  -- future.
-  getHash wm = H.hash (encode wm)
+  -- Hash the serialization directly.
+  getHash (WasmModuleV0 wm) = getHash wm
+  getHash (WasmModuleV1 wm) = getHash wm
+
+instance HashableTo H.Hash (WasmModuleV V0) where
+  -- Hash the serialization directly.
+  getHash (WasmModuleV wm) = H.hash (encode V0 <> encode wm)
+
+instance HashableTo H.Hash (WasmModuleV V1) where
+  -- Hash the serialization directly.
+  getHash (WasmModuleV wm) = H.hash (encode V1 <> encode wm)
 
 --------------------------------------------------------------------------------
 
@@ -229,6 +342,42 @@ isValidReceiveName proposal =
       hasDot = Text.any (== '.') proposal
   in hasValidLength && hasValidCharacters && hasDot
 
+-- |Name of the entrypoint, i.e., the part of the receive name after the dot.
+newtype EntrypointName = EntrypointName { entrypointName :: Text }
+    deriving (Eq, Show, Ord)
+    deriving(AE.ToJSON) via Text
+
+-- |Check whether the given text is a valid entrypoint name.
+-- This is the case if
+--
+-- * length is < maxFuncNameSize
+-- * all characters are valid ascii characters in alphanumeric or punctuation classes
+-- 
+-- Note that these are necessary, but not sufficient, conditions for this
+-- entrypoint name to be an entrypoint name of any contract.
+isValidEntrypointName :: Text -> Bool
+isValidEntrypointName proposal =
+  -- The limit is specified in bytes, but Text.length returns the number of chars.
+  -- This is not a problem, as we only allow ASCII.
+  let hasValidLength = Text.length proposal < maxFuncNameSize
+      hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+  in hasValidLength && hasValidCharacters
+
+instance Serialize EntrypointName where
+  put = putByteStringWord16 . Text.encodeUtf8 . entrypointName
+  get = do
+    bs <- getByteStringWord16
+    case Text.decodeUtf8' bs of
+      Left _ -> fail "Not a valid utf-8 encoding."
+      Right t | isValidEntrypointName t -> return (EntrypointName t)
+              | otherwise -> fail $ "Not a valid entrypoint name: " ++ Text.unpack t
+
+
+-- |Make a receive name from an init name and an entrypoint name. This does not check that the
+-- resulting receive name is valid. It could be too long.
+uncheckedMakeReceiveName :: InitName -> EntrypointName -> ReceiveName
+uncheckedMakeReceiveName iName EntrypointName{..} = ReceiveName (initContractName iName <> "." <> entrypointName)
+
 -- |Extract the contract name from the init function name.
 initContractName :: InitName -> Text
 initContractName = Text.drop (Text.length "init_") . initName
@@ -258,6 +407,10 @@ instance Serialize ReceiveName where
 newtype Parameter = Parameter { parameter :: ShortByteString }
     deriving(Eq, Show)
     deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
+
+-- |Parameter of size 0.
+emptyParameter :: Parameter
+emptyParameter = Parameter BSS.empty
 
 instance Serialize Parameter where
   put = putShortByteStringWord16 . parameter

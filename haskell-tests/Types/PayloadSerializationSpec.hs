@@ -85,21 +85,22 @@ genParameter = do
   n <- choose (0,1000)
   Parameter . BSS.pack <$> vector n
 
-genPayload :: Gen Payload
-genPayload = oneof [genDeployModule,
-                    genInit,
-                    genUpdate,
-                    genTransfer,
-                    genCredentialUpdate,
-                    genAddBaker,
-                    genRemoveBaker,
-                    genUpdateBakerStake,
-                    genUpdateBakerRestakeEarnings,
-                    genUpdateBakerKeys,
-                    genUpdateCredentialKeys,
-                    genTransferToEncrypted,
-                    genRegisterData
-                    ]
+genPayload :: ProtocolVersion -> Gen Payload
+genPayload pv = oneof [
+  genDeployModule,
+  genInit,
+  genUpdate,
+  genTransfer,
+  genCredentialUpdate,
+  genAddBaker,
+  genRemoveBaker,
+  genUpdateBakerStake,
+  genUpdateBakerRestakeEarnings,
+  genUpdateBakerKeys,
+  genUpdateCredentialKeys,
+  genTransferToEncrypted,
+  genRegisterData
+  ]
   where
         genCredentialUpdate = do
           maxNumCredentials <- choose (0,255)
@@ -116,7 +117,12 @@ genPayload = oneof [genDeployModule,
           n <- choose (0,1000)
           BS.pack <$> vector n
 
-        genDeployModule = DeployModule <$> (WasmModule 0 . ModuleSource <$> genByteString)
+        genDeployModule =
+          let genV0 = DeployModule <$> (WasmModuleV0 . WasmModuleV . ModuleSource <$> genByteString)
+              genV1 = DeployModule <$> (WasmModuleV1 . WasmModuleV . ModuleSource <$> genByteString)
+          in if pv <= P3 then -- protocol versions <= 3 only allow version 0 Wasm modules.
+               genV0
+             else oneof [genV0, genV1]
 
         genInit = do
           icAmount <- Amount <$> arbitrary
@@ -250,7 +256,7 @@ testSerializeEncryptedTransfer = property $ \gen gen1 seed1 seed2 -> forAll genA
   let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
   let amount = gen `div` 2
   Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
-  return (checkPayload (EncryptedAmountTransfer addr eatd))
+  return (checkPayload SP1 (EncryptedAmountTransfer addr eatd))
 
 testSecToPubTransfer :: Property
 testSecToPubTransfer = property $ \gen gen1 seed1 -> monadicIO $ do
@@ -258,7 +264,7 @@ testSecToPubTransfer = property $ \gen gen1 seed1 -> monadicIO $ do
   let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
   let amount = gen `div` 2
   Just eatd <- run (makeSecToPubAmountTransferData globalContext private agg amount)
-  return (checkPayload (TransferToPublic eatd))
+  return (checkPayload SP1 (TransferToPublic eatd))
 
 
 groupIntoSize :: Int64 -> [Char]
@@ -270,21 +276,23 @@ groupIntoSize s =
               ub = 10^(nd+1) :: Int
           in show lb ++ " -- " ++ show ub ++ "kB"
 
-checkPayload :: Payload -> Property
-checkPayload e = let bs = S.runPut $ putPayload e
-                 in case S.runGet (getPayload SP1 (fromIntegral (BS.length bs))) bs of
-                      Left err -> counterexample err False
-                      Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
+checkPayload :: SProtocolVersion pv -> Payload -> Property
+checkPayload spv e = let bs = S.runPut $ putPayload e
+                     in case S.runGet (getPayload spv (fromIntegral (BS.length bs))) bs of
+                          Left err -> counterexample err False
+                          Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
 
 tests :: Spec
 tests = do
   describe "Payload serialization tests" $ do
-    test 25 1000
-    test 50 500
+    test SP1 25 1000
+    test SP2 50 500
+    test SP3 50 500
+    test SP4 50 500
   describe "Encrypted transfer payloads" $ do
     specify "Encrypted transfer" $ testSerializeEncryptedTransfer
     specify "Transfer to public" $ testSecToPubTransfer
- where test size num =
+ where test spv size num =
          modifyMaxSuccess (const num) $
-           specify ("Payload serialization with size = " ++ show size ++ ":") $
-           forAll (resize size $ genPayload) checkPayload
+           specify ("Payload serialization for protocol " ++ show (demoteProtocolVersion spv) ++ " with size = " ++ show size ++ ":") $
+           forAll (resize size (genPayload (demoteProtocolVersion spv))) (checkPayload spv)

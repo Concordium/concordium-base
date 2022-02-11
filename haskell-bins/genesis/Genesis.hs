@@ -29,6 +29,7 @@ import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
+import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.Base as GDBase
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
@@ -177,6 +178,7 @@ main = cmdArgsRun mode >>=
                                -- for why we assign these versions to P1 and P2 genesis
                                4 -> return $ PVGenesisData . GDP2 $ P2.parametersToGenesisData params
                                5 -> return $ PVGenesisData . GDP3 $ P3.parametersToGenesisData params
+                               6 -> return $ PVGenesisData . GDP4 $ P4.parametersToGenesisData params
                                n -> do
                                  putStrLn $ "Unsupported genesis data version: " ++ show n
                                  exitFailure
@@ -202,6 +204,9 @@ main = cmdArgsRun mode >>=
                 SP3 -> case gdata of
                   GDP3 P3.GDP3Regenesis{..} -> printRegenesis P3 genesisRegenesis
                   gd@(GDP3 P3.GDP3Initial{..}) -> printInitial P3 (genesisBlockHash gd) genesisCore genesisInitialState
+                SP4 -> case gdata of
+                  GDP4 P4.GDP4Regenesis{..} -> printRegenesis P3 genesisRegenesis
+                  gd@(GDP4 P4.GDP4Initial{..}) -> printInitial P4 (genesisBlockHash gd) genesisCore genesisInitialState
 
 printRegenesis :: ProtocolVersion -> RegenesisData -> IO ()
 printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do

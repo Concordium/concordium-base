@@ -86,8 +86,8 @@ instance Arbitrary Event where
     arbitrary =
         oneof
             [ ModuleDeployed <$> genModuleRef,
-              ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> listOf genContractEvent,
-              Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> listOf genContractEvent,
+              ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion <*> listOf genContractEvent,
+              Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> genWasmVersion <*> listOf genContractEvent,
               Transferred <$> genAddress <*> genAmount <*> genAddress,
               AccountCreated <$> genAccountAddress,
               CredentialDeployed <$> genCredentialId <*> genAccountAddress,
@@ -106,9 +106,12 @@ instance Arbitrary Event where
               genTransferredWithSchedule,
               genCredentialsUpdated,
               DataRegistered <$> genRegisteredData,
-              TransferMemo <$> genMemo
+              TransferMemo <$> genMemo,
+              Interrupted <$> genCAddress <*> listOf genContractEvent,
+              Resumed <$> genCAddress <*> arbitrary
             ]
       where
+        genWasmVersion = elements [Wasm.V0, Wasm.V1]
         genBakerAdded = do
             ebaBakerId <- genBakerId
             ebaAccount <- genAccountAddress

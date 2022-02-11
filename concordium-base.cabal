@@ -53,6 +53,7 @@ library
       Concordium.Genesis.Data.P1
       Concordium.Genesis.Data.P2
       Concordium.Genesis.Data.P3
+      Concordium.Genesis.Data.P4
       Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker
@@ -73,6 +74,7 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
+      Concordium.Types.InvokeContract
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
