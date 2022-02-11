@@ -78,6 +78,10 @@ data InvokeContractResult =
   -- |Contract execution failed for the given reason.
   Failure {
       rcrReason :: !RejectReason,
+      -- |If invoking a V0 contract this is Nothing, otherwise it is potentially
+      -- a return value produced by the call unless the call failed with out of
+      -- energy or runtime error.
+      rcrReturnValue :: !(Maybe BS.ByteString),
       -- |Energy used by the execution.
       rcrUsedEnergy :: !Energy
       }
@@ -98,6 +102,8 @@ instance AE.FromJSON InvokeContractResult where
     case tag of
       "failure" -> do
         rcrReason <- obj AE..: "reason"
+        rv <- obj AE..:? "returnValue"
+        rcrReturnValue <- decodeReturnValue rv
         rcrUsedEnergy <- obj AE..: "usedEnergy"
         return Failure{..}
       "success" -> do
@@ -115,11 +121,13 @@ instance AE.FromJSON InvokeContractResult where
                 else fail $ "Failed decoding return value from base16."
 
 instance AE.ToJSON InvokeContractResult where
-  toJSON Failure{..} = AE.object [
+  toJSON Failure{..} = AE.object $ [
     "tag" AE..= AE.String "failure",
     "reason" AE..= rcrReason,
     "usedEnergy" AE..= rcrUsedEnergy
-    ]
+    ] ++ case rcrReturnValue of
+           Nothing -> []
+           Just rv -> [("returnValue", AE.String . Text.decodeUtf8 . BS16.encode $ rv)]
   toJSON Success{..} = AE.object $ [
     "tag" AE..= AE.String "success",
     "events" AE..= rcrEvents,
