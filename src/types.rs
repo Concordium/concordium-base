@@ -1,4 +1,4 @@
-use crate::constants;
+use crate::{constants, to_bytes, Serial};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
@@ -941,6 +941,13 @@ impl From<Vec<u8>> for OwnedParameter {
 
 impl OwnedParameter {
     pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
+
+    /// Construct an `OwnedParameter` by serializing the input using its
+    /// `Serial` instance.
+    pub fn new<D: Serial>(data: &D) -> Self { Self(to_bytes(data)) }
+
+    /// Construct an `OwnedParameter` from the raw, serialized, data.
+    pub fn new_raw(data: Vec<u8>) -> Self { Self(data) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
