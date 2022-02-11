@@ -183,10 +183,10 @@ fn prop_matches_reference_delete_subtree() {
             } else {
                 continue;
             };
-            for (_, _) in reference_iter {
+            for _ in reference_iter {
                 if let Some(entry) = trie.next(&mut loader, &mut iterator) {
                     ensure!(
-                        trie.with_entry(entry, &mut loader, |_| ()).is_none(),
+                        trie.get_mut(entry, &mut loader).is_none(),
                         "Entry should have been invalidated."
                     );
                 }
