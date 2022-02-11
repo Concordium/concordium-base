@@ -64,10 +64,12 @@ module Concordium.Wasm (
   -- contain several contracts.
   InitName(..),
   isValidInitName,
+  extractInitName,
   initContractName,
   ReceiveName(..),
   isValidReceiveName,
   contractAndFunctionName,
+  extractInitReceiveNames,
   EntrypointName(..),
   isValidEntrypointName,
   uncheckedMakeReceiveName,
@@ -308,6 +310,13 @@ isValidInitName proposal =
       hasDot = Text.any (== '.') proposal
   in "init_" `Text.isPrefixOf` proposal && hasValidLength && hasValidCharacters && not hasDot
 
+-- |Check that the given string is a valid init name. If so construct it,
+-- otherwise return Nothing.
+extractInitName :: Text -> Maybe InitName
+extractInitName nameText = do
+  guard (isValidInitName nameText)
+  return (InitName nameText)
+
 instance AE.FromJSON InitName where
   parseJSON = AE.withText "InitName" $ \initName -> do
     if isValidInitName initName then return InitName{..}
@@ -352,7 +361,7 @@ newtype EntrypointName = EntrypointName { entrypointName :: Text }
 --
 -- * length is < maxFuncNameSize
 -- * all characters are valid ascii characters in alphanumeric or punctuation classes
--- 
+--
 -- Note that these are necessary, but not sufficient, conditions for this
 -- entrypoint name to be an entrypoint name of any contract.
 isValidEntrypointName :: Text -> Bool
@@ -386,6 +395,16 @@ initContractName = Text.drop (Text.length "init_") . initName
 contractAndFunctionName :: ReceiveName -> (Text, Text)
 contractAndFunctionName (ReceiveName n) = (cname, Text.drop 1 fname)
     where (cname, fname) = Text.span (/= '.') n
+
+-- |Check that the given string is a valid receive name, and extract the init
+-- and receive names from it. The latter is just the name that was given and the
+-- former is the name of the function that was used to create the instance to
+-- which the receive function belongs.
+extractInitReceiveNames :: Text -> Maybe (InitName, ReceiveName)
+extractInitReceiveNames nameText = do
+  guard (isValidReceiveName nameText)
+  let cname = "init_" <> Text.takeWhile (/= '.') nameText
+  return (InitName cname, ReceiveName nameText)
 
 instance AE.FromJSON ReceiveName where
   parseJSON = AE.withText "ReceiveName" $ \receiveName -> do
