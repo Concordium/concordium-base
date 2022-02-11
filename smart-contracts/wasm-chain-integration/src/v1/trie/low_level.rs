@@ -1797,7 +1797,7 @@ impl<V> MutableTrie<V> {
                     if let Some((child_idx, parent_idx)) = parent_idx {
                         // invalidate pointers to the node
                         // this is wrong.
-                        entries[child_idx] = Entry::Deleted;
+                        //entries[child_idx] = Entry::Deleted;
                         let (has_value, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
                         children.remove(child_idx);
