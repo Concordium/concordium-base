@@ -183,12 +183,14 @@ fn prop_matches_reference_delete_subtree() {
             } else {
                 continue;
             };
-            for _ in reference_iter {
+            for (k, v) in reference_iter {
                 if let Some(entry) = trie.next(&mut loader, &mut iterator) {
                     ensure!(
-                        trie.get_mut(entry, &mut loader).is_none(),
-                        "Entry should have been invalidated."
+                        trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
+                        "Entry value does not match reference value."
                     );
+                    let it_key = iterator.get_key();
+                    ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}", it_key, k);
                 }
             }
             // there are no values left to iterate.
@@ -196,6 +198,12 @@ fn prop_matches_reference_delete_subtree() {
                 trie.next(&mut loader, &mut iterator).is_none(),
                 "Iterator has remaining values."
             );
+            // check that entries which have been removed are invalidated.
+            if let Some(mut removed_iter) = trie.iter(&mut loader, &prefix[..]) {
+                while let Some(child) = trie.next(&mut loader, &mut removed_iter) {
+                    // todo
+                }
+            }
         }
         Ok(())
     };

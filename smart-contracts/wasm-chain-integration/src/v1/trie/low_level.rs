@@ -1772,10 +1772,6 @@ impl<V> MutableTrie<V> {
                 // the subtree is locked so we cannot remove it
                 return None;
             }
-            // mark the root of the subtree as `Deleted`
-            if let Some(root_entry) = node.value {
-                entries[root_entry] = Entry::Deleted;
-            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -1799,7 +1795,8 @@ impl<V> MutableTrie<V> {
                     // we found the subtree to remove. Now traverse up and fixup the remaining part
                     // of the tree. if we deleted the root set the tree is empty, so set it as such.
                     if let Some((child_idx, parent_idx)) = parent_idx {
-                        // invalidate pointers to the child.
+                        // invalidate pointers to the node
+                        // this is wrong.
                         entries[child_idx] = Entry::Deleted;
                         let (has_value, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
@@ -1810,9 +1807,6 @@ impl<V> MutableTrie<V> {
                             // collapse path.
                             if let Some(child) = children.pop() {
                                 let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                                if let Some(entry) = child_1.value {
-                                    entries[entry] = Entry::Deleted;
-                                }
                                 let node = &mut owned_nodes[parent_idx];
                                 node.path.extend(child.key(), child_1.path.as_ref());
                                 node.children = child_1.children;
