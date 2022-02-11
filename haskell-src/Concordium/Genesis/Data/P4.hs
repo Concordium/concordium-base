@@ -2,7 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- |This module defines the genesis data fromat for the 'P4' protocol version.
+-- |This module defines the genesis data format for the 'P4' protocol version.
 module Concordium.Genesis.Data.P4 where
 
 import Data.Serialize
@@ -14,35 +14,61 @@ import Concordium.Genesis.Parameters
 import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Execution
+import Concordium.Types.Parameters
+import Concordium.Types.Updates
 
 -- |Parameters used to migrate state from protocol version 'P3' to 'P4'.
 data StateMigrationParametersP3toP4 = StateMigrationParametersP3toP4
     { -- |The commission rate to apply to bakers on migration.
       migrationDefaultCommissionRate :: !CommissionRates,
+      -- |The state of a baking pool on migration.
+      migrationDefaultPoolState :: !OpenStatus,
       -- |The genesis time of the previous genesis block.
       migrationPreviousGenesisTime :: !Timestamp,
       -- |The duration of an epoch in the previous chain.
-      migrationPreviousEpochDuration :: !Duration
+      migrationPreviousEpochDuration :: !Duration,
+      -- |Access structure defining the keys and threshold for cooldown parameter updates.
+      migrationCooldownParametersAccessStructure :: !AccessStructure,
+      -- |Access structure defining the keys and threshold for time parameter updates.
+      migrationTimeParametersAccessStructure :: !AccessStructure,
+      -- |New cooldown parameters.
+      migrationCooldownParameters :: !(CooldownParameters 'ChainParametersV1),
+      -- |New time parameters.
+      migrationTimeParameters :: !(TimeParameters 'ChainParametersV1),
+      -- |New pool parameters
+      migrationPoolParameters :: !(PoolParameters 'ChainParametersV1)
     }
     deriving (Eq, Show)
 
 instance Serialize StateMigrationParametersP3toP4 where
     put StateMigrationParametersP3toP4{..} = do
         put migrationDefaultCommissionRate
+        put migrationDefaultPoolState
         put migrationPreviousGenesisTime
         put migrationPreviousEpochDuration
+        put migrationCooldownParametersAccessStructure
+        put migrationTimeParametersAccessStructure
+        put migrationCooldownParameters
+        put migrationTimeParameters
+        put migrationPoolParameters
     get = do
         migrationDefaultCommissionRate <- get
+        migrationDefaultPoolState <- get
         migrationPreviousGenesisTime <- get
         migrationPreviousEpochDuration <- get
+        migrationCooldownParametersAccessStructure <- get
+        migrationTimeParametersAccessStructure <- get
+        migrationCooldownParameters <- get
+        migrationTimeParameters <- get
+        migrationPoolParameters <- get
         return StateMigrationParametersP3toP4{..}
 
 -- |The baker pool information to assign to existing bakers on migrating from 'P3' to 'P4'.
 defaultBakerPoolInfo :: StateMigrationParametersP3toP4 -> BakerPoolInfo
 defaultBakerPoolInfo StateMigrationParametersP3toP4{..} =
     BakerPoolInfo
-        { _poolOpenStatus = ClosedForAll,
-          _poolMetadataUrl = UrlText "",
+        { _poolOpenStatus = migrationDefaultPoolState,
+          _poolMetadataUrl = emptyUrlText,
           _poolCommissionRates = migrationDefaultCommissionRate
         }
 

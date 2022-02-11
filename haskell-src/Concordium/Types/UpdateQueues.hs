@@ -18,6 +18,9 @@ import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Updates
 import Concordium.Utils.Serialization
 import Concordium.Types.Parameters
+import Concordium.Genesis.Data
+import qualified Concordium.Genesis.Data.P4 as P4
+import Concordium.Types.Migration
 
 -- |An update queue consists of pending future updates ordered by
 -- the time at which they will take effect.
@@ -49,28 +52,36 @@ instance HashableTo H.Hash e => HashableTo H.Hash (UpdateQueue e) where
 
 -- |Serialize an update queue in V0 format.
 putUpdateQueueV0 :: (Serialize e) => Putter (UpdateQueue e)
-putUpdateQueueV0 UpdateQueue{..} = do
+putUpdateQueueV0 = putUpdateQueueV0With put
+
+-- |Serialize an update queue in V0 format.
+putUpdateQueueV0With :: Putter e -> Putter (UpdateQueue e)
+putUpdateQueueV0With putElem UpdateQueue{..} = do
         put _uqNextSequenceNumber
         forM_ _uqQueue $ \(tt, v) -> do
             putWord8 1
             put tt
-            put v
+            putElem v
         putWord8 0
 
 -- |Deserialize an update queue in V0 format.
-getUpdateQueueV0 :: (Serialize e) => Get (UpdateQueue e)
-getUpdateQueueV0 = do
+getUpdateQueueV0With :: Get e -> Get (UpdateQueue e)
+getUpdateQueueV0With getElem = do
         _uqNextSequenceNumber <- get
         let loop lastTT = getWord8 >>= \case
                 0 -> return []
                 1 -> do
                     tt <- get
                     unless (lastTT < Just tt) $ fail "Update queue not in ascending order"
-                    v <- get
+                    v <- getElem
                     ((tt, v) :) <$> loop (Just tt)
                 _ -> fail "Invalid update queue"
         _uqQueue <- loop Nothing
         return UpdateQueue{..}
+
+-- |Deserialize an update queue in V0 format.
+getUpdateQueueV0 :: Serialize e => Get (UpdateQueue e)
+getUpdateQueueV0 = getUpdateQueueV0With get
 
 instance ToJSON e => ToJSON (UpdateQueue e) where
     toJSON UpdateQueue{..} = object [
@@ -172,7 +183,7 @@ putPendingUpdatesV0 :: IsChainParametersVersion cpv => Putter (PendingUpdates cp
 putPendingUpdatesV0 PendingUpdates{..} = do
         putUpdateQueueV0 _pRootKeysUpdateQueue
         putUpdateQueueV0 _pLevel1KeysUpdateQueue
-        putUpdateQueueV0 _pLevel2KeysUpdateQueue
+        putUpdateQueueV0With putAuthorizations _pLevel2KeysUpdateQueue
         putUpdateQueueV0 _pProtocolQueue
         putUpdateQueueV0 _pElectionDifficultyQueue
         putUpdateQueueV0 _pEuroPerEnergyQueue
@@ -188,25 +199,33 @@ putPendingUpdatesV0 PendingUpdates{..} = do
         putUpdateQueueForCPV1 _pTimeParametersQueue
 
 -- |Deserialize pending updates.
-getPendingUpdatesV0 :: IsChainParametersVersion cpv => Get (PendingUpdates cpv)
-getPendingUpdatesV0 = do
+getPendingUpdatesV0 :: forall oldpv pv. (IsProtocolVersion oldpv) => StateMigrationParameters oldpv pv -> Get (PendingUpdates (ChainParametersVersionFor pv))
+getPendingUpdatesV0 migration = do
         _pRootKeysUpdateQueue <- getUpdateQueueV0
         _pLevel1KeysUpdateQueue <- getUpdateQueueV0
-        _pLevel2KeysUpdateQueue <- getUpdateQueueV0
+        -- Any pending updates to the authorizations are migrated.
+        _pLevel2KeysUpdateQueue <- getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
         _pProtocolQueue <- getUpdateQueueV0
         _pElectionDifficultyQueue <- getUpdateQueueV0
         _pEuroPerEnergyQueue <- getUpdateQueueV0
         _pMicroGTUPerEuroQueue <- getUpdateQueueV0
         _pFoundationAccountQueue <- getUpdateQueueV0
-        _pMintDistributionQueue <- getUpdateQueueV0
+        _pMintDistributionQueue <- getUpdateQueueV0With (migrateMintDistribution migration <$> get)
         _pTransactionFeeDistributionQueue <- getUpdateQueueV0
         _pGASRewardsQueue <- getUpdateQueueV0
-        _pPoolParametersQueue <- getUpdateQueueV0
+        _pPoolParametersQueue <- getUpdateQueueV0With (migratePoolParameters migration <$> get)
         _pAddAnonymityRevokerQueue <- getUpdateQueueV0
         _pAddIdentityProviderQueue <- getUpdateQueueV0
-        _pCooldownParametersQueue <- getUpdateQueueForCPV1
-        _pTimeParametersQueue <- getUpdateQueueForCPV1
+        -- Cooldown and time parameters are only part of CPV1
+        (_pCooldownParametersQueue, _pTimeParametersQueue) <- case migration of
+            StateMigrationParametersTrivial -> do
+                _pCooldownParametersQueue <- getUpdateQueueForCPV1
+                _pTimeParametersQueue <- getUpdateQueueForCPV1
+                return (_pCooldownParametersQueue, _pTimeParametersQueue)
+            StateMigrationParametersP3ToP4 P4.StateMigrationParametersP3toP4{} ->
+                return (JustForCPV1 emptyUpdateQueue, JustForCPV1 emptyUpdateQueue)
         return PendingUpdates{..}
+
 
 pendingUpdatesV0ToJSON :: PendingUpdates 'ChainParametersV0 -> Value
 pendingUpdatesV0ToJSON PendingUpdates{..} = object [
@@ -349,23 +368,25 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (Updates' cpv) where
 -- |Serialize 'Updates' in V0 format.
 putUpdatesV0 :: IsChainParametersVersion cpv => Putter (Updates' cpv)
 putUpdatesV0 Updates{..} = do
-        put (_currentKeyCollection ^. unhashed)
+        putUpdateKeysCollection (_currentKeyCollection ^. unhashed)
         case _currentProtocolUpdate of
             Nothing -> putWord8 0
             Just cpu -> putWord8 1 >> put cpu
         putChainParameters _currentParameters
         putPendingUpdatesV0 _pendingUpdates
 
--- |Deserialize 'Updates' in V0 format.
-getUpdatesV0 :: IsChainParametersVersion cpv => Get (Updates' cpv)
-getUpdatesV0 = do
-        _currentKeyCollection <- makeHashed <$> get
+-- |Deserialize 'Updates' in V0 format, applying a migration as necessary.
+getUpdatesV0 :: forall oldpv pv. (IsProtocolVersion oldpv, IsProtocolVersion pv) =>
+    StateMigrationParameters oldpv pv
+    -> Get (Updates' (ChainParametersVersionFor pv))
+getUpdatesV0 migration = do
+        _currentKeyCollection <- makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
         _currentProtocolUpdate <- getWord8 >>= \case
             0 -> return Nothing
             1 -> Just <$> get
             _ -> fail "Invalid Updates"
-        _currentParameters <- getChainParameters
-        _pendingUpdates <- getPendingUpdatesV0
+        _currentParameters <- migrateChainParameters migration <$> getChainParameters @(ChainParametersVersionFor oldpv)
+        _pendingUpdates <- getPendingUpdatesV0 migration
         return Updates{..}
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where

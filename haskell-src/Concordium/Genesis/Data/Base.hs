@@ -144,7 +144,7 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
         put genesisCryptographicParameters
         put genesisIdentityProviders
         put genesisAnonymityRevokers
-        put genesisUpdateKeys
+        putUpdateKeysCollection genesisUpdateKeys
         putChainParameters genesisChainParameters
         put genesisLeadershipElectionNonce
         putLength (length genesisAccounts)
@@ -153,7 +153,7 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
         genesisCryptographicParameters <- get
         genesisIdentityProviders <- get
         genesisAnonymityRevokers <- get
-        genesisUpdateKeys <- get
+        genesisUpdateKeys <- getUpdateKeysCollection
         genesisChainParameters <- getChainParameters
         genesisLeadershipElectionNonce <- get
         nGenesisAccounts <- getLength

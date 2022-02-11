@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- |This module defines the genesis data fromat for the 'P1' protocol version.
+-- |This module defines the genesis data format for the 'P1' protocol version.
 module Concordium.Genesis.Data.P1 where
 
 import Data.Serialize

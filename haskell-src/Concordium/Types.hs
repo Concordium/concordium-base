@@ -76,8 +76,11 @@ module Concordium.Types (
 
   -- * Addresses
   Address(..),
+
+  -- * URLs
   UrlText(..),
   maxUrlTextLength,
+  emptyUrlText,
 
   -- * Registered Data
   RegisteredData(..),
@@ -348,6 +351,9 @@ instance AE.FromJSON UrlText where
     when (len > fromIntegral maxUrlTextLength) $
       fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
     return (UrlText t)
+
+emptyUrlText :: UrlText
+emptyUrlText = UrlText ""
 
 -- |Due to limitations on the ledger, there has to be some restriction on the
 -- precision of the input for updating ElectionDifficult. For this purpose,

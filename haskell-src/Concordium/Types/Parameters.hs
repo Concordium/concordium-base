@@ -444,13 +444,13 @@ closestInRange v r
   | v < irMin r = irMin r
   | otherwise = irMax r
 
--- |Ranges of allowed commision values that pools may choose from.
+-- |Ranges of allowed commission values that pools may choose from.
 data CommissionRanges = CommissionRanges
-    { -- |The range of allowed finalization commisions.
+    { -- |The range of allowed finalization commissions.
       _finalizationCommissionRange :: !(InclusiveRange AmountFraction),
-      -- |The range of allowed baker commisions.
+      -- |The range of allowed baker commissions.
       _bakingCommissionRange :: !(InclusiveRange AmountFraction),
-      -- |The range of allowed transaction commisions.
+      -- |The range of allowed transaction commissions.
       _transactionCommissionRange :: !(InclusiveRange AmountFraction)
     }
     deriving (Eq, Show)
@@ -462,6 +462,14 @@ instance Serialize CommissionRanges where
         put _bakingCommissionRange
         put _transactionCommissionRange
     get = CommissionRanges <$> get <*> get <*> get
+
+-- |Compute the maximum commission rates from commission ranges.
+maximumCommissionRates :: CommissionRanges -> CommissionRates
+maximumCommissionRates CommissionRanges{..} = CommissionRates {
+        _finalizationCommission=irMax _finalizationCommissionRange,
+        _bakingCommission=irMax _bakingCommissionRange,
+        _transactionCommission=irMax _transactionCommissionRange
+    }
 
 type LeverageFactor = Ratio Word64
 
@@ -616,7 +624,8 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpRewardParameters :: !(RewardParameters cpv),
       -- |Foundation account index.
       _cpFoundationAccount :: !AccountIndex,
-      -- |Minimum threshold required for registering as a baker.
+      -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
+      -- for becoming a baker.
       _cpPoolParameters :: !(PoolParameters cpv)
     }
     deriving (Eq, Show)

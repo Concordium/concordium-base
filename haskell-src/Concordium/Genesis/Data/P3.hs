@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- |This module defines the genesis data fromat for the 'P3' protocol version.
+-- |This module defines the genesis data format for the 'P3' protocol version.
 module Concordium.Genesis.Data.P3 where
 
 import Data.Serialize
