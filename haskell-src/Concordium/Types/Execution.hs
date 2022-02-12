@@ -386,7 +386,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                     SP2 -> True
                     SP3 -> True
                     _ -> False
-              when (onlyVersion0 && Wasm.getVersion dmMod /= Wasm.V0) $ fail "Unsupported Wasm version"
+              when (onlyVersion0 && Wasm.wasmVersion dmMod /= Wasm.V0) $ fail "Unsupported Wasm version"
               return DeployModule{..}
             1 -> do
               icAmount <- S.get
@@ -526,6 +526,14 @@ payloadBodyBytes (EncodedPayload ss) =
   then BS.empty
   else BS.tail (BSS.fromShort ss)
 
+data VersionedContractEvents = VersionedContractEvents {
+  -- |Version of the contract that produced the events.
+  veContractVersion :: !Wasm.WasmVersion,
+  -- |The events, in the order they were produced.
+  veEvents :: ![Wasm.ContractEvent]
+  }
+    deriving(Eq, Show, Generic)
+
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
@@ -542,11 +550,11 @@ data Event =
                ecAmount :: !Amount,
                -- |Name of the contract init function being called
                ecInitName :: !Wasm.InitName,
+               -- |Version of the contract that was initialized.
+               ecContractVersion :: !Wasm.WasmVersion,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
                ecEvents :: ![Wasm.ContractEvent]
-               -- TODO: We could include initial state hash here.
-               -- Including the whole state is likely not a good idea.
                }
            -- |The given contract was updated.
            | Updated {
@@ -560,11 +568,11 @@ data Event =
                euMessage :: !Wasm.Parameter,
                -- |Name of the contract receive function being called
                euReceiveName :: !Wasm.ReceiveName,
+               -- |Version of the contract that was initialized.
+               euContractVersion :: !Wasm.WasmVersion,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
                euEvents :: ![Wasm.ContractEvent]
-               -- TODO: We could include input/output state hashes here
-               -- Including the whole state pre/post run is likely not a good idea.
                }
            -- |Tokens were transferred.
            | Transferred {
@@ -733,7 +741,7 @@ data Event =
            | Resumed {
                -- |Address of the contract that was interrupted.
                rAddress :: !ContractAddress,
-               -- |Whether the operation succeeded.
+               -- |Whether the operation that was invoked succeeded.
                rSuccess :: !Bool
                }
 
@@ -749,7 +757,9 @@ instance S.Serialize Event where
                 S.put ecAddress <>
                 S.put ecAmount <>
                 S.put ecInitName <>
-                putListOf S.put ecEvents
+                S.put ecContractVersion <>
+                S.putWord32be (fromIntegral (length ecEvents)) <>
+                mapM_ S.put ecEvents
               Updated{..} ->
                 S.putWord8 2 <>
                 S.put euAddress <>
@@ -757,7 +767,9 @@ instance S.Serialize Event where
                 S.put euAmount <>
                 S.put euMessage <>
                 S.put euReceiveName <>
-                putListOf S.put euEvents
+                S.put euContractVersion <>
+                S.putWord32be (fromIntegral (length euEvents)) <>
+                mapM_ S.put euEvents
               Transferred{..} ->
                 S.putWord8 3 <>
                 S.put etFrom <>
@@ -852,7 +864,8 @@ instance S.Serialize Event where
               Interrupted {..} ->
                 S.putWord8 22 <>
                 S.put iAddress <>
-                putListOf S.put iEvents
+                S.putWord32be (fromIntegral (length iEvents)) <>
+                mapM_ S.put iEvents
               Resumed {..} ->
                 S.putWord8 23 <>
                 S.put rAddress <>
@@ -867,7 +880,9 @@ instance S.Serialize Event where
       ecAddress <- S.get
       ecAmount <- S.get
       ecInitName <- S.get
-      ecEvents <- getListOf S.get
+      ecContractVersion <- S.get
+      ecEventsLength <- fromIntegral <$> S.getWord32be
+      ecEvents <- replicateM ecEventsLength S.get
       return ContractInitialized{..}
     2 -> do
       euAddress <- S.get
@@ -875,7 +890,9 @@ instance S.Serialize Event where
       euAmount <- S.get
       euMessage <- S.get
       euReceiveName <- S.get
-      euEvents <- getListOf S.get
+      euContractVersion <- S.get
+      euEventsLength <- fromIntegral <$> S.getWord32be
+      euEvents <- replicateM euEventsLength S.get
       return Updated{..}
     3 -> do
       etFrom <- S.get
@@ -970,7 +987,8 @@ instance S.Serialize Event where
       return  TransferMemo {..}
     22 -> do
       iAddress <- S.get
-      iEvents <- getListOf S.get
+      iEventsLength <- fromIntegral <$> S.getWord32be
+      iEvents <- replicateM iEventsLength S.get
       return Interrupted{..}
     23 -> do
       rAddress <- S.get

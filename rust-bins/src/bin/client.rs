@@ -855,15 +855,19 @@ fn handle_create_credential(cc: CreateCredential) {
 
     let address = AccountAddress::new(&cdi.values.cred_id);
 
+    let cdi_no_proofs = AccountCredentialWithoutProofs::Normal {
+        cdv:         cdi.values.clone(),
+        commitments: cdi.proofs.id_proofs.commitments.clone(),
+    };
     let cdi = AccountCredential::Normal { cdi };
 
     let (versioned_credentials, randomness_map) = {
         let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
         let mut randomness = BTreeMap::new();
-        // NB: We insert the reference to the credential here so as to avoid cloning
-        // (which is not implemented for the type)
-        credentials.insert(ki, &cdi);
+        // we insert a credential without proofs, to be compatible with the genesis
+        // tool, and concordium-client import.
+        credentials.insert(ki, cdi_no_proofs);
         randomness.insert(ki, &commitments_randomness);
         (Versioned::new(VERSION_0, credentials), randomness)
     };

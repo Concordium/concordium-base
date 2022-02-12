@@ -49,8 +49,8 @@ module Concordium.Wasm (
   unsafeUseModuleSourceAsCStringLen,
   moduleSourceLength,
   WasmModule(..),
-  getModuleSource,
-  getVersion,
+  wasmVersion,
+  wasmSource,
   demoteWasmVersion,
   WasmModuleV(..),
   getModuleRef,
@@ -65,13 +65,15 @@ module Concordium.Wasm (
   -- contain several contracts.
   InitName(..),
   isValidInitName,
+  extractInitName,
   initContractName,
   ReceiveName(..),
   isValidReceiveName,
   contractAndFunctionName,
+  extractInitReceiveNames,
   EntrypointName(..),
   isValidEntrypointName,
-  makeReceiveName,
+  uncheckedMakeReceiveName,
   Parameter(..),
   emptyParameter,
 
@@ -149,17 +151,25 @@ import Concordium.Utils.Serialization
 data WasmVersion = V0 | V1
   deriving(Eq, Show)
 
+-- |Map the WasmVersion to a 32-bit word for serialization.
 wasmVersionToWord :: WasmVersion -> Word32
 wasmVersionToWord V0 = 0
 wasmVersionToWord V1 = 1
 
+-- |Converse to 'wasmVersionToWord'.
+wordToWasmVersion :: Word32 -> Maybe WasmVersion
+wordToWasmVersion 0 = Just V0
+wordToWasmVersion 1 = Just V1
+wordToWasmVersion _ = Nothing
+
 instance Serialize WasmVersion where
   put = putWord32be . wasmVersionToWord
 
-  get = getWord32be >>= \case
-    0 -> return V0
-    1 -> return V1
-    n -> fail $ "Unrecognized Wasm version " ++ show n
+  get = do
+    w <- getWord32be
+    case wordToWasmVersion w of
+      Just wv -> return wv
+      Nothing -> fail $ "Unrecognized Wasm version number " ++ show w
 
 instance AE.ToJSON WasmVersion where
   toJSON = AE.toJSON . wasmVersionToWord
@@ -167,10 +177,9 @@ instance AE.ToJSON WasmVersion where
 instance AE.FromJSON WasmVersion where
   parseJSON v = do
     word <- AE.parseJSON v
-    case word :: Word32 of
-      0 -> return V0
-      1 -> return V1
-      _ -> fail $ "Unsupported Wasm version " ++ show word
+    case wordToWasmVersion word of
+      Just wv -> return wv
+      Nothing -> fail $ "Unsupported Wasm version " ++ show word
 
 -- |These type aliases are provided for convenience to avoid having to enable
 -- DataKinds everywhere we need wasm version.
@@ -221,27 +230,15 @@ unsafeUseModuleSourceAsCStringLen = unsafeUseAsCStringLen . moduleSource
 moduleSourceLength :: ModuleSource v -> Word64
 moduleSourceLength = fromIntegral . BS.length . moduleSource
 
--- |Get the WasmVersion of a WasmModule.
-getVersion :: WasmModule -> WasmVersion
-getVersion = \case
-  WasmModuleV0 _ -> V0
-  WasmModuleV1 _ -> V1
-
--- |Get the raw ModuleSource from a WasmModule.
-getModuleSource :: WasmModule -> ByteString
-getModuleSource = \case
-  WasmModuleV0 wmv -> moduleSource . wmvSource $ wmv
-  WasmModuleV1 wmv -> moduleSource . wmvSource $ wmv
-
 -- |A versioned module source. The serialization instance of this type, in contrast to ModuleSource,
 -- records the version that was used.
 newtype WasmModuleV (v :: WasmVersion) = WasmModuleV { wmvSource :: ModuleSource v }
     deriving (Eq, Show)
 
 instance IsWasmVersion v => Serialize (WasmModuleV v) where
-  put (WasmModuleV wasmSource) = case getWasmVersion @v of
-    SV0 -> put V0 <> put wasmSource
-    SV1 -> put V1 <> put wasmSource
+  put (WasmModuleV ws) = case getWasmVersion @v of
+    SV0 -> put V0 <> put ws
+    SV1 -> put V1 <> put ws
 
   get = case getWasmVersion @v of
     SV0 -> get >>= \case
@@ -262,11 +259,23 @@ getModuleRef wm = case getWasmVersion @v of
   SV0 -> ModuleRef (getHash wm)
   SV1 -> ModuleRef (getHash wm)
 
+-- |Get the WasmVersion of a WasmModule.
+wasmVersion :: WasmModule -> WasmVersion
+wasmVersion = \case
+  WasmModuleV0 _ -> V0
+  WasmModuleV1 _ -> V1
+
+-- |Get the raw ModuleSource from a WasmModule.
+wasmSource :: WasmModule -> ByteString
+wasmSource = \case
+  WasmModuleV0 wmv -> moduleSource . wmvSource $ wmv
+  WasmModuleV1 wmv -> moduleSource . wmvSource $ wmv
+
 instance Serialize WasmModule where
-  put (WasmModuleV0 wasmSource) =
-    put wasmSource
-  put (WasmModuleV1 wasmSource) =
-    put wasmSource
+  put (WasmModuleV0 ws) =
+    put ws
+  put (WasmModuleV1 ws) =
+    put ws
 
   get = do
     get >>= \case
@@ -308,6 +317,13 @@ isValidInitName proposal =
       hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
       hasDot = Text.any (== '.') proposal
   in "init_" `Text.isPrefixOf` proposal && hasValidLength && hasValidCharacters && not hasDot
+
+-- |Check that the given string is a valid init name. If so construct it,
+-- otherwise return Nothing.
+extractInitName :: Text -> Maybe InitName
+extractInitName nameText = do
+  guard (isValidInitName nameText)
+  return (InitName nameText)
 
 instance AE.FromJSON InitName where
   parseJSON = AE.withText "InitName" $ \initName -> do
@@ -351,13 +367,16 @@ newtype EntrypointName = EntrypointName { entrypointName :: Text }
 -- |Check whether the given text is a valid entrypoint name.
 -- This is the case if
 --
--- * length is <= maxFuncNameSize
+-- * length is < maxFuncNameSize
 -- * all characters are valid ascii characters in alphanumeric or punctuation classes
+--
+-- Note that these are necessary, but not sufficient, conditions for this
+-- entrypoint name to be an entrypoint name of any contract.
 isValidEntrypointName :: Text -> Bool
 isValidEntrypointName proposal =
   -- The limit is specified in bytes, but Text.length returns the number of chars.
   -- This is not a problem, as we only allow ASCII.
-  let hasValidLength = Text.length proposal <= maxFuncNameSize
+  let hasValidLength = Text.length proposal < maxFuncNameSize
       hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
   in hasValidLength && hasValidCharacters
 
@@ -371,9 +390,10 @@ instance Serialize EntrypointName where
               | otherwise -> fail $ "Not a valid entrypoint name: " ++ Text.unpack t
 
 
--- |Make a receive name from an init name and an entrypoint name.
-makeReceiveName :: InitName -> EntrypointName -> ReceiveName
-makeReceiveName iName EntrypointName{..} = ReceiveName (initContractName iName <> "." <> entrypointName)
+-- |Make a receive name from an init name and an entrypoint name. This does not check that the
+-- resulting receive name is valid. It could be too long.
+uncheckedMakeReceiveName :: InitName -> EntrypointName -> ReceiveName
+uncheckedMakeReceiveName iName EntrypointName{..} = ReceiveName (initContractName iName <> "." <> entrypointName)
 
 -- |Extract the contract name from the init function name.
 initContractName :: InitName -> Text
@@ -383,6 +403,16 @@ initContractName = Text.drop (Text.length "init_") . initName
 contractAndFunctionName :: ReceiveName -> (Text, Text)
 contractAndFunctionName (ReceiveName n) = (cname, Text.drop 1 fname)
     where (cname, fname) = Text.span (/= '.') n
+
+-- |Check that the given string is a valid receive name, and extract the init
+-- and receive names from it. The latter is just the name that was given and the
+-- former is the name of the function that was used to create the instance to
+-- which the receive function belongs.
+extractInitReceiveNames :: Text -> Maybe (InitName, ReceiveName)
+extractInitReceiveNames nameText = do
+  guard (isValidReceiveName nameText)
+  let cname = "init_" <> Text.takeWhile (/= '.') nameText
+  return (InitName cname, ReceiveName nameText)
 
 instance AE.FromJSON ReceiveName where
   parseJSON = AE.withText "ReceiveName" $ \receiveName -> do
