@@ -23,13 +23,29 @@ pub enum ModuleSchema {
     V1(schema::ModuleV1),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum SchemaBuildOptions {
+    DoNotBuild,
+    JustBuild,
+    BuildAndEmbed,
+}
+
+impl SchemaBuildOptions {
+    /// Return whether the schema should be built.
+    pub fn build(self) -> bool {
+        matches!(self, SchemaBuildOptions::JustBuild | SchemaBuildOptions::BuildAndEmbed)
+    }
+
+    /// Return whether the schema should be embedded.
+    pub fn embed(self) -> bool { matches!(self, SchemaBuildOptions::BuildAndEmbed) }
+}
+
 /// Build a contract and its schema.
 /// If build_schema is set then the return value will contain the schema of the
 /// version specified.
 pub fn build_contract(
     version: utils::WasmVersion,
-    build_schema: Option<bool>, /* if none do not build. If Some(true) then embed, otherwise
-                                 * just build and return */
+    build_schema: SchemaBuildOptions,
     out: Option<PathBuf>,
     cargo_args: &[String],
 ) -> anyhow::Result<(usize, Option<ModuleSchema>)> {
@@ -38,12 +54,14 @@ pub fn build_contract(
     // reference to this vector, which is why it has to be here. This is a bit ugly, but not as
     // ugly as alternatives.
     let mut schema_bytes = Vec::new();
+    /* if none do not build. If Some(true) then embed, otherwise
+     * just build and return */
     let schema = match version {
         utils::WasmVersion::V0 => {
-            if build_schema.is_some() {
+            if build_schema.build() {
                 let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v0)
                     .context("Could not build module schema.")?;
-                if build_schema == Some(true) {
+                if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
                         name:     "concordium-schema-v1".into(),
@@ -58,10 +76,10 @@ pub fn build_contract(
             }
         }
         utils::WasmVersion::V1 => {
-            if build_schema.is_some() {
+            if build_schema.build() {
                 let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v1)
                     .context("Could not build module schema.")?;
-                if build_schema == Some(true) {
+                if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
                         name:     "concordium-schema-v2".into(),

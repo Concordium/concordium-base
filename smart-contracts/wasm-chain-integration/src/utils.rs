@@ -23,14 +23,13 @@ impl std::str::FromStr for WasmVersion {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "V0" => Ok(WasmVersion::V0),
-            "V1" => Ok(WasmVersion::V1),
+            "V0" | "v0" => Ok(WasmVersion::V0),
+            "V1" | "v1" => Ok(WasmVersion::V1),
             _ => anyhow::bail!("Unsupported version: '{}'. Only 'V0' and 'V1' are supported.", s),
         }
     }
 }
 
-/// This is
 impl WasmVersion {
     /// Get the version from the cursor. This is not a Serial implementation
     /// since it uses big-endian.

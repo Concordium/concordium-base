@@ -19,7 +19,7 @@ unsafe extern "C" fn call_init_v0(
     init_name_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
-    energy: u64,
+    energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
@@ -72,7 +72,7 @@ unsafe extern "C" fn call_receive_v0(
     state_bytes_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
-    energy: u64,
+    energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
@@ -129,7 +129,7 @@ unsafe extern "C" fn call_receive_v0(
 /// - `artifact_out` a pointer where the pointer to the artifact will be
 ///   written.
 /// - `output_len` a pointer where the total length of the output will be
-///   written
+///   written.
 ///
 /// The return value is either a null pointer if validation fails, or a pointer
 /// to a byte array of length `*output_len`. The byte array starts with
@@ -179,8 +179,9 @@ unsafe extern "C" fn validate_and_process_v0(
 
 #[no_mangle]
 /// # Safety
-/// This function is safe provided the supplied pointer is not null and is
-/// constructed with [Arc::into_raw].
+/// This function is safe provided the supplied pointer is
+/// constructed with [Arc::into_raw] and for each [Arc::into_raw] this function
+/// is called only once.
 unsafe extern "C" fn artifact_v0_free(artifact_ptr: *const ArtifactV0) {
     if !artifact_ptr.is_null() {
         // decrease the reference count

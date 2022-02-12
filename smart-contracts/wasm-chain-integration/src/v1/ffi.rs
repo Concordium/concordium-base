@@ -1,3 +1,19 @@
+//! This module provides, via C ABI, foreign access to validation and execution
+//! of smart contracts. It is only available if `enable-ffi` feature is enabled.
+//!
+//! A number of objects are exchanged between Rust and foreign code, and their
+//! lifetimes and ownership is fairly complex. The general design is that
+//! structured objects related to smart contract execution are allocated in
+//! Rust, and pointers to these objects are passed to foreign code. The foreign
+//! code is also given a "free_*" function it can use to deallocate the objects
+//! once they are no longer needed. Everything in this module is unsafe, in the
+//! sense that if functions are not used correctly undefined behaviour can
+//! occur, null-pointer dereferencing, double free, or worse. Each of the types
+//! that is passed through the boundary documents its intended use.
+//!
+//! In addition to pointers to structured objects, the remaining data passed
+//! between foreign code and Rust is mainly byte-arrays. The main reason for
+//! this is that this is cheap and relatively easy to do.
 use super::trie::{
     low_level::{EmptyCollector, Loadable, Reference, SizeCollector},
     MutableState, PersistentState,
@@ -11,26 +27,86 @@ use wasm_transform::{
     utils::parse_artifact,
 };
 
-/// All functions in this module operate on an Arc<ArtifactV1>. The reason for
-/// choosing an Arc as opposed to Box or Rc is that we need to sometimes share
-/// this artifact to support resumable executions, and we might have to access
-/// it concurrently since these functions are called from Haskell.
+/// Creating or updating a contract instance requires access to code to execute.
+/// This code is stored in the [Artifact] which contains a preprocessed Wasm
+/// module in a format that is easy to run.
+/// What is passed through the FFI boundary is a pointer to such an artifact.
+/// Because the artifact might need to be shared, the pointer is
+/// atomically reference counted (using [std::sync::Arc]) so that it can be
+/// cheaply shared in a concurrent setting. The latter can happen since, for
+/// example, node queries might execute the same contract concurrently (via
+/// `InvokeContract` entrypoint of the node).
+///
+/// The main way the artifact is shared is during handling of interrupts. There
+/// we retain a pointer to the artifact in the artifact itself so that we can
+/// easily resume execution.
 type ArtifactV1 = OwnedArtifact<ProcessedImports>;
 
+/// A value that is returned from a V1 contract in case of either successful
+/// termination, or logic error. If contract execution traps with an illegal
+/// instruction, or illegal host access then no return value is returned.
+///
+/// We allocate this vector on the Rust side. The main reason for this is that
+/// it essentially only needs to be accessed from the smart contract execution
+/// environment, so this avoids copying byte arrays back and forth. This also
+/// helps in the analysis of costs, and allows us to charge relatively cheaply
+/// for producing return values since the cost of handling them is immediately
+/// clear when they are produced. This does unfortunately mean we have to deal
+/// with the ugly Box<Vec<u8>> with the double indirection.
 type ReturnValue = Vec<u8>;
 
+/// Interrupted state of execution. This is needed to resume execution.
+/// The lifetime of this is relatively complex. What is exchanged with foreign
+/// code is not a pointer to this state, but rather a pointer to a pointer.
+/// The reason for this is that this state must always have a unique owner. The
+/// first time we allocate this state is in the [call_receive_v1] function.
+/// Then if we resume execution we take ownership of the state in the
+/// [resume_receive_v1] and substitute a null pointer for it. This state is then
+/// **mutated** during execution of the [resume_receive_v1] function. If another
+/// interrupt occurs then we again write a pointer to the struct into the
+/// provided, thereby giving ownership to the foreign code.
+/// [receive_interrupted_state_free] must be called to deallocate the state in
+/// case execution of the smart contract was terminated by foreign code for any
+/// reason.
+type ReceiveInterruptedStateV1 = ReceiveInterruptedState<CompiledFunction>;
+
+/// Invoke an init function creating the contract instance.
+/// # Safety
+/// This function is safe provided the following preconditions hold
+/// - the artifact pointer points to a valid artifact and the pointer was
+///   created using [Arc::into_raw]
+/// - the `init_ctx_bytes`/`init_name`/`param_bytes` point to valid memory
+///   addresses which contain
+///   `init_ctx_bytes_len`/`init_name_len`/`param_bytes_len` bytes of data
+/// - `output_return_value` points to a memory location that can store a pointer
+/// - `output_len` points to a memory location that can store a [libc::size_t]
+///   value
+/// # Return value
+/// The return value is a pointer to a byte array buffer of size `*output_len`.
+/// To avoid leaking memory the buffer should be deallocated with
+/// `rs_free_array_len` (available in the crypto-common crate).
+/// The data in the buffer is produced by the [InitResult::extract] function and
+/// contains the serialization of the return value. The value of the out
+/// parameters depends on the result of initialization.
+/// - In case of [InitResult::OutOfEnergy] the `output_return_value` parameter
+///   is left unchanged.
+/// - In the remaining two cases the `output_return_value` is set to a pointer
+///   to a freshly allocated vector. This vector must be deallocated with
+///   [box_vec_u8_free] otherwise memory will be leaked.
+/// In case of execution failure, a panic, or failure to parse a null pointer is
+/// returned.
 #[no_mangle]
 unsafe extern "C" fn call_init_v1(
     loader: LoadCallBack, // This is not really needed since nothing is loaded.
     artifact_ptr: *const ArtifactV1,
-    init_ctx_bytes: *const u8,
+    init_ctx_bytes: *const u8, // pointer to an initcontext
     init_ctx_bytes_len: size_t,
     amount: u64,
-    init_name: *const u8,
+    init_name: *const u8, // the name of the contract init method
     init_name_len: size_t,
-    param_bytes: *const u8,
+    param_bytes: *const u8, // parameters to the init method
     param_bytes_len: size_t,
-    energy: u64,
+    energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
     output_state_ptr: *mut *mut MutableState,
@@ -88,21 +164,54 @@ unsafe extern "C" fn call_init_v1(
     res.unwrap_or_else(|_| std::ptr::null_mut())
 }
 
+/// Invoke a receive function, updating the contract instance.
+/// # Safety
+/// This function is safe provided the following preconditions hold
+/// - the artifact pointer points to a valid artifact and the pointer was
+///   created using [Arc::into_raw]
+/// - the `receive_ctx_bytes`/`receive_name`/`param_bytes`/`state_bytes` point
+///   to valid memory addresses which contain
+///   `receive_ctx_bytes_len`/`receive_name_len`/`param_bytes_len`/
+///   `state_bytes_len` bytes of data
+/// - `output_return_value` points to a memory location that can store a pointer
+/// - `output_config` points to a memory location that can store a pointer
+/// - `output_len` points to a memory location that can store a [libc::size_t]
+///   value
+/// # Return value
+/// The return value is a pointer to a byte array buffer of size `*output_len`.
+/// To avoid leaking memory the buffer should be deallocated with
+/// `rs_free_array_len` (available in the crypto-common crate).
+///
+/// The data in the buffer is produced by the [ReceiveResult::extract] function
+/// and contains the serialization of the return value. The value of the out
+/// parameters depends on the result of execution
+/// - In case of [ReceiveResult::OutOfEnergy] or [ReceiveResult::Trap] the
+///   `output_return_value` parameter is left unchanged.
+/// - In case of [ReceiveResult::Interrupt] the `output_config` pointer is set
+///   to a freshly allocated [ReceiveInterruptedState] structure. This should be
+///   deallocated with [receive_interrupted_state_free] so that memory is not
+///   leaked.
+/// - In the remaining two cases the `output_return_value` is set to a pointer
+///   to a freshly allocated vector and `output_config` is __not__ changed. This
+///   vector must be deallocated with [box_vec_u8_free] otherwise memory will be
+///   leaked.
+/// In case of execution failure, a panic, or failure to parse a null pointer is
+/// returned.
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
     loader: LoadCallBack,
     artifact_ptr: *const ArtifactV1,
-    receive_ctx_bytes: *const u8,
+    receive_ctx_bytes: *const u8, // receive context
     receive_ctx_bytes_len: size_t,
     amount: u64,
-    receive_name: *const u8,
+    receive_name: *const u8, // name of the entrypoint to invoke
     receive_name_len: size_t,
     state_ptr_ptr: *mut *mut MutableState,
-    param_bytes: *const u8,
+    param_bytes: *const u8, // parameters to the entrypoint
     param_bytes_len: size_t,
-    energy: u64,
+    energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
-    output_config: *mut *mut ReceiveInterruptedState<CompiledFunction>,
+    output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
@@ -177,7 +286,7 @@ unsafe extern "C" fn call_receive_v1(
 /// - `artifact_out` a pointer where the pointer to the artifact will be
 ///   written.
 /// - `output_len` a pointer where the total length of the output will be
-///   written
+///   written.
 ///
 /// The return value is either a null pointer if validation fails, or a pointer
 /// to a byte array of length `*output_len`. The byte array starts with
@@ -224,11 +333,24 @@ unsafe extern "C" fn validate_and_process_v1(
 }
 
 #[no_mangle]
-// TODO: Signal whether the state was updated.
+/// TODO: Signal whether the state was updated in the new state version.
+/// Resume execution of a contract after an interrupt.
+///
+/// # Safety
+/// This function is safe provided
+/// - `config_ptr` points to a memory location which in turn points to a
+///   ReceiveInterruptedState structure. the latter pointer must have been
+///   constructed with [Box::into_raw] and must be non-null.
+/// - the remaing arguments have the same requirements as they do for
+///   [call_receive_v1]....
+///
+/// # Return value
+/// The return value has the same semantics as
 unsafe extern "C" fn resume_receive_v1(
     loader: LoadCallBack,
-    // mutable pointer, we will mutate this, either to a new state or null
-    config_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
+    // mutable pointer, we will mutate this, either to a new state in case another interrupt
+    // occurred, or null
+    config_ptr: *mut *mut ReceiveInterruptedStateV1,
     // whether the state has been updated (non-zero) or not (zero)
     new_state_tag: u8,
     state_ptr_ptr: *mut *mut MutableState,
@@ -238,7 +360,7 @@ unsafe extern "C" fn resume_receive_v1(
     // response from the call.
     response: *mut ReturnValue,
     // remaining energy available for execution
-    energy: u64,
+    energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
 ) -> *mut u8 {
@@ -302,7 +424,7 @@ unsafe extern "C" fn resume_receive_v1(
         let config = Box::from_raw(config);
         let instance_state =
             InstanceState::new(config.host.latest_generation + 1, loader, state.get_inner());
-        let res = resume_receive(config, response, energy.into(), instance_state);
+        let res = resume_receive(config, response, energy, instance_state);
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {
@@ -316,8 +438,6 @@ unsafe extern "C" fn resume_receive_v1(
                 } // otherwise leave config_ptr pointing to null
                 if let Some(return_value) = return_value {
                     *output_return_value = Box::into_raw(Box::new(return_value));
-                } else {
-                    *output_return_value = std::ptr::null_mut();
                 }
                 if store_state {
                     *state_ptr_ptr = Box::into_raw(Box::new(state))
@@ -330,12 +450,13 @@ unsafe extern "C" fn resume_receive_v1(
     res.unwrap_or(std::ptr::null_mut())
 }
 
-// # Administrative functions.
+// Administrative functions.
 
 #[no_mangle]
 /// # Safety
 /// This function is safe provided the supplied pointer is
-/// constructed with [Arc::into_raw].
+/// constructed with [Arc::into_raw] and for each [Arc::into_raw] this function
+/// is called only once.
 unsafe extern "C" fn artifact_v1_free(artifact_ptr: *const ArtifactV1) {
     if !artifact_ptr.is_null() {
         // decrease the reference count
@@ -359,12 +480,10 @@ unsafe extern "C" fn box_vec_u8_free(vec_ptr: *mut Vec<u8>) {
 /// # Safety
 /// This function is safe provided the supplied pointer is
 /// constructed with [Box::into_raw].
-unsafe extern "C" fn receive_interrupted_state_free(
-    ptr_ptr: *mut *mut ReceiveInterruptedState<CompiledFunction>,
-) {
+unsafe extern "C" fn receive_interrupted_state_free(ptr_ptr: *mut *mut ReceiveInterruptedStateV1) {
     if !ptr_ptr.is_null() && !(*ptr_ptr).is_null() {
         // drop
-        let _: Box<ReceiveInterruptedState<CompiledFunction>> = Box::from_raw(*ptr_ptr);
+        let _: Box<ReceiveInterruptedStateV1> = Box::from_raw(*ptr_ptr);
         // and store null so that future calls (which there should not be any) are safe.
         *ptr_ptr = std::ptr::null_mut();
     }
@@ -422,7 +541,7 @@ unsafe extern "C" fn artifact_v1_from_bytes(
 /// rs_free_array_len.
 ///
 /// # Safety
-/// This function is safe provided the return value is construted using
+/// This function is safe provided the return value is constructed using
 /// Box::into_raw.
 unsafe extern "C" fn return_value_to_byte_array(
     rv_ptr: *mut Vec<u8>,
