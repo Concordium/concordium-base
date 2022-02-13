@@ -11,7 +11,7 @@ import Prelude hiding(fail)
 
 import Control.Monad.Reader
 
-import Data.Char
+import qualified Data.Text as Text
 import qualified Data.Aeson as AE
 import Data.Aeson((.=), (.:))
 import Data.Aeson.TH
@@ -996,7 +996,275 @@ instance S.Serialize Event where
       return Resumed{..}
     n -> fail $ "Unrecognized event tag: " ++ show n
 
+instance AE.ToJSON Event where
+  toJSON = \case
+    ModuleDeployed mref -> AE.object [
+      "tag" .= AE.String "ModuleDeployed",
+      "contents" .= mref
+      ]
+    ContractInitialized {..} -> AE.object [
+      "tag" .= AE.String "ContractInitialized",
+      "ref" .= ecRef,
+      "address" .= ecAddress,
+      "amount" .= ecAmount,
+      "initName" .= ecInitName,
+      "contractVersion" .= ecContractVersion,
+      "events" .= ecEvents
+        ]
+    Updated {..} -> AE.object [
+      "tag" .= AE.String "Updated",
+      "address" .= euAddress,
+      "instigator" .= euInstigator,
+      "amount" .= euAmount,
+      "message" .= euMessage,
+      "receiveName" .= euReceiveName,
+      "contractVersion" .= euContractVersion,
+      "events" .= euEvents
+     ]
+    Transferred {..} -> AE.object [
+      "tag" .= AE.String "Transferred",
+      "from" .= etFrom,
+      "amount" .= etAmount,
+      "to" .= etTo
+      ]
+    AccountCreated addr -> AE.object [
+      "tag" .= AE.String "AccountCreated",
+      "contents" .= addr
+      ]
+    CredentialDeployed {..} -> AE.object [
+      "tag" .= AE.String "CredentialDeployed",
+      "regId" .= ecdRegId,
+      "account" .= ecdAccount
+      ]
+    BakerAdded {..} -> AE.object [
+      "tag" .= AE.String "BakerAdded",
+      "bakerId" .= ebaBakerId,
+      "account" .= ebaAccount,
+      "signKey" .= ebaSignKey,
+      "electionKey" .= ebaElectionKey,
+      "aggregationKey" .= ebaAggregationKey,
+      "stake" .= ebaStake,
+      "restakeEarnings" .= ebaRestakeEarnings
+      ]  
+    BakerRemoved {..} -> AE.object [
+      "tag" .= AE.String "BakerRemoved",
+      "bakerId" .= ebrBakerId,
+      "account" .= ebrAccount
+      ]
+    BakerStakeIncreased {..} -> AE.object [
+      "tag" .= AE.String "BakerStakeIncreased",
+      "bakerId" .= ebsiBakerId,
+      "account" .= ebsiAccount,
+      "newStake" .= ebsiNewStake
+      ]
+    BakerStakeDecreased {..} -> AE.object [
+      "tag" .= AE.String "BakerStakeDecreased",
+      "bakerId" .= ebsiBakerId,
+      "account" .= ebsiAccount,
+      "newStake" .= ebsiNewStake
+      ]
+    BakerSetRestakeEarnings {..} -> AE.object [
+      "tag" .= AE.String "BakerSetRestakeEarnings",
+      "bakerId" .= ebsreBakerId,
+      "account" .= ebsreAccount,
+      "restakeEarnings" .= ebsreRestakeEarnings
+      ]
+    BakerKeysUpdated {..} -> AE.object [
+      "tag" .= AE.String "BakerKeysUpdated",
+      "bakerId" .= ebkuBakerId,
+      "account" .= ebkuAccount,
+      "signKey" .= ebkuSignKey,
+      "electionKey" .= ebkuElectionKey,
+      "aggregationKey" .= ebkuAggregationKey
+      ]
+    CredentialKeysUpdated {..} -> AE.object [
+      "tag" .= AE.String "CredentialKeysUpdated",
+      "credId" .= ckuCredId
+      ]
+    NewEncryptedAmount {..} -> AE.object [
+      "tag" .= AE.String "NewEncryptedAmount",
+      "account" .= neaAccount,
+      "newIndex" .= neaNewIndex,
+      "encryptedAmount" .= neaEncryptedAmount
+      ]
+    EncryptedAmountsRemoved {..} -> AE.object [
+      "tag" .= AE.String "EncryptedAmountsRemoved",
+      "account" .= earAccount,
+      "newAmount" .= earNewAmount,
+      "inputAmount" .= earInputAmount,
+      "upToIndex" .= earUpToIndex
+      ]            
+    AmountAddedByDecryption {..} -> AE.object [
+      "tag" .= AE.String "AmountAddedByDecryption",
+      "account" .= aabdAccount,
+      "amount" .= aabdAmount
+      ]
+    EncryptedSelfAmountAdded {..} -> AE.object [
+      "tag" .= AE.String "EncryptedSelfAmountAdded",
+      "account" .= eaaAccount,
+      "newAmount" .= eaaNewAmount,
+      "amount" .= eaaAmount
+      ]
+    UpdateEnqueued {..} -> AE.object [
+      "tag" .= AE.String "UpdateEnqueued",
+      "effectiveTime" .= ueEffectiveTime,
+      "payload" .= uePayload
+      ]
+    TransferredWithSchedule {..} -> AE.object [
+      "tag" .= AE.String "TransferredWithSchedule",
+      "from" .= etwsFrom,
+      "to" .= etwsTo,
+      "amount" .= etwsAmount
+      ]
+    CredentialsUpdated {..} -> AE.object [
+      "tag" .= AE.String "CredentialsUpdated",
+      "account" .= cuAccount,
+      "newCredIds" .= cuNewCredIds,
+      "removedCredIds" .= cuRemovedCredIds,
+      "newThreshold" .= cuNewThreshold
+      ]
+    DataRegistered {..} -> AE.object [
+      "tag" .= AE.String "DataRegistered",
+      "data" .= drData
+      ]
+    TransferMemo {..} -> AE.object [
+      "tag" .= AE.String "TransferMemo",
+      "memo" .= tmMemo
+      ]
+    Interrupted {..} -> AE.object [
+      "tag" .= AE.String "Interrupted",
+      "address" .= iAddress,
+      "events" .= iEvents
+      ]
+    Resumed {..} -> AE.object [
+      "tag" .= AE.String "Resumed",
+      "address" .= rAddress,
+      "success" .= rSuccess
+      ]
 
+instance AE.FromJSON Event where
+  parseJSON = AE.withObject "Event" $ \obj -> do
+    (obj .: "tag") >>= \case
+      "ModuleDeployed" -> do
+        mref <- obj .: "contents"
+        return $ ModuleDeployed mref 
+      "ContractInitialized" -> do
+        ecRef <- obj .: "ref"
+        ecAddress <- obj .: "address"
+        ecAmount <- obj .: "amount"
+        ecInitName <- obj .: "initName"
+        ecContractVersion <- obj AE..:! "contractVersion" AE..!= Wasm.V0 -- default for backwards compatibility
+        ecEvents <- obj .: "events"
+        return ContractInitialized{..}
+      "Updated" -> do
+        euAddress <- obj .: "address"
+        euInstigator <- obj .: "instigator"
+        euAmount <- obj .: "amount"
+        euMessage <- obj .: "message"
+        euReceiveName <- obj .: "receiveName"
+        euContractVersion <- obj AE..:! "contractVersion" AE..!= Wasm.V0 -- default for backwards compatibility
+        euEvents <- obj .: "events"
+        return Updated{..}
+      "Transferred" -> do
+        etFrom <- obj .: "from"
+        etAmount <- obj .: "amount"
+        etTo <- obj .: "to"
+        return Transferred{..}
+      "AccountCreated" -> do
+        addr <- obj .: "contents"
+        return $ AccountCreated addr
+      "CredentialDeployed" -> do
+        ecdRegId <- obj .: "regId"
+        ecdAccount <- obj .: "account"
+        return CredentialDeployed{..}
+      "BakerAdded" -> do
+        ebaBakerId <- obj .: "bakerId"
+        ebaAccount <- obj .: "account"
+        ebaSignKey <- obj .: "signKey"
+        ebaElectionKey <- obj .: "electionKey"
+        ebaAggregationKey <- obj .: "aggregationKey"
+        ebaStake <- obj .: "stake"
+        ebaRestakeEarnings <- obj .: "restakeEarnings"
+        return BakerAdded{..}
+      "BakerRemoved" -> do
+        ebrBakerId <- obj .: "bakerId"
+        ebrAccount <- obj .: "account"
+        return BakerRemoved{..}
+      "BakerStakeIncreased" -> do
+        ebsiBakerId <- obj .: "bakerId"
+        ebsiAccount <- obj .: "account"
+        ebsiNewStake <- obj .: "newStake"
+        return BakerStakeIncreased{..}
+      "BakerStakeDecreased" -> do
+        ebsiBakerId <- obj .: "bakerId"
+        ebsiAccount <- obj .: "account"
+        ebsiNewStake <- obj .: "newStake"
+        return BakerStakeDecreased{..}
+      "BakerSetRestakeEarnings" -> do
+        ebsreBakerId <- obj .: "bakerId"
+        ebsreAccount <- obj .: "account"
+        ebsreRestakeEarnings <- obj .: "restakeEarnings"
+        return BakerSetRestakeEarnings{..}
+      "BakerKeysUpdated" -> do
+        ebkuBakerId <- obj .: "bakerId"
+        ebkuAccount <- obj .: "account"
+        ebkuSignKey <- obj .: "signKey"
+        ebkuElectionKey <- obj .: "electionKey"
+        ebkuAggregationKey <- obj .: "aggregationKey"
+        return BakerKeysUpdated{..}
+      "CredentialKeysUpdated" -> do
+        ckuCredId <- obj .: "credId"
+        return CredentialKeysUpdated{..}
+      "NewEncryptedAmount" -> do
+        neaAccount <- obj .: "account"
+        neaNewIndex <- obj .: "newIndex"
+        neaEncryptedAmount <- obj .: "encryptedAmount"
+        return NewEncryptedAmount{..}
+      "EncryptedAmountsRemoved" -> do
+        earAccount <- obj .: "account"
+        earNewAmount <- obj .: "newAmount"
+        earInputAmount <- obj .: "inputAmount"
+        earUpToIndex <- obj .: "upToIndex"
+        return EncryptedAmountsRemoved{..}
+      "AmountAddedByDecryption" -> do
+        aabdAccount <- obj .: "account"
+        aabdAmount <- obj .: "amount"
+        return AmountAddedByDecryption{..}
+      "EncryptedSelfAmountAdded" -> do
+        eaaAccount <- obj .: "account"
+        eaaNewAmount <- obj .: "newAmount"
+        eaaAmount <- obj .: "amount"
+        return EncryptedSelfAmountAdded{..}
+      "UpdateEnqueued" -> do
+        ueEffectiveTime <- obj .: "effectiveTime"
+        uePayload <- obj .: "payload"
+        return UpdateEnqueued{..}
+      "TransferredWithSchedule" -> do
+        etwsFrom <- obj .: "from"
+        etwsTo <- obj .: "to"
+        etwsAmount <- obj .: "amount"
+        return TransferredWithSchedule{..}
+      "CredentialsUpdated" -> do
+        cuAccount <- obj .: "account"
+        cuNewCredIds <- obj .: "newCredIds"
+        cuRemovedCredIds <- obj .: "removedCredIds"
+        cuNewThreshold <- obj .: "newThreshold"
+        return CredentialsUpdated{..}
+      "DataRegistered" -> do
+        drData <- obj .: "data"
+        return DataRegistered{..}
+      "TransferMemo" -> do
+        tmMemo <- obj .: "memo"
+        return TransferMemo{..}
+      "Interrupted" -> do
+        iAddress <- obj .: "address"
+        iEvents <- obj .: "events"
+        return Interrupted{..}
+      "Resumed" -> do
+        rAddress <- obj .: "address"
+        rSuccess <- obj .: "success"
+        return Resumed{..}
+      tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
@@ -1263,8 +1531,6 @@ instance S.Serialize RejectReason where
     40 -> return NotAllowedToHandleEncrypted
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
-
-
 instance AE.ToJSON RejectReason
 instance AE.FromJSON RejectReason
 
@@ -1294,9 +1560,6 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
-
--- FIXME: These intances need to be made clearer.
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
 -- At the end of the file to avoid issues with staging restriction.
