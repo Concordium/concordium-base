@@ -1000,6 +1000,7 @@ pub struct ChainMetadata {
 }
 
 /// Add offset tracking inside a data structure.
+#[derive(Debug)]
 pub struct Cursor<T> {
     pub offset: usize,
     pub data:   T,
