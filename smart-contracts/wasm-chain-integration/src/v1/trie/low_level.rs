@@ -599,9 +599,6 @@ struct MutableNode<V> {
     value:      Option<usize>,
     path:       Stem,
     children:   ChildrenCow<V>,
-    /// 0 means the subtree is open for modifications (inserting and removing
-    /// nodes) > 0 means the subtree is closed for modifications.
-    locked:     u16,
 }
 
 impl<V> ChildrenCow<V> {
@@ -627,7 +624,6 @@ impl<V> Default for MutableNode<V> {
                 generation: 0,
                 value:      tinyvec::TinyVec::new(),
             },
-            locked:     0,
         }
     }
 }
@@ -658,7 +654,6 @@ impl<V> MutableNode<V> {
             value,
             path: self.path.clone(), // this is a cheap clone as well.
             children: self.children.clone(),
-            locked: self.locked,
         }
     }
 }
@@ -1248,7 +1243,6 @@ impl<V> Node<V> {
             value: entry_idx,
             path: self.path.clone(),
             children: ChildrenCow::Borrowed(self.children.clone()),
-            locked: 0,
         }
     }
 
@@ -1425,27 +1419,6 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn iter_delete(&mut self, loader: &mut impl FlatLoadable, iterator: &mut Iterator) {
-        while let Some(entry) = self.next(loader, iterator) {
-            match self.entries[entry] {
-                Entry::ReadOnly {
-                    borrowed,
-                    entry_idx,
-                } => {
-                    todo!()
-                }
-                Entry::Mutable {
-                    entry_idx,
-                } => {
-                    let owned_nodes = &mut self.nodes;
-                    let node = unsafe { owned_nodes.get_unchecked_mut(entry_idx) };
-                    node.locked = node.locked.saturating_sub(1);
-                }
-                Entry::Deleted => todo!(),
-            }
-        }
-    }
-
     pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
@@ -1454,8 +1427,6 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            // we increment the lock of the node.
-            node.locked += 1;
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
@@ -1692,10 +1663,6 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            if node.locked > 0 {
-                // The node is locked so we cannot delete it.
-                return None;
-            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
                     // we found it, delete the value first and save it for returning.
@@ -1788,10 +1755,6 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            if node.locked > 0 {
-                // the subtree is locked so we cannot remove it
-                return None;
-            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -1812,32 +1775,31 @@ impl<V> MutableTrie<V> {
                     return None;
                 }
                 _ => {
+                    let root_subtree = &owned_nodes[node_idx];
                     // We found the subtree to remove.
                     // First, invalidate entry of the node and all of its children.
-                    {
-                        let mut nodes_to_invalidate = vec![node_idx];
-                        // traverse each child subtree and invalidate them.
-                        while let Some(node_idx) = nodes_to_invalidate.pop() {
-                            let to_invalidate = &owned_nodes[node_idx];
-                            if let Some(entry) = to_invalidate.value {
-                                entries[entry] = Entry::Deleted;
-                            }
+                    let mut nodes_to_invalidate = vec![node_idx];
+                    // traverse each child subtree and invalidate them.
+                    while let Some(node_idx) = nodes_to_invalidate.pop() {
+                        let to_invalidate = &owned_nodes[node_idx];
+                        if let Some(entry) = to_invalidate.value {
+                            entries[entry] = Entry::Deleted;
+                        }
 
-                            // if children are borrowed then by construction there are no entries
-                            // in them. Hence we only need to recurse into owned children.
-                            if let ChildrenCow::Owned {
-                                generation,
-                                value,
-                            } = &to_invalidate.children
-                            {
-                                // if children are of a previous generation then, again, we
-                                // do not have to recurse, since all entries will be in fully owned
-                                // nodes, and that means they will be of
-                                // current generation.
-                                if to_invalidate.generation == *generation {
-                                    for v in value.iter() {
-                                        nodes_to_invalidate.push(v.index())
-                                    }
+                        // if children are borrowed then by construction there are no entries
+                        // in them. Hence we only need to recurse into owned children.
+                        if let ChildrenCow::Owned {
+                            generation,
+                            value,
+                        } = &to_invalidate.children
+                        {
+                            // if children are of a previous generation then, again, we
+                            // do not have to recurse, since all entries will be in fully owned
+                            // nodes, and that means they will be of
+                            // current generation.
+                            if to_invalidate.generation == *generation {
+                                for v in value.iter() {
+                                    nodes_to_invalidate.push(v.index())
                                 }
                             }
                         }
@@ -1903,7 +1865,6 @@ impl<V> MutableTrie<V> {
                     generation,
                     value: tinyvec::TinyVec::new(),
                 },
-                locked: 0,
             });
             self.generation_roots
                 .last_mut()
@@ -1919,11 +1880,6 @@ impl<V> MutableTrie<V> {
             let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-
-            if node.locked > 0 {
-                // The node is locked so we cannot insert new children.
-                return None;
-            }
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
@@ -1967,7 +1923,6 @@ impl<V> MutableTrie<V> {
                         value: node_value,
                         path: remaining_stem,
                         children: node_children,
-                        locked: 0,
                     });
                     return Some((entry_idx, None));
                 }
@@ -2001,7 +1956,6 @@ impl<V> MutableTrie<V> {
                                     generation,
                                     value: tinyvec::TinyVec::new(),
                                 },
-                                locked: 0,
                             });
                             return Some((entry_idx, None));
                         }
@@ -2059,14 +2013,12 @@ impl<V> MutableTrie<V> {
                             generation,
                             value: tinyvec::TinyVec::new(),
                         },
-                        locked: 0,
                     });
                     owned_nodes.push(MutableNode {
                         generation,
                         value: node_value,
                         path: remaining_stem,
                         children: node_children,
-                        locked: 0,
                     });
                     return Some((entry_idx, None));
                 }
