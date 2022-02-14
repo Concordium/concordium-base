@@ -599,10 +599,9 @@ struct MutableNode<V> {
     value:      Option<usize>,
     path:       Stem,
     children:   ChildrenCow<V>,
-    /// Whether it is allowed to remove this node or append new children.
-    /// Hence when a node is associated with an iterator it is not allowed to
-    /// remove it or appending/removing new children.
-    locked:     bool,
+    /// 0 means the subtree is open for modifications (inserting and removing
+    /// nodes) > 0 means the subtree is closed for modifications.
+    locked:     u16,
 }
 
 impl<V> ChildrenCow<V> {
@@ -628,7 +627,7 @@ impl<V> Default for MutableNode<V> {
                 generation: 0,
                 value:      tinyvec::TinyVec::new(),
             },
-            locked:     false,
+            locked:     0,
         }
     }
 }
@@ -1249,7 +1248,7 @@ impl<V> Node<V> {
             value: entry_idx,
             path: self.path.clone(),
             children: ChildrenCow::Borrowed(self.children.clone()),
-            locked: false,
+            locked: 0,
         }
     }
 
@@ -1440,7 +1439,7 @@ impl<V> MutableTrie<V> {
                 } => {
                     let owned_nodes = &mut self.nodes;
                     let node = unsafe { owned_nodes.get_unchecked_mut(entry_idx) };
-                    node.locked = false;
+                    node.locked = node.locked.saturating_sub(1);
                 }
                 Entry::Deleted => todo!(),
             }
@@ -1455,8 +1454,8 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            // We lock the node for modifications
-            node.locked = true;
+            // we increment the lock of the node.
+            node.locked += 1;
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
@@ -1693,7 +1692,7 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            if node.locked {
+            if node.locked > 0 {
                 // The node is locked so we cannot delete it.
                 return None;
             }
@@ -1789,7 +1788,7 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            if node.locked {
+            if node.locked > 0 {
                 // the subtree is locked so we cannot remove it
                 return None;
             }
@@ -1904,7 +1903,7 @@ impl<V> MutableTrie<V> {
                     generation,
                     value: tinyvec::TinyVec::new(),
                 },
-                locked: false,
+                locked: 0,
             });
             self.generation_roots
                 .last_mut()
@@ -1921,7 +1920,7 @@ impl<V> MutableTrie<V> {
             let owned_nodes_len = owned_nodes.len();
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
 
-            if node.locked {
+            if node.locked > 0 {
                 // The node is locked so we cannot insert new children.
                 return None;
             }
@@ -1968,7 +1967,7 @@ impl<V> MutableTrie<V> {
                         value: node_value,
                         path: remaining_stem,
                         children: node_children,
-                        locked: false,
+                        locked: 0,
                     });
                     return Some((entry_idx, None));
                 }
@@ -2002,7 +2001,7 @@ impl<V> MutableTrie<V> {
                                     generation,
                                     value: tinyvec::TinyVec::new(),
                                 },
-                                locked: false,
+                                locked: 0,
                             });
                             return Some((entry_idx, None));
                         }
@@ -2060,14 +2059,14 @@ impl<V> MutableTrie<V> {
                             generation,
                             value: tinyvec::TinyVec::new(),
                         },
-                        locked: false,
+                        locked: 0,
                     });
                     owned_nodes.push(MutableNode {
                         generation,
                         value: node_value,
                         path: remaining_stem,
                         children: node_children,
-                        locked: false,
+                        locked: 0,
                     });
                     return Some((entry_idx, None));
                 }
