@@ -887,6 +887,8 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     }
 }
 
+/// Returns `true` if the node is marked as locked for modification (insertion
+/// and removal of child nodes) otherwise `false`.
 fn is_key_locked(key: &[u8], iterator_roots: &std::collections::BTreeMap<usize, Vec<u8>>) -> bool {
     for iter_root in iterator_roots.values() {
         if key.starts_with(iter_root) {
