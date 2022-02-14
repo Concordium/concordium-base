@@ -372,6 +372,13 @@ tpRewardPeriodLength :: Lens' (TimeParameters 'ChainParametersV1) RewardPeriodLe
 tpRewardPeriodLength =
   lens _tpRewardPeriodLength (\tp x -> tp{_tpRewardPeriodLength = x})
 
+
+-- |Lens for '_tpMintPerPayday'
+{-# INLINE tpMintPerPayday #-}
+tpMintPerPayday :: Lens' (TimeParameters 'ChainParametersV1) MintRate
+tpMintPerPayday =
+  lens _tpMintPerPayday (\tp x -> tp{_tpMintPerPayday = x})
+
 putTimeParameters :: Putter (TimeParameters cpv)
 putTimeParameters TimeParametersV0 = return ()
 putTimeParameters TimeParametersV1{..} = do
