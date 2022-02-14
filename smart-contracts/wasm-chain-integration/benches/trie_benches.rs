@@ -53,7 +53,7 @@ fn make_btree(words: &[Vec<u8>]) -> BTreeMap<&[u8], [u8; 8]> {
 
 fn make_trie(words: &[Vec<u8>]) -> (Option<Node<[u8; 8]>>, VecLoader) {
     let (trie, mut loader) = make_mut_trie(words);
-    (trie.freeze(&mut loader).map(|x| x.data), loader)
+    (trie.freeze(&mut loader, &mut EmptyCollector).map(|x| x.data), loader)
 }
 
 fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie<[u8; 8]>, VecLoader) {
@@ -242,7 +242,7 @@ fn trie_thaw_delete(b: &mut Criterion) {
 fn mut_trie_freeze_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_mut_trie(&words);
-    let frozen = trie.freeze(&mut loader).unwrap().data;
+    let frozen = trie.freeze(&mut loader, &mut EmptyCollector).unwrap().data;
     b.bench_function("trie mut freeze get", |b| {
         b.iter(|| {
             for w in words.iter() {

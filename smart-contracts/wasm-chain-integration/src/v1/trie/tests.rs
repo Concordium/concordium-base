@@ -17,12 +17,12 @@ fn make_mut_trie<A: AsRef<[u8]>>(
 }
 
 #[test]
-/// Check that serialization also caches the data.
-fn prop_serialization_caches() {
+/// Check that storing also caches the data.
+fn prop_storing_caches() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader) {
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -37,13 +37,18 @@ fn prop_serialization_caches() {
 }
 
 #[test]
-/// Check that the mutable trie and its iterator match the reference
-/// implementation.
-fn prop_serialization() {
+/// Check that storing computes the correct size, and that it can be
+/// deserialized.
+fn prop_storing() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader) {
+        let mut collector = SizeCollector::default();
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut collector) {
+            // check that the computed size at least accounts for all the data
+            // keys are partially shared so we cannot easily bound those.
+            let data_size = reference.values().map(|v| v.len() as u64).sum::<u64>();
+            ensure!(collector.collect() > data_size);
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -63,12 +68,52 @@ fn prop_serialization() {
 }
 
 #[test]
-/// Check that the serialization preserves hash.
-fn prop_serialization_preseves_hash() {
+fn prop_serialization() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let mut frozen = if let Some(t) = trie.freeze(&mut loader) {
+        let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        let mut out = Vec::new();
+        frozen.serialize(&mut loader, &mut out).context("Serialization failed.")?;
+        let mut source = std::io::Cursor::new(&out);
+        let deserialized =
+            Hashed::<Node<Vec<u8>>>::deserialize(&mut source).context("Failed to deserialize")?;
+        ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
+        let mut mutable = deserialized.data.make_mutable(0);
+        let mut iterator = if let Some(i) = mutable.iter(&mut loader, &[]) {
+            i
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        let reference_iter = reference.iter();
+        for (k, v) in reference_iter {
+            let entry =
+                mutable.next(&mut loader, &mut iterator).context("Trie iterator ends early.")?;
+            ensure!(
+                mutable.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
+                "Reference value does not match the trie value."
+            );
+            let it_key = iterator.get_key();
+            ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}.", it_key, k);
+        }
+        Ok(())
+    };
+    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
+/// Check that the storing preserves hash.
+fn prop_storing_preseves_hash() {
+    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs);
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -99,7 +144,7 @@ fn prop_hash_independent_of_order() {
             inputs.sort_by(|(l, _), (r, _)| l.cmp(r));
             inputs.dedup_by(|(l, _), (r, _)| l == r);
             let (trie, mut loader) = make_mut_trie(inputs.clone());
-            let frozen = if let Some(t) = trie.freeze(&mut loader) {
+            let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
                 t
             } else {
                 ensure!(inputs.len() == 0, "Empty tree, but non-empty inputs.");
@@ -112,7 +157,7 @@ fn prop_hash_independent_of_order() {
                 inputs.swap(l % len, r % len);
             }
             let (trie_1, mut loader_1) = make_mut_trie(inputs.clone());
-            let frozen_1 = if let Some(t) = trie_1.freeze(&mut loader_1) {
+            let frozen_1 = if let Some(t) = trie_1.freeze(&mut loader_1, &mut EmptyCollector) {
                 t
             } else {
                 bail!("The first tree was not empty, but the second one is.");
@@ -317,7 +362,7 @@ fn prop_matches_reference_after_freeze_thaw() {
         let trie = if let Some(Hashed {
             data: trie,
             ..
-        }) = trie.freeze(&mut loader)
+        }) = trie.freeze(&mut loader, &mut EmptyCollector)
         {
             trie
         } else {

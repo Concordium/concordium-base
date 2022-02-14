@@ -17,7 +17,7 @@ use wasm_transform::{
 };
 
 /// Interrupt triggered by the smart contract to execute an instruction on the
-/// host, either an account transfer, or a smart contract.
+/// host, either an account transfer or a smart contract call.
 #[derive(Debug)]
 pub enum Interrupt {
     Transfer {
@@ -66,6 +66,12 @@ impl Interrupt {
 }
 
 #[derive(Debug)]
+/// A host implementation that provides access to host information needed for
+/// execution of contract initialization functions. The "host" in this context
+/// refers to the Wasm concept of a host.
+/// This keeps track of the current state and logs, gives access to the context,
+/// and makes sure that execution stays within resource bounds dictated by
+/// allocated energy.
 pub struct InitHost<'a, BackingStore, ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
@@ -78,9 +84,8 @@ pub struct InitHost<'a, BackingStore, ParamType, Ctx> {
     pub state:             InstanceState<'a, BackingStore>,
     /// The response from the call.
     pub return_value:      ReturnValue,
-    /// The parameter to the init method, as well as any responses from
-    /// calls to other contracts during execution.
-    pub parameters:        Vec<ParamType>,
+    /// The parameter to the init method.
+    pub parameter:         ParamType,
     /// The init context for this invocation.
     pub init_ctx:          Ctx,
 }
@@ -96,13 +101,19 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
             logs:              host.logs,
             state:             host.state,
             return_value:      host.return_value,
-            parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
+            parameter:         host.parameter.into(),
             init_ctx:          host.init_ctx.into(),
         }
     }
 }
 
 #[derive(Debug)]
+/// A host implementation that provides access to host information needed for
+/// execution of contract receive methods. The "host" in this context
+/// refers to the Wasm concept of a host.
+/// This keeps track of the current state and logs, gives access to the context,
+/// and makes sure that execution stays within resource bounds dictated by
+/// allocated energy.
 pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
     pub energy:    InterpreterEnergy,
     pub stateless: StateLessReceiveHost<ParamType, Ctx>,
@@ -118,7 +129,8 @@ pub struct StateLessReceiveHost<ParamType, Ctx> {
     pub logs:              v0::Logs,
     /// Return value from execution.
     pub return_value:      ReturnValue,
-    /// The parameter to the receive method.
+    /// The parameter to the receive method, as well as any responses from
+    /// calls to other contracts during execution.
     pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
     pub receive_ctx:       Ctx,
@@ -553,9 +565,9 @@ impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasInitCon
                     &mut self.energy,
                     &mut self.return_value,
                 ),
-                CommonFunc::GetParameterSize => host::get_parameter_size(stack, &self.parameters),
+                CommonFunc::GetParameterSize => host::get_parameter_size(stack, &[&self.parameter]),
                 CommonFunc::GetParameterSection => {
-                    host::get_parameter_section(memory, stack, &mut self.energy, &self.parameters)
+                    host::get_parameter_section(memory, stack, &mut self.energy, &[&self.parameter])
                 }
                 CommonFunc::GetPolicySection => v0::host::get_policy_section(
                     memory,
@@ -756,19 +768,17 @@ pub fn invoke_init<'a, BackingStore: FlatLoadable, R: RunnableCode>(
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    param: ParameterRef,
-    energy: u64,
+    parameter: ParameterRef,
+    energy: InterpreterEnergy,
     state: InstanceState<'a, BackingStore>,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
-        energy: InterpreterEnergy {
-            energy,
-        },
+        energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
         state,
         return_value: Vec::new(),
-        parameters: vec![param],
+        parameter,
         init_ctx,
     };
 
@@ -812,11 +822,14 @@ fn process_init_result<BackingStore: FlatLoadable, Param, Ctx>(
             reason,
             config: _,
         }) => match reason {},
-        Err(e) => {
-            if e.downcast_ref::<OutOfEnergy>().is_some() {
+        Err(error) => {
+            if error.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(InitResult::OutOfEnergy)
             } else {
-                Err(e)
+                Ok(InitResult::Trap {
+                    error,
+                    remaining_energy: host.energy.energy,
+                })
             }
         }
     }
@@ -849,7 +862,7 @@ pub fn invoke_init_from_artifact<'a, 'b, BackingStore: FlatLoadable>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
@@ -864,7 +877,7 @@ pub fn invoke_init_from_source<'b, BackingStore: FlatLoadable>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
@@ -873,7 +886,6 @@ pub fn invoke_init_from_source<'b, BackingStore: FlatLoadable>(
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
-/// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<'b, BackingStore: FlatLoadable>(
     source_bytes: &[u8],
@@ -881,7 +893,7 @@ pub fn invoke_init_with_metering_from_source<'b, BackingStore: FlatLoadable>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
@@ -969,13 +981,11 @@ pub fn invoke_receive<
     receive_ctx: Ctx1,
     receive_name: &str,
     param: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>> {
     let mut host = ReceiveHost {
-        energy:    InterpreterEnergy {
-            energy,
-        },
+        energy,
         stateless: StateLessReceiveHost {
             activation_frames: constants::MAX_ACTIVATION_FRAMES,
             logs: v0::Logs::new(),
@@ -984,7 +994,7 @@ pub fn invoke_receive<
             latest_generation: 0,
             receive_ctx,
         },
-        state:     instance_state,
+        state: instance_state,
     };
 
     let result = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]);
@@ -1085,7 +1095,7 @@ pub fn invoke_receive_from_artifact<
     receive_ctx: Ctx1,
     receive_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
@@ -1113,7 +1123,7 @@ pub fn invoke_receive_from_source<
     receive_ctx: Ctx1,
     receive_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
@@ -1142,7 +1152,7 @@ pub fn invoke_receive_with_metering_from_source<
     receive_ctx: Ctx1,
     receive_name: &str,
     parameter: ParameterRef,
-    energy: u64,
+    energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;

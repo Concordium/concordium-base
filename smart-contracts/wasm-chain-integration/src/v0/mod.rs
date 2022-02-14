@@ -842,12 +842,10 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     param: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
-        energy: InterpreterEnergy {
-            energy,
-        },
+        energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: Logs::new(),
         state: State::new(None),
@@ -903,7 +901,7 @@ pub fn invoke_init_from_artifact<Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
@@ -917,7 +915,7 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
@@ -925,7 +923,6 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
-/// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     source_bytes: &[u8],
@@ -933,7 +930,7 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
@@ -947,12 +944,10 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let mut host = ReceiveHost {
-        energy: InterpreterEnergy {
-            energy,
-        },
+        energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: Logs::new(),
         state: State::new(Some(current_state)),
@@ -1028,7 +1023,7 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
@@ -1043,7 +1038,7 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
@@ -1059,7 +1054,7 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
-    energy: u64,
+    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
