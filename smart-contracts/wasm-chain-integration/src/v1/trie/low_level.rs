@@ -1926,11 +1926,16 @@ impl<V> MutableTrie<V> {
                         return None;
                     }
                     // We found the subtree to remove.
-                    // First, invalidate entry of the node and all of its children.
+                    // First we check that the root of the subtree and it's children are not locked.
+                    // Second, invalidate entry of the node and all of its children.
                     let mut nodes_to_invalidate = vec![node_idx];
                     // traverse each child subtree and invalidate them.
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
                         let to_invalidate = &owned_nodes[node_idx];
+                        // Before invalidating the node we first check if its locked.
+                        if to_invalidate.locked > 0 {
+                            return None;
+                        }
                         if let Some(entry) = to_invalidate.value {
                             entries[entry] = Entry::Deleted;
                         }
