@@ -160,4 +160,4 @@ data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) wh
     -- |No state migration is performed.
     StateMigrationParametersTrivial :: StateMigrationParameters p p
     -- |The state is migrated from protocol version 'P3' to 'P4'.
-    StateMigrationParametersP3ToP4 :: P4.StateMigrationParametersP3toP4 -> StateMigrationParameters 'P3 'P4
+    StateMigrationParametersP3ToP4 :: P4.StateMigrationData -> StateMigrationParameters 'P3 'P4

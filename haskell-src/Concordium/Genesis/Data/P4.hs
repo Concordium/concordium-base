@@ -17,83 +17,85 @@ import Concordium.Types.Execution
 import Concordium.Types.Parameters
 import Concordium.Types.Updates
 
--- |Parameters used to migrate state from protocol version 'P3' to 'P4'.
-data StateMigrationParametersP3toP4 = StateMigrationParametersP3toP4
+-- |Parameter data type for the 'P3' to 'P4' protocol update.
+-- This is provided as a parameter to the protocol update chain update instruction.
+data ProtocolUpdateData = ProtocolUpdateData
     { -- |The commission rate to apply to bakers on migration.
-      migrationDefaultCommissionRate :: !CommissionRates,
+      updateDefaultCommissionRate :: !CommissionRates,
       -- |The state of a baking pool on migration.
-      migrationDefaultPoolState :: !OpenStatus,
-      -- |The genesis time of the previous genesis block.
-      migrationPreviousGenesisTime :: !Timestamp,
-      -- |The duration of an epoch in the previous chain.
-      migrationPreviousEpochDuration :: !Duration,
+      updateDefaultPoolState :: !OpenStatus,
       -- |Access structure defining the keys and threshold for cooldown parameter updates.
-      migrationCooldownParametersAccessStructure :: !AccessStructure,
+      updateCooldownParametersAccessStructure :: !AccessStructure,
       -- |Access structure defining the keys and threshold for time parameter updates.
-      migrationTimeParametersAccessStructure :: !AccessStructure,
+      updateTimeParametersAccessStructure :: !AccessStructure,
       -- |New cooldown parameters.
-      migrationCooldownParameters :: !(CooldownParameters 'ChainParametersV1),
+      updateCooldownParameters :: !(CooldownParameters 'ChainParametersV1),
       -- |New time parameters.
-      migrationTimeParameters :: !(TimeParameters 'ChainParametersV1),
+      updateTimeParameters :: !(TimeParameters 'ChainParametersV1),
       -- |New pool parameters
-      migrationPoolParameters :: !(PoolParameters 'ChainParametersV1)
+      updatePoolParameters :: !(PoolParameters 'ChainParametersV1)
     }
     deriving (Eq, Show)
 
-instance Serialize StateMigrationParametersP3toP4 where
-    put StateMigrationParametersP3toP4{..} = do
-        put migrationDefaultCommissionRate
-        put migrationDefaultPoolState
+instance Serialize ProtocolUpdateData where
+    put ProtocolUpdateData{..} = do
+        put updateDefaultCommissionRate
+        put updateDefaultPoolState
+        put updateCooldownParametersAccessStructure
+        put updateTimeParametersAccessStructure
+        put updateCooldownParameters
+        put updateTimeParameters
+        put updatePoolParameters
+    get = do
+        updateDefaultCommissionRate <- get
+        updateDefaultPoolState <- get
+        updateCooldownParametersAccessStructure <- get
+        updateTimeParametersAccessStructure <- get
+        updateCooldownParameters <- get
+        updateTimeParameters <- get
+        updatePoolParameters <- get
+        return ProtocolUpdateData{..}
+
+-- |Parameters used to migrate state from protocol version 'P3' to 'P4'.
+data StateMigrationData = StateMigrationData
+    { -- |Parameters provided by the protocol update instruction.
+      migrationProtocolUpdateData :: !ProtocolUpdateData,
+      -- |The genesis time of the previous genesis block.
+      migrationPreviousGenesisTime :: !Timestamp,
+      -- |The duration of an epoch in the previous chain.
+      migrationPreviousEpochDuration :: !Duration
+    }
+    deriving (Eq, Show)
+
+instance Serialize StateMigrationData where
+    put StateMigrationData{..} = do
+        put migrationProtocolUpdateData
         put migrationPreviousGenesisTime
         put migrationPreviousEpochDuration
-        put migrationCooldownParametersAccessStructure
-        put migrationTimeParametersAccessStructure
-        put migrationCooldownParameters
-        put migrationTimeParameters
-        put migrationPoolParameters
     get = do
-        migrationDefaultCommissionRate <- get
-        migrationDefaultPoolState <- get
+        migrationProtocolUpdateData <- get
         migrationPreviousGenesisTime <- get
         migrationPreviousEpochDuration <- get
-        migrationCooldownParametersAccessStructure <- get
-        migrationTimeParametersAccessStructure <- get
-        migrationCooldownParameters <- get
-        migrationTimeParameters <- get
-        migrationPoolParameters <- get
-        return StateMigrationParametersP3toP4{..}
+        return StateMigrationData{..}
+
+-- |Construct a 'StateMigrationParametersP3toP4' from a 'ProtocolUpdateData' together with the
+-- previous genesis time and previous epoch duration.
+makeStateMigrationParametersP3toP4 ::
+    ProtocolUpdateData -> Timestamp -> Duration -> StateMigrationData
+makeStateMigrationParametersP3toP4
+    migrationProtocolUpdateData
+    migrationPreviousGenesisTime
+    migrationPreviousEpochDuration =
+        StateMigrationData{..}
 
 -- |The baker pool information to assign to existing bakers on migrating from 'P3' to 'P4'.
-defaultBakerPoolInfo :: StateMigrationParametersP3toP4 -> BakerPoolInfo
-defaultBakerPoolInfo StateMigrationParametersP3toP4{..} =
+defaultBakerPoolInfo :: StateMigrationData -> BakerPoolInfo
+defaultBakerPoolInfo StateMigrationData{migrationProtocolUpdateData=ProtocolUpdateData{..}} =
     BakerPoolInfo
-        { _poolOpenStatus = migrationDefaultPoolState,
+        { _poolOpenStatus = updateDefaultPoolState,
           _poolMetadataUrl = emptyUrlText,
-          _poolCommissionRates = migrationDefaultCommissionRate
+          _poolCommissionRates = updateDefaultCommissionRate
         }
-
--- |Migrate an 'AccountStake' from 'AccountV0' to 'AccountV1', given the 'BakerPoolInfo' to attach
--- to any baker.
-migrateAccountStakeV0toV1 ::
-    StateMigrationParametersP3toP4 ->
-    AccountStake 'AccountV0 ->
-    AccountStake 'AccountV1
-migrateAccountStakeV0toV1 _ AccountStakeNone = AccountStakeNone
-migrateAccountStakeV0toV1
-    migration@StateMigrationParametersP3toP4{..}
-    (AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV0 bi, ..}) =
-        AccountStakeBaker
-            AccountBaker
-                { _accountBakerInfo = BakerInfoExV1 bi (defaultBakerPoolInfo migration),
-                  _bakerPendingChange = migratePCE <$> _bakerPendingChange,
-                  ..
-                }
-      where
-        migratePCE (PendingChangeEffectiveV0 eff) =
-            PendingChangeEffectiveV1 $
-                addDuration
-                    migrationPreviousGenesisTime
-                    (migrationPreviousEpochDuration * fromIntegral eff)
 
 -- |Genesis data for the P4 protocol version. The initial variant is here
 -- because it might be used in the future, at present it is not used.
@@ -107,7 +109,7 @@ data GenesisDataP4
         }
     | GDP4MigrateFromP3
         { genesisRegenesis :: !RegenesisData,
-          genesisMigration :: StateMigrationParametersP3toP4
+          genesisMigration :: !StateMigrationData
         }
     | GDP4Regenesis {genesisRegenesis :: !RegenesisData}
     deriving (Eq, Show)

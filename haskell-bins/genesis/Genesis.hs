@@ -207,24 +207,24 @@ main = cmdArgsRun mode >>=
                   GDP4 P4.GDP4MigrateFromP3{..} -> printP3P4Migration genesisRegenesis genesisMigration
                   gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
 
-printP3P4Migration :: RegenesisData -> P4.StateMigrationParametersP3toP4 -> IO ()
-printP3P4Migration regen P4.StateMigrationParametersP3toP4{..} = do
+printP3P4Migration :: RegenesisData -> P4.StateMigrationData -> IO ()
+printP3P4Migration regen P4.StateMigrationData{migrationProtocolUpdateData=P4.ProtocolUpdateData{..},..} = do
     putStrLn "Migration from protocol P3 to P4"
     printRegenesis P4 regen
     putStrLn ""
     putStrLn "Migration parameters:"
     putStrLn $ " - default pool commission rates:"
-    putStrLn $ "   + finalization commission rate: " ++ show (_finalizationCommission migrationDefaultCommissionRate)
-    putStrLn $ "   + baking commission rate: " ++ show (_bakingCommission migrationDefaultCommissionRate)
-    putStrLn $ "   + transaction commission rate: " ++ show (_transactionCommission migrationDefaultCommissionRate)
-    putStrLn $ " - default pool state: " ++ show migrationDefaultPoolState
+    putStrLn $ "   + finalization commission rate: " ++ show (_finalizationCommission updateDefaultCommissionRate)
+    putStrLn $ "   + baking commission rate: " ++ show (_bakingCommission updateDefaultCommissionRate)
+    putStrLn $ "   + transaction commission rate: " ++ show (_transactionCommission updateDefaultCommissionRate)
+    putStrLn $ " - default pool state: " ++ show updateDefaultPoolState
     putStrLn $ " - previous genesis time: " ++ showTime migrationPreviousGenesisTime
     putStrLn $ " - previous epoch duration: " ++ show (durationToNominalDiffTime migrationPreviousEpochDuration)
-    printAccessStructure "cooldown parameters" migrationCooldownParametersAccessStructure
-    printAccessStructure "time parameters" migrationTimeParametersAccessStructure
-    printCooldownParametersV1 migrationCooldownParameters
-    printTimeParametersV1 migrationTimeParameters
-    printPoolParametersV1 migrationPoolParameters
+    printAccessStructure "cooldown parameters" updateCooldownParametersAccessStructure
+    printAccessStructure "time parameters" updateTimeParametersAccessStructure
+    printCooldownParametersV1 updateCooldownParameters
+    printTimeParametersV1 updateTimeParameters
+    printPoolParametersV1 updatePoolParameters
 
 printRegenesis :: ProtocolVersion -> RegenesisData -> IO ()
 printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do

@@ -19,7 +19,6 @@ import Concordium.Types.Updates
 import Concordium.Utils.Serialization
 import Concordium.Types.Parameters
 import Concordium.Genesis.Data
-import qualified Concordium.Genesis.Data.P4 as P4
 import Concordium.Types.Migration
 
 -- |An update queue consists of pending future updates ordered by
@@ -222,7 +221,7 @@ getPendingUpdatesV0 migration = do
                 _pCooldownParametersQueue <- getUpdateQueueForCPV1
                 _pTimeParametersQueue <- getUpdateQueueForCPV1
                 return (_pCooldownParametersQueue, _pTimeParametersQueue)
-            StateMigrationParametersP3ToP4 P4.StateMigrationParametersP3toP4{} ->
+            StateMigrationParametersP3ToP4 _ ->
                 return (JustForCPV1 emptyUpdateQueue, JustForCPV1 emptyUpdateQueue)
         return PendingUpdates{..}
 
