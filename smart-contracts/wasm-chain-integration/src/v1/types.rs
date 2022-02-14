@@ -640,16 +640,13 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     }
 
     pub fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntry> {
-        if let Some(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
-            let idx = self.entry_mapping.len();
-            self.entry_mapping.push(Some(EntryWithKey {
-                id:  id.0,
-                key: key.into(),
-            }));
-            Ok(InstanceStateEntry::new(self.current_generation, idx))
-        } else {
-            bail!("Concurrent modification.")
-        }
+        let id = self.state_trie.insert(&mut self.backing_store, key, Vec::new());
+        let idx = self.entry_mapping.len();
+        self.entry_mapping.push(Some(EntryWithKey {
+            id:  id.0,
+            key: key.into(),
+        }));
+        Ok(InstanceStateEntry::new(self.current_generation, idx))
     }
 
     pub fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {

@@ -172,16 +172,15 @@ fn prop_matches_reference_delete_subtree() {
                 .collect::<BTreeMap<_, _>>();
             let (mut trie, mut loader) = make_mut_trie(inputs.clone());
 
-            let mut inserted_entries = vec![];
+            // Remember the entry ids of entries that were inserted and should be deleted
+            // since they are under the prefix.
+            let mut entries_under_prefix = vec![];
             for input in &inputs {
                 if input.0.starts_with(&prefix[..]) {
                     if let Some(e) = trie.get_entry(&mut loader, &input.0) {
-                        if inputs[0].0.is_empty() && inputs[0].1.is_empty() {
-                            println!("{:?}", e);
-                        }
-                        inserted_entries.push(e);
+                        entries_under_prefix.push(e);
                     } else {
-                        bail!("The prefix should've been present in the trie.");
+                        bail!("The key {:?} should have been present in the trie.", input.0);
                     }
                 }
             }
@@ -192,10 +191,10 @@ fn prop_matches_reference_delete_subtree() {
                 "There is at least one value with the given prefix, so deleting should succeed."
             );
 
-            for entry in inserted_entries {
+            for entry in entries_under_prefix {
                 ensure!(
                     trie.with_entry(entry, &mut loader, |_| ()).is_none(),
-                    "Entry {:?} should've been invalidated ({:?}).",
+                    "Entry {:?} should have been invalidated ({:?}).",
                     entry,
                     prefix
                 )

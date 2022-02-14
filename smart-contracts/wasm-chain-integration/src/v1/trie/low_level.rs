@@ -692,6 +692,23 @@ enum ChildrenCow<V> {
     },
 }
 
+impl<V> ChildrenCow<V> {
+    /// Return a reference to the owned value, if the enum is an owned variant.
+    /// Otherwise return [None].
+    #[inline]
+    pub fn get_owned(&self) -> Option<(u32, &[KeyIndexPair])> {
+        if let ChildrenCow::Owned {
+            generation,
+            value,
+        } = self
+        {
+            Some((*generation, value))
+        } else {
+            None
+        }
+    }
+}
+
 fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>>(
     borrowed_values: &mut [Link<Hashed<CachedRef<V>>>],
     owned_values: &mut [V],
@@ -1546,12 +1563,8 @@ impl<V> MutableTrie<V> {
         let mut reachable = Vec::new();
         while let Some(idx) = reachable_stack.pop() {
             reachable.push(idx);
-            if let ChildrenCow::Owned {
-                value,
-                ..
-            } = &owned_nodes[idx].children
-            {
-                for c in value.iter() {
+            if let Some((_, children)) = owned_nodes[idx].children.get_owned() {
+                for c in children {
                     reachable_stack.push(c.index());
                 }
             }
@@ -1775,7 +1788,6 @@ impl<V> MutableTrie<V> {
                     return None;
                 }
                 _ => {
-                    let root_subtree = &owned_nodes[node_idx];
                     // We found the subtree to remove.
                     // First, invalidate entry of the node and all of its children.
                     let mut nodes_to_invalidate = vec![node_idx];
@@ -1788,17 +1800,13 @@ impl<V> MutableTrie<V> {
 
                         // if children are borrowed then by construction there are no entries
                         // in them. Hence we only need to recurse into owned children.
-                        if let ChildrenCow::Owned {
-                            generation,
-                            value,
-                        } = &to_invalidate.children
-                        {
+                        if let Some((generation, children)) = to_invalidate.children.get_owned() {
                             // if children are of a previous generation then, again, we
                             // do not have to recurse, since all entries will be in fully owned
                             // nodes, and that means they will be of
                             // current generation.
-                            if to_invalidate.generation == *generation {
-                                for v in value.iter() {
+                            if to_invalidate.generation == generation {
+                                for v in children.iter() {
                                     nodes_to_invalidate.push(v.index())
                                 }
                             }
@@ -1840,7 +1848,7 @@ impl<V> MutableTrie<V> {
         loader: &mut impl FlatLoadable,
         key: &[Key],
         new_value: V,
-    ) -> Option<(EntryId, Option<EntryId>)> {
+    ) -> (EntryId, Option<EntryId>) {
         let mut key_iter = key.iter();
         let generation_root =
             self.generation_roots.last().expect("There should always be at least 1 generation.").0;
@@ -1870,7 +1878,7 @@ impl<V> MutableTrie<V> {
                 .last_mut()
                 .expect("We already checked the list is not empty.")
                 .0 = Some(root_idx);
-            return Some((entry_idx, None));
+            return (entry_idx, None);
         };
         let generation = self.nodes[node_idx].generation;
         let owned_nodes = &mut self.nodes;
@@ -1892,7 +1900,7 @@ impl<V> MutableTrie<V> {
                         entry_idx: value_idx,
                     });
                     node.value = Some(entry_idx);
-                    return Some((entry_idx, old_entry_idx));
+                    return (entry_idx, old_entry_idx);
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -1924,7 +1932,7 @@ impl<V> MutableTrie<V> {
                         path: remaining_stem,
                         children: node_children,
                     });
-                    return Some((entry_idx, None));
+                    return (entry_idx, None);
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -1957,7 +1965,7 @@ impl<V> MutableTrie<V> {
                                     value: tinyvec::TinyVec::new(),
                                 },
                             });
-                            return Some((entry_idx, None));
+                            return (entry_idx, None);
                         }
                     }
                 }
@@ -2020,7 +2028,7 @@ impl<V> MutableTrie<V> {
                         path: remaining_stem,
                         children: node_children,
                     });
-                    return Some((entry_idx, None));
+                    return (entry_idx, None);
                 }
             }
         }
