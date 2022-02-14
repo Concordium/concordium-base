@@ -418,7 +418,6 @@ genPoolParametersV1 = do
     _ppLPoolCommissions <- genCommissionRates
     _ppCommissionBounds <- genCommissionRanges
     _ppMinimumEquityCapital <- genAmount
-    _ppMinimumFinalizationCapital <- genAmountFraction
     _ppCapitalBound <- genAmountFraction
     _ppLeverageBound <- genLeverageFactor
     return PoolParametersV1{..}

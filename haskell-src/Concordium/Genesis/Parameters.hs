@@ -104,9 +104,6 @@ makeGenesisChainParametersV1 ::
     InclusiveRange AmountFraction ->
     -- |Minimum equity capital required for a new baker.
     Amount -> 
-    -- |Minimum fraction of the total supply required for a baker to qualify
-    -- as a finalizer.
-    AmountFraction -> 
     -- |Maximum fraction of the total supply of that a new baker can have.
     AmountFraction ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
@@ -133,7 +130,6 @@ makeGenesisChainParametersV1
     _bakingCommissionRange
     _transactionCommissionRange
     _ppMinimumEquityCapital
-    _ppMinimumFinalizationCapital
     _ppCapitalBound
     _ppLeverageBound
     _tpRewardPeriodLength
@@ -184,7 +180,6 @@ parseJSONForGCPV1 =
             <*> v .: "bakingCommissionRange"
             <*> v .: "transactionCommissionRange"
             <*> v .: "minimumEquityCapital"
-            <*> v .: "minimumFinalizationCapital"
             <*> v .: "capitalBound"
             <*> v .: "leverageBound"
             <*> v .: "rewardPeriodLength"
@@ -221,7 +216,6 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
               "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds gcpPoolParameters),
               "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds gcpPoolParameters),
               "minimumEquityCapital" AE..= _ppMinimumEquityCapital gcpPoolParameters,
-              "minimumFinalizationCapital" AE..= _ppMinimumFinalizationCapital gcpPoolParameters,
               "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
               "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
               "rewardPeriodLength" AE..= _tpRewardPeriodLength gcpTimeParameters,

@@ -487,9 +487,6 @@ data PoolParameters cpv where
       _ppCommissionBounds :: !CommissionRanges,
       -- |Minimum equity capital required for a new baker.
       _ppMinimumEquityCapital :: !Amount,
-      -- |Minimum fraction of the total supply required for a baker to qualify
-      -- as a finalizer.
-      _ppMinimumFinalizationCapital :: !AmountFraction,
       -- |Maximum fraction of the total supply of that a new baker can have.
       _ppCapitalBound :: !AmountFraction,
       -- |The maximum leverage that a baker can have as a ratio of total stake
@@ -511,7 +508,6 @@ instance ToJSON (PoolParameters cpv) where
             "bakingCommissionRange" AE..= _bakingCommissionRange _ppCommissionBounds,
             "transactionCommissionRange" AE..= _transactionCommissionRange _ppCommissionBounds,
             "minimumEquityCapital" AE..= _ppMinimumEquityCapital,
-            "minimumFinalizationCapital" AE..= _ppMinimumFinalizationCapital,
             "capitalBound" AE..= _ppCapitalBound,
             "leverageBound" AE..= _ppLeverageBound
         ]
@@ -527,7 +523,6 @@ parsePoolParametersJSON = case chainParametersVersion @cpv of
     _bakingCommissionRange <- v .: "bakingCommissionRange"
     _transactionCommissionRange <- v .: "transactionCommissionRange"
     _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
-    _ppMinimumFinalizationCapital <- v .: "minimumFinalizationCapital"
     _ppCapitalBound <- v .: "capitalBound"
     _ppLeverageBound <- v .: "leverageBound"
     let _ppLPoolCommissions = CommissionRates{..}
@@ -561,12 +556,6 @@ ppMinimumEquityCapital :: Lens' (PoolParameters 'ChainParametersV1) Amount
 ppMinimumEquityCapital =
   lens _ppMinimumEquityCapital (\pp x -> pp{_ppMinimumEquityCapital = x})
 
--- |Lens for '_ppMinimumFinalizationCapital'
-{-# INLINE ppMinimumFinalizationCapital #-}
-ppMinimumFinalizationCapital :: Lens' (PoolParameters 'ChainParametersV1) AmountFraction
-ppMinimumFinalizationCapital =
-  lens _ppMinimumFinalizationCapital (\pp x -> pp{_ppMinimumFinalizationCapital = x})
-
 -- |Lens for '_ppCapitalBound'
 {-# INLINE ppCapitalBound #-}
 ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) AmountFraction
@@ -586,7 +575,6 @@ putPoolParameters PoolParametersV1{..} = do
         put _ppLPoolCommissions
         put _ppCommissionBounds
         put _ppMinimumEquityCapital
-        put _ppMinimumFinalizationCapital
         put _ppCapitalBound
         put _ppLeverageBound
 
@@ -598,7 +586,7 @@ instance Monad m => MHashableTo m Hash.Hash (PoolParameters cpv)
 getPoolParameters :: forall cpv. IsChainParametersVersion cpv => Get (PoolParameters cpv)
 getPoolParameters = case chainParametersVersion @cpv of
     SCPV0 -> PoolParametersV0 <$> get
-    SCPV1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get <*> get
+    SCPV1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
   put = putPoolParameters
@@ -693,17 +681,14 @@ makeChainParametersV1 ::
     AmountFraction ->
     -- |Fraction of transaction rewards charged by the L-pool.
     AmountFraction ->
-    -- |The range of allowed finalization commisions for normal pools.
+    -- |The range of allowed finalization commissions for normal pools.
     InclusiveRange AmountFraction ->
-    -- |The range of allowed baker commisions for normal pools.
+    -- |The range of allowed baker commissions for normal pools.
     InclusiveRange AmountFraction ->
-    -- |The range of allowed transaction commisions for normal pools.
+    -- |The range of allowed transaction commissions for normal pools.
     InclusiveRange AmountFraction ->
     -- |Minimum equity capital required for a new baker.
     Amount ->
-    -- |Minimum fraction of the total supply required for a baker to qualify
-    -- as a finalizer.
-    AmountFraction ->
     -- |Maximum fraction of the total supply of that a new baker can have.
     AmountFraction ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
@@ -730,7 +715,6 @@ makeChainParametersV1
     _bakingCommissionRange
     _transactionCommissionRange
     _ppMinimumEquityCapital
-    _ppMinimumFinalizationCapital
     _ppCapitalBound
     _ppLeverageBound
     _tpRewardPeriodLength
@@ -804,7 +788,6 @@ parseJSONForCPV1 =
             <*> v .: "bakingCommissionRange"
             <*> v .: "transactionCommissionRange"
             <*> v .: "minimumEquityCapital"
-            <*> v .: "minimumFinalizationCapital"
             <*> v .: "capitalBound"
             <*> v .: "leverageBound"
             <*> v .: "rewardPeriodLength"
@@ -845,7 +828,6 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
               "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds _cpPoolParameters),
               "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds _cpPoolParameters),
               "minimumEquityCapital" AE..= _ppMinimumEquityCapital _cpPoolParameters,
-              "minimumFinalizationCapital" AE..= _ppMinimumFinalizationCapital _cpPoolParameters,
               "capitalBound" AE..= _ppCapitalBound _cpPoolParameters,
               "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
               "rewardPeriodLength" AE..= _tpRewardPeriodLength _cpTimeParameters,

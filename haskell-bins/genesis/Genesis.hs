@@ -204,7 +204,27 @@ main = cmdArgsRun mode >>=
                   gd@(GDP3 P3.GDP3Initial{..}) -> printInitial SP3 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP4 -> case gdata of
                   GDP4 P4.GDP4Regenesis{..} -> printRegenesis P4 genesisRegenesis
+                  GDP4 P4.GDP4MigrateFromP3{..} -> printP3P4Migration genesisRegenesis genesisMigration
                   gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
+
+printP3P4Migration :: RegenesisData -> P4.StateMigrationParametersP3toP4 -> IO ()
+printP3P4Migration regen P4.StateMigrationParametersP3toP4{..} = do
+    putStrLn "Migration from protocol P3 to P4"
+    printRegenesis P4 regen
+    putStrLn ""
+    putStrLn "Migration parameters:"
+    putStrLn $ " - default pool commission rates:"
+    putStrLn $ "   + finalization commission rate: " ++ show (_finalizationCommission migrationDefaultCommissionRate)
+    putStrLn $ "   + baking commission rate: " ++ show (_bakingCommission migrationDefaultCommissionRate)
+    putStrLn $ "   + transaction commission rate: " ++ show (_transactionCommission migrationDefaultCommissionRate)
+    putStrLn $ " - default pool state: " ++ show migrationDefaultPoolState
+    putStrLn $ " - previous genesis time: " ++ showTime migrationPreviousGenesisTime
+    putStrLn $ " - previous epoch duration: " ++ show (durationToNominalDiffTime migrationPreviousEpochDuration)
+    printAccessStructure "cooldown parameters" migrationCooldownParametersAccessStructure
+    printAccessStructure "time parameters" migrationTimeParametersAccessStructure
+    printCooldownParametersV1 migrationCooldownParameters
+    printTimeParametersV1 migrationTimeParameters
+    printPoolParametersV1 migrationPoolParameters
 
 printRegenesis :: ProtocolVersion -> RegenesisData -> IO ()
 printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do
@@ -306,6 +326,8 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printAccessStructure "baker stake threshold" asBakerStakeThreshold
     printAccessStructure "add anonymity revokers" asAddAnonymityRevoker
     printAccessStructure "add identity providers" asAddIdentityProvider
+    mapM_ (printAccessStructure "cooldown parameters") asCooldownParameters
+    mapM_ (printAccessStructure "time parameters") asTimeParameters
     where
         totalGTU = sum (gaBalance <$> genesisAccounts)
 
@@ -345,34 +367,11 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
             putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. erEuroPerEnergy)
             putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. erMicroGTUPerEuro)
-            putStrLn $ "  - pool owner cooldown epochs: " ++ show (_cpCooldownParameters ^. cpPoolOwnerCooldown)
-            putStrLn $ "  - delegator cooldown epochs: " ++ show (_cpCooldownParameters ^. cpDelegatorCooldown)
+            printCooldownParametersV1 _cpCooldownParameters
             putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
-            putStrLn $ "  - L-Pool parameters:"
-            putStrLn $ "    + finalization commision: "
-                        ++ show (_cpPoolParameters ^. ppLPoolCommissions ^. finalizationCommission)
-            putStrLn $ "    + baking commision: "
-                        ++ show (_cpPoolParameters ^. ppLPoolCommissions ^. bakingCommission)
-            putStrLn $ "    + transaction commision: "
-                        ++ show (_cpPoolParameters ^. ppLPoolCommissions ^. transactionCommission)
-            putStrLn $ "  - normal pool parameters:"
-            putStrLn $ "    + allowed (inclusive) range for finalization commision: "
-                        ++ showInclusiveRange show (_cpPoolParameters ^. ppCommissionBounds ^. finalizationCommissionRange)
-            putStrLn $ "    + allowed (inclusive) range for baking commision: "
-                        ++ showInclusiveRange show (_cpPoolParameters ^. ppCommissionBounds ^. bakingCommissionRange)
-            putStrLn $ "    + allowed (inclusive) range for transaction commision: "
-                        ++ showInclusiveRange show (_cpPoolParameters ^. ppCommissionBounds ^. transactionCommissionRange)
-            putStrLn $ "    + minimum stake to be a baker: "
-                        ++ show (_cpPoolParameters ^. ppMinimumEquityCapital)
-            putStrLn $ "    + minimum fraction of total stake for a pool to be finalizer: "
-                        ++ show (_cpPoolParameters ^. ppMinimumFinalizationCapital)
-            putStrLn $ "    + maximum fraction of total stake a pool is allowed hold: "
-                        ++ show (_cpPoolParameters ^. ppCapitalBound)
-            putStrLn $ "    + maximum factor a pool may stake relative to the baker's stake: "
-                        ++ show (_cpPoolParameters ^. ppLeverageBound)
+            printPoolParametersV1 _cpPoolParameters
             putStrLn "  - reward parameters:"
             putStrLn "    + mint distribution:"
-            putStrLn $ "      * mint rate per slot: " ++ show (_cpRewardParameters ^. mdMintPerSlot)
             putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
             putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
             putStrLn "    + transaction fee distribution:"
@@ -383,7 +382,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
             putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
             putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
-            putStrLn $ "    + reward period length (in epochs): " ++ show (_cpTimeParameters ^. tpRewardPeriodLength)
+            printTimeParametersV1 _cpTimeParameters
 
             let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
                   Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
@@ -395,6 +394,40 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             case chainParametersVersionFor spv of
                 SCPV0 -> printInitialChainParametersV0 genesisChainParameters
                 SCPV1 -> printInitialChainParametersV1 genesisChainParameters
+
+printCooldownParametersV1 :: CooldownParameters 'ChainParametersV1 -> IO ()
+printCooldownParametersV1 cp = do
+        putStrLn $ "  - pool owner cooldown epochs: " ++ show (cp ^. cpPoolOwnerCooldown)
+        putStrLn $ "  - delegator cooldown epochs: " ++ show (cp ^. cpDelegatorCooldown)
+
+printTimeParametersV1 :: TimeParameters 'ChainParametersV1 -> IO ()
+printTimeParametersV1 tp = do
+        putStrLn $ "  - time parameters:"
+        putStrLn $ "    + reward period length (in epochs): " ++ show (tp ^. tpRewardPeriodLength)
+        putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpRewardPeriodLength)
+
+printPoolParametersV1 :: PoolParameters 'ChainParametersV1 -> IO ()
+printPoolParametersV1 pp = do
+        putStrLn $ "  - L-Pool parameters:"
+        putStrLn $ "    + finalization commission: "
+                    ++ show (pp ^. ppLPoolCommissions . finalizationCommission)
+        putStrLn $ "    + baking commission: "
+                    ++ show (pp ^. ppLPoolCommissions . bakingCommission)
+        putStrLn $ "    + transaction commission: "
+                    ++ show (pp ^. ppLPoolCommissions . transactionCommission)
+        putStrLn $ "  - normal pool parameters:"
+        putStrLn $ "    + allowed (inclusive) range for finalization commission: "
+                    ++ showInclusiveRange show (pp ^. ppCommissionBounds . finalizationCommissionRange)
+        putStrLn $ "    + allowed (inclusive) range for baking commission: "
+                    ++ showInclusiveRange show (pp ^. ppCommissionBounds . bakingCommissionRange)
+        putStrLn $ "    + allowed (inclusive) range for transaction commission: "
+                    ++ showInclusiveRange show (pp ^. ppCommissionBounds . transactionCommissionRange)
+        putStrLn $ "    + minimum stake to be a baker: "
+                    ++ show (pp ^. ppMinimumEquityCapital)
+        putStrLn $ "    + maximum fraction of total stake a pool is allowed hold: "
+                    ++ show (pp ^. ppCapitalBound)
+        putStrLn $ "    + maximum factor a pool may stake relative to the baker's stake: "
+                    ++ show (pp ^. ppLeverageBound)
 
 showBalance :: Amount -> Amount -> String
 showBalance totalGTU balance =
