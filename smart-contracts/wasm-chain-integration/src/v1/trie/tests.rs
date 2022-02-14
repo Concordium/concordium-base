@@ -247,14 +247,13 @@ fn prop_iterator_locked_for_modification() {
                     trie.delete(&mut loader, &modification).is_none(),
                     "The subtree should be locked for modification (removal)."
                 );
-                // delete the iterator
                 trie.iter_delete(&mut loader, &mut iter);
                 ensure!(
-                    trie.insert(&mut loader, &modification, vec![]).is_none(),
+                    trie.insert(&mut loader, &modification, vec![]).is_some(),
                     "The subtree should not be locked for modification (insertion)."
                 );
                 ensure!(
-                    trie.delete(&mut loader, &modification).is_none(),
+                    trie.delete(&mut loader, &modification).is_some(),
                     "The subtree should not be locked for modification (removal)."
                 );
             } else {
