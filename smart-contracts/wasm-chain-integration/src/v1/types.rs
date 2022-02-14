@@ -682,13 +682,15 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     }
 
     pub fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntry> {
-        let id = self.state_trie.insert(&mut self.backing_store, key, Vec::new());
-        let idx = self.entry_mapping.len();
-        self.entry_mapping.push(Some(EntryWithKey {
-            id:  id.0,
-            key: key.into(),
-        }));
-        Ok(InstanceStateEntry::new(self.current_generation, idx))
+        if let Some(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
+            let idx = self.entry_mapping.len();
+            self.entry_mapping.push(Some(EntryWithKey {
+                id:  id.0,
+                key: key.into(),
+            }));
+            return Ok(InstanceStateEntry::new(self.current_generation, idx));
+        }
+        bail!("Cannot create entry.")
     }
 
     pub fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
@@ -764,9 +766,9 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
         match self.iterators.get_mut(idx) {
             Some(iter) => match iter {
-                Some(_) => {
+                Some(existing_iter) => {
                     // Unlock the nodes associated with this iterator.
-                    self.iterator_roots.remove(&idx);
+                    self.state_trie.delete_iter(&mut self.backing_store, existing_iter);
                     // Finally we remove the iterator by setting it to `None`.
                     *iter = None;
                     Ok(1)

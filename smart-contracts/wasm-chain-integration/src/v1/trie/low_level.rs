@@ -656,6 +656,9 @@ struct MutableNode<V> {
     value:      Option<usize>,
     path:       Stem,
     children:   ChildrenCow<V>,
+    /// 0 means the subtree is open for modifications (inserting and removing
+    /// nodes) > 0 means the subtree is closed for modifications.
+    locked:     u16,
 }
 
 impl<V> ChildrenCow<V> {
@@ -681,6 +684,7 @@ impl<V> Default for MutableNode<V> {
                 generation: 0,
                 value:      tinyvec::TinyVec::new(),
             },
+            locked:     0,
         }
     }
 }
@@ -711,6 +715,7 @@ impl<V> MutableNode<V> {
             value,
             path: self.path.clone(), // this is a cheap clone as well.
             children: self.children.clone(),
+            locked: 0,
         }
     }
 }
@@ -1320,6 +1325,7 @@ impl<V> Node<V> {
             value: entry_idx,
             path: self.path.clone(),
             children: ChildrenCow::Borrowed(self.children.clone()),
+            locked: 0,
         }
     }
 
@@ -1496,6 +1502,49 @@ impl<V> MutableTrie<V> {
         }
     }
 
+    pub fn delete_iter(
+        &mut self,
+        loader: &mut impl FlatLoadable,
+        iterator: &mut Iterator,
+    ) -> Option<()> {
+        let mut key_iter = iterator.get_key().iter();
+        let owned_nodes = &mut self.nodes;
+        let borrowed_values = &mut self.borrowed_values;
+        let entries = &mut self.entries;
+        let mut node_idx = self.generation_roots.last()?.0?;
+        loop {
+            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
+                FollowStem::Equal => {
+                    // we decrement the lock for this root.
+                    node.locked = node.locked.saturating_sub(1);
+                    return Some(());
+                }
+                FollowStem::KeyIsPrefix {
+                    ..
+                } => {
+                    return None;
+                }
+                FollowStem::StemIsPrefix {
+                    key_step,
+                } => {
+                    let (_, children) =
+                        make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
+                    let key_usize = usize::from(key_step) << 56;
+                    let pair = children
+                        .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
+                        .ok()?;
+                    node_idx = unsafe { children.get_unchecked(pair) }.index();
+                }
+                FollowStem::Diff {
+                    ..
+                } => {
+                    return None;
+                }
+            };
+        }
+    }
+
     pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
@@ -1507,12 +1556,14 @@ impl<V> MutableTrie<V> {
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
+                    // we lock this node and vice versa the subtree for modifications.
+                    node.locked += 1;
                     return Some(Iterator {
                         root:       node_idx,
                         key:        key.into(),
                         next_child: None,
                         stack:      Vec::new(),
-                    })
+                    });
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -1749,6 +1800,10 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            // We stumbled upon a locked node when traversing down the tree.
+            if node.locked > 0 {
+                return None;
+            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
                     // we found it, delete the value first and save it for returning.
@@ -1841,6 +1896,10 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            // We encountered  a locked node when traversing down the tree.
+            if node.locked > 0 {
+                return None;
+            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -1921,7 +1980,7 @@ impl<V> MutableTrie<V> {
         loader: &mut impl FlatLoadable,
         key: &[Key],
         new_value: V,
-    ) -> (EntryId, Option<EntryId>) {
+    ) -> Option<(EntryId, Option<EntryId>)> {
         let mut key_iter = key.iter();
         let generation_root =
             self.generation_roots.last().expect("There should always be at least 1 generation.").0;
@@ -1946,12 +2005,13 @@ impl<V> MutableTrie<V> {
                     generation,
                     value: tinyvec::TinyVec::new(),
                 },
+                locked: 0,
             });
             self.generation_roots
                 .last_mut()
                 .expect("We already checked the list is not empty.")
                 .0 = Some(root_idx);
-            return (entry_idx, None);
+            return Some((entry_idx, None));
         };
         let generation = self.nodes[node_idx].generation;
         let owned_nodes = &mut self.nodes;
@@ -1961,6 +2021,11 @@ impl<V> MutableTrie<V> {
             let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            // We encountered a locked node when traversing down the tree.
+            if node.locked > 0 {
+                return None;
+            }
+
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
@@ -1973,7 +2038,7 @@ impl<V> MutableTrie<V> {
                         entry_idx: value_idx,
                     });
                     node.value = Some(entry_idx);
-                    return (entry_idx, old_entry_idx);
+                    return Some((entry_idx, old_entry_idx));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -2004,8 +2069,9 @@ impl<V> MutableTrie<V> {
                         value: node_value,
                         path: remaining_stem,
                         children: node_children,
+                        locked: 0,
                     });
-                    return (entry_idx, None);
+                    return Some((entry_idx, None));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -2037,8 +2103,9 @@ impl<V> MutableTrie<V> {
                                     generation,
                                     value: tinyvec::TinyVec::new(),
                                 },
+                                locked: 0,
                             });
-                            return (entry_idx, None);
+                            return Some((entry_idx, None));
                         }
                     }
                 }
@@ -2094,14 +2161,16 @@ impl<V> MutableTrie<V> {
                             generation,
                             value: tinyvec::TinyVec::new(),
                         },
+                        locked: 0,
                     });
                     owned_nodes.push(MutableNode {
                         generation,
                         value: node_value,
                         path: remaining_stem,
                         children: node_children,
+                        locked: 0,
                     });
-                    return (entry_idx, None);
+                    return Some((entry_idx, None));
                 }
             }
         }

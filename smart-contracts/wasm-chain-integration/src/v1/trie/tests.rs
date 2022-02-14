@@ -274,6 +274,40 @@ fn prop_matches_reference_delete_subtree() {
 }
 
 #[test]
+/// Check that iterators cannot be modified.
+fn prop_iterator_locked_for_modification() {
+    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+        for (prefix, _) in inputs.iter() {
+            let locked_prefix = prefix.clone();
+            if let Some(mut iter) = trie.iter(&mut loader, &locked_prefix) {
+                let mut modification = locked_prefix.clone();
+                modification.push(0);
+                ensure!(
+                    trie.insert(&mut loader, &modification, vec![]).is_none(),
+                    "The subtree should be locked for modification (insertion)."
+                );
+                ensure!(
+                    trie.delete(&mut loader, &modification).is_none(),
+                    "The subtree should be locked for modification (removal)."
+                );
+                trie.delete_iter(&mut loader, &mut iter);
+                ensure!(
+                    trie.insert(&mut loader, &modification, vec![]).is_some(),
+                    "The subtree should not be locked for modification (insertion)."
+                );
+                ensure!(
+                    trie.delete(&mut loader, &modification).is_some(),
+                    "The subtree should not be locked for modification (removal)."
+                );
+            }
+        }
+        Ok(())
+    };
+    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
 /// Check that the mutable trie delete prefix does not affect generations that
 /// are frozen.
 fn prop_matches_reference_checkpoint_delete_subtree() {
