@@ -1800,7 +1800,7 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            // We stumbled upon a locked node when traversing down the tree.
+            // We encountered a locked node when traversing down the tree.
             if node.locked > 0 {
                 return None;
             }
@@ -1896,14 +1896,14 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            // We encountered  a locked node when traversing down the tree.
-            if node.locked > 0 {
-                return None;
-            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
+                    // We encountered  a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
@@ -1920,6 +1920,10 @@ impl<V> MutableTrie<V> {
                     return None;
                 }
                 _ => {
+                    // We encountered  a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     // We found the subtree to remove.
                     // First, invalidate entry of the node and all of its children.
                     let mut nodes_to_invalidate = vec![node_idx];
