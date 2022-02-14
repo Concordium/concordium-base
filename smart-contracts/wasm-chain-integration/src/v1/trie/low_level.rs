@@ -1573,6 +1573,7 @@ impl<V> MutableTrie<V> {
                     root_key.extend_from_slice(key);
                     root_key.push(stem_step);
                     root_key.extend_from_slice(stem_slice);
+                    node.locked += 1;
                     return Some(Iterator {
                         root:       node_idx,
                         key:        root_key,
