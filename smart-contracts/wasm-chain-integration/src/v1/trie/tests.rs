@@ -195,7 +195,7 @@ fn prop_matches_reference_delete_subtree() {
             for entry in inserted_entries {
                 ensure!(
                     trie.with_entry(entry, &mut loader, |_| ()).is_none(),
-                    "Entry should've been invalidated."
+                    "Entry {:?} should've been invalidated ({:?}).", entry, prefix
                 )
             }
 
