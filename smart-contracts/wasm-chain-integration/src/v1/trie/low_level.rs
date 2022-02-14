@@ -1792,22 +1792,28 @@ impl<V> MutableTrie<V> {
                     return None;
                 }
                 _ => {
-                    // invalidate entry of the node and all of its children.
-                    // collect the immediate children we need to invalidate.
-                    let mut nodes_to_invalidate = vec![node_idx];
-                    // traverse each child subtree and invalidate them.
-                    while let Some(node_idx) = nodes_to_invalidate.pop() {
-                        let to_invalidate = &owned_nodes[node_idx];
-                        if let Some(entry) = to_invalidate.value {
-                            entries[entry] = Entry::Deleted;
-                        }
+                    // We found the subtree to remove.
+                    // First, invalidate entry of the node and all of its children.
+                    {
+                        let mut nodes_to_invalidate = vec![node_idx];
+                        // traverse each child subtree and invalidate them.
+                        while let Some(node_idx) = nodes_to_invalidate.pop() {
+                            let to_invalidate = &owned_nodes[node_idx];
+                            if let Some(entry) = to_invalidate.value {
+                                entries[entry] = Entry::Deleted;
+                            }
 
-                        match &to_invalidate.children {
-                            ChildrenCow::Borrowed(_) => (),
-                            ChildrenCow::Owned {
+                            // if children are borrowed then by construction there are no entries
+                            // in them. Hence we only need to recurse into owned children.
+                            if let ChildrenCow::Owned {
                                 generation,
                                 value,
-                            } => {
+                            } = &to_invalidate.children
+                            {
+                                // if children are of a previous generation then, again, we
+                                // do not have to recurse, since all entries will be in fully owned
+                                // nodes, and that means they will be of
+                                // current generation.
                                 if to_invalidate.generation == *generation {
                                     for v in value.iter() {
                                         nodes_to_invalidate.push(v.index())
@@ -1816,8 +1822,8 @@ impl<V> MutableTrie<V> {
                             }
                         }
                     }
-                    // we found the subtree to remove. Now traverse up and fixup the remaining part
-                    // of the tree. if we deleted the root the tree is empty, so set it as such.
+                    // Now traverse up and fixup the remaining part
+                    // of the tree. If we deleted the root the tree is empty, so set it as such.
                     if let Some((child_idx, parent_idx)) = parent_idx {
                         let (has_value, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
