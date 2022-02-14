@@ -176,9 +176,6 @@ fn prop_matches_reference_delete_subtree() {
             for input in &inputs {
                 if input.0.strip_prefix(&prefix[..]).is_some() {
                     if let Some(e) = trie.get_entry(&mut loader, &input.0) {
-                        if inputs.len() == 1 {
-                            println!("{:?}", e);
-                        }
                         inserted_entries.push(e);
                     } else {
                         bail!("The prefix should've been present in the trie.");
