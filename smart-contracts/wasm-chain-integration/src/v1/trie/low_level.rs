@@ -1795,11 +1795,49 @@ impl<V> MutableTrie<V> {
                     // we found the subtree to remove. Now traverse up and fixup the remaining part
                     // of the tree. if we deleted the root set the tree is empty, so set it as such.
                     if let Some((child_idx, parent_idx)) = parent_idx {
-                        // invalidate pointers to the node
-                        // this is wrong.
-                        //entries[child_idx] = Entry::Deleted;
+                        // invalidate pointers to the node and all of its children.
+                        if let Some(entry) = node.value {
+                            entries[entry] = Entry::Deleted;
+                        }
+
+                        // collect the immediate children we need to invalidate.
+                        let mut children_to_invalidate = vec![];
+                        match &node.children {
+                            ChildrenCow::Borrowed(_) => (),
+                            ChildrenCow::Owned {
+                                generation,
+                                value,
+                            } => {
+                                if node.generation == *generation {
+                                    children_to_invalidate.extend_from_slice(value);
+                                }
+                            }
+                        }
+
+                        // traverse each child subtree and invalidate them.
+                        while let Some(child) = children_to_invalidate.pop() {
+                            let index = child.index();
+                            let to_invalidate = &owned_nodes[index];
+                            if let Some(entry) = to_invalidate.value {
+                                entries[entry] = Entry::Deleted;
+                            }
+
+                            match &to_invalidate.children {
+                                ChildrenCow::Borrowed(_) => (),
+                                ChildrenCow::Owned {
+                                    generation,
+                                    value,
+                                } => {
+                                    if to_invalidate.generation == *generation {
+                                        children_to_invalidate.extend_from_slice(value);
+                                    }
+                                }
+                            }
+                        }
+
                         let (has_value, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
+
                         children.remove(child_idx);
                         // if the node does not have a value and it has one child, then it should be
                         // collapsed (path compressed)

@@ -171,11 +171,34 @@ fn prop_matches_reference_delete_subtree() {
                 .cloned()
                 .collect::<BTreeMap<_, _>>();
             let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+
+            let mut inserted_entries = vec![];
+            for input in &inputs {
+                if input.0.strip_prefix(&prefix[..]).is_some() {
+                    if let Some(e) = trie.get_entry(&mut loader, &input.0) {
+                        if inputs.len() == 1 {
+                            println!("{:?}", e);
+                        }
+                        inserted_entries.push(e);
+                    } else {
+                        bail!("The prefix should've been present in the trie.");
+                    }
+                }
+            }
+
             let reference_iter = reference.iter();
             ensure!(
                 trie.delete_prefix(&mut loader, &prefix[..]).is_some(),
                 "There is at least one value with the given prefix, so deleting should succeed."
             );
+
+            for entry in inserted_entries {
+                ensure!(
+                    trie.with_entry(entry, &mut loader, |_| ()).is_none(),
+                    "Entry should've been invalidated."
+                )
+            }
+
             let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
                 i
             } else if !reference.is_empty() {
@@ -198,16 +221,20 @@ fn prop_matches_reference_delete_subtree() {
                 trie.next(&mut loader, &mut iterator).is_none(),
                 "Iterator has remaining values."
             );
-            // check that entries which have been removed are invalidated.
-            if let Some(mut removed_iter) = trie.iter(&mut loader, &prefix[..]) {
-                while let Some(child) = trie.next(&mut loader, &mut removed_iter) {
-                    // todo
-                }
-            }
         }
         Ok(())
     };
     QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
+/// Check that iterators cannot be modified.
+fn prop_iterator_locked() {
+    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+
+        Ok(())
+    };
 }
 
 #[test]
