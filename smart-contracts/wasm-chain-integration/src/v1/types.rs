@@ -495,6 +495,9 @@ pub struct InstanceState<'a, BackingStore> {
     iterators:          Vec<Option<trie::Iterator>>,
     /// Opaque pointer to the state of the instance in consensus.
     state_trie:         trie::StateTrie<'a>,
+    /// Table of iterator ids and their corresponding root.
+    /// Keys present in this table are to be considered locked for modification
+    /// i.e., there cannot be added or removed children of the root key.
     iterator_roots:     std::collections::BTreeMap<usize, Vec<u8>>,
 }
 
