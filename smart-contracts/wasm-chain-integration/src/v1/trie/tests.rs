@@ -174,8 +174,11 @@ fn prop_matches_reference_delete_subtree() {
 
             let mut inserted_entries = vec![];
             for input in &inputs {
-                if input.0.strip_prefix(&prefix[..]).is_some() {
+                if input.0.starts_with(&prefix[..]) {
                     if let Some(e) = trie.get_entry(&mut loader, &input.0) {
+                        if inputs[0].0.is_empty() && inputs[0].1.is_empty() {
+                            println!("{:?}", e);
+                        }
                         inserted_entries.push(e);
                     } else {
                         bail!("The prefix should've been present in the trie.");
