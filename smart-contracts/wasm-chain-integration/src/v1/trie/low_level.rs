@@ -601,7 +601,7 @@ struct MutableNode<V> {
     children:   ChildrenCow<V>,
     /// Whether it is allowed to remove this node or append new children.
     /// Hence when a node is associated with an iterator it is not allowed to
-    /// remove it or appending new children.
+    /// remove it or appending/removing new children.
     locked:     bool,
 }
 
@@ -1422,6 +1422,27 @@ impl<V> MutableTrie<V> {
                     // we are done
                     return None;
                 }
+            }
+        }
+    }
+
+    pub fn iter_delete(&mut self, loader: &mut impl FlatLoadable, iterator: &mut Iterator) {
+        while let Some(entry) = self.next(loader, iterator) {
+            match self.entries[entry] {
+                Entry::ReadOnly {
+                    borrowed,
+                    entry_idx,
+                } => {
+                    todo!()
+                }
+                Entry::Mutable {
+                    entry_idx,
+                } => {
+                    let owned_nodes = &mut self.nodes;
+                    let node = unsafe { owned_nodes.get_unchecked_mut(entry_idx) };
+                    node.locked = false;
+                }
+                Entry::Deleted => todo!(),
             }
         }
     }

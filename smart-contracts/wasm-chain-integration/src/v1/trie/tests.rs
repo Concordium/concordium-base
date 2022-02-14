@@ -195,7 +195,9 @@ fn prop_matches_reference_delete_subtree() {
             for entry in inserted_entries {
                 ensure!(
                     trie.with_entry(entry, &mut loader, |_| ()).is_none(),
-                    "Entry {:?} should've been invalidated ({:?}).", entry, prefix
+                    "Entry {:?} should've been invalidated ({:?}).",
+                    entry,
+                    prefix
                 )
             }
 
@@ -229,12 +231,39 @@ fn prop_matches_reference_delete_subtree() {
 
 #[test]
 /// Check that iterators cannot be modified.
-fn prop_iterator_locked() {
+fn prop_iterator_locked_for_modification() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
-
+        for (prefix, _) in inputs.iter() {
+            let locked_prefix = prefix.clone();
+            if let Some(mut iter) = trie.iter(&mut loader, &locked_prefix) {
+                let mut modification = locked_prefix.clone();
+                modification.push(0);
+                ensure!(
+                    trie.insert(&mut loader, &modification, vec![]).is_none(),
+                    "The subtree should be locked for modification (insertion)."
+                );
+                ensure!(
+                    trie.delete(&mut loader, &modification).is_none(),
+                    "The subtree should be locked for modification (removal)."
+                );
+                // delete the iterator
+                trie.iter_delete(&mut loader, &mut iter);
+                ensure!(
+                    trie.insert(&mut loader, &modification, vec![]).is_none(),
+                    "The subtree should not be locked for modification (insertion)."
+                );
+                ensure!(
+                    trie.delete(&mut loader, &modification).is_none(),
+                    "The subtree should not be locked for modification (removal)."
+                );
+            } else {
+                bail!("Failed creating iterator.");
+            }
+        }
         Ok(())
     };
+    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
