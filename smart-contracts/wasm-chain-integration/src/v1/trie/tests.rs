@@ -232,7 +232,7 @@ fn prop_matches_reference_delete_subtree() {
 
             let reference_iter = reference.iter();
             ensure!(
-                trie.delete_prefix(&mut loader, &prefix[..]).is_some(),
+                trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap(),
                 "There is at least one value with the given prefix, so deleting should succeed."
             );
 
@@ -282,7 +282,7 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         for (prefix, _) in inputs.iter() {
             trie.new_generation();
-            trie.delete_prefix(&mut loader, &prefix[..]);
+            trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap();
         }
         trie.normalize(0);
         let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {

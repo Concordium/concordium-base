@@ -89,3 +89,7 @@ pub const MEMORY_COST_FACTOR: u32 = 100;
 /// administrative costs of an invoke. Specific costs of the action are charged
 /// later by the scheduler.
 pub const INVOKE_BASE_COST: u64 = 500; // currently set as log event base cost. Revise based on benchmarks.
+
+/// Step cost of a tree traversal when invalidating entries.
+/// TODO: Needs benchmarking.
+pub const TREE_TRAVERSAL_STEP_COST: u64 = 10;

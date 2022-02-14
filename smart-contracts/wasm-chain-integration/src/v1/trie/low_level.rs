@@ -17,6 +17,8 @@ const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 /// A type that can be used to collect auxiliary information while a mutable
 /// trie is being frozen. Particular use-cases of this are collecting the size
 /// of new data, as well as new persistent nodes.
+/// TODO: Methods should probably return Result/Option so that we can terminate
+/// early in case of out of energy.
 pub trait Collector<V> {
     fn add_value(&mut self, data: &V);
     fn add_path(&mut self, path: usize);
@@ -48,7 +50,7 @@ impl SizeCollector {
 }
 
 // TODO: Make sure this is adequate. There is a bit of overhead with size length
-// when se store data.
+// when we store data.
 impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
     #[inline]
     fn add_value(&mut self, data: &V) { self.num_bytes += data.as_ref().len() as u64; }
@@ -1362,6 +1364,24 @@ impl<V> MutableTrie<V> {
     pub fn is_empty(&self) -> bool { self.generation_roots.last().map_or(false, |x| x.0.is_none()) }
 }
 
+/// A trait that supports keeping track of resources during tree traversal, to
+/// make sure that resource bounds are not exceeded.
+pub trait TraversalCounter {
+    type Err: std::fmt::Debug;
+    fn tick(&mut self) -> Result<(), Self::Err>;
+}
+/// A counter that does not count anything, and always returns Ok(()).
+pub struct EmptyCounter;
+#[derive(Debug)]
+pub enum NoError {}
+
+impl TraversalCounter for EmptyCounter {
+    type Err = NoError;
+
+    #[inline(always)]
+    fn tick(&mut self) -> Result<(), Self::Err> { Ok(()) }
+}
+
 pub type EntryId = usize;
 
 impl<V> MutableTrie<V> {
@@ -1831,14 +1851,23 @@ impl<V> MutableTrie<V> {
     }
 
     /// Delete the entire subtree whose keys match the given prefix, that is,
-    /// where the given key is a prefix.
-    pub fn delete_prefix(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<()> {
+    /// where the given key is a prefix. Return if anything was deleted.
+    pub fn delete_prefix<L: FlatLoadable, C: TraversalCounter>(
+        &mut self,
+        loader: &mut L,
+        key: &[Key],
+        counter: &mut C,
+    ) -> Result<bool, C::Err> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         let mut parent_idx = None;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let mut node_idx = if let Some(idx) = self.generation_roots.last().and_then(|x| x.0) {
+            idx
+        } else {
+            return Ok(false);
+        };
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
@@ -1852,13 +1881,13 @@ impl<V> MutableTrie<V> {
                         parent_idx = Some((c_idx, node_idx));
                         node_idx = pair.index();
                     } else {
-                        return None;
+                        return Ok(false);
                     }
                 }
                 FollowStem::Diff {
                     ..
                 } => {
-                    return None;
+                    return Ok(false);
                 }
                 _ => {
                     // We found the subtree to remove.
@@ -1866,6 +1895,7 @@ impl<V> MutableTrie<V> {
                     let mut nodes_to_invalidate = vec![node_idx];
                     // traverse each child subtree and invalidate them.
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
+                        counter.tick()?;
                         let to_invalidate = &owned_nodes[node_idx];
                         if let Some(entry) = to_invalidate.value {
                             entries[entry] = Entry::Deleted;
@@ -1905,10 +1935,10 @@ impl<V> MutableTrie<V> {
                             }
                         }
                     } else {
-                        self.generation_roots.last_mut()?.0 = None;
-                        return Some(());
+                        self.generation_roots.last_mut().map(|x| x.0 = None);
+                        return Ok(true);
                     }
-                    return Some(());
+                    return Ok(true);
                 }
             };
         }

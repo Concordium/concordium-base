@@ -386,7 +386,7 @@ mod host {
         // this cannot overflow on 64-bit platforms, so it is safe to just add
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let result = state.delete_prefix(key)?;
+        let result = state.delete_prefix(energy, key)?;
         stack.push_value(result);
         Ok(())
     }

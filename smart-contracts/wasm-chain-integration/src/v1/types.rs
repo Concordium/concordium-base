@@ -1,7 +1,10 @@
 use std::io::Write;
 
-use super::{trie, Interrupt, ParameterVec, StateLessReceiveHost};
-use crate::{resumption::InterruptedState, type_matches, v0};
+use super::{
+    trie::{self, low_level::TraversalCounter},
+    Interrupt, ParameterVec, StateLessReceiveHost,
+};
+use crate::{resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
@@ -648,6 +651,15 @@ impl InstanceStateIteratorOption {
 
 pub type StateResult<A> = anyhow::Result<A>;
 
+impl TraversalCounter for InterpreterEnergy {
+    type Err = anyhow::Error;
+
+    #[inline(always)]
+    fn tick(&mut self) -> Result<(), Self::Err> {
+        self.tick_energy(crate::constants::TREE_TRAVERSAL_STEP_COST)
+    }
+}
+
 impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     pub fn new(
         current_generation: u32,
@@ -714,12 +726,16 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn delete_prefix(&mut self, key: &[u8]) -> StateResult<u32> {
+    pub fn delete_prefix(
+        &mut self,
+        energy: &mut InterpreterEnergy,
+        key: &[u8],
+    ) -> StateResult<u32> {
         if is_key_locked(key, &self.iterator_roots) {
             return Ok(0);
         }
 
-        if self.state_trie.delete_prefix(&mut self.backing_store, key).is_some() {
+        if self.state_trie.delete_prefix(&mut self.backing_store, key, energy)? {
             Ok(1)
         } else {
             Ok(0)
