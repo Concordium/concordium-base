@@ -1388,6 +1388,11 @@ impl<V> MutableTrie<V> {
 
 pub type EntryId = usize;
 
+/// Too many
+#[derive(Debug, Error)]
+#[error("Too many iterators at the same root.")]
+pub struct TooManyIterators;
+
 impl<V> MutableTrie<V> {
     pub fn new_generation(&mut self) {
         let num_nodes = self.nodes.len();
@@ -1526,26 +1531,34 @@ impl<V> MutableTrie<V> {
         n.locked = n.locked.saturating_sub(1);
     }
 
-    pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
+    pub fn iter(
+        &mut self,
+        loader: &mut impl FlatLoadable,
+        key: &[Key],
+    ) -> Result<Option<Iterator>, TooManyIterators> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let mut node_idx = if let Some(node_idx) = self.generation_roots.last().and_then(|x| x.0) {
+            node_idx
+        } else {
+            return Ok(None);
+        };
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
-                    // we lock this node and vice versa the subtree for modifications.
-                    node.locked += 1;
-                    return Some(Iterator {
+                    // we lock this node and the entire subtree for modifications.
+                    node.locked = node.locked.checked_add(1).ok_or(TooManyIterators)?;
+                    return Ok(Some(Iterator {
                         root:         node_idx,
                         current_node: node_idx,
                         key:          key.into(),
                         next_child:   None,
                         stack:        Vec::new(),
-                    });
+                    }));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -1555,14 +1568,14 @@ impl<V> MutableTrie<V> {
                     root_key.extend_from_slice(key);
                     root_key.push(stem_step);
                     root_key.extend_from_slice(stem_slice);
-                    node.locked += 1;
-                    return Some(Iterator {
+                    node.locked = node.locked.checked_add(1).ok_or(TooManyIterators)?;
+                    return Ok(Some(Iterator {
                         root:         node_idx,
                         current_node: node_idx,
                         key:          root_key,
                         next_child:   None,
                         stack:        Vec::new(),
-                    });
+                    }));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -1570,15 +1583,19 @@ impl<V> MutableTrie<V> {
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let key_usize = usize::from(key_step) << 56;
-                    let pair = children
+                    let pair = if let Ok(pair) = children
                         .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
-                        .ok()?;
+                    {
+                        pair
+                    } else {
+                        return Ok(None);
+                    };
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
                 FollowStem::Diff {
                     ..
                 } => {
-                    return None;
+                    return Ok(None);
                 }
             };
         }
