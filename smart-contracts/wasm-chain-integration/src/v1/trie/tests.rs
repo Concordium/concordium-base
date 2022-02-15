@@ -275,7 +275,8 @@ fn prop_matches_reference_delete_subtree() {
 
 #[test]
 /// Check that iterators cannot be modified.
-// todo: tests with multiple iterators.
+// todo: tests with multiple iterators and that other parts of the tree are open
+// for modification.
 fn prop_iterator_locked_for_modification() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());

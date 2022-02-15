@@ -1505,19 +1505,10 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn delete_iter(
-        &mut self,
-        _loader: &mut impl FlatLoadable,
-        iterator: &mut Iterator,
-    ) -> Option<()> {
+    pub fn delete_iter(&mut self, _loader: &mut impl FlatLoadable, iterator: &mut Iterator) {
         let owned_nodes = &mut self.nodes;
-        // todo: needed? this safe lookup is here to be extra cautious if the instance
-        // state (the vec of iterators)  and the trie gets out of sync.
-        if let Some(n) = owned_nodes.get_mut(iterator.root) {
-            n.locked = n.locked.saturating_sub(1);
-            return Some(());
-        }
-        None
+        let n = &mut owned_nodes[iterator.root];
+        n.locked = n.locked.saturating_sub(1);
     }
 
     pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
