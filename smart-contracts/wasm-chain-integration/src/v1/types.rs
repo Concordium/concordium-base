@@ -665,10 +665,6 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     }
 
     pub fn lookup_entry(&mut self, key: &[u8]) -> InstanceStateEntryOption {
-        // check that the node is not part of an iterator
-        if is_key_locked(key, &self.iterator_roots) {
-            return InstanceStateEntryOption::new(None);
-        }
         if let Some(id) = self.state_trie.get_entry(&mut self.backing_store, key) {
             let idx = self.entry_mapping.len();
             self.entry_mapping.push(Some(EntryWithKey {
@@ -698,10 +694,6 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         ensure!(gen == self.current_generation, "Incorrect entry id generation.");
         let entry = if let Some(entry) = self.entry_mapping.get_mut(idx) {
             if let Some(entry) = std::mem::take(entry) {
-                // check that the node is not part of an iterator
-                if is_key_locked(&entry.key, &self.iterator_roots) {
-                    return Ok(0);
-                }
                 entry
             } else {
                 return Ok(0);
@@ -717,10 +709,6 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
     }
 
     pub fn delete_prefix(&mut self, key: &[u8]) -> StateResult<u32> {
-        if is_key_locked(key, &self.iterator_roots) {
-            return Ok(0);
-        }
-
         if self.state_trie.delete_prefix(&mut self.backing_store, key).is_some() {
             Ok(1)
         } else {
@@ -768,10 +756,15 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
             Some(iter) => match iter {
                 Some(existing_iter) => {
                     // Unlock the nodes associated with this iterator.
-                    self.state_trie.delete_iter(&mut self.backing_store, existing_iter);
-                    // Finally we remove the iterator by setting it to `None`.
-                    *iter = None;
-                    Ok(1)
+                    if self.state_trie.delete_iter(&mut self.backing_store, existing_iter).is_some()
+                    {
+                        // Finally we remove the iterator by setting it to `None`.
+                        *iter = None;
+                        Ok(1)
+                    } else {
+                        // the iterator could not be looked up in the trie.
+                        Ok(0)
+                    }
                 }
                 // already deleted.
                 None => Ok(0),
@@ -929,27 +922,4 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
             bail!("Invalid entry.");
         }
     }
-}
-
-/// Returns `true` if the node is marked as locked for modification (insertion
-/// and removal of child nodes) otherwise `false`.
-fn is_key_locked(key: &[u8], iterator_roots: &std::collections::BTreeMap<usize, Vec<u8>>) -> bool {
-    for iter_root in iterator_roots.values() {
-        if key.starts_with(iter_root) {
-            return true;
-        }
-    }
-    false
-}
-
-#[test]
-fn test_is_key_locked() {
-    let mut iterator_roots = std::collections::BTreeMap::new();
-    iterator_roots.insert(0, vec![0, 1]);
-    iterator_roots.insert(1, vec![0, 0, 1]);
-    assert!(!is_key_locked(&[0], &iterator_roots), "Subtree should not be locked");
-    assert!(!is_key_locked(&[0, 0], &iterator_roots), "Subtree should not be locked");
-    assert!(!is_key_locked(&[0, 0, 0], &iterator_roots), "Subtree should not be locked");
-    assert!(is_key_locked(&[0, 1], &iterator_roots), "Subtree should be locked");
-    assert!(is_key_locked(&[0, 1, 0], &iterator_roots), "Subtree should be locked");
 }

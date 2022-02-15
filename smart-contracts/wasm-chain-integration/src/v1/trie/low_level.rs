@@ -1255,16 +1255,19 @@ type Position = u16;
 
 #[derive(Debug)]
 pub struct Iterator {
+    /// The root of the iterator
+    /// This is stored here allow efficient deleting of iterators.
+    pub(crate) root:         usize,
     /// pointer to the table of nodes.
-    pub(crate) root:       usize,
+    pub(crate) current_node: usize,
     /// Key at the current position of the iterator.
-    pub(crate) key:        Vec<u8>,
+    pub(crate) key:          Vec<u8>,
     /// Next child to look at. This is None if
     /// we have to give out the value at the current node, and Some(_)
     /// otherwise.
-    pub(crate) next_child: Option<Position>,
+    pub(crate) next_child:   Option<Position>,
     /// Stack of parents and next positions, and key lengths of parents
-    pub(crate) stack:      Vec<(usize, Position, usize)>,
+    pub(crate) stack:        Vec<(usize, Position, usize)>,
 }
 
 impl Iterator {
@@ -1467,7 +1470,7 @@ impl<V> MutableTrie<V> {
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         loop {
-            let node_idx = iterator.root;
+            let node_idx = iterator.current_node;
             let node = &owned_nodes[node_idx];
             let next_child = if let Some(next_child) = iterator.next_child {
                 next_child
@@ -1485,14 +1488,14 @@ impl<V> MutableTrie<V> {
                 let (_, children) =
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                 let child = children[usize::from(next_child)];
-                iterator.root = child.index();
+                iterator.current_node = child.index();
                 iterator.key.push(child.key());
-                iterator.key.extend_from_slice(owned_nodes[iterator.root].path.as_ref());
+                iterator.key.extend_from_slice(owned_nodes[iterator.current_node].path.as_ref());
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
                     iterator.key.truncate(key_len);
-                    iterator.root = parent_idx;
+                    iterator.current_node = parent_idx;
                     iterator.next_child = Some(next_child);
                 } else {
                     // we are done
@@ -1504,45 +1507,17 @@ impl<V> MutableTrie<V> {
 
     pub fn delete_iter(
         &mut self,
-        loader: &mut impl FlatLoadable,
+        _loader: &mut impl FlatLoadable,
         iterator: &mut Iterator,
     ) -> Option<()> {
-        let mut key_iter = iterator.get_key().iter();
         let owned_nodes = &mut self.nodes;
-        let borrowed_values = &mut self.borrowed_values;
-        let entries = &mut self.entries;
-        let mut node_idx = self.generation_roots.last()?.0?;
-        loop {
-            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
-                FollowStem::Equal => {
-                    // we decrement the lock for this root.
-                    node.locked = node.locked.saturating_sub(1);
-                    return Some(());
-                }
-                FollowStem::KeyIsPrefix {
-                    ..
-                } => {
-                    return None;
-                }
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
-                    let (_, children) =
-                        make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
-                    let key_usize = usize::from(key_step) << 56;
-                    let pair = children
-                        .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
-                        .ok()?;
-                    node_idx = unsafe { children.get_unchecked(pair) }.index();
-                }
-                FollowStem::Diff {
-                    ..
-                } => {
-                    return None;
-                }
-            };
+        // todo: needed? this safe lookup is here to be extra cautious if the instance
+        // state (the vec of iterators)  and the trie gets out of sync.
+        if let Some(n) = owned_nodes.get_mut(iterator.root) {
+            n.locked = n.locked.saturating_sub(1);
+            return Some(());
         }
+        None
     }
 
     pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
@@ -1559,10 +1534,11 @@ impl<V> MutableTrie<V> {
                     // we lock this node and vice versa the subtree for modifications.
                     node.locked += 1;
                     return Some(Iterator {
-                        root:       node_idx,
-                        key:        key.into(),
-                        next_child: None,
-                        stack:      Vec::new(),
+                        root:         node_idx,
+                        current_node: node_idx,
+                        key:          key.into(),
+                        next_child:   None,
+                        stack:        Vec::new(),
                     });
                 }
                 FollowStem::KeyIsPrefix {
@@ -1575,10 +1551,11 @@ impl<V> MutableTrie<V> {
                     root_key.extend_from_slice(stem_slice);
                     node.locked += 1;
                     return Some(Iterator {
-                        root:       node_idx,
-                        key:        root_key,
-                        next_child: None,
-                        stack:      Vec::new(),
+                        root:         node_idx,
+                        current_node: node_idx,
+                        key:          root_key,
+                        next_child:   None,
+                        stack:        Vec::new(),
                     });
                 }
                 FollowStem::StemIsPrefix {
