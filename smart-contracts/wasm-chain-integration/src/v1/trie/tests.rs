@@ -85,7 +85,9 @@ fn prop_serialization() {
             Hashed::<Node<Vec<u8>>>::deserialize(&mut source).context("Failed to deserialize")?;
         ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
         let mut mutable = deserialized.data.make_mutable(0);
-        let mut iterator = if let Some(i) = mutable.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            mutable.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -176,7 +178,9 @@ fn prop_matches_reference() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (mut trie, mut loader) = make_mut_trie(inputs);
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -245,7 +249,9 @@ fn prop_matches_reference_delete_subtree() {
                 )
             }
 
-            let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+            let mut iterator = if let Some(i) =
+                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            {
                 i
             } else if !reference.is_empty() {
                 bail!("Iterator is empty, but the reference is not.");
@@ -282,7 +288,10 @@ fn prop_iterator_locked_for_modification() {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
         for (prefix, _) in inputs.iter() {
             let locked_prefix = prefix.clone();
-            if let Some(mut iter) = trie.iter(&mut loader, &locked_prefix) {
+            if let Some(mut iter) = trie
+                .iter(&mut loader, &locked_prefix)
+                .expect("This is the first iterator, so no overflow.")
+            {
                 let mut modification = locked_prefix.clone();
                 modification.push(0);
                 ensure!(
@@ -343,7 +352,9 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
             trie.delete_prefix(&mut loader, &prefix[..]);
         }
         trie.normalize(0);
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             return reference.is_empty();
@@ -383,7 +394,9 @@ fn prop_matches_reference_delete() {
             if trie.delete(&mut loader, &to_delete[..]).is_none() {
                 return false;
             }
-            let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+            let mut iterator = if let Some(i) =
+                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            {
                 i
             } else if !reference.is_empty() {
                 return false;
@@ -427,7 +440,9 @@ fn prop_matches_reference_after_freeze_thaw() {
             return reference.is_empty();
         };
         let mut trie = trie.make_mutable(0);
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             return reference.is_empty();
@@ -481,7 +496,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
 
             // insert additions into the new generation.
             let reference_iter = joined_reference.keys();
-            let mut iterator_gen_1 = if let Some(i) = trie.iter(&mut loader, &[]) {
+            let mut iterator_gen_1 = if let Some(i) =
+                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            {
                 i
             } else {
                 return joined_reference.is_empty();
@@ -510,7 +527,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
 
         trie.pop_generation(); // kill the generation we updated.
         let reference_iter = reference.iter();
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             return reference.is_empty();

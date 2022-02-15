@@ -603,10 +603,11 @@ pub struct InstanceStateEntryOption {
 pub struct InstanceStateIterator {
     index: u64,
 }
-/// Analogous to InstanceStateEntryOption.
+
+/// Analogous to [InstanceStateEntryResultOption].
 #[derive(Debug, Clone, Copy, From, Into)]
 #[repr(transparent)]
-pub struct InstanceStateIteratorOption {
+pub struct InstanceStateIteratorResultOption {
     index: u64,
 }
 
@@ -630,18 +631,20 @@ impl InstanceStateIterator {
     }
 }
 
-impl InstanceStateIteratorOption {
+impl InstanceStateIteratorResultOption {
+    pub const NEW_ERR: Self = Self {
+        index: 1u64 << 62,
+    };
+    pub const NEW_OK_NONE: Self = Self {
+        index: 0,
+    };
+
     /// Construct a new index from a generation and index.
     /// This assumes both value are small enough.
     #[inline]
-    pub fn new(opt: Option<(Generation, usize)>) -> Self {
-        match opt {
-            None => Self {
-                index: 0,
-            },
-            Some((gen, idx)) => Self {
-                index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
-            },
+    pub fn new_ok_some(gen: Generation, idx: usize) -> Self {
+        Self {
+            index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
         }
     }
 }
@@ -716,14 +719,18 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIteratorOption {
-        if let Some(iter) = self.state_trie.iter(&mut self.backing_store, prefix) {
-            let iter_id = self.iterators.len();
-            self.iterators.push(Some(iter));
-            self.iterator_roots.insert(iter_id, prefix.to_vec());
-            InstanceStateIteratorOption::new(Some((self.current_generation, iter_id)))
+    pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIteratorResultOption {
+        if let Ok(iter) = self.state_trie.iter(&mut self.backing_store, prefix) {
+            if let Some(iter) = iter {
+                let iter_id = self.iterators.len();
+                self.iterators.push(Some(iter));
+                self.iterator_roots.insert(iter_id, prefix.to_vec());
+                InstanceStateIteratorResultOption::new_ok_some(self.current_generation, iter_id)
+            } else {
+                InstanceStateIteratorResultOption::NEW_OK_NONE
+            }
         } else {
-            InstanceStateIteratorOption::new(None)
+            InstanceStateIteratorResultOption::NEW_ERR
         }
     }
 
