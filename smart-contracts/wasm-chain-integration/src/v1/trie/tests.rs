@@ -283,46 +283,74 @@ fn prop_iterator_locked_for_modification() {
         for (prefix, _) in inputs.iter() {
             let locked_prefix = prefix.clone();
             if let Some(mut iter) = trie.iter(&mut loader, &locked_prefix) {
-                let mut modification = locked_prefix.clone();
-                modification.push(0);
+                let mut locked_prefix_extended = locked_prefix.clone();
+                locked_prefix_extended.push(0);
                 ensure!(
-                    trie.insert(&mut loader, &modification, vec![]).is_none(),
-                    "The subtree should be locked for modification (insertion)."
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_none(),
+                    "The subtree should be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
-                    trie.delete(&mut loader, &modification).is_none(),
-                    "The subtree should be locked for modification (removal)."
+                    trie.delete(&mut loader, &locked_prefix_extended).is_none(),
+                    "The subtree should be locked for locked_prefix_extended (removal)."
                 );
                 ensure!(
-                    trie.delete_prefix(&mut loader, &modification).is_none(),
-                    "The subtree should be locked for modification (prefix removal)."
+                    trie.delete_prefix(&mut loader, &locked_prefix_extended).is_none(),
+                    "The subtree should be locked for locked_prefix_extended (prefix removal)."
                 );
-                let mut step_up = modification.clone();
-                step_up.pop();
+                // test that we can insert at another part of the tree
+                let mut step_up = locked_prefix.clone();
+                if let Some(popped) = step_up.pop() {
+                    let to_go = if popped == 0 {
+                        42
+                    } else {
+                        0
+                    };
+                    let mut new_path = step_up.clone();
+                    new_path.push(to_go);
+                    ensure!(
+                        trie.insert(&mut loader, &new_path, vec![]).is_some(),
+                        "The subtree should be open for new_path (inserting)."
+                    );
+                    ensure!(
+                        trie.delete(&mut loader, &new_path).is_some(),
+                        "The subtree should be open for new_path (removal)."
+                    );
+                    ensure!(
+                        trie.insert(&mut loader, &new_path, vec![]).is_some(),
+                        "The subtree should be open for new_path (inserting before prefix \
+                         removal)."
+                    );
+                    ensure!(
+                        trie.delete_prefix(&mut loader, &new_path).is_some(),
+                        "The subtree should be locked for new_path (prefix removal)."
+                    );
+                }
                 ensure!(
                     trie.delete_prefix(&mut loader, &step_up).is_none(),
-                    "The subtree should be locked for modification (prefix removal - step up)."
+                    "The subtree should be locked for step_up (prefix removal)."
                 );
+
                 trie.delete_iter(&mut loader, &mut iter);
                 ensure!(
-                    trie.insert(&mut loader, &modification, vec![]).is_some(),
-                    "The subtree should not be locked for modification (insertion)."
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
-                    trie.delete(&mut loader, &modification).is_some(),
-                    "The subtree should not be locked for modification (removal)."
+                    trie.delete(&mut loader, &locked_prefix_extended).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (removal)."
                 );
                 ensure!(
-                    trie.insert(&mut loader, &modification, vec![]).is_some(),
-                    "The subtree should not be locked for modification (insertion)."
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
-                    trie.delete_prefix(&mut loader, &modification).is_some(),
-                    "The subtree should not be locked for modification (prefix removal)."
+                    trie.delete_prefix(&mut loader, &locked_prefix_extended).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (prefix removal)."
                 );
                 ensure!(
                     trie.delete_prefix(&mut loader, &step_up).is_some(),
-                    "The subtree should not be locked for modification (prefix removal - step up)."
+                    "The subtree should not be locked for locked_prefix_extended (prefix removal \
+                     - step up)."
                 );
             }
         }

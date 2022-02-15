@@ -769,6 +769,21 @@ impl<V> ChildrenCow<V> {
             None
         }
     }
+
+    /// Return a mutable reference to the owned value, if the enum is an owned
+    /// variant. Otherwise return [None].
+    #[inline]
+    pub fn get_owned_mut(&mut self) -> Option<(u32, &mut [KeyIndexPair])> {
+        if let ChildrenCow::Owned {
+            generation,
+            value,
+        } = self
+        {
+            Some((*generation, value))
+        } else {
+            None
+        }
+    }
 }
 
 fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
@@ -1769,12 +1784,12 @@ impl<V> MutableTrie<V> {
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            // We encountered a locked node when traversing down the tree.
-            if node.locked > 0 {
-                return None;
-            }
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
+                    // The node is the root of an iterator and closed for modification.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     // we found it, delete the value first and save it for returning.
                     let rv = std::mem::take(&mut node.value);
                     if let Some(entry) = rv {
@@ -1835,6 +1850,10 @@ impl<V> MutableTrie<V> {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
+                    // the node we want to delete has a locked parent so we cannot.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
@@ -1995,18 +2014,19 @@ impl<V> MutableTrie<V> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        // the parent node index and the index of the parents child we're visiting.
+        let mut parent_node_idxs: Option<(usize, usize)> = None;
         loop {
             let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            // We encountered a locked node when traversing down the tree.
-            if node.locked > 0 {
-                return None;
-            }
-
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
+                    // The node is root of an iterator.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let value_idx = self.values.len();
                     self.values.push(new_value);
                     let old_entry_idx = node.value;
@@ -2030,35 +2050,49 @@ impl<V> MutableTrie<V> {
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
-                    // if the node had an entry before we need to update it if it was borrowed.
-                    let node_value = std::mem::replace(&mut node.value, Some(entry_idx));
-                    let node_children = std::mem::replace(&mut node.children, ChildrenCow::Owned {
-                        generation,
-                        value: tinyvec::TinyVec::new(),
-                    });
-                    node.path = key_slice.into();
+
+                    node.path = remaining_stem;
                     let new_node_idx = owned_nodes_len;
-                    node.children = ChildrenCow::Owned {
+
+                    // Update the parents children index with the new child
+                    if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
+                        if let Some((_, children)) = parent_node.children.get_owned_mut() {
+                            if let Some(key_and_index) = children.get_mut(child_idx) {
+                                let key = key_and_index.key();
+                                *key_and_index = KeyIndexPair::new(key, new_node_idx);
+                            }
+                        }
+                    } else if let Some(root) = self.generation_roots.last_mut() {
+                        root.0 = Some(new_node_idx);
+                    }
+
+                    let new_node = MutableNode {
                         generation,
-                        value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, new_node_idx)],
-                    };
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: node_value,
-                        path: remaining_stem,
-                        children: node_children,
+                        value: Some(entry_idx),
+                        path: key_slice.into(),
+                        children: ChildrenCow::Owned {
+                            generation,
+                            value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, node_idx)],
+                        },
                         locked: 0,
-                    });
+                    };
+                    owned_nodes.push(new_node);
                     return Some((entry_idx, None));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
+                    // We encountered a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let idx = children.binary_search_by(|kk| kk.key().cmp(&key_step));
                     match idx {
                         Ok(idx) => {
+                            parent_node_idxs = Some((node_idx, idx));
                             node_idx = unsafe { children.get_unchecked(idx).index() };
                         }
                         Err(place) => {
