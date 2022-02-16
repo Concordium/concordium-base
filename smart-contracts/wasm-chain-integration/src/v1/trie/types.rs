@@ -131,21 +131,21 @@ impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
 
 /// Trait implemented by types that can be used to store binary data, and return
 /// a handle for loading data.
-pub trait FlatStorable {
+pub trait BackingStoreStore {
     /// Store the provided value and return a reference that can be used
     /// to load it.
     fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError>;
 }
 
 /// Trait implemented by types that can load data from given locations.
-pub trait FlatLoadable {
+pub trait BackingStoreLoad {
     type R: AsRef<[u8]>;
     /// Store the provided value and return a reference that can be used
     /// to load it.
     fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R>;
 }
 
-impl FlatStorable for Vec<u8> {
+impl BackingStoreStore for Vec<u8> {
     fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError> {
         let len = self.len();
         let data_len = data.len() as u64;
@@ -161,7 +161,7 @@ pub struct Storable<X> {
     inner: X,
 }
 
-impl<X: Seek + Write> FlatStorable for Storable<X> {
+impl<X: Seek + Write> BackingStoreStore for Storable<X> {
     fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError> {
         let pos = self.inner.seek(SeekFrom::Current(0))?;
         let data_len = data.len() as u32;
@@ -186,7 +186,7 @@ impl<S> Loader<S> {
     }
 }
 
-impl<'a, A: AsRef<[u8]>> FlatLoadable for Loader<A> {
+impl<'a, A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
     type R = Vec<u8>;
 
     // FIXME: This is inefficient. We allocate too many vectors.
@@ -207,9 +207,12 @@ impl<'a, A: AsRef<[u8]>> FlatLoadable for Loader<A> {
 /// A trait implemented by types that can be loaded from a [FlatLoadable]
 /// storage.
 pub trait Loadable: Sized {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self>;
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self>;
 
-    fn load_from_location<F: FlatLoadable>(
+    fn load_from_location<F: BackingStoreLoad>(
         loader: &mut F,
         location: Reference,
     ) -> LoadResult<Self> {
@@ -222,7 +225,7 @@ pub trait Loadable: Sized {
 /// cachedref. But it saves on the length which is significant for the concrete
 /// use-case, hence I opted for it.
 impl Loadable for Vec<u8> {
-    fn load<S: std::io::Read, F: FlatLoadable>(
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
         _loader: &mut F,
         source: &mut S,
     ) -> LoadResult<Self> {
@@ -233,7 +236,7 @@ impl Loadable for Vec<u8> {
 }
 
 impl<const N: usize> Loadable for [u8; N] {
-    fn load<S: std::io::Read, F: FlatLoadable>(
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
         _loader: &mut F,
         source: &mut S,
     ) -> LoadResult<Self> {
@@ -245,7 +248,7 @@ impl<const N: usize> Loadable for [u8; N] {
 
 impl Loadable for u64 {
     #[inline(always)]
-    fn load<S: std::io::Read, F: FlatLoadable>(
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
         _loader: &mut F,
         source: &mut S,
     ) -> LoadResult<Self> {
@@ -256,14 +259,20 @@ impl Loadable for u64 {
 
 impl Loadable for Reference {
     #[inline(always)]
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
         let reference = u64::load(loader, source)?;
         Ok(reference.into())
     }
 }
 
 impl<V: Loadable> Loadable for Hashed<V> {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
         let hash = Hash::read(source)?;
         let data = V::load(loader, source)?;
         Ok(Hashed {

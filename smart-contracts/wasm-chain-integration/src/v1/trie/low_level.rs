@@ -90,7 +90,7 @@ impl<V> Default for CachedRef<V> {
 
 impl<V: Loadable> CachedRef<V> {
     #[inline(always)]
-    pub fn get(&self, loader: &mut impl FlatLoadable) -> V
+    pub fn get(&self, loader: &mut impl BackingStoreLoad) -> V
     where
         V: Clone, {
         match self {
@@ -112,7 +112,7 @@ impl<V: Loadable> CachedRef<V> {
     /// Apply the supplied function to the contained value. The value is loaded
     /// if it is not yet cached. Note that this will **not** cache the
     /// value, the loaded value will be dropped.
-    pub fn use_value<X>(&self, loader: &mut impl FlatLoadable, f: impl FnOnce(&V) -> X) -> X {
+    pub fn use_value<X>(&self, loader: &mut impl BackingStoreLoad, f: impl FnOnce(&V) -> X) -> X {
         match self {
             CachedRef::Disk {
                 key,
@@ -139,7 +139,7 @@ impl<V> CachedRef<V> {
         }
     }
 
-    pub fn load_and_cache<F: FlatLoadable>(&mut self, loader: &mut F) -> &mut V
+    pub fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) -> &mut V
     where
         V: Loadable, {
         match self {
@@ -198,7 +198,7 @@ impl<V> CachedRef<V> {
         }
     }
 
-    pub fn store_and_cache<S: FlatStorable, W: std::io::Write>(
+    pub fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -415,7 +415,7 @@ impl<V> Clone for Node<V> {
     }
 }
 
-impl<V: Loadable, Ctx: FlatLoadable> ToSHA256<Ctx> for CachedRef<Hashed<V>>
+impl<V: Loadable, Ctx: BackingStoreLoad> ToSHA256<Ctx> for CachedRef<Hashed<V>>
 where
     V: ToSHA256<Ctx>,
 {
@@ -424,7 +424,7 @@ where
 }
 
 // TODO: Review and revise for security and correctness.
-impl<V, Ctx: FlatLoadable> ToSHA256<Ctx> for Node<V> {
+impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V> {
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();
         match &self.value {
@@ -670,7 +670,10 @@ impl<V> Clone for ChildrenCow<V> {
 
 impl<V> Loadable for CachedRef<V> {
     #[inline(always)]
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
         let reference = Reference::load(loader, source)?;
         Ok(CachedRef::Disk {
             key: reference,
@@ -679,7 +682,10 @@ impl<V> Loadable for CachedRef<V> {
 }
 
 impl<V> Loadable for Node<V> {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
         let tag = source.read_u8()?;
         let path_len = if tag & 0b1000_0000 == 0 {
             // stem length is encoded in the tag
@@ -714,7 +720,7 @@ impl<V> Loadable for Node<V> {
 
 impl<V: Loadable> Node<V> {
     /// The entire tree in memory.
-    pub fn cache<F: FlatLoadable>(&mut self, loader: &mut F) {
+    pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let Some(v) = self.value.as_mut() {
             v.borrow_mut().data.load_and_cache(loader);
         }
@@ -736,7 +742,7 @@ impl<V: Loadable> Node<V> {
 }
 
 impl<V: AsRef<[u8]>> Hashed<Node<V>> {
-    pub fn store_update<S: FlatStorable>(
+    pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
     ) -> Result<Vec<u8>, WriteError> {
@@ -745,7 +751,7 @@ impl<V: AsRef<[u8]>> Hashed<Node<V>> {
         Ok(buf)
     }
 
-    pub fn store_update_buf<S: FlatStorable, W: std::io::Write>(
+    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -756,7 +762,7 @@ impl<V: AsRef<[u8]>> Hashed<Node<V>> {
 }
 
 impl<V: AsRef<[u8]>> Node<V> {
-    pub fn store_update_buf<S: FlatStorable, W: std::io::Write>(
+    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -851,7 +857,7 @@ fn make_owned<'a, 'b, V>(
     borrowed_values: &mut Vec<Link<Hashed<CachedRef<V>>>>,
     owned_nodes: &'a mut Vec<MutableNode<V>>,
     entries: &'a mut Vec<Entry>,
-    loader: &'b mut impl FlatLoadable,
+    loader: &'b mut impl BackingStoreLoad,
 ) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>) {
     let owned_nodes_len = owned_nodes.len();
     let node = unsafe { owned_nodes.get_unchecked(idx) };
@@ -966,7 +972,7 @@ impl<V> CachedRef<Hashed<Node<V>>> {
         borrowed_values: &mut Vec<Link<Hashed<CachedRef<V>>>>,
         entries: &mut Vec<Entry>,
         generation: u32,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
     ) -> MutableNode<V> {
         match self {
             CachedRef::Disk {
@@ -1116,7 +1122,11 @@ impl<V> MutableTrie<V> {
     /// Get a mutable reference to an entry, if the entry exists. This copies
     /// the data pointed to by the entry unless the entry was already
     /// mutable.
-    pub fn get_mut(&mut self, entry: EntryId, loader: &mut impl FlatLoadable) -> Option<&mut V>
+    pub fn get_mut(
+        &mut self,
+        entry: EntryId,
+        loader: &mut impl BackingStoreLoad,
+    ) -> Option<&mut V>
     where
         V: Clone + Loadable, {
         let values = &mut self.values;
@@ -1147,7 +1157,7 @@ impl<V> MutableTrie<V> {
 
     pub fn next(
         &mut self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         iterator: &mut Iterator,
     ) -> Option<EntryId> {
         let owned_nodes = &mut self.nodes;
@@ -1199,7 +1209,7 @@ impl<V> MutableTrie<V> {
 
     pub fn iter(
         &mut self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         key: &[Key],
     ) -> Result<Option<Iterator>, TooManyIterators> {
         let mut key_iter = key.iter();
@@ -1299,7 +1309,7 @@ impl<V> MutableTrie<V> {
     pub fn with_entry<X, F>(
         &self,
         entry: EntryId,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         f: F,
     ) -> Option<X>
     where
@@ -1328,7 +1338,7 @@ impl<V> MutableTrie<V> {
     /// TODO: It might be useful to return a list of new nodes so that they
     /// may be persisted quicker than traversing the tree again.
     /// Freeze the current generation. Returns None if the tree was empty.
-    pub fn freeze<Ctx: FlatLoadable, C: Collector<V>>(
+    pub fn freeze<Ctx: BackingStoreLoad, C: Collector<V>>(
         self,
         loader: &mut Ctx,
         collector: &mut C,
@@ -1421,7 +1431,11 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn get_entry(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<EntryId> {
+    pub fn get_entry(
+        &mut self,
+        loader: &mut impl BackingStoreLoad,
+        key: &[Key],
+    ) -> Option<EntryId> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
@@ -1458,7 +1472,7 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn delete(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<EntryId> {
+    pub fn delete(&mut self, loader: &mut impl BackingStoreLoad, key: &[Key]) -> Option<EntryId> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
@@ -1609,7 +1623,7 @@ impl<V> MutableTrie<V> {
 
     /// Delete the entire subtree whose keys match the given prefix, that is,
     /// where the given key is a prefix. Return if anything was deleted.
-    pub fn delete_prefix<L: FlatLoadable, C: TraversalCounter>(
+    pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
         key: &[Key],
@@ -1758,7 +1772,7 @@ impl<V> MutableTrie<V> {
     /// at the key existed.
     pub fn insert(
         &mut self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         key: &[Key],
         new_value: V,
     ) -> Option<(EntryId, Option<EntryId>)> {
@@ -2003,7 +2017,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
     /// the tree that is in memory.
     pub fn serialize(
         &self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         out: &mut impl std::io::Write,
     ) -> anyhow::Result<()> {
         // this limits the tree size to 4 billion nodes.
@@ -2193,7 +2207,7 @@ impl<V: Clone> Node<V> {
     /// We also don't need this in production, so it is low priority to fix.
     pub fn lookup(
         &self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         key: &[Key],
     ) -> Option<Link<Hashed<CachedRef<V>>>> {
         let mut key_iter = key.iter();

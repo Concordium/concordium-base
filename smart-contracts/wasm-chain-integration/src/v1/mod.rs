@@ -8,7 +8,7 @@ use anyhow::{bail, ensure};
 use concordium_contracts_common::{AccountAddress, Amount, ContractAddress, OwnedEntrypointName};
 use machine::Value;
 use std::{borrow::Borrow, io::Write, sync::Arc};
-use trie::FlatLoadable;
+use trie::BackingStoreLoad;
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
@@ -324,7 +324,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_lookup_entry<'a, BackingStore: FlatLoadable>(
+    pub fn state_lookup_entry<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -342,7 +342,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_create_entry<'a, BackingStore: FlatLoadable>(
+    pub fn state_create_entry<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -360,7 +360,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_delete_entry<'a, BackingStore: FlatLoadable>(
+    pub fn state_delete_entry<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
@@ -373,7 +373,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_delete_prefix<'a, BackingStore: FlatLoadable>(
+    pub fn state_delete_prefix<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -392,7 +392,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_iterator<'a, BackingStore: FlatLoadable>(
+    pub fn state_iterator<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -411,7 +411,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_iterator_next<'a, BackingStore: FlatLoadable>(
+    pub fn state_iterator_next<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
@@ -423,7 +423,7 @@ mod host {
         Ok(())
     }
 
-    pub fn state_iterator_delete<'a, BackingStore: FlatLoadable>(
+    pub fn state_iterator_delete<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
@@ -435,7 +435,7 @@ mod host {
         Ok(())
     }
 
-    pub fn state_iterator_key_size<'a, BackingStore: FlatLoadable>(
+    pub fn state_iterator_key_size<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
@@ -449,7 +449,7 @@ mod host {
         Ok(())
     }
 
-    pub fn state_iterator_key_read<'a, BackingStore: FlatLoadable>(
+    pub fn state_iterator_key_read<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -469,7 +469,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_read<'a, BackingStore: FlatLoadable>(
+    pub fn state_entry_read<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -489,7 +489,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_write<'a, BackingStore: FlatLoadable>(
+    pub fn state_entry_write<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -509,7 +509,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_size<'a, BackingStore: FlatLoadable>(
+    pub fn state_entry_size<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
@@ -520,7 +520,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_entry_resize<'a, BackingStore: FlatLoadable>(
+    pub fn state_entry_resize<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
@@ -536,7 +536,7 @@ mod host {
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
-impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext>
+impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext>
     machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = NoInterrupt;
@@ -630,7 +630,7 @@ impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasInitCon
     }
 }
 
-impl<'a, BackingStore: FlatLoadable, ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext>
+impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext>
     machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = Interrupt;
@@ -765,7 +765,7 @@ pub type ParameterRef<'a> = &'a [u8];
 pub type ParameterVec = Vec<u8>;
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<'a, BackingStore: FlatLoadable, R: RunnableCode>(
+pub fn invoke_init<'a, BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -788,7 +788,7 @@ pub fn invoke_init<'a, BackingStore: FlatLoadable, R: RunnableCode>(
     process_init_result(host, result)
 }
 
-fn process_init_result<BackingStore: FlatLoadable, Param, Ctx>(
+fn process_init_result<BackingStore: BackingStoreLoad, Param, Ctx>(
     host: InitHost<'_, BackingStore, Param, Ctx>,
     result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
 ) -> ExecResult<InitResult> {
@@ -858,7 +858,7 @@ pub enum InvokeResponse {
 
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<'a, 'b, BackingStore: FlatLoadable>(
+pub fn invoke_init_from_artifact<'a, 'b, BackingStore: BackingStoreLoad>(
     artifact_bytes: &'a [u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -873,7 +873,7 @@ pub fn invoke_init_from_artifact<'a, 'b, BackingStore: FlatLoadable>(
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source<'b, BackingStore: FlatLoadable>(
+pub fn invoke_init_from_source<'b, BackingStore: BackingStoreLoad>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -889,7 +889,7 @@ pub fn invoke_init_from_source<'b, BackingStore: FlatLoadable>(
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source<'b, BackingStore: FlatLoadable>(
+pub fn invoke_init_with_metering_from_source<'b, BackingStore: BackingStoreLoad>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -973,7 +973,7 @@ where
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<
     'b,
-    BackingStore: FlatLoadable,
+    BackingStore: BackingStoreLoad,
     R: RunnableCode,
     Ctx1: v0::HasReceiveContext,
     Ctx2: From<Ctx1>,
@@ -1003,7 +1003,7 @@ pub fn invoke_receive<
     process_receive_result(artifact, host, result)
 }
 
-pub fn resume_receive<BackingStore: FlatLoadable>(
+pub fn resume_receive<BackingStore: BackingStoreLoad>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
@@ -1088,7 +1088,7 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
 pub fn invoke_receive_from_artifact<
     'a,
     'b,
-    BackingStore: FlatLoadable,
+    BackingStore: BackingStoreLoad,
     Ctx1: v0::HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
@@ -1116,7 +1116,7 @@ pub fn invoke_receive_from_artifact<
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
     'b,
-    BackingStore: FlatLoadable,
+    BackingStore: BackingStoreLoad,
     Ctx1: v0::HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
@@ -1145,7 +1145,7 @@ pub fn invoke_receive_from_source<
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<
     'b,
-    BackingStore: FlatLoadable,
+    BackingStore: BackingStoreLoad,
     Ctx1: v0::HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(

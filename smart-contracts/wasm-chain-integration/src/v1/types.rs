@@ -691,7 +691,7 @@ impl trie::TraversalCounter for InterpreterEnergy {
     }
 }
 
-impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
+impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     pub fn new(
         current_generation: u32,
         backing_store: BackingStore,
