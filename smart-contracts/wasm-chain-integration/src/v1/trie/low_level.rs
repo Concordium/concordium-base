@@ -451,7 +451,7 @@ impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V> {
 struct MutableNode<V> {
     generation: u32,
     /// Pointer to the table of entries, if the node has a value.
-    value:      Option<usize>,
+    value:      Option<EntryId>,
     path:       Stem,
     children:   ChildrenCow<V>,
     /// 0 means the subtree is open for modifications (inserting and removing
@@ -504,7 +504,7 @@ impl<V> MutableNode<V> {
                 entry
             };
             entries.push(new_entry);
-            Some(new_entry_idx)
+            Some(new_entry_idx.into())
         } else {
             None
         };
@@ -588,7 +588,7 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
     borrowed_values: &mut [Link<Hashed<CachedRef<V>>>],
     owned_values: &mut [V],
     entries: &[Entry],
-    mutable: Option<usize>,
+    mutable: Option<EntryId>,
     loader: &mut Ctx,
     collector: &mut C,
 ) -> Option<Link<Hashed<CachedRef<V>>>> {
@@ -1013,7 +1013,7 @@ impl<V> Node<V> {
         let entry_idx = entry.map(|e| {
             let len = entries.len();
             entries.push(e);
-            len
+            len.into()
         });
         MutableNode {
             generation,
@@ -1788,7 +1788,7 @@ impl<V> MutableTrie<V> {
             self.values.push(new_value);
             let generation = (self.generation_roots.len() - 1) as u32;
             let root_idx = self.nodes.len();
-            let entry_idx = self.entries.len();
+            let entry_idx: EntryId = self.entries.len().into();
             self.entries.push(Entry::Mutable {
                 entry_idx: value_idx,
             });
@@ -1829,7 +1829,7 @@ impl<V> MutableTrie<V> {
                     self.values.push(new_value);
                     let old_entry_idx = node.value;
                     // insert new entry
-                    let entry_idx = self.entries.len();
+                    let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
@@ -1844,7 +1844,7 @@ impl<V> MutableTrie<V> {
                     let remaining_stem: Stem = stem_iter.as_slice().into();
                     let value_idx = self.values.len();
                     self.values.push(new_value);
-                    let entry_idx = self.entries.len();
+                    let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
@@ -1904,7 +1904,7 @@ impl<V> MutableTrie<V> {
                             let value_idx = self.values.len();
                             self.values.push(new_value);
                             // insert new entry
-                            let entry_idx = entries.len();
+                            let entry_idx: EntryId = entries.len().into();
                             entries.push(Entry::Mutable {
                                 entry_idx: value_idx,
                             });
@@ -1941,7 +1941,7 @@ impl<V> MutableTrie<V> {
                     // insert new entry
                     let value_idx = self.values.len();
                     self.values.push(new_value);
-                    let entry_idx = self.entries.len();
+                    let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });

@@ -1,10 +1,12 @@
 //! Auxiliary types related to the trie implementation.
 
-use std::io::{Read, Seek, SeekFrom, Write};
-
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use derive_more::{AsRef, From, Into};
 use sha2::Digest;
+use std::{
+    io::{Read, Seek, SeekFrom, Write},
+    ops::{Index, IndexMut},
+};
 use thiserror::Error;
 
 #[repr(transparent)]
@@ -385,7 +387,30 @@ impl<V, Ctx> ToSHA256<Ctx> for Hashed<V> {
     fn hash(&self, _ctx: &mut Ctx) -> Hash { self.hash }
 }
 
-pub type EntryId = usize;
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, From)]
+/// An identifier of an entry stored in the mutable trie.
+pub struct EntryId {
+    id: usize,
+}
+
+impl<A> Index<EntryId> for [A] {
+    type Output = A;
+
+    #[inline(always)]
+    fn index(&self, index: EntryId) -> &Self::Output { self.index(index.id) }
+}
+
+impl<A> Index<EntryId> for Vec<A> {
+    type Output = A;
+
+    #[inline(always)]
+    fn index(&self, index: EntryId) -> &Self::Output { self.index(index.id) }
+}
+
+impl<A> IndexMut<EntryId> for Vec<A> {
+    fn index_mut(&mut self, index: EntryId) -> &mut Self::Output { self.index_mut(index.id) }
+}
 
 #[derive(Debug, Error)]
 #[error("Too many iterators at the same root.")]
