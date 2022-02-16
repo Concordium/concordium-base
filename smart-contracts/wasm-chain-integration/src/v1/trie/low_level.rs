@@ -658,6 +658,9 @@ struct MutableNode<V> {
     value:      Option<usize>,
     path:       Stem,
     children:   ChildrenCow<V>,
+    /// 0 means the subtree is open for modifications (inserting and removing
+    /// nodes) > 0 means the subtree is closed for modifications.
+    locked:     u16,
 }
 
 impl<V> ChildrenCow<V> {
@@ -683,6 +686,7 @@ impl<V> Default for MutableNode<V> {
                 generation: 0,
                 value:      tinyvec::TinyVec::new(),
             },
+            locked:     0,
         }
     }
 }
@@ -713,6 +717,7 @@ impl<V> MutableNode<V> {
             value,
             path: self.path.clone(), // this is a cheap clone as well.
             children: self.children.clone(),
+            locked: 0,
         }
     }
 }
@@ -756,6 +761,21 @@ impl<V> ChildrenCow<V> {
     /// Otherwise return [None].
     #[inline]
     pub fn get_owned(&self) -> Option<(u32, &[KeyIndexPair])> {
+        if let ChildrenCow::Owned {
+            generation,
+            value,
+        } = self
+        {
+            Some((*generation, value))
+        } else {
+            None
+        }
+    }
+
+    /// Return a mutable reference to the owned value, if the enum is an owned
+    /// variant. Otherwise return [None].
+    #[inline]
+    pub fn get_owned_mut(&mut self) -> Option<(u32, &mut [KeyIndexPair])> {
         if let ChildrenCow::Owned {
             generation,
             value,
@@ -1252,16 +1272,19 @@ type Position = u16;
 
 #[derive(Debug)]
 pub struct Iterator {
+    /// The root of the iterator
+    /// This is stored here to allow efficient deleting of iterators.
+    pub(crate) root:         usize,
     /// pointer to the table of nodes.
-    pub(crate) root:       usize,
+    pub(crate) current_node: usize,
     /// Key at the current position of the iterator.
-    pub(crate) key:        Vec<u8>,
+    pub(crate) key:          Vec<u8>,
     /// Next child to look at. This is None if
     /// we have to give out the value at the current node, and Some(_)
     /// otherwise.
-    pub(crate) next_child: Option<Position>,
+    pub(crate) next_child:   Option<Position>,
     /// Stack of parents and next positions, and key lengths of parents
-    pub(crate) stack:      Vec<(usize, Position, usize)>,
+    pub(crate) stack:        Vec<(usize, Position, usize)>,
 }
 
 impl Iterator {
@@ -1322,6 +1345,7 @@ impl<V> Node<V> {
             value: entry_idx,
             path: self.path.clone(),
             children: ChildrenCow::Borrowed(self.children.clone()),
+            locked: 0,
         }
     }
 
@@ -1383,6 +1407,11 @@ impl TraversalCounter for EmptyCounter {
 }
 
 pub type EntryId = usize;
+
+/// Too many
+#[derive(Debug, Error)]
+#[error("Too many iterators at the same root.")]
+pub struct TooManyIterators;
 
 impl<V> MutableTrie<V> {
     pub fn new_generation(&mut self) {
@@ -1481,7 +1510,7 @@ impl<V> MutableTrie<V> {
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         loop {
-            let node_idx = iterator.root;
+            let node_idx = iterator.current_node;
             let node = &owned_nodes[node_idx];
             let next_child = if let Some(next_child) = iterator.next_child {
                 next_child
@@ -1499,14 +1528,14 @@ impl<V> MutableTrie<V> {
                 let (_, children) =
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                 let child = children[usize::from(next_child)];
-                iterator.root = child.index();
+                iterator.current_node = child.index();
                 iterator.key.push(child.key());
-                iterator.key.extend_from_slice(owned_nodes[iterator.root].path.as_ref());
+                iterator.key.extend_from_slice(owned_nodes[iterator.current_node].path.as_ref());
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
                     iterator.key.truncate(key_len);
-                    iterator.root = parent_idx;
+                    iterator.current_node = parent_idx;
                     iterator.next_child = Some(next_child);
                 } else {
                     // we are done
@@ -1516,23 +1545,40 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
+    pub fn delete_iter(&mut self, _loader: &mut impl FlatLoadable, iterator: &mut Iterator) {
+        let owned_nodes = &mut self.nodes;
+        let n = &mut owned_nodes[iterator.root];
+        n.locked = n.locked.saturating_sub(1);
+    }
+
+    pub fn iter(
+        &mut self,
+        loader: &mut impl FlatLoadable,
+        key: &[Key],
+    ) -> Result<Option<Iterator>, TooManyIterators> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let mut node_idx = if let Some(node_idx) = self.generation_roots.last().and_then(|x| x.0) {
+            node_idx
+        } else {
+            return Ok(None);
+        };
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
-                    return Some(Iterator {
-                        root:       node_idx,
-                        key:        key.into(),
-                        next_child: None,
-                        stack:      Vec::new(),
-                    })
+                    // we lock this node and the entire subtree for modifications.
+                    node.locked = node.locked.checked_add(1).ok_or(TooManyIterators)?;
+                    return Ok(Some(Iterator {
+                        root:         node_idx,
+                        current_node: node_idx,
+                        key:          key.into(),
+                        next_child:   None,
+                        stack:        Vec::new(),
+                    }));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -1542,12 +1588,14 @@ impl<V> MutableTrie<V> {
                     root_key.extend_from_slice(key);
                     root_key.push(stem_step);
                     root_key.extend_from_slice(stem_slice);
-                    return Some(Iterator {
-                        root:       node_idx,
-                        key:        root_key,
-                        next_child: None,
-                        stack:      Vec::new(),
-                    });
+                    node.locked = node.locked.checked_add(1).ok_or(TooManyIterators)?;
+                    return Ok(Some(Iterator {
+                        root:         node_idx,
+                        current_node: node_idx,
+                        key:          root_key,
+                        next_child:   None,
+                        stack:        Vec::new(),
+                    }));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -1555,15 +1603,19 @@ impl<V> MutableTrie<V> {
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let key_usize = usize::from(key_step) << 56;
-                    let pair = children
+                    let pair = if let Ok(pair) = children
                         .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
-                        .ok()?;
+                    {
+                        pair
+                    } else {
+                        return Ok(None);
+                    };
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
                 FollowStem::Diff {
                     ..
                 } => {
-                    return None;
+                    return Ok(None);
                 }
             };
         }
@@ -1765,12 +1817,17 @@ impl<V> MutableTrie<V> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        let mut grandfather = None;
         let mut father = None;
         let mut node_idx = self.generation_roots.last()?.0?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
+                    // The node is the root of an iterator and closed for modification.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     // we found it, delete the value first and save it for returning.
                     let rv = std::mem::take(&mut node.value);
                     if let Some(entry) = rv {
@@ -1783,11 +1840,32 @@ impl<V> MutableTrie<V> {
                     if children.len() == 1 {
                         // collapse path from father
                         if let Some(child) = children.pop() {
-                            let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                            let node = &mut owned_nodes[node_idx];
-                            node.path.extend(child.key(), child_1.path.as_ref());
-                            node.children = child_1.children;
-                            node.value = child_1.value;
+                            let node = std::mem::take(&mut owned_nodes[node_idx]); // invalidate the node.
+                            let child_node = &mut owned_nodes[child.index()];
+                            let mut new_stem: Stem = node.path;
+                            new_stem.extend(child.key(), child_node.path.as_ref());
+                            child_node.path = new_stem;
+                            if let Some((child_idx, father_idx)) = father {
+                                // skip the current node
+                                // father's child pointer should point directly to the node's child,
+                                // instead of the node.
+                                // the only thing that needs to be transferred from the node to the
+                                // child is (potentially) the stem of the node.
+                                let father_node: &mut MutableNode<_> =
+                                    unsafe { owned_nodes.get_unchecked_mut(father_idx) };
+                                if let Some((_, children)) = father_node.children.get_owned_mut() {
+                                    let child_place: &mut KeyIndexPair = &mut children[child_idx];
+                                    let step = child_place.key();
+                                    *child_place = KeyIndexPair::new(step, child.index());
+                                } else {
+                                    unsafe { std::hint::unreachable_unchecked() }
+                                }
+                            } else {
+                                // set the root to the new child
+                                if let Some(root) = self.generation_roots.last_mut() {
+                                    root.0 = Some(child.index());
+                                }
+                            }
                         }
                     } else if children.is_empty() {
                         // no children are left, and also no value, we need to delete the child from
@@ -1808,12 +1886,41 @@ impl<V> MutableTrie<V> {
                             // if it had a value there is nothing left to do. It must stay as is.
                             // if it had exactly two children we must now path-compress it
                             if !has_value && father_children.len() == 1 {
+                                // collapse path from grandfather
                                 if let Some(child) = father_children.pop() {
-                                    let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                                    let node = &mut owned_nodes[father_idx];
-                                    node.path.extend(child.key(), child_1.path.as_ref());
-                                    node.children = child_1.children;
-                                    node.value = child_1.value;
+                                    let node = std::mem::take(&mut owned_nodes[father_idx]); // invalidate the node.
+                                    let child_node = &mut owned_nodes[child.index()];
+                                    let mut new_stem: Stem = node.path;
+                                    new_stem.extend(child.key(), child_node.path.as_ref());
+                                    child_node.path = new_stem;
+                                    if let Some((child_idx, grandfather_idx)) = grandfather {
+                                        // skip the current node
+                                        // grandfather's child pointer should point directly to the
+                                        // node's child, instead of the node.
+                                        // the only thing that needs to be transferred from the node
+                                        // to the child is (potentially) the stem of the node.
+                                        let grandfather_node: &mut MutableNode<_> = unsafe {
+                                            owned_nodes.get_unchecked_mut(grandfather_idx)
+                                        };
+                                        if let Some((_, children)) =
+                                            grandfather_node.children.get_owned_mut()
+                                        {
+                                            let child_place: &mut KeyIndexPair =
+                                                &mut children[child_idx];
+                                            let step = child_place.key();
+                                            *child_place = KeyIndexPair::new(step, child.index());
+                                        } else {
+                                            unsafe { std::hint::unreachable_unchecked() }
+                                        }
+                                    } else {
+                                        // grandfather did not exist
+                                        // set the root to the new child
+                                        if let Some(root) = self.generation_roots.last_mut() {
+                                            root.0 = Some(child.index());
+                                        }
+                                    }
+                                } else {
+                                    unsafe { std::hint::unreachable_unchecked() }
                                 }
                             }
                         } else {
@@ -1831,11 +1938,15 @@ impl<V> MutableTrie<V> {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
+                    // the node we want to delete has a locked parent so we cannot.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
                         let pair = unsafe { children.get_unchecked(c_idx) };
-                        father = Some((c_idx, node_idx));
+                        grandfather = std::mem::replace(&mut father, Some((c_idx, node_idx)));
                         node_idx = pair.index();
                     } else {
                         return None;
@@ -1862,6 +1973,7 @@ impl<V> MutableTrie<V> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        let mut grandparent_idx = None;
         let mut parent_idx = None;
         let mut node_idx = if let Some(idx) = self.generation_roots.last().and_then(|x| x.0) {
             idx
@@ -1874,11 +1986,16 @@ impl<V> MutableTrie<V> {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
+                    // We encountered  a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return Ok(false);
+                    }
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
                         let pair = unsafe { children.get_unchecked(c_idx) };
-                        parent_idx = Some((c_idx, node_idx));
+                        grandparent_idx =
+                            std::mem::replace(&mut parent_idx, Some((c_idx, node_idx)));
                         node_idx = pair.index();
                     } else {
                         return Ok(false);
@@ -1890,13 +2007,22 @@ impl<V> MutableTrie<V> {
                     return Ok(false);
                 }
                 _ => {
+                    // We encountered  a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return Ok(false);
+                    }
                     // We found the subtree to remove.
-                    // First, invalidate entry of the node and all of its children.
+                    // First we check that the root of the subtree and it's children are not locked.
+                    // Second, invalidate entry of the node and all of its children.
                     let mut nodes_to_invalidate = vec![node_idx];
                     // traverse each child subtree and invalidate them.
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
                         counter.tick()?;
                         let to_invalidate = &owned_nodes[node_idx];
+                        // Before invalidating the node we first check if its locked.
+                        if to_invalidate.locked > 0 {
+                            return Ok(false);
+                        }
                         if let Some(entry) = to_invalidate.value {
                             entries[entry] = Entry::Deleted;
                         }
@@ -1915,8 +2041,12 @@ impl<V> MutableTrie<V> {
                             }
                         }
                     }
-                    // Now traverse up and fixup the remaining part
-                    // of the tree. If we deleted the root the tree is empty, so set it as such.
+                    // FIXME: The comment could be made more precise. We do not traverse the tree
+                    // up, we just look one or two levels.
+                    //
+                    // Now traverse up and
+                    // fixup the remaining part of the tree. If we deleted the
+                    // root the tree is empty, so set it as such.
                     if let Some((child_idx, parent_idx)) = parent_idx {
                         let (has_value, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
@@ -1927,11 +2057,40 @@ impl<V> MutableTrie<V> {
                         if !has_value && children.len() == 1 {
                             // collapse path.
                             if let Some(child) = children.pop() {
-                                let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                                let node = &mut owned_nodes[parent_idx];
-                                node.path.extend(child.key(), child_1.path.as_ref());
-                                node.children = child_1.children;
-                                node.value = child_1.value;
+                                // FIXME: Avoid looking up again.
+                                let parent_node: MutableNode<_> =
+                                    std::mem::take(&mut owned_nodes[parent_idx]);
+                                let child_node = &mut owned_nodes[child.index()];
+                                let mut new_stem: Stem = parent_node.path;
+                                new_stem.extend(child.key(), child_node.path.as_ref());
+                                child_node.path = new_stem;
+                                if let Some((child_idx, grandparent_idx)) = grandparent_idx {
+                                    // skip the parent
+                                    // grandfather's child pointer should point directly to the
+                                    // node's child, instead of the node.
+                                    // the only thing that needs to be transferred from the node
+                                    // to the child is (potentially) the stem of the node.
+                                    let grandparent_node: &mut MutableNode<_> =
+                                        unsafe { owned_nodes.get_unchecked_mut(grandparent_idx) };
+                                    if let Some((_, children)) =
+                                        grandparent_node.children.get_owned_mut()
+                                    {
+                                        let child_place: &mut KeyIndexPair =
+                                            &mut children[child_idx];
+                                        let step = child_place.key();
+                                        *child_place = KeyIndexPair::new(step, child.index());
+                                    } else {
+                                        unsafe { std::hint::unreachable_unchecked() }
+                                    }
+                                } else {
+                                    // grandparent did not exist
+                                    // set the root to the new child
+                                    if let Some(root) = self.generation_roots.last_mut() {
+                                        root.0 = Some(child.index());
+                                    }
+                                }
+                            } else {
+                                unsafe { std::hint::unreachable_unchecked() }
                             }
                         }
                     } else {
@@ -1951,7 +2110,7 @@ impl<V> MutableTrie<V> {
         loader: &mut impl FlatLoadable,
         key: &[Key],
         new_value: V,
-    ) -> (EntryId, Option<EntryId>) {
+    ) -> Option<(EntryId, Option<EntryId>)> {
         let mut key_iter = key.iter();
         let generation_root =
             self.generation_roots.last().expect("There should always be at least 1 generation.").0;
@@ -1976,17 +2135,20 @@ impl<V> MutableTrie<V> {
                     generation,
                     value: tinyvec::TinyVec::new(),
                 },
+                locked: 0,
             });
             self.generation_roots
                 .last_mut()
                 .expect("We already checked the list is not empty.")
                 .0 = Some(root_idx);
-            return (entry_idx, None);
+            return Some((entry_idx, None));
         };
         let generation = self.nodes[node_idx].generation;
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        // the parent node index and the index of the parents child we're visiting.
+        let mut parent_node_idxs: Option<(usize, usize)> = None;
         loop {
             let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
@@ -1994,6 +2156,10 @@ impl<V> MutableTrie<V> {
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
+                    // The node is root of an iterator.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let value_idx = self.values.len();
                     self.values.push(new_value);
                     let old_entry_idx = node.value;
@@ -2003,7 +2169,7 @@ impl<V> MutableTrie<V> {
                         entry_idx: value_idx,
                     });
                     node.value = Some(entry_idx);
-                    return (entry_idx, old_entry_idx);
+                    return Some((entry_idx, old_entry_idx));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -2017,34 +2183,49 @@ impl<V> MutableTrie<V> {
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
-                    // if the node had an entry before we need to update it if it was borrowed.
-                    let node_value = std::mem::replace(&mut node.value, Some(entry_idx));
-                    let node_children = std::mem::replace(&mut node.children, ChildrenCow::Owned {
-                        generation,
-                        value: tinyvec::TinyVec::new(),
-                    });
-                    node.path = key_slice.into();
+
+                    node.path = remaining_stem;
                     let new_node_idx = owned_nodes_len;
-                    node.children = ChildrenCow::Owned {
+
+                    // Update the parents children index with the new child
+                    if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
+                        if let Some((_, children)) = parent_node.children.get_owned_mut() {
+                            if let Some(key_and_index) = children.get_mut(child_idx) {
+                                let key = key_and_index.key();
+                                *key_and_index = KeyIndexPair::new(key, new_node_idx);
+                            }
+                        }
+                    } else if let Some(root) = self.generation_roots.last_mut() {
+                        root.0 = Some(new_node_idx);
+                    }
+
+                    let new_node = MutableNode {
                         generation,
-                        value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, new_node_idx)],
+                        value: Some(entry_idx),
+                        path: key_slice.into(),
+                        children: ChildrenCow::Owned {
+                            generation,
+                            value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, node_idx)],
+                        },
+                        locked: 0,
                     };
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: node_value,
-                        path: remaining_stem,
-                        children: node_children,
-                    });
-                    return (entry_idx, None);
+                    owned_nodes.push(new_node);
+                    return Some((entry_idx, None));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
+                    // We encountered a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return None;
+                    }
                     let (_, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let idx = children.binary_search_by(|kk| kk.key().cmp(&key_step));
                     match idx {
                         Ok(idx) => {
+                            parent_node_idxs = Some((node_idx, idx));
                             node_idx = unsafe { children.get_unchecked(idx).index() };
                         }
                         Err(place) => {
@@ -2067,8 +2248,9 @@ impl<V> MutableTrie<V> {
                                     generation,
                                     value: tinyvec::TinyVec::new(),
                                 },
+                                locked: 0,
                             });
-                            return (entry_idx, None);
+                            return Some((entry_idx, None));
                         }
                     }
                 }
@@ -2083,55 +2265,73 @@ impl<V> MutableTrie<V> {
                     let remaining_key: Stem = key_iter.as_slice().into();
                     let new_stem =
                         Stem::from(&key_slice[0..key_slice.len() - remaining_key_len - 1]);
-                    let key_node_idx = owned_nodes_len;
-                    let node_value = std::mem::take(&mut node.value);
-                    let node_children = std::mem::replace(&mut node.children, ChildrenCow::Owned {
-                        generation,
-                        value: tinyvec::TinyVec::new(),
-                    });
-                    let stem_node_idx = owned_nodes_len + 1;
-                    // Insert the children in the correct order.
-                    let children = if key_step < stem_step {
-                        tinyvec::tiny_vec![
-                            [_; INLINE_CAPACITY] =>
-                            KeyIndexPair::new(key_step, key_node_idx),
-                            KeyIndexPair::new(stem_step, stem_node_idx),
-                        ]
-                    } else {
-                        tinyvec::tiny_vec![
-                            [_; INLINE_CAPACITY] =>
-                            KeyIndexPair::new(stem_step, stem_node_idx),
-                            KeyIndexPair::new(key_step, key_node_idx),
-                        ]
-                    };
-                    node.path = new_stem;
-                    node.children = ChildrenCow::Owned {
-                        generation,
-                        value: children,
-                    };
+                    // index of the node that continues along the remaining key
+                    let remaining_key_node_idx = owned_nodes_len;
+                    // index of the new node that will have two children
+                    let new_node_idx = owned_nodes_len + 1;
+                    node.path = remaining_stem;
+                    // insert new entry
                     let value_idx = self.values.len();
                     self.values.push(new_value);
-                    // insert new entry
                     let entry_idx = self.entries.len();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: Some(entry_idx),
-                        path: remaining_key,
-                        children: ChildrenCow::Owned {
+                    {
+                        let remaining_key_node = MutableNode {
                             generation,
-                            value: tinyvec::TinyVec::new(),
-                        },
-                    });
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: node_value,
-                        path: remaining_stem,
-                        children: node_children,
-                    });
-                    return (entry_idx, None);
+                            value: Some(entry_idx),
+                            path: remaining_key,
+                            children: ChildrenCow::Owned {
+                                generation,
+                                value: tinyvec::TinyVec::new(),
+                            },
+                            locked: 0,
+                        };
+                        owned_nodes.push(remaining_key_node);
+                    }
+
+                    // construct the new node with two children
+                    {
+                        let children = if key_step < stem_step {
+                            tinyvec::tiny_vec![
+                                [_; INLINE_CAPACITY] =>
+                                KeyIndexPair::new(key_step, remaining_key_node_idx),
+                                KeyIndexPair::new(stem_step, node_idx),
+                            ]
+                        } else {
+                            tinyvec::tiny_vec![
+                                [_; INLINE_CAPACITY] =>
+                                KeyIndexPair::new(stem_step, node_idx),
+                                KeyIndexPair::new(key_step, remaining_key_node_idx),
+                            ]
+                        };
+                        let new_node = MutableNode {
+                            generation,
+                            value: None,
+                            path: new_stem,
+                            children: ChildrenCow::Owned {
+                                generation,
+                                value: children,
+                            },
+                            locked: 0,
+                        };
+                        owned_nodes.push(new_node);
+                    }
+
+                    // Update the parents children index with the new child
+                    if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
+                        if let Some((_, children)) = parent_node.children.get_owned_mut() {
+                            if let Some(key_and_index) = children.get_mut(child_idx) {
+                                let key = key_and_index.key();
+                                *key_and_index = KeyIndexPair::new(key, new_node_idx);
+                            }
+                        }
+                    } else if let Some(root) = self.generation_roots.last_mut() {
+                        root.0 = Some(new_node_idx);
+                    }
+                    return Some((entry_idx, None));
                 }
             }
         }

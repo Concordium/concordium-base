@@ -85,7 +85,9 @@ fn prop_serialization() {
             Hashed::<Node<Vec<u8>>>::deserialize(&mut source).context("Failed to deserialize")?;
         ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
         let mut mutable = deserialized.data.make_mutable(0);
-        let mut iterator = if let Some(i) = mutable.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            mutable.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -176,7 +178,9 @@ fn prop_matches_reference() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (mut trie, mut loader) = make_mut_trie(inputs);
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -245,7 +249,9 @@ fn prop_matches_reference_delete_subtree() {
                 )
             }
 
-            let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+            let mut iterator = if let Some(i) =
+                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            {
                 i
             } else if !reference.is_empty() {
                 bail!("Iterator is empty, but the reference is not.");
@@ -274,6 +280,112 @@ fn prop_matches_reference_delete_subtree() {
 }
 
 #[test]
+/// Check that iterators cannot be modified.
+// todo: tests with multiple iterators and that other parts of the tree are open
+// for modification.
+fn prop_iterator_locked_for_modification() {
+    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+        for (prefix, _) in inputs.iter() {
+            let locked_prefix = prefix.clone();
+
+            if let Some(mut iter) = trie
+                .iter(&mut loader, &locked_prefix)
+                .expect("This is the first iterator, so no overflow.")
+            {
+                let mut locked_prefix_extended = locked_prefix.clone();
+                locked_prefix_extended.push(0);
+                ensure!(
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_none(),
+                    "The subtree should be locked for locked_prefix_extended (insertion)."
+                );
+                ensure!(
+                    trie.delete(&mut loader, &locked_prefix_extended).is_none(),
+                    "The subtree should be locked for locked_prefix_extended (removal)."
+                );
+                ensure!(
+                    !trie
+                        .delete_prefix(&mut loader, &locked_prefix_extended, &mut EmptyCounter)
+                        .expect("Empty counter does not fail."),
+                    "The subtree should be locked for locked_prefix_extended (prefix removal)."
+                );
+                // test that we can insert at another part of the tree
+                let mut step_up = locked_prefix.clone();
+                if let Some(popped) = step_up.pop() {
+                    let to_go = if popped == 0 {
+                        42
+                    } else {
+                        0
+                    };
+                    let mut new_path = step_up.clone();
+                    new_path.push(to_go);
+                    ensure!(
+                        trie.insert(&mut loader, &new_path, vec![]).is_some(),
+                        "The subtree should be open for new_path (inserting)."
+                    );
+                    ensure!(
+                        trie.delete(&mut loader, &new_path).is_some(),
+                        "The subtree should be open for new_path (removal)."
+                    );
+                    ensure!(
+                        trie.insert(&mut loader, &new_path, vec![]).is_some(),
+                        "The subtree should be open for new_path (inserting before prefix \
+                         removal)."
+                    );
+                    ensure!(
+                        trie.delete_prefix(&mut loader, &new_path, &mut EmptyCounter)
+                            .expect("Empty counter does not fail."),
+                        "The subtree should be locked for new_path (prefix removal)."
+                    );
+                }
+                ensure!(
+                    !trie
+                        .delete_prefix(&mut loader, &step_up, &mut EmptyCounter)
+                        .expect("Empty counter does not fail."),
+                    "The subtree should be locked for step_up (prefix removal), {:#?}, {:?}, {:?}",
+                    trie,
+                    prefix,
+                    step_up
+                );
+
+                trie.delete_iter(&mut loader, &mut iter);
+                ensure!(
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (insertion): \
+                     {:#?}, {:#?}, {:?}",
+                    trie,
+                    iter,
+                    locked_prefix_extended
+                );
+                ensure!(
+                    trie.delete(&mut loader, &locked_prefix_extended).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (removal)."
+                );
+                ensure!(
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
+                    "The subtree should not be locked for locked_prefix_extended (insertion)."
+                );
+                ensure!(
+                    trie.delete_prefix(&mut loader, &locked_prefix_extended, &mut EmptyCounter)
+                        .expect("Empty counter does not fail."),
+                    "The subtree should not be locked for locked_prefix_extended (prefix removal)."
+                );
+                ensure!(
+                    trie.delete_prefix(&mut loader, &step_up, &mut EmptyCounter)
+                        .expect("Empty counter does not fail."),
+                    "The subtree should not be locked for locked_prefix_extended (prefix removal \
+                     - step up). {:#?}, {:?}",
+                    trie,
+                    step_up
+                );
+            }
+        }
+        Ok(())
+    };
+    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
 /// Check that the mutable trie delete prefix does not affect generations that
 /// are frozen.
 fn prop_matches_reference_checkpoint_delete_subtree() {
@@ -285,7 +397,9 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
             trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap();
         }
         trie.normalize(0);
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             return reference.is_empty();
@@ -325,7 +439,9 @@ fn prop_matches_reference_delete() {
             if trie.delete(&mut loader, &to_delete[..]).is_none() {
                 return false;
             }
-            let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+            let mut iterator = if let Some(i) =
+                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            {
                 i
             } else if !reference.is_empty() {
                 return false;
@@ -369,7 +485,9 @@ fn prop_matches_reference_after_freeze_thaw() {
             return reference.is_empty();
         };
         let mut trie = trie.make_mutable(0);
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             return reference.is_empty();
@@ -423,7 +541,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
 
             // insert additions into the new generation.
             let reference_iter = joined_reference.keys();
-            let mut iterator_gen_1 = if let Some(i) = trie.iter(&mut loader, &[]) {
+            let mut iterator_gen_1 = if let Some(i) =
+                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            {
                 i
             } else {
                 return joined_reference.is_empty();
@@ -452,7 +572,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
 
         trie.pop_generation(); // kill the generation we updated.
         let reference_iter = reference.iter();
-        let mut iterator = if let Some(i) = trie.iter(&mut loader, &[]) {
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
             i
         } else {
             return reference.is_empty();
