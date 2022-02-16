@@ -365,7 +365,7 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost.
+        energy.tick_energy(constants::DELETE_ENTRY_COST)?;
         let entry_index = unsafe { stack.pop_u64() };
         let result = state.delete_entry(InstanceStateEntry::from(entry_index))?;
         stack.push_value(result);
@@ -379,13 +379,13 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge.
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
         // this cannot overflow on 64-bit platforms, so it is safe to just add
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
+        energy.tick_energy(constants::delete_prefix_find_cost(key_len))?;
         let result = state.delete_prefix(energy, key)?;
         stack.push_value(result);
         Ok(())
@@ -403,6 +403,7 @@ mod host {
         let prefix_start = unsafe { stack.pop_u32() } as usize;
         let prefix_end = prefix_start + prefix_len as usize;
         ensure!(prefix_end <= memory.len(), "Illegal memory access.");
+        energy.tick_energy(constants::new_iterator_cost(prefix_len))?;
         let prefix = &memory[prefix_start..prefix_end];
         let iterator_index = state.iterator(prefix);
         stack.push_value(u64::from(iterator_index));
@@ -415,7 +416,7 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost.
+        // TODO: Charge cost. This needs to be dynamic.
         let iter_index = unsafe { stack.pop_u64() };
         let entry_option = state.iterator_next(InstanceStateIterator::from(iter_index))?;
         stack.push_value(u64::from(entry_option));
@@ -427,7 +428,7 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost.
+        energy.tick_energy(constants::DELETE_ITERATOR_COST)?;
         let iter = unsafe { stack.pop_u64() };
         let result = state.iterator_delete(InstanceStateIterator::from(iter))?;
         stack.push_value(result);
@@ -439,7 +440,9 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost.
+        // TODO: Verify cost below.
+        // the cost of this function is adequately reflected by the base cost of a
+        // function call so we do not charge extra.
         let iter = unsafe { stack.pop_u64() };
         let result = state.iterator_key_size(InstanceStateIterator::from(iter))?;
         stack.push_value(result);
@@ -452,7 +455,6 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost.
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
@@ -523,10 +525,10 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost
+        energy.tick_energy(constants::RESIZE_ENTRY_BASE_COST)?;
         let new_size = unsafe { stack.pop_u32() };
         let entry_index = unsafe { stack.pop_u64() };
-        let result = state.entry_resize(InstanceStateEntry::from(entry_index), new_size)?;
+        let result = state.entry_resize(energy, InstanceStateEntry::from(entry_index), new_size)?;
         stack.push_value(result);
         Ok(())
     }

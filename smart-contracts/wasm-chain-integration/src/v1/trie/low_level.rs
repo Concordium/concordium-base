@@ -2103,7 +2103,12 @@ impl<V> MutableTrie<V> {
                             }
                         }
                     } else {
-                        self.generation_roots.last_mut().map(|x| x.0 = None);
+                        if let Some(root) = self.generation_roots.last_mut() {
+                            root.0 = None;
+                        } else {
+                            // we would not have reached here if there was no generation root.
+                            unsafe { std::hint::unreachable_unchecked() }
+                        }
                         return Ok(true);
                     }
                     return Ok(true);
@@ -2473,7 +2478,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             }
             parents.push(new_node);
         }
-        if let Some(root) = parents.into_iter().nth(0) {
+        if let Some(root) = parents.into_iter().next() {
             let rw = std::mem::take(&mut *root.borrow_mut());
             if let CachedRef::Memory {
                 value,

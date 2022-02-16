@@ -48,7 +48,7 @@ pub fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
 /// Cost of allocating additional smart contract state. The argument is the
 /// number of additional bytes.
 #[inline(always)]
-pub fn additional_state_size_cost(x: u32) -> u64 { u64::from(x) / 100 }
+pub fn additional_state_size_cost(x: u64) -> u64 { x / 100 }
 
 /// Cost of logging an event of a given size.
 #[inline(always)]
@@ -90,6 +90,28 @@ pub const MEMORY_COST_FACTOR: u32 = 100;
 /// later by the scheduler.
 pub const INVOKE_BASE_COST: u64 = 500; // currently set as log event base cost. Revise based on benchmarks.
 
+/// Cost of delete_prefix which accounts for finding the prefix. It is
+/// parametrized by the length of the key. TODO: Needs benchmarking.
+/// TODO: Benchmark
+pub fn delete_prefix_find_cost(len: u32) -> u64 { 10 * len as u64 }
+
+/// Cost of a new iterator. This accounts for tree traversal as well
+/// as the storage the execution engine needs to keep for the iterator.
+/// TODO: Benchmark and analyze space requirements.
+pub fn new_iterator_cost(len: u32) -> u64 { 60 + 10 * len as u64 }
+
+/// Delete an iterator. This is constant since we only invalidate a pointer.
+/// TODO: Benchmark.
+pub const DELETE_ITERATOR_COST: u64 = 10;
+
 /// Step cost of a tree traversal when invalidating entries.
 /// TODO: Needs benchmarking.
 pub const TREE_TRAVERSAL_STEP_COST: u64 = 10;
+
+/// Cost of deleting an entry. This is a constant-time operation.
+/// TODO: Benchmark.
+pub const DELETE_ENTRY_COST: u64 = 10;
+
+/// Base cost of resizing an entry. This accounts for lookup.
+/// TODO: Benchmark.
+pub const RESIZE_ENTRY_BASE_COST: u64 = 10;

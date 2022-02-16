@@ -4,7 +4,7 @@ use super::{
     trie::{self, low_level::TraversalCounter},
     Interrupt, ParameterVec, StateLessReceiveHost,
 };
-use crate::{resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
+use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
@@ -135,25 +135,41 @@ pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
     OutOfEnergy,
 }
 
+#[cfg(feature = "enable-ffi")]
+pub(crate) struct ReceiveResultExtract<R> {
+    pub status:          Vec<u8>,
+    pub state_changed:   bool,
+    pub interrupt_state: Option<Box<ReceiveInterruptedState<R>>>,
+    pub return_value:    Option<ReturnValue>,
+}
+
 impl<R> ReceiveResult<R> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the
     /// [ReceiveResult] enum directly.
     #[cfg(feature = "enable-ffi")]
-    pub(crate) fn extract(
-        self,
-    ) -> (Vec<u8>, bool, Option<Box<ReceiveInterruptedState<R>>>, Option<ReturnValue>) {
+    pub(crate) fn extract(self) -> ReceiveResultExtract<R> {
         use ReceiveResult::*;
         match self {
-            OutOfEnergy => (vec![0], false, None, None),
+            OutOfEnergy => ReceiveResultExtract{
+                status: vec![0],
+                state_changed: false,
+                interrupt_state: None,
+                return_value: None
+            },
             Trap {
                 remaining_energy,
                 .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
                 out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
-                (out, false, None, None)
+                ReceiveResultExtract{
+                    status: out,
+                    state_changed: false,
+                    interrupt_state: None,
+                    return_value: None
+                }
             }
             Reject {
                 reason,
@@ -164,7 +180,12 @@ impl<R> ReceiveResult<R> {
                 out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, false, None, Some(return_value))
+                ReceiveResultExtract{
+                    status: out,
+                    state_changed: false,
+                    interrupt_state: None,
+                    return_value: Some(return_value),
+                }
             }
             Success {
                 logs,
@@ -174,7 +195,12 @@ impl<R> ReceiveResult<R> {
                 let mut out = vec![3];
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, true, None, Some(return_value))
+                ReceiveResultExtract{
+                    status: out,
+                    state_changed: true,
+                    interrupt_state: None,
+                    return_value: Some(return_value),
+                }
             }
             Interrupt {
                 remaining_energy,
@@ -186,7 +212,12 @@ impl<R> ReceiveResult<R> {
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out.extend_from_slice(&logs.to_bytes());
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
-                (out, true, Some(config), None)
+                ReceiveResultExtract{
+                    status: out,
+                    state_changed: true,
+                    interrupt_state: Some(config),
+                    return_value: None,
+                }
             }
         }
     }
@@ -896,11 +927,22 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn entry_resize(&mut self, entry: InstanceStateEntry, new_size: u32) -> StateResult<u32> {
+    pub fn entry_resize(
+        &mut self,
+        energy: &mut InterpreterEnergy,
+        entry: InstanceStateEntry,
+        new_size: u32,
+    ) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         ensure!(gen == self.current_generation, "Incorrect entry id generation.");
         if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
             if let Some(v) = self.state_trie.get_mut(entry.id, &mut self.backing_store) {
+                let old_size = v.len() as u64;
+                let new_size = u64::from(new_size);
+                if new_size > old_size {
+                    energy
+                        .tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
+                }
                 v.resize(new_size as usize, 0u8);
                 Ok(1)
             } else {

@@ -215,7 +215,7 @@ unsafe extern "C" fn call_receive_v1(
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
-    let res = std::panic::catch_unwind(|| {
+    let res = std::panic::catch_unwind(|| -> *mut u8 {
         let receive_ctx = v0::deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
             receive_ctx_bytes_len as usize
@@ -240,7 +240,12 @@ unsafe extern "C" fn call_receive_v1(
                 );
                 match res {
                     Ok(result) => {
-                        let (mut out, store_state, config, return_value) = result.extract();
+                        let ReceiveResultExtract {
+                            status: mut out,
+                            state_changed: store_state,
+                            interrupt_state: config,
+                            return_value,
+                        } = result.extract();
                         out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
@@ -428,7 +433,12 @@ unsafe extern "C" fn resume_receive_v1(
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {
-                let (mut out, store_state, new_config, return_value) = result.extract();
+                let ReceiveResultExtract {
+                    status: mut out,
+                    state_changed: store_state,
+                    interrupt_state: new_config,
+                    return_value,
+                } = result.extract();
                 out.shrink_to_fit();
                 *output_len = out.len() as size_t;
                 let ptr = out.as_mut_ptr();
