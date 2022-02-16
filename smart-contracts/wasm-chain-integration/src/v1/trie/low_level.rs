@@ -1545,7 +1545,9 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn delete_iter(&mut self, _loader: &mut impl FlatLoadable, iterator: &mut Iterator) {
+    // TODO: Document assumptions/preconditions of this method. It blindly looks up
+    // the node.
+    pub fn delete_iter(&mut self, iterator: &Iterator) {
         let owned_nodes = &mut self.nodes;
         let n = &mut owned_nodes[iterator.root];
         n.locked = n.locked.saturating_sub(1);

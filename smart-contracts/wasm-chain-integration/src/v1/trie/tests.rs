@@ -3,6 +3,8 @@ use anyhow::{bail, ensure, Context};
 use quickcheck::*;
 use std::collections::BTreeMap;
 
+const NUM_TESTS: u64 = 1000000;
+
 fn make_mut_trie<A: AsRef<[u8]>>(
     words: Vec<(A, Vec<u8>)>,
 ) -> (MutableTrie<Vec<u8>>, Loader<Vec<u8>>) {
@@ -33,7 +35,7 @@ fn prop_storing_caches() {
         ensure!(frozen.data.is_stored(), "Not all data is stored.");
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -64,7 +66,7 @@ fn prop_storing() {
         ensure!(trie.is_ok(), "Failed to deserialize {:?}", loader.inner);
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -106,7 +108,7 @@ fn prop_serialization() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -134,7 +136,7 @@ fn prop_storing_preseves_hash() {
         ensure!(hash_1 == hash_2, "Hashes differ.");
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -168,7 +170,7 @@ fn prop_hash_independent_of_order() {
             ensure!(hash == hash_1, "Hashes differ.");
             Ok(())
         };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -203,7 +205,7 @@ fn prop_matches_reference() {
         );
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -276,13 +278,112 @@ fn prop_matches_reference_delete_subtree() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
+/// Test the following scenarios
+/// - creating iterators placed in arbitrary locations in the tree prevents us
+///   from deleting in those areas, but still allows us to create and delete in
+///   areas that are not locked
+fn prop_iterator_locked_for_modification_multiple() {
+    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>,
+                prefixes_to_lock: Vec<Vec<u8>>,
+                to_insert: Vec<Vec<u8>>|
+     -> anyhow::Result<()> {
+        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+        let mut stop = false;
+        for len_to_consider in 0.. {
+            if stop {
+                break;
+            }
+            let mut locked_prefixes = Vec::new();
+            stop = true;
+            for prefix in &prefixes_to_lock {
+                if prefix.len() >= len_to_consider {
+                    if let Ok(option_iterator) = trie.iter(&mut loader, &prefix) {
+                        if let Some(iterator) = option_iterator {
+                            locked_prefixes.push(iterator);
+                        }
+                    } else {
+                        // We are not testing overflow behaviour here, so just terminate the test.
+                        return Ok(());
+                    }
+                    stop = false;
+                }
+            }
+            for (candidate, data) in to_insert.iter().zip(0u64..) {
+                // find out if the candidate can or cannot be inserted
+                let not_allowed =
+                    locked_prefixes.iter().any(|iter| candidate.starts_with(iter.get_key()));
+                if not_allowed {
+                    ensure!(
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_none(),
+                        "{:?} extends one of the iterator keys.",
+                        candidate
+                    );
+                    ensure!(
+                        trie.delete(&mut loader, &candidate).is_none(),
+                        "{:?} extends one of the iterator keys, so deletion is not allowed.",
+                        candidate
+                    );
+                    ensure!(
+                        !trie
+                            .delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
+                            .expect("Empty counter does not fail."),
+                        "{:?} extends one of the iterator keys, but delete_prefix succeded.",
+                        candidate
+                    )
+                } else {
+                    ensure!(
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_some(),
+                        "{:?} does not extend any of the iterator keys, but insertion failed.",
+                        candidate
+                    );
+                    let not_allowed_delete_subtree =
+                        locked_prefixes.iter().any(|iter| iter.get_key().starts_with(candidate));
+                    if !not_allowed_delete_subtree {
+                        if data % 2 == 0 {
+                            // now delete the just inserted entry
+                            ensure!(
+                                trie.delete(&mut loader, &candidate).is_some(),
+                                "{:?} does not extend any of the iterator keys, but deletion \
+                                 failed.",
+                                candidate
+                            );
+                        } else {
+                            ensure!(
+                                trie.delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
+                                    .expect("Empty counter does not fail."),
+                                "{:?} is not extended by any of iterator keys, nor does it extend \
+                                 them, but delete_prefix failed.",
+                                candidate
+                            )
+                        }
+                    } else {
+                        // now delete the just inserted entry
+                        ensure!(
+                            trie.delete(&mut loader, &candidate).is_some(),
+                            "{:?} does not extend any of the iterator keys, but deletion failed.",
+                            candidate
+                        );
+                    }
+                }
+            }
+            // cleanup the trie
+            for iter in &locked_prefixes {
+                trie.delete_iter(iter)
+            }
+        }
+        Ok(())
+    };
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>, Vec<_>, Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
 /// Check that iterators cannot be modified.
-// todo: tests with multiple iterators and that other parts of the tree are open
-// for modification.
 fn prop_iterator_locked_for_modification() {
     let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
@@ -348,7 +449,7 @@ fn prop_iterator_locked_for_modification() {
                     step_up
                 );
 
-                trie.delete_iter(&mut loader, &mut iter);
+                trie.delete_iter(&mut iter);
                 ensure!(
                     trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
                     "The subtree should not be locked for locked_prefix_extended (insertion): \
@@ -382,7 +483,7 @@ fn prop_iterator_locked_for_modification() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -420,7 +521,7 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
         }
         true
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
 }
 
 #[test]
@@ -465,7 +566,7 @@ fn prop_matches_reference_delete() {
         }
         true
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
 }
 
 #[test]
@@ -506,7 +607,7 @@ fn prop_matches_reference_after_freeze_thaw() {
         trie.next(&mut loader, &mut iterator).is_none() // there are no values
                                                         // left to iterate.
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
 }
 
 #[test]
@@ -594,5 +695,5 @@ fn prop_matches_reference_after_new_gen_mutate() {
         trie.next(&mut loader, &mut iterator).is_none() // there are no values
                                                         // left to iterate.
     };
-    QuickCheck::new().tests(10000).quickcheck(prop as fn(Vec<_>, Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> bool);
 }

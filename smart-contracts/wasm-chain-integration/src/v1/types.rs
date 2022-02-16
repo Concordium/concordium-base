@@ -780,7 +780,7 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
             Some(iter) => match iter {
                 Some(existing_iter) => {
                     // Unlock the nodes associated with this iterator.
-                    self.state_trie.delete_iter(&mut self.backing_store, existing_iter);
+                    self.state_trie.delete_iter(existing_iter);
                     // Finally we remove the iterator in the instance by setting it to `None`.
                     *iter = None;
                     Ok(1)
