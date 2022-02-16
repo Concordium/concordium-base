@@ -337,13 +337,13 @@ fn prop_iterator_locked_for_modification() {
                 }
                 ensure!(
                     trie.delete_prefix(&mut loader, &step_up).is_none(),
-                    "The subtree should be locked for step_up (prefix removal)."
+                    "The subtree should be locked for step_up (prefix removal), {:#?}, {:?}, {:?}", trie, prefix, step_up
                 );
 
                 trie.delete_iter(&mut loader, &mut iter);
                 ensure!(
                     trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
-                    "The subtree should not be locked for locked_prefix_extended (insertion)."
+                    "The subtree should not be locked for locked_prefix_extended (insertion): {:#?}, {:#?}, {:?}", trie, iter, locked_prefix_extended
                 );
                 ensure!(
                     trie.delete(&mut loader, &locked_prefix_extended).is_some(),
@@ -360,7 +360,7 @@ fn prop_iterator_locked_for_modification() {
                 ensure!(
                     trie.delete_prefix(&mut loader, &step_up).is_some(),
                     "The subtree should not be locked for locked_prefix_extended (prefix removal \
-                     - step up)."
+                     - step up). {:#?}, {:?}", trie, step_up
                 );
             }
         }
