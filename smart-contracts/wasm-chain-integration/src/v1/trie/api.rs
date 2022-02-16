@@ -1,6 +1,6 @@
-use super::low_level::{
-    Collector, FlatLoadable, FlatStorable, Hashed, LoadError, LoadResult, Loadable, MutableTrie,
-    Node, Reference, StoreResult,
+use super::{
+    low_level::{MutableTrie, Node},
+    FlatLoadable, FlatStorable, Loadable, *,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -113,9 +113,9 @@ impl PersistentState {
         }
     }
 
-    pub fn hash(&self) -> super::low_level::Hash {
+    pub fn hash(&self) -> super::Hash {
         match self {
-            PersistentState::Empty => super::low_level::Hash::zero(), /* FIXME: Think about what */
+            PersistentState::Empty => super::Hash::zero(), /* FIXME: Think about what */
             // the correct thing would
             // be.
             PersistentState::Root(root) => root.hash,

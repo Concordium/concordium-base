@@ -52,3 +52,6 @@ harness = false
 [[bench]]
 name = "trie_benches"
 harness = false
+
+[profile.release]
+codegen-units = 1

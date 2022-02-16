@@ -15,8 +15,7 @@
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
 use super::trie::{
-    low_level::{EmptyCollector, Loadable, Reference, SizeCollector},
-    MutableState, PersistentState,
+    EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
 };
 use crate::{slice_from_c_bytes, v1::*};
 use libc::size_t;

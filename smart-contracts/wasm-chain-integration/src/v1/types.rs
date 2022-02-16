@@ -1,9 +1,6 @@
 use std::io::Write;
 
-use super::{
-    trie::{self, low_level::TraversalCounter},
-    Interrupt, ParameterVec, StateLessReceiveHost,
-};
+use super::{trie, Interrupt, ParameterVec, StateLessReceiveHost};
 use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
@@ -685,7 +682,7 @@ impl InstanceStateIteratorResultOption {
 
 pub type StateResult<A> = anyhow::Result<A>;
 
-impl TraversalCounter for InterpreterEnergy {
+impl trie::TraversalCounter for InterpreterEnergy {
     type Err = anyhow::Error;
 
     #[inline(always)]
@@ -828,7 +825,7 @@ impl<'a, BackingStore: trie::FlatLoadable> InstanceState<'a, BackingStore> {
         let (gen, idx) = iter.split();
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
         if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
-            Ok(iter.key.len() as u32)
+            Ok(iter.get_key().len() as u32)
         } else {
             bail!("Invalid iterator.")
         }

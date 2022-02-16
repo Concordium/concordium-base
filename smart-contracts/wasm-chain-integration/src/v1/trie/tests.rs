@@ -1,13 +1,11 @@
-use super::{low_level::*, Value};
+use super::{low_level::*, Value, *};
 use anyhow::{bail, ensure, Context};
 use quickcheck::*;
 use std::collections::BTreeMap;
 
-const NUM_TESTS: u64 = 1000000;
+const NUM_TESTS: u64 = 1000;
 
-fn make_mut_trie<A: AsRef<[u8]>>(
-    words: Vec<(A, Vec<u8>)>,
-) -> (MutableTrie<Vec<u8>>, Loader<Vec<u8>>) {
+fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie<Value>, Loader<Value>) {
     let mut node = MutableTrie::empty();
     let mut loader = Loader {
         inner: Vec::<u8>::new(),
@@ -21,7 +19,7 @@ fn make_mut_trie<A: AsRef<[u8]>>(
 #[test]
 /// Check that storing also caches the data.
 fn prop_storing_caches() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
@@ -42,7 +40,7 @@ fn prop_storing_caches() {
 /// Check that storing computes the correct size, and that it can be
 /// deserialized.
 fn prop_storing() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let mut collector = SizeCollector::default();
@@ -62,7 +60,7 @@ fn prop_storing() {
         let mut loader = Loader {
             inner: backing_store,
         };
-        let trie = Hashed::<Node<Vec<u8>>>::load_from_location(&mut loader, root);
+        let trie = Hashed::<Node<Value>>::load_from_location(&mut loader, root);
         ensure!(trie.is_ok(), "Failed to deserialize {:?}", loader.inner);
         Ok(())
     };
@@ -71,7 +69,7 @@ fn prop_storing() {
 
 #[test]
 fn prop_serialization() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
@@ -84,7 +82,7 @@ fn prop_serialization() {
         frozen.serialize(&mut loader, &mut out).context("Serialization failed.")?;
         let mut source = std::io::Cursor::new(&out);
         let deserialized =
-            Hashed::<Node<Vec<u8>>>::deserialize(&mut source).context("Failed to deserialize")?;
+            Hashed::<Node<Value>>::deserialize(&mut source).context("Failed to deserialize")?;
         ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
         let mut mutable = deserialized.data.make_mutable(0);
         let mut iterator = if let Some(i) =
@@ -114,7 +112,7 @@ fn prop_serialization() {
 #[test]
 /// Check that the storing preserves hash.
 fn prop_storing_preseves_hash() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
@@ -130,7 +128,7 @@ fn prop_storing_preseves_hash() {
         let mut loader = Loader {
             inner: backing_store,
         };
-        let trie = Hashed::<Node<Vec<u8>>>::load_from_location(&mut loader, root)
+        let trie = Hashed::<Node<Value>>::load_from_location(&mut loader, root)
             .context("Failed to deserialize.")?;
         let hash_2 = trie.hash;
         ensure!(hash_1 == hash_2, "Hashes differ.");
@@ -144,7 +142,7 @@ fn prop_storing_preseves_hash() {
 /// provided there are no duplicates.
 fn prop_hash_independent_of_order() {
     let prop =
-        |mut inputs: Vec<(Vec<u8>, Vec<u8>)>, swaps: Vec<(usize, usize)>| -> anyhow::Result<()> {
+        |mut inputs: Vec<(Vec<u8>, Value)>, swaps: Vec<(usize, usize)>| -> anyhow::Result<()> {
             inputs.sort_by(|(l, _), (r, _)| l.cmp(r));
             inputs.dedup_by(|(l, _), (r, _)| l == r);
             let (trie, mut loader) = make_mut_trie(inputs.clone());
@@ -177,7 +175,7 @@ fn prop_hash_independent_of_order() {
 /// Check that the mutable trie and its iterator match the reference
 /// implementation.
 fn prop_matches_reference() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (mut trie, mut loader) = make_mut_trie(inputs);
         let mut iterator = if let Some(i) =
@@ -212,7 +210,7 @@ fn prop_matches_reference() {
 /// Check that the mutable trie and its iterator match the reference
 /// implementation, after deleting a prefix.
 fn prop_matches_reference_delete_subtree() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         for (prefix, _) in inputs.iter() {
             let reference = inputs
                 .iter()
@@ -287,7 +285,7 @@ fn prop_matches_reference_delete_subtree() {
 ///   from deleting in those areas, but still allows us to create and delete in
 ///   areas that are not locked
 fn prop_iterator_locked_for_modification_multiple() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>,
+    let prop = |inputs: Vec<(Vec<u8>, Value)>,
                 prefixes_to_lock: Vec<Vec<u8>>,
                 to_insert: Vec<Vec<u8>>|
      -> anyhow::Result<()> {
@@ -502,7 +500,7 @@ fn prop_iterator_locked_for_modification_generations() {
 #[test]
 /// Check that iterators cannot be modified.
 fn prop_iterator_locked_for_modification() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> anyhow::Result<()> {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
         for (prefix, _) in inputs.iter() {
             let locked_prefix = prefix.clone();
@@ -607,7 +605,7 @@ fn prop_iterator_locked_for_modification() {
 /// Check that the mutable trie delete prefix does not affect generations that
 /// are frozen.
 fn prop_matches_reference_checkpoint_delete_subtree() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         for (prefix, _) in inputs.iter() {
@@ -645,7 +643,7 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
 /// Check that the mutable trie and its iterator match the reference
 /// implementation, after deleting a single value.
 fn prop_matches_reference_delete() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
         for (to_delete, _) in inputs.iter() {
             let reference = inputs
                 .iter()
@@ -690,7 +688,7 @@ fn prop_matches_reference_delete() {
 /// Check that the mutable trie and its iterator match the reference
 /// implementation after a freeze/thaw step.
 fn prop_matches_reference_after_freeze_thaw() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let trie = if let Some(Hashed {
@@ -730,7 +728,7 @@ fn prop_matches_reference_after_freeze_thaw() {
 #[test]
 /// Check that mutating the new generation does not affect the previous one.
 fn prop_matches_reference_after_new_gen_mutate() {
-    let prop = |inputs: Vec<(Vec<u8>, Vec<u8>)>, additions: Vec<(Vec<u8>, Vec<u8>)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>, additions: Vec<(Vec<u8>, Value)>| -> bool {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (mut trie, mut loader) = make_mut_trie(inputs);
         trie.new_generation();
