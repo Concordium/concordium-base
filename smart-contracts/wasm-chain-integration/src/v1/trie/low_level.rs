@@ -830,9 +830,15 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
 }
 
 #[repr(transparent)]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 struct KeyIndexPair {
     pub pair: usize,
+}
+
+impl std::fmt::Debug for KeyIndexPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        (self.key(), self.index()).fmt(f)
+    }
 }
 
 impl KeyIndexPair {
@@ -1177,15 +1183,15 @@ impl<V: AsRef<[u8]>> Node<V> {
     }
 }
 
-/// Make the children owned, and return whether the node has a value, and a
-/// mutable reference to the children.
+/// Make the children owned, and return whether the node has a value, the new
+/// length of owned_nodes, and a mutable reference to the children.
 fn make_owned<'a, 'b, V>(
     idx: usize,
     borrowed_values: &mut Vec<Link<Hashed<CachedRef<V>>>>,
     owned_nodes: &'a mut Vec<MutableNode<V>>,
     entries: &'a mut Vec<Entry>,
     loader: &'b mut impl FlatLoadable,
-) -> (bool, &'a mut tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>) {
+) -> ((bool, usize), &'a mut tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>) {
     let owned_nodes_len = owned_nodes.len();
     let node = unsafe { owned_nodes.get_unchecked(idx) };
     let node_generation = node.generation;
@@ -1240,12 +1246,13 @@ fn make_owned<'a, 'b, V>(
             value:      children,
         };
     }
+    let owned_nodes_len = owned_nodes.len();
     match &mut unsafe { owned_nodes.get_unchecked_mut(idx) }.children {
         ChildrenCow::Borrowed(_) => unsafe { std::hint::unreachable_unchecked() },
         ChildrenCow::Owned {
             value: ref mut children,
             ..
-        } => (has_value, children),
+        } => ((has_value, owned_nodes_len), children),
     }
 }
 
@@ -1873,7 +1880,7 @@ impl<V> MutableTrie<V> {
                         // no children are left, and also no value, we need to delete the child from
                         // the father.
                         if let Some((child_idx, father_idx)) = father {
-                            let (has_value, father_children) = make_owned(
+                            let ((has_value, _), father_children) = make_owned(
                                 father_idx,
                                 borrowed_values,
                                 owned_nodes,
@@ -2050,7 +2057,7 @@ impl<V> MutableTrie<V> {
                     // fixup the remaining part of the tree. If we deleted the
                     // root the tree is empty, so set it as such.
                     if let Some((child_idx, parent_idx)) = parent_idx {
-                        let (has_value, children) =
+                        let ((has_value, _), children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
 
                         children.remove(child_idx);
@@ -2222,7 +2229,7 @@ impl<V> MutableTrie<V> {
                     if node.locked > 0 {
                         return None;
                     }
-                    let (_, children) =
+                    let ((_, owned_nodes_len), children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let idx = children.binary_search_by(|kk| kk.key().cmp(&key_step));
                     match idx {

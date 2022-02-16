@@ -1,4 +1,4 @@
-use super::low_level::*;
+use super::{low_level::*, Value};
 use anyhow::{bail, ensure, Context};
 use quickcheck::*;
 use std::collections::BTreeMap;
@@ -380,6 +380,123 @@ fn prop_iterator_locked_for_modification_multiple() {
     QuickCheck::new()
         .tests(NUM_TESTS)
         .quickcheck(prop as fn(Vec<_>, Vec<_>, Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
+/// Test the following scenarios
+/// - creating iterators placed in arbitrary locations in the tree prevents us
+///   from deleting in those areas, but still allows us to create and delete in
+///   areas that are not locked
+fn prop_iterator_locked_for_modification_generations() {
+    // tests is a list of pairs of (prefixes_to_lock, keys to insert/delete)
+    let prop = |inputs: Vec<(Vec<u8>, Value)>,
+                tests: Vec<(Vec<Vec<u8>>, Vec<Vec<u8>>)>|
+     -> anyhow::Result<()> {
+        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+        let mut generation_cleanup_stack = Vec::new();
+        let mut tester = |prefixes_to_lock: &[Vec<u8>], to_insert: &[Vec<u8>], pop_gen: bool| {
+            if pop_gen {
+                if let Some(locked_prefixes) = generation_cleanup_stack.pop() {
+                    for iter in &locked_prefixes {
+                        trie.delete_iter(iter)
+                    }
+                }
+            }
+            let mut locked_prefixes = Vec::new();
+            for prefix in prefixes_to_lock {
+                if let Ok(option_iterator) = trie.iter(&mut loader, &prefix) {
+                    if let Some(iterator) = option_iterator {
+                        locked_prefixes.push(iterator);
+                    }
+                }
+            }
+            for (candidate, data) in to_insert.iter().zip(0u64..) {
+                // find out if the candidate can or cannot be inserted
+                let not_allowed =
+                    locked_prefixes.iter().any(|iter| candidate.starts_with(iter.get_key()));
+                if not_allowed {
+                    ensure!(
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_none(),
+                        "{:?} extends one of the iterator keys.",
+                        candidate
+                    );
+                    ensure!(
+                        trie.delete(&mut loader, &candidate).is_none(),
+                        "{:?} extends one of the iterator keys, so deletion is not allowed.",
+                        candidate
+                    );
+                    ensure!(
+                        !trie
+                            .delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
+                            .expect("Empty counter does not fail."),
+                        "{:?} extends one of the iterator keys, but delete_prefix succeded.",
+                        candidate
+                    )
+                } else {
+                    ensure!(
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_some(),
+                        "{:?} does not extend any of the iterator keys, but insertion failed.",
+                        candidate
+                    );
+                    let not_allowed_delete_subtree =
+                        locked_prefixes.iter().any(|iter| iter.get_key().starts_with(candidate));
+                    if !not_allowed_delete_subtree {
+                        if data % 2 == 0 {
+                            // now delete the just inserted entry
+                            ensure!(
+                                trie.delete(&mut loader, &candidate).is_some(),
+                                "{:?} does not extend any of the iterator keys but deletion \
+                                 failed, {:#?}, iterator {:#?}",
+                                candidate,
+                                trie,
+                                locked_prefixes,
+                            );
+                        } else {
+                            ensure!(
+                                trie.delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
+                                    .expect("Empty counter does not fail."),
+                                "{:?} is not extended by any of iterator keys, nor does it extend \
+                                 them, but delete_prefix failed.",
+                                candidate
+                            )
+                        }
+                    } else {
+                        // now delete the just inserted entry
+                        ensure!(
+                            trie.delete(&mut loader, &candidate).is_some(),
+                            "{:?} does not extend any of the iterator keys, but deletion failed.",
+                            candidate
+                        );
+                    }
+                }
+            }
+            if !pop_gen {
+                generation_cleanup_stack.push(locked_prefixes);
+            }
+            // cleanup the trie
+            // for iter in &locked_prefixes {
+            // trie.delete_iter(iter)
+            // }
+            if pop_gen {
+                trie.pop_generation().context(
+                    "We are iterating over the same list, so we should alwasy succeed in popping.",
+                )?;
+            } else {
+                trie.new_generation();
+            }
+            Ok(())
+        };
+        for (prefixes_to_lock, to_insert) in &tests {
+            tester(prefixes_to_lock, to_insert, false)?;
+        }
+        for (prefixes_to_lock, to_insert) in tests.iter().rev() {
+            tester(prefixes_to_lock, to_insert, true)?;
+        }
+        ensure!(trie.pop_generation().is_some(), "We should have one generation left.");
+        ensure!(trie.pop_generation().is_none(), "We should have exhausted the generations.");
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
