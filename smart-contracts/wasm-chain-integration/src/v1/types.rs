@@ -425,7 +425,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "state_create_entry" => type_matches!(ty => [I32, I32]; I64),
                 "state_delete_entry" => type_matches!(ty => [I64]; I32),
                 "state_delete_prefix" => type_matches!(ty => [I32, I32]; I32),
-                "state_iterate_prefix" => type_matches!(ty => [I32, I32]; I32),
+                "state_iterate_prefix" => type_matches!(ty => [I32, I32]; I64),
                 "state_iterator_next" => type_matches!(ty => [I64]; I64),
                 "state_iterator_delete" => type_matches!(ty => [I64]; I32),
                 "state_iterator_key_size" => type_matches!(ty => [I64]; I32),
@@ -434,8 +434,6 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "state_entry_write" => type_matches!(ty => [I64, I32, I32, I32]; I32),
                 "state_entry_size" => type_matches!(ty => [I64]; I32),
                 "state_entry_resize" => type_matches!(ty => [I64, I32]; I32),
-                "state_entry_key_read" => type_matches!(ty => [I64, I32, I32, I32]; I32),
-                "state_entry_key_size" => type_matches!(ty => [I64]; I32),
                 _ => false,
             }
         } else {
@@ -613,7 +611,7 @@ pub(crate) struct InstanceStateEntryOption {
 
 impl InstanceStateEntryOption {
     pub const NEW_NONE: Self = Self {
-        index: 0,
+        index: u64::MAX,
     };
 
     #[inline]
@@ -621,7 +619,7 @@ impl InstanceStateEntryOption {
     /// This assumes both value are small enough.
     pub fn new_some(gen: Generation, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
+            index: u64::from(gen) << 32 | idx as u64,
         }
     }
 }
@@ -653,21 +651,21 @@ pub(crate) struct InstanceStateIteratorResultOption {
     index: u64,
 }
 
-// TODO: Make sure this is a sensible encoding.
 impl InstanceStateIteratorResultOption {
     pub const NEW_ERR: Self = Self {
-        index: 1u64 << 62,
+        index: u64::MAX & !(1u64 << 62), // second bit is 0
     };
     pub const NEW_OK_NONE: Self = Self {
-        index: 0,
+        index: u64::MAX,
     };
 
     /// Construct a new index from a generation and index.
-    /// This assumes both values are small enough.
+    /// This assumes both values are small enough, in particular that idx <=
+    /// 2^31
     #[inline]
     pub fn new_ok_some(gen: Generation, idx: usize) -> Self {
         Self {
-            index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
+            index: u64::from(gen) << 32 | idx as u64,
         }
     }
 }
@@ -732,8 +730,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     }
 
     /// Delete an entry. Return
-    /// - 0 if there was no entry with the given id existed, or the entry was
-    ///   invalidated
+    /// - 0 if the entry was invalidated/deleted already
     /// - 1 if an entry existed and was not invalidated.
     pub(crate) fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
         let (gen, idx) = entry.split();
@@ -749,7 +746,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 Ok(0)
             }
         } else {
-            Ok(0)
+            bail!("Invalid entry ID")
         }
     }
 
@@ -775,7 +772,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     }
 
     /// Get an iterator for the given prefix.
-    /// Returns
+    /// Returns an encoding of
     /// - an error if there are too many iterators with the given prefix
     /// - Ok(None) if the prefix points to an empty part of the tree
     /// - Ok(Some(id)) with an iterator id in case an iterator is found. This
@@ -799,6 +796,8 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// otherwise an id of an entry.
     /// This charges energy based on how much of the tree needed to be
     /// traversed, expressed in terms of bytes of the key that changed.
+    /// FIXME: Currently all iterators that have been deleted are treated as
+    /// non-existing. Perhaps this is not entirely consistent.
     pub(crate) fn iterator_next(
         &mut self,
         energy: &mut InterpreterEnergy,
@@ -871,7 +870,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             let offset = std::cmp::min(key.len(), offset as usize);
             let num_copied = std::cmp::min(key.len().saturating_sub(offset), dest.len());
             dest[0..num_copied].copy_from_slice(&key[offset..offset + num_copied]);
-            Ok(0)
+            Ok(num_copied as u32)
         } else {
             bail!("Invalid iterator.")
         }
@@ -969,7 +968,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// Resize the entry to the new size. Returns
     /// - 0 if this was unsuccessful because the new state is too big
     /// - u32::MAX if entry was already invalidated
-    /// - 2 if successful
+    /// - 1 if successful
     pub(crate) fn entry_resize(
         &mut self,
         energy: &mut InterpreterEnergy,
@@ -990,7 +989,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                         .tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
                 }
                 v.resize(new_size as usize, 0u8);
-                Ok(2)
+                Ok(1)
             } else {
                 Ok(u32::MAX)
             }
