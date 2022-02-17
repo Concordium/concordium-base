@@ -1,12 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GADTs #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Queries where
@@ -19,8 +19,10 @@ import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
+import Data.Word
 
 import Concordium.Types
+import Concordium.Types.Accounts
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
@@ -238,16 +240,17 @@ instance Show BlockSummary where
 instance ToJSON BlockSummary where
     toJSON BlockSummary{..} =
         object (commonFields ++ versionField)
-        where
-          commonFields =
+      where
+        commonFields =
             [ "transactionSummaries" .= bsTransactionSummaries,
               "specialEvents" .= bsSpecialEvents,
               "finalizationData" .= bsFinalizationData,
-              "updates" .= bsUpdates ]
+              "updates" .= bsUpdates
+            ]
 
-          -- The version field has been added in protocol version 4. For backwards compatibility,
-          -- we will not include that field in JSON for versions < 4.
-          versionField = case bsProtocolVersion of
+        -- The version field has been added in protocol version 4. For backwards compatibility,
+        -- we will not include that field in JSON for versions < 4.
+        versionField = case bsProtocolVersion of
             SP1 -> []
             SP2 -> []
             SP3 -> []
@@ -363,3 +366,119 @@ instance ToJSON BlockTransactionStatus where
             [ "status" .= String "finalized",
               "result" .= outcome
             ]
+
+data PoolPendingChange
+    = -- |No change is pending.
+      PPCNoChange
+    | -- |A reduction in baker equity capital is pending.
+      PPCReduceBakerCapital
+        { -- |New baker equity capital.
+          ppcBakerEquityCapital :: !Amount,
+          -- |Effective time of the change.
+          ppcEffectiveTime :: !UTCTime
+        }
+    | -- |Removal of the pool is pending.
+      PPCRemovePool
+        { -- |Effective time of the change.
+          ppcEffectiveTime :: !UTCTime
+        }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          constructorTagModifier = drop 3,
+          sumEncoding =
+            TaggedObject
+                { tagFieldName = "pendingChangeType",
+                  contentsFieldName = "pendingChangeDetails"
+                }
+        }
+    ''PoolPendingChange
+ )
+
+-- |Construct a 'PoolPendingChange' from the 'StakePendingChange' of the pool owner.
+makePoolPendingChange ::
+    -- |Pool owner's pending stake change
+    StakePendingChange 'AccountV1 ->
+    PoolPendingChange
+makePoolPendingChange NoChange = PPCNoChange
+makePoolPendingChange (ReduceStake ppcBakerEquityCapital (PendingChangeEffectiveV1 et)) =
+    PPCReduceBakerCapital{..}
+    where
+        ppcEffectiveTime = timestampToUTCTime et
+makePoolPendingChange (RemoveStake (PendingChangeEffectiveV1 et)) = PPCRemovePool{..}
+    where
+        ppcEffectiveTime = timestampToUTCTime et
+
+data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
+    { -- |The number of blocks baked in the current reward period.
+      bpsBlocksBaked :: !Word64,
+      -- |Whether the baker has contributed a finalization proof in the current reward period.
+      bpsFinalizationLive :: !Bool,
+      -- |The transaction fees accruing to the pool in the current reward period.
+      bpsTransactionFeesEarned :: !Amount,
+      -- |The effective stake of the baker in the current reward period.
+      bpsEffectiveStake :: !Amount,
+      -- |The lottery power of the baker in the current reward period.
+      bpsLotteryPower :: !Double,
+      -- |The effective equity capital of the baker for the current reward period.
+      bpsBakerEquityCapital :: !Amount,
+      -- |The effective delegated capital to the pool for the current reward period.
+      bpsDelegatedCapital :: !Amount
+    }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower
+        }
+    ''CurrentPaydayBakerPoolStatus
+ )
+
+-- |Status information about a given pool.
+--
+-- Commission rates for the L-pool provide a basis for comparison with baking pools, however,
+-- whereas the commission for baking pools is paid to the pool owner, "commission" is not paid
+-- to anyone.  Rather, it is used to determine the level of rewards paid to delegators, so that
+-- their earnings are commensurate to delegating to a baking pool with the same commission rates.
+data PoolStatus
+    = BakerPoolStatus
+        { -- |The 'BakerId' of the pool owner.
+          psBakerId :: !BakerId,
+          -- |The account address of the pool owner.
+          psBakerAddress :: !AccountAddress,
+          -- |The equity capital provided by the pool owner.
+          psBakerEquityCapital :: !Amount,
+          -- |The capital delegated to the pool by other accounts.
+          psDelegatedCapital :: !Amount,
+          -- |The maximum amount that may be delegated to the pool, accounting for leverage and
+          -- stake limits.
+          psDelegatedCapitalCap :: !Amount,
+          -- |The pool info associated with the pool: open status, metadata URL and commission rates.
+          psPoolInfo :: !BakerPoolInfo,
+          -- |Any pending change to the baker's stake.
+          psBakerStakePendingChange :: !PoolPendingChange,
+          -- |Status of the pool in the current reward period.
+          psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus)
+        }
+    | LPoolStatus
+        { -- |The total capital delegated to the L-pool.
+          psDelegatedCapital :: !Amount,
+          -- |The L-pool commission rates.
+          psCommissionRates :: !CommissionRates,
+          -- |The transaction fees accruing to the L-pool in the current reward period.
+          psCurrentPaydayTransactionFeesEarned :: !Amount,
+          -- |The effective delegated capital to the L-pool for the current reward period.
+          psCurrentPaydayDelegatedCapital :: !Amount
+        }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          constructorTagModifier = reverse . drop (length ("Status" :: String)) . reverse,
+          sumEncoding = TaggedObject{tagFieldName = "poolType", contentsFieldName = "poolStatus"}
+        }
+    ''PoolStatus
+ )

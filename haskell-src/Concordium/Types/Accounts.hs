@@ -282,8 +282,6 @@ putAccountBaker AccountBaker{..} = do
     put _accountBakerInfo
     put _bakerPendingChange
 
---putBakerPoolInfo _bakerPoolInfo
-
 -- |Deserialize an 'AccountBaker'.
 getAccountBaker :: IsAccountVersion av => Get (AccountBaker av)
 getAccountBaker = do
@@ -296,7 +294,6 @@ getAccountBaker = do
         ReduceStake amt _
             | amt > _stakedAmount -> fail "Pending stake reduction is not a reduction in stake"
         _ -> return ()
-    --_bakerPoolInfo <- getBakerPoolInfo sav
     return AccountBaker{..}
 
 data AccountDelegation (av :: AccountVersion) where

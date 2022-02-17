@@ -86,6 +86,7 @@ library
       Concordium.Types.UpdateQueues
       Concordium.Types.Updates
       Concordium.Utils
+      Concordium.Utils.BinarySearch
       Concordium.Utils.Encryption
       Concordium.Utils.Serialization
       Concordium.Utils.Serialization.Put
