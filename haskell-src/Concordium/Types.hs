@@ -241,10 +241,10 @@ instance (Show a) => Show (Hashed a) where
     show = show . _hashed
 
 -- * Types related to bakers.
-newtype BakerId = BakerId AccountIndex
+newtype BakerId = BakerId {bakerAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
-newtype DelegatorId = DelegatorId AccountIndex
+newtype DelegatorId = DelegatorId {delegatorAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
 type LeadershipElectionNonce = Hash.Hash
