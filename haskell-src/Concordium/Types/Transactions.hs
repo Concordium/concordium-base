@@ -653,6 +653,52 @@ data SpecialTransactionOutcome =
     -- |The foundation account.
     stoFoundationAccount :: !AccountAddress
   }
+  -- |Payment for a particular account.
+  | PaydayFoundationReward {
+    -- |The account that got rewarded.
+    stoFoundationAccount :: !AccountAddress,
+    -- |The transaction fee reward at payday to the account.
+    stoDevelopmentCharge :: !Amount
+  }
+  -- |Payment for a particular account.
+  | PaydayAccountReward {
+    -- |The account that got rewarded.
+    stoAccount :: !AccountAddress,
+    -- |The transaction fee reward at payday to the account.
+    stoTransactionFees :: !Amount,
+    -- |The baking reward at payday to the account.
+    stoBakerReward :: !Amount,
+    -- |The finalization reward at payday to the account.
+    stoFinalizationReward :: !Amount
+  }
+  -- |Amounts accrued to accounts for each baked block.
+  | BlockAccrueReward {
+    -- |The total fees paid for transactions in the block.
+    stoTransactionFees :: !Amount,
+    -- |The old balance of the GAS account.
+    stoOldGASAccount :: !Amount,
+    -- |The new balance of the GAS account.
+    stoNewGASAccount :: !Amount,
+    -- |The amount awarded to the baker.
+    stoBakerReward :: !Amount,
+    -- |The amount awarded to the L-Pool.
+    stoLPoolReward :: !Amount,
+    -- |The amount awarded to the foundation.
+    stoFoundationCharge :: !Amount,
+    -- |The baker of the block, who will receive the award.
+    stoBakerId :: !BakerId
+  }
+  -- |Payment distributed to a pool or L-Pool.
+  | PaydayPoolReward {
+    -- |The pool owner (L-Pool when 'Nothing').
+    stoPoolOwner :: !(Maybe BakerId),
+    -- |Accrued transaction fees for pool.
+    stoTransactionFees :: !Amount,
+    -- |Accrued baking rewards for pool.
+    stoBakerReward :: !Amount,
+    -- |Accrued finalization rewards for pool.
+    stoFinalizationReward :: !Amount
+  }
   deriving(Show, Eq)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
@@ -681,6 +727,31 @@ instance S.Serialize SpecialTransactionOutcome where
       S.put stoFoundationCharge
       S.put stoBaker
       S.put stoFoundationAccount
+    put PaydayFoundationReward{..} = do
+      S.putWord8 4
+      S.put stoFoundationAccount
+      S.put stoDevelopmentCharge
+    put PaydayAccountReward{..} = do
+      S.putWord8 5
+      S.put stoAccount
+      S.put stoTransactionFees
+      S.put stoBakerReward
+      S.put stoFinalizationReward
+    put BlockAccrueReward{..} = do
+      S.putWord8 6
+      S.put stoTransactionFees
+      S.put stoOldGASAccount
+      S.put stoNewGASAccount
+      S.put stoBakerReward
+      S.put stoLPoolReward
+      S.put stoFoundationCharge
+      S.put stoBakerId
+    put PaydayPoolReward{..} = do
+      S.putWord8 7
+      S.put stoPoolOwner
+      S.put stoTransactionFees
+      S.put stoBakerReward
+      S.put stoFinalizationReward
 
     get = S.getWord8 >>= \case
       0 -> do
@@ -706,6 +777,31 @@ instance S.Serialize SpecialTransactionOutcome where
         stoBaker <- S.get
         stoFoundationAccount <- S.get
         return BlockReward{..}
+      4 -> do
+        stoFoundationAccount <- S.get
+        stoDevelopmentCharge <- S.get
+        return PaydayFoundationReward{..}
+      5 -> do
+        stoAccount <- S.get
+        stoTransactionFees <- S.get
+        stoBakerReward <- S.get
+        stoFinalizationReward <- S.get
+        return PaydayAccountReward{..}
+      6 -> do
+        stoTransactionFees <- S.get
+        stoOldGASAccount <- S.get
+        stoNewGASAccount <- S.get
+        stoBakerReward <- S.get
+        stoLPoolReward <- S.get
+        stoFoundationCharge <- S.get
+        stoBakerId <- S.get
+        return BlockAccrueReward{..}
+      7 -> do
+        stoPoolOwner <- S.get
+        stoTransactionFees <- S.get
+        stoBakerReward <- S.get
+        stoFinalizationReward <- S.get
+        return PaydayPoolReward{..}
       _ -> fail "Invalid SpecialTransactionOutcome type"
 
 -- |Outcomes of transactions. The vector of outcomes must have the same size as the
