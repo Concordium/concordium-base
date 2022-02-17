@@ -60,7 +60,7 @@ pub(crate) const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 /// make sure that resource bounds are not exceeded.
 pub trait TraversalCounter {
     type Err: std::fmt::Debug;
-    fn tick(&mut self) -> Result<(), Self::Err>;
+    fn tick(&mut self, num: u64) -> Result<(), Self::Err>;
 }
 /// A counter that does not count anything, and always returns Ok(()).
 pub struct EmptyCounter;
@@ -71,7 +71,7 @@ impl TraversalCounter for EmptyCounter {
     type Err = NoError;
 
     #[inline(always)]
-    fn tick(&mut self) -> Result<(), Self::Err> { Ok(()) }
+    fn tick(&mut self, _num: u64) -> Result<(), Self::Err> { Ok(()) }
 }
 
 /// A type that can be used to collect auxiliary information while a mutable

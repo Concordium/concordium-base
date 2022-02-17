@@ -1132,11 +1132,12 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn next(
+    pub fn next<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
-        loader: &mut impl BackingStoreLoad,
+        loader: &mut L,
         iterator: &mut Iterator,
-    ) -> Option<EntryId> {
+        counter: &mut C,
+    ) -> Result<Option<EntryId>, C::Err> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
@@ -1148,7 +1149,7 @@ impl<V> MutableTrie<V> {
             } else {
                 iterator.next_child = Some(0);
                 if node.value.is_some() {
-                    return node.value;
+                    return Ok(node.value);
                 }
                 0
             };
@@ -1160,17 +1161,20 @@ impl<V> MutableTrie<V> {
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                 let child = children[usize::from(next_child)];
                 iterator.current_node = child.index();
+                let new_path = owned_nodes[iterator.current_node].path.as_ref();
+                counter.tick(1 + new_path.len() as u64)?;
                 iterator.key.push(child.key());
-                iterator.key.extend_from_slice(owned_nodes[iterator.current_node].path.as_ref());
+                iterator.key.extend_from_slice(new_path);
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
+                    counter.tick(iterator.key.len().saturating_sub(key_len) as u64)?;
                     iterator.key.truncate(key_len);
                     iterator.current_node = parent_idx;
                     iterator.next_child = Some(next_child);
                 } else {
                     // we are done
-                    return None;
+                    return Ok(None);
                 }
             }
         }
@@ -1678,9 +1682,9 @@ impl<V> MutableTrie<V> {
                     let mut nodes_to_invalidate = vec![node_idx];
                     // traverse each child subtree and invalidate them.
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
-                        counter.tick()?;
                         let to_invalidate = &owned_nodes[node_idx];
-                        // Before invalidating the node we first check if its locked.
+                        counter.tick(to_invalidate.path.as_ref().len() as u64 + 1)?; // + 1 is for the step from the parent.
+                                                                                     // Before invalidating the node we first check if its locked.
                         if to_invalidate.locked > 0 {
                             return Ok(Err(AttemptToModifyLockedArea));
                         }

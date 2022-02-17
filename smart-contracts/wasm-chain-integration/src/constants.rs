@@ -115,3 +115,10 @@ pub const DELETE_ENTRY_COST: u64 = 10;
 /// Base cost of resizing an entry. This accounts for lookup.
 /// TODO: Benchmark.
 pub const RESIZE_ENTRY_BASE_COST: u64 = 10;
+
+/// Maximum size (in bytes) of data in the entry. The execution engine relies on
+/// this being strictly less than [u32::MAX].
+/// Realistically this is much above any bound implied by energy, however it is
+/// good to have it explicit since correctness of the implementation relies on
+/// this.
+pub const MAX_ENTRY_SIZE: usize = 1 << 31;

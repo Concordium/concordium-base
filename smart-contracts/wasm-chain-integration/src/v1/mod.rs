@@ -398,7 +398,6 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge.
         let prefix_len = unsafe { stack.pop_u32() };
         let prefix_start = unsafe { stack.pop_u32() } as usize;
         let prefix_end = prefix_start + prefix_len as usize;
@@ -416,9 +415,8 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Charge cost. This needs to be dynamic.
         let iter_index = unsafe { stack.pop_u64() };
-        let entry_option = state.iterator_next(InstanceStateIterator::from(iter_index))?;
+        let entry_option = state.iterator_next(energy, InstanceStateIterator::from(iter_index))?;
         stack.push_value(u64::from(entry_option));
         Ok(())
     }

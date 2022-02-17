@@ -96,8 +96,10 @@ fn prop_serialization() {
         };
         let reference_iter = reference.iter();
         for (k, v) in reference_iter {
-            let entry =
-                mutable.next(&mut loader, &mut iterator).context("Trie iterator ends early.")?;
+            let entry = mutable
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .context("Trie iterator ends early.")?;
             ensure!(
                 mutable.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
                 "Reference value does not match the trie value."
@@ -150,7 +152,7 @@ fn prop_hash_independent_of_order() {
             let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
                 t
             } else {
-                ensure!(inputs.len() == 0, "Empty tree, but non-empty inputs.");
+                ensure!(inputs.is_empty(), "Empty tree, but non-empty inputs.");
                 return Ok(());
             };
             let hash = frozen.hash;
@@ -159,7 +161,7 @@ fn prop_hash_independent_of_order() {
             for (l, r) in swaps {
                 inputs.swap(l % len, r % len);
             }
-            let (trie_1, mut loader_1) = make_mut_trie(inputs.clone());
+            let (trie_1, mut loader_1) = make_mut_trie(inputs);
             let frozen_1 = if let Some(t) = trie_1.freeze(&mut loader_1, &mut EmptyCollector) {
                 t
             } else {
@@ -189,8 +191,10 @@ fn prop_matches_reference() {
         };
         let reference_iter = reference.iter();
         for (k, v) in reference_iter {
-            let entry =
-                trie.next(&mut loader, &mut iterator).context("Trie iterator ends early.")?;
+            let entry = trie
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .context("Trie iterator ends early.")?;
             ensure!(
                 trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
                 "Reference value does not match the trie value."
@@ -199,7 +203,9 @@ fn prop_matches_reference() {
             ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}", it_key, k);
         }
         ensure!(
-            trie.next(&mut loader, &mut iterator).is_none(),
+            trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .is_none(),
             "Trie iterator has remaining values."
         );
         Ok(())
@@ -261,7 +267,10 @@ fn prop_matches_reference_delete_subtree() {
                 continue;
             };
             for (k, v) in reference_iter {
-                if let Some(entry) = trie.next(&mut loader, &mut iterator) {
+                if let Some(entry) = trie
+                    .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                    .expect("Empty counter does not fail.")
+                {
                     ensure!(
                         trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
                         "Entry value does not match reference value."
@@ -272,7 +281,9 @@ fn prop_matches_reference_delete_subtree() {
             }
             // there are no values left to iterate.
             ensure!(
-                trie.next(&mut loader, &mut iterator).is_none(),
+                trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
+                    .expect("Empty counter does not fail.")
+                    .is_none(),
                 "Iterator has remaining values."
             );
         }
@@ -291,7 +302,7 @@ fn prop_iterator_locked_for_modification_multiple() {
                 prefixes_to_lock: Vec<Vec<u8>>,
                 to_insert: Vec<Vec<u8>>|
      -> anyhow::Result<()> {
-        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+        let (mut trie, mut loader) = make_mut_trie(inputs);
         let mut stop = false;
         for len_to_consider in 0.. {
             if stop {
@@ -383,6 +394,8 @@ fn prop_iterator_locked_for_modification_multiple() {
         .quickcheck(prop as fn(Vec<_>, Vec<_>, Vec<_>) -> anyhow::Result<()>);
 }
 
+type PrefixesToLock = Vec<Vec<u8>>;
+type KeysToInsert = Vec<Vec<u8>>;
 #[test]
 /// Test the following scenarios
 /// - creating iterators placed in arbitrary locations in the tree prevents us
@@ -391,9 +404,9 @@ fn prop_iterator_locked_for_modification_multiple() {
 fn prop_iterator_locked_for_modification_generations() {
     // tests is a list of pairs of (prefixes_to_lock, keys to insert/delete)
     let prop = |inputs: Vec<(Vec<u8>, Value)>,
-                tests: Vec<(Vec<Vec<u8>>, Vec<Vec<u8>>)>|
+                tests: Vec<(PrefixesToLock, KeysToInsert)>|
      -> anyhow::Result<()> {
-        let (mut trie, mut loader) = make_mut_trie(inputs.clone());
+        let (mut trie, mut loader) = make_mut_trie(inputs);
         let mut generation_cleanup_stack = Vec::new();
         let mut tester = |prefixes_to_lock: &[Vec<u8>], to_insert: &[Vec<u8>], pop_gen: bool| {
             if pop_gen {
@@ -405,10 +418,8 @@ fn prop_iterator_locked_for_modification_generations() {
             }
             let mut locked_prefixes = Vec::new();
             for prefix in prefixes_to_lock {
-                if let Ok(option_iterator) = trie.iter(&mut loader, &prefix) {
-                    if let Some(iterator) = option_iterator {
-                        locked_prefixes.push(iterator);
-                    }
+                if let Ok(Some(iterator)) = trie.iter(&mut loader, &prefix) {
+                    locked_prefixes.push(iterator);
                 }
             }
             for (candidate, data) in to_insert.iter().zip(0u64..) {
@@ -509,7 +520,7 @@ fn prop_iterator_locked_for_modification() {
         for (prefix, _) in inputs.iter() {
             let locked_prefix = prefix.clone();
 
-            if let Some(mut iter) = trie
+            if let Some(iter) = trie
                 .iter(&mut loader, &locked_prefix)
                 .expect("This is the first iterator, so no overflow.")
             {
@@ -569,7 +580,7 @@ fn prop_iterator_locked_for_modification() {
                     step_up
                 );
 
-                trie.delete_iter(&mut iter);
+                trie.delete_iter(&iter);
                 ensure!(
                     trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (insertion): \
@@ -630,7 +641,10 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
             return reference.is_empty();
         };
         for (k, v) in reference.iter() {
-            if let Some(entry) = trie.next(&mut loader, &mut iterator) {
+            if let Some(entry) = trie
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+            {
                 if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
                     return false;
                 }
@@ -640,7 +654,11 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
             }
         }
         // there are no values left to iterate.
-        if trie.next(&mut loader, &mut iterator).is_some() {
+        if trie
+            .next(&mut loader, &mut iterator, &mut EmptyCounter)
+            .expect("Empty counter does not fail.")
+            .is_some()
+        {
             return false;
         }
         true
@@ -674,7 +692,10 @@ fn prop_matches_reference_delete() {
                 continue;
             };
             for (k, v) in reference_iter {
-                if let Some(entry) = trie.next(&mut loader, &mut iterator) {
+                if let Some(entry) = trie
+                    .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                    .expect("Empty counter does not fail.")
+                {
                     if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
                         return false;
                     }
@@ -684,7 +705,11 @@ fn prop_matches_reference_delete() {
                 }
             }
             // there are no values left to iterate.
-            if trie.next(&mut loader, &mut iterator).is_some() {
+            if trie
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .is_some()
+            {
                 return false;
             }
         }
@@ -719,7 +744,10 @@ fn prop_matches_reference_after_freeze_thaw() {
         };
         let reference_iter = reference.iter();
         for (k, v) in reference_iter {
-            if let Some(entry) = trie.next(&mut loader, &mut iterator) {
+            if let Some(entry) = trie
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+            {
                 if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
                     return false;
                 }
@@ -728,8 +756,9 @@ fn prop_matches_reference_after_freeze_thaw() {
                 }
             }
         }
-        trie.next(&mut loader, &mut iterator).is_none() // there are no values
-                                                        // left to iterate.
+        trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
+            .expect("Empty counter does not fail.")
+            .is_none() // there are no values left to iterate.
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
 }
@@ -775,13 +804,16 @@ fn prop_matches_reference_after_new_gen_mutate() {
                 return joined_reference.is_empty();
             };
             for k in reference_iter {
-                if let Some(entry) = trie.next(&mut loader, &mut iterator_gen_1) {
-                    if !trie
+                if let Some(entry) = trie
+                    .next(&mut loader, &mut iterator_gen_1, &mut EmptyCounter)
+                    .expect("Empty counter does not fail.")
+                {
+                    let lookup_result = trie
                         .with_entry(entry, &mut loader, |ev| {
                             ev == &[17] || additions_map.get(k) == Some(ev)
                         })
-                        .unwrap_or(false)
-                    {
+                        .unwrap_or(false);
+                    if !lookup_result {
                         return false;
                     }
                     if iterator_gen_1.get_key() != k {
@@ -791,7 +823,11 @@ fn prop_matches_reference_after_new_gen_mutate() {
                     return false;
                 }
             }
-            if trie.next(&mut loader, &mut iterator_gen_1).is_some() {
+            if trie
+                .next(&mut loader, &mut iterator_gen_1, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .is_some()
+            {
                 return false;
             }
         }
@@ -806,7 +842,10 @@ fn prop_matches_reference_after_new_gen_mutate() {
             return reference.is_empty();
         };
         for (k, v) in reference_iter {
-            if let Some(entry) = trie.next(&mut loader, &mut iterator) {
+            if let Some(entry) = trie
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+            {
                 if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
                     return false;
                 }
@@ -817,8 +856,10 @@ fn prop_matches_reference_after_new_gen_mutate() {
                 return false;
             }
         }
-        trie.next(&mut loader, &mut iterator).is_none() // there are no values
-                                                        // left to iterate.
+        trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
+            .expect("Empty counter does not fail.")
+            .is_none() // there are no values
+                       // left to iterate.
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> bool);
 }

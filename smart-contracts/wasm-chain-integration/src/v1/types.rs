@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use super::{trie, Interrupt, ParameterVec, StateLessReceiveHost};
 use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
@@ -680,8 +678,8 @@ impl trie::TraversalCounter for InterpreterEnergy {
     type Err = anyhow::Error;
 
     #[inline(always)]
-    fn tick(&mut self) -> Result<(), Self::Err> {
-        self.tick_energy(crate::constants::TREE_TRAVERSAL_STEP_COST)
+    fn tick(&mut self, num: u64) -> Result<(), Self::Err> {
+        self.tick_energy(crate::constants::TREE_TRAVERSAL_STEP_COST * num)
     }
 }
 
@@ -799,14 +797,17 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 
     /// Advance the iterator. Returns None if the iterator is exhausted, and
     /// otherwise an id of an entry.
+    /// This charges energy based on how much of the tree needed to be
+    /// traversed, expressed in terms of bytes of the key that changed.
     pub(crate) fn iterator_next(
         &mut self,
+        energy: &mut InterpreterEnergy,
         iter: InstanceStateIterator,
     ) -> StateResult<InstanceStateEntryOption> {
         let (gen, idx) = iter.split();
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
         if let Some(iter) = self.iterators.get_mut(idx).and_then(Option::as_mut) {
-            if let Some(id) = self.state_trie.next(&mut self.backing_store, iter) {
+            if let Some(id) = self.state_trie.next(&mut self.backing_store, iter, energy)? {
                 let idx = self.entry_mapping.len();
                 self.entry_mapping.push(Some(EntryWithKey {
                     id,
@@ -906,7 +907,6 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 
     /// Read a section of the entry, and return how much was written, or
     /// u32::MAX, in case the entry has already been invalidated.
-    // TODO: u32::MAX-1 is the maximum size of an entry. Ensure it.
     pub(crate) fn entry_write(
         &mut self,
         entry: InstanceStateEntry,
@@ -919,12 +919,21 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             if let Some(v) = self.state_trie.get_mut(entry.id, &mut self.backing_store) {
                 let offset = offset as usize;
                 if offset <= v.len() {
-                    let end = offset.checked_add(src.len()).context("Too much data.")?;
+                    // by state invariants, v.len() <= MAX_ENTRY_SIZE.
+                    // Hence offset <= MAX_ENTRY_SIZE, and thus offset <= end.
+                    // So the below will work correctly.
+                    let end = std::cmp::min(
+                        constants::MAX_ENTRY_SIZE,
+                        offset.checked_add(src.len()).context("Too much data.")?,
+                    );
                     if v.len() < end {
                         v.resize(end, 0u8);
                     }
-                    (&mut v[offset..end]).write_all(src)?;
-                    Ok(src.len() as u32)
+                    let num_bytes_to_write = end - offset;
+                    v[offset..end].copy_from_slice(&src[0..num_bytes_to_write]);
+                    // as below is correct, since num_bytes_to_write <= end <= MAX_ENTRY_SIZE <
+                    // u32::MAX
+                    Ok(num_bytes_to_write as u32)
                 } else {
                     // cannot start writing past the entry, so write nothing.
                     Ok(0)
@@ -959,9 +968,8 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 
     /// Resize the entry to the new size. Returns
     /// - 0 if this was unsuccessful because the new state is too big
-    /// - 1 if entry was already invalidated
+    /// - u32::MAX if entry was already invalidated
     /// - 2 if successful
-    /// TODO: Ensure max size < u32::MAX
     pub(crate) fn entry_resize(
         &mut self,
         energy: &mut InterpreterEnergy,
@@ -971,6 +979,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         let (gen, idx) = entry.split();
         ensure!(gen == self.current_generation, "Incorrect entry id generation.");
         if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
+            if new_size as usize > constants::MAX_ENTRY_SIZE {
+                return Ok(0);
+            }
             if let Some(v) = self.state_trie.get_mut(entry.id, &mut self.backing_store) {
                 let old_size = v.len() as u64;
                 let new_size = u64::from(new_size);
@@ -981,7 +992,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 v.resize(new_size as usize, 0u8);
                 Ok(2)
             } else {
-                Ok(1)
+                Ok(u32::MAX)
             }
         } else {
             bail!("Invalid entry.");
