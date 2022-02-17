@@ -604,41 +604,34 @@ impl InstanceStateEntry {
     }
 }
 
-impl InstanceStateEntryOption {
-    #[inline]
-    /// Construct a new index from a generation and index.
-    /// This assumes both value are small enough.
-    pub fn new(opt: Option<(Generation, usize)>) -> Self {
-        match opt {
-            None => Self {
-                index: 0,
-            },
-            Some((gen, idx)) => Self {
-                index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
-            },
-        }
-    }
-}
-
 /// if the first bit is 0 then this counts as None,
 /// otherwise the next 31 bits indicate the generation,
 /// and the remaining 32 the index in the entry mapping.
 #[derive(Debug, Clone, Copy, From, Into)]
 #[repr(transparent)]
-pub struct InstanceStateEntryOption {
-    index: u64,
-}
-/// Analogous to InstanceStateEntry.
-#[derive(Debug, Clone, Copy, From, Into)]
-#[repr(transparent)]
-pub struct InstanceStateIterator {
+pub(crate) struct InstanceStateEntryOption {
     index: u64,
 }
 
-/// Analogous to [InstanceStateEntryResultOption].
+impl InstanceStateEntryOption {
+    pub const NEW_NONE: Self = Self {
+        index: 0,
+    };
+
+    #[inline]
+    /// Construct a new index from a generation and index.
+    /// This assumes both value are small enough.
+    pub fn new_some(gen: Generation, idx: usize) -> Self {
+        Self {
+            index: u64::from(gen) << 32 | idx as u64 | 1u64 << 63,
+        }
+    }
+}
+
+/// Analogous to InstanceStateEntry.
 #[derive(Debug, Clone, Copy, From, Into)]
 #[repr(transparent)]
-pub struct InstanceStateIteratorResultOption {
+pub(crate) struct InstanceStateIterator {
     index: u64,
 }
 
@@ -651,17 +644,18 @@ impl InstanceStateIterator {
         let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
         (generation as u32, idx as usize)
     }
-
-    #[inline]
-    /// Construct a new index from a generation and index.
-    /// This assumes both value are small enough.
-    pub fn new(gen: Generation, idx: usize) -> Self {
-        Self {
-            index: u64::from(gen) << 32 | idx as u64,
-        }
-    }
 }
 
+/// An encoding of `Result<Option<Iterator>>`. The Result is for the case where
+/// we have too many iterators already at the given location, the Option is for
+/// when the key does not point to a valid part of the tree.
+#[derive(Debug, Clone, Copy, From, Into)]
+#[repr(transparent)]
+pub(crate) struct InstanceStateIteratorResultOption {
+    index: u64,
+}
+
+// TODO: Make sure this is a sensible encoding.
 impl InstanceStateIteratorResultOption {
     pub const NEW_ERR: Self = Self {
         index: 1u64 << 62,
@@ -671,7 +665,7 @@ impl InstanceStateIteratorResultOption {
     };
 
     /// Construct a new index from a generation and index.
-    /// This assumes both value are small enough.
+    /// This assumes both values are small enough.
     #[inline]
     pub fn new_ok_some(gen: Generation, idx: usize) -> Self {
         Self {
@@ -707,64 +701,88 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn lookup_entry(&mut self, key: &[u8]) -> InstanceStateEntryOption {
+    /// Lookup an entry and return an entry id if it exists,
+    /// and (an encoding of) [None] otherwise.
+    pub(crate) fn lookup_entry(&mut self, key: &[u8]) -> InstanceStateEntryOption {
         if let Some(id) = self.state_trie.get_entry(&mut self.backing_store, key) {
             let idx = self.entry_mapping.len();
             self.entry_mapping.push(Some(EntryWithKey {
                 id,
                 key: key.into(),
             }));
-            InstanceStateEntryOption::new(Some((self.current_generation, idx)))
+            InstanceStateEntryOption::new_some(self.current_generation, idx)
         } else {
-            InstanceStateEntryOption::new(None)
+            InstanceStateEntryOption::NEW_NONE
         }
     }
 
-    pub fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntry> {
-        if let Some(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
+    /// Create an entry. Return an id of the new entry if successful. This
+    /// method succeeds if and only if the entry would not be created in the
+    /// subtree that is locked due to an iterator. In that case this returns (an
+    /// encoding of) [None].
+    pub(crate) fn create_entry(&mut self, key: &[u8]) -> InstanceStateEntryOption {
+        if let Ok(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
             let idx = self.entry_mapping.len();
             self.entry_mapping.push(Some(EntryWithKey {
                 id:  id.0,
                 key: key.into(),
             }));
-            Ok(InstanceStateEntry::new(self.current_generation, idx))
+            InstanceStateEntryOption::new_some(self.current_generation, idx)
         } else {
-            bail!("Cannot create entry.")
+            InstanceStateEntryOption::NEW_NONE
         }
     }
 
-    pub fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
+    /// Delete an entry. Return
+    /// - 0 if there was no entry with the given id existed, or the entry was
+    ///   invalidated
+    /// - 1 if an entry existed and was not invalidated.
+    pub(crate) fn delete_entry(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         ensure!(gen == self.current_generation, "Incorrect entry id generation.");
-        let entry = if let Some(entry) = self.entry_mapping.get_mut(idx) {
+        if let Some(entry) = self.entry_mapping.get_mut(idx) {
             if let Some(entry) = std::mem::take(entry) {
-                entry
+                if let Ok(true) = self.state_trie.delete(&mut self.backing_store, &entry.key) {
+                    Ok(1)
+                } else {
+                    Ok(0)
+                }
             } else {
-                return Ok(0);
+                Ok(0)
             }
-        } else {
-            return Ok(0);
-        };
-        if self.state_trie.delete(&mut self.backing_store, &entry.key).is_some() {
-            Ok(1)
         } else {
             Ok(0)
         }
     }
 
-    pub fn delete_prefix(
+    /// Delete a prefix in the trie. Return
+    /// - 0 if the tree was locked
+    /// - 1 the tree was not locked, but nothing was deleted since the key
+    ///   points to an empty part of the tree.
+    /// - 2 if something was deleted.
+    pub(crate) fn delete_prefix(
         &mut self,
         energy: &mut InterpreterEnergy,
         key: &[u8],
     ) -> StateResult<u32> {
-        if self.state_trie.delete_prefix(&mut self.backing_store, key, energy)? {
-            Ok(1)
+        if let Ok(b) = self.state_trie.delete_prefix(&mut self.backing_store, key, energy)? {
+            if b {
+                Ok(2)
+            } else {
+                Ok(1)
+            }
         } else {
             Ok(0)
         }
     }
 
-    pub fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIteratorResultOption {
+    /// Get an iterator for the given prefix.
+    /// Returns
+    /// - an error if there are too many iterators with the given prefix
+    /// - Ok(None) if the prefix points to an empty part of the tree
+    /// - Ok(Some(id)) with an iterator id in case an iterator is found. This
+    ///   iterator will always yield at least one value.
+    pub(crate) fn iterator(&mut self, prefix: &[u8]) -> InstanceStateIteratorResultOption {
         if let Ok(iter) = self.state_trie.iter(&mut self.backing_store, prefix) {
             if let Some(iter) = iter {
                 let iter_id = self.iterators.len();
@@ -779,7 +797,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn iterator_next(
+    /// Advance the iterator. Returns None if the iterator is exhausted, and
+    /// otherwise an id of an entry.
+    pub(crate) fn iterator_next(
         &mut self,
         iter: InstanceStateIterator,
     ) -> StateResult<InstanceStateEntryOption> {
@@ -792,16 +812,19 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                     id,
                     key: iter.get_key().into(),
                 }));
-                Ok(InstanceStateEntryOption::new(Some((self.current_generation, idx))))
+                Ok(InstanceStateEntryOption::new_some(self.current_generation, idx))
             } else {
-                Ok(InstanceStateEntryOption::new(None))
+                Ok(InstanceStateEntryOption::NEW_NONE)
             }
         } else {
             bail!("Invalid iterator.")
         }
     }
 
-    pub fn iterator_delete(&mut self, iter: InstanceStateIterator) -> StateResult<u32> {
+    /// Delete the iterator.
+    /// Returns 1 if the iterator was successfully deleted, and 0 if the
+    /// iterator was already deleted.
+    pub(crate) fn iterator_delete(&mut self, iter: InstanceStateIterator) -> StateResult<u32> {
         let (gen, idx) = iter.split();
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
         match self.iterators.get_mut(idx) {
@@ -817,11 +840,13 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 None => Ok(0),
             },
             // iterator did not exist.
-            None => Ok(0),
+            None => bail!("Invalid iterator."),
         }
     }
 
-    pub fn iterator_key_size(&mut self, iter: InstanceStateIterator) -> StateResult<u32> {
+    /// Return the size (in bytes) of the key the iterator is currently located
+    /// at.
+    pub(crate) fn iterator_key_size(&mut self, iter: InstanceStateIterator) -> StateResult<u32> {
         let (gen, idx) = iter.split();
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
         if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
@@ -831,7 +856,8 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn iterator_key_read(
+    /// Read a section of the iterator key, and return how much was read.
+    pub(crate) fn iterator_key_read(
         &mut self,
         iter: InstanceStateIterator,
         dest: &mut [u8],
@@ -841,11 +867,8 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         ensure!(gen == self.current_generation, "Incorrect iterator generation.");
         if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
             let key = iter.get_key();
-            let offset = offset as usize;
-            let num_copied = std::cmp::min(
-                key.len().checked_sub(offset).context("Offset is past key.")?,
-                dest.len(),
-            );
+            let offset = std::cmp::min(key.len(), offset as usize);
+            let num_copied = std::cmp::min(key.len().saturating_sub(offset), dest.len());
             dest[0..num_copied].copy_from_slice(&key[offset..offset + num_copied]);
             Ok(0)
         } else {
@@ -853,7 +876,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    pub fn entry_read(
+    /// Read a section of the entry, and return how much was read, or u32::MAX,
+    /// in case the entry has already been invalidated.
+    pub(crate) fn entry_read(
         &mut self,
         entry: InstanceStateEntry,
         dest: &mut [u8],
@@ -863,26 +888,26 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         ensure!(gen == self.current_generation, "Incorrect entry id generation.");
         if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
             let res = self.state_trie.with_entry(entry.id, &mut self.backing_store, |v| {
-                let offset = offset as usize;
-                let num_copied = std::cmp::min(v.len().checked_sub(offset)?, dest.len());
+                let offset = std::cmp::min(v.len(), offset as usize);
+                let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
                 dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
-                Some(num_copied as u32)
+                num_copied as u32
             });
             if let Some(res) = res {
-                if let Some(res) = res {
-                    Ok(res)
-                } else {
-                    bail!("Offset is past end.");
-                }
+                Ok(res)
             } else {
-                bail!("Entry does not exist.");
+                // Entry has been invalidated.
+                Ok(u32::MAX)
             }
         } else {
             bail!("Invalid entry.");
         }
     }
 
-    pub fn entry_write(
+    /// Read a section of the entry, and return how much was written, or
+    /// u32::MAX, in case the entry has already been invalidated.
+    // TODO: u32::MAX-1 is the maximum size of an entry. Ensure it.
+    pub(crate) fn entry_write(
         &mut self,
         entry: InstanceStateEntry,
         src: &[u8],
@@ -893,22 +918,29 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
             if let Some(v) = self.state_trie.get_mut(entry.id, &mut self.backing_store) {
                 let offset = offset as usize;
-                ensure!(offset <= v.len(), "Cannot write past the len.");
-                let end = offset.checked_add(src.len()).context("Too much data.")?;
-                if v.len() < end {
-                    v.resize(end, 0u8);
+                if offset <= v.len() {
+                    let end = offset.checked_add(src.len()).context("Too much data.")?;
+                    if v.len() < end {
+                        v.resize(end, 0u8);
+                    }
+                    (&mut v[offset..end]).write_all(src)?;
+                    Ok(src.len() as u32)
+                } else {
+                    // cannot start writing past the entry, so write nothing.
+                    Ok(0)
                 }
-                (&mut v[offset..end]).write_all(src)?;
-                Ok(src.len() as u32)
             } else {
-                bail!("Entry does not exist.");
+                // Entry has been invalidated.
+                Ok(u32::MAX)
             }
         } else {
             bail!("Invalid entry.");
         }
     }
 
-    pub fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
+    /// Return the size of the entry, or u32::MAX in case the entry has already
+    /// been invalidated.
+    pub(crate) fn entry_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
         let (gen, idx) = entry.split();
         ensure!(gen == self.current_generation, "Incorrect entry id generation.");
         if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
@@ -917,14 +949,20 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             if let Some(res) = res {
                 Ok(res)
             } else {
-                bail!("Entry does not exist.");
+                // entry was invalidated.
+                Ok(u32::MAX)
             }
         } else {
             bail!("Invalid entry.");
         }
     }
 
-    pub fn entry_resize(
+    /// Resize the entry to the new size. Returns
+    /// - 0 if this was unsuccessful because the new state is too big
+    /// - 1 if entry was already invalidated
+    /// - 2 if successful
+    /// TODO: Ensure max size < u32::MAX
+    pub(crate) fn entry_resize(
         &mut self,
         energy: &mut InterpreterEnergy,
         entry: InstanceStateEntry,
@@ -941,41 +979,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                         .tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
                 }
                 v.resize(new_size as usize, 0u8);
-                Ok(1)
+                Ok(2)
             } else {
-                bail!("Entry does not exist.");
+                Ok(1)
             }
-        } else {
-            bail!("Invalid entry.");
-        }
-    }
-
-    pub fn entry_key_read(
-        &mut self,
-        entry: InstanceStateEntry,
-        dest: &mut [u8],
-        offset: u32,
-    ) -> StateResult<u32> {
-        let (gen, idx) = entry.split();
-        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
-        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
-            let offset = offset as usize;
-            let num_copied = std::cmp::min(
-                entry.key.len().checked_sub(offset).context("Offset is past key.")?,
-                dest.len(),
-            );
-            dest[0..num_copied].copy_from_slice(&entry.key[offset..offset + num_copied]);
-            Ok(num_copied as u32)
-        } else {
-            bail!("Invalid entry.");
-        }
-    }
-
-    pub fn entry_key_size(&mut self, entry: InstanceStateEntry) -> StateResult<u32> {
-        let (gen, idx) = entry.split();
-        ensure!(gen == self.current_generation, "Incorrect entry id generation.");
-        if let Some(entry) = self.entry_mapping.get(idx).and_then(Option::as_ref) {
-            Ok(entry.key.len() as u32)
         } else {
             bail!("Invalid entry.");
         }

@@ -11,7 +11,8 @@ fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie<Value>,
         inner: Vec::<u8>::new(),
     };
     for (key, value) in words {
-        node.insert(&mut loader, key.as_ref(), value);
+        node.insert(&mut loader, key.as_ref(), value)
+            .expect("No iterators are present, so insert should succeed");
     }
     (node, loader)
 }
@@ -236,7 +237,8 @@ fn prop_matches_reference_delete_subtree() {
 
             let reference_iter = reference.iter();
             ensure!(
-                trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap(),
+                Ok(true)
+                    == trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap(),
                 "There is at least one value with the given prefix, so deleting should succeed."
             );
 
@@ -316,25 +318,25 @@ fn prop_iterator_locked_for_modification_multiple() {
                     locked_prefixes.iter().any(|iter| candidate.starts_with(iter.get_key()));
                 if not_allowed {
                     ensure!(
-                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_none(),
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_err(),
                         "{:?} extends one of the iterator keys.",
                         candidate
                     );
                     ensure!(
-                        trie.delete(&mut loader, &candidate).is_none(),
+                        trie.delete(&mut loader, &candidate).is_err(),
                         "{:?} extends one of the iterator keys, so deletion is not allowed.",
                         candidate
                     );
                     ensure!(
-                        !trie
-                            .delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
-                            .expect("Empty counter does not fail."),
+                        trie.delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
+                            .expect("Empty counter does not fail.")
+                            .is_err(),
                         "{:?} extends one of the iterator keys, but delete_prefix succeded.",
                         candidate
                     )
                 } else {
                     ensure!(
-                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_some(),
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_ok(),
                         "{:?} does not extend any of the iterator keys, but insertion failed.",
                         candidate
                     );
@@ -344,7 +346,7 @@ fn prop_iterator_locked_for_modification_multiple() {
                         if data % 2 == 0 {
                             // now delete the just inserted entry
                             ensure!(
-                                trie.delete(&mut loader, &candidate).is_some(),
+                                trie.delete(&mut loader, &candidate).is_ok(),
                                 "{:?} does not extend any of the iterator keys, but deletion \
                                  failed.",
                                 candidate
@@ -352,7 +354,8 @@ fn prop_iterator_locked_for_modification_multiple() {
                         } else {
                             ensure!(
                                 trie.delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
-                                    .expect("Empty counter does not fail."),
+                                    .expect("Empty counter does not fail.")
+                                    .is_ok(),
                                 "{:?} is not extended by any of iterator keys, nor does it extend \
                                  them, but delete_prefix failed.",
                                 candidate
@@ -361,7 +364,7 @@ fn prop_iterator_locked_for_modification_multiple() {
                     } else {
                         // now delete the just inserted entry
                         ensure!(
-                            trie.delete(&mut loader, &candidate).is_some(),
+                            trie.delete(&mut loader, &candidate).is_ok(),
                             "{:?} does not extend any of the iterator keys, but deletion failed.",
                             candidate
                         );
@@ -414,25 +417,25 @@ fn prop_iterator_locked_for_modification_generations() {
                     locked_prefixes.iter().any(|iter| candidate.starts_with(iter.get_key()));
                 if not_allowed {
                     ensure!(
-                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_none(),
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_err(),
                         "{:?} extends one of the iterator keys.",
                         candidate
                     );
                     ensure!(
-                        trie.delete(&mut loader, &candidate).is_none(),
+                        trie.delete(&mut loader, &candidate).is_err(),
                         "{:?} extends one of the iterator keys, so deletion is not allowed.",
                         candidate
                     );
                     ensure!(
-                        !trie
-                            .delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
-                            .expect("Empty counter does not fail."),
+                        trie.delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
+                            .expect("Empty counter does not fail.")
+                            .is_err(),
                         "{:?} extends one of the iterator keys, but delete_prefix succeded.",
                         candidate
                     )
                 } else {
                     ensure!(
-                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_some(),
+                        trie.insert(&mut loader, &candidate, data.to_be_bytes().to_vec()).is_ok(),
                         "{:?} does not extend any of the iterator keys, but insertion failed.",
                         candidate
                     );
@@ -442,7 +445,7 @@ fn prop_iterator_locked_for_modification_generations() {
                         if data % 2 == 0 {
                             // now delete the just inserted entry
                             ensure!(
-                                trie.delete(&mut loader, &candidate).is_some(),
+                                trie.delete(&mut loader, &candidate).is_ok(),
                                 "{:?} does not extend any of the iterator keys but deletion \
                                  failed, {:#?}, iterator {:#?}",
                                 candidate,
@@ -452,7 +455,8 @@ fn prop_iterator_locked_for_modification_generations() {
                         } else {
                             ensure!(
                                 trie.delete_prefix(&mut loader, &candidate, &mut EmptyCounter)
-                                    .expect("Empty counter does not fail."),
+                                    .expect("Empty counter does not fail.")
+                                    .is_ok(),
                                 "{:?} is not extended by any of iterator keys, nor does it extend \
                                  them, but delete_prefix failed.",
                                 candidate
@@ -461,7 +465,7 @@ fn prop_iterator_locked_for_modification_generations() {
                     } else {
                         // now delete the just inserted entry
                         ensure!(
-                            trie.delete(&mut loader, &candidate).is_some(),
+                            trie.delete(&mut loader, &candidate).is_ok(),
                             "{:?} does not extend any of the iterator keys, but deletion failed.",
                             candidate
                         );
@@ -512,17 +516,17 @@ fn prop_iterator_locked_for_modification() {
                 let mut locked_prefix_extended = locked_prefix.clone();
                 locked_prefix_extended.push(0);
                 ensure!(
-                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_none(),
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_err(),
                     "The subtree should be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
-                    trie.delete(&mut loader, &locked_prefix_extended).is_none(),
+                    trie.delete(&mut loader, &locked_prefix_extended).is_err(),
                     "The subtree should be locked for locked_prefix_extended (removal)."
                 );
                 ensure!(
-                    !trie
-                        .delete_prefix(&mut loader, &locked_prefix_extended, &mut EmptyCounter)
-                        .expect("Empty counter does not fail."),
+                    trie.delete_prefix(&mut loader, &locked_prefix_extended, &mut EmptyCounter)
+                        .expect("Empty counter does not fail.")
+                        .is_err(),
                     "The subtree should be locked for locked_prefix_extended (prefix removal)."
                 );
                 // test that we can insert at another part of the tree
@@ -536,28 +540,29 @@ fn prop_iterator_locked_for_modification() {
                     let mut new_path = step_up.clone();
                     new_path.push(to_go);
                     ensure!(
-                        trie.insert(&mut loader, &new_path, vec![]).is_some(),
+                        trie.insert(&mut loader, &new_path, vec![]).is_ok(),
                         "The subtree should be open for new_path (inserting)."
                     );
                     ensure!(
-                        trie.delete(&mut loader, &new_path).is_some(),
+                        trie.delete(&mut loader, &new_path).is_ok(),
                         "The subtree should be open for new_path (removal)."
                     );
                     ensure!(
-                        trie.insert(&mut loader, &new_path, vec![]).is_some(),
+                        trie.insert(&mut loader, &new_path, vec![]).is_ok(),
                         "The subtree should be open for new_path (inserting before prefix \
                          removal)."
                     );
                     ensure!(
                         trie.delete_prefix(&mut loader, &new_path, &mut EmptyCounter)
-                            .expect("Empty counter does not fail."),
+                            .expect("Empty counter does not fail.")
+                            .is_ok(),
                         "The subtree should be locked for new_path (prefix removal)."
                     );
                 }
                 ensure!(
-                    !trie
-                        .delete_prefix(&mut loader, &step_up, &mut EmptyCounter)
-                        .expect("Empty counter does not fail."),
+                    trie.delete_prefix(&mut loader, &step_up, &mut EmptyCounter)
+                        .expect("Empty counter does not fail.")
+                        .is_err(),
                     "The subtree should be locked for step_up (prefix removal), {:#?}, {:?}, {:?}",
                     trie,
                     prefix,
@@ -566,7 +571,7 @@ fn prop_iterator_locked_for_modification() {
 
                 trie.delete_iter(&mut iter);
                 ensure!(
-                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (insertion): \
                      {:#?}, {:#?}, {:?}",
                     trie,
@@ -574,21 +579,23 @@ fn prop_iterator_locked_for_modification() {
                     locked_prefix_extended
                 );
                 ensure!(
-                    trie.delete(&mut loader, &locked_prefix_extended).is_some(),
+                    trie.delete(&mut loader, &locked_prefix_extended).is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (removal)."
                 );
                 ensure!(
-                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_some(),
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
                     trie.delete_prefix(&mut loader, &locked_prefix_extended, &mut EmptyCounter)
-                        .expect("Empty counter does not fail."),
+                        .expect("Empty counter does not fail.")
+                        .is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (prefix removal)."
                 );
                 ensure!(
                     trie.delete_prefix(&mut loader, &step_up, &mut EmptyCounter)
-                        .expect("Empty counter does not fail."),
+                        .expect("Empty counter does not fail.")
+                        .is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (prefix removal \
                      - step up). {:#?}, {:?}",
                     trie,
@@ -610,7 +617,9 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         for (prefix, _) in inputs.iter() {
             trie.new_generation();
-            trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap();
+            trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter)
+                .unwrap()
+                .expect("No iterators are present, so we should be able to delete the prefix.");
         }
         trie.normalize(0);
         let mut iterator = if let Some(i) =
@@ -652,7 +661,7 @@ fn prop_matches_reference_delete() {
                 .collect::<BTreeMap<_, _>>();
             let (mut trie, mut loader) = make_mut_trie(inputs.clone());
             let reference_iter = reference.iter();
-            if trie.delete(&mut loader, &to_delete[..]).is_none() {
+            if trie.delete(&mut loader, &to_delete[..]).is_err() {
                 return false;
             }
             let mut iterator = if let Some(i) =
@@ -751,7 +760,8 @@ fn prop_matches_reference_after_new_gen_mutate() {
             let mut joined_reference = reference.clone();
             let additions_map = additions.iter().cloned().collect::<BTreeMap<_, _>>();
             for (k, v) in additions {
-                trie.insert(&mut loader, &k, v.clone());
+                trie.insert(&mut loader, &k, v.clone())
+                    .expect("No iterators, so insert should succeed.");
                 joined_reference.insert(k, v);
             }
 

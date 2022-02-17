@@ -5,13 +5,13 @@
 //! and generally have many preconditions, violation of which will make them
 //! unsafe, could trigger panics, or memory corruption. For this reason
 //! functions should only be used via the exposed high-level api in the
-//! [crate::api] module.
+//! `super::api` module, which is re-exported at the top-level.
 use super::types::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use sha2::Digest;
 use std::{
     collections::HashMap,
-    io::Write,
+    io::{Read, Write},
     iter::once,
     slice::Iter,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -686,18 +686,8 @@ impl<V> Loadable for Node<V> {
         loader: &mut F,
         source: &mut S,
     ) -> LoadResult<Self> {
-        let tag = source.read_u8()?;
-        let path_len = if tag & 0b1000_0000 == 0 {
-            // stem length is encoded in the tag
-            u32::from(tag & 0b0011_1111)
-        } else {
-            // stem length follows as a u32
-            source.read_u32::<BigEndian>()?
-        };
-        let mut path = vec![0u8; path_len as usize];
-        source.read_exact(&mut path)?;
-        let path = Stem::from(path);
-        let value = if (tag & 0b100_0000) != 0 {
+        let (path, has_value) = read_node_path_and_value_tag(source)?;
+        let value = if has_value {
             let val = Hashed::<CachedRef<V>>::load(loader, source)?;
             Some(Link::new(val))
         } else {
@@ -776,25 +766,7 @@ impl<V: AsRef<[u8]>> Node<V> {
                           backing_store: &mut S,
                           ref_stack: &mut Vec<Reference>|
          -> StoreResult<()> {
-            let stem_len = node.path.as_ref().len();
-            let value_mask: u8 = if node.value.is_none() {
-                0
-            } else {
-                0b0100_0000
-            };
-            // if the first bit is 0 then the first byte encodes
-            // path length + presence of value
-            if stem_len <= INLINE_STEM_LENGTH {
-                let tag = stem_len as u8 | value_mask;
-                buf.write_u8(tag)?;
-            } else {
-                // TODO: We could optimize this as well by using variable-length encoding.
-                // But it probably does not matter in practice since paths should really always
-                // be < 64 in length.
-                let tag = 0b1000_0000 | value_mask;
-                buf.write_u8(tag)?;
-                buf.write_u32::<BigEndian>(stem_len as u32)?;
-            }
+            write_node_path_and_value_tag(node.path.as_ref(), node.value.is_none(), buf)?;
             // store the path
             buf.write_all(node.path.as_ref())?;
             // store the value
@@ -940,6 +912,11 @@ enum Entry {
     },
     /// The entry is deleted.
     Deleted,
+}
+
+impl Entry {
+    /// Return whether the entry is still alive, i.e., not [Entry::Deleted].
+    pub fn is_alive(&self) -> bool { !matches!(self, Self::Deleted) }
 }
 
 type Position = u16;
@@ -1472,28 +1449,43 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn delete(&mut self, loader: &mut impl BackingStoreLoad, key: &[Key]) -> Option<EntryId> {
+    /// Delete the given key from the trie. If the entry is in a part of the
+    /// tree that is locked this returns an error. Otherwise return whether
+    /// an entry existed.
+    pub fn delete(
+        &mut self,
+        loader: &mut impl BackingStoreLoad,
+        key: &[Key],
+    ) -> Result<bool, AttemptToModifyLockedArea> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         let mut grandfather = None;
         let mut father = None;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let mut node_idx = if let Some(node_idx) = self.generation_roots.last().and_then(|x| x.0) {
+            node_idx
+        } else {
+            return Ok(false);
+        };
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
                     // The node is the root of an iterator and closed for modification.
                     if node.locked > 0 {
-                        return None;
+                        return Err(AttemptToModifyLockedArea);
                     }
                     // we found it, delete the value first and save it for returning.
-                    let rv = std::mem::take(&mut node.value);
-                    if let Some(entry) = rv {
+                    let rv;
+                    if let Some(entry) = std::mem::take(&mut node.value) {
                         // We mark the entry as `Deleted` such that other ids pointing to the entry
                         // are automatically invalidated.
-                        entries[entry] = Entry::Deleted;
+                        let existing_entry = std::mem::replace(&mut entries[entry], Entry::Deleted);
+                        rv = existing_entry.is_alive();
+                    } else {
+                        // no value here, so no entry was found
+                        return Ok(false);
                     }
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
@@ -1585,77 +1577,34 @@ impl<V> MutableTrie<V> {
                             }
                         } else {
                             // otherwise this must be the root. Delete it.
-                            self.generation_roots.last_mut()?.0 = None;
+                            if let Some(root) = self.generation_roots.last_mut() {
+                                root.0 = None;
+                            } else {
+                                // since we would have exited this function at the very beginning if
+                                // there were no roots, this is safe
+                                unsafe { std::hint::unreachable_unchecked() }
+                            }
                         }
                     }
-                    return rv;
+                    return Ok(rv);
                 }
                 FollowStem::KeyIsPrefix {
                     ..
                 } => {
-                    return None;
+                    return Ok(false);
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
                     // the node we want to delete has a locked parent so we cannot.
                     if node.locked > 0 {
-                        return None;
+                        return Err(AttemptToModifyLockedArea);
                     }
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
                         let pair = unsafe { children.get_unchecked(c_idx) };
                         grandfather = std::mem::replace(&mut father, Some((c_idx, node_idx)));
-                        node_idx = pair.index();
-                    } else {
-                        return None;
-                    }
-                }
-                FollowStem::Diff {
-                    ..
-                } => {
-                    return None;
-                }
-            };
-        }
-    }
-
-    /// Delete the entire subtree whose keys match the given prefix, that is,
-    /// where the given key is a prefix. Return if anything was deleted.
-    pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
-        &mut self,
-        loader: &mut L,
-        key: &[Key],
-        counter: &mut C,
-    ) -> Result<bool, C::Err> {
-        let mut key_iter = key.iter();
-        let owned_nodes = &mut self.nodes;
-        let borrowed_values = &mut self.borrowed_values;
-        let entries = &mut self.entries;
-        let mut grandparent_idx = None;
-        let mut parent_idx = None;
-        let mut node_idx = if let Some(idx) = self.generation_roots.last().and_then(|x| x.0) {
-            idx
-        } else {
-            return Ok(false);
-        };
-        loop {
-            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
-                    // We encountered  a locked node when traversing down the tree.
-                    if node.locked > 0 {
-                        return Ok(false);
-                    }
-                    let (_, _, children) =
-                        make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
-                    if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
-                        let pair = unsafe { children.get_unchecked(c_idx) };
-                        grandparent_idx =
-                            std::mem::replace(&mut parent_idx, Some((c_idx, node_idx)));
                         node_idx = pair.index();
                     } else {
                         return Ok(false);
@@ -1666,10 +1615,62 @@ impl<V> MutableTrie<V> {
                 } => {
                     return Ok(false);
                 }
+            };
+        }
+    }
+
+    /// Delete the entire subtree whose keys match the given prefix, that is,
+    /// where the given key is a prefix. Return
+    /// - either an error caused by the counter
+    /// - an error caused by attempting to modify a locked part of the tree
+    /// - otherwise return whether anything was deleted
+    pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
+        &mut self,
+        loader: &mut L,
+        key: &[Key],
+        counter: &mut C,
+    ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err> {
+        let mut key_iter = key.iter();
+        let owned_nodes = &mut self.nodes;
+        let borrowed_values = &mut self.borrowed_values;
+        let entries = &mut self.entries;
+        let mut grandparent_idx = None;
+        let mut parent_idx = None;
+        let mut node_idx = if let Some(idx) = self.generation_roots.last().and_then(|x| x.0) {
+            idx
+        } else {
+            return Ok(Ok(false));
+        };
+        loop {
+            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
+                FollowStem::StemIsPrefix {
+                    key_step,
+                } => {
+                    // We encountered  a locked node when traversing down the tree.
+                    if node.locked > 0 {
+                        return Ok(Err(AttemptToModifyLockedArea));
+                    }
+                    let (_, _, children) =
+                        make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
+                    if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
+                        let pair = unsafe { children.get_unchecked(c_idx) };
+                        grandparent_idx =
+                            std::mem::replace(&mut parent_idx, Some((c_idx, node_idx)));
+                        node_idx = pair.index();
+                    } else {
+                        return Ok(Ok(false));
+                    }
+                }
+                FollowStem::Diff {
+                    ..
+                } => {
+                    return Ok(Ok(false));
+                }
                 _ => {
                     // We encountered  a locked node when traversing down the tree.
                     if node.locked > 0 {
-                        return Ok(false);
+                        return Ok(Err(AttemptToModifyLockedArea));
                     }
                     // We found the subtree to remove.
                     // First we check that the root of the subtree and it's children are not locked.
@@ -1681,7 +1682,7 @@ impl<V> MutableTrie<V> {
                         let to_invalidate = &owned_nodes[node_idx];
                         // Before invalidating the node we first check if its locked.
                         if to_invalidate.locked > 0 {
-                            return Ok(false);
+                            return Ok(Err(AttemptToModifyLockedArea));
                         }
                         if let Some(entry) = to_invalidate.value {
                             entries[entry] = Entry::Deleted;
@@ -1701,12 +1702,12 @@ impl<V> MutableTrie<V> {
                             }
                         }
                     }
-                    // FIXME: The comment could be made more precise. We do not traverse the tree
-                    // up, we just look one or two levels.
-                    //
-                    // Now traverse up and
-                    // fixup the remaining part of the tree. If we deleted the
-                    // root the tree is empty, so set it as such.
+                    // Now fix up the tree. We deleted a child of the parent. If the
+                    // parent now has a single remaining child and no value we must collapse it with
+                    // its parent, the grandfather, if it exists. If either the father nor the
+                    // grandfather exist then they are in effect the root, so we change the root
+                    // pointer to point to the relevant node, or None if we
+                    // deleted the entire tree.
                     if let Some((child_idx, parent_idx)) = parent_idx {
                         let (has_value, _, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
@@ -1717,7 +1718,6 @@ impl<V> MutableTrie<V> {
                         if !has_value && children.len() == 1 {
                             // collapse path.
                             if let Some(child) = children.pop() {
-                                // FIXME: Avoid looking up again.
                                 let parent_node: MutableNode<_> =
                                     std::mem::take(&mut owned_nodes[parent_idx]);
                                 let child_node = &mut owned_nodes[child.index()];
@@ -1730,6 +1730,7 @@ impl<V> MutableTrie<V> {
                                     // node's child, instead of the node.
                                     // the only thing that needs to be transferred from the node
                                     // to the child is (potentially) the stem of the node.
+                                    // All other values in the node are empty.
                                     let grandparent_node: &mut MutableNode<_> =
                                         unsafe { owned_nodes.get_unchecked_mut(grandparent_idx) };
                                     if let Some((_, children)) =
@@ -1760,9 +1761,9 @@ impl<V> MutableTrie<V> {
                             // we would not have reached here if there was no generation root.
                             unsafe { std::hint::unreachable_unchecked() }
                         }
-                        return Ok(true);
+                        return Ok(Ok(true));
                     }
-                    return Ok(true);
+                    return Ok(Ok(true));
                 }
             };
         }
@@ -1775,7 +1776,7 @@ impl<V> MutableTrie<V> {
         loader: &mut impl BackingStoreLoad,
         key: &[Key],
         new_value: V,
-    ) -> Option<(EntryId, Option<EntryId>)> {
+    ) -> Result<(EntryId, Option<EntryId>), AttemptToModifyLockedArea> {
         let mut key_iter = key.iter();
         let generation_root =
             self.generation_roots.last().expect("There should always be at least 1 generation.").0;
@@ -1806,7 +1807,7 @@ impl<V> MutableTrie<V> {
                 .last_mut()
                 .expect("We already checked the list is not empty.")
                 .0 = Some(root_idx);
-            return Some((entry_idx, None));
+            return Ok((entry_idx, None));
         };
         let generation = self.nodes[node_idx].generation;
         let owned_nodes = &mut self.nodes;
@@ -1823,7 +1824,7 @@ impl<V> MutableTrie<V> {
                 FollowStem::Equal => {
                     // The node is root of an iterator.
                     if node.locked > 0 {
-                        return None;
+                        return Err(AttemptToModifyLockedArea);
                     }
                     let value_idx = self.values.len();
                     self.values.push(new_value);
@@ -1834,7 +1835,7 @@ impl<V> MutableTrie<V> {
                         entry_idx: value_idx,
                     });
                     node.value = Some(entry_idx);
-                    return Some((entry_idx, old_entry_idx));
+                    return Ok((entry_idx, old_entry_idx));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -1876,14 +1877,14 @@ impl<V> MutableTrie<V> {
                         locked: 0,
                     };
                     owned_nodes.push(new_node);
-                    return Some((entry_idx, None));
+                    return Ok((entry_idx, None));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
                     // We encountered a locked node when traversing down the tree.
                     if node.locked > 0 {
-                        return None;
+                        return Err(AttemptToModifyLockedArea);
                     }
                     // make_owned may insert additional nodes. Hence we have to update our
                     // owned_nodes_len to make sure we have the up-to-date
@@ -1918,7 +1919,7 @@ impl<V> MutableTrie<V> {
                                 },
                                 locked: 0,
                             });
-                            return Some((entry_idx, None));
+                            return Ok((entry_idx, None));
                         }
                     }
                 }
@@ -1999,15 +2000,59 @@ impl<V> MutableTrie<V> {
                     } else if let Some(root) = self.generation_roots.last_mut() {
                         root.0 = Some(new_node_idx);
                     }
-                    return Some((entry_idx, None));
+                    return Ok((entry_idx, None));
                 }
             }
         }
     }
 }
 
-impl<V> Node<V> {
-    pub fn empty() -> Self { Self::default() }
+/// Store the node's value tag (whether the value is present or not) together
+/// with the length of the stem. This should match
+/// [read_node_path_and_value_tag] below.
+#[inline(always)]
+fn write_node_path_and_value_tag(
+    stem: &[u8],
+    no_value: bool,
+    out: &mut impl Write,
+) -> Result<(), std::io::Error> {
+    let stem_len = stem.len();
+    let value_mask: u8 = if no_value {
+        0
+    } else {
+        0b0100_0000
+    };
+    // if the first bit is 0 then the first byte encodes
+    // path length + presence of value
+    if stem_len <= INLINE_STEM_LENGTH {
+        let tag = stem_len as u8 | value_mask;
+        out.write_u8(tag)
+    } else {
+        // We could optimize this as well by using variable-length encoding.
+        // But it probably does not matter in practice since paths should really always
+        // be < 64 in length.
+        let tag = 0b1000_0000 | value_mask;
+        out.write_u8(tag)?;
+        out.write_u32::<BigEndian>(stem_len as u32)
+    }
+}
+
+#[inline(always)]
+/// Read a node path and whether the value exists. This should match
+/// [write_node_path_and_value_tag] above.
+fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), std::io::Error> {
+    let tag = source.read_u8()?;
+    let path_len = if tag & 0b1000_0000 == 0 {
+        // stem length is encoded in the tag
+        u32::from(tag & 0b0011_1111)
+    } else {
+        // stem length follows as a u32
+        source.read_u32::<BigEndian>()?
+    };
+    let mut path = vec![0u8; path_len as usize];
+    source.read_exact(&mut path)?;
+    let path = Stem::from(path);
+    Ok((path, (tag & 0b100_0000 != 0)))
 }
 
 impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
@@ -2028,27 +2073,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             out.write_u32::<BigEndian>(node_counter - idx)?;
             out.write_all(node.hash.as_ref())?;
             let node = &node.data;
-            // FIXME: Make a function to do this since it is the same as in
-            // store_update_buf.
-            let stem_len = node.path.as_ref().len();
-            let value_mask: u8 = if node.value.is_none() {
-                0
-            } else {
-                0b0100_0000
-            };
-            // if the first bit is 0 then the first byte encodes
-            // path length + presence of value
-            if stem_len <= INLINE_STEM_LENGTH {
-                let tag = stem_len as u8 | value_mask;
-                out.write_u8(tag)?;
-            } else {
-                // TODO: We could optimize this as well by using variable-length encoding.
-                // But it probably does not matter in practice since paths should really always
-                // be < 64 in length.
-                let tag = 0b1000_0000 | value_mask;
-                out.write_u8(tag)?;
-                out.write_u32::<BigEndian>(stem_len as u32)?;
-            }
+            write_node_path_and_value_tag(node.path.as_ref(), node.value.is_none(), out)?;
             // store the path
             out.write_all(node.path.as_ref())?;
             // store the value
@@ -2084,18 +2109,8 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
         while let Some(key) = todo.pop_front() {
             let idx = source.read_u32::<BigEndian>()?;
             let hash = Hash::read(source)?;
-            let tag = source.read_u8()?;
-            let path_len = if tag & 0b1000_0000 == 0 {
-                // stem length is encoded in the tag
-                u32::from(tag & 0b0011_1111)
-            } else {
-                // stem length follows as a u32
-                source.read_u32::<BigEndian>()?
-            };
-            let mut path = vec![0u8; path_len as usize];
-            source.read_exact(&mut path)?;
-            let path = Stem::from(path);
-            let value = if (tag & 0b100_0000) != 0 {
+            let (path, has_value) = read_node_path_and_value_tag(source)?;
+            let value = if has_value {
                 let value_hash = Hash::read(source)?;
                 let value_len = source.read_u32::<BigEndian>()?;
                 let mut val = vec![0u8; value_len as usize];
@@ -2151,24 +2166,22 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
     }
 }
 
-impl<V> Default for Node<V> {
-    fn default() -> Self {
-        Self {
-            value:    None,
-            children: Vec::new(),
-            path:     Stem::empty(),
-        }
-    }
-}
-
+/// Result of [follow_stem] below.
 enum FollowStem {
+    /// Iterators were equal. Both were consumed to the end.
     Equal,
+    /// The key iterator is a strict prefix of the stem iterator.
+    /// The first item of the stem past the key is returned.
     KeyIsPrefix {
         stem_step: Key,
     },
+    /// The stem iterator is a strict prefix of the key iterator.
+    /// The first item of the key past the stem is returned.
     StemIsPrefix {
         key_step: Key,
     },
+    /// The stem and key iterators differ. The items where they differ are
+    /// returned.
     Diff {
         key_step:  Key,
         stem_step: Key,
@@ -2176,6 +2189,9 @@ enum FollowStem {
 }
 
 #[inline(always)]
+/// Given two iterators, representing the key and the stem of the node, advance
+/// them stepwise until either at least one of them is exhausted or the steps
+/// differ. Return which option occurred.
 fn follow_stem(key_iter: &mut Iter<Key>, stem_iter: &mut Iter<Key>) -> FollowStem {
     for &stem_step in stem_iter {
         if let Some(&key_step) = key_iter.next() {

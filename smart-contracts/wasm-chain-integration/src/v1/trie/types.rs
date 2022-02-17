@@ -157,7 +157,7 @@ impl BackingStoreStore for Vec<u8> {
     }
 }
 #[derive(Debug)]
-/// A generic wrapper that implements [FlatStorable] for any inner
+/// A generic wrapper that implements [BackingStoreStore] for any inner
 /// type that implements [Seek] and [Write].
 pub struct Storable<X> {
     inner: X,
@@ -206,7 +206,7 @@ impl<'a, A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
     }
 }
 
-/// A trait implemented by types that can be loaded from a [FlatLoadable]
+/// A trait implemented by types that can be loaded from a [BackingStoreLoad]
 /// storage.
 pub trait Loadable: Sized {
     fn load<S: std::io::Read, F: BackingStoreLoad>(
@@ -412,8 +412,14 @@ impl<A> IndexMut<EntryId> for Vec<A> {
     fn index_mut(&mut self, index: EntryId) -> &mut Self::Output { self.index_mut(index.id) }
 }
 
-#[derive(Debug, Error)]
-#[error("Too many iterators at the same root.")]
+#[derive(Debug, Error, Eq, PartialEq)]
 /// An error used to indicate when too many iterators were acquired at the same
 /// location in the tree. The maximum number is [u16::MAX].
+#[error("Too many iterators at the same root.")]
 pub struct TooManyIterators;
+
+#[derive(Debug, Error, Eq, PartialEq)]
+/// An error used to indicate that an operation could not be completed because
+/// the portion of the trie is locked
+#[error("Trying to insert or delete in a locked part of the trie.")]
+pub struct AttemptToModifyLockedArea;

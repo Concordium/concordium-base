@@ -354,7 +354,7 @@ mod host {
         energy.tick_energy(constants::modify_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let entry_index = state.create_entry(key)?;
+        let entry_index = state.create_entry(key);
         stack.push_value(u64::from(entry_index));
         Ok(())
     }
