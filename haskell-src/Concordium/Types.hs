@@ -149,7 +149,8 @@ module Concordium.Types (
   FinalizationCommitteeSize,
 
   -- * Hashing
-  Hashed(..),
+  Hashed'(..),
+  Hashed,
   unhashed,
   makeHashed,
   
@@ -218,27 +219,29 @@ import qualified Data.Serialize.Get as G
 
 import Lens.Micro.Platform
 
-data Hashed a = Hashed {_unhashed :: a, _hashed :: Hash.Hash}
+data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
 
-instance HashableTo Hash.Hash (Hashed a) where
+type Hashed = Hashed' Hash.Hash
+
+instance HashableTo h (Hashed' h a) where
     getHash = _hashed
 
 -- |This lens allows for getting and setting the value inside a Hashed structure.
 -- If a value is updated the new hash is recomputed automatically.
-unhashed :: (HashableTo Hash.Hash a) => Lens' (Hashed a) a
+unhashed :: (HashableTo h a) => Lens' (Hashed' h a) a
 unhashed f h = makeHashed <$> f (_unhashed h)
 
-makeHashed :: HashableTo Hash.Hash a => a -> Hashed a
+makeHashed :: HashableTo h a => a -> Hashed' h a
 makeHashed v = Hashed v (getHash v)
 
-instance Eq (Hashed a) where
+instance Eq h => Eq (Hashed' h a) where
     a == b = _hashed a == _hashed b
 
-instance Ord a => Ord (Hashed a) where
+instance (Eq h, Ord a) => Ord (Hashed' h a) where
     compare a b = compare (_unhashed a) (_unhashed b)
 
-instance (Show a) => Show (Hashed a) where
-    show = show . _hashed
+instance (Show a) => Show (Hashed' h a) where
+    show = show . _unhashed
 
 -- * Types related to bakers.
 newtype BakerId = BakerId {bakerAccountIndex :: AccountIndex}

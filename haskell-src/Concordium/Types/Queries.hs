@@ -226,15 +226,15 @@ instance Show BlockSummary where
         showParen (prec > 11) $
             showString "BlockSummary "
                 . showString " {bsTransactionSummaries = "
-                . showsPrec 0 bsTransactionSummaries
+                . shows bsTransactionSummaries
                 . showString ",bsSpecialEvents = "
-                . showsPrec 0 bsSpecialEvents
+                . shows bsSpecialEvents
                 . showString ",bsFinalizationData = "
-                . showsPrec 0 bsFinalizationData
+                . shows bsFinalizationData
                 . showString ",bsUpdates = "
-                . showsPrec 0 bsUpdates
+                . shows bsUpdates
                 . showString ",bsProtocolVersion = "
-                . showsPrec 0 (demoteProtocolVersion bsProtocolVersion)
+                . shows (demoteProtocolVersion bsProtocolVersion)
                 . showString "}"
 
 instance ToJSON BlockSummary where
