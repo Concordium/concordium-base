@@ -354,7 +354,7 @@ mod host {
         energy.tick_energy(constants::modify_key_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        let entry_index = state.create_entry(key);
+        let entry_index = state.create_entry(key)?;
         stack.push_value(u64::from(entry_index));
         Ok(())
     }
@@ -367,7 +367,7 @@ mod host {
     ) -> machine::RunResult<()> {
         energy.tick_energy(constants::DELETE_ENTRY_COST)?;
         let entry_index = unsafe { stack.pop_u64() };
-        let result = state.delete_entry(InstanceStateEntry::from(entry_index))?;
+        let result = state.delete_entry(InstanceStateEntry::from(entry_index));
         stack.push_value(result);
         Ok(())
     }
@@ -428,7 +428,7 @@ mod host {
     ) -> machine::RunResult<()> {
         energy.tick_energy(constants::DELETE_ITERATOR_COST)?;
         let iter = unsafe { stack.pop_u64() };
-        let result = state.iterator_delete(InstanceStateIterator::from(iter))?;
+        let result = state.iterator_delete(InstanceStateIterator::from(iter));
         stack.push_value(result);
         Ok(())
     }
@@ -442,7 +442,7 @@ mod host {
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let iter = unsafe { stack.pop_u64() };
-        let result = state.iterator_key_size(InstanceStateIterator::from(iter))?;
+        let result = state.iterator_key_size(InstanceStateIterator::from(iter));
         stack.push_value(result);
         Ok(())
     }
@@ -461,7 +461,7 @@ mod host {
         let dest_end = start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[start..dest_end];
-        let result = state.iterator_key_read(InstanceStateIterator::from(iter), dest, offset)?;
+        let result = state.iterator_key_read(InstanceStateIterator::from(iter), dest, offset);
         stack.push_value(result);
         Ok(())
     }
@@ -481,7 +481,7 @@ mod host {
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
-        let result = state.entry_read(InstanceStateEntry::from(entry_index), dest, offset)?;
+        let result = state.entry_read(InstanceStateEntry::from(entry_index), dest, offset);
         stack.push_value(result);
         Ok(())
     }
@@ -512,7 +512,7 @@ mod host {
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u64() };
-        let result = state.entry_size(InstanceStateEntry::from(entry_index))?;
+        let result = state.entry_size(InstanceStateEntry::from(entry_index));
         stack.push_value(result);
         Ok(())
     }
