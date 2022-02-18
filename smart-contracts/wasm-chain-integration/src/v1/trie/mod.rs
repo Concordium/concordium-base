@@ -9,9 +9,12 @@ mod tests;
 mod api;
 pub use api::*;
 pub use low_level::Iterator;
-pub mod foreign;
-// This should ideally be private, however we need it in benchmarks.
-#[doc(hidden)]
+mod foreign;
+// We need the low-level module for testing and benchmarks, but we do not wish
+// to expose it.
+#[cfg(not(any(test, bench)))]
+mod low_level;
+#[cfg(any(test, bench))]
 pub mod low_level;
 mod types;
 pub use types::*;

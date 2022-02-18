@@ -9,15 +9,184 @@
 use super::types::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use sha2::Digest;
+use slab::Slab;
 use std::{
     collections::HashMap,
     io::{Read, Write},
     iter::once,
+    num::NonZeroU16,
     slice::Iter,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 const INLINE_CAPACITY: usize = 8;
+
+#[derive(Default, Debug)]
+/// An inner node in the [PrefixMap]. The default instance produces an empty
+/// node with no values and no children.
+struct InnerNode {
+    value:    Option<NonZeroU16>,
+    children: Vec<(u8, usize)>,
+}
+
+/// A prefix map that efficiently stores a list of keys and supports the
+/// following operations
+/// - insert with reference counting
+/// - delete
+/// - check whether the given key extends any value in the collection
+/// - check whether the given key either extends any value or is extended by any
+///   value
+#[derive(Debug)]
+pub(crate) struct PrefixesMap {
+    root:  Option<usize>,
+    nodes: Slab<InnerNode>,
+}
+
+impl PrefixesMap {
+    pub fn new() -> Self {
+        PrefixesMap {
+            root:  None,
+            nodes: Slab::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool { self.root.is_none() }
+
+    pub fn insert(&mut self, key: &[u8]) -> Result<(), TooManyIterators> {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            let root = self.nodes.insert(InnerNode::default());
+            self.root = Some(root);
+            root
+        };
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+            match node.children.binary_search_by_key(k, |x| x.0) {
+                Ok(idx) => {
+                    let (_, b) = unsafe { node.children.get_unchecked(idx) };
+                    node_idx = *b;
+                }
+                Err(idx) => {
+                    let new_node = self.nodes.insert(InnerNode::default());
+                    // look up again to not have issues with double mutable borrow.
+                    // This could be improved.
+                    let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+                    node.children.insert(idx, (*k, new_node));
+                    node_idx = new_node;
+                }
+            }
+        }
+        let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+        if let Some(value) = node.value {
+            let new_value = value.get().checked_add(1).ok_or(TooManyIterators)?;
+            node.value = Some(unsafe { NonZeroU16::new_unchecked(new_value) });
+        } else {
+            node.value = Some(unsafe { NonZeroU16::new_unchecked(1) });
+        }
+        Ok(())
+    }
+
+    /// Return whether the given key is a prefix of at least one of the
+    /// keys in the trie.
+    pub fn is_prefix(&self, key: &[u8]) -> bool {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            // empty tree
+            return false;
+        };
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.0) {
+                let (_, b) = unsafe { node.children.get_unchecked(idx) };
+                node_idx = *b;
+            } else {
+                return false;
+            }
+        }
+        // we found a node that either has a value, or has children, in both cases
+        // the given key is a prefix of some value in the trie.
+        true
+    }
+
+    /// Return whether any key in the trie **is a prefix of the given key**, or
+    /// whether the given key **is extended by** any keys in the map.
+    pub fn is_or_has_prefix(&self, key: &[u8]) -> bool {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            // empty tree
+            return false;
+        };
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            // if there is a value at this node, then we have found our prefix.
+            if node.value.is_some() {
+                return true;
+            }
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.0) {
+                let (_, b) = unsafe { node.children.get_unchecked(idx) };
+                node_idx = *b;
+            } else {
+                return false;
+            }
+        }
+        // we found a node that either has a value, or has children. In the first case
+        // it matches the key exactly, so is a prefix of it. In the latter, a key
+        // extends this node.
+        true
+    }
+
+    pub fn delete(&mut self, key: &[u8]) -> bool {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            // empty tree
+            return false;
+        };
+        let mut stack = Vec::new();
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.0) {
+                let (_, b) = unsafe { node.children.get_unchecked(idx) };
+                stack.push((node_idx, idx));
+                node_idx = *b;
+            } else {
+                return false;
+            }
+        }
+        let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+        let have_removed = node.value.is_some();
+        match node.value {
+            Some(ref mut value) if value.get() > 1 => {
+                *value = unsafe { NonZeroU16::new_unchecked(value.get() - 1) };
+                return true;
+            }
+            _ => node.value = None,
+        }
+        // back up and delete subtrees if needed
+        if node.children.is_empty() {
+            self.nodes.remove(node_idx);
+            while let Some((node_idx, child_idx)) = stack.pop() {
+                let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+                node.children.remove(child_idx);
+                if !node.children.is_empty() || node.value.is_some() {
+                    break;
+                } else {
+                    self.nodes.remove(node_idx);
+                }
+            }
+            // delete the root, if needed
+            if let Some(root) = self.root {
+                if !self.nodes.contains(root) {
+                    self.root = None;
+                }
+            }
+        }
+        have_removed
+    }
+}
 
 #[derive(Debug)]
 /// A link to a shared occurrence of a value V.
@@ -2329,5 +2498,88 @@ impl<V: Clone> Node<V> {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+/// Tests for the prefix map.
+mod prefix_map_tests {
+    use super::PrefixesMap;
+    const NUM_TESTS: u64 = 100000;
+    #[test]
+    fn prop_insert_delete() {
+        let prop = |keys: Vec<Vec<u8>>| -> anyhow::Result<()> {
+            let mut map = PrefixesMap::new();
+            for key in keys.iter() {
+                if map.insert(key).is_err() {
+                    // ignore tests which cause overflow
+                    return Ok(());
+                }
+            }
+            for key in keys.iter() {
+                anyhow::ensure!(map.delete(key), "Every inserted key should be deleted.");
+            }
+            anyhow::ensure!(map.is_empty(), "Deleting everything should leave the map empty.");
+            anyhow::ensure!(map.nodes.is_empty(), "Slab should be empty.");
+            Ok(())
+        };
+        quickcheck::QuickCheck::new()
+            .tests(NUM_TESTS)
+            .quickcheck(prop as fn(_) -> anyhow::Result<()>);
+    }
+
+    #[test]
+    fn prop_is_prefix() {
+        let prop = |keys: Vec<Vec<u8>>, prefixes: Vec<Vec<u8>>| -> anyhow::Result<()> {
+            let mut map = PrefixesMap::new();
+            for key in keys.iter() {
+                // ignore tests which cause overflow
+                if map.insert(key).is_err() {
+                    return Ok(());
+                }
+            }
+            for prefix in prefixes.iter() {
+                let is_prefix_of_any = keys.iter().any(|key| key.starts_with(prefix));
+                let res = map.is_prefix(prefix);
+                anyhow::ensure!(
+                    is_prefix_of_any == res,
+                    "Reference ({}) differs from actual ({}).",
+                    is_prefix_of_any,
+                    res
+                );
+            }
+            Ok(())
+        };
+        quickcheck::QuickCheck::new()
+            .tests(NUM_TESTS)
+            .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+    }
+
+    #[test]
+    fn prop_has_prefix() {
+        let prop = |keys: Vec<Vec<u8>>, prefixes: Vec<Vec<u8>>| -> anyhow::Result<()> {
+            let mut map = PrefixesMap::new();
+            for key in keys.iter() {
+                // ignore tests which cause overflow
+                if map.insert(key).is_err() {
+                    return Ok(());
+                }
+            }
+            for prefix in prefixes.iter() {
+                let has_any_as_prefix =
+                    keys.iter().any(|key| key.starts_with(prefix) || prefix.starts_with(key));
+                let res = map.is_or_has_prefix(prefix);
+                anyhow::ensure!(
+                    has_any_as_prefix == res,
+                    "Reference ({}) differs from actual ({}).",
+                    has_any_as_prefix,
+                    res
+                );
+            }
+            Ok(())
+        };
+        quickcheck::QuickCheck::new()
+            .tests(NUM_TESTS)
+            .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
     }
 }

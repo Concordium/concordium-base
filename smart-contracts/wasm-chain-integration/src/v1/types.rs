@@ -877,7 +877,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 None => 0,
             },
             // iterator did not exist.
-            None => u32::MAX
+            None => u32::MAX,
         }
     }
 
@@ -886,7 +886,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     pub(crate) fn iterator_key_size(&mut self, iter: InstanceStateIterator) -> u32 {
         let (gen, idx) = iter.split();
         if gen != self.current_generation {
-            return u32::MAX
+            return u32::MAX;
         }
         if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
             iter.get_key().len() as u32
@@ -904,7 +904,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     ) -> u32 {
         let (gen, idx) = iter.split();
         if gen != self.current_generation {
-            return u32::MAX
+            return u32::MAX;
         }
         if let Some(iter) = self.iterators.get(idx).and_then(Option::as_ref) {
             let key = iter.get_key();
