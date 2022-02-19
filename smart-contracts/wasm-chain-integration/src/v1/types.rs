@@ -131,10 +131,18 @@ pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
 }
 
 #[cfg(feature = "enable-ffi")]
+/// Data extracted from the [ReceiveResult] in a format suitable to pass to
+/// foreign code via FFI.
 pub(crate) struct ReceiveResultExtract<R> {
+    /// Encoding of the status (i.e., whether it is success, interrupt, ...),
+    /// see [ReceiveResult::extract] for the format.
     pub status:          Vec<u8>,
+    /// Whether the state of the contract changed or not.
     pub state_changed:   bool,
+    /// If execution triggered an operation, this is the current state of
+    /// execution.
     pub interrupt_state: Option<Box<ReceiveInterruptedState<R>>>,
+    /// If execution terminated, this is the return value that was produced.
     pub return_value:    Option<ReturnValue>,
 }
 
@@ -558,7 +566,7 @@ pub struct InstanceState<'a, BackingStore> {
     /// in-memory yet.
     backing_store:      BackingStore,
     /// Current generation of the state.
-    current_generation: Generation,
+    current_generation: InstanceCounter,
     entry_mapping:      Vec<Option<EntryWithKey>>, /* FIXME: This could be done more efficiently
                                                     * by using a usize::MAX as deleted id */
     iterators:          Vec<Option<trie::Iterator>>,
@@ -574,13 +582,17 @@ pub struct InstanceStateEntry {
     index: u64,
 }
 
-pub type Generation = u32;
+/// A counter of the "state instance". When contract execution is interrupted
+/// and then resumed, if the state has been modified by the handling of the
+/// operation then all state entries that were handed out before the interrupt
+/// are invalidated. This is achieved by incrementing the instance counter.
+pub type InstanceCounter = u32;
 
 impl InstanceStateEntry {
     /// Return the current generation together with the index in the entry
     /// mapping.
     #[inline]
-    pub fn split(self) -> (Generation, usize) {
+    pub fn split(self) -> (InstanceCounter, usize) {
         let idx = self.index & 0xffff_ffff;
         let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
         (generation as u32, idx as usize)
@@ -589,16 +601,16 @@ impl InstanceStateEntry {
     #[inline]
     /// Construct a new index from a generation and index.
     /// This assumes both value are small enough.
-    pub fn new(gen: Generation, idx: usize) -> Self {
+    pub fn new(gen: InstanceCounter, idx: usize) -> Self {
         Self {
             index: u64::from(gen) << 32 | idx as u64,
         }
     }
 }
 
-/// if the first bit is 0 then this counts as None,
-/// otherwise the next 31 bits indicate the generation,
-/// and the remaining 32 the index in the entry mapping.
+/// Encoding of `Option<Entry>` where `Entry` is what
+/// is handed out to smart contracts. See the implementation below for encoding
+/// details.
 #[derive(Debug, Clone, Copy, From, Into)]
 #[repr(transparent)]
 pub(crate) struct InstanceStateEntryOption {
@@ -613,7 +625,7 @@ impl InstanceStateEntryOption {
     #[inline]
     /// Construct a new index from a generation and index.
     /// This assumes both value are small enough.
-    pub fn new_some(gen: Generation, idx: usize) -> Self {
+    pub fn new_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
             index: u64::from(gen) << 32 | idx as u64,
         }
@@ -641,14 +653,14 @@ impl InstanceStateEntryResultOption {
     /// This assumes both values are small enough, in particular that idx <=
     /// 2^31.
     #[inline]
-    pub fn new_ok_some(gen: Generation, idx: usize) -> Self {
+    pub fn new_ok_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
             index: u64::from(gen) << 32 | idx as u64,
         }
     }
 }
 
-/// Analogous to InstanceStateEntry.
+/// Analogous to [InstanceStateEntry].
 #[derive(Debug, Clone, Copy, From, Into)]
 #[repr(transparent)]
 pub(crate) struct InstanceStateIterator {
@@ -659,7 +671,7 @@ impl InstanceStateIterator {
     /// Return the current generation together with the index in the entry
     /// mapping.
     #[inline]
-    pub fn split(self) -> (Generation, usize) {
+    pub fn split(self) -> (InstanceCounter, usize) {
         let idx = self.index & 0xffff_ffff;
         let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
         (generation as u32, idx as usize)
@@ -687,7 +699,7 @@ impl InstanceStateIteratorResultOption {
     /// This assumes both values are small enough, in particular that idx <=
     /// 2^31
     #[inline]
-    pub fn new_ok_some(gen: Generation, idx: usize) -> Self {
+    pub fn new_ok_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
             index: u64::from(gen) << 32 | idx as u64,
         }

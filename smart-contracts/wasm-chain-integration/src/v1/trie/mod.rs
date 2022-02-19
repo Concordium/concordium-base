@@ -12,9 +12,7 @@ pub use low_level::Iterator;
 mod foreign;
 // We need the low-level module for testing and benchmarks, but we do not wish
 // to expose it.
-#[cfg(not(any(test, bench)))]
-mod low_level;
-#[cfg(any(test, bench))]
+#[doc(hidden)]
 pub mod low_level;
 mod types;
 pub use types::*;

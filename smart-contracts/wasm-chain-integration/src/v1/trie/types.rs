@@ -11,7 +11,7 @@ use thiserror::Error;
 
 #[repr(transparent)]
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
-/// Reference to a storage location where an item may be retrieved
+/// Reference to a storage location where an item may be retrieved.
 pub struct Reference {
     reference: u64,
 }
@@ -64,7 +64,9 @@ pub trait TraversalCounter {
 }
 /// A counter that does not count anything, and always returns Ok(()).
 pub struct EmptyCounter;
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Error)]
+/// An error that cannot happen, i.e., this type is not inhabited and is used as
+/// an error type of an operation that cannot fail.
 pub enum NoError {}
 
 impl TraversalCounter for EmptyCounter {
@@ -363,7 +365,8 @@ impl<Ctx, const N: usize> ToSHA256<Ctx> for [u8; N] {
     }
 }
 
-pub type Key = u8;
+/// Part of the key to branch on.
+pub type KeyPart = u8;
 
 #[derive(Debug, Clone)]
 /// Data together with a cached hash.

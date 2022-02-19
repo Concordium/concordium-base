@@ -1,10 +1,13 @@
-use super::{low_level::*, Value, *};
+use super::{low_level::*, *};
 use anyhow::{bail, ensure, Context};
 use quickcheck::*;
 use std::collections::BTreeMap;
 
 const NUM_TESTS: u64 = 100000;
 
+/// Construt a mutable trie with the given contents.
+/// The loader that was used during construction is returned, but in reality it
+/// is not needed since the entire tree is in-memory.
 fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie<Value>, Loader<Value>) {
     let mut node = MutableTrie::empty();
     let mut loader = Loader {
@@ -69,6 +72,7 @@ fn prop_storing() {
 }
 
 #[test]
+/// Check that serializing a tree, and then deserializing it, succeeds.
 fn prop_serialization() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
@@ -81,10 +85,16 @@ fn prop_serialization() {
         };
         let mut out = Vec::new();
         frozen.serialize(&mut loader, &mut out).context("Serialization failed.")?;
+        let original_hash = frozen.hash;
         let mut source = std::io::Cursor::new(&out);
         let deserialized =
             Hashed::<Node<Value>>::deserialize(&mut source).context("Failed to deserialize")?;
         ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
+        let deserialized_hash = deserialized.hash;
+        ensure!(
+            original_hash == deserialized_hash,
+            "Hashes of the original and deserialized tree differ."
+        );
         let mut mutable = deserialized.data.make_mutable(0);
         let mut iterator = if let Some(i) =
             mutable.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
@@ -113,7 +123,7 @@ fn prop_serialization() {
 }
 
 #[test]
-/// Check that the storing preserves hash.
+/// Check that the storing preserves the hash of the tree.
 fn prop_storing_preseves_hash() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
@@ -215,7 +225,7 @@ fn prop_matches_reference() {
 
 #[test]
 /// Check that the mutable trie and its iterator match the reference
-/// implementation, after deleting a prefix.
+/// implementation, after deleting a prefix/subtree.
 fn prop_matches_reference_delete_subtree() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         for (prefix, _) in inputs.iter() {
@@ -295,8 +305,8 @@ fn prop_matches_reference_delete_subtree() {
 #[test]
 /// Test the following scenarios
 /// - creating iterators placed in arbitrary locations in the tree prevents us
-///   from deleting in those areas, but still allows us to create and delete in
-///   areas that are not locked
+///   from deleting in those areas
+/// - but still allows us to create and delete in areas that are not locked
 fn prop_iterator_locked_for_modification_multiple() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>,
                 prefixes_to_lock: Vec<Vec<u8>>,
@@ -399,12 +409,14 @@ type KeysToInsert = Vec<Vec<u8>>;
 #[test]
 /// Test the following scenarios
 /// - creating iterators placed in arbitrary locations in the tree prevents us
-///   from deleting in those areas, but still allows us to create and delete in
-///   areas that are not locked
+///   from deleting in those areas,
+/// - but still allows us to create and delete in areas that are not locked
+/// - making a new generation clears all locks and we can make new iterators and
+///   insert/delete
 fn prop_iterator_locked_for_modification_generations() {
     // tests is a list of pairs of (prefixes_to_lock, keys to insert/delete)
     let prop = |inputs: Vec<(Vec<u8>, Value)>,
-                tests: Vec<(PrefixesToLock, KeysToInsert)>|
+                tests_by_generation: Vec<(PrefixesToLock, KeysToInsert)>|
      -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs);
         let mut generation_cleanup_stack = Vec::new();
@@ -492,10 +504,10 @@ fn prop_iterator_locked_for_modification_generations() {
             }
             Ok(())
         };
-        for (prefixes_to_lock, to_insert) in &tests {
+        for (prefixes_to_lock, to_insert) in &tests_by_generation {
             tester(prefixes_to_lock, to_insert, false)?;
         }
-        for (prefixes_to_lock, to_insert) in tests.iter().rev() {
+        for (prefixes_to_lock, to_insert) in tests_by_generation.iter().rev() {
             tester(prefixes_to_lock, to_insert, true)?;
         }
         ensure!(trie.pop_generation().is_some(), "We should have one generation left.");
@@ -506,7 +518,8 @@ fn prop_iterator_locked_for_modification_generations() {
 }
 
 #[test]
-/// Check that iterators cannot be modified.
+/// Check that areas locked by iterators cannot be altered by insertion or
+/// deletion.
 fn prop_iterator_locked_for_modification() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
@@ -855,4 +868,44 @@ fn prop_matches_reference_after_new_gen_mutate() {
                        // left to iterate.
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> bool);
+}
+
+#[test]
+/// A basic unit test to make sure that we cannot acquire too many iterators
+/// with the same key.
+fn too_many_iterators() -> anyhow::Result<()> {
+    let inputs = vec![([0].into(), vec![1]), (vec![0, 0], vec![1]), ([1].into(), vec![2])];
+    let (mut trie, mut loader) = make_mut_trie(inputs);
+    let prefixes: &[&[u8]] = &[&[], &[0], &[0, 0], &[1]];
+    let mut iters = Vec::new();
+    for prefix in prefixes {
+        let iter = trie
+            .iter(&mut loader, &prefix)
+            .expect("Acquiring the first iterator should succeed.")
+            .expect("Prefix exists.");
+        iters.push(iter);
+        for i in 1..u16::MAX {
+            if trie.iter(&mut loader, &prefix).is_err() {
+                bail!("Acquiring the {}th iterator should succeed.", u32::from(i) + 1)
+            }
+        }
+        let _ =
+            trie.iter(&mut loader, &prefix).expect_err("We should now have exceeded the limit.");
+    }
+    // now delete one
+    for iter in iters.iter() {
+        ensure!(
+            trie.delete_iter(iter),
+            "Deleting the iterator should succeed, since there should be u16::MAX of them."
+        );
+    }
+    // now add one back, check it succeeds, and then add another, and check it fails
+    for prefix in prefixes {
+        let _ = trie
+            .iter(&mut loader, &prefix)
+            .expect("We should succeed since we just removed one iterator.");
+        let _ =
+            trie.iter(&mut loader, &prefix).expect_err("We should now have exceeded the limit.");
+    }
+    Ok(())
 }

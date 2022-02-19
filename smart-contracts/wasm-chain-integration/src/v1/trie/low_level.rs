@@ -26,6 +26,7 @@ const INLINE_CAPACITY: usize = 8;
 /// node with no values and no children.
 struct InnerNode {
     value:    Option<NonZeroU16>,
+    /// Children ordered by increasing keys.
     children: Vec<KeyIndexPair>,
 }
 
@@ -37,8 +38,17 @@ struct InnerNode {
 /// - check whether the given key is extended by any value in the collection
 /// - check whether the given key either extends any value or is extended by any
 ///   value
+///
+/// The data structure is a basic trie. Instead of using pointers to children
+/// node we use a slab of nodes, and children are pointers in this vector. This
+/// is to avoid issues with lifetimes and ownership when traversing and
+/// modifying the tree.
 pub(crate) struct PrefixesMap {
+    /// Root of the map. This is [None] if and only if the map is empty.
+    /// If this is Some then the index is the key in the [PrefixesMap::nodes]
+    /// slab below.
     root:  Option<usize>,
+    /// All the live nodes in the tree.
     nodes: Slab<InnerNode>,
 }
 
@@ -148,6 +158,9 @@ impl PrefixesMap {
         true
     }
 
+    /// Delete the given key from the map. That is, decrease the reference count
+    /// by 1, and if this is the last occurrence of the key remove it from the
+    /// map. Return whether the key was in the map.
     pub fn delete(&mut self, key: &[u8]) -> bool {
         let mut node_idx = if let Some(root) = self.root {
             root
@@ -458,7 +471,7 @@ impl<V> CachedRef<V> {
 enum Stem {
     // the first byte is length, remaining is data.
     Short([u8; 16]),
-    Long(Arc<[Key]>),
+    Long(Arc<[KeyPart]>),
 }
 
 impl Stem {
@@ -556,7 +569,7 @@ pub struct Node<V> {
     // In contrast to Hashed<Cached<..>> above for the value, here we store the hash
     // behind a pointer indirection. The reason for this is that there are going to be many
     // pointers to the same node, and we want to avoid duplicating node hashes.
-    children: Vec<(Key, ChildLink<V>)>,
+    children: Vec<(KeyPart, ChildLink<V>)>,
 }
 
 impl<V> Drop for Node<V> {
@@ -705,9 +718,11 @@ struct Checkpoint {
 }
 
 #[derive(Debug)]
-/// A generation of the [MutableTrie]. This structure only makes sense in the
-/// context of a [MutableTrie], since it maintains pointers into other parts of
-/// the trie.
+/// A generation of the [MutableTrie]. This keeps track of the current root of
+/// the tree, together with the enough data to be able to go back to the
+/// previous generation. Generations are used to checkpoint the tree. This
+/// structure only makes sense in the context of a [MutableTrie], since it
+/// maintains pointers into other parts of the trie.
 struct Generation {
     /// Pointer to the root node of the trie at this generation. This is [None]
     /// if and only if the trie at this generation is empty.
@@ -735,6 +750,8 @@ impl Generation {
         }
     }
 
+    /// Construct a generation that contains the given root and checkpoint, and
+    /// no locks.
     fn new_with_checkpoint(root: Option<usize>, checkpoint: Checkpoint) -> Self {
         Generation {
             root,
@@ -760,7 +777,7 @@ pub struct MutableTrie<V> {
 
 #[derive(Debug)]
 enum ChildrenCow<V> {
-    Borrowed(Vec<(Key, ChildLink<V>)>),
+    Borrowed(Vec<(KeyPart, ChildLink<V>)>),
     Owned {
         generation: u32,
         value:      tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>,
@@ -846,6 +863,7 @@ struct KeyIndexPair {
     pub pair: usize,
 }
 
+/// Format the [KeyIndexPair] as a pair of a key and index.
 impl std::fmt::Debug for KeyIndexPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         (self.key(), self.index()).fmt(f)
@@ -854,13 +872,13 @@ impl std::fmt::Debug for KeyIndexPair {
 
 impl KeyIndexPair {
     #[inline(always)]
-    pub fn key(self) -> Key { (self.pair >> 56) as u8 }
+    pub fn key(self) -> KeyPart { (self.pair >> 56) as u8 }
 
     #[inline(always)]
     pub fn index(self) -> usize { self.pair & 0x00ff_ffff_ffff_ffff }
 
     #[inline(always)]
-    pub fn new(key: Key, index: usize) -> Self {
+    pub fn new(key: KeyPart, index: usize) -> Self {
         let pair = usize::from(key) << 56 | index;
         Self {
             pair,
@@ -1132,6 +1150,19 @@ enum Entry {
 impl Entry {
     /// Return whether the entry is still alive, i.e., not [Entry::Deleted].
     pub fn is_alive(&self) -> bool { !matches!(self, Self::Deleted) }
+
+    /// Return whether the entry is owned, i.e., mutable. If so, return the
+    /// value it points to.
+    pub fn is_owned(self) -> Option<usize> {
+        if let Self::Mutable {
+            entry_idx,
+        } = self
+        {
+            Some(entry_idx)
+        } else {
+            None
+        }
+    }
 }
 
 type Position = u16;
@@ -1403,7 +1434,7 @@ impl<V> MutableTrie<V> {
     pub fn iter(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[Key],
+        key: &[KeyPart],
     ) -> Result<Option<Iterator>, TooManyIterators> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
@@ -1631,7 +1662,7 @@ impl<V> MutableTrie<V> {
     pub fn get_entry(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[Key],
+        key: &[KeyPart],
     ) -> Option<EntryId> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
@@ -1675,11 +1706,14 @@ impl<V> MutableTrie<V> {
     pub fn delete(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[Key],
-    ) -> Result<bool, AttemptToModifyLockedArea> {
+        key: &[KeyPart],
+    ) -> Result<bool, AttemptToModifyLockedArea>
+    where
+        V: Default, {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
+        let owned_values = &mut self.values;
         let entries = &mut self.entries;
         let mut grandfather = None;
         let mut father = None;
@@ -1704,6 +1738,11 @@ impl<V> MutableTrie<V> {
                         // We mark the entry as `Deleted` such that other ids pointing to the entry
                         // are automatically invalidated.
                         let existing_entry = std::mem::replace(&mut entries[entry], Entry::Deleted);
+                        // if this entry was owned we now also clean up the stored value to
+                        // deallocate any storage.
+                        if let Some(value_idx) = existing_entry.is_owned() {
+                            std::mem::take(&mut owned_values[value_idx]);
+                        }
                         rv = existing_entry.is_alive();
                     } else {
                         // no value here, so no entry was found
@@ -1835,7 +1874,7 @@ impl<V> MutableTrie<V> {
     pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
-        key: &[Key],
+        key: &[KeyPart],
         counter: &mut C,
     ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err> {
         let mut key_iter = key.iter();
@@ -1973,7 +2012,7 @@ impl<V> MutableTrie<V> {
     pub fn insert(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[Key],
+        key: &[KeyPart],
         new_value: V,
     ) -> Result<(EntryId, Option<EntryId>), AttemptToModifyLockedArea> {
         let (current_generation, older_generations) = self
@@ -2358,18 +2397,18 @@ enum FollowStem {
     /// The key iterator is a strict prefix of the stem iterator.
     /// The first item of the stem past the key is returned.
     KeyIsPrefix {
-        stem_step: Key,
+        stem_step: KeyPart,
     },
     /// The stem iterator is a strict prefix of the key iterator.
     /// The first item of the key past the stem is returned.
     StemIsPrefix {
-        key_step: Key,
+        key_step: KeyPart,
     },
     /// The stem and key iterators differ. The items where they differ are
     /// returned.
     Diff {
-        key_step:  Key,
-        stem_step: Key,
+        key_step:  KeyPart,
+        stem_step: KeyPart,
     },
 }
 
@@ -2377,7 +2416,7 @@ enum FollowStem {
 /// Given two iterators, representing the key and the stem of the node, advance
 /// them stepwise until either at least one of them is exhausted or the steps
 /// differ. Return which option occurred.
-fn follow_stem(key_iter: &mut Iter<Key>, stem_iter: &mut Iter<Key>) -> FollowStem {
+fn follow_stem(key_iter: &mut Iter<KeyPart>, stem_iter: &mut Iter<KeyPart>) -> FollowStem {
     for &stem_step in stem_iter {
         if let Some(&key_step) = key_iter.next() {
             if stem_step != key_step {
@@ -2409,7 +2448,7 @@ impl<V: Clone> Node<V> {
     pub fn lookup(
         &self,
         loader: &mut impl BackingStoreLoad,
-        key: &[Key],
+        key: &[KeyPart],
     ) -> Option<Link<Hashed<CachedRef<V>>>> {
         let mut key_iter = key.iter();
         let mut path = self.path.as_ref().to_vec();

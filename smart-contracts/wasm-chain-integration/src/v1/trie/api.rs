@@ -1,6 +1,6 @@
 use super::{
     low_level::{MutableTrie, Node},
-    BackingStoreLoad, BackingStoreStore, Loadable, *,
+    types::*,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::sync::{Arc, Mutex, MutexGuard};

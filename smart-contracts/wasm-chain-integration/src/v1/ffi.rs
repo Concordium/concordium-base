@@ -240,16 +240,16 @@ unsafe extern "C" fn call_receive_v1(
                 match res {
                     Ok(result) => {
                         let ReceiveResultExtract {
-                            status: mut out,
-                            state_changed: store_state,
-                            interrupt_state: config,
+                            mut status,
+                            state_changed,
+                            interrupt_state,
                             return_value,
                         } = result.extract();
-                        out.shrink_to_fit();
-                        *output_len = out.len() as size_t;
-                        let ptr = out.as_mut_ptr();
-                        std::mem::forget(out);
-                        if let Some(config) = config {
+                        status.shrink_to_fit();
+                        *output_len = status.len() as size_t;
+                        let ptr = status.as_mut_ptr();
+                        std::mem::forget(status);
+                        if let Some(config) = interrupt_state {
                             std::ptr::replace(output_config, Box::into_raw(config));
                         } else {
                             // make sure to set it to null to make the finalizer work correctly.
@@ -260,7 +260,7 @@ unsafe extern "C" fn call_receive_v1(
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
-                        if store_state {
+                        if state_changed {
                             let new_state = Box::into_raw(Box::new(state));
                             *state_ptr_ptr = new_state;
                         }
@@ -433,22 +433,22 @@ unsafe extern "C" fn resume_receive_v1(
         match res {
             Ok(result) => {
                 let ReceiveResultExtract {
-                    status: mut out,
-                    state_changed: store_state,
-                    interrupt_state: new_config,
+                    mut status,
+                    state_changed,
+                    interrupt_state,
                     return_value,
                 } = result.extract();
-                out.shrink_to_fit();
-                *output_len = out.len() as size_t;
-                let ptr = out.as_mut_ptr();
-                std::mem::forget(out);
-                if let Some(config) = new_config {
+                status.shrink_to_fit();
+                *output_len = status.len() as size_t;
+                let ptr = status.as_mut_ptr();
+                std::mem::forget(status);
+                if let Some(config) = interrupt_state {
                     std::ptr::replace(config_ptr, Box::into_raw(config));
                 } // otherwise leave config_ptr pointing to null
                 if let Some(return_value) = return_value {
                     *output_return_value = Box::into_raw(Box::new(return_value));
                 }
-                if store_state {
+                if state_changed {
                     *state_ptr_ptr = Box::into_raw(Box::new(state))
                 }
                 ptr
