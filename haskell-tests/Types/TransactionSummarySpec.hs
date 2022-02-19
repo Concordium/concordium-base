@@ -4,6 +4,7 @@ module Types.TransactionSummarySpec where
 
 import qualified Data.ByteString.Short as SBS
 import Data.Serialize
+import qualified Data.Aeson as AE
 import Test.Hspec
 import Test.QuickCheck
 
@@ -144,6 +145,10 @@ instance Arbitrary Event where
 testEventSerializationIdentity :: Event -> Property
 testEventSerializationIdentity e = decode (encode e) === Right e
 
+-- |Test that decoding is the inverse of encoding for 'Event's.
+testEventJSONSerializationIdentity :: Event -> Property
+testEventJSONSerializationIdentity e = AE.eitherDecode (AE.encode e) === Right e
+
 instance Arbitrary RejectReason where
     arbitrary =
         oneof
@@ -229,6 +234,7 @@ tests :: Spec
 tests = describe "Transaction summaries" $ do
     specify "TransactionType: serialize then deserialize is identity" testTransactionTypesSerialIdentity
     specify "Event: serialize then deserialize is identity" $ withMaxSuccess 10000 testEventSerializationIdentity
+    specify "Event: JSON serialize then deserialize is identity" $ withMaxSuccess 10000 testEventJSONSerializationIdentity
     specify "RejectReason: serialize then deserialize is identity" $ withMaxSuccess 10000 testRejectReasonSerializationIdentity
     specify "ValidResult: serialize then deserialize is identity" $ withMaxSuccess 1000 testValidResultSerializationIdentity
     specify "TransactionSummary: serialize then deserialize is identity" $ withMaxSuccess 1000 testTransactionSummarySerializationIdentity
