@@ -129,3 +129,14 @@ pub const MAX_ENTRY_SIZE: usize = 1 << 31;
 /// good to have it explicit since correctness of the implementation relies on
 /// this.
 pub const MAX_KEY_SIZE: usize = 1 << 31;
+
+/// Cost of allocating additional data in the entry. The argument is the
+/// number of additional bytes.
+/// TODO: Benchmark. The max might not be necessary due to the amortized nature
+/// of growing the vector.
+#[inline(always)]
+pub fn additional_entry_size_cost(x: u64) -> u64 {
+    // NB: the MAX is to make sure that repeatedly calling, e.g., resize(99) is
+    // charged adequately.
+    std::cmp::max(10, x / 100)
+}

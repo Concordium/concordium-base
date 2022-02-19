@@ -1029,7 +1029,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 let new_size = u64::from(new_size);
                 if new_size > old_size {
                     energy
-                        .tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
+                        .tick_energy(constants::additional_entry_size_cost(new_size - old_size))?;
                 }
                 v.resize(new_size as usize, 0u8);
                 Ok(1)
