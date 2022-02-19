@@ -26,17 +26,17 @@ const INLINE_CAPACITY: usize = 8;
 /// node with no values and no children.
 struct InnerNode {
     value:    Option<NonZeroU16>,
-    children: Vec<(u8, usize)>,
+    children: Vec<KeyIndexPair>,
 }
 
+#[derive(Debug)]
 /// A prefix map that efficiently stores a list of keys and supports the
 /// following operations
 /// - insert with reference counting
 /// - delete
-/// - check whether the given key extends any value in the collection
+/// - check whether the given key is extended by any value in the collection
 /// - check whether the given key either extends any value or is extended by any
 ///   value
-#[derive(Debug)]
 pub(crate) struct PrefixesMap {
     root:  Option<usize>,
     nodes: Slab<InnerNode>,
@@ -50,6 +50,7 @@ impl PrefixesMap {
         }
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool { self.root.is_none() }
 
     pub fn insert(&mut self, key: &[u8]) -> Result<(), TooManyIterators> {
@@ -62,17 +63,17 @@ impl PrefixesMap {
         };
         for k in key {
             let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-            match node.children.binary_search_by_key(k, |x| x.0) {
+            match node.children.binary_search_by_key(k, |x| x.key()) {
                 Ok(idx) => {
-                    let (_, b) = unsafe { node.children.get_unchecked(idx) };
-                    node_idx = *b;
+                    let c = unsafe { node.children.get_unchecked(idx) };
+                    node_idx = c.index();
                 }
                 Err(idx) => {
                     let new_node = self.nodes.insert(InnerNode::default());
                     // look up again to not have issues with double mutable borrow.
                     // This could be improved.
                     let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-                    node.children.insert(idx, (*k, new_node));
+                    node.children.insert(idx, KeyIndexPair::new(*k, new_node));
                     node_idx = new_node;
                 }
             }
@@ -87,27 +88,36 @@ impl PrefixesMap {
         Ok(())
     }
 
-    /// Return whether the given key is a prefix of at least one of the
-    /// keys in the trie.
-    pub fn is_prefix(&self, key: &[u8]) -> bool {
+    /// Return whether the given key has a prefix in the prefix map.
+    pub fn check_has_no_prefix(&self, key: &[u8]) -> Result<(), AttemptToModifyLockedArea> {
         let mut node_idx = if let Some(root) = self.root {
             root
         } else {
             // empty tree
-            return false;
+            return Ok(());
         };
         for k in key {
             let node = unsafe { self.nodes.get_unchecked(node_idx) };
-            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.0) {
-                let (_, b) = unsafe { node.children.get_unchecked(idx) };
-                node_idx = *b;
+            // if there is a value at this node, then we have found our prefix.
+            if node.value.is_some() {
+                return Err(AttemptToModifyLockedArea);
+            }
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+                let c = unsafe { node.children.get_unchecked(idx) };
+                node_idx = c.index();
             } else {
-                return false;
+                return Ok(());
             }
         }
-        // we found a node that either has a value, or has children, in both cases
-        // the given key is a prefix of some value in the trie.
-        true
+        // we found a node that either has a value, or has children, in the first case
+        // the given key is a prefix of some value in the trie. In the latter it is not,
+        // the entire tree is below it.
+        let node = unsafe { self.nodes.get_unchecked(node_idx) };
+        if node.value.is_some() {
+            Err(AttemptToModifyLockedArea)
+        } else {
+            Ok(())
+        }
     }
 
     /// Return whether any key in the trie **is a prefix of the given key**, or
@@ -125,9 +135,9 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return true;
             }
-            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.0) {
-                let (_, b) = unsafe { node.children.get_unchecked(idx) };
-                node_idx = *b;
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+                let c = unsafe { node.children.get_unchecked(idx) };
+                node_idx = c.index();
             } else {
                 return false;
             }
@@ -148,10 +158,10 @@ impl PrefixesMap {
         let mut stack = Vec::new();
         for k in key {
             let node = unsafe { self.nodes.get_unchecked(node_idx) };
-            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.0) {
-                let (_, b) = unsafe { node.children.get_unchecked(idx) };
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+                let c = unsafe { node.children.get_unchecked(idx) };
                 stack.push((node_idx, idx));
-                node_idx = *b;
+                node_idx = c.index();
             } else {
                 return false;
             }
@@ -623,9 +633,6 @@ struct MutableNode<V> {
     value:      Option<EntryId>,
     path:       Stem,
     children:   ChildrenCow<V>,
-    /// 0 means the subtree is open for modifications (inserting and removing
-    /// nodes) > 0 means the subtree is closed for modifications.
-    locked:     u16,
 }
 
 impl<V> ChildrenCow<V> {
@@ -651,7 +658,6 @@ impl<V> Default for MutableNode<V> {
                 generation: 0,
                 value:      tinyvec::TinyVec::new(),
             },
-            locked:     0,
         }
     }
 }
@@ -682,7 +688,6 @@ impl<V> MutableNode<V> {
             value,
             path: self.path.clone(), // this is a cheap clone as well.
             children: self.children.clone(),
-            locked: 0,
         }
     }
 }
@@ -700,16 +705,57 @@ struct Checkpoint {
 }
 
 #[derive(Debug)]
+/// A generation of the [MutableTrie]. This structure only makes sense in the
+/// context of a [MutableTrie], since it maintains pointers into other parts of
+/// the trie.
+struct Generation {
+    /// Pointer to the root node of the trie at this generation. This is [None]
+    /// if and only if the trie at this generation is empty.
+    root:           Option<usize>,
+    /// Checkpoint that allows us to clean up the trie when going back to the
+    /// **previous** generation.
+    checkpoint:     Checkpoint,
+    /// Map of prefixes that are locked by iterators.
+    iterator_roots: PrefixesMap,
+}
+
+impl Generation {
+    /// Construct a generation that contains the given root, no locks, and the
+    /// checkpoint which goes back to the beginning of the trie.
+    fn new(root: Option<usize>) -> Self {
+        Generation {
+            root,
+            checkpoint: Checkpoint {
+                num_nodes:          0,
+                num_values:         0,
+                num_borrowed_nodes: 0,
+                num_entries:        0,
+            },
+            iterator_roots: PrefixesMap::new(),
+        }
+    }
+
+    fn new_with_checkpoint(root: Option<usize>, checkpoint: Checkpoint) -> Self {
+        Generation {
+            root,
+            checkpoint,
+            iterator_roots: PrefixesMap::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MutableTrie<V> {
-    /// Roots for previous generations. The value is None if the tree for that
-    /// generation is empty. The second component of the pair is the number
-    /// of nodes that exist at the previous generation. This is used for
-    /// pushing and popping generations.
-    generation_roots: Vec<(Option<usize>, Checkpoint)>,
-    entries:          Vec<Entry>,
-    values:           Vec<V>,
-    borrowed_values:  Vec<Link<Hashed<CachedRef<V>>>>,
-    nodes:            Vec<MutableNode<V>>,
+    /// Roots for previous generations.
+    generations:     Vec<Generation>,
+    /// Entries. These are pointers to either [MutableTrie::values] or
+    /// [MutableTrie::borrowed_values].
+    entries:         Vec<Entry>,
+    values:          Vec<V>,
+    borrowed_values: Vec<Link<Hashed<CachedRef<V>>>>,
+    /// List of all the nodes for all generations. Nodes for new generations are
+    /// always added at the end.
+    nodes:           Vec<MutableNode<V>>,
 }
 
 #[derive(Debug)]
@@ -1092,10 +1138,10 @@ type Position = u16;
 
 #[derive(Debug)]
 pub struct Iterator {
-    /// The root of the iterator
-    /// This is stored here to allow efficient deleting of iterators.
-    root:         usize,
-    /// pointer to the table of nodes.
+    /// The root of the iterator. This is stored to allow removal of the
+    /// iterator.
+    root:         Box<[u8]>,
+    /// Pointer to the table of nodes where the iterator is currently anchored.
     current_node: usize,
     /// Key at the current position of the iterator.
     key:          Vec<u8>,
@@ -1108,8 +1154,13 @@ pub struct Iterator {
 }
 
 impl Iterator {
+    /// Get key the iterator is currently pointing at.
     #[inline(always)]
     pub fn get_key(&self) -> &[u8] { &self.key }
+
+    /// Get the key of which the iterator was initialized with.
+    #[inline(always)]
+    pub fn get_root(&self) -> &[u8] { &self.root }
 }
 
 impl<V> CachedRef<Hashed<Node<V>>> {
@@ -1166,7 +1217,6 @@ impl<V> Node<V> {
             value: entry_idx,
             path: self.path.clone(),
             children: ChildrenCow::Borrowed(self.children.clone()),
-            locked: 0,
         }
     }
 
@@ -1175,12 +1225,7 @@ impl<V> Node<V> {
         let mut entries = Vec::new();
         let root_node = self.thaw(&mut borrowed_values, &mut entries, generation);
         MutableTrie {
-            generation_roots: vec![(Some(0), Checkpoint {
-                num_nodes:          0,
-                num_values:         0,
-                num_borrowed_nodes: 0,
-                num_entries:        0,
-            })],
+            generations: vec![Generation::new(Some(0))],
             values: Vec::new(),
             nodes: vec![root_node],
             borrowed_values,
@@ -1192,21 +1237,16 @@ impl<V> Node<V> {
 impl<V> MutableTrie<V> {
     pub fn empty() -> Self {
         Self {
-            generation_roots: vec![(None, Checkpoint {
-                num_nodes:          0,
-                num_values:         0,
-                num_borrowed_nodes: 0,
-                num_entries:        0,
-            })],
-            values:           Vec::new(),
-            nodes:            Vec::new(),
-            borrowed_values:  Vec::new(),
-            entries:          Vec::new(),
+            generations:     vec![Generation::new(None)],
+            values:          Vec::new(),
+            nodes:           Vec::new(),
+            borrowed_values: Vec::new(),
+            entries:         Vec::new(),
         }
     }
 
     /// Check whether the current generation is an empty tree.
-    pub fn is_empty(&self) -> bool { self.generation_roots.last().map_or(false, |x| x.0.is_none()) }
+    pub fn is_empty(&self) -> bool { self.generations.last().map_or(false, |x| x.root.is_none()) }
 }
 
 impl<V> MutableTrie<V> {
@@ -1215,26 +1255,25 @@ impl<V> MutableTrie<V> {
         let num_values = self.values.len();
         let num_borrowed_nodes = self.borrowed_values.len();
         let num_entries = self.entries.len();
-        if let Some((maybe_root_idx, _)) = self.generation_roots.last() {
-            if let Some(root_idx) = maybe_root_idx {
-                let root = &self.nodes[*root_idx];
+        if let Some(generation) = self.generations.last() {
+            let checkpoint = Checkpoint {
+                num_nodes,
+                num_values,
+                num_borrowed_nodes,
+                num_entries,
+            };
+            if let Some(root_idx) = generation.root {
+                let root = &self.nodes[root_idx];
                 let current_generation = root.generation;
                 let new_root_node = root.migrate(&mut self.entries, current_generation + 1);
                 let new_root_idx = self.nodes.len();
                 self.nodes.push(new_root_node);
-                self.generation_roots.push((Some(new_root_idx), Checkpoint {
-                    num_nodes,
-                    num_values,
-                    num_borrowed_nodes,
-                    num_entries,
-                }));
+                let new_generation =
+                    Generation::new_with_checkpoint(Some(new_root_idx), checkpoint);
+                self.generations.push(new_generation);
             } else {
-                self.generation_roots.push((None, Checkpoint {
-                    num_nodes,
-                    num_values,
-                    num_borrowed_nodes,
-                    num_entries,
-                }));
+                let new_generation = Generation::new_with_checkpoint(None, checkpoint);
+                self.generations.push(new_generation);
             }
         }
     }
@@ -1242,11 +1281,12 @@ impl<V> MutableTrie<V> {
     /// Pop a generation, removing all data that is only accessible from newer
     /// generations. Return None if no generations are left.
     pub fn pop_generation(&mut self) -> Option<()> {
-        let (_, num_remaining) = self.generation_roots.pop()?;
-        self.nodes.truncate(num_remaining.num_nodes);
-        self.values.truncate(num_remaining.num_values);
-        self.borrowed_values.truncate(num_remaining.num_borrowed_nodes);
-        self.entries.truncate(num_remaining.num_entries);
+        let generation = self.generations.pop()?;
+        let checkpoint = generation.checkpoint;
+        self.nodes.truncate(checkpoint.num_nodes);
+        self.values.truncate(checkpoint.num_values);
+        self.borrowed_values.truncate(checkpoint.num_borrowed_nodes);
+        self.entries.truncate(checkpoint.num_entries);
         Some(())
     }
 
@@ -1255,14 +1295,14 @@ impl<V> MutableTrie<V> {
     /// nothing.
     pub fn normalize(&mut self, root: u32) {
         let new_len = root as usize + 1;
-        let one_past_new_root = self.generation_roots.get(new_len).copied();
-        if let Some((_, num_remaining)) = one_past_new_root {
-            self.generation_roots.truncate(new_len);
-            self.nodes.truncate(num_remaining.num_nodes);
-            self.values.truncate(num_remaining.num_values);
-            self.borrowed_values.truncate(num_remaining.num_borrowed_nodes);
-            self.entries.truncate(num_remaining.num_entries);
+        let generation = self.generations.get(new_len);
+        if let Some(generation) = generation {
+            self.nodes.truncate(generation.checkpoint.num_nodes);
+            self.values.truncate(generation.checkpoint.num_values);
+            self.borrowed_values.truncate(generation.checkpoint.num_borrowed_nodes);
+            self.entries.truncate(generation.checkpoint.num_entries);
         }
+        self.generations.truncate(new_len);
     }
 
     /// Get a mutable reference to an entry, if the entry exists. This copies
@@ -1349,12 +1389,15 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    // TODO: Document assumptions/preconditions of this method. It blindly looks up
-    // the node.
-    pub fn delete_iter(&mut self, iterator: &Iterator) {
-        let owned_nodes = &mut self.nodes;
-        let n = &mut owned_nodes[iterator.root];
-        n.locked = n.locked.saturating_sub(1);
+    /// Deletes an iterator.
+    /// If an iterator was deleted then return `true` otherwise `false`.
+    pub fn delete_iter(&mut self, iterator: &Iterator) -> bool {
+        let generations = &mut self.generations;
+        if let Some(generation) = generations.last_mut() {
+            generation.iterator_roots.delete(iterator.get_root())
+        } else {
+            false
+        }
     }
 
     pub fn iter(
@@ -1366,7 +1409,12 @@ impl<V> MutableTrie<V> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
-        let mut node_idx = if let Some(node_idx) = self.generation_roots.last().and_then(|x| x.0) {
+        let generation = if let Some(generation) = self.generations.last_mut() {
+            generation
+        } else {
+            return Ok(None);
+        };
+        let mut node_idx = if let Some(node_idx) = generation.root {
             node_idx
         } else {
             return Ok(None);
@@ -1376,10 +1424,9 @@ impl<V> MutableTrie<V> {
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
-                    // we lock this node and the entire subtree for modifications.
-                    node.locked = node.locked.checked_add(1).ok_or(TooManyIterators)?;
+                    generation.iterator_roots.insert(key)?;
                     return Ok(Some(Iterator {
-                        root:         node_idx,
+                        root:         key.into(),
                         current_node: node_idx,
                         key:          key.into(),
                         next_child:   None,
@@ -1389,14 +1436,14 @@ impl<V> MutableTrie<V> {
                 FollowStem::KeyIsPrefix {
                     stem_step,
                 } => {
+                    generation.iterator_roots.insert(key)?;
                     let stem_slice = stem_iter.as_slice();
                     let mut root_key = Vec::with_capacity(key.len() + 1 + stem_slice.len());
                     root_key.extend_from_slice(key);
                     root_key.push(stem_step);
                     root_key.extend_from_slice(stem_slice);
-                    node.locked = node.locked.checked_add(1).ok_or(TooManyIterators)?;
                     return Ok(Some(Iterator {
-                        root:         node_idx,
+                        root:         key.into(),
                         current_node: node_idx,
                         key:          root_key,
                         next_child:   None,
@@ -1423,7 +1470,7 @@ impl<V> MutableTrie<V> {
                 } => {
                     return Ok(None);
                 }
-            };
+            }
         }
     }
 
@@ -1499,7 +1546,7 @@ impl<V> MutableTrie<V> {
         let mut values = self.values;
         let entries = self.entries;
         let mut borrowed_values = self.borrowed_values;
-        let root_idx = self.generation_roots.last()?.0?;
+        let root_idx = self.generations.last()?.root?;
         // get the reachable owned nodes.
         let mut reachable_stack = vec![root_idx];
         let mut reachable = Vec::new();
@@ -1590,7 +1637,7 @@ impl<V> MutableTrie<V> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let mut node_idx = self.generations.last()?.root?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
@@ -1636,19 +1683,21 @@ impl<V> MutableTrie<V> {
         let entries = &mut self.entries;
         let mut grandfather = None;
         let mut father = None;
-        let mut node_idx = if let Some(node_idx) = self.generation_roots.last().and_then(|x| x.0) {
+        let generation = if let Some(generation) = self.generations.last_mut() {
+            generation
+        } else {
+            return Ok(false);
+        };
+        let mut node_idx = if let Some(node_idx) = generation.root {
             node_idx
         } else {
             return Ok(false);
         };
+        generation.iterator_roots.check_has_no_prefix(key)?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
-                    // The node is the root of an iterator and closed for modification.
-                    if node.locked > 0 {
-                        return Err(AttemptToModifyLockedArea);
-                    }
                     // we found it, delete the value first and save it for returning.
                     let rv;
                     if let Some(entry) = std::mem::take(&mut node.value) {
@@ -1687,9 +1736,7 @@ impl<V> MutableTrie<V> {
                                 }
                             } else {
                                 // set the root to the new child
-                                if let Some(root) = self.generation_roots.last_mut() {
-                                    root.0 = Some(child.index());
-                                }
+                                generation.root = Some(child.index());
                             }
                         }
                     } else if children.is_empty() {
@@ -1740,9 +1787,7 @@ impl<V> MutableTrie<V> {
                                     } else {
                                         // grandfather did not exist
                                         // set the root to the new child
-                                        if let Some(root) = self.generation_roots.last_mut() {
-                                            root.0 = Some(child.index());
-                                        }
+                                        generation.root = Some(child.index());
                                     }
                                 } else {
                                     unsafe { std::hint::unreachable_unchecked() }
@@ -1750,13 +1795,7 @@ impl<V> MutableTrie<V> {
                             }
                         } else {
                             // otherwise this must be the root. Delete it.
-                            if let Some(root) = self.generation_roots.last_mut() {
-                                root.0 = None;
-                            } else {
-                                // since we would have exited this function at the very beginning if
-                                // there were no roots, this is safe
-                                unsafe { std::hint::unreachable_unchecked() }
-                            }
+                            generation.root = None;
                         }
                     }
                     return Ok(rv);
@@ -1769,10 +1808,6 @@ impl<V> MutableTrie<V> {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    // the node we want to delete has a locked parent so we cannot.
-                    if node.locked > 0 {
-                        return Err(AttemptToModifyLockedArea);
-                    }
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
@@ -1809,21 +1844,25 @@ impl<V> MutableTrie<V> {
         let entries = &mut self.entries;
         let mut grandparent_idx = None;
         let mut parent_idx = None;
-        let mut node_idx = if let Some(idx) = self.generation_roots.last().and_then(|x| x.0) {
+        let generation = if let Some(generation) = self.generations.last_mut() {
+            generation
+        } else {
+            return Ok(Ok(false));
+        };
+        let mut node_idx = if let Some(idx) = generation.root {
             idx
         } else {
             return Ok(Ok(false));
         };
+        if generation.iterator_roots.is_or_has_prefix(key) {
+            return Ok(Err(AttemptToModifyLockedArea));
+        }
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    // We encountered  a locked node when traversing down the tree.
-                    if node.locked > 0 {
-                        return Ok(Err(AttemptToModifyLockedArea));
-                    }
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
@@ -1841,10 +1880,6 @@ impl<V> MutableTrie<V> {
                     return Ok(Ok(false));
                 }
                 _ => {
-                    // We encountered  a locked node when traversing down the tree.
-                    if node.locked > 0 {
-                        return Ok(Err(AttemptToModifyLockedArea));
-                    }
                     // We found the subtree to remove.
                     // First we check that the root of the subtree and it's children are not locked.
                     // Second, invalidate entry of the node and all of its children.
@@ -1853,10 +1888,6 @@ impl<V> MutableTrie<V> {
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
                         let to_invalidate = &owned_nodes[node_idx];
                         counter.tick(to_invalidate.path.as_ref().len() as u64 + 1)?; // + 1 is for the step from the parent.
-                                                                                     // Before invalidating the node we first check if its locked.
-                        if to_invalidate.locked > 0 {
-                            return Ok(Err(AttemptToModifyLockedArea));
-                        }
                         if let Some(entry) = to_invalidate.value {
                             entries[entry] = Entry::Deleted;
                         }
@@ -1919,8 +1950,8 @@ impl<V> MutableTrie<V> {
                                 } else {
                                     // grandparent did not exist
                                     // set the root to the new child
-                                    if let Some(root) = self.generation_roots.last_mut() {
-                                        root.0 = Some(child.index());
+                                    if let Some(generation) = self.generations.last_mut() {
+                                        generation.root = Some(child.index());
                                     }
                                 }
                             } else {
@@ -1928,12 +1959,7 @@ impl<V> MutableTrie<V> {
                             }
                         }
                     } else {
-                        if let Some(root) = self.generation_roots.last_mut() {
-                            root.0 = None;
-                        } else {
-                            // we would not have reached here if there was no generation root.
-                            unsafe { std::hint::unreachable_unchecked() }
-                        }
+                        generation.root = None;
                         return Ok(Ok(true));
                     }
                     return Ok(Ok(true));
@@ -1950,44 +1976,43 @@ impl<V> MutableTrie<V> {
         key: &[Key],
         new_value: V,
     ) -> Result<(EntryId, Option<EntryId>), AttemptToModifyLockedArea> {
-        let mut key_iter = key.iter();
-        let generation_root =
-            self.generation_roots.last().expect("There should always be at least 1 generation.").0;
+        let (current_generation, older_generations) = self
+            .generations
+            .split_last_mut()
+            .expect("There should always be at least 1 generation.");
+        current_generation.iterator_roots.check_has_no_prefix(key)?;
         // if the tree is empty we must create a new root
-        let mut node_idx = if let Some(root) = generation_root {
+        let mut node_idx = if let Some(root) = current_generation.root {
             root
         } else {
             // the tree is empty
             let value_idx = self.values.len();
             self.values.push(new_value);
-            let generation = (self.generation_roots.len() - 1) as u32;
+            let generation_idx = older_generations.len() as u32;
             let root_idx = self.nodes.len();
             let entry_idx: EntryId = self.entries.len().into();
             self.entries.push(Entry::Mutable {
                 entry_idx: value_idx,
             });
             self.nodes.push(MutableNode {
-                generation,
-                value: Some(entry_idx),
-                path: key.into(),
-                children: ChildrenCow::Owned {
-                    generation,
-                    value: tinyvec::TinyVec::new(),
+                generation: generation_idx,
+                value:      Some(entry_idx),
+                path:       key.into(),
+                children:   ChildrenCow::Owned {
+                    generation: generation_idx,
+                    value:      tinyvec::TinyVec::new(),
                 },
-                locked: 0,
             });
-            self.generation_roots
-                .last_mut()
-                .expect("We already checked the list is not empty.")
-                .0 = Some(root_idx);
+            current_generation.root = Some(root_idx);
             return Ok((entry_idx, None));
         };
-        let generation = self.nodes[node_idx].generation;
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         // the parent node index and the index of the parents child we're visiting.
         let mut parent_node_idxs: Option<(usize, usize)> = None;
+        let generation = owned_nodes[node_idx].generation;
+        let mut key_iter = key.iter();
         loop {
             let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
@@ -1995,10 +2020,6 @@ impl<V> MutableTrie<V> {
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
-                    // The node is root of an iterator.
-                    if node.locked > 0 {
-                        return Err(AttemptToModifyLockedArea);
-                    }
                     let value_idx = self.values.len();
                     self.values.push(new_value);
                     let old_entry_idx = node.value;
@@ -2035,10 +2056,9 @@ impl<V> MutableTrie<V> {
                                 *key_and_index = KeyIndexPair::new(key, new_node_idx);
                             }
                         }
-                    } else if let Some(root) = self.generation_roots.last_mut() {
-                        root.0 = Some(new_node_idx);
+                    } else {
+                        current_generation.root = Some(new_node_idx);
                     }
-
                     let new_node = MutableNode {
                         generation,
                         value: Some(entry_idx),
@@ -2047,7 +2067,6 @@ impl<V> MutableTrie<V> {
                             generation,
                             value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, node_idx)],
                         },
-                        locked: 0,
                     };
                     owned_nodes.push(new_node);
                     return Ok((entry_idx, None));
@@ -2055,10 +2074,6 @@ impl<V> MutableTrie<V> {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    // We encountered a locked node when traversing down the tree.
-                    if node.locked > 0 {
-                        return Err(AttemptToModifyLockedArea);
-                    }
                     // make_owned may insert additional nodes. Hence we have to update our
                     // owned_nodes_len to make sure we have the up-to-date
                     // value.
@@ -2090,7 +2105,6 @@ impl<V> MutableTrie<V> {
                                     generation,
                                     value: tinyvec::TinyVec::new(),
                                 },
-                                locked: 0,
                             });
                             return Ok((entry_idx, None));
                         }
@@ -2125,10 +2139,9 @@ impl<V> MutableTrie<V> {
                             value: Some(entry_idx),
                             path: remaining_key,
                             children: ChildrenCow::Owned {
-                                generation,
-                                value: tinyvec::TinyVec::new(),
+                                generation: generation as u32,
+                                value:      tinyvec::TinyVec::new(),
                             },
-                            locked: 0,
                         };
                         owned_nodes.push(remaining_key_node);
                     }
@@ -2156,7 +2169,6 @@ impl<V> MutableTrie<V> {
                                 generation,
                                 value: children,
                             },
-                            locked: 0,
                         };
                         owned_nodes.push(new_node);
                     }
@@ -2170,8 +2182,8 @@ impl<V> MutableTrie<V> {
                                 *key_and_index = KeyIndexPair::new(key, new_node_idx);
                             }
                         }
-                    } else if let Some(root) = self.generation_roots.last_mut() {
-                        root.0 = Some(new_node_idx);
+                    } else {
+                        current_generation.root = Some(new_node_idx);
                     }
                     return Ok((entry_idx, None));
                 }
@@ -2539,12 +2551,12 @@ mod prefix_map_tests {
                 }
             }
             for prefix in prefixes.iter() {
-                let is_prefix_of_any = keys.iter().any(|key| key.starts_with(prefix));
-                let res = map.is_prefix(prefix);
+                let has_any_prefix = keys.iter().any(|key| prefix.starts_with(key));
+                let res = map.check_has_no_prefix(prefix);
                 anyhow::ensure!(
-                    is_prefix_of_any == res,
-                    "Reference ({}) differs from actual ({}).",
-                    is_prefix_of_any,
+                    has_any_prefix == res.is_err(),
+                    "Reference ({}) differs from actual ({:?}).",
+                    has_any_prefix,
                     res
                 );
             }

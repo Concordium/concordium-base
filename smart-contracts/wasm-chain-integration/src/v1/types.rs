@@ -564,10 +564,6 @@ pub struct InstanceState<'a, BackingStore> {
     iterators:          Vec<Option<trie::Iterator>>,
     /// Opaque pointer to the state of the instance in consensus.
     state_trie:         trie::StateTrie<'a>,
-    /// Table of iterator ids and their corresponding root.
-    /// Keys present in this table are to be considered locked for modification
-    /// i.e., there cannot be added or removed children of the root key.
-    iterator_roots:     std::collections::BTreeMap<usize, Vec<u8>>,
 }
 
 /// first bit is ignored, the next 31 indicate a generation,
@@ -721,7 +717,6 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             state_trie: state.state.lock().unwrap(),
             iterators: Vec::new(),
             entry_mapping: Vec::new(),
-            iterator_roots: std::collections::BTreeMap::new(),
         }
     }
 
@@ -815,7 +810,6 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             if let Some(iter) = iter {
                 let iter_id = self.iterators.len();
                 self.iterators.push(Some(iter));
-                self.iterator_roots.insert(iter_id, prefix.to_vec());
                 InstanceStateIteratorResultOption::new_ok_some(self.current_generation, iter_id)
             } else {
                 InstanceStateIteratorResultOption::NEW_OK_NONE
