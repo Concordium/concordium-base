@@ -1,6 +1,6 @@
-use super::low_level::{
-    Collector, FlatLoadable, FlatStorable, Hashed, LoadError, LoadResult, Loadable, MutableTrie,
-    Node, Reference, StoreResult,
+use super::{
+    low_level::{MutableTrie, Node},
+    types::*,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -16,7 +16,10 @@ pub enum PersistentState {
 }
 
 impl Loadable for PersistentState {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
             1 => Ok(Self::Root(Hashed::<Node<Value>>::load(loader, source)?)),
@@ -28,7 +31,7 @@ impl Loadable for PersistentState {
 }
 
 impl PersistentState {
-    pub fn store_update_buf<S: FlatStorable, W: std::io::Write>(
+    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -45,7 +48,7 @@ impl PersistentState {
         }
     }
 
-    pub fn store_update<S: FlatStorable>(
+    pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
     ) -> StoreResult<Reference> {
@@ -56,7 +59,7 @@ impl PersistentState {
 
     pub fn serialize(
         &self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         out: &mut impl std::io::Write,
     ) -> anyhow::Result<()> {
         match self {
@@ -113,16 +116,16 @@ impl PersistentState {
         }
     }
 
-    pub fn hash(&self) -> super::low_level::Hash {
+    pub fn hash(&self) -> super::Hash {
         match self {
-            PersistentState::Empty => super::low_level::Hash::zero(), /* FIXME: Think about what */
+            PersistentState::Empty => super::Hash::zero(), /* FIXME: Think about what */
             // the correct thing would
             // be.
             PersistentState::Root(root) => root.hash,
         }
     }
 
-    pub fn cache<F: FlatLoadable>(&mut self, loader: &mut F) {
+    pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let PersistentState::Root(node) = self {
             node.data.cache(loader)
         }
@@ -195,7 +198,7 @@ impl MutableState {
     /// Make the state persistent. This leaves the mutable state empty.
     pub fn freeze<C: Collector<Value>>(
         &mut self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         collector: &mut C,
     ) -> PersistentState {
         let inner = self.inner.take();

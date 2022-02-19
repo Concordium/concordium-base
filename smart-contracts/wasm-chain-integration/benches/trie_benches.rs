@@ -1,7 +1,7 @@
 use criterion::*;
 use sha2::Digest;
 use std::collections::BTreeMap;
-use wasm_chain_integration::v1::trie::low_level::*;
+use wasm_chain_integration::v1::trie::{low_level::*, *};
 
 /// Amount of data to generate.
 const N: usize = 100000;
@@ -62,7 +62,8 @@ fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie<[u8; 8]>, VecLoader) {
         inner: Vec::<u8>::new(),
     };
     for w in words {
-        node.insert(&mut loader, &w, (w.len() as u64).to_ne_bytes());
+        node.insert(&mut loader, &w, (w.len() as u64).to_ne_bytes())
+            .expect("No locks, so cannot fail.");
     }
     (node, loader)
 }
@@ -218,7 +219,7 @@ fn mut_trie_delete(b: &mut Criterion) {
     b.bench_function("trie mut delete", |b| {
         b.iter(|| {
             for w in words.iter() {
-                trie.delete(&mut loader, w.as_ref());
+                trie.delete(&mut loader, w.as_ref()).expect("No locks, so cannot fail.");
             }
             assert!(trie.is_empty(), "After deleting everything the tree should be empty.");
         })
@@ -232,7 +233,7 @@ fn trie_thaw_delete(b: &mut Criterion) {
     b.bench_function("trie thaw delete", |b| {
         b.iter(|| {
             for w in words.iter() {
-                trie.delete(&mut loader, &w[..]);
+                trie.delete(&mut loader, &w[..]).expect("No locks, so cannot fail.");
             }
             assert!(trie.is_empty(), "After deleting everything the tree should be empty.");
         })

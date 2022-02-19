@@ -1,143 +1,220 @@
+//! This module provides the low-level primitives that are used to build
+//! the state implementation for V1 smart contracts.
+//!
+//! Functions in this module are, as the name of the module suggests, low-level
+//! and generally have many preconditions, violation of which will make them
+//! unsafe, could trigger panics, or memory corruption. For this reason
+//! functions should only be used via the exposed high-level api in the
+//! `super::api` module, which is re-exported at the top-level.
+use super::types::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use derive_more::{AsRef, From, Into};
 use sha2::Digest;
+use slab::Slab;
 use std::{
     collections::HashMap,
-    io::{Read, Seek, SeekFrom, Write},
+    io::{Read, Write},
     iter::once,
+    num::NonZeroU16,
     slice::Iter,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-use thiserror::*;
 
 const INLINE_CAPACITY: usize = 8;
 
-const INLINE_STEM_LENGTH: usize = 0b0011_1111;
-
-/// A type that can be used to collect auxiliary information while a mutable
-/// trie is being frozen. Particular use-cases of this are collecting the size
-/// of new data, as well as new persistent nodes.
-pub trait Collector<V> {
-    fn add_value(&mut self, data: &V);
-    fn add_path(&mut self, path: usize);
-    fn add_children(&mut self, num_children: usize);
-}
-/// Collector that does not collect anything.
-pub struct EmptyCollector;
-
-impl<V> Collector<V> for EmptyCollector {
-    #[inline(always)]
-    fn add_value(&mut self, _data: &V) {}
-
-    #[inline(always)]
-    fn add_path(&mut self, _path: usize) {}
-
-    #[inline(always)]
-    fn add_children(&mut self, _num_children: usize) {}
+#[derive(Default, Debug)]
+/// An inner node in the [PrefixMap]. The default instance produces an empty
+/// node with no values and no children.
+struct InnerNode {
+    value:    Option<NonZeroU16>,
+    /// Children ordered by increasing keys.
+    children: Vec<KeyIndexPair>,
 }
 
-/// A collector that keeps track of how much additional data will be required to
-/// store the tree.
-#[derive(Default)]
-pub struct SizeCollector {
-    num_bytes: u64,
+#[derive(Debug)]
+/// A prefix map that efficiently stores a list of keys and supports the
+/// following operations
+/// - insert with reference counting
+/// - delete
+/// - check whether the given key is extended by any value in the collection
+/// - check whether the given key either extends any value or is extended by any
+///   value
+///
+/// The data structure is a basic trie. Instead of using pointers to children
+/// node we use a slab of nodes, and children are pointers in this vector. This
+/// is to avoid issues with lifetimes and ownership when traversing and
+/// modifying the tree.
+pub(crate) struct PrefixesMap {
+    /// Root of the map. This is [None] if and only if the map is empty.
+    /// If this is Some then the index is the key in the [PrefixesMap::nodes]
+    /// slab below.
+    root:  Option<usize>,
+    /// All the live nodes in the tree.
+    nodes: Slab<InnerNode>,
 }
 
-impl SizeCollector {
-    pub fn collect(self) -> u64 { self.num_bytes }
-}
-
-// TODO: Make sure this is adequate. There is a bit of overhead with size length
-// when se store data.
-impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
-    #[inline]
-    fn add_value(&mut self, data: &V) { self.num_bytes += data.as_ref().len() as u64; }
-
-    #[inline]
-    fn add_path(&mut self, path: usize) {
-        // 1 is for the tag of the value, 4 is for large key length.
-        if path <= INLINE_STEM_LENGTH {
-            self.num_bytes += 1 + path as u64;
-        } else {
-            self.num_bytes += 1 + 4 + path as u64;
+impl PrefixesMap {
+    pub fn new() -> Self {
+        PrefixesMap {
+            root:  None,
+            nodes: Slab::new(),
         }
     }
 
-    fn add_children(&mut self, num_children: usize) {
-        // 1 for the key, 8 for the reference.
-        self.num_bytes += (num_children as u64) * (1 + 8)
-    }
-}
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool { self.root.is_none() }
 
-#[repr(transparent)]
-#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
-/// Reference to a storage location where an item may be retrieved
-pub struct Reference {
-    reference: u64,
-}
-
-#[derive(Debug, Error)]
-pub enum WriteError {
-    #[error("{0}")]
-    IOError(#[from] std::io::Error),
-}
-
-pub type StoreResult<A> = Result<A, WriteError>;
-
-#[derive(Debug, Error)]
-pub enum LoadError {
-    #[error("{0}")]
-    IOError(#[from] std::io::Error),
-    #[error("Incorrect tag")]
-    IncorrectTag {
-        // The tag that was provided.
-        tag: u8,
-    },
-    #[error("Out of bounds read.")]
-    OutOfBoundsRead,
-}
-
-pub type LoadResult<A> = Result<A, LoadError>;
-
-impl Reference {
-    #[inline(always)]
-    pub fn store(&self, sink: &mut impl std::io::Write) -> StoreResult<()> {
-        sink.write_u64::<BigEndian>(self.reference)?;
+    pub fn insert(&mut self, key: &[u8]) -> Result<(), TooManyIterators> {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            let root = self.nodes.insert(InnerNode::default());
+            self.root = Some(root);
+            root
+        };
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+            match node.children.binary_search_by_key(k, |x| x.key()) {
+                Ok(idx) => {
+                    let c = unsafe { node.children.get_unchecked(idx) };
+                    node_idx = c.index();
+                }
+                Err(idx) => {
+                    let new_node = self.nodes.insert(InnerNode::default());
+                    // look up again to not have issues with double mutable borrow.
+                    // This could be improved.
+                    let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+                    node.children.insert(idx, KeyIndexPair::new(*k, new_node));
+                    node_idx = new_node;
+                }
+            }
+        }
+        let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+        if let Some(value) = node.value {
+            let new_value = value.get().checked_add(1).ok_or(TooManyIterators)?;
+            node.value = Some(unsafe { NonZeroU16::new_unchecked(new_value) });
+        } else {
+            node.value = Some(unsafe { NonZeroU16::new_unchecked(1) });
+        }
         Ok(())
     }
-}
 
-#[repr(transparent)]
-#[derive(Clone, Copy, AsRef, From, PartialEq, Eq, Ord, PartialOrd)]
-pub struct Hash {
-    hash: [u8; 32],
-}
-
-impl AsRef<[u8]> for Hash {
-    #[inline(always)]
-    fn as_ref(&self) -> &[u8] { self.hash.as_ref() }
-}
-
-impl Hash {
-    #[inline(always)]
-    pub fn zero() -> Self {
-        Self {
-            hash: [0u8; 32],
+    /// Return whether the given key has a prefix in the prefix map.
+    pub fn check_has_no_prefix(&self, key: &[u8]) -> Result<(), AttemptToModifyLockedArea> {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            // empty tree
+            return Ok(());
+        };
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            // if there is a value at this node, then we have found our prefix.
+            if node.value.is_some() {
+                return Err(AttemptToModifyLockedArea);
+            }
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+                let c = unsafe { node.children.get_unchecked(idx) };
+                node_idx = c.index();
+            } else {
+                return Ok(());
+            }
+        }
+        // we found a node that either has a value, or has children, in the first case
+        // the given key is a prefix of some value in the trie. In the latter it is not,
+        // the entire tree is below it.
+        let node = unsafe { self.nodes.get_unchecked(node_idx) };
+        if node.value.is_some() {
+            Err(AttemptToModifyLockedArea)
+        } else {
+            Ok(())
         }
     }
 
-    /// Read a hash value from the provided source, failing if not enough data
-    /// is available.
-    pub fn read(source: &mut impl Read) -> LoadResult<Self> {
-        let mut hash = [0u8; 32];
-        source.read_exact(&mut hash)?;
-        Ok(Self {
-            hash,
-        })
+    /// Return whether any key in the trie **is a prefix of the given key**, or
+    /// whether the given key **is extended by** any keys in the map.
+    pub fn is_or_has_prefix(&self, key: &[u8]) -> bool {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            // empty tree
+            return false;
+        };
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            // if there is a value at this node, then we have found our prefix.
+            if node.value.is_some() {
+                return true;
+            }
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+                let c = unsafe { node.children.get_unchecked(idx) };
+                node_idx = c.index();
+            } else {
+                return false;
+            }
+        }
+        // we found a node that either has a value, or has children. In the first case
+        // it matches the key exactly, so is a prefix of it. In the latter, a key
+        // extends this node.
+        true
+    }
+
+    /// Delete the given key from the map. That is, decrease the reference count
+    /// by 1, and if this is the last occurrence of the key remove it from the
+    /// map. Return whether the key was in the map.
+    pub fn delete(&mut self, key: &[u8]) -> bool {
+        let mut node_idx = if let Some(root) = self.root {
+            root
+        } else {
+            // empty tree
+            return false;
+        };
+        let mut stack = Vec::new();
+        for k in key {
+            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+                let c = unsafe { node.children.get_unchecked(idx) };
+                stack.push((node_idx, idx));
+                node_idx = c.index();
+            } else {
+                return false;
+            }
+        }
+        let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+        let have_removed = node.value.is_some();
+        match node.value {
+            Some(ref mut value) if value.get() > 1 => {
+                *value = unsafe { NonZeroU16::new_unchecked(value.get() - 1) };
+                return true;
+            }
+            _ => node.value = None,
+        }
+        // back up and delete subtrees if needed
+        if node.children.is_empty() {
+            self.nodes.remove(node_idx);
+            while let Some((node_idx, child_idx)) = stack.pop() {
+                let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+                node.children.remove(child_idx);
+                if !node.children.is_empty() || node.value.is_some() {
+                    break;
+                } else {
+                    self.nodes.remove(node_idx);
+                }
+            }
+            // delete the root, if needed
+            if let Some(root) = self.root {
+                if !self.nodes.contains(root) {
+                    self.root = None;
+                }
+            }
+        }
+        have_removed
     }
 }
 
 #[derive(Debug)]
+/// A link to a shared occurrence of a value V.
+/// This is used in this module to construct trees, allowing for sharing of
+/// values in trees and subtrees in case of the persistent tree.
 pub struct Link<V> {
     link: Arc<RwLock<V>>,
 }
@@ -159,12 +236,16 @@ impl<V> Link<V> {
     }
 
     #[inline(always)]
+    /// Immutably borrow the pointed to value.
     pub fn borrow(&self) -> RwLockReadGuard<'_, V> { self.link.as_ref().read().unwrap() }
 
     #[inline(always)]
+    /// Mutably borrow the value that is pointed to.
     pub fn borrow_mut(&self) -> RwLockWriteGuard<'_, V> { self.link.as_ref().write().unwrap() }
 
     #[inline(always)]
+    /// Attempt to consume the link. If the pointed to value has a single owner
+    /// this will return Ok(_), otherwise it will return an error.
     pub fn try_unwrap(self) -> Result<V, Self> {
         Arc::try_unwrap(self.link)
             .map_err(|link| Link {
@@ -174,21 +255,9 @@ impl<V> Link<V> {
     }
 }
 
-pub trait ToSHA256<Ctx> {
-    fn hash(&self, ctx: &mut Ctx) -> Hash;
-}
-
-/// Display the hash in hex.
-impl std::fmt::Debug for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for c in self.hash {
-            write!(f, "{:x}", c)?;
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone)]
+/// A potentially cached value V. This is a value that can either be purely in
+/// memory, purely in backing storage, or both in memory and in backing storage.
 pub enum CachedRef<V> {
     Disk {
         key: Reference,
@@ -213,7 +282,7 @@ impl<V> Default for CachedRef<V> {
 
 impl<V: Loadable> CachedRef<V> {
     #[inline(always)]
-    pub fn get(&self, loader: &mut impl FlatLoadable) -> V
+    pub fn get(&self, loader: &mut impl BackingStoreLoad) -> V
     where
         V: Clone, {
         match self {
@@ -235,7 +304,7 @@ impl<V: Loadable> CachedRef<V> {
     /// Apply the supplied function to the contained value. The value is loaded
     /// if it is not yet cached. Note that this will **not** cache the
     /// value, the loaded value will be dropped.
-    pub fn use_value<X>(&self, loader: &mut impl FlatLoadable, f: impl FnOnce(&V) -> X) -> X {
+    pub fn use_value<X>(&self, loader: &mut impl BackingStoreLoad, f: impl FnOnce(&V) -> X) -> X {
         match self {
             CachedRef::Disk {
                 key,
@@ -262,7 +331,7 @@ impl<V> CachedRef<V> {
         }
     }
 
-    pub fn load_and_cache<F: FlatLoadable>(&mut self, loader: &mut F) -> &mut V
+    pub fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) -> &mut V
     where
         V: Loadable, {
         match self {
@@ -321,7 +390,7 @@ impl<V> CachedRef<V> {
         }
     }
 
-    pub fn store_and_cache<S: FlatStorable, W: std::io::Write>(
+    pub fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -398,13 +467,11 @@ impl<V> CachedRef<V> {
     }
 }
 
-pub type Key = u8;
-
 #[derive(Debug, Clone)]
 enum Stem {
     // the first byte is length, remaining is data.
     Short([u8; 16]),
-    Long(Arc<[Key]>),
+    Long(Arc<[KeyPart]>),
 }
 
 impl Stem {
@@ -472,25 +539,6 @@ impl From<Vec<u8>> for Stem {
     }
 }
 
-// impl FromIterator<u8> for Stem {
-//     #[inline(always)]
-//     fn from_iter<T: IntoIterator<Item = u8>>(iter: T) -> Self where
-//     {
-//         let iter = iter.into_iter();
-//         let len = iter.len();
-//         if len < 15 {
-//             let mut buf = [0u8; 16];
-//             buf[0] = len as u8;
-//             for (place, value) in buf[1..1+len].iter_mut().zip(iter) {
-//                 *place = value;
-//             }
-//             Self::Short(buf)
-//         } else {
-//             Self::Long(Arc::from(iter))
-//         }
-//     }
-// }
-
 impl AsRef<[u8]> for Stem {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] {
@@ -521,7 +569,7 @@ pub struct Node<V> {
     // In contrast to Hashed<Cached<..>> above for the value, here we store the hash
     // behind a pointer indirection. The reason for this is that there are going to be many
     // pointers to the same node, and we want to avoid duplicating node hashes.
-    children: Vec<(Key, ChildLink<V>)>,
+    children: Vec<(KeyPart, ChildLink<V>)>,
 }
 
 impl<V> Drop for Node<V> {
@@ -559,54 +607,7 @@ impl<V> Clone for Node<V> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Hashed<V> {
-    pub hash: Hash,
-    pub data: V,
-}
-
-impl<V> Hashed<V> {
-    #[inline(always)]
-    pub fn new(hash: Hash, data: V) -> Self {
-        Self {
-            hash,
-            data,
-        }
-    }
-}
-
-impl<Ctx> ToSHA256<Ctx> for Vec<u8> {
-    #[inline(always)]
-    fn hash(&self, _ctx: &mut Ctx) -> Hash {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(&(self.len() as u64).to_be_bytes());
-        hasher.update(self);
-        let hash = hasher.finalize().into();
-        Hash {
-            hash,
-        }
-    }
-}
-
-impl<Ctx, const N: usize> ToSHA256<Ctx> for [u8; N] {
-    #[inline(always)]
-    fn hash(&self, _ctx: &mut Ctx) -> Hash {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(&(N as u64).to_be_bytes());
-        hasher.update(self);
-        let hash = hasher.finalize().into();
-        Hash {
-            hash,
-        }
-    }
-}
-
-impl<V, Ctx> ToSHA256<Ctx> for Hashed<V> {
-    #[inline(always)]
-    fn hash(&self, _ctx: &mut Ctx) -> Hash { self.hash }
-}
-
-impl<V: Loadable, Ctx: FlatLoadable> ToSHA256<Ctx> for CachedRef<Hashed<V>>
+impl<V: Loadable, Ctx: BackingStoreLoad> ToSHA256<Ctx> for CachedRef<Hashed<V>>
 where
     V: ToSHA256<Ctx>,
 {
@@ -615,7 +616,7 @@ where
 }
 
 // TODO: Review and revise for security and correctness.
-impl<V, Ctx: FlatLoadable> ToSHA256<Ctx> for Node<V> {
+impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V> {
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();
         match &self.value {
@@ -633,19 +634,8 @@ impl<V, Ctx: FlatLoadable> ToSHA256<Ctx> for Node<V> {
             child_hasher.update(child.1.borrow().hash(ctx));
         }
         hasher.update(child_hasher.finalize());
-        Hash {
-            hash: hasher.finalize().into(),
-        }
-    }
-}
-
-impl<Ctx> ToSHA256<Ctx> for u64 {
-    #[inline(always)]
-    fn hash(&self, _ctx: &mut Ctx) -> Hash {
-        let hash = sha2::Sha256::digest(&self.to_be_bytes()).into();
-        Hash {
-            hash,
-        }
+        let hash: [u8; 32] = hasher.finalize().into();
+        Hash::from(hash)
     }
 }
 
@@ -653,7 +643,7 @@ impl<Ctx> ToSHA256<Ctx> for u64 {
 struct MutableNode<V> {
     generation: u32,
     /// Pointer to the table of entries, if the node has a value.
-    value:      Option<usize>,
+    value:      Option<EntryId>,
     path:       Stem,
     children:   ChildrenCow<V>,
 }
@@ -702,7 +692,7 @@ impl<V> MutableNode<V> {
                 entry
             };
             entries.push(new_entry);
-            Some(new_entry_idx)
+            Some(new_entry_idx.into())
         } else {
             None
         };
@@ -720,7 +710,7 @@ impl<V> MutableNode<V> {
 /// state rollback. It stores which items were alive at the time of the
 /// checkpoint, utilizing the fact that items are always just added to the end
 /// of the relevant collections.
-pub struct Checkpoint {
+struct Checkpoint {
     pub num_nodes:          usize,
     pub num_values:         usize,
     pub num_borrowed_nodes: usize,
@@ -728,32 +718,109 @@ pub struct Checkpoint {
 }
 
 #[derive(Debug)]
+/// A generation of the [MutableTrie]. This keeps track of the current root of
+/// the tree, together with the enough data to be able to go back to the
+/// previous generation. Generations are used to checkpoint the tree. This
+/// structure only makes sense in the context of a [MutableTrie], since it
+/// maintains pointers into other parts of the trie.
+struct Generation {
+    /// Pointer to the root node of the trie at this generation. This is [None]
+    /// if and only if the trie at this generation is empty.
+    root:           Option<usize>,
+    /// Checkpoint that allows us to clean up the trie when going back to the
+    /// **previous** generation.
+    checkpoint:     Checkpoint,
+    /// Map of prefixes that are locked by iterators.
+    iterator_roots: PrefixesMap,
+}
+
+impl Generation {
+    /// Construct a generation that contains the given root, no locks, and the
+    /// checkpoint which goes back to the beginning of the trie.
+    fn new(root: Option<usize>) -> Self {
+        Generation {
+            root,
+            checkpoint: Checkpoint {
+                num_nodes:          0,
+                num_values:         0,
+                num_borrowed_nodes: 0,
+                num_entries:        0,
+            },
+            iterator_roots: PrefixesMap::new(),
+        }
+    }
+
+    /// Construct a generation that contains the given root and checkpoint, and
+    /// no locks.
+    fn new_with_checkpoint(root: Option<usize>, checkpoint: Checkpoint) -> Self {
+        Generation {
+            root,
+            checkpoint,
+            iterator_roots: PrefixesMap::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MutableTrie<V> {
-    /// Roots for previous generations. The value is None if the tree for that
-    /// generation is empty. The second component of the pair is the number
-    /// of nodes that exist at the previous generation. This is used for
-    /// pushing and popping generations.
-    generation_roots: Vec<(Option<usize>, Checkpoint)>,
-    entries:          Vec<Entry>,
-    values:           Vec<V>,
-    borrowed_values:  Vec<Link<Hashed<CachedRef<V>>>>,
-    nodes:            Vec<MutableNode<V>>,
+    /// Roots for previous generations.
+    generations:     Vec<Generation>,
+    /// Entries. These are pointers to either [MutableTrie::values] or
+    /// [MutableTrie::borrowed_values].
+    entries:         Vec<Entry>,
+    values:          Vec<V>,
+    borrowed_values: Vec<Link<Hashed<CachedRef<V>>>>,
+    /// List of all the nodes for all generations. Nodes for new generations are
+    /// always added at the end.
+    nodes:           Vec<MutableNode<V>>,
 }
 
 #[derive(Debug)]
 enum ChildrenCow<V> {
-    Borrowed(Vec<(Key, ChildLink<V>)>),
+    Borrowed(Vec<(KeyPart, ChildLink<V>)>),
     Owned {
         generation: u32,
         value:      tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>,
     },
 }
 
+impl<V> ChildrenCow<V> {
+    /// Return a reference to the owned value, if the enum is an owned variant.
+    /// Otherwise return [None].
+    #[inline]
+    pub fn get_owned(&self) -> Option<(u32, &[KeyIndexPair])> {
+        if let ChildrenCow::Owned {
+            generation,
+            value,
+        } = self
+        {
+            Some((*generation, value))
+        } else {
+            None
+        }
+    }
+
+    /// Return a mutable reference to the owned value, if the enum is an owned
+    /// variant. Otherwise return [None].
+    #[inline]
+    pub fn get_owned_mut(&mut self) -> Option<(u32, &mut [KeyIndexPair])> {
+        if let ChildrenCow::Owned {
+            generation,
+            value,
+        } = self
+        {
+            Some((*generation, value))
+        } else {
+            None
+        }
+    }
+}
+
 fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
     borrowed_values: &mut [Link<Hashed<CachedRef<V>>>],
     owned_values: &mut [V],
     entries: &[Entry],
-    mutable: Option<usize>,
+    mutable: Option<EntryId>,
     loader: &mut Ctx,
     collector: &mut C,
 ) -> Option<Link<Hashed<CachedRef<V>>>> {
@@ -762,6 +829,7 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
         Entry::ReadOnly {
             borrowed,
             entry_idx,
+            ..
         } => {
             if borrowed {
                 Some(borrowed_values[entry_idx].clone())
@@ -776,6 +844,7 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
         }
         Entry::Mutable {
             entry_idx,
+            ..
         } => {
             let value = std::mem::take(&mut owned_values[entry_idx]);
             collector.add_value(&value);
@@ -784,24 +853,32 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
                 value,
             })))
         }
+        Entry::Deleted => None,
     }
 }
 
 #[repr(transparent)]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 struct KeyIndexPair {
     pub pair: usize,
 }
 
+/// Format the [KeyIndexPair] as a pair of a key and index.
+impl std::fmt::Debug for KeyIndexPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        (self.key(), self.index()).fmt(f)
+    }
+}
+
 impl KeyIndexPair {
     #[inline(always)]
-    pub fn key(self) -> Key { (self.pair >> 56) as u8 }
+    pub fn key(self) -> KeyPart { (self.pair >> 56) as u8 }
 
     #[inline(always)]
     pub fn index(self) -> usize { self.pair & 0x00ff_ffff_ffff_ffff }
 
     #[inline(always)]
-    pub fn new(key: Key, index: usize) -> Self {
+    pub fn new(key: KeyPart, index: usize) -> Self {
         let pair = usize::from(key) << 56 | index;
         Self {
             pair,
@@ -824,144 +901,12 @@ impl<V> Clone for ChildrenCow<V> {
     }
 }
 
-pub trait Loadable: Sized {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self>;
-
-    fn load_from_location<F: FlatLoadable>(
-        loader: &mut F,
-        location: Reference,
-    ) -> LoadResult<Self> {
-        let mut source = std::io::Cursor::new(loader.load_raw(location)?);
-        Self::load(loader, &mut source)
-    }
-}
-
-/// This loadable instance means that we can only retrieve the vector behind a
-/// cachedref. But it saves on the length which is significant for the concrete
-/// use-case, hence I opted for it.
-impl Loadable for Vec<u8> {
-    fn load<S: std::io::Read, F: FlatLoadable>(
-        _loader: &mut F,
-        source: &mut S,
-    ) -> LoadResult<Self> {
-        let mut ret = Vec::new();
-        source.read_to_end(&mut ret)?;
-        Ok(ret)
-    }
-}
-
-impl<const N: usize> Loadable for [u8; N] {
-    fn load<S: std::io::Read, F: FlatLoadable>(
-        _loader: &mut F,
-        source: &mut S,
-    ) -> LoadResult<Self> {
-        let mut ret = [0u8; N];
-        source.read_exact(&mut ret)?;
-        Ok(ret)
-    }
-}
-
-pub trait FlatStorable {
-    /// Store the provided value and return a reference that can be used
-    /// to load it.
-    fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError>;
-}
-
-pub trait FlatLoadable {
-    type R: AsRef<[u8]>;
-    /// Store the provided value and return a reference that can be used
-    /// to load it.
-    fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R>;
-}
-
-impl FlatStorable for Vec<u8> {
-    fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError> {
-        let len = self.len();
-        let data_len = data.len() as u64;
-        self.extend_from_slice(&data_len.to_be_bytes());
-        self.extend_from_slice(data);
-        Ok((len as u64).into())
-    }
-}
-#[derive(Debug)]
-pub struct Storable<X> {
-    inner: X,
-}
-
-impl<X: Seek + Write> FlatStorable for Storable<X> {
-    fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError> {
-        let pos = self.inner.seek(SeekFrom::Current(0))?;
-        let data_len = data.len() as u32;
-        self.inner.write_u32::<BigEndian>(data_len)?;
-        self.inner.write_all(data)?;
-        Ok(pos.into())
-    }
-}
-
-/// Generic wrapper for a loader. This implements loadable for any S that
-/// implements Seek + Read.
-pub struct Loader<S> {
-    pub inner: S,
-}
-
-impl<S> Loader<S> {
-    pub fn new(file: S) -> Self {
-        Self {
-            inner: file,
-        }
-    }
-}
-
-impl<'a, A: AsRef<[u8]>> FlatLoadable for Loader<A> {
-    type R = Vec<u8>;
-
-    // FIXME: This is inefficient. We allocate too many vectors.
-    fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
-        let slice = self.inner.as_ref();
-        let mut c = std::io::Cursor::new(slice);
-        let pos = c.seek(SeekFrom::Start(location.into()))?;
-        let len = c.read_u64::<BigEndian>()?;
-        let end = (pos + 8 + len) as usize;
-        if end <= slice.len() {
-            Ok(slice[pos as usize + 8..end].to_vec())
-        } else {
-            Err(LoadError::OutOfBoundsRead)
-        }
-    }
-}
-
-impl Loadable for u64 {
-    #[inline(always)]
-    fn load<S: std::io::Read, F: FlatLoadable>(
-        _loader: &mut F,
-        source: &mut S,
-    ) -> LoadResult<Self> {
-        let x = source.read_u64::<BigEndian>()?;
-        Ok(x)
-    }
-}
-impl Loadable for Reference {
-    #[inline(always)]
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
-        let reference = u64::load(loader, source)?;
-        Ok(reference.into())
-    }
-}
-
-impl<V: Loadable> Loadable for Hashed<V> {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
-        let hash = Hash::read(source)?;
-        let data = V::load(loader, source)?;
-        Ok(Hashed {
-            hash,
-            data,
-        })
-    }
-}
-
 impl<V> Loadable for CachedRef<V> {
     #[inline(always)]
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
         let reference = Reference::load(loader, source)?;
         Ok(CachedRef::Disk {
             key: reference,
@@ -970,19 +915,12 @@ impl<V> Loadable for CachedRef<V> {
 }
 
 impl<V> Loadable for Node<V> {
-    fn load<S: std::io::Read, F: FlatLoadable>(loader: &mut F, source: &mut S) -> LoadResult<Self> {
-        let tag = source.read_u8()?;
-        let path_len = if tag & 0b1000_0000 == 0 {
-            // stem length is encoded in the tag
-            u32::from(tag & 0b0011_1111)
-        } else {
-            // stem length follows as a u32
-            source.read_u32::<BigEndian>()?
-        };
-        let mut path = vec![0u8; path_len as usize];
-        source.read_exact(&mut path)?;
-        let path = Stem::from(path);
-        let value = if (tag & 0b100_0000) != 0 {
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
+        let (path, has_value) = read_node_path_and_value_tag(source)?;
+        let value = if has_value {
             let val = Hashed::<CachedRef<V>>::load(loader, source)?;
             Some(Link::new(val))
         } else {
@@ -1005,7 +943,7 @@ impl<V> Loadable for Node<V> {
 
 impl<V: Loadable> Node<V> {
     /// The entire tree in memory.
-    pub fn cache<F: FlatLoadable>(&mut self, loader: &mut F) {
+    pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let Some(v) = self.value.as_mut() {
             v.borrow_mut().data.load_and_cache(loader);
         }
@@ -1027,7 +965,7 @@ impl<V: Loadable> Node<V> {
 }
 
 impl<V: AsRef<[u8]>> Hashed<Node<V>> {
-    pub fn store_update<S: FlatStorable>(
+    pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
     ) -> Result<Vec<u8>, WriteError> {
@@ -1036,7 +974,7 @@ impl<V: AsRef<[u8]>> Hashed<Node<V>> {
         Ok(buf)
     }
 
-    pub fn store_update_buf<S: FlatStorable, W: std::io::Write>(
+    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -1047,7 +985,7 @@ impl<V: AsRef<[u8]>> Hashed<Node<V>> {
 }
 
 impl<V: AsRef<[u8]>> Node<V> {
-    pub fn store_update_buf<S: FlatStorable, W: std::io::Write>(
+    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -1061,25 +999,7 @@ impl<V: AsRef<[u8]>> Node<V> {
                           backing_store: &mut S,
                           ref_stack: &mut Vec<Reference>|
          -> StoreResult<()> {
-            let stem_len = node.path.as_ref().len();
-            let value_mask: u8 = if node.value.is_none() {
-                0
-            } else {
-                0b0100_0000
-            };
-            // if the first bit is 0 then the first byte encodes
-            // path length + presence of value
-            if stem_len <= INLINE_STEM_LENGTH {
-                let tag = stem_len as u8 | value_mask;
-                buf.write_u8(tag)?;
-            } else {
-                // TODO: We could optimize this as well by using variable-length encoding.
-                // But it probably does not matter in practice since paths should really always
-                // be < 64 in length.
-                let tag = 0b1000_0000 | value_mask;
-                buf.write_u8(tag)?;
-                buf.write_u32::<BigEndian>(stem_len as u32)?;
-            }
+            write_node_path_and_value_tag(node.path.as_ref(), node.value.is_none(), buf)?;
             // store the path
             buf.write_all(node.path.as_ref())?;
             // store the value
@@ -1135,15 +1055,15 @@ impl<V: AsRef<[u8]>> Node<V> {
     }
 }
 
-/// Make the children owned, and return whether the node has a value, and a
-/// mutable reference to the children.
+/// Make the children owned, and return whether the node has a value, the new
+/// length of owned_nodes, and a mutable reference to the children.
 fn make_owned<'a, 'b, V>(
     idx: usize,
     borrowed_values: &mut Vec<Link<Hashed<CachedRef<V>>>>,
     owned_nodes: &'a mut Vec<MutableNode<V>>,
     entries: &'a mut Vec<Entry>,
-    loader: &'b mut impl FlatLoadable,
-) -> (bool, &'a mut tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>) {
+    loader: &'b mut impl BackingStoreLoad,
+) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>) {
     let owned_nodes_len = owned_nodes.len();
     let node = unsafe { owned_nodes.get_unchecked(idx) };
     let node_generation = node.generation;
@@ -1198,12 +1118,13 @@ fn make_owned<'a, 'b, V>(
             value:      children,
         };
     }
+    let owned_nodes_len = owned_nodes.len();
     match &mut unsafe { owned_nodes.get_unchecked_mut(idx) }.children {
         ChildrenCow::Borrowed(_) => unsafe { std::hint::unreachable_unchecked() },
         ChildrenCow::Owned {
             value: ref mut children,
             ..
-        } => (has_value, children),
+        } => (has_value, owned_nodes_len, children),
     }
 }
 
@@ -1222,26 +1143,55 @@ enum Entry {
         /// so this is an index in the array of normal entries.
         entry_idx: usize,
     },
+    /// The entry is deleted.
+    Deleted,
+}
+
+impl Entry {
+    /// Return whether the entry is still alive, i.e., not [Entry::Deleted].
+    pub fn is_alive(&self) -> bool { !matches!(self, Self::Deleted) }
+
+    /// Return whether the entry is owned, i.e., mutable. If so, return the
+    /// value it points to.
+    pub fn is_owned(self) -> Option<usize> {
+        if let Self::Mutable {
+            entry_idx,
+        } = self
+        {
+            Some(entry_idx)
+        } else {
+            None
+        }
+    }
 }
 
 type Position = u16;
 
 #[derive(Debug)]
 pub struct Iterator {
-    /// pointer to the table of nodes.
-    pub(crate) root:       usize,
+    /// The root of the iterator. This is stored to allow removal of the
+    /// iterator.
+    root:         Box<[u8]>,
+    /// Pointer to the table of nodes where the iterator is currently anchored.
+    current_node: usize,
     /// Key at the current position of the iterator.
-    pub(crate) key:        Vec<u8>,
+    key:          Vec<u8>,
     /// Next child to look at. This is None if
     /// we have to give out the value at the current node, and Some(_)
     /// otherwise.
-    pub(crate) next_child: Option<Position>,
+    next_child:   Option<Position>,
     /// Stack of parents and next positions, and key lengths of parents
-    pub(crate) stack:      Vec<(usize, Position, usize)>,
+    stack:        Vec<(usize, Position, usize)>,
 }
 
 impl Iterator {
+    /// Get key the iterator is currently pointing at.
+    #[inline(always)]
     pub fn get_key(&self) -> &[u8] { &self.key }
+
+    /// Get the key of which the iterator was initialized with.
+    #[inline(always)]
+    pub fn get_root(&self) -> &[u8] { &self.root }
 }
 
 impl<V> CachedRef<Hashed<Node<V>>> {
@@ -1250,7 +1200,7 @@ impl<V> CachedRef<Hashed<Node<V>>> {
         borrowed_values: &mut Vec<Link<Hashed<CachedRef<V>>>>,
         entries: &mut Vec<Entry>,
         generation: u32,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
     ) -> MutableNode<V> {
         match self {
             CachedRef::Disk {
@@ -1291,7 +1241,7 @@ impl<V> Node<V> {
         let entry_idx = entry.map(|e| {
             let len = entries.len();
             entries.push(e);
-            len
+            len.into()
         });
         MutableNode {
             generation,
@@ -1306,12 +1256,7 @@ impl<V> Node<V> {
         let mut entries = Vec::new();
         let root_node = self.thaw(&mut borrowed_values, &mut entries, generation);
         MutableTrie {
-            generation_roots: vec![(Some(0), Checkpoint {
-                num_nodes:          0,
-                num_values:         0,
-                num_borrowed_nodes: 0,
-                num_entries:        0,
-            })],
+            generations: vec![Generation::new(Some(0))],
             values: Vec::new(),
             nodes: vec![root_node],
             borrowed_values,
@@ -1323,24 +1268,17 @@ impl<V> Node<V> {
 impl<V> MutableTrie<V> {
     pub fn empty() -> Self {
         Self {
-            generation_roots: vec![(None, Checkpoint {
-                num_nodes:          0,
-                num_values:         0,
-                num_borrowed_nodes: 0,
-                num_entries:        0,
-            })],
-            values:           Vec::new(),
-            nodes:            Vec::new(),
-            borrowed_values:  Vec::new(),
-            entries:          Vec::new(),
+            generations:     vec![Generation::new(None)],
+            values:          Vec::new(),
+            nodes:           Vec::new(),
+            borrowed_values: Vec::new(),
+            entries:         Vec::new(),
         }
     }
 
     /// Check whether the current generation is an empty tree.
-    pub fn is_empty(&self) -> bool { self.generation_roots.last().map_or(false, |x| x.0.is_none()) }
+    pub fn is_empty(&self) -> bool { self.generations.last().map_or(false, |x| x.root.is_none()) }
 }
-
-pub type EntryId = usize;
 
 impl<V> MutableTrie<V> {
     pub fn new_generation(&mut self) {
@@ -1348,26 +1286,25 @@ impl<V> MutableTrie<V> {
         let num_values = self.values.len();
         let num_borrowed_nodes = self.borrowed_values.len();
         let num_entries = self.entries.len();
-        if let Some((maybe_root_idx, _)) = self.generation_roots.last() {
-            if let Some(root_idx) = maybe_root_idx {
-                let root = &self.nodes[*root_idx];
+        if let Some(generation) = self.generations.last() {
+            let checkpoint = Checkpoint {
+                num_nodes,
+                num_values,
+                num_borrowed_nodes,
+                num_entries,
+            };
+            if let Some(root_idx) = generation.root {
+                let root = &self.nodes[root_idx];
                 let current_generation = root.generation;
                 let new_root_node = root.migrate(&mut self.entries, current_generation + 1);
                 let new_root_idx = self.nodes.len();
                 self.nodes.push(new_root_node);
-                self.generation_roots.push((Some(new_root_idx), Checkpoint {
-                    num_nodes,
-                    num_values,
-                    num_borrowed_nodes,
-                    num_entries,
-                }));
+                let new_generation =
+                    Generation::new_with_checkpoint(Some(new_root_idx), checkpoint);
+                self.generations.push(new_generation);
             } else {
-                self.generation_roots.push((None, Checkpoint {
-                    num_nodes,
-                    num_values,
-                    num_borrowed_nodes,
-                    num_entries,
-                }));
+                let new_generation = Generation::new_with_checkpoint(None, checkpoint);
+                self.generations.push(new_generation);
             }
         }
     }
@@ -1375,11 +1312,12 @@ impl<V> MutableTrie<V> {
     /// Pop a generation, removing all data that is only accessible from newer
     /// generations. Return None if no generations are left.
     pub fn pop_generation(&mut self) -> Option<()> {
-        let (_, num_remaining) = self.generation_roots.pop()?;
-        self.nodes.truncate(num_remaining.num_nodes);
-        self.values.truncate(num_remaining.num_values);
-        self.borrowed_values.truncate(num_remaining.num_borrowed_nodes);
-        self.entries.truncate(num_remaining.num_entries);
+        let generation = self.generations.pop()?;
+        let checkpoint = generation.checkpoint;
+        self.nodes.truncate(checkpoint.num_nodes);
+        self.values.truncate(checkpoint.num_values);
+        self.borrowed_values.truncate(checkpoint.num_borrowed_nodes);
+        self.entries.truncate(checkpoint.num_entries);
         Some(())
     }
 
@@ -1388,20 +1326,24 @@ impl<V> MutableTrie<V> {
     /// nothing.
     pub fn normalize(&mut self, root: u32) {
         let new_len = root as usize + 1;
-        let one_past_new_root = self.generation_roots.get(new_len).copied();
-        if let Some((_, num_remaining)) = one_past_new_root {
-            self.generation_roots.truncate(new_len);
-            self.nodes.truncate(num_remaining.num_nodes);
-            self.values.truncate(num_remaining.num_values);
-            self.borrowed_values.truncate(num_remaining.num_borrowed_nodes);
-            self.entries.truncate(num_remaining.num_entries);
+        let generation = self.generations.get(new_len);
+        if let Some(generation) = generation {
+            self.nodes.truncate(generation.checkpoint.num_nodes);
+            self.values.truncate(generation.checkpoint.num_values);
+            self.borrowed_values.truncate(generation.checkpoint.num_borrowed_nodes);
+            self.entries.truncate(generation.checkpoint.num_entries);
         }
+        self.generations.truncate(new_len);
     }
 
     /// Get a mutable reference to an entry, if the entry exists. This copies
     /// the data pointed to by the entry unless the entry was already
     /// mutable.
-    pub fn get_mut(&mut self, entry: EntryId, loader: &mut impl FlatLoadable) -> Option<&mut V>
+    pub fn get_mut(
+        &mut self,
+        entry: EntryId,
+        loader: &mut impl BackingStoreLoad,
+    ) -> Option<&mut V>
     where
         V: Clone + Loadable, {
         let values = &mut self.values;
@@ -1426,26 +1368,28 @@ impl<V> MutableTrie<V> {
             Entry::Mutable {
                 entry_idx,
             } => values.get_mut(entry_idx),
+            Entry::Deleted => None,
         }
     }
 
-    pub fn next(
+    pub fn next<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut L,
         iterator: &mut Iterator,
-    ) -> Option<EntryId> {
+        counter: &mut C,
+    ) -> Result<Option<EntryId>, C::Err> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         loop {
-            let node_idx = iterator.root;
+            let node_idx = iterator.current_node;
             let node = &owned_nodes[node_idx];
             let next_child = if let Some(next_child) = iterator.next_child {
                 next_child
             } else {
                 iterator.next_child = Some(0);
                 if node.value.is_some() {
-                    return node.value;
+                    return Ok(node.value);
                 }
                 0
             };
@@ -1453,76 +1397,111 @@ impl<V> MutableTrie<V> {
                 // we have to visit this child.
                 iterator.stack.push((node_idx, next_child + 1, iterator.key.len()));
                 iterator.next_child = None;
-                let (_, children) =
+                let (_, _, children) =
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                 let child = children[usize::from(next_child)];
-                iterator.root = child.index();
+                iterator.current_node = child.index();
+                let new_path = owned_nodes[iterator.current_node].path.as_ref();
+                counter.tick(1 + new_path.len() as u64)?;
                 iterator.key.push(child.key());
-                iterator.key.extend_from_slice(owned_nodes[iterator.root].path.as_ref());
+                iterator.key.extend_from_slice(new_path);
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
+                    counter.tick(iterator.key.len().saturating_sub(key_len) as u64)?;
                     iterator.key.truncate(key_len);
-                    iterator.root = parent_idx;
+                    iterator.current_node = parent_idx;
                     iterator.next_child = Some(next_child);
                 } else {
                     // we are done
-                    return None;
+                    return Ok(None);
                 }
             }
         }
     }
 
-    pub fn iter(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<Iterator> {
+    /// Deletes an iterator.
+    /// If an iterator was deleted then return `true` otherwise `false`.
+    pub fn delete_iter(&mut self, iterator: &Iterator) -> bool {
+        let generations = &mut self.generations;
+        if let Some(generation) = generations.last_mut() {
+            generation.iterator_roots.delete(iterator.get_root())
+        } else {
+            false
+        }
+    }
+
+    pub fn iter(
+        &mut self,
+        loader: &mut impl BackingStoreLoad,
+        key: &[KeyPart],
+    ) -> Result<Option<Iterator>, TooManyIterators> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let generation = if let Some(generation) = self.generations.last_mut() {
+            generation
+        } else {
+            return Ok(None);
+        };
+        let mut node_idx = if let Some(node_idx) = generation.root {
+            node_idx
+        } else {
+            return Ok(None);
+        };
         loop {
-            let node = unsafe { owned_nodes.get_unchecked(node_idx) };
+            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             let mut stem_iter = node.path.as_ref().iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
-                    return Some(Iterator {
-                        root:       node_idx,
-                        key:        key.into(),
-                        next_child: None,
-                        stack:      Vec::new(),
-                    })
+                    generation.iterator_roots.insert(key)?;
+                    return Ok(Some(Iterator {
+                        root:         key.into(),
+                        current_node: node_idx,
+                        key:          key.into(),
+                        next_child:   None,
+                        stack:        Vec::new(),
+                    }));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
                 } => {
+                    generation.iterator_roots.insert(key)?;
                     let stem_slice = stem_iter.as_slice();
                     let mut root_key = Vec::with_capacity(key.len() + 1 + stem_slice.len());
                     root_key.extend_from_slice(key);
                     root_key.push(stem_step);
                     root_key.extend_from_slice(stem_slice);
-                    return Some(Iterator {
-                        root:       node_idx,
-                        key:        root_key,
-                        next_child: None,
-                        stack:      Vec::new(),
-                    });
+                    return Ok(Some(Iterator {
+                        root:         key.into(),
+                        current_node: node_idx,
+                        key:          root_key,
+                        next_child:   None,
+                        stack:        Vec::new(),
+                    }));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    let (_, children) =
+                    let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let key_usize = usize::from(key_step) << 56;
-                    let pair = children
+                    let pair = if let Ok(pair) = children
                         .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
-                        .ok()?;
+                    {
+                        pair
+                    } else {
+                        return Ok(None);
+                    };
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
                 FollowStem::Diff {
                     ..
                 } => {
-                    return None;
+                    return Ok(None);
                 }
-            };
+            }
         }
     }
 
@@ -1550,6 +1529,7 @@ impl<V> MutableTrie<V> {
                 values[entry_idx] = new_value;
                 values.get_mut(entry_idx)
             }
+            Entry::Deleted => None,
         }
     }
 
@@ -1557,7 +1537,7 @@ impl<V> MutableTrie<V> {
     pub fn with_entry<X, F>(
         &self,
         entry: EntryId,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         f: F,
     ) -> Option<X>
     where
@@ -1579,13 +1559,14 @@ impl<V> MutableTrie<V> {
             Entry::Mutable {
                 entry_idx,
             } => return values.get(entry_idx).map(f),
+            Entry::Deleted => None,
         }
     }
 
     /// TODO: It might be useful to return a list of new nodes so that they
     /// may be persisted quicker than traversing the tree again.
     /// Freeze the current generation. Returns None if the tree was empty.
-    pub fn freeze<Ctx: FlatLoadable, C: Collector<V>>(
+    pub fn freeze<Ctx: BackingStoreLoad, C: Collector<V>>(
         self,
         loader: &mut Ctx,
         collector: &mut C,
@@ -1596,18 +1577,14 @@ impl<V> MutableTrie<V> {
         let mut values = self.values;
         let entries = self.entries;
         let mut borrowed_values = self.borrowed_values;
-        let root_idx = self.generation_roots.last()?.0?;
+        let root_idx = self.generations.last()?.root?;
         // get the reachable owned nodes.
         let mut reachable_stack = vec![root_idx];
         let mut reachable = Vec::new();
         while let Some(idx) = reachable_stack.pop() {
             reachable.push(idx);
-            if let ChildrenCow::Owned {
-                value,
-                ..
-            } = &owned_nodes[idx].children
-            {
-                for c in value.iter() {
+            if let Some((_, children)) = owned_nodes[idx].children.get_owned() {
+                for c in children {
                     reachable_stack.push(c.index());
                 }
             }
@@ -1682,12 +1659,16 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn get_entry(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<EntryId> {
+    pub fn get_entry(
+        &mut self,
+        loader: &mut impl BackingStoreLoad,
+        key: &[KeyPart],
+    ) -> Option<EntryId> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let mut node_idx = self.generations.last()?.root?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
@@ -1702,7 +1683,7 @@ impl<V> MutableTrie<V> {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    let (_, children) =
+                    let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let key_usize = usize::from(key_step) << 56;
                     let pair = children
@@ -1719,35 +1700,89 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn delete(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<EntryId> {
+    /// Delete the given key from the trie. If the entry is in a part of the
+    /// tree that is locked this returns an error. Otherwise return whether
+    /// an entry existed.
+    pub fn delete(
+        &mut self,
+        loader: &mut impl BackingStoreLoad,
+        key: &[KeyPart],
+    ) -> Result<bool, AttemptToModifyLockedArea>
+    where
+        V: Default, {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
+        let owned_values = &mut self.values;
         let entries = &mut self.entries;
+        let mut grandfather = None;
         let mut father = None;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let generation = if let Some(generation) = self.generations.last_mut() {
+            generation
+        } else {
+            return Ok(false);
+        };
+        let mut node_idx = if let Some(node_idx) = generation.root {
+            node_idx
+        } else {
+            return Ok(false);
+        };
+        generation.iterator_roots.check_has_no_prefix(key)?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::Equal => {
                     // we found it, delete the value first and save it for returning.
-                    let rv = std::mem::take(&mut node.value);
-                    let (_, children) =
+                    let rv;
+                    if let Some(entry) = std::mem::take(&mut node.value) {
+                        // We mark the entry as `Deleted` such that other ids pointing to the entry
+                        // are automatically invalidated.
+                        let existing_entry = std::mem::replace(&mut entries[entry], Entry::Deleted);
+                        // if this entry was owned we now also clean up the stored value to
+                        // deallocate any storage.
+                        if let Some(value_idx) = existing_entry.is_owned() {
+                            std::mem::take(&mut owned_values[value_idx]);
+                        }
+                        rv = existing_entry.is_alive();
+                    } else {
+                        // no value here, so no entry was found
+                        return Ok(false);
+                    }
+                    let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if children.len() == 1 {
                         // collapse path from father
                         if let Some(child) = children.pop() {
-                            let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                            let node = &mut owned_nodes[node_idx];
-                            node.path.extend(child.key(), child_1.path.as_ref());
-                            node.children = child_1.children;
-                            node.value = child_1.value;
+                            let node = std::mem::take(&mut owned_nodes[node_idx]); // invalidate the node.
+                            let child_node = &mut owned_nodes[child.index()];
+                            let mut new_stem: Stem = node.path;
+                            new_stem.extend(child.key(), child_node.path.as_ref());
+                            child_node.path = new_stem;
+                            if let Some((child_idx, father_idx)) = father {
+                                // skip the current node
+                                // father's child pointer should point directly to the node's child,
+                                // instead of the node.
+                                // the only thing that needs to be transferred from the node to the
+                                // child is (potentially) the stem of the node.
+                                let father_node: &mut MutableNode<_> =
+                                    unsafe { owned_nodes.get_unchecked_mut(father_idx) };
+                                if let Some((_, children)) = father_node.children.get_owned_mut() {
+                                    let child_place: &mut KeyIndexPair = &mut children[child_idx];
+                                    let step = child_place.key();
+                                    *child_place = KeyIndexPair::new(step, child.index());
+                                } else {
+                                    unsafe { std::hint::unreachable_unchecked() }
+                                }
+                            } else {
+                                // set the root to the new child
+                                generation.root = Some(child.index());
+                            }
                         }
                     } else if children.is_empty() {
                         // no children are left, and also no value, we need to delete the child from
                         // the father.
                         if let Some((child_idx, father_idx)) = father {
-                            let (has_value, father_children) = make_owned(
+                            let (has_value, _, father_children) = make_owned(
                                 father_idx,
                                 borrowed_values,
                                 owned_nodes,
@@ -1762,102 +1797,211 @@ impl<V> MutableTrie<V> {
                             // if it had a value there is nothing left to do. It must stay as is.
                             // if it had exactly two children we must now path-compress it
                             if !has_value && father_children.len() == 1 {
+                                // collapse path from grandfather
                                 if let Some(child) = father_children.pop() {
-                                    let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                                    let node = &mut owned_nodes[father_idx];
-                                    node.path.extend(child.key(), child_1.path.as_ref());
-                                    node.children = child_1.children;
-                                    node.value = child_1.value;
+                                    let node = std::mem::take(&mut owned_nodes[father_idx]); // invalidate the node.
+                                    let child_node = &mut owned_nodes[child.index()];
+                                    let mut new_stem: Stem = node.path;
+                                    new_stem.extend(child.key(), child_node.path.as_ref());
+                                    child_node.path = new_stem;
+                                    if let Some((child_idx, grandfather_idx)) = grandfather {
+                                        // skip the current node
+                                        // grandfather's child pointer should point directly to the
+                                        // node's child, instead of the node.
+                                        // the only thing that needs to be transferred from the node
+                                        // to the child is (potentially) the stem of the node.
+                                        let grandfather_node: &mut MutableNode<_> = unsafe {
+                                            owned_nodes.get_unchecked_mut(grandfather_idx)
+                                        };
+                                        if let Some((_, children)) =
+                                            grandfather_node.children.get_owned_mut()
+                                        {
+                                            let child_place: &mut KeyIndexPair =
+                                                &mut children[child_idx];
+                                            let step = child_place.key();
+                                            *child_place = KeyIndexPair::new(step, child.index());
+                                        } else {
+                                            unsafe { std::hint::unreachable_unchecked() }
+                                        }
+                                    } else {
+                                        // grandfather did not exist
+                                        // set the root to the new child
+                                        generation.root = Some(child.index());
+                                    }
+                                } else {
+                                    unsafe { std::hint::unreachable_unchecked() }
                                 }
                             }
                         } else {
                             // otherwise this must be the root. Delete it.
-                            self.generation_roots.last_mut()?.0 = None;
+                            generation.root = None;
                         }
                     }
-                    return rv;
+                    return Ok(rv);
                 }
                 FollowStem::KeyIsPrefix {
                     ..
                 } => {
-                    return None;
+                    return Ok(false);
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    let (_, children) =
+                    let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
                         let pair = unsafe { children.get_unchecked(c_idx) };
-                        father = Some((c_idx, node_idx));
+                        grandfather = std::mem::replace(&mut father, Some((c_idx, node_idx)));
                         node_idx = pair.index();
                     } else {
-                        return None;
+                        return Ok(false);
                     }
                 }
                 FollowStem::Diff {
                     ..
                 } => {
-                    return None;
+                    return Ok(false);
                 }
             };
         }
     }
 
     /// Delete the entire subtree whose keys match the given prefix, that is,
-    /// where the given key is a prefix.
-    pub fn delete_prefix(&mut self, loader: &mut impl FlatLoadable, key: &[Key]) -> Option<()> {
+    /// where the given key is a prefix. Return
+    /// - either an error caused by the counter
+    /// - an error caused by attempting to modify a locked part of the tree
+    /// - otherwise return whether anything was deleted
+    pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
+        &mut self,
+        loader: &mut L,
+        key: &[KeyPart],
+        counter: &mut C,
+    ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err> {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        let mut grandparent_idx = None;
         let mut parent_idx = None;
-        let mut node_idx = self.generation_roots.last()?.0?;
+        let generation = if let Some(generation) = self.generations.last_mut() {
+            generation
+        } else {
+            return Ok(Ok(false));
+        };
+        let mut node_idx = if let Some(idx) = generation.root {
+            idx
+        } else {
+            return Ok(Ok(false));
+        };
+        if generation.iterator_roots.is_or_has_prefix(key) {
+            return Ok(Err(AttemptToModifyLockedArea));
+        }
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    let (_, children) =
+                    let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
                         let pair = unsafe { children.get_unchecked(c_idx) };
-                        parent_idx = Some((c_idx, node_idx));
+                        grandparent_idx =
+                            std::mem::replace(&mut parent_idx, Some((c_idx, node_idx)));
                         node_idx = pair.index();
                     } else {
-                        return None;
+                        return Ok(Ok(false));
                     }
                 }
                 FollowStem::Diff {
                     ..
                 } => {
-                    return None;
+                    return Ok(Ok(false));
                 }
                 _ => {
-                    // we found the subtree to remove. Now traverse up and fixup the remaining part
-                    // of the tree. if we deleted the root set the tree is empty, so set it as such.
+                    // We found the subtree to remove.
+                    // First we check that the root of the subtree and it's children are not locked.
+                    // Second, invalidate entry of the node and all of its children.
+                    let mut nodes_to_invalidate = vec![node_idx];
+                    // traverse each child subtree and invalidate them.
+                    while let Some(node_idx) = nodes_to_invalidate.pop() {
+                        let to_invalidate = &owned_nodes[node_idx];
+                        counter.tick(to_invalidate.path.as_ref().len() as u64 + 1)?; // + 1 is for the step from the parent.
+                        if let Some(entry) = to_invalidate.value {
+                            entries[entry] = Entry::Deleted;
+                        }
+
+                        // if children are borrowed then by construction there are no entries
+                        // in them. Hence we only need to recurse into owned children.
+                        if let Some((generation, children)) = to_invalidate.children.get_owned() {
+                            // if children are of a previous generation then, again, we
+                            // do not have to recurse, since all entries will be in fully owned
+                            // nodes, and that means they will be of
+                            // current generation.
+                            if to_invalidate.generation == generation {
+                                for v in children.iter() {
+                                    nodes_to_invalidate.push(v.index())
+                                }
+                            }
+                        }
+                    }
+                    // Now fix up the tree. We deleted a child of the parent. If the
+                    // parent now has a single remaining child and no value we must collapse it with
+                    // its parent, the grandfather, if it exists. If either the father nor the
+                    // grandfather exist then they are in effect the root, so we change the root
+                    // pointer to point to the relevant node, or None if we
+                    // deleted the entire tree.
                     if let Some((child_idx, parent_idx)) = parent_idx {
-                        let (has_value, children) =
+                        let (has_value, _, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
+
                         children.remove(child_idx);
                         // if the node does not have a value and it has one child, then it should be
                         // collapsed (path compressed)
                         if !has_value && children.len() == 1 {
                             // collapse path.
                             if let Some(child) = children.pop() {
-                                let child_1 = std::mem::take(&mut owned_nodes[child.index()]);
-                                let node = &mut owned_nodes[parent_idx];
-                                node.path.extend(child.key(), child_1.path.as_ref());
-                                node.children = child_1.children;
-                                node.value = child_1.value;
+                                let parent_node: MutableNode<_> =
+                                    std::mem::take(&mut owned_nodes[parent_idx]);
+                                let child_node = &mut owned_nodes[child.index()];
+                                let mut new_stem: Stem = parent_node.path;
+                                new_stem.extend(child.key(), child_node.path.as_ref());
+                                child_node.path = new_stem;
+                                if let Some((child_idx, grandparent_idx)) = grandparent_idx {
+                                    // skip the parent
+                                    // grandfather's child pointer should point directly to the
+                                    // node's child, instead of the node.
+                                    // the only thing that needs to be transferred from the node
+                                    // to the child is (potentially) the stem of the node.
+                                    // All other values in the node are empty.
+                                    let grandparent_node: &mut MutableNode<_> =
+                                        unsafe { owned_nodes.get_unchecked_mut(grandparent_idx) };
+                                    if let Some((_, children)) =
+                                        grandparent_node.children.get_owned_mut()
+                                    {
+                                        let child_place: &mut KeyIndexPair =
+                                            &mut children[child_idx];
+                                        let step = child_place.key();
+                                        *child_place = KeyIndexPair::new(step, child.index());
+                                    } else {
+                                        unsafe { std::hint::unreachable_unchecked() }
+                                    }
+                                } else {
+                                    // grandparent did not exist
+                                    // set the root to the new child
+                                    if let Some(generation) = self.generations.last_mut() {
+                                        generation.root = Some(child.index());
+                                    }
+                                }
+                            } else {
+                                unsafe { std::hint::unreachable_unchecked() }
                             }
                         }
                     } else {
-                        self.generation_roots.last_mut()?.0 = None;
-                        return Some(());
+                        generation.root = None;
+                        return Ok(Ok(true));
                     }
-                    return Some(());
+                    return Ok(Ok(true));
                 }
             };
         }
@@ -1867,45 +2011,47 @@ impl<V> MutableTrie<V> {
     /// at the key existed.
     pub fn insert(
         &mut self,
-        loader: &mut impl FlatLoadable,
-        key: &[Key],
+        loader: &mut impl BackingStoreLoad,
+        key: &[KeyPart],
         new_value: V,
-    ) -> (EntryId, Option<EntryId>) {
-        let mut key_iter = key.iter();
-        let generation_root =
-            self.generation_roots.last().expect("There should always be at least 1 generation.").0;
+    ) -> Result<(EntryId, Option<EntryId>), AttemptToModifyLockedArea> {
+        let (current_generation, older_generations) = self
+            .generations
+            .split_last_mut()
+            .expect("There should always be at least 1 generation.");
+        current_generation.iterator_roots.check_has_no_prefix(key)?;
         // if the tree is empty we must create a new root
-        let mut node_idx = if let Some(root) = generation_root {
+        let mut node_idx = if let Some(root) = current_generation.root {
             root
         } else {
             // the tree is empty
             let value_idx = self.values.len();
             self.values.push(new_value);
-            let generation = (self.generation_roots.len() - 1) as u32;
+            let generation_idx = older_generations.len() as u32;
             let root_idx = self.nodes.len();
-            let entry_idx = self.entries.len();
+            let entry_idx: EntryId = self.entries.len().into();
             self.entries.push(Entry::Mutable {
                 entry_idx: value_idx,
             });
             self.nodes.push(MutableNode {
-                generation,
-                value: Some(entry_idx),
-                path: key.into(),
-                children: ChildrenCow::Owned {
-                    generation,
-                    value: tinyvec::TinyVec::new(),
+                generation: generation_idx,
+                value:      Some(entry_idx),
+                path:       key.into(),
+                children:   ChildrenCow::Owned {
+                    generation: generation_idx,
+                    value:      tinyvec::TinyVec::new(),
                 },
             });
-            self.generation_roots
-                .last_mut()
-                .expect("We already checked the list is not empty.")
-                .0 = Some(root_idx);
-            return (entry_idx, None);
+            current_generation.root = Some(root_idx);
+            return Ok((entry_idx, None));
         };
-        let generation = self.nodes[node_idx].generation;
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        // the parent node index and the index of the parents child we're visiting.
+        let mut parent_node_idxs: Option<(usize, usize)> = None;
+        let generation = owned_nodes[node_idx].generation;
+        let mut key_iter = key.iter();
         loop {
             let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
@@ -1917,12 +2063,12 @@ impl<V> MutableTrie<V> {
                     self.values.push(new_value);
                     let old_entry_idx = node.value;
                     // insert new entry
-                    let entry_idx = self.entries.len();
+                    let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
                     node.value = Some(entry_idx);
-                    return (entry_idx, old_entry_idx);
+                    return Ok((entry_idx, old_entry_idx));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -1932,38 +2078,50 @@ impl<V> MutableTrie<V> {
                     let remaining_stem: Stem = stem_iter.as_slice().into();
                     let value_idx = self.values.len();
                     self.values.push(new_value);
-                    let entry_idx = self.entries.len();
+                    let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
-                    // if the node had an entry before we need to update it if it was borrowed.
-                    let node_value = std::mem::replace(&mut node.value, Some(entry_idx));
-                    let node_children = std::mem::replace(&mut node.children, ChildrenCow::Owned {
-                        generation,
-                        value: tinyvec::TinyVec::new(),
-                    });
-                    node.path = key_slice.into();
+
+                    node.path = remaining_stem;
                     let new_node_idx = owned_nodes_len;
-                    node.children = ChildrenCow::Owned {
+
+                    // Update the parents children index with the new child
+                    if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
+                        if let Some((_, children)) = parent_node.children.get_owned_mut() {
+                            if let Some(key_and_index) = children.get_mut(child_idx) {
+                                let key = key_and_index.key();
+                                *key_and_index = KeyIndexPair::new(key, new_node_idx);
+                            }
+                        }
+                    } else {
+                        current_generation.root = Some(new_node_idx);
+                    }
+                    let new_node = MutableNode {
                         generation,
-                        value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, new_node_idx)],
+                        value: Some(entry_idx),
+                        path: key_slice.into(),
+                        children: ChildrenCow::Owned {
+                            generation,
+                            value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, node_idx)],
+                        },
                     };
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: node_value,
-                        path: remaining_stem,
-                        children: node_children,
-                    });
-                    return (entry_idx, None);
+                    owned_nodes.push(new_node);
+                    return Ok((entry_idx, None));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
-                    let (_, children) =
+                    // make_owned may insert additional nodes. Hence we have to update our
+                    // owned_nodes_len to make sure we have the up-to-date
+                    // value.
+                    let (_, owned_nodes_len, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let idx = children.binary_search_by(|kk| kk.key().cmp(&key_step));
                     match idx {
                         Ok(idx) => {
+                            parent_node_idxs = Some((node_idx, idx));
                             node_idx = unsafe { children.get_unchecked(idx).index() };
                         }
                         Err(place) => {
@@ -1974,7 +2132,7 @@ impl<V> MutableTrie<V> {
                             let value_idx = self.values.len();
                             self.values.push(new_value);
                             // insert new entry
-                            let entry_idx = entries.len();
+                            let entry_idx: EntryId = entries.len().into();
                             entries.push(Entry::Mutable {
                                 entry_idx: value_idx,
                             });
@@ -1987,7 +2145,7 @@ impl<V> MutableTrie<V> {
                                     value: tinyvec::TinyVec::new(),
                                 },
                             });
-                            return (entry_idx, None);
+                            return Ok((entry_idx, None));
                         }
                     }
                 }
@@ -2002,63 +2160,123 @@ impl<V> MutableTrie<V> {
                     let remaining_key: Stem = key_iter.as_slice().into();
                     let new_stem =
                         Stem::from(&key_slice[0..key_slice.len() - remaining_key_len - 1]);
-                    let key_node_idx = owned_nodes_len;
-                    let node_value = std::mem::take(&mut node.value);
-                    let node_children = std::mem::replace(&mut node.children, ChildrenCow::Owned {
-                        generation,
-                        value: tinyvec::TinyVec::new(),
-                    });
-                    let stem_node_idx = owned_nodes_len + 1;
-                    // Insert the children in the correct order.
-                    let children = if key_step < stem_step {
-                        tinyvec::tiny_vec![
-                            [_; INLINE_CAPACITY] =>
-                            KeyIndexPair::new(key_step, key_node_idx),
-                            KeyIndexPair::new(stem_step, stem_node_idx),
-                        ]
-                    } else {
-                        tinyvec::tiny_vec![
-                            [_; INLINE_CAPACITY] =>
-                            KeyIndexPair::new(stem_step, stem_node_idx),
-                            KeyIndexPair::new(key_step, key_node_idx),
-                        ]
-                    };
-                    node.path = new_stem;
-                    node.children = ChildrenCow::Owned {
-                        generation,
-                        value: children,
-                    };
+                    // index of the node that continues along the remaining key
+                    let remaining_key_node_idx = owned_nodes_len;
+                    // index of the new node that will have two children
+                    let new_node_idx = owned_nodes_len + 1;
+                    node.path = remaining_stem;
+                    // insert new entry
                     let value_idx = self.values.len();
                     self.values.push(new_value);
-                    // insert new entry
-                    let entry_idx = self.entries.len();
+                    let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: Some(entry_idx),
-                        path: remaining_key,
-                        children: ChildrenCow::Owned {
+                    {
+                        let remaining_key_node = MutableNode {
                             generation,
-                            value: tinyvec::TinyVec::new(),
-                        },
-                    });
-                    owned_nodes.push(MutableNode {
-                        generation,
-                        value: node_value,
-                        path: remaining_stem,
-                        children: node_children,
-                    });
-                    return (entry_idx, None);
+                            value: Some(entry_idx),
+                            path: remaining_key,
+                            children: ChildrenCow::Owned {
+                                generation: generation as u32,
+                                value:      tinyvec::TinyVec::new(),
+                            },
+                        };
+                        owned_nodes.push(remaining_key_node);
+                    }
+
+                    // construct the new node with two children
+                    {
+                        let children = if key_step < stem_step {
+                            tinyvec::tiny_vec![
+                                [_; INLINE_CAPACITY] =>
+                                KeyIndexPair::new(key_step, remaining_key_node_idx),
+                                KeyIndexPair::new(stem_step, node_idx),
+                            ]
+                        } else {
+                            tinyvec::tiny_vec![
+                                [_; INLINE_CAPACITY] =>
+                                KeyIndexPair::new(stem_step, node_idx),
+                                KeyIndexPair::new(key_step, remaining_key_node_idx),
+                            ]
+                        };
+                        let new_node = MutableNode {
+                            generation,
+                            value: None,
+                            path: new_stem,
+                            children: ChildrenCow::Owned {
+                                generation,
+                                value: children,
+                            },
+                        };
+                        owned_nodes.push(new_node);
+                    }
+
+                    // Update the parents children index with the new child
+                    if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
+                        if let Some((_, children)) = parent_node.children.get_owned_mut() {
+                            if let Some(key_and_index) = children.get_mut(child_idx) {
+                                let key = key_and_index.key();
+                                *key_and_index = KeyIndexPair::new(key, new_node_idx);
+                            }
+                        }
+                    } else {
+                        current_generation.root = Some(new_node_idx);
+                    }
+                    return Ok((entry_idx, None));
                 }
             }
         }
     }
 }
 
-impl<V> Node<V> {
-    pub fn empty() -> Self { Self::default() }
+/// Store the node's value tag (whether the value is present or not) together
+/// with the length of the stem. This should match
+/// [read_node_path_and_value_tag] below.
+#[inline(always)]
+fn write_node_path_and_value_tag(
+    stem: &[u8],
+    no_value: bool,
+    out: &mut impl Write,
+) -> Result<(), std::io::Error> {
+    let stem_len = stem.len();
+    let value_mask: u8 = if no_value {
+        0
+    } else {
+        0b0100_0000
+    };
+    // if the first bit is 0 then the first byte encodes
+    // path length + presence of value
+    if stem_len <= INLINE_STEM_LENGTH {
+        let tag = stem_len as u8 | value_mask;
+        out.write_u8(tag)
+    } else {
+        // We could optimize this as well by using variable-length encoding.
+        // But it probably does not matter in practice since paths should really always
+        // be < 64 in length.
+        let tag = 0b1000_0000 | value_mask;
+        out.write_u8(tag)?;
+        out.write_u32::<BigEndian>(stem_len as u32)
+    }
+}
+
+#[inline(always)]
+/// Read a node path and whether the value exists. This should match
+/// [write_node_path_and_value_tag] above.
+fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), std::io::Error> {
+    let tag = source.read_u8()?;
+    let path_len = if tag & 0b1000_0000 == 0 {
+        // stem length is encoded in the tag
+        u32::from(tag & 0b0011_1111)
+    } else {
+        // stem length follows as a u32
+        source.read_u32::<BigEndian>()?
+    };
+    let mut path = vec![0u8; path_len as usize];
+    source.read_exact(&mut path)?;
+    let path = Stem::from(path);
+    Ok((path, (tag & 0b100_0000 != 0)))
 }
 
 impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
@@ -2068,7 +2286,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
     /// the tree that is in memory.
     pub fn serialize(
         &self,
-        loader: &mut impl FlatLoadable,
+        loader: &mut impl BackingStoreLoad,
         out: &mut impl std::io::Write,
     ) -> anyhow::Result<()> {
         // this limits the tree size to 4 billion nodes.
@@ -2079,27 +2297,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             out.write_u32::<BigEndian>(node_counter - idx)?;
             out.write_all(node.hash.as_ref())?;
             let node = &node.data;
-            // FIXME: Make a function to do this since it is the same as in
-            // store_update_buf.
-            let stem_len = node.path.as_ref().len();
-            let value_mask: u8 = if node.value.is_none() {
-                0
-            } else {
-                0b0100_0000
-            };
-            // if the first bit is 0 then the first byte encodes
-            // path length + presence of value
-            if stem_len <= INLINE_STEM_LENGTH {
-                let tag = stem_len as u8 | value_mask;
-                out.write_u8(tag)?;
-            } else {
-                // TODO: We could optimize this as well by using variable-length encoding.
-                // But it probably does not matter in practice since paths should really always
-                // be < 64 in length.
-                let tag = 0b1000_0000 | value_mask;
-                out.write_u8(tag)?;
-                out.write_u32::<BigEndian>(stem_len as u32)?;
-            }
+            write_node_path_and_value_tag(node.path.as_ref(), node.value.is_none(), out)?;
             // store the path
             out.write_all(node.path.as_ref())?;
             // store the value
@@ -2135,18 +2333,8 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
         while let Some(key) = todo.pop_front() {
             let idx = source.read_u32::<BigEndian>()?;
             let hash = Hash::read(source)?;
-            let tag = source.read_u8()?;
-            let path_len = if tag & 0b1000_0000 == 0 {
-                // stem length is encoded in the tag
-                u32::from(tag & 0b0011_1111)
-            } else {
-                // stem length follows as a u32
-                source.read_u32::<BigEndian>()?
-            };
-            let mut path = vec![0u8; path_len as usize];
-            source.read_exact(&mut path)?;
-            let path = Stem::from(path);
-            let value = if (tag & 0b100_0000) != 0 {
+            let (path, has_value) = read_node_path_and_value_tag(source)?;
+            let value = if has_value {
                 let value_hash = Hash::read(source)?;
                 let value_len = source.read_u32::<BigEndian>()?;
                 let mut val = vec![0u8; value_len as usize];
@@ -2183,7 +2371,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             }
             parents.push(new_node);
         }
-        if let Some(root) = parents.into_iter().nth(0) {
+        if let Some(root) = parents.into_iter().next() {
             let rw = std::mem::take(&mut *root.borrow_mut());
             if let CachedRef::Memory {
                 value,
@@ -2202,32 +2390,33 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
     }
 }
 
-impl<V> Default for Node<V> {
-    fn default() -> Self {
-        Self {
-            value:    None,
-            children: Vec::new(),
-            path:     Stem::empty(),
-        }
-    }
-}
-
+/// Result of [follow_stem] below.
 enum FollowStem {
+    /// Iterators were equal. Both were consumed to the end.
     Equal,
+    /// The key iterator is a strict prefix of the stem iterator.
+    /// The first item of the stem past the key is returned.
     KeyIsPrefix {
-        stem_step: Key,
+        stem_step: KeyPart,
     },
+    /// The stem iterator is a strict prefix of the key iterator.
+    /// The first item of the key past the stem is returned.
     StemIsPrefix {
-        key_step: Key,
+        key_step: KeyPart,
     },
+    /// The stem and key iterators differ. The items where they differ are
+    /// returned.
     Diff {
-        key_step:  Key,
-        stem_step: Key,
+        key_step:  KeyPart,
+        stem_step: KeyPart,
     },
 }
 
 #[inline(always)]
-fn follow_stem(key_iter: &mut Iter<Key>, stem_iter: &mut Iter<Key>) -> FollowStem {
+/// Given two iterators, representing the key and the stem of the node, advance
+/// them stepwise until either at least one of them is exhausted or the steps
+/// differ. Return which option occurred.
+fn follow_stem(key_iter: &mut Iter<KeyPart>, stem_iter: &mut Iter<KeyPart>) -> FollowStem {
     for &stem_step in stem_iter {
         if let Some(&key_step) = key_iter.next() {
             if stem_step != key_step {
@@ -2258,8 +2447,8 @@ impl<V: Clone> Node<V> {
     /// We also don't need this in production, so it is low priority to fix.
     pub fn lookup(
         &self,
-        loader: &mut impl FlatLoadable,
-        key: &[Key],
+        loader: &mut impl BackingStoreLoad,
+        key: &[KeyPart],
     ) -> Option<Link<Hashed<CachedRef<V>>>> {
         let mut key_iter = key.iter();
         let mut path = self.path.as_ref().to_vec();
@@ -2360,5 +2549,88 @@ impl<V: Clone> Node<V> {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+/// Tests for the prefix map.
+mod prefix_map_tests {
+    use super::PrefixesMap;
+    const NUM_TESTS: u64 = 100000;
+    #[test]
+    fn prop_insert_delete() {
+        let prop = |keys: Vec<Vec<u8>>| -> anyhow::Result<()> {
+            let mut map = PrefixesMap::new();
+            for key in keys.iter() {
+                if map.insert(key).is_err() {
+                    // ignore tests which cause overflow
+                    return Ok(());
+                }
+            }
+            for key in keys.iter() {
+                anyhow::ensure!(map.delete(key), "Every inserted key should be deleted.");
+            }
+            anyhow::ensure!(map.is_empty(), "Deleting everything should leave the map empty.");
+            anyhow::ensure!(map.nodes.is_empty(), "Slab should be empty.");
+            Ok(())
+        };
+        quickcheck::QuickCheck::new()
+            .tests(NUM_TESTS)
+            .quickcheck(prop as fn(_) -> anyhow::Result<()>);
+    }
+
+    #[test]
+    fn prop_is_prefix() {
+        let prop = |keys: Vec<Vec<u8>>, prefixes: Vec<Vec<u8>>| -> anyhow::Result<()> {
+            let mut map = PrefixesMap::new();
+            for key in keys.iter() {
+                // ignore tests which cause overflow
+                if map.insert(key).is_err() {
+                    return Ok(());
+                }
+            }
+            for prefix in prefixes.iter() {
+                let has_any_prefix = keys.iter().any(|key| prefix.starts_with(key));
+                let res = map.check_has_no_prefix(prefix);
+                anyhow::ensure!(
+                    has_any_prefix == res.is_err(),
+                    "Reference ({}) differs from actual ({:?}).",
+                    has_any_prefix,
+                    res
+                );
+            }
+            Ok(())
+        };
+        quickcheck::QuickCheck::new()
+            .tests(NUM_TESTS)
+            .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+    }
+
+    #[test]
+    fn prop_has_prefix() {
+        let prop = |keys: Vec<Vec<u8>>, prefixes: Vec<Vec<u8>>| -> anyhow::Result<()> {
+            let mut map = PrefixesMap::new();
+            for key in keys.iter() {
+                // ignore tests which cause overflow
+                if map.insert(key).is_err() {
+                    return Ok(());
+                }
+            }
+            for prefix in prefixes.iter() {
+                let has_any_as_prefix =
+                    keys.iter().any(|key| key.starts_with(prefix) || prefix.starts_with(key));
+                let res = map.is_or_has_prefix(prefix);
+                anyhow::ensure!(
+                    has_any_as_prefix == res,
+                    "Reference ({}) differs from actual ({}).",
+                    has_any_as_prefix,
+                    res
+                );
+            }
+            Ok(())
+        };
+        quickcheck::QuickCheck::new()
+            .tests(NUM_TESTS)
+            .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
     }
 }

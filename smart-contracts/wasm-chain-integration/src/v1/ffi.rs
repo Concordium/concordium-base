@@ -15,8 +15,7 @@
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
 use super::trie::{
-    low_level::{EmptyCollector, Loadable, Reference, SizeCollector},
-    MutableState, PersistentState,
+    EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
 };
 use crate::{slice_from_c_bytes, v1::*};
 use libc::size_t;
@@ -215,7 +214,7 @@ unsafe extern "C" fn call_receive_v1(
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
-    let res = std::panic::catch_unwind(|| {
+    let res = std::panic::catch_unwind(|| -> *mut u8 {
         let receive_ctx = v0::deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
             receive_ctx_bytes_len as usize
@@ -240,12 +239,17 @@ unsafe extern "C" fn call_receive_v1(
                 );
                 match res {
                     Ok(result) => {
-                        let (mut out, store_state, config, return_value) = result.extract();
-                        out.shrink_to_fit();
-                        *output_len = out.len() as size_t;
-                        let ptr = out.as_mut_ptr();
-                        std::mem::forget(out);
-                        if let Some(config) = config {
+                        let ReceiveResultExtract {
+                            mut status,
+                            state_changed,
+                            interrupt_state,
+                            return_value,
+                        } = result.extract();
+                        status.shrink_to_fit();
+                        *output_len = status.len() as size_t;
+                        let ptr = status.as_mut_ptr();
+                        std::mem::forget(status);
+                        if let Some(config) = interrupt_state {
                             std::ptr::replace(output_config, Box::into_raw(config));
                         } else {
                             // make sure to set it to null to make the finalizer work correctly.
@@ -256,7 +260,7 @@ unsafe extern "C" fn call_receive_v1(
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
-                        if store_state {
+                        if state_changed {
                             let new_state = Box::into_raw(Box::new(state));
                             *state_ptr_ptr = new_state;
                         }
@@ -428,18 +432,23 @@ unsafe extern "C" fn resume_receive_v1(
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {
-                let (mut out, store_state, new_config, return_value) = result.extract();
-                out.shrink_to_fit();
-                *output_len = out.len() as size_t;
-                let ptr = out.as_mut_ptr();
-                std::mem::forget(out);
-                if let Some(config) = new_config {
+                let ReceiveResultExtract {
+                    mut status,
+                    state_changed,
+                    interrupt_state,
+                    return_value,
+                } = result.extract();
+                status.shrink_to_fit();
+                *output_len = status.len() as size_t;
+                let ptr = status.as_mut_ptr();
+                std::mem::forget(status);
+                if let Some(config) = interrupt_state {
                     std::ptr::replace(config_ptr, Box::into_raw(config));
                 } // otherwise leave config_ptr pointing to null
                 if let Some(return_value) = return_value {
                     *output_return_value = Box::into_raw(Box::new(return_value));
                 }
-                if store_state {
+                if state_changed {
                     *state_ptr_ptr = Box::into_raw(Box::new(state))
                 }
                 ptr

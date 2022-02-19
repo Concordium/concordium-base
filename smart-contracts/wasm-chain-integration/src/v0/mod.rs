@@ -468,7 +468,9 @@ pub(crate) mod host {
         if new_size > old_size {
             // resizing is very similar to writing 0 to the newly allocated parts,
             // but since we don't have to read anything we charge it more cheaply.
-            energy.tick_energy(constants::additional_state_size_cost(new_size - old_size))?;
+            energy.tick_energy(constants::additional_state_size_cost(u64::from(
+                new_size - old_size,
+            )))?;
         }
         stack.push_value(state.resize_state(new_size));
         Ok(())

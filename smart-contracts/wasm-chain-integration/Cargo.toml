@@ -24,6 +24,7 @@ sha2 = "0.9"
 thiserror = "1"
 byteorder = "1.4"
 tinyvec = {version = "1.5", features = ["alloc"]}
+slab = "0.4.5"
 
 arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
 wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
@@ -52,3 +53,6 @@ harness = false
 [[bench]]
 name = "trie_benches"
 harness = false
+
+[profile.release]
+codegen-units = 1

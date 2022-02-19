@@ -1,8 +1,11 @@
-use super::low_level::{FlatLoadable, FlatStorable, LoadResult, Reference, StoreResult};
+//! Implementation of [BackingStoreLoad] and [BackingStoreStore] traits
+//! for function pointers that are needed when integrating with the node.
+use super::*;
 
+/// Load a vector from the given location.
 type LoadCallBack = extern "C" fn(Reference) -> *mut Vec<u8>;
 
-impl FlatLoadable for LoadCallBack {
+impl BackingStoreLoad for LoadCallBack {
     type R = Vec<u8>;
 
     #[inline]
@@ -11,9 +14,11 @@ impl FlatLoadable for LoadCallBack {
     }
 }
 
+/// Store the given data and return the location where it can later be
+/// retrieved.
 type StoreCallBack = extern "C" fn(data: *const u8, len: libc::size_t) -> Reference;
 
-impl FlatStorable for StoreCallBack {
+impl BackingStoreStore for StoreCallBack {
     #[inline]
     fn store_raw(&mut self, data: &[u8]) -> StoreResult<Reference> {
         Ok(self(data.as_ptr(), data.len()))
