@@ -1876,10 +1876,13 @@ impl<V> MutableTrie<V> {
         loader: &mut L,
         key: &[KeyPart],
         counter: &mut C,
-    ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err> {
+    ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err>
+    where
+        V: Default, {
         let mut key_iter = key.iter();
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
+        let owned_values = &mut self.values;
         let entries = &mut self.entries;
         let mut grandparent_idx = None;
         let mut parent_idx = None;
@@ -1928,7 +1931,10 @@ impl<V> MutableTrie<V> {
                         let to_invalidate = &owned_nodes[node_idx];
                         counter.tick(to_invalidate.path.as_ref().len() as u64 + 1)?; // + 1 is for the step from the parent.
                         if let Some(entry) = to_invalidate.value {
-                            entries[entry] = Entry::Deleted;
+                            let old_entry = std::mem::replace(&mut entries[entry], Entry::Deleted);
+                            if let Some(idx) = old_entry.is_owned() {
+                                std::mem::take(&mut owned_values[idx]);
+                            }
                         }
 
                         // if children are borrowed then by construction there are no entries
