@@ -175,8 +175,10 @@ impl<X: Seek + Write> BackingStoreStore for Storable<X> {
     }
 }
 
-/// Generic wrapper for a loader. This implements loadable for any S that
-/// implements Seek + Read.
+/// Generic wrapper for a loader. This implements loadable for any S that can be
+/// seen as a byte array. Since this type is often used with a `S = &[u8]` we
+/// make it [Copy] to be able to share the backing buffer.
+#[derive(Copy, Clone)]
 pub struct Loader<S> {
     pub inner: S,
 }

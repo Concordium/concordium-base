@@ -703,19 +703,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
-name = "rust-trie"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "byteorder",
- "derive_more",
- "libc",
- "sha2 0.9.9",
- "thiserror",
- "tinyvec",
-]
-
-[[package]]
 name = "rustc_version"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -816,6 +803,12 @@ dependencies = [
  "digest 0.9.0",
  "opaque-debug 0.3.0",
 ]
+
+[[package]]
+name = "slab"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9def91fd1e018fe007022791f865d0ccc9b3a0d5001e01aabb8b40e46000afb5"
 
 [[package]]
 name = "strsim"
@@ -1041,15 +1034,19 @@ checksum = "0237232789cf037d5480773fe568aac745bfe2afbc11a863e97901780a6b47cc"
 
 [[package]]
 name = "wasm-chain-integration"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "concordium-contracts-common",
  "derive_more",
  "libc",
  "num_enum",
- "rust-trie",
  "serde",
+ "sha2 0.9.9",
+ "slab",
+ "thiserror",
+ "tinyvec",
  "wasm-transform",
 ]
 

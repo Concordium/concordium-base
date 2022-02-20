@@ -1,4 +1,7 @@
-use super::{trie, Interrupt, ParameterVec, StateLessReceiveHost};
+use super::{
+    trie::{self, MutableState},
+    Interrupt, ParameterVec, StateLessReceiveHost,
+};
 use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
@@ -23,6 +26,8 @@ pub enum InitResult {
         logs:             v0::Logs,
         return_value:     ReturnValue,
         remaining_energy: u64,
+        /// Initial state of the contract.
+        state:            MutableState,
     },
     Reject {
         reason:           i32,
@@ -44,16 +49,16 @@ impl InitResult {
     /// When using this from Rust the consumer should inspect the [InitResult]
     /// enum directly.
     #[cfg(feature = "enable-ffi")]
-    pub(crate) fn extract(self) -> (Vec<u8>, Option<(bool, ReturnValue)>) {
+    pub(crate) fn extract(self) -> (Vec<u8>, Option<MutableState>, Option<ReturnValue>) {
         match self {
-            InitResult::OutOfEnergy => (vec![0], None),
+            InitResult::OutOfEnergy => (vec![0], None, None),
             InitResult::Trap {
                 remaining_energy,
                 .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
                 out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
-                (out, None)
+                (out, None, None)
             }
             InitResult::Reject {
                 reason,
@@ -64,18 +69,19 @@ impl InitResult {
                 out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, Some((false, return_value)))
+                (out, None, Some(return_value))
             }
             InitResult::Success {
                 logs,
                 return_value,
                 remaining_energy,
+                state,
             } => {
                 let mut out = Vec::with_capacity(5 + 8);
                 out.push(3);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
-                (out, Some((true, return_value)))
+                (out, Some(state), Some(return_value))
             }
         }
     }
@@ -570,7 +576,8 @@ pub struct InstanceState<'a, BackingStore> {
     entry_mapping:      Vec<Option<EntryWithKey>>, /* FIXME: This could be done more efficiently
                                                     * by using a usize::MAX as deleted id */
     iterators:          Vec<Option<trie::Iterator>>,
-    /// Opaque pointer to the state of the instance in consensus.
+    /// Opaque pointer to the state of the instance in consensus. Note that this
+    /// is in effect a mutable reference.
     state_trie:         trie::StateTrie<'a>,
 }
 

@@ -24,7 +24,7 @@ path = "../wasm-transform"
 version = "0"
 
 [dependencies.wasm-chain-integration]
-version = "0.1"
+version = "0.2"
 path = "../wasm-chain-integration/"
 
 [dev-dependencies]

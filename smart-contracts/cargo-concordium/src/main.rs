@@ -752,10 +752,19 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             eprintln!("{}: {:?}", i, item)
         }
     };
-    let print_result = |state: v0::State, logs: v0::Logs| -> anyhow::Result<()> {
-        print_logs(logs);
+    let print_state = |mut state: v1::trie::MutableState,
+                       loader: &mut v1::trie::Loader<&[u8]>|
+     -> anyhow::Result<()> {
+        let mut collector = v1::trie::SizeCollector::default();
+        let frozen = state.freeze(loader, &mut collector);
+        // TODO: Decide on terminology to use for this so that it is clear what it
+        // means. This then needs to be documented.
+        println!("The resulting state will cost {} storage energy.", collector.collect());
         if let Some(file_path) = &runner.out_bin {
-            fs::write(file_path, &state.state).context("Could not write state to file")?;
+            let mut out_file = std::fs::File::create(file_path)
+                .context("Could not create file to write state into.")?;
+            frozen.serialize(loader, &mut out_file).context("Could not write the state.")?;
+            eprintln!("Resulting state written to {}.", file_path.display());
         }
         Ok(())
     };
@@ -796,6 +805,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 None => InitContextOpt::default(),
             };
             let name = format!("init_{}", contract_name);
+            // empty initial backing store.
+            let mut loader = v1::trie::Loader::new(&[][..]);
             let res = v1::invoke_init_with_metering_from_source(
                 &module,
                 runner.amount.micro_ccd,
@@ -803,6 +814,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 &name,
                 &parameter,
                 runner.energy,
+                loader,
             )
             .context("Initialization failed due to a runtime error.")?;
             match res {
@@ -813,7 +825,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     return_value,
                 } => {
                     eprintln!("Init call succeeded. The following logs were produced:");
-                    print_result(state, logs)?;
+                    print_logs(logs);
+                    print_state(state, &mut loader)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(
@@ -872,43 +885,50 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             }
 
             // initial state of the smart contract, read from either a binary or json file.
-            let init_state = match state_bin_path {
+            let (init_state, mut loader) = match state_bin_path {
                 None => bail!(
                     "The current state is required for simulating an update to a contract \
                      instance. Use --state-bin."
                 ),
                 Some(file_path) => {
-                    let mut file = File::open(&file_path).context("Could not read state file.")?;
-                    let metadata = file.metadata().context("Could not read file metadata.")?;
-                    let mut init_state = Vec::with_capacity(metadata.len() as usize);
-                    file.read_to_end(&mut init_state).context("Reading the state file failed.")?;
-                    init_state
+                    let file = File::open(&file_path).context("Could not read state file.")?;
+                    let mut reader = std::io::BufReader::new(file);
+                    let init_state = v1::trie::PersistentState::deserialize(&mut reader)
+                        .context("Could not deserialize the provided state.")?;
+                    // TODO: since we deserialized the entire state we do not need a loader.
+                    // However we should probably change how state is stored by cargo-concordium and
+                    // load it lazily.
+                    let loader = v1::trie::Loader::new(&[][..]);
+                    (init_state, loader)
                 }
             };
 
             let name = format!("{}.{}", contract_name, func);
+            let mut mutable_state = init_state.thaw();
+            let instance_state = v1::InstanceState::new(0, loader, mutable_state.get_inner());
             let res = v1::invoke_receive_with_metering_from_source::<
+                _,
                 ReceiveContextOpt,
                 ReceiveContextOpt,
             >(
                 &module,
                 runner.amount.micro_ccd,
                 receive_ctx,
-                &init_state,
                 &name,
                 &parameter,
                 runner.energy,
+                instance_state,
             )
             .context("Calling receive failed.")?;
             match res {
                 v1::ReceiveResult::Success {
                     logs,
-                    state,
                     remaining_energy,
                     return_value,
                 } => {
                     eprintln!("Receive method succeeded. The following logs were produced.");
-                    print_result(state, logs)?;
+                    print_logs(logs);
+                    print_state(mutable_state, &mut loader)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(

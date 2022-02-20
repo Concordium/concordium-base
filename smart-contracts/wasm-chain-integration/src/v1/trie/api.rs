@@ -133,6 +133,15 @@ impl PersistentState {
 }
 
 impl MutableState {
+    /// Initial state, i.e., the state that the contract's init method starts
+    /// executing in.
+    pub fn initial_state() -> Self {
+        Self {
+            inner:  None,
+            origin: PersistentState::Empty,
+        }
+    }
+
     /// Get the inner mutable state. If it does not yet exist create it,
     /// otherwise return it.
     pub fn get_inner(&mut self) -> &mut MutableStateInner {

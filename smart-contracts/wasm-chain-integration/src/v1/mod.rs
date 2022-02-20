@@ -763,39 +763,37 @@ pub type ParameterRef<'a> = &'a [u8];
 pub type ParameterVec = Vec<u8>;
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<'a, BackingStore: BackingStoreLoad, R: RunnableCode>(
+pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    state: InstanceState<'a, BackingStore>,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
+    let mut initial_state = trie::MutableState::initial_state();
+    let state_ref = InstanceState::new(0, loader, initial_state.get_inner());
     let mut host = InitHost {
         energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
-        state,
+        state: state_ref,
         return_value: Vec::new(),
         parameter,
         init_ctx,
     };
-
     let result = artifact.borrow().run(&mut host, init_name, &[Value::I64(amount as i64)]);
-    process_init_result(host, result)
-}
-
-fn process_init_result<BackingStore: BackingStoreLoad, Param, Ctx>(
-    host: InitHost<'_, BackingStore, Param, Ctx>,
-    result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
-) -> ExecResult<InitResult> {
+    let return_value = std::mem::take(&mut host.return_value);
+    let remaining_energy = host.energy.energy;
+    let logs = std::mem::take(&mut host.logs);
+    // release lock on the state
+    drop(host);
     match result {
         Ok(ExecutionOutcome::Success {
             result,
             ..
         }) => {
-            let remaining_energy = host.energy.energy;
             // process the return value.
             // - 0 indicates success
             // - positive values are a protocol violation, so they lead to a runtime error
@@ -803,14 +801,15 @@ fn process_init_result<BackingStore: BackingStoreLoad, Param, Ctx>(
             if let Some(Value::I32(n)) = result {
                 if n == 0 {
                     Ok(InitResult::Success {
-                        logs: host.logs,
-                        return_value: host.return_value,
+                        logs,
+                        return_value,
                         remaining_energy,
+                        state: initial_state,
                     })
                 } else {
                     Ok(InitResult::Reject {
                         reason: reason_from_wasm_error_code(n)?,
-                        return_value: host.return_value,
+                        return_value,
                         remaining_energy,
                     })
                 }
@@ -828,7 +827,7 @@ fn process_init_result<BackingStore: BackingStoreLoad, Param, Ctx>(
             } else {
                 Ok(InitResult::Trap {
                     error,
-                    remaining_energy: host.energy.energy,
+                    remaining_energy,
                 })
             }
         }
@@ -856,48 +855,48 @@ pub enum InvokeResponse {
 
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<'a, 'b, BackingStore: BackingStoreLoad>(
-    artifact_bytes: &'a [u8],
+pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
+    artifact_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    state: InstanceState<'b, BackingStore>,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source<'b, BackingStore: BackingStoreLoad>(
+pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    state: InstanceState<'b, BackingStore>,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source<'b, BackingStore: BackingStoreLoad>(
+pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    state: InstanceState<'b, BackingStore>,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, state)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
 fn process_receive_result<BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(

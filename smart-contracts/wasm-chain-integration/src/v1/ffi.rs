@@ -119,8 +119,6 @@ unsafe extern "C" fn call_init_v1(
             init_ctx_bytes_len as usize
         ))
         .expect("Precondition violation: invalid init ctx given by host.");
-        let mut initial_state = PersistentState::Empty.thaw();
-        let instance_state = InstanceState::new(0, loader, initial_state.get_inner());
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
@@ -130,24 +128,23 @@ unsafe extern "C" fn call_init_v1(
                     name,
                     parameter,
                     energy,
-                    instance_state,
+                    loader,
                 );
                 match res {
                     Ok(result) => {
-                        let (mut out, return_value) = result.extract();
+                        let (mut out, initial_state, return_value) = result.extract();
                         out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
                         std::mem::forget(out);
-                        if let Some((success, return_value)) = return_value {
+                        if let Some(return_value) = return_value {
                             *output_return_value = Box::into_raw(Box::new(return_value));
-                            if success {
-                                // the lock has been dropped at this point
-                                let initial_state = Box::into_raw(Box::new(initial_state));
-                                *output_state_ptr = initial_state;
-                            }
                         } else {
                             *output_return_value = std::ptr::null_mut();
+                        }
+                        if let Some(initial_state) = initial_state {
+                            let initial_state = Box::into_raw(Box::new(initial_state));
+                            *output_state_ptr = initial_state;
                         }
                         ptr
                     }
