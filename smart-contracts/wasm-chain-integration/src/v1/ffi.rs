@@ -665,6 +665,30 @@ extern "C" fn serialize_persistent_state_v1(
 }
 
 #[no_mangle]
+/// Lookup in the persistent state. This should only be used for testing the
+/// integration. It is not efficient compared to thawing and looking up.
+extern "C" fn persistent_state_v1_lookup(
+    mut loader: LoadCallBack,
+    key: *const u8,
+    key_len: libc::size_t,
+    tree: *mut PersistentState,
+    out_len: *mut size_t,
+) -> *mut u8 {
+    let tree = unsafe { &*tree };
+    let key = unsafe { std::slice::from_raw_parts(key, key_len) };
+    match tree.lookup(&mut loader, key) {
+        Some(mut out) => {
+            out.shrink_to_fit();
+            unsafe { *out_len = out.len() as size_t };
+            let ptr = out.as_mut_ptr();
+            std::mem::forget(out);
+            ptr
+        }
+        None => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
 extern "C" fn deserialize_persistent_state_v1(
     source: *const u8,
     len: size_t,

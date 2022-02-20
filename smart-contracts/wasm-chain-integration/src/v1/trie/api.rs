@@ -79,6 +79,19 @@ impl PersistentState {
             tag => anyhow::bail!("Invalid persistent tree tag: {}", tag),
         }
     }
+
+    /// Lookup a key in the tree. This is only meant for testing
+    /// since performance is slow compared to lookup in the mutable tree.
+    pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[KeyPart]) -> Option<Value> {
+        match self {
+            PersistentState::Empty => None,
+            PersistentState::Root(node) => {
+                let data = node.data.lookup(loader, key)?;
+                let borrowed = data.borrow();
+                Some(borrowed.data.get(loader))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
