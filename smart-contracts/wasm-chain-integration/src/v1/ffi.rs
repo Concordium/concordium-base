@@ -19,6 +19,7 @@ use super::trie::{
 };
 use crate::{slice_from_c_bytes, v1::*};
 use libc::size_t;
+use sha2::Digest;
 use std::sync::Arc;
 use wasm_transform::{
     artifact::{CompiledFunction, OwnedArtifact},
@@ -707,4 +708,29 @@ extern "C" fn deserialize_persistent_state_v1(
 /// The vector must be passed to Rust to be deallocated.
 extern "C" fn copy_to_vec_ffi(data: *const u8, len: libc::size_t) -> *mut Vec<u8> {
     Box::into_raw(Box::new(unsafe { std::slice::from_raw_parts(data, len) }.to_vec()))
+}
+
+/// Generate a persistent tree from a seed for testing.
+#[no_mangle]
+extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut PersistentState {
+    let res = std::panic::catch_unwind(|| {
+        let mut mutable = PersistentState::Empty.thaw();
+        let mut loader = trie::Loader::new(&[]);
+        {
+            let mut state_lock = mutable.get_inner().state.lock().unwrap();
+            let mut hasher = sha2::Sha512::new();
+            hasher.update(&seed.to_be_bytes());
+            for i in 0..len {
+                let data = hasher.finalize_reset();
+                hasher.update(&data);
+                state_lock.insert(&mut loader, &data, i.to_be_bytes().to_vec()).unwrap();
+            }
+        }
+        Box::new(mutable.freeze(&mut loader, &mut trie::EmptyCollector))
+    });
+    if let Ok(r) = res {
+        Box::into_raw(r)
+    } else {
+        std::ptr::null_mut()
+    }
 }
