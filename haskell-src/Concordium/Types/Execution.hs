@@ -1677,11 +1677,12 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
                  | InvalidUpdateTime -- ^The update timeout is later than the effective time
                  | ExceedsMaxCredentialDeployments -- ^The block contains more than the limit of credential deployments
+                 | NotSupportedAtCurrentProtocolVersion -- ^The operation is not legal at the current protocol version.
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
--- FIXME: These intances need to be made clearer.
+-- FIXME: These instances need to be made clearer.
 $(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
