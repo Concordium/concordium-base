@@ -923,12 +923,17 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             match res {
                 v1::ReceiveResult::Success {
                     logs,
+                    state_changed,
                     remaining_energy,
                     return_value,
                 } => {
                     eprintln!("Receive method succeeded. The following logs were produced.");
                     print_logs(logs);
-                    print_state(mutable_state, &mut loader)?;
+                    if state_changed {
+                        print_state(mutable_state, &mut loader)?;
+                    } else {
+                        eprintln!("The state of the contract did not change.");
+                    }
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(
@@ -954,6 +959,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
                 v1::ReceiveResult::Interrupt {
                     remaining_energy,
+                    state_changed,
                     logs,
                     config: _,
                     interrupt,
@@ -963,6 +969,11 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                          time of the interrupt."
                     );
                     print_logs(logs);
+                    if state_changed {
+                        print_state(mutable_state, &mut loader)?;
+                    } else {
+                        eprintln!("The state of the contract did not change.");
+                    }
                     match interrupt {
                         v1::Interrupt::Transfer {
                             to,

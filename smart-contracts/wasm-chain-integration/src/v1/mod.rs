@@ -134,9 +134,6 @@ pub struct StateLessReceiveHost<ParamType, Ctx> {
     pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
     pub receive_ctx:       Ctx,
-    /// Latest generation that was used. This is incremented on each resume to
-    /// invalidate all entries and iterators from before the out-call.
-    pub latest_generation: u32,
 }
 
 impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx1>>
@@ -149,7 +146,6 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
             return_value:      host.return_value,
             parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
             receive_ctx:       host.receive_ctx.into(),
-            latest_generation: host.latest_generation,
         }
     }
 }
@@ -917,6 +913,7 @@ where
                 if n >= 0 {
                     Ok(ReceiveResult::Success {
                         logs: stateless.logs,
+                        state_changed: host.state.changed,
                         return_value: stateless.return_value,
                         remaining_energy,
                     })
@@ -943,11 +940,19 @@ where
             // So here we set the host logs to empty and return any
             // existing logs.
             let logs = std::mem::take(&mut stateless.logs);
+            let state_changed = host.state.changed;
+            let host = SavedHost {
+                stateless:          stateless.into(),
+                current_generation: host.state.current_generation,
+                entry_mapping:      host.state.entry_mapping,
+                iterators:          host.state.iterators,
+            };
             Ok(ReceiveResult::Interrupt {
                 remaining_energy,
+                state_changed,
                 logs,
                 config: Box::new(ReceiveInterruptedState {
-                    host: stateless.into(),
+                    host,
                     artifact,
                     config,
                 }),
@@ -990,7 +995,6 @@ pub fn invoke_receive<
             logs: v0::Logs::new(),
             return_value: Vec::new(),
             parameters: vec![param],
-            latest_generation: 0,
             receive_ctx,
         },
         state: instance_state,
@@ -1004,15 +1008,23 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
-    instance_state: InstanceState<'_, BackingStore>, // New instance state
+    state_trie: &mut trie::MutableState,
+    state_updated: bool,
+    backing_store: BackingStore,
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
+    let state = InstanceState::migrate(
+        state_updated,
+        interrupted_state.host.current_generation,
+        interrupted_state.host.entry_mapping,
+        interrupted_state.host.iterators,
+        backing_store,
+        state_trie.get_inner(),
+    );
     let mut host = ReceiveHost {
-        stateless: interrupted_state.host,
+        stateless: interrupted_state.host.stateless,
         energy,
-        state: instance_state,
+        state,
     };
-    // invalidate previous entries and iterators.
-    host.stateless.latest_generation += 1;
     let response = match response {
         InvokeResponse::Success {
             new_state,

@@ -377,6 +377,7 @@ unsafe extern "C" fn resume_receive_v1(
                 Some(data)
             }
         };
+        let state_updated = new_state_tag != 0;
         // NB: This must match the response encoding in V1.hs in consensus
         // If the first 3 bytes are all set that indicates an error.
         let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
@@ -397,15 +398,9 @@ unsafe extern "C" fn resume_receive_v1(
                     data,
                 }
             }
-        } else if new_state_tag == 0 {
-            InvokeResponse::Success {
-                new_state: false,
-                new_balance: Amount::from_micro_ccd(new_amount),
-                data,
-            }
         } else {
             InvokeResponse::Success {
-                new_state: true,
+                new_state: state_updated,
                 new_balance: Amount::from_micro_ccd(new_amount),
                 data,
             }
@@ -418,15 +413,16 @@ unsafe extern "C" fn resume_receive_v1(
         // since we will never roll back past this point, other than to the beginning of
         // execution, we do not need to make a new generation for checkpoint
         // reasons. We are not the owner of the state, so we make a clone of it.
+        // Before cloning we replace the contents of the pointer with a null pointer.
+        // Whether the contents is null or not at the end of execution signals whether
+        // the state has changed, so this is crucial.
+        let state_ref = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         // The clone is cheap since this is reference counted.
-        let state_ref = &mut **state_ptr_ptr;
-        let mut state = state_ref.clone();
+        let mut state = (&mut *state_ref).clone();
         // it is important to invalidate all previous iterators and entries we have
         // given out. so we start a new generation.
         let config = Box::from_raw(config);
-        let instance_state =
-            InstanceState::new(config.host.latest_generation + 1, loader, state.get_inner());
-        let res = resume_receive(config, response, energy, instance_state);
+        let res = resume_receive(config, response, energy, &mut state, state_updated, loader);
         // FIXME: Reduce duplication with call_receive
         match res {
             Ok(result) => {

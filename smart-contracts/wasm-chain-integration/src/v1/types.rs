@@ -87,10 +87,31 @@ impl InitResult {
     }
 }
 
+#[derive(Debug)]
+/// Host that is saved between handling of operations. This contains sufficient
+/// information to resume execution once control returns to the contract.
+pub struct SavedHost<Ctx> {
+    pub(crate) stateless:          StateLessReceiveHost<ParameterVec, Ctx>,
+    /// Current generation of the state. This is the generation before the
+    /// handler for the operation is invoked. When control is handed back to the
+    /// contract the contract is told whether its state has changed. If it
+    /// did, this is incremented to invalidate all previously handed out
+    /// iterators and entries.
+    pub(crate) current_generation: InstanceCounter,
+    /// A list of entries that were handed out before the handler of the
+    /// operation was invoked.
+    /// FIXME: This could be done more efficiently by using a usize::MAX as
+    /// deleted id.
+    pub(crate) entry_mapping:      Vec<Option<EntryWithKey>>,
+    /// A list of iterators that were handed out before the handler of the
+    /// operation was invoked.
+    pub(crate) iterators:          Vec<Option<trie::Iterator>>,
+}
+
 /// State of the suspended execution of the receive function.
 /// This retains both the module that is executed, as well the host.
 pub type ReceiveInterruptedState<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> =
-    InterruptedState<ProcessedImports, R, StateLessReceiveHost<ParameterVec, Ctx>>;
+    InterruptedState<ProcessedImports, R, SavedHost<Ctx>>;
 
 #[derive(Debug)]
 /// Result of execution of a receive function.
@@ -99,6 +120,9 @@ pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
     Success {
         /// Logs produced since the last interrupt (or beginning of execution).
         logs:             v0::Logs,
+        /// Whether the state has changed as a result of execution. Note that
+        /// the meaning of this is "since the start of the last resume".
+        state_changed:    bool,
         /// Return value that was produced. There is always a return value,
         /// although it might be empty.
         return_value:     ReturnValue,
@@ -109,6 +133,9 @@ pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
     Interrupt {
         /// Remaining interpreter energy.
         remaining_energy: u64,
+        /// Whether the state has changed as a result of execution. Note that
+        /// the meaning of this is "since the start of the last resume".
+        state_changed:    bool,
         /// Logs produced since the last interrupt (or beginning of execution).
         logs:             v0::Logs,
         /// Stored execution state that can be used to resume execution.
@@ -198,6 +225,7 @@ impl<R> ReceiveResult<R> {
             }
             Success {
                 logs,
+                state_changed,
                 return_value,
                 remaining_energy,
             } => {
@@ -206,13 +234,14 @@ impl<R> ReceiveResult<R> {
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 ReceiveResultExtract{
                     status: out,
-                    state_changed: true,
+                    state_changed,
                     interrupt_state: None,
                     return_value: Some(return_value),
                 }
             }
             Interrupt {
                 remaining_energy,
+                state_changed,
                 logs,
                 config,
                 interrupt,
@@ -223,7 +252,7 @@ impl<R> ReceiveResult<R> {
                 interrupt.to_bytes(&mut out).expect("Serialization to a vector never fails.");
                 ReceiveResultExtract{
                     status: out,
-                    state_changed: true,
+                    state_changed,
                     interrupt_state: Some(config),
                     return_value: None,
                 }
@@ -567,21 +596,24 @@ pub struct EntryWithKey {
     key: Box<[u8]>, // FIXME: Use TinyVec here instead since most keys will be small.
 }
 
-/// Wrapper for the opaque pointers to the state of the instance managed by
-/// Consensus.
+/// The runtime representation of the contract state. This collects all the
+/// pieces of data needed to efficiently use the state.
 #[derive(Debug)]
 pub struct InstanceState<'a, BackingStore> {
     /// The backing store that allows accessing any contract state that is not
     /// in-memory yet.
-    backing_store:      BackingStore,
+    backing_store:                 BackingStore,
+    /// A flag indicating whether any of the state change functions have been
+    /// called.
+    pub(crate) changed:            bool,
     /// Current generation of the state.
-    current_generation: InstanceCounter,
-    entry_mapping:      Vec<Option<EntryWithKey>>, /* FIXME: This could be done more efficiently
-                                                    * by using a usize::MAX as deleted id */
-    iterators:          Vec<Option<trie::Iterator>>,
+    pub(crate) current_generation: InstanceCounter,
+    /* FIXME: This could be done more efficiently by using a usize::MAX as deleted id */
+    pub(crate) entry_mapping:      Vec<Option<EntryWithKey>>,
+    pub(crate) iterators:          Vec<Option<trie::Iterator>>,
     /// Opaque pointer to the state of the instance in consensus. Note that this
     /// is in effect a mutable reference.
-    state_trie:         trie::StateTrie<'a>,
+    state_trie:                    trie::StateTrie<'a>,
 }
 
 /// first bit is ignored, the next 31 indicate a generation,
@@ -736,9 +768,41 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         Self {
             current_generation,
             backing_store,
+            changed: false,
             state_trie: state.state.lock().unwrap(),
             iterators: Vec::new(),
             entry_mapping: Vec::new(),
+        }
+    }
+
+    pub fn migrate(
+        state_updated: bool,
+        current_generation: InstanceCounter,
+        entry_mapping: Vec<Option<EntryWithKey>>,
+        iterators: Vec<Option<trie::Iterator>>,
+        backing_store: BackingStore,
+        state: &'a trie::MutableStateInner,
+    ) -> InstanceState<'a, BackingStore> {
+        // if the state has been updated invalidate everything, and start a new
+        // generation.
+        if state_updated {
+            Self {
+                current_generation: current_generation + 1,
+                backing_store,
+                changed: false,
+                state_trie: state.state.lock().unwrap(),
+                iterators: Vec::new(),
+                entry_mapping: Vec::new(),
+            }
+        } else {
+            Self {
+                current_generation,
+                backing_store,
+                changed: false,
+                state_trie: state.state.lock().unwrap(),
+                iterators,
+                entry_mapping,
+            }
         }
     }
 
@@ -762,6 +826,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// subtree that is locked due to an iterator. In that case this returns (an
     /// encoding of) [None].
     pub(crate) fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntryOption> {
+        self.changed = true;
         ensure!(key.len() <= constants::MAX_KEY_SIZE, "Maximum key length exceeded.");
         if let Ok(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
             let idx = self.entry_mapping.len();
@@ -779,6 +844,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 0 if the entry was invalidated/deleted already
     /// - 1 if an entry existed and was not invalidated.
     pub(crate) fn delete_entry(&mut self, entry: InstanceStateEntry) -> u32 {
+        self.changed = true;
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
             return u32::MAX;
@@ -971,6 +1037,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         src: &[u8],
         offset: u32,
     ) -> StateResult<u32> {
+        self.changed = true;
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
             return Ok(u32::MAX);
@@ -1038,6 +1105,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         entry: InstanceStateEntry,
         new_size: u32,
     ) -> StateResult<u32> {
+        self.changed = true;
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
             return Ok(u32::MAX);
