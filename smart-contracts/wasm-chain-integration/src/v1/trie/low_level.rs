@@ -1185,7 +1185,10 @@ pub struct Iterator {
 }
 
 impl Iterator {
-    /// Get key the iterator is currently pointing at.
+    /// Get key the iterator is currently pointing at. When the iterator is
+    /// created this points to the prefix the iterator was created with.
+    /// **After each call to next** this points to the key of the entry that
+    /// was returned.
     #[inline(always)]
     pub fn get_key(&self) -> &[u8] { &self.key }
 
@@ -1388,6 +1391,8 @@ impl<V> MutableTrie<V> {
                 next_child
             } else {
                 iterator.next_child = Some(0);
+                counter.tick(node.path.as_ref().len() as u64)?;
+                iterator.key.extend(node.path.as_ref());
                 if node.value.is_some() {
                     return Ok(node.value);
                 }
@@ -1401,10 +1406,8 @@ impl<V> MutableTrie<V> {
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                 let child = children[usize::from(next_child)];
                 iterator.current_node = child.index();
-                let new_path = owned_nodes[iterator.current_node].path.as_ref();
-                counter.tick(1 + new_path.len() as u64)?;
+                counter.tick(1)?;
                 iterator.key.push(child.key());
-                iterator.key.extend_from_slice(new_path);
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
@@ -1476,7 +1479,7 @@ impl<V> MutableTrie<V> {
                     return Ok(Some(Iterator {
                         root:         key.into(),
                         current_node: node_idx,
-                        key:          root_key,
+                        key:          key.into(),
                         next_child:   None,
                         stack:        Vec::new(),
                     }));
