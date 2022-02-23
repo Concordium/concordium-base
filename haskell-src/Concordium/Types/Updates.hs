@@ -549,9 +549,9 @@ data UpdateKeysCollection cpv = UpdateKeysCollection {
 
 putUpdateKeysCollection :: IsChainParametersVersion cpv => Putter (UpdateKeysCollection cpv)
 putUpdateKeysCollection UpdateKeysCollection{..} = do
-  put rootKeys
-  put level1Keys
-  putAuthorizations level2Keys
+    put rootKeys
+    put level1Keys
+    putAuthorizations level2Keys
 
 getUpdateKeysCollection :: IsChainParametersVersion cpv => Get (UpdateKeysCollection cpv)
 getUpdateKeysCollection = UpdateKeysCollection <$> get <*> get <*> getAuthorizations
@@ -560,8 +560,17 @@ instance IsChainParametersVersion cpv => Serialize (UpdateKeysCollection cpv) wh
   put = putUpdateKeysCollection
   get = getUpdateKeysCollection
 
+-- |SHA256 hashing instance for `UpdateKeysCollection`
+-- Security considerations: It is crucial to use a cryptographic secure hash instance for `UpdateKeysCollection`.
+-- The caller must be able to use the resulting hash in security critical application code.
+-- Currently the computed hash is used to short circuit the signature verification check of transactions. 
 instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (UpdateKeysCollection cpv) where
   getHash = SHA256.hash . runPut . putUpdateKeysCollection
+
+-- |Check that the update keys collection matches the given SHA256 hash.
+-- Note. See above for more information.
+matchesUpdateKeysCollection :: IsChainParametersVersion cpv => UpdateKeysCollection cpv -> SHA256.Hash -> Bool
+matchesUpdateKeysCollection ukc h = getHash ukc == h  
 
 instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (UpdateKeysCollection cpv)
 

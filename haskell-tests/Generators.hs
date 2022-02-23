@@ -124,7 +124,7 @@ genInclusiveRangeOfAmountFraction = do
 genPayload :: ProtocolVersion -> Gen Payload
 genPayload pv =
     oneof $
-        [ genPayloadDeployModule,
+        [ genPayloadDeployModule pv,
           genPayloadInitContract,
           genPayloadUpdate,
           genPayloadTransfer,
@@ -163,8 +163,13 @@ genByteString = do
     n <- choose (0, 1000)
     BS.pack <$> vector n
 
-genPayloadDeployModule :: Gen Payload
-genPayloadDeployModule = DeployModule <$> (Wasm.WasmModule 0 . Wasm.ModuleSource <$> genByteString)
+genPayloadDeployModule :: ProtocolVersion -> Gen Payload
+genPayloadDeployModule pv =
+    let genV0 = DeployModule . Wasm.WasmModuleV0 . Wasm.WasmModuleV . Wasm.ModuleSource <$> genByteString
+        genV1 = DeployModule . Wasm.WasmModuleV1 . Wasm.WasmModuleV . Wasm.ModuleSource <$> genByteString
+    in if pv <= P3 then -- protocol versions <= 3 only allow version 0 Wasm modules.
+               genV0
+        else oneof [genV0, genV1]
 
 genPayloadInitContract :: Gen Payload
 genPayloadInitContract = do
@@ -504,12 +509,17 @@ genBakerId = BakerId . AccountIndex <$> arbitrary
 genDelegatorId :: Gen DelegatorId
 genDelegatorId = DelegatorId . AccountIndex <$> arbitrary
 
+genWasmVersion :: SProtocolVersion pv -> Gen Wasm.WasmVersion
+genWasmVersion spv
+    | supportsV1Contracts spv = elements [Wasm.V0, Wasm.V1]
+    | otherwise = return Wasm.V0
+
 genEvent :: IsProtocolVersion pv => SProtocolVersion pv -> Gen Event
 genEvent spv =
         oneof
             ([ ModuleDeployed <$> genModuleRef,
-              ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> listOf genContractEvent,
-              Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> listOf genContractEvent,
+              ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent,
+              Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> genWasmVersion spv <*> listOf genContractEvent,
               Transferred <$> genAddress <*> genAmount <*> genAddress,
               AccountCreated <$> genAccountAddress,
               CredentialDeployed <$> genCredentialId <*> genAccountAddress,
@@ -528,16 +538,18 @@ genEvent spv =
               genTransferredWithSchedule,
               genCredentialsUpdated,
               DataRegistered <$> genRegisteredData
-            ] ++ maybeMemo ++ maybeDelegationEvents)
+            ] ++ maybeMemo ++ maybeV1ContractEvents ++ maybeDelegationEvents)
       where
-        maybeMemo = if supportMemo then [TransferMemo <$> genMemo] else []
-        supportMemo = case spv of
-                SP1 -> False
-                SP2 -> True
-                SP3 -> True
-                SP4 -> True
+        maybeMemo = if supportsMemo spv then [TransferMemo <$> genMemo] else []
+        maybeV1ContractEvents =
+                if supportsV1Contracts spv then
+                    [Interrupted <$> genCAddress <*> listOf genContractEvent,
+                     Resumed <$> genCAddress <*> arbitrary
+                    ]
+                else
+                    []
         maybeDelegationEvents =
-                if supportDelegation then
+                if supportsDelegation spv then
                     [BakerSetOpenStatus <$> genBakerId <*> genAccountAddress <*> arbitrary,
                      BakerSetMetadataURL <$> genBakerId <*> genAccountAddress <*> genUrlText,
                      BakerSetTransactionFeeCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
@@ -552,11 +564,6 @@ genEvent spv =
                     ]
                 else
                     []
-        supportDelegation = case spv of
-                SP1 -> False
-                SP2 -> False
-                SP3 -> False
-                SP4 -> True
         genBakerAdded = do
             ebaBakerId <- genBakerId
             ebaAccount <- genAccountAddress
@@ -681,7 +688,7 @@ genSchemeId = elements schemes
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
     thSender <- genAccountAddress
-    thPayloadSize <- PayloadSize <$> choose (0, maxPayloadSize)
+    thPayloadSize <- PayloadSize <$> choose (0, maxPayloadSize SP4)
     thNonce <- Nonce <$> arbitrary
     thEnergyAmount <- Energy <$> arbitrary
     thExpiry <- TransactionTime <$> arbitrary

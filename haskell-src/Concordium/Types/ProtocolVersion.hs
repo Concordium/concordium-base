@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -199,3 +200,25 @@ instance IsAccountVersion 'AccountV0 where
 
 instance IsAccountVersion 'AccountV1 where
     accountVersion = SAccountV1
+
+-- |Whether the protocol version supports memo functionality.
+-- (Memos are supported in 'P2' onwards.)
+supportsMemo :: SProtocolVersion pv -> Bool
+supportsMemo SP1 = False
+supportsMemo _ = True
+
+-- |Whether the protocol version supports stake delegation functionality.
+-- (Delegation is supported in 'P4' onwards.)
+supportsDelegation :: SProtocolVersion pv -> Bool
+supportsDelegation SP1 = False
+supportsDelegation SP2 = False
+supportsDelegation SP3 = False
+supportsDelegation SP4 = True
+
+-- |Whether the protocol version supports V1 smart contracts.
+-- (V1 contracts are supported in 'P4' onwards.)
+supportsV1Contracts :: SProtocolVersion pv -> Bool
+supportsV1Contracts SP1 = False
+supportsV1Contracts SP2 = False
+supportsV1Contracts SP3 = False
+supportsV1Contracts SP4 = True

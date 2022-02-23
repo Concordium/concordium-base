@@ -136,7 +136,7 @@ namespace IdissLib
         public string idCredPub { get; set; }
         public Dictionary<string, IpArData> arData { get; set; }
         public byte maxAccounts { get; set; }
-        public byte threshold { get; set; }
+        public byte revocationThreshold { get; set; }
     }
 
     /// A wrapper around the InitialCredentialDeploymentInfo class.

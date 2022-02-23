@@ -3,6 +3,7 @@
 module Types.TransactionSummarySpec where
 
 import Data.Serialize
+import qualified Data.Aeson as AE
 import Test.Hspec
 import Test.QuickCheck
 
@@ -22,6 +23,9 @@ testTransactionTypesSerialIdentity = mapM_ testEncDec transactionTypes
 testEventSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testEventSerializationIdentity spv = forAll (genEvent spv) $ \e -> runGet (getEvent spv) (runPut $ putEvent e) === Right e
 
+-- |Test that decoding is the inverse of encoding for 'Event's.
+testEventJSONSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
+testEventJSONSerializationIdentity spv = forAll (genEvent spv) $ \e -> AE.eitherDecode (AE.encode e) === Right e
 
 -- |Test that decoding is the inverse of encoding for 'RejectReason's.
 testRejectReasonSerializationIdentity :: RejectReason -> Property
@@ -44,11 +48,15 @@ tests = describe "Transaction summaries" $ do
     specify "Event: serialize then deserialize is identity in P2" $ withMaxSuccess 10000 $ testEventSerializationIdentity SP2
     specify "Event: serialize then deserialize is identity in P3" $ withMaxSuccess 10000 $ testEventSerializationIdentity SP3
     specify "Event: serialize then deserialize is identity in P4" $ withMaxSuccess 10000 $ testEventSerializationIdentity SP4
-    specify "RejectReason: serialize then deserialize is identity" $ withMaxSuccess 10000 $ testRejectReasonSerializationIdentity
+    -- Since the JSON serialization is the same for all protocol versions, we just test for P4,
+    -- since this includes all events.
+    specify "Event: JSON serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventJSONSerializationIdentity SP4
+    specify "RejectReason: serialize then deserialize is identity" $ withMaxSuccess 10000 testRejectReasonSerializationIdentity
     specify "ValidResult: serialize then deserialize is identity in P1" $ withMaxSuccess 1000 $ testValidResultSerializationIdentity SP1
     specify "ValidResult: serialize then deserialize is identity in P2" $ withMaxSuccess 1000 $ testValidResultSerializationIdentity SP2
     specify "ValidResult: serialize then deserialize is identity in P3" $ withMaxSuccess 1000 $ testValidResultSerializationIdentity SP3
     specify "ValidResult: serialize then deserialize is identity in P4" $ withMaxSuccess 1000 $ testValidResultSerializationIdentity SP4
+
     specify "TransactionSummary: serialize then deserialize is identity in P1" $ withMaxSuccess 1000 $ testTransactionSummarySerializationIdentity SP1
     specify "TransactionSummary: serialize then deserialize is identity in P2" $ withMaxSuccess 1000 $ testTransactionSummarySerializationIdentity SP2
     specify "TransactionSummary: serialize then deserialize is identity in P3" $ withMaxSuccess 1000 $ testTransactionSummarySerializationIdentity SP3

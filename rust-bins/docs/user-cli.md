@@ -17,7 +17,7 @@ To generate a request to the identity provider together with some auxiliary data
 ```console
 user_cli generate-request --cryptographic-parameters cryptographic-parameters.json \
                           --ars ars.json \
-                          --ip-info ip-info.json
+                          --ip-info ip-info.json \
                           --initial-keys-out initial-keys.json \ # keys of the initial account together with its address.
                           --id-use-data-out id-use-data.json \ # data that enables use of the identity object
                           --request-out request.json # request to send to the identity provider
@@ -40,7 +40,7 @@ To create a credential use the following command.
 ```console
 user_cli create-credential --id-use-data id-use-data.json \
                            --id-object id-object.json \
-                           --keys-out account-keys.json
+                           --keys-out account-keys.json \
                            --credential-out credential.json
 ```
 You will have to select whether to reveal the LEI, which was optional when creating the identity object. Use the space key to select and deselect list entries. 

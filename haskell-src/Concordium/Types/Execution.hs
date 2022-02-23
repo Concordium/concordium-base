@@ -12,7 +12,7 @@ import Prelude hiding(fail)
 
 import Control.Monad.Reader
 
-import Data.Char
+import qualified Data.Text as Text
 import qualified Data.Aeson as AE
 import Data.Aeson((.=), (.:))
 import Data.Aeson.TH
@@ -530,6 +530,14 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
   where go start = G.getWord8 >>= \case
             0 -> do
               dmMod <- S.get
+              -- in protocol 1..3 only version 0 modules were supported
+              -- and this was checked during serialization
+              let onlyVersion0 = case spv of
+                    SP1 -> True
+                    SP2 -> True
+                    SP3 -> True
+                    _ -> False
+              when (onlyVersion0 && Wasm.wasmVersion dmMod /= Wasm.V0) $ fail "Unsupported Wasm version"
               return DeployModule{..}
             1 -> do
               icAmount <- S.get
@@ -666,16 +674,8 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               cdDelegationTarget <- maybeGet 2
               return ConfigureDelegation{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
-        supportMemo = case spv of
-          SP1 -> False
-          SP2 -> True
-          SP3 -> True
-          SP4 -> True
-        supportDelegation = case spv of
-          SP1 -> False
-          SP2 -> False
-          SP3 -> False
-          SP4 -> True
+        supportMemo = supportsMemo spv
+        supportDelegation = supportsDelegation spv
         configureBakerBitMask = 0b0000000011111111
         configureDelegationBitMask = 0b0000000000000111
 
@@ -707,6 +707,14 @@ payloadBodyBytes (EncodedPayload ss) =
   then BS.empty
   else BS.tail (BSS.fromShort ss)
 
+data VersionedContractEvents = VersionedContractEvents {
+  -- |Version of the contract that produced the events.
+  veContractVersion :: !Wasm.WasmVersion,
+  -- |The events, in the order they were produced.
+  veEvents :: ![Wasm.ContractEvent]
+  }
+    deriving(Eq, Show, Generic)
+
 -- |Events which are generated during transaction execution.
 -- These are only used for committed transactions.
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
@@ -723,11 +731,11 @@ data Event =
                ecAmount :: !Amount,
                -- |Name of the contract init function being called
                ecInitName :: !Wasm.InitName,
+               -- |Version of the contract that was initialized.
+               ecContractVersion :: !Wasm.WasmVersion,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
                ecEvents :: ![Wasm.ContractEvent]
-               -- TODO: We could include initial state hash here.
-               -- Including the whole state is likely not a good idea.
                }
            -- |The given contract was updated.
            | Updated {
@@ -741,11 +749,11 @@ data Event =
                euMessage :: !Wasm.Parameter,
                -- |Name of the contract receive function being called
                euReceiveName :: !Wasm.ReceiveName,
+               -- |Version of the contract that was initialized.
+               euContractVersion :: !Wasm.WasmVersion,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
                euEvents :: ![Wasm.ContractEvent]
-               -- TODO: We could include input/output state hashes here
-               -- Including the whole state pre/post run is likely not a good idea.
                }
            -- |Tokens were transferred.
            | Transferred {
@@ -903,6 +911,20 @@ data Event =
                -- | The memo.
                tmMemo :: !Memo
            }
+           -- | Contract invocation was interrupted. This only applies to V1 contracts.
+           | Interrupted {
+               -- |Address of the contract that was interrupted.
+               iAddress :: !ContractAddress,
+               -- |Partial event log generated in the execution before the interrupt.
+               iEvents :: ![Wasm.ContractEvent]
+               }
+           -- | Contract execution resumed. This only applies to V1 contracts.
+           | Resumed {
+               -- |Address of the contract that was interrupted.
+               rAddress :: !ContractAddress,
+               -- |Whether the operation that was invoked succeeded.
+               rSuccess :: !Bool
+               }
            -- | Updated open status for a baker pool
            | BakerSetOpenStatus {
               -- |Baker's id
@@ -1005,7 +1027,9 @@ putEvent = \case
     S.put ecAddress <>
     S.put ecAmount <>
     S.put ecInitName <>
-    putListOf S.put ecEvents
+    S.put ecContractVersion <>
+    S.putWord32be (fromIntegral (length ecEvents)) <>
+    mapM_ S.put ecEvents
   Updated{..} ->
     S.putWord8 2 <>
     S.put euAddress <>
@@ -1013,7 +1037,9 @@ putEvent = \case
     S.put euAmount <>
     S.put euMessage <>
     S.put euReceiveName <>
-    putListOf S.put euEvents
+    S.put euContractVersion <>
+    S.putWord32be (fromIntegral (length euEvents)) <>
+    mapM_ S.put euEvents
   Transferred{..} ->
     S.putWord8 3 <>
     S.put etFrom <>
@@ -1105,57 +1131,66 @@ putEvent = \case
   TransferMemo {..} ->
     S.putWord8 21 <>
     S.put tmMemo
-  BakerSetOpenStatus {..} ->
+  Interrupted {..} ->
     S.putWord8 22 <>
+    S.put iAddress <>
+    S.putWord32be (fromIntegral (length iEvents)) <>
+    mapM_ S.put iEvents
+  Resumed {..} ->
+    S.putWord8 23 <>
+    S.put rAddress <>
+    putBool rSuccess
+  BakerSetOpenStatus {..} ->
+    S.putWord8 24 <>
     S.put ebsosBakerId <>
     S.put ebsosAccount <>
     S.put ebsosOpenStatus
   BakerSetMetadataURL {..} ->
-    S.putWord8 23 <>
+    S.putWord8 25 <>
     S.put ebsmuBakerId <>
     S.put ebsmuAccount <>
     S.put ebsmuMetadataURL
   BakerSetTransactionFeeCommission {..} ->
-    S.putWord8 24 <>
+    S.putWord8 26 <>
     S.put ebstfcBakerId <>
     S.put ebstfcAccount <>
     S.put ebstfcTransactionFeeCommission
   BakerSetBakingRewardCommission {..} ->
-    S.putWord8 25 <>
+    S.putWord8 27 <>
     S.put ebsbrcBakerId <>
     S.put ebsbrcAccount <>
     S.put ebsbrcBakingRewardCommission
   BakerSetFinalizationRewardCommission {..} ->
-    S.putWord8 26 <>
+    S.putWord8 28 <>
     S.put ebsfrcBakerId <>
     S.put ebsfrcAccount <>
     S.put ebsfrcFinalizationRewardCommission
   DelegationStakeIncreased{..} ->
-    S.putWord8 27 <>
+    S.putWord8 29 <>
     S.put edsiDelegatorId <>
     S.put edsiAccount <>
     S.put edsiNewStake
   DelegationStakeDecreased{..} ->
-    S.putWord8 28 <>
+    S.putWord8 30 <>
     S.put edsdDelegatorId <>
     S.put edsdAccount <>
     S.put edsdNewStake
   DelegationSetRestakeEarnings{..} ->
-    S.putWord8 29 <>
+    S.putWord8 31 <>
     S.put edsreDelegatorId <>
     S.put edsreAccount <>
     S.put edsreRestakeEarnings
   DelegationSetDelegationTarget{..} ->
-    S.putWord8 30 <>
+    S.putWord8 32 <>
     S.put edsdtDelegatorId <>
     S.put edsdtAccount <>
     S.put edsdtDelegationTarget
   DelegationAdded{..} ->
-    S.putWord8 31 <>
+    S.putWord8 33 <>
     S.put edaDelegatorId <>
     S.put edaAccount
   DelegationRemoved{..} ->
-    S.putWord8 32 <>
+    S.putWord8 34 <>
     S.put edrDelegatorId <>
     S.put edrAccount
 
@@ -1170,7 +1205,9 @@ getEvent spv =
       ecAddress <- S.get
       ecAmount <- S.get
       ecInitName <- S.get
-      ecEvents <- getListOf S.get
+      ecContractVersion <- S.get
+      ecEventsLength <- fromIntegral <$> S.getWord32be
+      ecEvents <- replicateM ecEventsLength S.get
       return ContractInitialized{..}
     2 -> do
       euAddress <- S.get
@@ -1178,7 +1215,9 @@ getEvent spv =
       euAmount <- S.get
       euMessage <- S.get
       euReceiveName <- S.get
-      euEvents <- getListOf S.get
+      euContractVersion <- S.get
+      euEventsLength <- fromIntegral <$> S.getWord32be
+      euEvents <- replicateM euEventsLength S.get
       return Updated{..}
     3 -> do
       etFrom <- S.get
@@ -1271,71 +1310,460 @@ getEvent spv =
     21 | supportMemo -> do
       tmMemo <- S.get
       return  TransferMemo {..}
-    22 | supportDelegation -> do
+    22 | supportV1Contracts -> do
+      iAddress <- S.get
+      iEventsLength <- fromIntegral <$> S.getWord32be
+      iEvents <- replicateM iEventsLength S.get
+      return Interrupted{..}
+    23 | supportV1Contracts -> do
+      rAddress <- S.get
+      rSuccess <- getBool
+      return Resumed{..}
+    24 | supportDelegation -> do
       ebsosBakerId <- S.get
       ebsosAccount <- S.get
       ebsosOpenStatus <- S.get
       return  BakerSetOpenStatus {..}
-    23 | supportDelegation -> do
+    25 | supportDelegation -> do
       ebsmuBakerId <- S.get
       ebsmuAccount <- S.get
       ebsmuMetadataURL <- S.get
       return  BakerSetMetadataURL {..}
-    24 | supportDelegation -> do
+    26 | supportDelegation -> do
       ebstfcBakerId <- S.get
       ebstfcAccount <- S.get
       ebstfcTransactionFeeCommission <- S.get
       return  BakerSetTransactionFeeCommission {..}
-    25 | supportDelegation -> do
+    27 | supportDelegation -> do
       ebsbrcBakerId <- S.get
       ebsbrcAccount <- S.get
       ebsbrcBakingRewardCommission <- S.get
       return  BakerSetBakingRewardCommission {..}
-    26 | supportDelegation -> do
+    28 | supportDelegation -> do
       ebsfrcBakerId <- S.get
       ebsfrcAccount <- S.get
       ebsfrcFinalizationRewardCommission <- S.get
       return  BakerSetFinalizationRewardCommission {..}
-    27 | supportDelegation -> do
+    29 | supportDelegation -> do
         edsiDelegatorId <- S.get
         edsiAccount <- S.get
         edsiNewStake <- S.get
         return DelegationStakeIncreased{..}
-    28 | supportDelegation -> do
+    30 | supportDelegation -> do
         edsdDelegatorId <- S.get
         edsdAccount <- S.get
         edsdNewStake <- S.get
         return DelegationStakeDecreased{..}
-    29 | supportDelegation -> do
+    31 | supportDelegation -> do
         edsreDelegatorId <- S.get
         edsreAccount <- S.get
         edsreRestakeEarnings <- S.get
         return DelegationSetRestakeEarnings{..}
-    30 | supportDelegation -> do
+    32 | supportDelegation -> do
         edsdtDelegatorId <- S.get
         edsdtAccount <- S.get
         edsdtDelegationTarget <- S.get
         return DelegationSetDelegationTarget{..}
-    31 | supportDelegation -> do
+    33 | supportDelegation -> do
         edaDelegatorId <- S.get
         edaAccount <- S.get
         return DelegationAdded{..}
-    32 | supportDelegation -> do
+    34 | supportDelegation -> do
         edrDelegatorId <- S.get
         edrAccount <- S.get
         return DelegationRemoved{..}
     n -> fail $ "Unrecognized event tag: " ++ show n
     where
-      supportMemo = case spv of
-          SP1 -> False
-          SP2 -> True
-          SP3 -> True
-          SP4 -> True
-      supportDelegation = case spv of
-          SP1 -> False
-          SP2 -> False
-          SP3 -> False
-          SP4 -> True
+      supportMemo = supportsMemo spv
+      supportV1Contracts = supportsV1Contracts spv
+      supportDelegation = supportsDelegation spv
+
+instance AE.ToJSON Event where
+  toJSON = \case
+    ModuleDeployed mref -> AE.object [
+      "tag" .= AE.String "ModuleDeployed",
+      "contents" .= mref
+      ]
+    ContractInitialized {..} -> AE.object [
+      "tag" .= AE.String "ContractInitialized",
+      "ref" .= ecRef,
+      "address" .= ecAddress,
+      "amount" .= ecAmount,
+      "initName" .= ecInitName,
+      "contractVersion" .= ecContractVersion,
+      "events" .= ecEvents
+        ]
+    Updated {..} -> AE.object [
+      "tag" .= AE.String "Updated",
+      "address" .= euAddress,
+      "instigator" .= euInstigator,
+      "amount" .= euAmount,
+      "message" .= euMessage,
+      "receiveName" .= euReceiveName,
+      "contractVersion" .= euContractVersion,
+      "events" .= euEvents
+     ]
+    Transferred {..} -> AE.object [
+      "tag" .= AE.String "Transferred",
+      "from" .= etFrom,
+      "amount" .= etAmount,
+      "to" .= etTo
+      ]
+    AccountCreated addr -> AE.object [
+      "tag" .= AE.String "AccountCreated",
+      "contents" .= addr
+      ]
+    CredentialDeployed {..} -> AE.object [
+      "tag" .= AE.String "CredentialDeployed",
+      "regId" .= ecdRegId,
+      "account" .= ecdAccount
+      ]
+    BakerAdded {..} -> AE.object [
+      "tag" .= AE.String "BakerAdded",
+      "bakerId" .= ebaBakerId,
+      "account" .= ebaAccount,
+      "signKey" .= ebaSignKey,
+      "electionKey" .= ebaElectionKey,
+      "aggregationKey" .= ebaAggregationKey,
+      "stake" .= ebaStake,
+      "restakeEarnings" .= ebaRestakeEarnings
+      ]  
+    BakerRemoved {..} -> AE.object [
+      "tag" .= AE.String "BakerRemoved",
+      "bakerId" .= ebrBakerId,
+      "account" .= ebrAccount
+      ]
+    BakerStakeIncreased {..} -> AE.object [
+      "tag" .= AE.String "BakerStakeIncreased",
+      "bakerId" .= ebsiBakerId,
+      "account" .= ebsiAccount,
+      "newStake" .= ebsiNewStake
+      ]
+    BakerStakeDecreased {..} -> AE.object [
+      "tag" .= AE.String "BakerStakeDecreased",
+      "bakerId" .= ebsiBakerId,
+      "account" .= ebsiAccount,
+      "newStake" .= ebsiNewStake
+      ]
+    BakerSetRestakeEarnings {..} -> AE.object [
+      "tag" .= AE.String "BakerSetRestakeEarnings",
+      "bakerId" .= ebsreBakerId,
+      "account" .= ebsreAccount,
+      "restakeEarnings" .= ebsreRestakeEarnings
+      ]
+    BakerKeysUpdated {..} -> AE.object [
+      "tag" .= AE.String "BakerKeysUpdated",
+      "bakerId" .= ebkuBakerId,
+      "account" .= ebkuAccount,
+      "signKey" .= ebkuSignKey,
+      "electionKey" .= ebkuElectionKey,
+      "aggregationKey" .= ebkuAggregationKey
+      ]
+    CredentialKeysUpdated {..} -> AE.object [
+      "tag" .= AE.String "CredentialKeysUpdated",
+      "credId" .= ckuCredId
+      ]
+    NewEncryptedAmount {..} -> AE.object [
+      "tag" .= AE.String "NewEncryptedAmount",
+      "account" .= neaAccount,
+      "newIndex" .= neaNewIndex,
+      "encryptedAmount" .= neaEncryptedAmount
+      ]
+    EncryptedAmountsRemoved {..} -> AE.object [
+      "tag" .= AE.String "EncryptedAmountsRemoved",
+      "account" .= earAccount,
+      "newAmount" .= earNewAmount,
+      "inputAmount" .= earInputAmount,
+      "upToIndex" .= earUpToIndex
+      ]            
+    AmountAddedByDecryption {..} -> AE.object [
+      "tag" .= AE.String "AmountAddedByDecryption",
+      "account" .= aabdAccount,
+      "amount" .= aabdAmount
+      ]
+    EncryptedSelfAmountAdded {..} -> AE.object [
+      "tag" .= AE.String "EncryptedSelfAmountAdded",
+      "account" .= eaaAccount,
+      "newAmount" .= eaaNewAmount,
+      "amount" .= eaaAmount
+      ]
+    UpdateEnqueued {..} -> AE.object [
+      "tag" .= AE.String "UpdateEnqueued",
+      "effectiveTime" .= ueEffectiveTime,
+      "payload" .= uePayload
+      ]
+    TransferredWithSchedule {..} -> AE.object [
+      "tag" .= AE.String "TransferredWithSchedule",
+      "from" .= etwsFrom,
+      "to" .= etwsTo,
+      "amount" .= etwsAmount
+      ]
+    CredentialsUpdated {..} -> AE.object [
+      "tag" .= AE.String "CredentialsUpdated",
+      "account" .= cuAccount,
+      "newCredIds" .= cuNewCredIds,
+      "removedCredIds" .= cuRemovedCredIds,
+      "newThreshold" .= cuNewThreshold
+      ]
+    DataRegistered {..} -> AE.object [
+      "tag" .= AE.String "DataRegistered",
+      "data" .= drData
+      ]
+    TransferMemo {..} -> AE.object [
+      "tag" .= AE.String "TransferMemo",
+      "memo" .= tmMemo
+      ]
+    Interrupted {..} -> AE.object [
+      "tag" .= AE.String "Interrupted",
+      "address" .= iAddress,
+      "events" .= iEvents
+      ]
+    Resumed {..} -> AE.object [
+      "tag" .= AE.String "Resumed",
+      "address" .= rAddress,
+      "success" .= rSuccess
+      ]
+    BakerSetOpenStatus {..} -> AE.object [
+      "tag" .= AE.String "BakerSetOpenStatus",
+      "bakerId" .= ebsosBakerId,
+      "account" .= ebsosAccount,
+      "openStatus" .= ebsosOpenStatus
+      ]
+    BakerSetMetadataURL {..} -> AE.object [
+        "tag" .= AE.String "BakerSetMetadataURL",
+        "bakerId" .= ebsmuBakerId,
+        "account" .= ebsmuAccount,
+        "metadataURL" .= ebsmuMetadataURL
+      ]
+    BakerSetTransactionFeeCommission {..} -> AE.object [
+        "tag" .= AE.String "BakerSetTransactionFeeCommission",
+        "bakerId" .= ebstfcBakerId,
+        "account" .= ebstfcAccount,
+        "transactionFeeCommission" .= ebstfcTransactionFeeCommission
+      ]
+    BakerSetBakingRewardCommission {..} -> AE.object [
+        "tag" .= AE.String "BakerSetBakingRewardCommission",
+        "bakerId" .= ebsbrcBakerId,
+        "account" .= ebsbrcAccount,
+        "bakingRewardCommission" .= ebsbrcBakingRewardCommission
+      ]
+    BakerSetFinalizationRewardCommission {..} -> AE.object [
+        "tag" .= AE.String "BakerSetFinalizationRewardCommission",
+        "bakerId" .= ebsfrcBakerId,
+        "account" .= ebsfrcAccount,
+        "finalizationRewardCommission" .= ebsfrcFinalizationRewardCommission
+      ]
+    DelegationStakeIncreased {..} -> AE.object [
+        "tag" .= AE.String "DelegationStakeIncreased",
+        "delegatorId" .= edsiDelegatorId,
+        "account" .= edsiAccount,
+        "newStake" .= edsiNewStake
+      ]
+    DelegationStakeDecreased {..} -> AE.object [
+        "tag" .= AE.String "DelegationStakeDecreased",
+        "delegatorId" .= edsdDelegatorId,
+        "account" .= edsdAccount,
+        "newStake" .= edsdNewStake
+      ]
+    DelegationSetRestakeEarnings {..} -> AE.object [
+        "tag" .= AE.String "DelegationSetRestakeEarnings",
+        "delegatorId" .= edsreDelegatorId,
+        "account" .= edsreAccount,
+        "restakeEarnings" .= edsreRestakeEarnings
+      ]
+    DelegationSetDelegationTarget {..} -> AE.object [
+        "tag" .= AE.String "DelegationSetDelegationTarget",
+        "delegatorId" .= edsdtDelegatorId,
+        "account" .= edsdtAccount,
+        "delegationTarget" .= edsdtDelegationTarget
+      ]
+    DelegationAdded {..} -> AE.object [
+        "tag" .= AE.String "DelegationAdded",
+        "delegatorId" .= edaDelegatorId,
+        "account" .= edaAccount
+      ]
+    DelegationRemoved {..} -> AE.object [
+        "tag" .= AE.String "DelegationRemoved",
+        "delegatorId" .= edrDelegatorId,
+        "account" .= edrAccount
+      ]
+
+instance AE.FromJSON Event where
+  parseJSON = AE.withObject "Event" $ \obj -> do
+    (obj .: "tag") >>= \case
+      "ModuleDeployed" -> do
+        mref <- obj .: "contents"
+        return $ ModuleDeployed mref 
+      "ContractInitialized" -> do
+        ecRef <- obj .: "ref"
+        ecAddress <- obj .: "address"
+        ecAmount <- obj .: "amount"
+        ecInitName <- obj .: "initName"
+        ecContractVersion <- obj AE..:! "contractVersion" AE..!= Wasm.V0 -- default for backwards compatibility
+        ecEvents <- obj .: "events"
+        return ContractInitialized{..}
+      "Updated" -> do
+        euAddress <- obj .: "address"
+        euInstigator <- obj .: "instigator"
+        euAmount <- obj .: "amount"
+        euMessage <- obj .: "message"
+        euReceiveName <- obj .: "receiveName"
+        euContractVersion <- obj AE..:! "contractVersion" AE..!= Wasm.V0 -- default for backwards compatibility
+        euEvents <- obj .: "events"
+        return Updated{..}
+      "Transferred" -> do
+        etFrom <- obj .: "from"
+        etAmount <- obj .: "amount"
+        etTo <- obj .: "to"
+        return Transferred{..}
+      "AccountCreated" -> do
+        addr <- obj .: "contents"
+        return $ AccountCreated addr
+      "CredentialDeployed" -> do
+        ecdRegId <- obj .: "regId"
+        ecdAccount <- obj .: "account"
+        return CredentialDeployed{..}
+      "BakerAdded" -> do
+        ebaBakerId <- obj .: "bakerId"
+        ebaAccount <- obj .: "account"
+        ebaSignKey <- obj .: "signKey"
+        ebaElectionKey <- obj .: "electionKey"
+        ebaAggregationKey <- obj .: "aggregationKey"
+        ebaStake <- obj .: "stake"
+        ebaRestakeEarnings <- obj .: "restakeEarnings"
+        return BakerAdded{..}
+      "BakerRemoved" -> do
+        ebrBakerId <- obj .: "bakerId"
+        ebrAccount <- obj .: "account"
+        return BakerRemoved{..}
+      "BakerStakeIncreased" -> do
+        ebsiBakerId <- obj .: "bakerId"
+        ebsiAccount <- obj .: "account"
+        ebsiNewStake <- obj .: "newStake"
+        return BakerStakeIncreased{..}
+      "BakerStakeDecreased" -> do
+        ebsiBakerId <- obj .: "bakerId"
+        ebsiAccount <- obj .: "account"
+        ebsiNewStake <- obj .: "newStake"
+        return BakerStakeDecreased{..}
+      "BakerSetRestakeEarnings" -> do
+        ebsreBakerId <- obj .: "bakerId"
+        ebsreAccount <- obj .: "account"
+        ebsreRestakeEarnings <- obj .: "restakeEarnings"
+        return BakerSetRestakeEarnings{..}
+      "BakerKeysUpdated" -> do
+        ebkuBakerId <- obj .: "bakerId"
+        ebkuAccount <- obj .: "account"
+        ebkuSignKey <- obj .: "signKey"
+        ebkuElectionKey <- obj .: "electionKey"
+        ebkuAggregationKey <- obj .: "aggregationKey"
+        return BakerKeysUpdated{..}
+      "CredentialKeysUpdated" -> do
+        ckuCredId <- obj .: "credId"
+        return CredentialKeysUpdated{..}
+      "NewEncryptedAmount" -> do
+        neaAccount <- obj .: "account"
+        neaNewIndex <- obj .: "newIndex"
+        neaEncryptedAmount <- obj .: "encryptedAmount"
+        return NewEncryptedAmount{..}
+      "EncryptedAmountsRemoved" -> do
+        earAccount <- obj .: "account"
+        earNewAmount <- obj .: "newAmount"
+        earInputAmount <- obj .: "inputAmount"
+        earUpToIndex <- obj .: "upToIndex"
+        return EncryptedAmountsRemoved{..}
+      "AmountAddedByDecryption" -> do
+        aabdAccount <- obj .: "account"
+        aabdAmount <- obj .: "amount"
+        return AmountAddedByDecryption{..}
+      "EncryptedSelfAmountAdded" -> do
+        eaaAccount <- obj .: "account"
+        eaaNewAmount <- obj .: "newAmount"
+        eaaAmount <- obj .: "amount"
+        return EncryptedSelfAmountAdded{..}
+      "UpdateEnqueued" -> do
+        ueEffectiveTime <- obj .: "effectiveTime"
+        uePayload <- obj .: "payload"
+        return UpdateEnqueued{..}
+      "TransferredWithSchedule" -> do
+        etwsFrom <- obj .: "from"
+        etwsTo <- obj .: "to"
+        etwsAmount <- obj .: "amount"
+        return TransferredWithSchedule{..}
+      "CredentialsUpdated" -> do
+        cuAccount <- obj .: "account"
+        cuNewCredIds <- obj .: "newCredIds"
+        cuRemovedCredIds <- obj .: "removedCredIds"
+        cuNewThreshold <- obj .: "newThreshold"
+        return CredentialsUpdated{..}
+      "DataRegistered" -> do
+        drData <- obj .: "data"
+        return DataRegistered{..}
+      "TransferMemo" -> do
+        tmMemo <- obj .: "memo"
+        return TransferMemo{..}
+      "Interrupted" -> do
+        iAddress <- obj .: "address"
+        iEvents <- obj .: "events"
+        return Interrupted{..}
+      "Resumed" -> do
+        rAddress <- obj .: "address"
+        rSuccess <- obj .: "success"
+        return Resumed{..}
+      "BakerSetOpenStatus" -> do
+        ebsosBakerId <- obj .: "bakerId"
+        ebsosAccount <- obj .: "account"
+        ebsosOpenStatus <- obj .: "openStatus"
+        return BakerSetOpenStatus {..}
+      "BakerSetMetadataURL" -> do
+        ebsmuBakerId <- obj .: "bakerId"
+        ebsmuAccount <- obj .: "account"
+        ebsmuMetadataURL <- obj .: "metadataURL"
+        return BakerSetMetadataURL {..}
+      "BakerSetTransactionFeeCommission" -> do
+        ebstfcBakerId <- obj .: "bakerId"
+        ebstfcAccount <- obj .: "account"
+        ebstfcTransactionFeeCommission <- obj .: "transactionFeeCommission"
+        return BakerSetTransactionFeeCommission {..}
+      "BakerSetBakingRewardCommission" -> do
+        ebsbrcBakerId <- obj .: "bakerId"
+        ebsbrcAccount <- obj .: "account"
+        ebsbrcBakingRewardCommission <- obj .: "bakingRewardCommission"
+        return BakerSetBakingRewardCommission {..}
+      "BakerSetFinalizationRewardCommission" -> do
+        ebsfrcBakerId <- obj .: "bakerId"
+        ebsfrcAccount <- obj .: "account"
+        ebsfrcFinalizationRewardCommission <- obj .: "finalizationRewardCommission"
+        return BakerSetFinalizationRewardCommission {..}
+      "DelegationStakeIncreased" -> do
+        edsiDelegatorId <- obj .: "delegatorId"
+        edsiAccount <- obj .: "account"
+        edsiNewStake <- obj .: "newStake"
+        return DelegationStakeIncreased {..}
+      "DelegationStakeDecreased" -> do
+        edsdDelegatorId <- obj .: "delegatorId"
+        edsdAccount <- obj .: "account"
+        edsdNewStake <- obj .: "newStake"
+        return DelegationStakeDecreased {..}
+      "DelegationSetRestakeEarnings" -> do
+        edsreDelegatorId <- obj .: "delegatorId"
+        edsreAccount <- obj .: "account"
+        edsreRestakeEarnings <- obj .: "restakeEarnings"
+        return DelegationSetRestakeEarnings {..}
+      "DelegationSetDelegationTarget" -> do
+        edsdtDelegatorId <- obj .: "delegatorId"
+        edsdtAccount <- obj .: "account"
+        edsdtDelegationTarget <- obj .: "delegationTarget"
+        return DelegationSetDelegationTarget {..}
+      "DelegationAdded" -> do
+        edaDelegatorId <- obj .: "delegatorId"
+        edaAccount <- obj .: "account"
+        return DelegationAdded {..}
+      "DelegationRemoved" -> do
+        edrDelegatorId <- obj .: "delegatorId"
+        edrAccount <- obj .: "account"
+        return DelegationRemoved {..}
+      tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
@@ -1677,13 +2105,11 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
                  | InvalidUpdateTime -- ^The update timeout is later than the effective time
                  | ExceedsMaxCredentialDeployments -- ^The block contains more than the limit of credential deployments
+                 | InvalidPayloadSize -- ^Payload size exceeds maximum allowed for the protocol version.
                  | NotSupportedAtCurrentProtocolVersion -- ^The operation is not legal at the current protocol version.
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
-
--- FIXME: These instances need to be made clearer.
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
 -- At the end of the file to avoid issues with staging restriction.

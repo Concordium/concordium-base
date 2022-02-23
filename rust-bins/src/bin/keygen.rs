@@ -21,6 +21,7 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
+    str::FromStr,
 };
 use structopt::StructOpt;
 
@@ -124,6 +125,38 @@ struct KeygenAr {
     v1:                     bool,
 }
 
+#[derive(Debug)]
+enum Level {
+    Root,
+    One,
+    Two,
+}
+
+impl FromStr for Level {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "root" => Ok(Level::Root),
+            "1" => Ok(Level::One),
+            "one" => Ok(Level::One),
+            "2" => Ok(Level::Two),
+            "two" => Ok(Level::Two),
+            _ => anyhow::bail!("Unknown governance key level '{}'", s),
+        }
+    }
+}
+
+#[derive(StructOpt)]
+struct KeygenGovernance {
+    #[structopt(long = "level", help = "Governance key level.", default_value = "2")]
+    level:   Level,
+    #[structopt(long = "out", help = "File to output the secret keys to.")]
+    out:     PathBuf,
+    #[structopt(long = "out-pub", help = "File to output the public keys to.")]
+    out_pub: PathBuf,
+}
+
 #[derive(StructOpt)]
 struct GenRand {
     #[structopt(
@@ -157,7 +190,7 @@ struct GenRand {
     about = "Tool for generating keys",
     name = "keygen",
     author = "Concordium",
-    version = "2.0"
+    version = "2.1"
 )]
 enum KeygenTool {
     #[structopt(
@@ -178,6 +211,12 @@ enum KeygenTool {
         version = "2.0"
     )]
     GenRand(GenRand),
+    #[structopt(
+        name = "keygen-governance",
+        about = "Generate update keys.",
+        version = "1.0"
+    )]
+    KeygenUpdate(KeygenGovernance),
 }
 
 fn main() {
@@ -203,6 +242,11 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
+        KeygenUpdate(kgup) => {
+            if let Err(e) = handle_generate_update_keys(kgup) {
+                eprintln!("{}", e)
+            }
+        }
     }
 }
 
@@ -219,6 +263,49 @@ macro_rules! succeed_or_die {
             None => return Err($s.to_owned()),
         }
     };
+}
+
+fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
+    let mut csprng = rand::thread_rng();
+    let keypair = crypto_common::types::KeyPair::generate(&mut csprng);
+    let public_bytes = keypair.public.to_bytes();
+    let sig = keypair.sign(&public_bytes);
+    let level_str = match kgup.level {
+        Level::Root => "root",
+        Level::One => "level1",
+        Level::Two => "level2",
+    };
+    let public_data = serde_json::json!({
+        "key": {
+            "verifyKey": base16_encode_string(&keypair.public),
+            "scheme": "Ed25519",
+        },
+        "signature": sig,
+        "type": level_str,
+    });
+    let secret_data = serde_json::json!({
+        "keyPair": keypair,
+        "type": level_str,
+    });
+    match write_json_to_file(&kgup.out_pub, &public_data) {
+        Ok(_) => println!("Wrote public keys to {}.", kgup.out_pub.display()),
+        Err(e) => {
+            return Err(format!(
+                "Could not JSON write public keys to file because {}",
+                e
+            ));
+        }
+    }
+    match output_possibly_encrypted(&kgup.out, &secret_data) {
+        Ok(_) => println!("Wrote private keys to {}.", kgup.out.display()),
+        Err(e) => {
+            return Err(format!(
+                "Could not JSON write private keys to file because {}",
+                e
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {

@@ -93,7 +93,8 @@ checkInvalidPayloadByteString spv bs =
 tests :: Spec
 tests = do
   describe "Payload serialization tests" $ do
-    test SP3 25 1000
+    test SP1 25 1000
+    test SP2 50 500
     test SP3 50 500
     test SP4 25 1000
     test SP4 50 500
