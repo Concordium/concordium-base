@@ -18,6 +18,7 @@ use super::trie::{
     EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
 };
 use crate::{slice_from_c_bytes, v1::*};
+use concordium_contracts_common::OwnedReceiveName;
 use libc::size_t;
 use sha2::Digest;
 use std::sync::Arc;
@@ -201,8 +202,9 @@ unsafe extern "C" fn call_receive_v1(
     receive_ctx_bytes: *const u8, // receive context
     receive_ctx_bytes_len: size_t,
     amount: u64,
-    receive_name: *const u8, // name of the entrypoint to invoke
+    receive_name: *const u8, // name of the entrypoint that was named
     receive_name_len: size_t,
+    call_default: u8, // non-zero if to call the default/fallback instead
     state_ptr_ptr: *mut *mut MutableState,
     param_bytes: *const u8, // parameters to the entrypoint
     param_bytes_len: size_t,
@@ -213,7 +215,8 @@ unsafe extern "C" fn call_receive_v1(
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| -> *mut u8 {
-        let receive_ctx = v0::deserial_receive_context(slice_from_c_bytes!(
+        // For FFI we only pass v0 contexts to keep the other end simpler.
+        let receive_ctx_common = v0::deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
             receive_ctx_bytes_len as usize
         ))
@@ -224,13 +227,31 @@ unsafe extern "C" fn call_receive_v1(
         let mut state = (&mut *state_ptr).make_fresh_generation();
         let inner = state.get_inner();
         let instance_state = InstanceState::new(0, loader, inner);
-        match std::str::from_utf8(receive_name) {
-            Ok(name) => {
+        match std::str::from_utf8(receive_name)
+            .ok()
+            .and_then(|s| OwnedReceiveName::new(s.into()).ok())
+        {
+            Some(name) => {
+                let entrypoint: OwnedEntrypointName =
+                    name.as_receive_name().entrypoint_name().into();
+                // the actual name to invoke
+                let actual_name = if call_default != 0 {
+                    let mut actual_name: String = name.as_receive_name().contract_name().into();
+                    actual_name.push('.');
+                    OwnedReceiveName::new_unchecked(actual_name)
+                } else {
+                    name
+                };
+
+                let receive_ctx = ReceiveContext {
+                    common: receive_ctx_common,
+                    entrypoint,
+                };
                 let res = invoke_receive(
                     artifact.clone(),
                     amount,
                     receive_ctx,
-                    name,
+                    actual_name.as_receive_name(),
                     parameter,
                     energy,
                     instance_state,
@@ -267,7 +288,7 @@ unsafe extern "C" fn call_receive_v1(
                     Err(_trap) => std::ptr::null_mut(),
                 }
             }
-            Err(_) => std::ptr::null_mut(), // should not happen.
+            None => std::ptr::null_mut(), // should not happen.
         }
     });
     // do not drop the pointer, we are not the owner

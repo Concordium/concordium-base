@@ -5,7 +5,10 @@ mod types;
 
 use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
-use concordium_contracts_common::{AccountAddress, Amount, ContractAddress, OwnedEntrypointName};
+use concordium_contracts_common::{
+    AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
+    OwnedEntrypointName, ReceiveName,
+};
 use machine::Value;
 use std::{borrow::Borrow, io::Write, sync::Arc};
 use trie::BackingStoreLoad;
@@ -153,7 +156,9 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
 /// v1 host functions.
 mod host {
     use super::*;
-    use concordium_contracts_common::{Cursor, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE};
+    use concordium_contracts_common::{
+        Cursor, EntrypointName, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE,
+    };
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
@@ -526,6 +531,32 @@ mod host {
         stack.push_value(result);
         Ok(())
     }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_entrypoint_size(
+        stack: &mut machine::RuntimeStack,
+        entrypoint: EntrypointName,
+    ) -> machine::RunResult<()> {
+        let size: u32 = entrypoint.size();
+        stack.push_value(size);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn get_receive_entrypoint(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        entrypoint: EntrypointName,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() };
+        let size = entrypoint.size();
+        // overflow here is not possible on 64-bit machines
+        let end: usize = start as usize + size as usize;
+        ensure!(end <= memory.len(), "Illegal memory access.");
+        let entrypoint_str: &str = entrypoint.into();
+        memory[start as usize..end].copy_from_slice(entrypoint_str.as_bytes());
+        Ok(())
+    }
 }
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
@@ -624,7 +655,38 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
     }
 }
 
-impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext>
+/// A receive context for V1 contracts.
+pub trait HasReceiveContext: v0::HasReceiveContext {
+    /// Get the name of the entrypoint that was actually invoked.
+    /// This may differ from the name of the entrypoing that is actually invoked
+    /// in case the entrypoint that is invoke is the fallback one.
+    fn entrypoint(&self) -> ExecResult<EntrypointName>;
+}
+
+impl<X: AsRef<[u8]>> v0::HasReceiveContext for ReceiveContext<X> {
+    type MetadataType = ChainMetadata;
+
+    fn metadata(&self) -> &Self::MetadataType { &self.common.metadata }
+
+    fn invoker(&self) -> ExecResult<&AccountAddress> { Ok(&self.common.invoker) }
+
+    fn self_address(&self) -> ExecResult<&ContractAddress> { Ok(&self.common.self_address) }
+
+    fn self_balance(&self) -> ExecResult<Amount> { Ok(self.common.self_balance) }
+
+    fn sender(&self) -> ExecResult<&Address> { Ok(&self.common.sender) }
+
+    fn owner(&self) -> ExecResult<&AccountAddress> { Ok(&self.common.owner) }
+
+    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.common.sender_policies.as_ref()) }
+}
+
+impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
+    #[inline(always)]
+    fn entrypoint(&self) -> ExecResult<EntrypointName> { Ok(self.entrypoint.as_entrypoint_name()) }
+}
+
+impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceiveContext>
     machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = Interrupt;
@@ -740,6 +802,15 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasRec
                 ReceiveOnlyFunc::GetReceiveOwner => {
                     v0::host::get_receive_owner(memory, stack, self.stateless.receive_ctx.owner())
                 }
+                ReceiveOnlyFunc::GetReceiveEntrypointSize => host::get_receive_entrypoint_size(
+                    stack,
+                    self.stateless.receive_ctx.entrypoint()?,
+                ),
+                ReceiveOnlyFunc::GetReceiveEntryPoint => host::get_receive_entrypoint(
+                    memory,
+                    stack,
+                    self.stateless.receive_ctx.entrypoint()?,
+                ),
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 bail!("Not implemented for receive.");
@@ -977,13 +1048,13 @@ pub fn invoke_receive<
     'b,
     BackingStore: BackingStoreLoad,
     R: RunnableCode,
-    Ctx1: v0::HasReceiveContext,
+    Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
     artifact: Arc<Artifact<ProcessedImports, R>>,
     amount: u64,
     receive_ctx: Ctx1,
-    receive_name: &str,
+    receive_name: ReceiveName,
     param: ParameterRef,
     energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
@@ -1000,7 +1071,8 @@ pub fn invoke_receive<
         state: instance_state,
     };
 
-    let result = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]);
+    let result =
+        artifact.run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
     process_receive_result(artifact, host, result)
 }
 
@@ -1031,7 +1103,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
             new_balance,
             data,
         } => {
-            host.stateless.receive_ctx.self_balance = new_balance;
+            host.stateless.receive_ctx.common.self_balance = new_balance;
             // the response value is constructed by setting the last 5 bytes to 0
             // for the first 3 bytes, the first bit is 1 if the state changed, and 0
             // otherwise the remaining bits are the index of the parameter.
@@ -1098,13 +1170,13 @@ pub fn invoke_receive_from_artifact<
     'a,
     'b,
     BackingStore: BackingStoreLoad,
-    Ctx1: v0::HasReceiveContext,
+    Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
     artifact_bytes: &'a [u8],
     amount: u64,
     receive_ctx: Ctx1,
-    receive_name: &str,
+    receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
@@ -1126,13 +1198,13 @@ pub fn invoke_receive_from_artifact<
 pub fn invoke_receive_from_source<
     'b,
     BackingStore: BackingStoreLoad,
-    Ctx1: v0::HasReceiveContext,
+    Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
-    receive_name: &str,
+    receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,
@@ -1155,13 +1227,13 @@ pub fn invoke_receive_from_source<
 pub fn invoke_receive_with_metering_from_source<
     'b,
     BackingStore: BackingStoreLoad,
-    Ctx1: v0::HasReceiveContext,
+    Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
-    receive_name: &str,
+    receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
     instance_state: InstanceState<'b, BackingStore>,

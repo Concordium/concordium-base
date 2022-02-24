@@ -1,6 +1,6 @@
 use crate::{
     build::*,
-    context::{InitContextOpt, ReceiveContextOpt},
+    context::{InitContextOpt, ReceiveContextOpt, ReceiveContextOptV1},
     schema_json::write_bytes_from_json_schema_type,
 };
 use anyhow::{bail, ensure, Context};
@@ -8,7 +8,7 @@ use clap::AppSettings;
 use concordium_contracts_common::{
     from_bytes,
     schema::{Function, Type},
-    to_bytes, Amount, Parameter,
+    to_bytes, Amount, OwnedReceiveName, Parameter,
 };
 use std::{
     fs::{self, File},
@@ -868,19 +868,19 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             ref context,
             ..
         } => {
-            let mut receive_ctx: ReceiveContextOpt = match context {
+            let mut receive_ctx: ReceiveContextOptV1 = match context {
                 Some(context_file) => {
                     let ctx_content =
                         fs::read(context_file).context("Could not read receive context file.")?;
                     serde_json::from_slice(&ctx_content)
                         .context("Could not parse receive context.")?
                 }
-                None => ReceiveContextOpt::default(),
+                None => ReceiveContextOptV1::default(),
             };
             // if the balance is set in the flag it overrides any balance that is set in the
             // context.
             if let Some(balance) = balance {
-                receive_ctx.self_balance =
+                receive_ctx.common.self_balance =
                     Some(concordium_contracts_common::Amount::from_micro_ccd(balance));
             }
 
@@ -903,18 +903,19 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
             };
 
-            let name = format!("{}.{}", contract_name, func);
+            let name = OwnedReceiveName::new(format!("{}.{}", contract_name, func))
+                .map_err(|e| anyhow::anyhow!("Invalid contract or receive function name: {}", e))?;
             let mut mutable_state = init_state.thaw();
             let instance_state = v1::InstanceState::new(0, loader, mutable_state.get_inner());
             let res = v1::invoke_receive_with_metering_from_source::<
                 _,
-                ReceiveContextOpt,
-                ReceiveContextOpt,
+                ReceiveContextOptV1,
+                ReceiveContextOptV1,
             >(
                 &module,
                 runner.amount.micro_ccd,
                 receive_ctx,
-                &name,
+                name.as_receive_name(),
                 &parameter,
                 runner.energy,
                 instance_state,

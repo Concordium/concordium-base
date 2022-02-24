@@ -6,7 +6,9 @@ use crate::{constants, resumption::InterruptedState, type_matches, v0, Interpret
 use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
+use concordium_contracts_common::OwnedEntrypointName;
 use derive_more::{From, Into};
+use serde::Deserialize as SerdeDeserialize;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
@@ -108,14 +110,32 @@ pub struct SavedHost<Ctx> {
     pub(crate) iterators:          Vec<Option<trie::Iterator>>,
 }
 
+#[derive(SerdeDeserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveContext<Policies> {
+    #[serde(flatten)]
+    pub(crate) common:     v0::ReceiveContext<Policies>,
+    /// The entrypoint that was intended to be called.
+    pub(crate) entrypoint: OwnedEntrypointName,
+}
+
+impl<'a> From<ReceiveContext<v0::PolicyBytes<'a>>> for ReceiveContext<v0::OwnedPolicyBytes> {
+    fn from(borrowed: ReceiveContext<v0::PolicyBytes<'a>>) -> Self {
+        Self {
+            common:     borrowed.common.into(),
+            entrypoint: borrowed.entrypoint,
+        }
+    }
+}
+
 /// State of the suspended execution of the receive function.
 /// This retains both the module that is executed, as well the host.
-pub type ReceiveInterruptedState<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> =
+pub type ReceiveInterruptedState<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> =
     InterruptedState<ProcessedImports, R, SavedHost<Ctx>>;
 
 #[derive(Debug)]
 /// Result of execution of a receive function.
-pub enum ReceiveResult<R, Ctx = v0::ReceiveContext<v0::OwnedPolicyBytes>> {
+pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
     /// Execution terminated.
     Success {
         /// Logs produced since the last interrupt (or beginning of execution).
@@ -304,6 +324,8 @@ pub enum ReceiveOnlyFunc {
     GetReceiveSelfBalance,
     GetReceiveSender,
     GetReceiveOwner,
+    GetReceiveEntrypointSize,
+    GetReceiveEntryPoint,
 }
 
 #[repr(u8)]
@@ -361,7 +383,9 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             26 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
             27 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             28 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
-            29 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke)),
+            29 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntrypointSize)),
+            30 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntryPoint)),
+            31 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
@@ -404,7 +428,9 @@ impl Output for ImportFunc {
                 ReceiveOnlyFunc::GetReceiveSelfBalance => 26,
                 ReceiveOnlyFunc::GetReceiveSender => 27,
                 ReceiveOnlyFunc::GetReceiveOwner => 28,
-                ReceiveOnlyFunc::Invoke => 29,
+                ReceiveOnlyFunc::GetReceiveEntrypointSize => 29,
+                ReceiveOnlyFunc::GetReceiveEntryPoint => 30,
+                ReceiveOnlyFunc::Invoke => 31,
             },
         };
         tag.output(out)
@@ -466,6 +492,8 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "get_receive_self_balance" => type_matches!(ty => []; I64),
                 "get_receive_sender" => type_matches!(ty => [I32]),
                 "get_receive_owner" => type_matches!(ty => [I32]),
+                "get_receive_entrypoint_size" => type_matches!(ty => []; I32),
+                "get_receive_entrypoint" => type_matches!(ty => [I32]),
                 "get_slot_time" => type_matches!(ty => []; I64),
                 "state_lookup_entry" => type_matches!(ty => [I32, I32]; I64),
                 "state_create_entry" => type_matches!(ty => [I32, I32]; I64),
@@ -554,6 +582,12 @@ impl TryFromImport for ProcessedImports {
                 }
                 "get_receive_sender" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender),
                 "get_receive_owner" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner),
+                "get_receive_entrypoint_size" => {
+                    ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntrypointSize)
+                }
+                "get_receive_entrypoint" => {
+                    ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntryPoint)
+                }
                 "get_slot_time" => ImportFunc::Common(CommonFunc::GetSlotTime),
                 "state_lookup_entry" => ImportFunc::Common(CommonFunc::StateLookupEntry),
                 "state_create_entry" => ImportFunc::Common(CommonFunc::StateCreateEntry),
