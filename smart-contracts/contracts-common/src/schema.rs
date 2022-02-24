@@ -838,11 +838,12 @@ mod impls {
                     Ok(json!({ "contract": name_without_init }))
                 }
                 Type::ReceiveName(size_len) => {
-                    let receive_name = OwnedReceiveName::new(deserial_string(source, *size_len)?)
-                        .map_err(|_| ParseError::default())?;
-                    let contract_name =
-                        receive_name.contract_name().ok_or_else(ParseError::default)?;
-                    let func_name = receive_name.func_name().ok_or_else(ParseError::default)?;
+                    let owned_receive_name =
+                        OwnedReceiveName::new(deserial_string(source, *size_len)?)
+                            .map_err(|_| ParseError::default())?;
+                    let receive_name = owned_receive_name.as_receive_name();
+                    let contract_name = receive_name.contract_name();
+                    let func_name = receive_name.entrypoint_name();
                     Ok(json!({"contract": contract_name, "func": func_name}))
                 }
             }

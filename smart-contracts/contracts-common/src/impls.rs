@@ -363,7 +363,9 @@ impl<'a> Serial for ReceiveName<'a> {
 }
 
 impl Serial for OwnedReceiveName {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.as_ref().serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_receive_name().serial(out)
+    }
 }
 
 impl Deserial for OwnedReceiveName {
