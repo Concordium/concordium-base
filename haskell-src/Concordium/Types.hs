@@ -41,6 +41,8 @@ module Concordium.Types (
   utcTimeToTimestamp,
   timestampToSeconds,
   addDuration,
+  DurationSeconds(..),
+  addDurationSeconds,
   TransactionTime(..),
   TransactionExpiryTime,
   utcTimeToTransactionTime,
@@ -122,7 +124,6 @@ module Concordium.Types (
   EpochLength,
   Epoch,
   RewardPeriodLength(..),
-  RewardPeriod(..),
   genesisSlot,
   CredentialsPerBlockLimit,
   -- ** Transactions
@@ -796,8 +797,8 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   -- | Encrypted amount that is a result of this accounts' actions.
   -- In particular this list includes the aggregate of
   --
-  -- - remaining amounts that result when transfering to public balance
-  -- - remaining amounts when transfering to another account
+  -- - remaining amounts that result when transferring to public balance
+  -- - remaining amounts when transferring to another account
   -- - encrypted amounts that are transferred from public balance
   --
   -- When a transfer is made all of these must always be used.

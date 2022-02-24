@@ -28,10 +28,6 @@ type Epoch = Word64
 newtype RewardPeriodLength = RewardPeriodLength {rewardPeriodEpochs :: Epoch}
   deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
 
--- |Number of reward periods.
-newtype RewardPeriod = RewardPeriod {theRewardPeriod :: Word64}
-  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
-
 -- |Block height relative to the genesis block on the block's chain.
 -- In the event of a protocol update, a new chain is created with the new genesis block having
 -- 'BlockHeight' 0.

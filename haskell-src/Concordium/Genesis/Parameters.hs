@@ -78,12 +78,12 @@ makeGenesisChainParametersV1 ::
     ExchangeRate ->
     -- |uGTU:Euro rate
     ExchangeRate ->
-    -- |Number of reward periods that pool owners must cooldown
+    -- |Number of seconds that pool owners must cooldown
     -- when reducing their equity capital or closing the pool.
-    RewardPeriod ->
-    -- |Number of reward periods that a delegator must cooldown
+    DurationSeconds ->
+    -- |Number of seconds that a delegator must cooldown
     -- when reducing their delegated stake.
-    RewardPeriod ->
+    DurationSeconds ->
     -- |Account creation limit
     CredentialsPerBlockLimit ->
     -- |Reward parameters

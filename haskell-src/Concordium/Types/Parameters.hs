@@ -279,20 +279,24 @@ erEnergyRate = to _erEnergyRate
 -- |Version-indexed type of cooldown parameters.
 -- This is a newtype to provide instances of 'Eq' and 'Show'.
 data CooldownParameters cpv where
-    CooldownParametersV0 :: { -- |Number of additional epochs that bakers must cool down when
-      -- removing stake. The cool-down will effectively be 2 epochs
-      -- longer than this value, since at any given time, the bakers
-      -- (and stakes) for the current and next epochs have already
-      -- been determined.
-      _cpBakerExtraCooldownEpochs :: Epoch
-    } -> CooldownParameters 'ChainParametersV0
-    CooldownParametersV1 :: { -- |Number of reward periods that pool owners must cooldown
-      -- when reducing their equity capital or closing the pool.
-      _cpPoolOwnerCooldown :: !RewardPeriod,
-      -- |Number of reward periods that a delegator must cooldown
-      -- when reducing their delegated stake.
-      _cpDelegatorCooldown :: !RewardPeriod
-    } -> CooldownParameters 'ChainParametersV1
+    CooldownParametersV0 ::
+        { -- |Number of additional epochs that bakers must cool down when
+          -- removing stake. The cool-down will effectively be 2 epochs
+          -- longer than this value, since at any given time, the bakers
+          -- (and stakes) for the current and next epochs have already
+          -- been determined.
+          _cpBakerExtraCooldownEpochs :: Epoch
+        } ->
+        CooldownParameters 'ChainParametersV0
+    CooldownParametersV1 ::
+        { -- |Number of seconds that pool owners must cooldown
+          -- when reducing their equity capital or closing the pool.
+          _cpPoolOwnerCooldown :: !DurationSeconds,
+          -- |Number of seconds that a delegator must cooldown
+          -- when reducing their delegated stake.
+          _cpDelegatorCooldown :: !DurationSeconds
+        } ->
+        CooldownParameters 'ChainParametersV1
 
 instance ToJSON (CooldownParameters cpv) where
   toJSON CooldownParametersV0{..} =
@@ -323,13 +327,13 @@ cpBakerExtraCooldownEpochs =
 
 -- |Lens for '_cpPoolOwnerCooldown'
 {-# INLINE cpPoolOwnerCooldown #-}
-cpPoolOwnerCooldown :: Lens' (CooldownParameters 'ChainParametersV1) RewardPeriod
+cpPoolOwnerCooldown :: Lens' (CooldownParameters 'ChainParametersV1) DurationSeconds
 cpPoolOwnerCooldown =
   lens _cpPoolOwnerCooldown (\cp x -> cp{_cpPoolOwnerCooldown = x})
 
 -- |Lens for '_cpDelegatorCooldown'
 {-# INLINE cpDelegatorCooldown #-}
-cpDelegatorCooldown :: Lens' (CooldownParameters 'ChainParametersV1) RewardPeriod
+cpDelegatorCooldown :: Lens' (CooldownParameters 'ChainParametersV1) DurationSeconds
 cpDelegatorCooldown =
   lens _cpDelegatorCooldown (\cp x -> cp{_cpDelegatorCooldown = x})
 
@@ -492,7 +496,7 @@ data PoolParameters cpv where
       _ppCommissionBounds :: !CommissionRanges,
       -- |Minimum equity capital required for a new baker.
       _ppMinimumEquityCapital :: !Amount,
-      -- |Maximum fraction of the total supply of that a new baker can have.
+      -- |Maximum fraction of the total staked capital of that a new baker can have.
       _ppCapitalBound :: !AmountFraction,
       -- |The maximum leverage that a baker can have as a ratio of total stake
       -- to equity capital.
@@ -668,12 +672,12 @@ makeChainParametersV1 ::
     ExchangeRate ->
     -- |uGTU:Euro rate
     ExchangeRate ->
-    -- |Number of reward periods that pool owners must cooldown
+    -- |Number of seconds that pool owners must cooldown
     -- when reducing their equity capital or closing the pool.
-    RewardPeriod ->
-    -- |Number of reward periods that a delegator must cooldown
+    DurationSeconds ->
+    -- |Number of seconds that a delegator must cooldown
     -- when reducing their delegated stake.
-    RewardPeriod ->
+    DurationSeconds ->
     -- |Account creation limit
     CredentialsPerBlockLimit ->
     -- |Reward parameters
