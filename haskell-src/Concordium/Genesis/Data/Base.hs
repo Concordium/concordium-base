@@ -203,16 +203,3 @@ parametersToState GenesisParameters{..} =
     genesisMaxBlockEnergy = gpMaxBlockEnergy
     genesisUpdateKeys = gpUpdateKeys
     genesisChainParameters = toChainParameters genesisAccounts gpChainParameters
-    --     makeChainParameters
-    --         gcpElectionDifficulty
-    --         gcpEuroPerEnergy
-    --         gcpMicroGTUPerEuro
-    --         gcpBakerExtraCooldownEpochs
-    --         gcpAccountCreationLimit
-    --         gcpRewardParameters
-    --         foundationAccountIndex
-    --         gcpBakerStakeThreshold
-    -- foundationAccountIndex = case Vec.findIndex ((gcpFoundationAccount ==) . gaAddress) genesisAccounts of
-    --     Nothing -> error "Foundation account is missing"
-    --     Just i -> fromIntegral i
-
