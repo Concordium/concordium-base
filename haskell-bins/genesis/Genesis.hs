@@ -84,7 +84,7 @@ generateGenesisData = GenerateGenesisData {
                         opt (Nothing :: Maybe FilePath) &=
                         typFile &=
                         help "JSON file with update keys.",
-    gdVersion = 3 &=
+    gdVersion = 6 &=
         explicit &=
         name "gdver" &=
         typ "VER" &=
