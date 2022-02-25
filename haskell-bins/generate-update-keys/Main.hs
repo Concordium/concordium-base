@@ -111,7 +111,11 @@ commonParameters = CommonUpdateKeys
     <*> option readAuthDetails (metavar "ACSTR" <> long "add-identity-provider" <> help "Add identity provider access structure")
 
 parameters :: Parser GenerateUpdateKeys
-parameters = GenerateUpdateKeysCPV0 <$> commonParameters
+parameters =
+    GenerateUpdateKeysCPV1
+    <$> commonParameters
+    <*> option readAuthDetails (metavar "ACSTR" <> long "cooldown" <> help "Cooldown update access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "time" <> help "Time update access structure")
 
 main :: IO ()
 main = customExecParser p opts >>= generateKeys
