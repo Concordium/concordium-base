@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -276,21 +277,84 @@ instance FromJSON BlockSummary where
                 <*> (v .: "updates" :: Parser (Updates pv))
                 <*> pure spv
 
-data RewardStatus = RewardStatus
-    { -- |The total GTU in existence
-      rsTotalAmount :: !Amount,
-      -- |The total GTU in encrypted balances
-      rsTotalEncryptedAmount :: !Amount,
-      -- |The amount in the baking reward account
-      rsBakingRewardAccount :: !Amount,
-      -- |The amount in the finalization reward account
-      rsFinalizationRewardAccount :: !Amount,
-      -- |The amount in the GAS account
-      rsGasAccount :: !Amount
-    }
-    deriving (Show)
+data RewardStatus' t
+    = RewardStatusV0
+        { -- |The total CCD in existence
+          rsTotalAmount :: !Amount,
+          -- |The total CCD in encrypted balances
+          rsTotalEncryptedAmount :: !Amount,
+          -- |The amount in the baking reward account
+          rsBakingRewardAccount :: !Amount,
+          -- |The amount in the finalization reward account
+          rsFinalizationRewardAccount :: !Amount,
+          -- |The amount in the GAS account
+          rsGasAccount :: !Amount
+        }
+    | RewardStatusV1
+        { -- |The total CCD in existence
+          rsTotalAmount :: !Amount,
+          -- |The total CCD in encrypted balances
+          rsTotalEncryptedAmount :: !Amount,
+          -- |The amount in the baking reward account
+          rsBakingRewardAccount :: !Amount,
+          -- |The amount in the finalization reward account
+          rsFinalizationRewardAccount :: !Amount,
+          -- |The amount in the GAS account
+          rsGasAccount :: !Amount,
+          -- |The transaction reward fraction accruing to the foundation (to be paid at next payday)
+          rsFoundationTransactionRewards :: !Amount,
+          -- |The time of the next payday
+          rsNextPaydayTime :: !t,
+          -- |The rate at which CCD will be minted (as a proportion of the total supply) at the next payday
+          rsNextPaydayMintRate :: !MintRate,
+          -- |The total capital put up as stake by bakers and delegators
+          rsTotalStakedCapital :: !Amount,
+          -- |The protocol version
+          rsProtocolVersion :: !ProtocolVersion
+        }
+    deriving (Eq, Show, Functor)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''RewardStatus)
+type RewardStatus = RewardStatus' UTCTime
+
+-- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''RewardStatus)
+instance ToJSON RewardStatus where
+    toJSON RewardStatusV0{..} = object [
+            "totalAmount" .= rsTotalAmount,
+            "totalEncryptedAmount" .= rsTotalEncryptedAmount,
+            "bakingRewardAccount" .= rsBakingRewardAccount,
+            "finalizationRewardAccount" .= rsFinalizationRewardAccount,
+            "gasAccount" .= rsGasAccount
+        ]
+    toJSON RewardStatusV1{..} = object [
+            "totalAmount" .= rsTotalAmount,
+            "totalEncryptedAmount" .= rsTotalEncryptedAmount,
+            "bakingRewardAccount" .= rsBakingRewardAccount,
+            "finalizationRewardAccount" .= rsFinalizationRewardAccount,
+            "gasAccount" .= rsGasAccount,
+            "foundationTransactionRewards" .= rsFoundationTransactionRewards,
+            "nextPaydayTime" .= rsNextPaydayTime,
+            "nextPaydayMintRate" .= rsNextPaydayMintRate,
+            "totalStakedCapital" .= rsTotalStakedCapital,
+            "protocolVersion" .= rsProtocolVersion
+        ]
+
+instance FromJSON RewardStatus where
+    parseJSON = withObject "RewardStatus" $ \obj -> do
+        rsTotalAmount <- obj .: "totalAmount"
+        rsTotalEncryptedAmount <- obj .: "totalEncryptedAmount"
+        rsBakingRewardAccount <- obj .: "bakingRewardAccount"
+        rsFinalizationRewardAccount <- obj .: "finalizationRewardAccount"
+        rsGasAccount <- obj .: "gasAccount"
+        mProtocolVersion <- obj .:? "protocolVersion"
+        case mProtocolVersion of
+            Just pv | pv >= P4 -> do
+                rsFoundationTransactionRewards <- obj .: "foundationTransactionRewards"
+                rsNextPaydayTime <- obj .: "nextPaydayTime"
+                rsNextPaydayMintRate <- obj .: "nextPaydayMintRate"
+                rsTotalStakedCapital <- obj .: "totalStakedCapital"
+                rsProtocolVersion <- obj .: "protocolVersion"
+                return RewardStatusV1{..}
+            _ -> return RewardStatusV0{..}
 
 -- |Summary of a baker.
 data BakerSummary = BakerSummary
