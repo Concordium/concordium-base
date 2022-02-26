@@ -367,9 +367,6 @@ impl<Ctx, const N: usize> ToSHA256<Ctx> for [u8; N] {
     }
 }
 
-/// Part of the key to branch on.
-pub type KeyPart = u8;
-
 #[derive(Debug, Clone)]
 /// Data together with a cached hash.
 pub struct Hashed<V> {

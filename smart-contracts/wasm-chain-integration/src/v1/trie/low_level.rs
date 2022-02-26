@@ -15,22 +15,21 @@ use std::{
     io::{Read, Write},
     iter::once,
     num::NonZeroU16,
-    slice::Iter,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 const INLINE_CAPACITY: usize = 8;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 /// An inner node in the [PrefixMap]. The default instance produces an empty
 /// node with no values and no children.
 struct InnerNode {
     value:    Option<NonZeroU16>,
     /// Children ordered by increasing keys.
-    children: Vec<KeyIndexPair>,
+    children: Vec<KeyIndexPair<8>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A prefix map that efficiently stores a list of keys and supports the
 /// following operations
 /// - insert with reference counting
@@ -73,7 +72,12 @@ impl PrefixesMap {
         };
         for k in key {
             let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-            match node.children.binary_search_by_key(k, |x| x.key()) {
+            match node.children.binary_search_by_key(
+                &Chunk {
+                    value: *k,
+                },
+                |x| x.key(),
+            ) {
                 Ok(idx) => {
                     let c = unsafe { node.children.get_unchecked(idx) };
                     node_idx = c.index();
@@ -83,7 +87,15 @@ impl PrefixesMap {
                     // look up again to not have issues with double mutable borrow.
                     // This could be improved.
                     let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-                    node.children.insert(idx, KeyIndexPair::new(*k, new_node));
+                    node.children.insert(
+                        idx,
+                        KeyIndexPair::new(
+                            Chunk {
+                                value: *k,
+                            },
+                            new_node,
+                        ),
+                    );
                     node_idx = new_node;
                 }
             }
@@ -112,7 +124,12 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return Err(AttemptToModifyLockedArea);
             }
-            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+            if let Ok(idx) = node.children.binary_search_by_key(
+                &Chunk {
+                    value: *k,
+                },
+                |x| x.key(),
+            ) {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -145,7 +162,12 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return true;
             }
-            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+            if let Ok(idx) = node.children.binary_search_by_key(
+                &Chunk {
+                    value: *k,
+                },
+                |x| x.key(),
+            ) {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -171,7 +193,12 @@ impl PrefixesMap {
         let mut stack = Vec::new();
         for k in key {
             let node = unsafe { self.nodes.get_unchecked(node_idx) };
-            if let Ok(idx) = node.children.binary_search_by_key(k, |x| x.key()) {
+            if let Ok(idx) = node.children.binary_search_by_key(
+                &Chunk {
+                    value: *k,
+                },
+                |x| x.key(),
+            ) {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 stack.push((node_idx, idx));
                 node_idx = c.index();
@@ -468,88 +495,290 @@ impl<V> CachedRef<V> {
 }
 
 #[derive(Debug, Clone)]
-enum Stem {
-    // the first byte is length, remaining is data.
-    Short([u8; 16]),
-    Long(Arc<[KeyPart]>),
+struct Stem {
+    // TODO: Split into short + long, or use smallvec/tinyvec, but make sure to benchmark any
+    // improvements.
+    pub(crate) data:         Box<[u8]>,
+    /// Whether the last chunk is partial or not.
+    pub(crate) last_partial: bool,
+}
+
+#[derive(Debug, Clone)]
+/// A mutable version of the stem.
+/// This is an implementation detail of the iterator.
+struct MutStem {
+    // TODO: Split into short + long, or use smallvec/tinyvec, but make sure to benchmark any
+    // improvements.
+    pub(crate) data:         Vec<u8>,
+    /// Whether the last chunk is partial or not.
+    pub(crate) last_partial: bool,
+}
+
+impl MutStem {
+    #[inline(always)]
+    /// Push a new chunk to the end of the stem.
+    pub fn push(&mut self, elem: Chunk<4>) {
+        if self.last_partial {
+            self.last_partial = false;
+            *self.data.last_mut().expect("Odd implies at least one element") |= elem.value;
+        } else {
+            self.last_partial = true;
+            self.data.push(elem.value << 4);
+        }
+    }
+
+    /// Truncate the stem to the **given number of chunks.**
+    /// It is asssumed that the given length is no more than the current length
+    /// of the stem.
+    pub fn truncate(&mut self, len: usize) {
+        if len % 2 == 0 {
+            self.data.truncate(len / 2);
+            self.last_partial = false;
+        } else {
+            self.data.truncate(len / 2 + 1);
+            *self.data.last_mut().expect("Odd implies at least one element.") &= 0xf0;
+            self.last_partial = true;
+        }
+    }
+
+    /// Extend the current stem by the content of the given stem.
+    fn extend(&mut self, second: &Stem) {
+        if second.data.is_empty() {
+            return;
+        }
+        if self.last_partial {
+            let start = self.data.len();
+            let left = second.data[0] & 0xf0;
+            *self.data.last_mut().expect("Odd has at least one field.") |= left >> 4;
+            if second.last_partial {
+                self.data.extend_from_slice(&second.data[1..]);
+                let mut right = second.data[0] & 0x0f;
+                for place in self.data.iter_mut().skip(start) {
+                    let tmp = *place & 0x0f;
+                    *place >>= 4;
+                    *place |= right << 4;
+                    right = tmp;
+                }
+                self.last_partial = false;
+            } else {
+                self.data.extend_from_slice(&second.data);
+                for (place, next) in self
+                    .data
+                    .iter_mut()
+                    .skip(start)
+                    .zip(second.data.iter().skip(1).copied().chain(once(0)))
+                {
+                    *place <<= 4;
+                    *place |= (next & 0xf0) >> 4;
+                }
+                self.last_partial = true;
+            }
+        } else {
+            self.data.extend_from_slice(&second.data);
+            self.last_partial = second.last_partial;
+        }
+    }
+
+    #[inline(always)]
+    /// Return the number of **chunks** in the stem.
+    pub fn len(&self) -> usize {
+        let len = self.data.len();
+        if self.last_partial {
+            2 * len - 1
+        } else {
+            2 * len
+        }
+    }
 }
 
 impl Stem {
-    pub fn empty() -> Self { Self::Short([0u8; 16]) }
+    #[inline(always)]
+    /// Construct a new stem from the given byte array and length, which should
+    /// be the **number of chunks** in the byte array.
+    pub fn new(data: Box<[u8]>, len: usize) -> Self {
+        Self {
+            data,
+            last_partial: len % 2 == 1,
+        }
+    }
 
-    fn extend(&mut self, mid: u8, second: &[u8]) {
-        match self {
-            Stem::Short(buf) => {
-                let cur_len = usize::from(buf[0]);
-                if cur_len + 1 + second.len() <= 15 {
-                    buf[0] += 1 + second.len() as u8;
-                    buf[cur_len + 1] = mid;
-                    buf[cur_len + 2..cur_len + 2 + second.len()].copy_from_slice(second);
-                } else {
-                    let new = buf[1..cur_len + 1]
-                        .iter()
-                        .copied()
-                        .chain(once(mid))
-                        .chain(second.iter().copied())
-                        .collect();
-                    *self = Stem::Long(new);
-                }
-            }
-            Stem::Long(arc) => {
-                let new = arc
-                    .as_ref()
-                    .iter()
-                    .copied()
-                    .chain(once(mid))
-                    .chain(second.iter().copied())
-                    .collect();
-                *self = Stem::Long(new);
+    /// Return an iterator over the chunks of the stem.
+    pub fn iter(&self) -> StemIter {
+        let len = if self.last_partial {
+            2 * self.data.len() - 1
+        } else {
+            2 * self.data.len()
+        };
+        StemIter {
+            data: &self.data,
+            pos: 0,
+            len,
+        }
+    }
+
+    /// Construct an empty slice.
+    pub fn empty() -> Self {
+        Self {
+            data:         Box::new([]),
+            last_partial: false,
+        }
+    }
+
+    #[inline(always)]
+    /// Return the number of **chunks** in the stem.
+    pub fn len(&self) -> usize {
+        let len = self.data.len();
+        if self.last_partial {
+            2 * len - 1
+        } else {
+            2 * len
+        }
+    }
+
+    #[inline(always)]
+    /// Convert the stem to a slice. Return **the number of chunks** and a slice
+    /// view. If the number of chunks is odd then the last 4 bits of the
+    /// slice are 0.
+    pub fn to_slice(&self) -> (usize, &[u8]) { (self.len(), &self.data) }
+
+    #[inline(always)]
+    /// Prepend the given data (first, then mid, then self).
+    pub fn prepend_parts(&mut self, first: Stem, mid: Chunk<4>) {
+        let new_len = first.len() + 1 + self.len();
+        let mut data = Vec::with_capacity(new_len / 2 + new_len % 2);
+        data.extend_from_slice(&first.data);
+        if first.last_partial {
+            *data.last_mut().expect("Odd implies at least one element.") |= mid.value;
+            data.extend_from_slice(&self.data);
+        } else {
+            let start = data.len();
+            data.extend_from_slice(&self.data);
+            if self.last_partial {
+                self.last_partial = false;
+            } else {
+                data.push(0);
+                self.last_partial = true;
+            };
+            let mut old = mid.value << 4;
+            for place in data.iter_mut().skip(start) {
+                let tmp = *place & 0x0f;
+                *place = old | (*place >> 4);
+                old = tmp << 4;
             }
         }
+        self.data = data.into_boxed_slice();
     }
 }
 
 impl From<&[u8]> for Stem {
     #[inline(always)]
-    fn from(s: &[u8]) -> Self {
-        let len = s.len();
-        if len <= 15 {
-            let mut buf = [0u8; 16];
-            buf[0] = len as u8;
-            buf[1..1 + len].copy_from_slice(s);
-            Self::Short(buf)
-        } else {
-            Self::Long(Arc::from(s))
+    fn from(data: &[u8]) -> Self {
+        Self {
+            data:         data.into(),
+            last_partial: false,
         }
     }
 }
 
-impl From<Vec<u8>> for Stem {
+impl From<&[u8]> for MutStem {
     #[inline(always)]
-    fn from(s: Vec<u8>) -> Self {
-        let len = s.len();
-        if len <= 15 {
-            let mut buf = [0u8; 16];
-            buf[0] = len as u8;
-            buf[1..1 + len].copy_from_slice(&s);
-            Self::Short(buf)
-        } else {
-            Self::Long(Arc::from(s))
+    fn from(data: &[u8]) -> Self {
+        Self {
+            data:         data.into(),
+            last_partial: false,
         }
     }
 }
+struct StemIter<'a> {
+    data: &'a [u8],
+    /// Current position (in chunks).
+    pos:  usize,
+    /// Number of chunks in the data slice.
+    len:  usize,
+}
 
-impl AsRef<[u8]> for Stem {
-    #[inline(always)]
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Stem::Short(s) => {
-                let len = usize::from(s[0]);
-                &s[1..1 + len]
+impl<'a> StemIter<'a> {
+    /// Construct an iterator from the entire input.
+    pub fn new(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            pos: 0,
+            len: 2 * data.len(),
+        }
+    }
+
+    /// Return the next chunk.
+    pub fn next(&mut self) -> Option<Chunk<4>> {
+        if self.pos < self.len {
+            if self.pos % 2 == 0 {
+                let ret = (self.data[self.pos / 2] & 0xf0) >> 4;
+                self.pos += 1;
+                Some(Chunk {
+                    value: ret,
+                })
+            } else {
+                let ret = self.data[self.pos / 2] & 0x0f;
+                self.pos += 1;
+                Some(Chunk {
+                    value: ret,
+                })
             }
-            Stem::Long(arc) => arc.as_ref(),
+        } else {
+            None
         }
     }
+
+    #[inline(always)]
+    /// Convert the remaining part of the iterator into a stem.
+    pub fn to_stem(&self) -> Stem { self.last_to_stem(self.pos) }
+
+    // NB: Consumed - 1 to stem!
+    #[inline(always)]
+    /// Convert the consumed parts (**without the last element**) of the
+    /// iterator into a stem. The strange behaviour is what is needed.
+    pub fn consumed_to_stem(&self) -> Stem {
+        if self.pos == 0 {
+            Stem::empty()
+        } else {
+            let new_len = self.pos - 1;
+            if new_len % 2 == 0 {
+                Stem::new(self.data[..new_len / 2].into(), new_len)
+            } else {
+                let mut data = self.data[..new_len / 2].to_vec();
+                data.push(self.data[new_len / 2] & 0xf0);
+                Stem::new(data.into_boxed_slice(), new_len)
+            }
+        }
+    }
+
+    #[inline(always)]
+    /// Convert the data from the given position (inclusive) into a stem.
+    fn last_to_stem(&self, pos: usize) -> Stem {
+        let new_len = self.len - pos;
+        if pos % 2 == 0 {
+            let data = &self.data[pos / 2..];
+            Stem::new(data.into(), new_len)
+        } else {
+            let mut data = Vec::with_capacity(new_len + 1);
+            let mut left = (self.data[pos / 2] & 0x0f) << 4;
+            for &byte in &self.data[pos / 2 + 1..] {
+                data.push(left | (byte & 0xf0) >> 4);
+                left = (byte & 0x0f) << 4;
+            }
+            if new_len % 2 == 1 {
+                data.push(left);
+            }
+            Stem::new(data.into_boxed_slice(), new_len)
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[repr(transparent)]
+/// A wrapper around u8 that indicates an N-bit value. N must be between 1 and
+/// 8.
+struct Chunk<const N: usize> {
+    value: u8,
 }
 
 /// Recursive link to a child node.
@@ -563,13 +792,12 @@ pub struct Node<V> {
     /// here makes sense, it makes it so that the hash is stored inline.
     value:    Option<Link<Hashed<CachedRef<V>>>>,
     path:     Stem,
-    // TODO: It might be better to have just an array or Box here.
-    // The Rc has an advantage when thawing since we only copy the Rc
-    // but is otherwise annoying.
-    // In contrast to Hashed<Cached<..>> above for the value, here we store the hash
-    // behind a pointer indirection. The reason for this is that there are going to be many
-    // pointers to the same node, and we want to avoid duplicating node hashes.
-    children: Vec<(KeyPart, ChildLink<V>)>,
+    /// Children, ordered by increasing key.
+    /// In contrast to Hashed<Cached<..>> above for the value, here we store the
+    /// hash behind a pointer indirection. The reason for this is that there
+    /// are going to be many pointers to the same node, and we want to avoid
+    /// duplicating node hashes.
+    children: Vec<(Chunk<4>, ChildLink<V>)>,
 }
 
 impl<V> Drop for Node<V> {
@@ -626,11 +854,13 @@ impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V> {
             }
             None => hasher.update(&[0]),
         }
-        hasher.update(&self.path);
+        let (stem_len, stem_ref) = self.path.to_slice();
+        hasher.update((stem_len as u64).to_le_bytes());
+        hasher.update(stem_ref);
         let mut child_hasher = sha2::Sha256::new();
         child_hasher.update(&(self.children.len() as u16).to_be_bytes());
         for child in self.children.iter() {
-            child_hasher.update(&[child.0]);
+            child_hasher.update(&[child.0.value]);
             child_hasher.update(child.1.borrow().hash(ctx));
         }
         hasher.update(child_hasher.finalize());
@@ -639,7 +869,7 @@ impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MutableNode<V> {
     generation: u32,
     /// Pointer to the table of entries, if the node has a value.
@@ -717,7 +947,7 @@ struct Checkpoint {
     pub num_entries:        usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A generation of the [MutableTrie]. This keeps track of the current root of
 /// the tree, together with the enough data to be able to go back to the
 /// previous generation. Generations are used to checkpoint the tree. This
@@ -761,7 +991,7 @@ impl Generation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MutableTrie<V> {
     /// Roots for previous generations.
     generations:     Vec<Generation>,
@@ -777,10 +1007,10 @@ pub struct MutableTrie<V> {
 
 #[derive(Debug)]
 enum ChildrenCow<V> {
-    Borrowed(Vec<(KeyPart, ChildLink<V>)>),
+    Borrowed(Vec<(Chunk<4>, ChildLink<V>)>),
     Owned {
         generation: u32,
-        value:      tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>,
+        value:      tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>,
     },
 }
 
@@ -788,7 +1018,7 @@ impl<V> ChildrenCow<V> {
     /// Return a reference to the owned value, if the enum is an owned variant.
     /// Otherwise return [None].
     #[inline]
-    pub fn get_owned(&self) -> Option<(u32, &[KeyIndexPair])> {
+    pub fn get_owned(&self) -> Option<(u32, &[KeyIndexPair<4>])> {
         if let ChildrenCow::Owned {
             generation,
             value,
@@ -803,7 +1033,7 @@ impl<V> ChildrenCow<V> {
     /// Return a mutable reference to the owned value, if the enum is an owned
     /// variant. Otherwise return [None].
     #[inline]
-    pub fn get_owned_mut(&mut self) -> Option<(u32, &mut [KeyIndexPair])> {
+    pub fn get_owned_mut(&mut self) -> Option<(u32, &mut [KeyIndexPair<4>])> {
         if let ChildrenCow::Owned {
             generation,
             value,
@@ -859,27 +1089,27 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
 
 #[repr(transparent)]
 #[derive(Default, Clone, Copy)]
-struct KeyIndexPair {
+struct KeyIndexPair<const N: usize> {
     pub pair: usize,
 }
 
 /// Format the [KeyIndexPair] as a pair of a key and index.
-impl std::fmt::Debug for KeyIndexPair {
+impl<const N: usize> std::fmt::Debug for KeyIndexPair<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         (self.key(), self.index()).fmt(f)
     }
 }
 
-impl KeyIndexPair {
+impl<const N: usize> KeyIndexPair<N> {
     #[inline(always)]
-    pub fn key(self) -> KeyPart { (self.pair >> 56) as u8 }
+    pub fn key(self) -> Chunk<N> { unsafe { std::mem::transmute((self.pair >> (64 - N)) as u8) } }
 
     #[inline(always)]
-    pub fn index(self) -> usize { self.pair & 0x00ff_ffff_ffff_ffff }
+    pub fn index(self) -> usize { self.pair & (0xffff_ffff_ffff_ffff >> N) }
 
     #[inline(always)]
-    pub fn new(key: KeyPart, index: usize) -> Self {
-        let pair = usize::from(key) << 56 | index;
+    pub fn new(key: Chunk<N>, index: usize) -> Self {
+        let pair = usize::from(key.value) << (64 - N) | index;
         Self {
             pair,
         }
@@ -926,10 +1156,12 @@ impl<V> Loadable for Node<V> {
         } else {
             None
         };
-        let num_branches = source.read_u16::<BigEndian>()?;
+        let num_branches = source.read_u8()?;
         let mut branches = Vec::with_capacity(num_branches.into());
         for _ in 0..num_branches {
-            let key = source.read_u8()?;
+            let key = Chunk {
+                value: source.read_u8()?,
+            };
             let reference = CachedRef::<Hashed<Node<V>>>::load(loader, source)?;
             branches.push((key, Link::new(reference)));
         }
@@ -999,20 +1231,22 @@ impl<V: AsRef<[u8]>> Node<V> {
                           backing_store: &mut S,
                           ref_stack: &mut Vec<Reference>|
          -> StoreResult<()> {
-            write_node_path_and_value_tag(node.path.as_ref(), node.value.is_none(), buf)?;
+            let (stem_len, stem_ref) = node.path.to_slice();
+            write_node_path_and_value_tag(stem_len, node.value.is_none(), buf)?;
             // store the path
-            buf.write_all(node.path.as_ref())?;
+            buf.write_all(stem_ref)?;
             // store the value
             if let Some(v) = &mut node.value {
                 let mut borrowed = v.borrow_mut();
                 buf.write_all(borrowed.hash.as_ref())?;
                 borrowed.data.store_and_cache(backing_store, buf)?;
             }
-            // TODO: Revise this when branching on 4 bits.
-            // now store the children.
-            buf.write_u16::<BigEndian>(node.children.len() as u16)?;
+            // Since we branch on 4 bits there can be at most 16 children.
+            // So using u8 is safe.
+            buf.write_u8(node.children.len() as u8)?;
             for (k, _) in node.children.iter() {
-                buf.write_u8(*k)?;
+                // TODO: This can be revised by combining the reference and the key.
+                buf.write_u8(k.value)?;
                 ref_stack.pop().unwrap().store(buf)?;
             }
             Ok(())
@@ -1063,7 +1297,7 @@ fn make_owned<'a, 'b, V>(
     owned_nodes: &'a mut Vec<MutableNode<V>>,
     entries: &'a mut Vec<Entry>,
     loader: &'b mut impl BackingStoreLoad,
-) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair; INLINE_CAPACITY]>) {
+) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>) {
     let owned_nodes_len = owned_nodes.len();
     let node = unsafe { owned_nodes.get_unchecked(idx) };
     let node_generation = node.generation;
@@ -1175,7 +1409,7 @@ pub struct Iterator {
     /// Pointer to the table of nodes where the iterator is currently anchored.
     current_node: usize,
     /// Key at the current position of the iterator.
-    key:          Vec<u8>,
+    key:          MutStem,
     /// Next child to look at. This is None if
     /// we have to give out the value at the current node, and Some(_)
     /// otherwise.
@@ -1190,7 +1424,11 @@ impl Iterator {
     /// **After each call to next** this points to the key of the entry that
     /// was returned.
     #[inline(always)]
-    pub fn get_key(&self) -> &[u8] { &self.key }
+    pub fn get_key(&self) -> &[u8] {
+        // key at any node with a value should always be full (i.e., even length), so
+        // length is ignored.
+        &self.key.data
+    }
 
     /// Get the key of which the iterator was initialized with.
     #[inline(always)]
@@ -1391,8 +1629,8 @@ impl<V> MutableTrie<V> {
                 next_child
             } else {
                 iterator.next_child = Some(0);
-                counter.tick(node.path.as_ref().len() as u64)?;
-                iterator.key.extend(node.path.as_ref());
+                counter.tick(node.path.len() as u64)?;
+                iterator.key.extend(&node.path);
                 if node.value.is_some() {
                     return Ok(node.value);
                 }
@@ -1437,9 +1675,9 @@ impl<V> MutableTrie<V> {
     pub fn iter(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[KeyPart],
+        key: &[u8],
     ) -> Result<Option<Iterator>, TooManyIterators> {
-        let mut key_iter = key.iter();
+        let mut key_iter = StemIter::new(key);
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
@@ -1455,7 +1693,7 @@ impl<V> MutableTrie<V> {
         };
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            let mut stem_iter = node.path.as_ref().iter();
+            let mut stem_iter = node.path.iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
                     generation.iterator_roots.insert(key)?;
@@ -1468,14 +1706,9 @@ impl<V> MutableTrie<V> {
                     }));
                 }
                 FollowStem::KeyIsPrefix {
-                    stem_step,
+                    ..
                 } => {
                     generation.iterator_roots.insert(key)?;
-                    let stem_slice = stem_iter.as_slice();
-                    let mut root_key = Vec::with_capacity(key.len() + 1 + stem_slice.len());
-                    root_key.extend_from_slice(key);
-                    root_key.push(stem_step);
-                    root_key.extend_from_slice(stem_slice);
                     return Ok(Some(Iterator {
                         root:         key.into(),
                         current_node: node_idx,
@@ -1489,9 +1722,9 @@ impl<V> MutableTrie<V> {
                 } => {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
-                    let key_usize = usize::from(key_step) << 56;
+                    let key_usize = usize::from(key_step.value) << 60;
                     let pair = if let Ok(pair) = children
-                        .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
+                        .binary_search_by(|ck| (ck.pair & 0xf000_0000_0000_0000).cmp(&key_usize))
                     {
                         pair
                     } else {
@@ -1609,7 +1842,7 @@ impl<V> MutableTrie<V> {
                         loader,
                         collector,
                     );
-                    collector.add_path(node.path.as_ref().len());
+                    collector.add_path(node.path.len());
                     collector.add_children(children.len());
                     let value = Node {
                         value,
@@ -1641,7 +1874,7 @@ impl<V> MutableTrie<V> {
                         loader,
                         collector,
                     );
-                    collector.add_path(node.path.as_ref().len());
+                    collector.add_path(node.path.len());
                     collector.add_children(children.len());
                     let new_node = Node {
                         value,
@@ -1662,19 +1895,15 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    pub fn get_entry(
-        &mut self,
-        loader: &mut impl BackingStoreLoad,
-        key: &[KeyPart],
-    ) -> Option<EntryId> {
-        let mut key_iter = key.iter();
+    pub fn get_entry(&mut self, loader: &mut impl BackingStoreLoad, key: &[u8]) -> Option<EntryId> {
+        let mut key_iter = StemIter::new(key);
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
         let mut node_idx = self.generations.last()?.root?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked(node_idx) };
-            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
+            match follow_stem(&mut key_iter, &mut node.path.iter()) {
                 FollowStem::Equal => {
                     return node.value;
                 }
@@ -1688,9 +1917,9 @@ impl<V> MutableTrie<V> {
                 } => {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
-                    let key_usize = usize::from(key_step) << 56;
+                    let key_usize = usize::from(key_step.value) << 60;
                     let pair = children
-                        .binary_search_by(|ck| (ck.pair & 0xff00_0000_0000_0000).cmp(&key_usize))
+                        .binary_search_by(|ck| (ck.pair & 0xf000_0000_0000_0000).cmp(&key_usize))
                         .ok()?;
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
@@ -1709,11 +1938,11 @@ impl<V> MutableTrie<V> {
     pub fn delete(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[KeyPart],
+        key: &[u8],
     ) -> Result<bool, AttemptToModifyLockedArea>
     where
         V: Default, {
-        let mut key_iter = key.iter();
+        let mut key_iter = StemIter::new(key);
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let owned_values = &mut self.values;
@@ -1733,7 +1962,7 @@ impl<V> MutableTrie<V> {
         generation.iterator_roots.check_has_no_prefix(key)?;
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
+            match follow_stem(&mut key_iter, &mut node.path.iter()) {
                 FollowStem::Equal => {
                     // we found it, delete the value first and save it for returning.
                     let rv;
@@ -1758,9 +1987,7 @@ impl<V> MutableTrie<V> {
                         if let Some(child) = children.pop() {
                             let node = std::mem::take(&mut owned_nodes[node_idx]); // invalidate the node.
                             let child_node = &mut owned_nodes[child.index()];
-                            let mut new_stem: Stem = node.path;
-                            new_stem.extend(child.key(), child_node.path.as_ref());
-                            child_node.path = new_stem;
+                            child_node.path.prepend_parts(node.path, child.key());
                             if let Some((child_idx, father_idx)) = father {
                                 // skip the current node
                                 // father's child pointer should point directly to the node's child,
@@ -1770,7 +1997,8 @@ impl<V> MutableTrie<V> {
                                 let father_node: &mut MutableNode<_> =
                                     unsafe { owned_nodes.get_unchecked_mut(father_idx) };
                                 if let Some((_, children)) = father_node.children.get_owned_mut() {
-                                    let child_place: &mut KeyIndexPair = &mut children[child_idx];
+                                    let child_place: &mut KeyIndexPair<4> =
+                                        &mut children[child_idx];
                                     let step = child_place.key();
                                     *child_place = KeyIndexPair::new(step, child.index());
                                 } else {
@@ -1804,9 +2032,7 @@ impl<V> MutableTrie<V> {
                                 if let Some(child) = father_children.pop() {
                                     let node = std::mem::take(&mut owned_nodes[father_idx]); // invalidate the node.
                                     let child_node = &mut owned_nodes[child.index()];
-                                    let mut new_stem: Stem = node.path;
-                                    new_stem.extend(child.key(), child_node.path.as_ref());
-                                    child_node.path = new_stem;
+                                    child_node.path.prepend_parts(node.path, child.key());
                                     if let Some((child_idx, grandfather_idx)) = grandfather {
                                         // skip the current node
                                         // grandfather's child pointer should point directly to the
@@ -1819,7 +2045,7 @@ impl<V> MutableTrie<V> {
                                         if let Some((_, children)) =
                                             grandfather_node.children.get_owned_mut()
                                         {
-                                            let child_place: &mut KeyIndexPair =
+                                            let child_place: &mut KeyIndexPair<4> =
                                                 &mut children[child_idx];
                                             let step = child_place.key();
                                             *child_place = KeyIndexPair::new(step, child.index());
@@ -1877,12 +2103,12 @@ impl<V> MutableTrie<V> {
     pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
-        key: &[KeyPart],
+        key: &[u8],
         counter: &mut C,
     ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err>
     where
         V: Default, {
-        let mut key_iter = key.iter();
+        let mut key_iter = StemIter::new(key);
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let owned_values = &mut self.values;
@@ -1904,7 +2130,7 @@ impl<V> MutableTrie<V> {
         }
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            match follow_stem(&mut key_iter, &mut node.path.as_ref().iter()) {
+            match follow_stem(&mut key_iter, &mut node.path.iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
                 } => {
@@ -1932,7 +2158,7 @@ impl<V> MutableTrie<V> {
                     // traverse each child subtree and invalidate them.
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
                         let to_invalidate = &owned_nodes[node_idx];
-                        counter.tick(to_invalidate.path.as_ref().len() as u64 + 1)?; // + 1 is for the step from the parent.
+                        counter.tick(to_invalidate.path.len() as u64 + 1)?; // + 1 is for the step from the parent.
                         if let Some(entry) = to_invalidate.value {
                             let old_entry = std::mem::replace(&mut entries[entry], Entry::Deleted);
                             if let Some(idx) = old_entry.is_owned() {
@@ -1973,9 +2199,7 @@ impl<V> MutableTrie<V> {
                                 let parent_node: MutableNode<_> =
                                     std::mem::take(&mut owned_nodes[parent_idx]);
                                 let child_node = &mut owned_nodes[child.index()];
-                                let mut new_stem: Stem = parent_node.path;
-                                new_stem.extend(child.key(), child_node.path.as_ref());
-                                child_node.path = new_stem;
+                                child_node.path.prepend_parts(parent_node.path, child.key());
                                 if let Some((child_idx, grandparent_idx)) = grandparent_idx {
                                     // skip the parent
                                     // grandfather's child pointer should point directly to the
@@ -1988,7 +2212,7 @@ impl<V> MutableTrie<V> {
                                     if let Some((_, children)) =
                                         grandparent_node.children.get_owned_mut()
                                     {
-                                        let child_place: &mut KeyIndexPair =
+                                        let child_place: &mut KeyIndexPair<4> =
                                             &mut children[child_idx];
                                         let step = child_place.key();
                                         *child_place = KeyIndexPair::new(step, child.index());
@@ -2021,7 +2245,7 @@ impl<V> MutableTrie<V> {
     pub fn insert(
         &mut self,
         loader: &mut impl BackingStoreLoad,
-        key: &[KeyPart],
+        key: &[u8],
         new_value: V,
     ) -> Result<(EntryId, Option<EntryId>), AttemptToModifyLockedArea> {
         let (current_generation, older_generations) = self
@@ -2060,12 +2284,12 @@ impl<V> MutableTrie<V> {
         // the parent node index and the index of the parents child we're visiting.
         let mut parent_node_idxs: Option<(usize, usize)> = None;
         let generation = owned_nodes[node_idx].generation;
-        let mut key_iter = key.iter();
+        let mut key_iter = StemIter::new(key);
         loop {
-            let key_slice = key_iter.as_slice();
             let owned_nodes_len = owned_nodes.len();
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
-            let mut stem_iter = node.path.as_ref().iter();
+            let mut stem_iter = node.path.iter();
+            let checkpoint = key_iter.pos;
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
                     let value_idx = self.values.len();
@@ -2084,7 +2308,7 @@ impl<V> MutableTrie<V> {
                 } => {
                     // create a new branch with the value being the new_value since the key ends
                     // here.
-                    let remaining_stem: Stem = stem_iter.as_slice().into();
+                    let remaining_stem: Stem = stem_iter.to_stem();
                     let value_idx = self.values.len();
                     self.values.push(new_value);
                     let entry_idx: EntryId = self.entries.len().into();
@@ -2107,10 +2331,11 @@ impl<V> MutableTrie<V> {
                     } else {
                         current_generation.root = Some(new_node_idx);
                     }
+                    // FIXME: Need argument of whether to use all or without the last one.
                     let new_node = MutableNode {
                         generation,
                         value: Some(entry_idx),
-                        path: key_slice.into(),
+                        path: key_iter.last_to_stem(checkpoint),
                         children: ChildrenCow::Owned {
                             generation,
                             value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, node_idx)],
@@ -2135,7 +2360,7 @@ impl<V> MutableTrie<V> {
                         }
                         Err(place) => {
                             // need to create a new node.
-                            let remaining_key: Stem = key_iter.as_slice().into();
+                            let remaining_key: Stem = key_iter.to_stem();
                             let new_key_node_idx = owned_nodes_len;
                             children.insert(place, KeyIndexPair::new(key_step, new_key_node_idx));
                             let value_idx = self.values.len();
@@ -2164,11 +2389,9 @@ impl<V> MutableTrie<V> {
                 } => {
                     // create a new branch with the value being the new_value since the key ends
                     // here.
-                    let remaining_stem: Stem = stem_iter.as_slice().into();
-                    let remaining_key_len = key_iter.as_slice().len();
-                    let remaining_key: Stem = key_iter.as_slice().into();
-                    let new_stem =
-                        Stem::from(&key_slice[0..key_slice.len() - remaining_key_len - 1]);
+                    let remaining_stem: Stem = stem_iter.to_stem();
+                    let remaining_key: Stem = key_iter.to_stem();
+                    let new_stem = stem_iter.consumed_to_stem();
                     // index of the node that continues along the remaining key
                     let remaining_key_node_idx = owned_nodes_len;
                     // index of the new node that will have two children
@@ -2245,11 +2468,10 @@ impl<V> MutableTrie<V> {
 /// [read_node_path_and_value_tag] below.
 #[inline(always)]
 fn write_node_path_and_value_tag(
-    stem: &[u8],
+    stem_len: usize,
     no_value: bool,
     out: &mut impl Write,
 ) -> Result<(), std::io::Error> {
-    let stem_len = stem.len();
     let value_mask: u8 = if no_value {
         0
     } else {
@@ -2282,9 +2504,10 @@ fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), 
         // stem length follows as a u32
         source.read_u32::<BigEndian>()?
     };
-    let mut path = vec![0u8; path_len as usize];
+    let num_bytes = path_len / 2 + path_len % 2;
+    let mut path = vec![0u8; num_bytes as usize];
     source.read_exact(&mut path)?;
-    let path = Stem::from(path);
+    let path = Stem::new(path.into_boxed_slice(), path_len as usize);
     Ok((path, (tag & 0b100_0000 != 0)))
 }
 
@@ -2306,9 +2529,10 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             out.write_u32::<BigEndian>(node_counter - idx)?;
             out.write_all(node.hash.as_ref())?;
             let node = &node.data;
-            write_node_path_and_value_tag(node.path.as_ref(), node.value.is_none(), out)?;
+            let (stem_len, stem_ref) = node.path.to_slice();
+            write_node_path_and_value_tag(stem_len, node.value.is_none(), out)?;
             // store the path
-            out.write_all(node.path.as_ref())?;
+            out.write_all(stem_ref)?;
             // store the value
             if let Some(v) = node.value.as_ref() {
                 let borrowed = v.borrow();
@@ -2318,10 +2542,11 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
                     out.write_all(v.as_ref())
                 })?;
             }
-            out.write_u16::<BigEndian>(node.children.len() as u16)?;
+            // There can be at most 16 children, this is safe.
+            out.write_u8(node.children.len() as u8)?;
             let parent_idx = node_counter;
             for (key, child) in node.children.iter() {
-                out.write_u8(*key)?;
+                out.write_u8(key.value)?;
                 child.borrow().use_value(loader, |nd| queue.push_back((nd.clone(), parent_idx)));
             }
             node_counter += 1;
@@ -2354,7 +2579,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             } else {
                 None
             };
-            let num_children = source.read_u16::<BigEndian>()?;
+            let num_children = source.read_u8()?;
             let new_node = Link::new(CachedRef::Memory {
                 value: Hashed::new(hash, Node {
                     value,
@@ -2368,7 +2593,12 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
                     value,
                 } = &mut *parent
                 {
-                    value.data.children.push((key, new_node.clone()));
+                    value.data.children.push((
+                        Chunk {
+                            value: key,
+                        },
+                        new_node.clone(),
+                    ));
                 } else {
                     // all values are allocated in this function, so in-memory.
                     unsafe { std::hint::unreachable_unchecked() };
@@ -2406,18 +2636,18 @@ enum FollowStem {
     /// The key iterator is a strict prefix of the stem iterator.
     /// The first item of the stem past the key is returned.
     KeyIsPrefix {
-        stem_step: KeyPart,
+        stem_step: Chunk<4>,
     },
     /// The stem iterator is a strict prefix of the key iterator.
     /// The first item of the key past the stem is returned.
     StemIsPrefix {
-        key_step: KeyPart,
+        key_step: Chunk<4>,
     },
     /// The stem and key iterators differ. The items where they differ are
     /// returned.
     Diff {
-        key_step:  KeyPart,
-        stem_step: KeyPart,
+        key_step:  Chunk<4>,
+        stem_step: Chunk<4>,
     },
 }
 
@@ -2425,9 +2655,9 @@ enum FollowStem {
 /// Given two iterators, representing the key and the stem of the node, advance
 /// them stepwise until either at least one of them is exhausted or the steps
 /// differ. Return which option occurred.
-fn follow_stem(key_iter: &mut Iter<KeyPart>, stem_iter: &mut Iter<KeyPart>) -> FollowStem {
-    for &stem_step in stem_iter {
-        if let Some(&key_step) = key_iter.next() {
+fn follow_stem(key_iter: &mut StemIter, stem_iter: &mut StemIter) -> FollowStem {
+    while let Some(stem_step) = stem_iter.next() {
+        if let Some(key_step) = key_iter.next() {
             if stem_step != key_step {
                 return FollowStem::Diff {
                     key_step,
@@ -2441,7 +2671,7 @@ fn follow_stem(key_iter: &mut Iter<KeyPart>, stem_iter: &mut Iter<KeyPart>) -> F
             };
         }
     }
-    if let Some(&key_step) = key_iter.next() {
+    if let Some(key_step) = key_iter.next() {
         FollowStem::StemIsPrefix {
             key_step,
         }
@@ -2457,10 +2687,10 @@ impl<V: Clone> Node<V> {
     pub fn lookup(
         &self,
         loader: &mut impl BackingStoreLoad,
-        key: &[KeyPart],
+        key: &[u8],
     ) -> Option<Link<Hashed<CachedRef<V>>>> {
-        let mut key_iter = key.iter();
-        let mut path = self.path.as_ref().to_vec();
+        let mut key_iter = StemIter::new(key);
+        let mut path = self.path.clone();
         let mut children = self.children.clone();
         let mut value = self.value.clone();
         let mut tmp = Vec::new();
@@ -2479,8 +2709,7 @@ impl<V: Clone> Node<V> {
                 } => {
                     let (_, c) = children.iter().find(|&&(ck, _)| ck == key_step)?;
                     c.borrow().use_value(loader, |node| {
-                        path.clear();
-                        path.extend_from_slice(node.data.path.as_ref());
+                        path = node.data.path.clone();
                         tmp.clear();
                         tmp.extend_from_slice(&node.data.children);
                         value = node.data.value.clone();

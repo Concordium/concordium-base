@@ -240,6 +240,23 @@ fn trie_thaw_delete(b: &mut Criterion) {
     });
 }
 
+/// Benchmark freezing a mutable trie.
+fn mut_trie_freeze(b: &mut Criterion) {
+    let words = get_data();
+    let (trie, mut loader) = make_mut_trie(&words);
+    // let frozen = trie.freeze(&mut loader, &mut EmptyCollector).unwrap().data;
+    b.bench_function("trie mut freeze", |b| {
+        b.iter_batched(
+            || trie.clone(),
+            |trie| {
+                trie.freeze(&mut loader, &mut EmptyCollector).expect("Freezing succeeds");
+            },
+            BatchSize::LargeInput,
+        );
+    });
+}
+
+/// Benchmark looking up from a frozen tree.
 fn mut_trie_freeze_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_mut_trie(&words);
@@ -270,6 +287,7 @@ criterion_group!(
     mut_trie_get,
     mut_trie_delete,
     trie_thaw_delete,
+    mut_trie_freeze,
     mut_trie_freeze_get
 );
 

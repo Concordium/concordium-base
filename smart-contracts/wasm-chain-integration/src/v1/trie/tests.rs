@@ -187,7 +187,7 @@ fn prop_hash_independent_of_order() {
 #[test]
 /// Check that the mutable trie and its iterator match the reference
 /// implementation.
-fn prop_matches_reference() {
+fn prop_matches_reference_basic() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (mut trie, mut loader) = make_mut_trie(inputs);
@@ -210,7 +210,14 @@ fn prop_matches_reference() {
                 "Reference value does not match the trie value."
             );
             let it_key = iterator.get_key();
-            ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}", it_key, k);
+            ensure!(
+                it_key == k,
+                "Iterator returns incorrect key, {:?} != {:?}, {:#?}, {:#?}",
+                it_key,
+                k,
+                iterator,
+                trie
+            );
         }
         ensure!(
             trie.next(&mut loader, &mut iterator, &mut EmptyCounter)

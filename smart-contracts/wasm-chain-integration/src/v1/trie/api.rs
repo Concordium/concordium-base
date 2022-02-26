@@ -82,7 +82,7 @@ impl PersistentState {
 
     /// Lookup a key in the tree. This is only meant for testing
     /// since performance is slow compared to lookup in the mutable tree.
-    pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[KeyPart]) -> Option<Value> {
+    pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[u8]) -> Option<Value> {
         match self {
             PersistentState::Empty => None,
             PersistentState::Root(node) => {
@@ -98,7 +98,6 @@ impl PersistentState {
 /// Clone on this structure is designed to be cheap, and it is a shallow copy.
 /// Modifications of the inner MutableTrie on either the clone or the original
 /// propagate to the other.
-/// The Clone on this structure is a shallow, and therefore cheap one.
 pub struct MutableStateInner {
     /// Current root of the tree. The current generation.
     root:      u32,

@@ -439,7 +439,7 @@ unsafe extern "C" fn resume_receive_v1(
         // the state has changed, so this is crucial.
         let state_ref = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         // The clone is cheap since this is reference counted.
-        let mut state = (&mut *state_ref).clone();
+        let mut state = (&*state_ref).clone();
         // it is important to invalidate all previous iterators and entries we have
         // given out. so we start a new generation.
         let config = Box::from_raw(config);
