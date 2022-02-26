@@ -18,7 +18,7 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
-const INLINE_CAPACITY: usize = 8;
+const INLINE_CAPACITY: usize = 4;
 
 #[derive(Default, Debug, Clone)]
 /// An inner node in the [PrefixMap]. The default instance produces an empty
