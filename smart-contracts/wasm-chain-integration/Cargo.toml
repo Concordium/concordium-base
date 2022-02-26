@@ -16,11 +16,11 @@ fuzz-coverage = ["wasm-transform/fuzz-coverage"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 libc = "0.2"
-anyhow = "1.0.33"
+anyhow = "1"
 serde = "1.0"
 num_enum = "0.5"
 derive_more = "0.99"
-sha2 = "0.9"
+sha2 = "0.10"
 thiserror = "1"
 byteorder = "1.4"
 tinyvec = {version = "1.5", features = ["alloc"]}
