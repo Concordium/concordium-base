@@ -10,6 +10,7 @@ use concordium_contracts_common::{
     schema::{Function, Type},
     to_bytes, Amount, OwnedReceiveName, Parameter,
 };
+use ptree::{TreeBuilder, print_tree_with, PrintConfig};
 use std::{
     fs::{self, File},
     io::Read,
@@ -21,7 +22,6 @@ use wasm_chain_integration::{
     v1::{self, ReturnValue},
     InterpreterEnergy,
 };
-
 mod build;
 mod context;
 mod schema_json;
@@ -41,6 +41,18 @@ enum Command {
         about = "Locally simulate invocation method of a smart contract and inspect the state."
     )]
     Run(RunCommand),
+    #[structopt(
+        name = "display-state",
+        about = "Display the contract state as a tree."
+    )]
+    DisplayState {
+        #[structopt(
+            name = "state-bin",
+            long = "state-bin",
+            help = "Path to the file with state that is to be displayed. The state must be for a V1 contract."
+        )]
+        state_bin_path: PathBuf,
+    },
     #[structopt(name = "test", about = "Build and run tests using a Wasm interpreter.")]
     Test {
         #[structopt(
@@ -174,6 +186,12 @@ enum RunCommand {
             help = "Path to the init context file."
         )]
         context:       Option<PathBuf>,
+        #[structopt(
+            name = "display-state",
+            long = "display-state",
+            help = "Pretty print the contract state at the end of execution."
+        )]
+        should_display_state:   bool,
         #[structopt(flatten)]
         runner:        Runner,
     },
@@ -221,6 +239,12 @@ enum RunCommand {
             help = "Path to the receive context file."
         )]
         context:         Option<PathBuf>,
+        #[structopt(
+            name = "display-state",
+            long = "display-state",
+            help = "Pretty print the contract state at the end of execution."
+        )]
+        should_display_state:   bool,
         #[structopt(flatten)]
         runner:          Runner,
     },
@@ -342,8 +366,33 @@ pub fn main() -> anyhow::Result<()> {
                 bold_style.paint(size)
             )
         }
+        Command::DisplayState { state_bin_path } => display_state_from_file(state_bin_path)?,
     };
     Ok(())
+}
+
+/// Loads the contract state from file and displays it as a tree by printing to stdout.
+fn display_state_from_file(file_path: PathBuf) -> anyhow::Result<()> {
+    let file = File::open(&file_path)
+        .with_context(|| format!("Could not read state file {}.", file_path.display()))?;
+    let mut reader = std::io::BufReader::new(file);
+    let state = v1::trie::PersistentState::deserialize(&mut reader)
+        .context("Could not deserialize the provided state.")?;
+
+    display_state(&state)
+}
+
+/// Displays the contract state as a tree by printing to stdout.
+fn display_state(state: &v1::trie::PersistentState) -> Result<(), anyhow::Error> {
+    let mut loader = v1::trie::Loader::new([]);
+
+    let mut tree_builder = TreeBuilder::new("StateRoot".into());
+    state.display_tree(&mut tree_builder, &mut loader);
+    let tree = tree_builder.build();
+    // We don't want to depend on some global config as it opens up for all sorts of 
+    // corner-case bugs since we are not in control and thus inconsistent user experience.
+    let config = PrintConfig::default();
+    print_tree_with(&tree, &config).context("Could not print the state as a tree.")
 }
 
 /// Print the summary of the contract schema.
@@ -753,7 +802,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         }
     };
     let print_state = |mut state: v1::trie::MutableState,
-                       loader: &mut v1::trie::Loader<&[u8]>|
+                       loader: &mut v1::trie::Loader<&[u8]>,
+                       should_display_state: bool|
      -> anyhow::Result<()> {
         let mut collector = v1::trie::SizeCollector::default();
         let frozen = state.freeze(loader, &mut collector);
@@ -765,6 +815,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 .context("Could not create file to write state into.")?;
             frozen.serialize(loader, &mut out_file).context("Could not write the state.")?;
             eprintln!("Resulting state written to {}.", file_path.display());
+        }
+        if should_display_state {
+            display_state(&frozen)?;
         }
         Ok(())
     };
@@ -794,6 +847,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     match run_cmd {
         RunCommand::Init {
             ref context,
+            should_display_state,
             ..
         } => {
             let init_ctx: InitContextOpt = match context {
@@ -826,7 +880,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 } => {
                     eprintln!("Init call succeeded. The following logs were produced:");
                     print_logs(logs);
-                    print_state(state, &mut loader)?;
+                    print_state(state, &mut loader, should_display_state)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(
@@ -866,6 +920,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             ref state_bin_path,
             balance,
             ref context,
+            should_display_state,
             ..
         } => {
             let mut receive_ctx: ReceiveContextOptV1 = match context {
@@ -931,7 +986,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     eprintln!("Receive method succeeded. The following logs were produced.");
                     print_logs(logs);
                     if state_changed {
-                        print_state(mutable_state, &mut loader)?;
+                        print_state(mutable_state, &mut loader, should_display_state)?;
                     } else {
                         eprintln!("The state of the contract did not change.");
                     }
@@ -971,7 +1026,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     );
                     print_logs(logs);
                     if state_changed {
-                        print_state(mutable_state, &mut loader)?;
+                        print_state(mutable_state, &mut loader, should_display_state)?;
                     } else {
                         eprintln!("The state of the contract did not change.");
                     }

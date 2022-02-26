@@ -16,6 +16,7 @@ serde_json="1.0.56"
 cargo_toml = "0.8.1"
 anyhow = "1.0.33"
 ansi_term = "0.12"
+ptree = "0.4"
 
 [features]
 
@@ -26,6 +27,7 @@ version = "0"
 [dependencies.wasm-chain-integration]
 version = "0.2"
 path = "../wasm-chain-integration/"
+features = ["display-state"]
 
 [dev-dependencies]
 criterion = "0.3"

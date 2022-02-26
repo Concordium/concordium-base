@@ -8,6 +8,8 @@
 //! `super::api` module, which is re-exported at the top-level.
 use super::types::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+#[cfg(feature = "display-state")]
+use ptree::TreeBuilder;
 use sha2::Digest;
 use slab::Slab;
 use std::{
@@ -15,7 +17,7 @@ use std::{
     io::{Read, Write},
     iter::once,
     num::NonZeroU16,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, fmt::{Debug, Display, Formatter, self, LowerHex},
 };
 
 /// Children of a node are sometimes stored in a [tinyvec::TinyVec]. This
@@ -653,6 +655,21 @@ impl Stem {
     }
 }
 
+impl Display for Stem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut stem_iter = self.iter();
+        if let Some(chunk) = stem_iter.next() {
+            write!(f, "0x{:x}", chunk)?;
+            while let Some(chunk) = stem_iter.next() {
+                write!(f, "{:x}", chunk)?
+            }
+        } else {
+            write!(f, "[]")?;
+        }
+        Ok(())
+    }
+}
+
 impl From<&[u8]> for Stem {
     #[inline(always)]
     fn from(data: &[u8]) -> Self {
@@ -760,6 +777,12 @@ impl<'a> StemIter<'a> {
 /// 8.
 struct Chunk<const N: usize> {
     value: u8,
+}
+
+impl LowerHex for Chunk<4> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{:x}", self.value)
+    }
 }
 
 impl<const N: usize> Chunk<N> {
@@ -1165,7 +1188,7 @@ impl<V> Loadable for Node<V> {
     }
 }
 
-impl<V: Loadable> Node<V> {
+impl<V: Loadable + Debug> Node<V> {
     /// The entire tree in memory.
     pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let Some(v) = self.value.as_mut() {
@@ -1184,6 +1207,28 @@ impl<V: Loadable> Node<V> {
             for c in node.data.children.iter() {
                 stack.push(c.1.clone());
             }
+        }
+    }
+
+    #[cfg(feature = "display-state")]
+    pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
+        let value = if let Some(ref value) = self.value {
+            value.borrow().data.use_value(loader, |value| {
+                format!(", value = {:?}", value)
+            })
+        } else {
+            String::new()
+        };
+        let text = format!("Node (path = {}{})", self.path, value);
+        builder.add_empty_child(text);
+        for (key, node) in &self.children {
+            builder.begin_child(format!("Child {:#x}", *key));
+            let node = node.borrow();
+            let node = node.use_value(loader, |node| {
+              node.data.clone()
+            });
+            node.display_tree(builder, loader);
+            builder.end_child();
         }
     }
 }

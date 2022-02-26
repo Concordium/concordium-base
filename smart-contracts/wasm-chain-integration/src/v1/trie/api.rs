@@ -3,6 +3,8 @@ use super::{
     types::*,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
+#[cfg(feature = "display-state")]
+use ptree::TreeBuilder;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub type Value = Vec<u8>;
@@ -90,6 +92,14 @@ impl PersistentState {
                 let borrowed = data.borrow();
                 Some(borrowed.data.get(loader))
             }
+        }
+    }
+
+    #[cfg(feature = "display-state")]
+    pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
+        match self {
+            Self::Empty => {},
+            Self::Root(node) => node.data.display_tree(builder, loader),
         }
     }
 }
