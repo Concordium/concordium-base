@@ -72,12 +72,7 @@ impl PrefixesMap {
         };
         for k in key {
             let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-            match node.children.binary_search_by_key(
-                &Chunk {
-                    value: *k,
-                },
-                |x| x.key(),
-            ) {
+            match node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
                 Ok(idx) => {
                     let c = unsafe { node.children.get_unchecked(idx) };
                     node_idx = c.index();
@@ -87,15 +82,7 @@ impl PrefixesMap {
                     // look up again to not have issues with double mutable borrow.
                     // This could be improved.
                     let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-                    node.children.insert(
-                        idx,
-                        KeyIndexPair::new(
-                            Chunk {
-                                value: *k,
-                            },
-                            new_node,
-                        ),
-                    );
+                    node.children.insert(idx, KeyIndexPair::new(Chunk::new(*k), new_node));
                     node_idx = new_node;
                 }
             }
@@ -124,12 +111,7 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return Err(AttemptToModifyLockedArea);
             }
-            if let Ok(idx) = node.children.binary_search_by_key(
-                &Chunk {
-                    value: *k,
-                },
-                |x| x.key(),
-            ) {
+            if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -162,12 +144,7 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return true;
             }
-            if let Ok(idx) = node.children.binary_search_by_key(
-                &Chunk {
-                    value: *k,
-                },
-                |x| x.key(),
-            ) {
+            if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -193,12 +170,7 @@ impl PrefixesMap {
         let mut stack = Vec::new();
         for k in key {
             let node = unsafe { self.nodes.get_unchecked(node_idx) };
-            if let Ok(idx) = node.children.binary_search_by_key(
-                &Chunk {
-                    value: *k,
-                },
-                |x| x.key(),
-            ) {
+            if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 stack.push((node_idx, idx));
                 node_idx = c.index();
@@ -713,15 +685,11 @@ impl<'a> StemIter<'a> {
             if self.pos % 2 == 0 {
                 let ret = (self.data[self.pos / 2] & 0xf0) >> 4;
                 self.pos += 1;
-                Some(Chunk {
-                    value: ret,
-                })
+                Some(Chunk::new(ret))
             } else {
                 let ret = self.data[self.pos / 2] & 0x0f;
                 self.pos += 1;
-                Some(Chunk {
-                    value: ret,
-                })
+                Some(Chunk::new(ret))
             }
         } else {
             None
@@ -779,6 +747,15 @@ impl<'a> StemIter<'a> {
 /// 8.
 struct Chunk<const N: usize> {
     value: u8,
+}
+
+impl<const N: usize> Chunk<N> {
+    #[inline(always)]
+    pub fn new(value: u8) -> Self {
+        Chunk {
+            value,
+        }
+    }
 }
 
 /// Recursive link to a child node.
@@ -1159,9 +1136,7 @@ impl<V> Loadable for Node<V> {
         let num_branches = source.read_u8()?;
         let mut branches = Vec::with_capacity(num_branches.into());
         for _ in 0..num_branches {
-            let key = Chunk {
-                value: source.read_u8()?,
-            };
+            let key = Chunk::new(source.read_u8()?);
             let reference = CachedRef::<Hashed<Node<V>>>::load(loader, source)?;
             branches.push((key, Link::new(reference)));
         }
@@ -2593,12 +2568,7 @@ impl<V: AsRef<[u8]> + Loadable> Hashed<Node<V>> {
                     value,
                 } = &mut *parent
                 {
-                    value.data.children.push((
-                        Chunk {
-                            value: key,
-                        },
-                        new_node.clone(),
-                    ));
+                    value.data.children.push((Chunk::new(key), new_node.clone()));
                 } else {
                     // all values are allocated in this function, so in-memory.
                     unsafe { std::hint::unreachable_unchecked() };
