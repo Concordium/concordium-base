@@ -244,7 +244,6 @@ fn trie_thaw_delete(b: &mut Criterion) {
 fn mut_trie_freeze(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_mut_trie(&words);
-    // let frozen = trie.freeze(&mut loader, &mut EmptyCollector).unwrap().data;
     b.bench_function("trie mut freeze", |b| {
         b.iter_batched(
             || trie.clone(),

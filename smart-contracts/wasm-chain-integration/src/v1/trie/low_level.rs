@@ -18,6 +18,14 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
+/// Children of a node are sometimes stored in a [tinyvec::TinyVec]. This
+/// constant determines how many values (at most) are stored inline. If the
+/// number of children exceeds this number then a normal [Vec] is allocated.
+/// The idea of a [tinyvec::TinyVec] is that storing elements inline is more
+/// efficient since it removes a pointer indirection. The best constant to use
+/// must be a tradeoff between wasted space and performance (note that with too
+/// large a constant performance also degrades since fewer nodes fit into the
+/// cache).
 const INLINE_CAPACITY: usize = 4;
 
 #[derive(Default, Debug, Clone)]
@@ -467,6 +475,9 @@ impl<V> CachedRef<V> {
 }
 
 #[derive(Debug, Clone)]
+/// A stem is a sequence of [Chunk]s. It is an optimization of the node
+/// representation where common parts of the key are stored inline in a single
+/// node instead of having many nodes with a single child.
 struct Stem {
     // TODO: Split into short + long, or use smallvec/tinyvec, but make sure to benchmark any
     // improvements.
@@ -1068,6 +1079,10 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
 
 #[repr(transparent)]
 #[derive(Default, Clone, Copy)]
+/// A pair of a key and index in the vector of nodes.
+/// This only makes sense in the context of some vector of values where this
+/// index points to. Which vector that is is context dependent.
+/// The first N bits of the value are the key, the remaining are the index.
 struct KeyIndexPair<const N: usize> {
     pub pair: usize,
 }
