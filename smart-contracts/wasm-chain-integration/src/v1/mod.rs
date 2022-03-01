@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 #[cfg(feature = "enable-ffi")]
 mod ffi;
 pub mod trie;

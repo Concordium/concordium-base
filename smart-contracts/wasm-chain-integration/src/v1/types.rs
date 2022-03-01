@@ -687,7 +687,7 @@ impl InstanceStateEntry {
 /// Encoding of `Option<Entry>` where `Entry` is what
 /// is handed out to smart contracts. See the implementation below for encoding
 /// details.
-#[derive(Debug, Clone, Copy, From, Into)]
+#[derive(Debug, Clone, Copy, From, Into, PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct InstanceStateEntryOption {
     index: u64,
@@ -706,12 +706,25 @@ impl InstanceStateEntryOption {
             index: u64::from(gen) << 32 | idx as u64,
         }
     }
+
+    /// Converting a `InstanceStateEntryOption`
+    /// to a Option<InstanceStateEntry>.
+    /// Returns `None` if the underlying value is
+    /// [InstanceStateEntryOption::NONE]
+    #[cfg(test)]
+    pub fn convert(self) -> Option<InstanceStateEntry> {
+        if self.index == u64::MAX {
+            None
+        } else {
+            Some(self.index.into())
+        }
+    }
 }
 
 /// An encoding of `Result<Option<Iterator>>`. The Result is for the case where
 /// we have too many iterators already at the given location, the Option is for
 /// when the key does not point to a valid part of the tree.
-#[derive(Debug, Clone, Copy, From, Into)]
+#[derive(Debug, Clone, Copy, From, Into, PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct InstanceStateEntryResultOption {
     index: u64,
@@ -737,7 +750,7 @@ impl InstanceStateEntryResultOption {
 }
 
 /// Analogous to [InstanceStateEntry].
-#[derive(Debug, Clone, Copy, From, Into)]
+#[derive(Debug, Clone, Copy, From, Into, PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct InstanceStateIterator {
     index: u64,
@@ -757,7 +770,7 @@ impl InstanceStateIterator {
 /// An encoding of `Result<Option<Iterator>>`. The Result is for the case where
 /// we have too many iterators already at the given location, the Option is for
 /// when the key does not point to a valid part of the tree.
-#[derive(Debug, Clone, Copy, From, Into)]
+#[derive(Debug, Clone, Copy, From, Into, PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct InstanceStateIteratorResultOption {
     index: u64,
@@ -778,6 +791,19 @@ impl InstanceStateIteratorResultOption {
     pub fn new_ok_some(gen: InstanceCounter, idx: usize) -> Self {
         Self {
             index: u64::from(gen) << 32 | idx as u64,
+        }
+    }
+
+    /// Converting a `InstanceStateIteratorOption`
+    /// to a Option<InstanceStateIterator>.
+    /// Returns `None` if the underlying value is
+    /// [InstanceStateIteratorOption::None]
+    #[cfg(test)]
+    pub fn convert(self) -> Option<InstanceStateIterator> {
+        if self.index == u64::MAX {
+            None
+        } else {
+            Some(self.index.into())
         }
     }
 }
@@ -875,28 +901,33 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     }
 
     /// Delete an entry. Return
-    /// - 0 if the entry was invalidated/deleted already
-    /// - 1 if an entry existed and was not invalidated.
+    /// - 0 if the part of the tree with the entry was locked
+    /// - 1 if the entry did not exist, or was already invalidated.
+    /// - 2 if an entry was deleted
     pub(crate) fn delete_entry(&mut self, entry: InstanceStateEntry) -> u32 {
         self.changed = true;
         let (gen, idx) = entry.split();
         if gen != self.current_generation {
-            return u32::MAX;
+            return 1;
         }
         if let Some(entry) = self.entry_mapping.get_mut(idx) {
             if let Some(entry) = std::mem::take(entry) {
-                if let Ok(true) = self.state_trie.delete(&mut self.backing_store, &entry.key) {
-                    1
+                if let Ok(deleted) = self.state_trie.delete(&mut self.backing_store, &entry.key) {
+                    if deleted {
+                        2
+                    } else {
+                        1
+                    }
                 } else {
-                    // entry did not exist
-                    u32::MAX
+                    // tree was locked
+                    0
                 }
             } else {
                 // entry was already invalidated
-                u32::MAX
+                1
             }
         } else {
-            u32::MAX
+            1
         }
     }
 
@@ -1012,6 +1043,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     }
 
     /// Read a section of the iterator key, and return how much was read.
+    /// Returns u32::MAX if an invalid iterator id was supplied.
     pub(crate) fn iterator_key_read(
         &mut self,
         iter: InstanceStateIterator,
@@ -1063,7 +1095,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
-    /// Read a section of the entry, and return how much was written, or
+    /// Write a section of the entry, and return how much was written, or
     /// u32::MAX, in case the entry has already been invalidated.
     pub(crate) fn entry_write(
         &mut self,
