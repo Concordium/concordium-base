@@ -11,6 +11,7 @@ uint8_t check_account_address(char*);
 
 char* create_transfer(char*, uint8_t*);
 char* create_configure_delegation_transaction(char*, uint8_t*);
+char* create_configure_baker_transaction(char*, uint8_t*);
 
 char* create_encrypted_transfer(char*, uint8_t*); //
 char* combine_encrypted_amounts(char*, char*, uint8_t*);
@@ -102,6 +103,9 @@ int main(int argc, char *argv[]) {
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_configure_delegation_transaction-input.json")) {
         out = create_configure_delegation_transaction(buffer, &flag);
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_configure_baker_transaction-input.json")) {
+        out = create_configure_baker_transaction(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "generate-accounts-input.json")) {
         out = generate_accounts(buffer, &flag);

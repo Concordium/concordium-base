@@ -2,7 +2,7 @@
 extern crate serde_json;
 use anyhow::{bail, ensure};
 use crypto_common::{
-    types::{Amount, DelegationTarget, KeyIndex, Memo, Signature, TransactionSignature},
+    types::{Amount, DelegationTarget, OpenStatus, UrlText, KeyIndex, Memo, Signature, TransactionSignature},
     *,
 };
 use dodis_yampolskiy_prf as prf;
@@ -25,6 +25,42 @@ use std::{
 
 use crypto_common::types::KeyPair;
 type ExampleCurve = G1;
+
+/// Baker keys
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BakerKeys {
+    #[serde(
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub election_verify_key: ecvrf::PublicKey, // den fra ecvrf
+    #[serde(
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub election_private_key: ecvrf::SecretKey, // den fra ecvrf
+    #[serde(
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub signature_verify_key: ed25519::PublicKey, // den fra ed25519_dalek
+    #[serde(
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub signature_sign_key: ed25519::SecretKey, // den fra ed25519_dalek
+    #[serde(
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub aggregation_verify_key: aggregate_sig::PublicKey<Bls12>, // den fra aggregate_sig
+    #[serde(
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub aggregation_sign_key: aggregate_sig::SecretKey<Bls12>, // den fra aggregate_sig
+}
 
 /// Context for a transaction to send.
 #[derive(SerdeDeserialize)]
@@ -233,6 +269,157 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
         }
         if let Some(delegation_target) = maybe_delegation_target {
             payload.put(&delegation_target);
+        }
+
+        make_transaction_bytes(&ctx, &payload)
+    };
+
+    let signatures = make_signatures(ctx.keys, &hash);
+
+    let response = json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
+}
+
+
+fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+
+    let ctx: TransferContext = from_value(v.clone())?;
+
+    let maybe_capital: Option<Amount> = match v.get("capital") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_restake_earnings: Option<bool> = match v.get("restakeEarnings") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_openstatus: Option<OpenStatus> = match v.get("openStatus") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_url: Option<UrlText> = match v.get("url") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_transaction_fee: Option<u32> = match v.get("transactionFeeCommission") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_baking_reward: Option<u32> = match v.get("bakingRewardCommission") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_finalization_reward: Option<u32> = match v.get("finalizationRewardCommission") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let maybe_baker_keys: Option<BakerKeys> = match v.get("bakerKeys") {
+        Some(m) => Some(from_value(m.clone())?),
+        None => None,
+    };
+
+    let mut bitmap: u16 = 0b0000000000000000;
+    if maybe_capital.is_some() {
+        bitmap |= 0b0000000010000000;
+    }
+
+    if maybe_restake_earnings.is_some() {
+        bitmap |= 0b0000000001000000;
+    }
+
+    if maybe_openstatus.is_some() {
+        bitmap |= 0b0000000000100000;
+    }
+
+    if maybe_openstatus.is_some() {
+        bitmap |= 0b0000000000010000;
+    }
+
+    if maybe_openstatus.is_some() {
+        bitmap |= 0b0000000000001000;
+    }
+
+    if maybe_openstatus.is_some() {
+        bitmap |= 0b0000000000000100;
+    }
+
+    if maybe_openstatus.is_some() {
+        bitmap |= 0b0000000000000010;
+    }
+
+    if maybe_openstatus.is_some() {
+        bitmap |= 0b0000000000000001;
+    }
+
+    let (hash, body) = {
+        let mut payload = Vec::new();
+        payload.put(&25u8); // transaction type is configure baker
+        payload.put(&bitmap);
+        if let Some(capital) = maybe_capital {
+            payload.put(&capital);
+        }
+        if let Some(restake_earnings) = maybe_restake_earnings {
+            payload.put(&restake_earnings);
+        }
+        if let Some(openstatus) = maybe_openstatus {
+            payload.put(&openstatus);
+        }
+        if let Some(baker_keys) = maybe_baker_keys {
+            let mut challenge = Vec::new();
+            challenge.put(b"addBaker");
+            challenge.put(&ctx.from);
+            challenge.put(&baker_keys.election_verify_key);
+            challenge.put(&baker_keys.signature_verify_key);
+            challenge.put(&baker_keys.aggregation_verify_key);
+
+            let election_proof = eddsa_ed25519::prove_dlog_ed25519(
+                &mut random_oracle::RandomOracle::domain(&challenge),
+                &baker_keys.election_verify_key,
+                &baker_keys.election_private_key,
+            );
+
+            let signature_proof = eddsa_ed25519::prove_dlog_ed25519(
+                &mut random_oracle::RandomOracle::domain(&challenge),
+                &baker_keys.signature_verify_key,
+                &baker_keys.signature_sign_key,
+            );
+
+
+            let mut csprng = thread_rng();
+            let aggregation_proof = baker_keys.aggregation_sign_key.prove(
+                &mut csprng,
+                &mut random_oracle::RandomOracle::domain(&challenge)
+            );
+            payload.put(&baker_keys.election_verify_key);
+            payload.put(&election_proof);
+            payload.put(&baker_keys.signature_verify_key);
+            payload.put(&signature_proof);
+            payload.put(&baker_keys.aggregation_verify_key);
+            payload.put(&aggregation_proof);
+        }
+        if let Some(url) = maybe_url {
+            payload.put(&url);
+        }
+        if let Some(transaction_fee) = maybe_transaction_fee {
+            payload.put(&transaction_fee);
+        }
+        if let Some(baking_reward) = maybe_baking_reward {
+            payload.put(&baking_reward);
+        }
+        if let Some(finalization_reward) = maybe_finalization_reward {
+            payload.put(&finalization_reward);
         }
 
         make_transaction_bytes(&ctx, &payload)
@@ -701,6 +888,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_configure_delegation_transaction -> create_configure_delegation_transaction_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_configure_baker_transaction -> create_configure_baker_transaction_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

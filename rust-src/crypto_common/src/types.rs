@@ -1,6 +1,6 @@
 //! Common types needed in concordium.
 
-use crate::{Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial};
+use crate::{Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial, serial_string};
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
@@ -36,6 +36,80 @@ pub struct KeyIndex(pub u8);
 /// Index of the credential that is to be used.
 pub struct CredentialIndex {
     pub index: u8,
+}
+
+
+// #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+// pub struct AmountFraction {
+//     pub parts_per_hundred_thousand: u32,
+// }
+
+// impl Serial for AmountFraction {
+//     fn serial<B: crate::Buffer>(&self, out: &mut B) { self.parts_per_hundred_thousand.serial(out) }
+// }
+
+// pub struct BakerKeysWithProofs {
+//     election_verify_key: PublicKey, // den fra ecvrf
+//     proof_election: Ed25519DlogProof, // den fra eddsa
+//     signature_verify_key: PublicKey, // den fra ed25519_dalek
+//     proof_sig: Ed25519DlogProof,
+//     aggregation_verify_key: PublicKey<Bls12>, // den fra aggregate_sig
+//     proof_aggregation: bool, // pub type Proof<P> = SigmaProof<Witness<<P as Pairing>::G2>>; from aggregate_sig
+// }
+
+// pub struct BakerKeys {
+//     election_verify_key: PublicKey, // den fra ecvrf
+//     election_sign_key: PublicKey, // den fra ecvrf
+//     signature_verify_key: PublicKey, // den fra ed25519_dalek
+//     signature_sign_key: PublicKey, // den fra ed25519_dalek
+//     aggregation_verify_key: PublicKey<Bls12>, // den fra aggregate_sig
+//     aggregation_sign_key: PublicKey<Bls12>, // den fra aggregate_sig
+// }
+
+pub struct UrlText {
+    pub url: String,
+}
+
+pub const MAX_URL_SIZE: usize = 2048; // Needs to be same as maxUrlTextLength in Types.hs in haskell-src
+
+impl Serial for UrlText {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.url.len() as u16).serial(out);
+        serial_string(&self.url, out)
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for UrlText {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>, {
+        let url = String::deserialize(deserializer)?;
+        if url.len() <= MAX_URL_SIZE {
+            Ok(UrlText { url })
+        } else {
+            Err(serde::de::Error::custom("Url length out of bounds."))
+        }
+    }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+pub enum OpenStatus {
+    #[serde(rename = "openForAll")]
+    OpenForAll,
+    #[serde(rename = "closedForNew")]
+    ClosedForNew,
+    #[serde(rename = "closedForAll")]
+    ClosedForAll,
+}
+
+impl Serial for OpenStatus {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match *self {
+            OpenStatus::OpenForAll => out.write_u8(0),
+            OpenStatus::ClosedForNew => out.write_u8(1),
+            OpenStatus::ClosedForAll => out.write_u8(2),
+        }.expect("Writing to a buffer should not fail.");
+    }
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
