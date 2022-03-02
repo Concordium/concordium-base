@@ -407,7 +407,7 @@ genCooldownParametersV0 = CooldownParametersV0 <$> arbitrary
 
 genCooldownParametersV1 :: Gen (CooldownParameters 'ChainParametersV1)
 genCooldownParametersV1 =
-    CooldownParametersV1 <$> (RewardPeriod <$> arbitrary) <*> (RewardPeriod <$> arbitrary)
+    CooldownParametersV1 <$> (DurationSeconds <$> arbitrary) <*> (DurationSeconds <$> arbitrary)
 
 genTimeParametersV0 :: Gen (TimeParameters 'ChainParametersV0)
 genTimeParametersV0 = return TimeParametersV0
