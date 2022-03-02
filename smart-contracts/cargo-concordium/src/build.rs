@@ -59,7 +59,7 @@ pub fn build_contract(
     let schema = match version {
         utils::WasmVersion::V0 => {
             if build_schema.build() {
-                let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v0)
+                let schema = build_contract_schema(cargo_args, utils::generate_contract_schema_v0)
                     .context("Could not build module schema.")?;
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
@@ -77,7 +77,7 @@ pub fn build_contract(
         }
         utils::WasmVersion::V1 => {
             if build_schema.build() {
-                let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v1)
+                let schema = build_contract_schema(cargo_args, utils::generate_contract_schema_v1)
                     .context("Could not build module schema.")?;
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);

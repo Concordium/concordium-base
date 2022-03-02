@@ -439,7 +439,7 @@ mod host {
 
     pub fn state_iterator_key_size<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        _energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         // TODO: Verify cost below.

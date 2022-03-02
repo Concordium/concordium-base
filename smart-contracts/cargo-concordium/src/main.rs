@@ -40,7 +40,7 @@ enum Command {
         name = "run",
         about = "Locally simulate invocation method of a smart contract and inspect the state."
     )]
-    Run(RunCommand),
+    Run(Box<RunCommand>),
     #[structopt(
         name = "display-state",
         about = "Display the contract state as a tree."
@@ -271,7 +271,7 @@ pub fn main() -> anyhow::Result<()> {
     };
     match cmd {
         Command::Run(run_cmd) => {
-            let runner = match run_cmd {
+            let runner = match *run_cmd {
                 RunCommand::Init {
                     ref runner,
                     ..
@@ -300,8 +300,8 @@ pub fn main() -> anyhow::Result<()> {
                  size of the provided data."
             );
             match wasm_version {
-                utils::WasmVersion::V0 => handle_run_v0(run_cmd, module)?,
-                utils::WasmVersion::V1 => handle_run_v1(run_cmd, module)?,
+                utils::WasmVersion::V0 => handle_run_v0(*run_cmd, module)?,
+                utils::WasmVersion::V1 => handle_run_v1(*run_cmd, module)?,
             }
         }
         Command::Test {
@@ -332,14 +332,14 @@ pub fn main() -> anyhow::Result<()> {
                     ModuleSchema::V0(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v0(&contract_name, &contract_schema);
+                            print_contract_schema_v0(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
                     ModuleSchema::V1(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v1(&contract_name, &contract_schema);
+                            print_contract_schema_v1(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
@@ -520,7 +520,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         match (runner.ignore_state_schema, &contract_schema_state_opt) {
             (false, Some(state_schema)) => {
                 let s = state_schema
-                    .to_json_string_pretty(&state)
+                    .to_json_string_pretty(state)
                     .map_err(|_| anyhow::anyhow!("Could not encode state to JSON."))?;
                 if runner.schema_path.is_some() {
                     eprintln!("The new state is: (Using provided schema)\n{}", s)
@@ -544,7 +544,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                  this contract.",
             )?;
             let json_string = schema_state
-                .to_json_string_pretty(&state)
+                .to_json_string_pretty(state)
                 .map_err(|_| anyhow::anyhow!("Could not output contract state in JSON."))?;
             fs::write(file_path, json_string).context("Could not write out the state.")?;
         }
@@ -574,7 +574,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             };
             let name = format!("init_{}", contract_name);
             let res = v0::invoke_init_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 init_ctx,
                 &name,
@@ -658,7 +658,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     let state_json: serde_json::Value =
                         serde_json::from_slice(&file).context("Could not parse state JSON.")?;
                     let mut state_bytes = Vec::new();
-                    write_bytes_from_json_schema_type(&schema_state, &state_json, &mut state_bytes)
+                    write_bytes_from_json_schema_type(schema_state, &state_json, &mut state_bytes)
                         .context("Could not generate state bytes using schema and JSON.")?;
                     state_bytes
                 }
@@ -666,7 +666,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
 
             let name = format!("{}.{}", contract_name, func);
             let res = v0::invoke_receive_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 receive_ctx,
                 &init_state,
@@ -862,7 +862,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             // empty initial backing store.
             let mut loader = v1::trie::Loader::new(&[][..]);
             let res = v1::invoke_init_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 init_ctx,
                 &name,
@@ -967,7 +967,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 ReceiveContextOptV1,
                 ReceiveContextOptV1,
             >(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 receive_ctx,
                 name.as_receive_name(),
@@ -1094,7 +1094,7 @@ fn get_parameter(
                 .context("Could not parse the JSON in parameter-json file.")?;
             let mut parameter_bytes = Vec::new();
             write_bytes_from_json_schema_type(
-                &parameter_schema,
+                parameter_schema,
                 &parameter_json,
                 &mut parameter_bytes,
             )
