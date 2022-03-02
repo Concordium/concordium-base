@@ -14,10 +14,11 @@ use sha2::Digest;
 use slab::Slab;
 use std::{
     collections::HashMap,
+    fmt::{self, Debug, Display, Formatter, LowerHex},
     io::{Read, Write},
     iter::once,
     num::NonZeroU16,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, fmt::{Debug, Display, Formatter, self, LowerHex},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 /// Children of a node are sometimes stored in a [tinyvec::TinyVec]. This
@@ -780,9 +781,7 @@ struct Chunk<const N: usize> {
 }
 
 impl LowerHex for Chunk<4> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{:x}", self.value)
-    }
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result { write!(f, "{:x}", self.value) }
 }
 
 impl<const N: usize> Chunk<N> {
@@ -1213,9 +1212,7 @@ impl<V: Loadable + Debug> Node<V> {
     #[cfg(feature = "display-state")]
     pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
         let value = if let Some(ref value) = self.value {
-            value.borrow().data.use_value(loader, |value| {
-                format!(", value = {:?}", value)
-            })
+            value.borrow().data.use_value(loader, |value| format!(", value = {:?}", value))
         } else {
             String::new()
         };
@@ -1224,9 +1221,7 @@ impl<V: Loadable + Debug> Node<V> {
         for (key, node) in &self.children {
             builder.begin_child(format!("Child {:#x}", *key));
             let node = node.borrow();
-            let node = node.use_value(loader, |node| {
-              node.data.clone()
-            });
+            let node = node.use_value(loader, |node| node.data.clone());
             node.display_tree(builder, loader);
             builder.end_child();
         }

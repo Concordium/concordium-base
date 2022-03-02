@@ -10,7 +10,7 @@ use concordium_contracts_common::{
     schema::{Function, Type},
     to_bytes, Amount, OwnedReceiveName, Parameter,
 };
-use ptree::{TreeBuilder, print_tree_with, PrintConfig};
+use ptree::{print_tree_with, PrintConfig, TreeBuilder};
 use std::{
     fs::{self, File},
     io::Read,
@@ -41,15 +41,13 @@ enum Command {
         about = "Locally simulate invocation method of a smart contract and inspect the state."
     )]
     Run(Box<RunCommand>),
-    #[structopt(
-        name = "display-state",
-        about = "Display the contract state as a tree."
-    )]
+    #[structopt(name = "display-state", about = "Display the contract state as a tree.")]
     DisplayState {
         #[structopt(
             name = "state-bin",
             long = "state-bin",
-            help = "Path to the file with state that is to be displayed. The state must be for a V1 contract."
+            help = "Path to the file with state that is to be displayed. The state must be for a \
+                    V1 contract."
         )]
         state_bin_path: PathBuf,
     },
@@ -178,22 +176,22 @@ enum RunCommand {
             short = "c",
             help = "Name of the contract to instantiate."
         )]
-        contract_name: String,
+        contract_name:        String,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the init context file."
         )]
-        context:       Option<PathBuf>,
+        context:              Option<PathBuf>,
         #[structopt(
             name = "display-state",
             long = "display-state",
             help = "Pretty print the contract state at the end of execution."
         )]
-        should_display_state:   bool,
+        should_display_state: bool,
         #[structopt(flatten)]
-        runner:        Runner,
+        runner:               Runner,
     },
     #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
@@ -218,35 +216,35 @@ enum RunCommand {
             help = "File with existing state of the contract in JSON, requires a schema is \
                     present either embedded or using --schema."
         )]
-        state_json_path: Option<PathBuf>,
+        state_json_path:      Option<PathBuf>,
         #[structopt(
             name = "state-bin",
             long = "state-bin",
             help = "File with existing state of the contract in binary."
         )]
-        state_bin_path:  Option<PathBuf>,
+        state_bin_path:       Option<PathBuf>,
         #[structopt(
             name = "balance",
             long = "balance",
             help = "Balance on the contract at the time it is invoked. Overrides the balance in \
                     the receive context."
         )]
-        balance:         Option<u64>,
+        balance:              Option<u64>,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the receive context file."
         )]
-        context:         Option<PathBuf>,
+        context:              Option<PathBuf>,
         #[structopt(
             name = "display-state",
             long = "display-state",
             help = "Pretty print the contract state at the end of execution."
         )]
-        should_display_state:   bool,
+        should_display_state: bool,
         #[structopt(flatten)]
-        runner:          Runner,
+        runner:               Runner,
     },
 }
 
@@ -366,12 +364,15 @@ pub fn main() -> anyhow::Result<()> {
                 bold_style.paint(size)
             )
         }
-        Command::DisplayState { state_bin_path } => display_state_from_file(state_bin_path)?,
+        Command::DisplayState {
+            state_bin_path,
+        } => display_state_from_file(state_bin_path)?,
     };
     Ok(())
 }
 
-/// Loads the contract state from file and displays it as a tree by printing to stdout.
+/// Loads the contract state from file and displays it as a tree by printing to
+/// stdout.
 fn display_state_from_file(file_path: PathBuf) -> anyhow::Result<()> {
     let file = File::open(&file_path)
         .with_context(|| format!("Could not read state file {}.", file_path.display()))?;
@@ -389,8 +390,9 @@ fn display_state(state: &v1::trie::PersistentState) -> Result<(), anyhow::Error>
     let mut tree_builder = TreeBuilder::new("StateRoot".into());
     state.display_tree(&mut tree_builder, &mut loader);
     let tree = tree_builder.build();
-    // We don't want to depend on some global config as it opens up for all sorts of 
-    // corner-case bugs since we are not in control and thus inconsistent user experience.
+    // We don't want to depend on some global config as it opens up for all sorts of
+    // corner-case bugs since we are not in control and thus inconsistent user
+    // experience.
     let config = PrintConfig::default();
     print_tree_with(&tree, &config).context("Could not print the state as a tree.")
 }

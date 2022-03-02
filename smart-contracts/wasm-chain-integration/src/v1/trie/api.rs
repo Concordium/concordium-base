@@ -98,7 +98,7 @@ impl PersistentState {
     #[cfg(feature = "display-state")]
     pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
         match self {
-            Self::Empty => {},
+            Self::Empty => {}
             Self::Root(node) => node.data.display_tree(builder, loader),
         }
     }
