@@ -70,6 +70,7 @@ module Concordium.Wasm (
   ReceiveName(..),
   isValidReceiveName,
   contractAndFunctionName,
+  makeFallbackReceiveName,
   extractInitReceiveNames,
   EntrypointName(..),
   isValidEntrypointName,
@@ -414,6 +415,13 @@ extractInitReceiveNames nameText = do
   let cname = "init_" <> Text.takeWhile (/= '.') nameText
   return (InitName cname, ReceiveName nameText)
 
+-- |Derive the name of a fallback entrypoint for the contract.
+-- This is defined as the entrypoint "contractName.", i.e., with the empty function name.
+makeFallbackReceiveName :: ReceiveName -> ReceiveName
+makeFallbackReceiveName r =
+  let (cname, _) = contractAndFunctionName r
+  in ReceiveName (cname <> ".")
+
 instance AE.FromJSON ReceiveName where
   parseJSON = AE.withText "ReceiveName" $ \receiveName -> do
     if isValidReceiveName receiveName then return ReceiveName{..}
@@ -720,7 +728,7 @@ data InstanceInfo = InstanceInfoV0 {
   iiMethods :: !(Set.Set ReceiveName),
   iiName :: !InitName,
   iiSourceModule :: !ModuleRef
-  }
+  } deriving(Eq, Show)
 
 -- |Helper function for JSON encoding an 'Instance'.
 instancePairs :: AE.KeyValue kv => InstanceInfo -> [kv]
