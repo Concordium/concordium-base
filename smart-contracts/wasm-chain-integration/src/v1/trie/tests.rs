@@ -916,3 +916,65 @@ fn too_many_iterators() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[test]
+/// Check that mutating the new generation does not affect the previous one.
+fn prop_iterator_get_key() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>, prefix: Vec<u8>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (mut trie, mut loader) = make_mut_trie(inputs);
+
+        let reference_iter = reference.iter();
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &prefix).expect("This is the first iterator, so no overflow.")
+        {
+            i
+        } else {
+            for (k, _) in reference_iter {
+                if k.starts_with(&prefix) {
+                    bail!(
+                        "There is a key {:?} that starts with {:?}, but iterator could not be \
+                         obtained.",
+                        k,
+                        prefix
+                    )
+                }
+            }
+            return Ok(());
+        };
+        ensure!(
+            iterator.get_key() == &prefix,
+            "Initial key returned by get_key should be the given prefix {:?}, but it is {:?}.",
+            prefix,
+            iterator.get_key()
+        );
+        for (k, v) in reference_iter {
+            if k.starts_with(&prefix) {
+                if let Some(entry) = trie
+                    .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                    .expect("Empty counter does not fail.")
+                {
+                    ensure!(
+                        trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
+                        "Value at key {:?} does not match.",
+                        k
+                    );
+                    ensure!(
+                        iterator.get_key() == k,
+                        "Key returned by the iterator {:?} does not match reference {:?}.",
+                        iterator.get_key(),
+                        k
+                    );
+                } else {
+                    bail!(
+                        "Reference iterator has a next key {:?}, but the iterator did not return \
+                         a next item.",
+                        k
+                    );
+                }
+            }
+        }
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+}

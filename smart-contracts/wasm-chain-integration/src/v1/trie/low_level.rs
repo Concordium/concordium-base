@@ -1408,6 +1408,9 @@ pub struct Iterator {
     next_child:   Option<Position>,
     /// Stack of parents and next positions, and key lengths of parents
     stack:        Vec<(usize, Position, usize)>,
+    /// Whether [MutableTrie::next] has already been called on the iterator or
+    /// not. This is only useful for the `get_key` method.
+    started:      bool,
 }
 
 impl Iterator {
@@ -1417,9 +1420,13 @@ impl Iterator {
     /// was returned.
     #[inline(always)]
     pub fn get_key(&self) -> &[u8] {
-        // key at any node with a value should always be full (i.e., even length), so
-        // length is ignored.
-        &self.key.data
+        if self.started {
+            // key at any node with a value should always be full (i.e., even length), so
+            // length is ignored.
+            &self.key.data
+        } else {
+            &self.root
+        }
     }
 
     /// Get the key of which the iterator was initialized with.
@@ -1614,6 +1621,7 @@ impl<V> MutableTrie<V> {
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
         let entries = &mut self.entries;
+        iterator.started = true;
         loop {
             let node_idx = iterator.current_node;
             let node = &owned_nodes[node_idx];
@@ -1622,7 +1630,6 @@ impl<V> MutableTrie<V> {
             } else {
                 iterator.next_child = Some(0);
                 counter.tick(node.path.len() as u64)?;
-                iterator.key.extend(&node.path);
                 if node.value.is_some() {
                     return Ok(node.value);
                 }
@@ -1638,6 +1645,8 @@ impl<V> MutableTrie<V> {
                 iterator.current_node = child.index();
                 counter.tick(1)?;
                 iterator.key.push(child.key());
+                let child_node = &owned_nodes[child.index()];
+                iterator.key.extend(&child_node.path);
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
@@ -1695,18 +1704,26 @@ impl<V> MutableTrie<V> {
                         key:          key.into(),
                         next_child:   None,
                         stack:        Vec::new(),
+                        started:      false,
                     }));
                 }
                 FollowStem::KeyIsPrefix {
-                    ..
+                    stem_step,
                 } => {
                     generation.iterator_roots.insert(key)?;
+                    let root: Box<[u8]> = key.into();
+                    let mut key: MutStem = key.into();
+                    key.push(stem_step);
+                    while let Some(chunk) = stem_iter.next() {
+                        key.push(chunk);
+                    }
                     return Ok(Some(Iterator {
-                        root:         key.into(),
+                        root,
                         current_node: node_idx,
-                        key:          key.into(),
-                        next_child:   None,
-                        stack:        Vec::new(),
+                        key,
+                        next_child: None,
+                        stack: Vec::new(),
+                        started: false,
                     }));
                 }
                 FollowStem::StemIsPrefix {

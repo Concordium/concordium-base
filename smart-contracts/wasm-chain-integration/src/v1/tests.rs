@@ -582,7 +582,7 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
     ensure!(state.iterator_delete(42.into()) == u32::MAX, "Iterator should never have existed..");
 
     let mut energy_supplied = crate::InterpreterEnergy {
-        energy: 0,
+        energy: 100,
     };
 
     let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
