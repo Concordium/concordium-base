@@ -334,9 +334,9 @@ the result. On a linux system the program can be compiled and run like so.
   - First compile the libraries in [../mobile_wallet](../mobile-wallet) by running
     ```cargo build --release```.
   - Next from this directory run
-    ```gcc example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
+    ```gcc example.c -lmobile_wallet -L ../../mobile_wallet/target/release/ -o example```
     or
-    ```clang example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
+    ```clang example.c -lmobile_wallet -L ../../mobile_wallet/target/release/ -o example```
     depending on what C compiler is preffered.
 
 The binary can then be run with the following inputs:
@@ -372,6 +372,8 @@ The binary can then be run with the following inputs:
 |                                      | input                                                                                                  | output                                                                                                   |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
 | `create_id_request_and_private_data` | [`create_id_request_and_private_data-input.json`](files/create_id_request_and_private_data-input.json) | [`create_id_request_and_private_data-output.json`](files/create_id_request_and_private_data-output.json) |
+| `create_configure_baker_transaction` } [`create_configure_baker_transaction-input.json`](files/create_configure_baker_transaction-input.json) | [`create_configure_baker_transaction-output.json`](files/create_configure_baker_transaction-output.json) |
+| `create_configure_baker_transaction` } [`create_configure_baker_transaction-input.json`](files/create_configure_baker_transaction-input.json) | [`create_configure_delegation_transaction-output.json`](files/create_configure_delegation_transaction-output.json) |
 | `create_credential`                  | [`create_credential-input.json`](files/create_credential-input.json)                                   | [`create_credential-output.json`](files/create_credential-output.json)                                   |
 | `create_transfer_ext`                | [`create_transfer-input.json`](files/create_transfer-input.json)                                       | [`create_transfer-output.json`](files/create_transfer-output.json)                                       |
 | `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](files/create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](files/create_encrypted_transfer-output.json)                   |

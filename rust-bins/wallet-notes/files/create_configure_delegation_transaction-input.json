@@ -29,7 +29,8 @@
     "capital": "1000000",
     "restakeEarnings": true,
     "delegationTarget": {
-        "type": "delegateToBaker"
+        "type": "delegateToBaker",
+	"targetBaker": 100
     }
-  }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+}
+
