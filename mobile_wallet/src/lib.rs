@@ -2,7 +2,10 @@
 extern crate serde_json;
 use anyhow::{bail, ensure};
 use crypto_common::{
-    types::{Amount, DelegationTarget, OpenStatus, UrlText, KeyIndex, Memo, Signature, TransactionSignature},
+    types::{
+        Amount, DelegationTarget, KeyIndex, Memo, OpenStatus, Signature, TransactionSignature,
+        UrlText,
+    },
     *,
 };
 use dodis_yampolskiy_prf as prf;
@@ -30,36 +33,18 @@ type ExampleCurve = G1;
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BakerKeys {
-    #[serde(
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub election_verify_key: ecvrf::PublicKey, // den fra ecvrf
-    #[serde(
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub election_private_key: ecvrf::SecretKey, // den fra ecvrf
-    #[serde(
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub signature_verify_key: ed25519::PublicKey, // den fra ed25519_dalek
-    #[serde(
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub signature_sign_key: ed25519::SecretKey, // den fra ed25519_dalek
-    #[serde(
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub aggregation_verify_key: aggregate_sig::PublicKey<Bls12>, // den fra aggregate_sig
-    #[serde(
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub aggregation_sign_key: aggregate_sig::SecretKey<Bls12>, // den fra aggregate_sig
+    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    pub election_verify_key:    ecvrf::PublicKey,
+    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    pub election_private_key:   ecvrf::SecretKey,
+    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    pub signature_verify_key:   ed25519::PublicKey,
+    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    pub signature_sign_key:     ed25519::SecretKey,
+    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    pub aggregation_verify_key: aggregate_sig::PublicKey<Bls12>,
+    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    pub aggregation_sign_key:   aggregate_sig::SecretKey<Bls12>,
 }
 
 /// Context for a transaction to send.
@@ -284,7 +269,6 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
     Ok(to_string(&response)?)
 }
 
-
 fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
@@ -343,23 +327,23 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         bitmap |= 0b0000000000100000;
     }
 
-    if maybe_openstatus.is_some() {
+    if maybe_baker_keys.is_some() {
         bitmap |= 0b0000000000010000;
     }
 
-    if maybe_openstatus.is_some() {
+    if maybe_url.is_some() {
         bitmap |= 0b0000000000001000;
     }
 
-    if maybe_openstatus.is_some() {
+    if maybe_transaction_fee.is_some() {
         bitmap |= 0b0000000000000100;
     }
 
-    if maybe_openstatus.is_some() {
+    if maybe_baking_reward.is_some() {
         bitmap |= 0b0000000000000010;
     }
 
-    if maybe_openstatus.is_some() {
+    if maybe_finalization_reward.is_some() {
         bitmap |= 0b0000000000000001;
     }
 
@@ -396,11 +380,10 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
                 &baker_keys.signature_sign_key,
             );
 
-
             let mut csprng = thread_rng();
             let aggregation_proof = baker_keys.aggregation_sign_key.prove(
                 &mut csprng,
-                &mut random_oracle::RandomOracle::domain(&challenge)
+                &mut random_oracle::RandomOracle::domain(&challenge),
             );
             payload.put(&baker_keys.election_verify_key);
             payload.put(&election_proof);
