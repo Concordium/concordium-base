@@ -198,6 +198,7 @@ mod host {
     /// Write to the return value.
     fn write_return_value_helper(
         rv: &mut ReturnValue,
+        energy: &mut InterpreterEnergy,
         offset: u32,
         bytes: &[u8],
     ) -> ExecResult<u32> {
@@ -210,6 +211,9 @@ mod host {
             as usize;
         let end = std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32;
         if rv.len() < end as usize {
+            energy.tick_energy(constants::additional_output_size_cost(
+                u64::from(end) - rv.len() as u64,
+            ))?;
             rv.resize(end as usize, 0u8);
         }
         let written = (&mut rv[offset..end as usize]).write(bytes)?;
@@ -227,10 +231,10 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
-        energy.tick_energy(constants::copy_to_host_cost(length))?;
+        energy.tick_energy(constants::write_output_cost(length))?;
         let end = start + length as usize; // this cannot overflow on 64-bit machines.
         ensure!(end <= memory.len(), "Illegal memory access.");
-        let res = write_return_value_helper(rv, offset, &memory[start..end])?;
+        let res = write_return_value_helper(rv, energy, offset, &memory[start..end])?;
         stack.push_value(res);
         Ok(())
     }
@@ -249,7 +253,8 @@ mod host {
             TRANSFER_TAG => {
                 ensure!(
                     length == ACCOUNT_ADDRESS_SIZE + 8,
-                    "Transfers must have exactly 40 bytes of payload."
+                    "Transfers must have exactly 40 bytes of payload, but was {}",
+                    length
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
@@ -337,7 +342,7 @@ mod host {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
-        energy.tick_energy(constants::traverse_key_cost(key_len))?;
+        energy.tick_energy(constants::lookup_entry_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let result = state.lookup_entry(key);
@@ -355,7 +360,7 @@ mod host {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
-        energy.tick_energy(constants::modify_key_cost(key_len))?;
+        energy.tick_energy(constants::create_entry_cost(key_len))?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let entry_index = state.create_entry(key)?;
@@ -365,13 +370,18 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub fn state_delete_entry<'a, BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        energy.tick_energy(constants::DELETE_ENTRY_COST)?;
-        let entry_index = unsafe { stack.pop_u64() };
-        let result = state.delete_entry(InstanceStateEntry::from(entry_index));
+        let key_len = unsafe { stack.pop_u32() };
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::delete_entry_cost(key_len))?;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let result = state.delete_entry(key)?;
         stack.push_value(result);
         Ok(())
     }
@@ -430,9 +440,8 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        energy.tick_energy(constants::DELETE_ITERATOR_COST)?;
         let iter = unsafe { stack.pop_u64() };
-        let result = state.iterator_delete(InstanceStateIterator::from(iter));
+        let result = state.iterator_delete(energy, InstanceStateIterator::from(iter))?;
         stack.push_value(result);
         Ok(())
     }
@@ -442,7 +451,7 @@ mod host {
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
-        // TODO: Verify cost below.
+        energy.tick_energy(constants::ITERATOR_KEY_SIZE_COST)?;
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let iter = unsafe { stack.pop_u64() };
@@ -481,7 +490,7 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let dest_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        energy.tick_energy(constants::read_entry_cost(length))?;
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
@@ -501,11 +510,12 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let source_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::copy_to_host_cost(length))?;
+        energy.tick_energy(constants::write_entry_cost(length))?;
         let source_end = source_start + length as usize;
         ensure!(source_end <= memory.len(), "Illegal memory access.");
         let source = &memory[source_start..source_end];
-        let result = state.entry_write(InstanceStateEntry::from(entry_index), source, offset)?;
+        let result =
+            state.entry_write(energy, InstanceStateEntry::from(entry_index), source, offset)?;
         stack.push_value(result);
         Ok(())
     }
@@ -513,9 +523,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub fn state_entry_size<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
         state: &mut InstanceState<'a, BackingStore>,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u64() };
+        energy.tick_energy(constants::ENTRY_SIZE_COST)?;
         let result = state.entry_size(InstanceStateEntry::from(entry_index));
         stack.push_value(result);
         Ok(())
@@ -616,7 +628,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                     host::state_create_entry(memory, stack, &mut self.energy, &mut self.state)
                 }
                 CommonFunc::StateDeleteEntry => {
-                    host::state_delete_entry(stack, &mut self.energy, &mut self.state)
+                    host::state_delete_entry(memory, stack, &mut self.energy, &mut self.state)
                 }
                 CommonFunc::StateDeletePrefix => {
                     host::state_delete_prefix(memory, stack, &mut self.energy, &mut self.state)
@@ -642,7 +654,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                 CommonFunc::StateEntryWrite => {
                     host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
                 }
-                CommonFunc::StateEntrySize => host::state_entry_size(stack, &mut self.state),
+                CommonFunc::StateEntrySize => {
+                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
+                }
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }
@@ -687,6 +701,11 @@ impl<X: AsRef<[u8]>> v0::HasReceiveContext for ReceiveContext<X> {
 impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
     #[inline(always)]
     fn entrypoint(&self) -> ExecResult<EntrypointName> { Ok(self.entrypoint.as_entrypoint_name()) }
+}
+
+impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
+    #[inline(always)]
+    fn entrypoint(&self) -> ExecResult<EntrypointName> { (*self).entrypoint() }
 }
 
 impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceiveContext>
@@ -750,7 +769,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     host::state_create_entry(memory, stack, &mut self.energy, &mut self.state)
                 }
                 CommonFunc::StateDeleteEntry => {
-                    host::state_delete_entry(stack, &mut self.energy, &mut self.state)
+                    host::state_delete_entry(memory, stack, &mut self.energy, &mut self.state)
                 }
                 CommonFunc::StateDeletePrefix => {
                     host::state_delete_prefix(memory, stack, &mut self.energy, &mut self.state)
@@ -776,7 +795,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 CommonFunc::StateEntryWrite => {
                     host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
                 }
-                CommonFunc::StateEntrySize => host::state_entry_size(stack, &mut self.state),
+                CommonFunc::StateEntrySize => {
+                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
+                }
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }

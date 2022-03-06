@@ -40,7 +40,7 @@ pub const BASE_SIMPLE_TRANSFER_ACTION_COST: u64 = BASE_ACTION_COST + 40000;
 /// contract state) to the Wasm memory.
 #[inline(always)]
 pub fn copy_from_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
-/// Cost of copying the given amount of bytes from the host (e.g., parameter or
+/// Cost of copying the given amount of bytes to the host (e.g., parameter or
 /// contract state) from the Wasm to host memory.
 #[inline(always)]
 pub fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
@@ -72,12 +72,36 @@ pub fn traverse_key_cost(key_len: u32) -> u64 {
     BASE_STATE_COST + copy_to_host_cost(key_len) + u64::from(key_len)
 }
 
-/// Cost of updating/inserting an entry in the instance state.
+/// Cost of creating an entry in the instance state.
 #[inline(always)]
-pub fn modify_key_cost(key_len: u32) -> u64 { 2 * traverse_key_cost(key_len) }
+pub fn create_entry_cost(key_len: u32) -> u64 {
+    // 48 accounts for overall administrative costs and storing the indirection
+    // for the entry.
+    // We want to encourage short keys so we charge linearly for those.
+    if key_len <= 40 {
+        48 + 8 * copy_from_host_cost(key_len) + 100 * u64::from(key_len)
+    } else {
+        let len = u64::from(key_len);
+        let q = 100u64.checked_mul(len * len);
+        if let Some(q) = q {
+            48 + 8 * copy_from_host_cost(key_len) + q / 40
+        } else {
+            u64::MAX
+        }
+    }
+}
+
+/// Cost of looking up an entry in the instance state.
+/// Compared to creating an entry this does not require extra storage for the
+/// key. The only cost is tree traversal and storing an indirection, which is 8
+/// bytes.
+#[inline(always)]
+pub fn lookup_entry_cost(key_len: u32) -> u64 {
+    80 + 4 * copy_from_host_cost(key_len) + 16 * u64::from(key_len)
+}
 
 /// Cost of accessing the instance state.
-pub const BASE_STATE_COST: u64 = 10;
+pub const BASE_STATE_COST: u64 = 20;
 
 /// Cost of allocation of one page of memory in relation to execution cost.
 /// FIXME: It is unclear whether this is really necessary with the hard limit we
@@ -91,26 +115,43 @@ pub const MEMORY_COST_FACTOR: u32 = 100;
 pub const INVOKE_BASE_COST: u64 = 500; // currently set as log event base cost. Revise based on benchmarks.
 
 /// Cost of delete_prefix which accounts for finding the prefix. It is
-/// parametrized by the length of the key. TODO: Needs benchmarking.
-/// TODO: Benchmark
-pub fn delete_prefix_find_cost(len: u32) -> u64 { 10 * len as u64 }
+/// parametrized by the length of the key.
+#[inline(always)]
+pub fn delete_prefix_find_cost(len: u32) -> u64 { 10 * u64::from(len) }
 
 /// Cost of a new iterator. This accounts for tree traversal as well
 /// as the storage the execution engine needs to keep for the iterator.
-/// TODO: Benchmark and analyze space requirements.
-pub fn new_iterator_cost(len: u32) -> u64 { 60 + 10 * len as u64 }
+/// Since we have to store the key for the iterator we have to charge adequately
+/// so that memory use is bounded. This is the reason for the 100 factor.
+#[inline(always)]
+pub fn new_iterator_cost(len: u32) -> u64 { 32 + 100 * u64::from(len) }
 
-/// Delete an iterator. This is constant since we only invalidate a pointer.
-/// TODO: Benchmark.
-pub const DELETE_ITERATOR_COST: u64 = 10;
+/// Basic administrative cost that is charged when an invalid iterator is
+/// attempted to be deleted.
+pub const DELETE_ITERATOR_BASE_COST: u64 = 10;
 
-/// Step cost of a tree traversal when invalidating entries.
-/// TODO: Needs benchmarking.
-pub const TREE_TRAVERSAL_STEP_COST: u64 = 10;
+/// Delete an iterator. Since we need to unlock the region locked by it this
+/// cost is based on the length of the key.
+#[inline(always)]
+pub fn delete_iterator_cost(len: u32) -> u64 { 32 + 32 * u64::from(len) }
 
-/// Cost of deleting an entry. This is a constant-time operation.
-/// TODO: Benchmark.
-pub const DELETE_ENTRY_COST: u64 = 10;
+/// Cost of return the size of the iterator key. This is constant since the
+/// iterator key is readily available.
+pub const ITERATOR_KEY_SIZE_COST: u64 = 10;
+
+/// Basic administrative cost of advancing an iterator.
+pub const ITERATOR_NEXT_COST: u64 = 32;
+
+/// Step cost of a tree traversal when invalidating entries when deleting a
+/// prefix, as well as when advancing an iterator.
+pub const TREE_TRAVERSAL_STEP_COST: u64 = 40;
+
+/// Cost of deleting an entry based on key length. This involves lookup in the
+/// "locked" map so it is relatively expensive.
+#[inline(always)]
+pub fn delete_entry_cost(key_len: u32) -> u64 {
+    80 + 4 * copy_from_host_cost(key_len) + 16 * u64::from(key_len)
+}
 
 /// Base cost of resizing an entry. This accounts for lookup.
 /// TODO: Benchmark.
@@ -132,11 +173,32 @@ pub const MAX_KEY_SIZE: usize = 1 << 31;
 
 /// Cost of allocating additional data in the entry. The argument is the
 /// number of additional bytes.
-/// TODO: Benchmark. The max might not be necessary due to the amortized nature
-/// of growing the vector.
+/// This is needed since we do allocate memory on entry_resize. As a result
+/// we must bound how much can be allocated.
+/// With `100` we have at most 30MB of memory allocated with 3000000NRG. We can
+/// relax this a bit, but not much.
 #[inline(always)]
-pub fn additional_entry_size_cost(x: u64) -> u64 {
-    // NB: the MAX is to make sure that repeatedly calling, e.g., resize(99) is
-    // charged adequately.
-    std::cmp::max(10, x / 100)
-}
+pub fn additional_entry_size_cost(x: u64) -> u64 { 100 * x }
+
+/// Cost of querying entry size.
+pub const ENTRY_SIZE_COST: u64 = 32;
+
+/// Cost of copying the given amount of bytes from the host (e.g., parameter or
+/// contract state) to the Wasm memory.
+#[inline(always)]
+pub fn read_entry_cost(x: u32) -> u64 { 32 + u64::from(x / 8) }
+/// Cost of copying the given amount of bytes to the host (e.g., parameter or
+/// contract state) from the Wasm to host memory.
+#[inline(always)]
+pub fn write_entry_cost(x: u32) -> u64 { 32 + u64::from(x / 8) }
+
+/// Cost of writing the given bytes of the return value.
+#[inline(always)]
+pub fn write_output_cost(x: u32) -> u64 { 10 + u64::from(x) }
+
+/// Cost of adding an additional byte to the output. With the factor of 30
+/// and 3000000NRG there can be at most 100MB of output produced.
+#[inline(always)]
+pub fn additional_output_size_cost(x: u64) -> u64 { 30 * x }
+
+// TODO: Maximum memory possible with create_entry/lookup_entry

@@ -15,6 +15,10 @@ pub enum PersistentState {
     Root(Hashed<Node<Value>>),
 }
 
+impl From<Hashed<Node<Value>>> for PersistentState {
+    fn from(root: Hashed<Node<Value>>) -> Self { Self::Root(root) }
+}
+
 impl Loadable for PersistentState {
     fn load<S: std::io::Read, F: BackingStoreLoad>(
         loader: &mut F,

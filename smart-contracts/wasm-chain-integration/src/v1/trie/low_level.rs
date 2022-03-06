@@ -14,7 +14,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     iter::once,
-    num::NonZeroU16,
+    num::NonZeroU32,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
@@ -32,7 +32,7 @@ const INLINE_CAPACITY: usize = 4;
 /// An inner node in the [PrefixMap]. The default instance produces an empty
 /// node with no values and no children.
 struct InnerNode {
-    value:    Option<NonZeroU16>,
+    value:    Option<NonZeroU32>,
     /// Children ordered by increasing keys.
     children: Vec<KeyIndexPair<8>>,
 }
@@ -98,14 +98,15 @@ impl PrefixesMap {
         let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
         if let Some(value) = node.value {
             let new_value = value.get().checked_add(1).ok_or(TooManyIterators)?;
-            node.value = Some(unsafe { NonZeroU16::new_unchecked(new_value) });
+            node.value = Some(unsafe { NonZeroU32::new_unchecked(new_value) });
         } else {
-            node.value = Some(unsafe { NonZeroU16::new_unchecked(1) });
+            node.value = Some(unsafe { NonZeroU32::new_unchecked(1) });
         }
         Ok(())
     }
 
     /// Return whether the given key has a prefix in the prefix map.
+    #[inline]
     pub fn check_has_no_prefix(&self, key: &[u8]) -> Result<(), AttemptToModifyLockedArea> {
         let mut node_idx = if let Some(root) = self.root {
             root
@@ -190,7 +191,7 @@ impl PrefixesMap {
         let have_removed = node.value.is_some();
         match node.value {
             Some(ref mut value) if value.get() > 1 => {
-                *value = unsafe { NonZeroU16::new_unchecked(value.get() - 1) };
+                *value = unsafe { NonZeroU32::new_unchecked(value.get() - 1) };
                 return true;
             }
             _ => node.value = None,
@@ -690,7 +691,8 @@ impl<'a> StemIter<'a> {
         }
     }
 
-    /// Return the next chunk.
+    /// Return the next chunk if any are remaining.
+    #[allow(clippy::branches_sharing_code)] // see https://github.com/rust-lang/rust-clippy/issues/7452
     pub fn next(&mut self) -> Option<Chunk<4>> {
         if self.pos < self.len {
             // This access is safe since we have already checked the bound.
@@ -1379,6 +1381,7 @@ impl Entry {
 
     /// Return whether the entry is owned, i.e., mutable. If so, return the
     /// value it points to.
+    #[inline]
     pub fn is_owned(self) -> Option<usize> {
         if let Self::Mutable {
             entry_idx,
@@ -1578,12 +1581,15 @@ impl<V> MutableTrie<V> {
 
     /// Get a mutable reference to an entry, if the entry exists. This copies
     /// the data pointed to by the entry unless the entry was already
-    /// mutable.
-    pub fn get_mut(
+    /// mutable. The counter is invoked in case a copy of the entry must be made
+    /// and gives the caller the ability to terminate if too much data must
+    /// be copied.
+    pub fn get_mut<A: AllocCounter<V>>(
         &mut self,
         entry: EntryId,
         loader: &mut impl BackingStoreLoad,
-    ) -> Option<&mut V>
+        counter: &mut A,
+    ) -> Result<Option<&mut V>, A::Err>
     where
         V: Clone + Loadable, {
         let values = &mut self.values;
@@ -1596,20 +1602,44 @@ impl<V> MutableTrie<V> {
             } => {
                 let value_idx = values.len();
                 if borrowed {
-                    values.push(borrowed_entries[entry_idx].borrow().data.get(loader));
+                    let data = borrowed_entries[entry_idx].borrow().data.get(loader);
+                    counter.allocate(&data)?;
+                    values.push(data);
                 } else {
-                    values.push(values[entry_idx].clone());
+                    let data = {
+                        let data = &values[entry_idx];
+                        counter.allocate(data)?;
+                        data.clone()
+                    };
+                    values.push(data);
                 }
                 self.entries[entry] = Entry::Mutable {
                     entry_idx: value_idx,
                 };
-                values.last_mut()
+                Ok(values.last_mut())
             }
             Entry::Mutable {
                 entry_idx,
-            } => values.get_mut(entry_idx),
-            Entry::Deleted => None,
+            } => Ok(values.get_mut(entry_idx)),
+            Entry::Deleted => Ok(None),
         }
+    }
+
+    /// Set the entry to contain the given value, overwriting any existing
+    /// value.
+    fn set_entry_value(&mut self, entry: EntryId, value: V) {
+        let values = &mut self.values;
+        let entries = &mut self.entries;
+        let entry = &mut entries[entry];
+        if let Some(v) = entry.is_owned() {
+            values[v] = value
+        } else {
+            let value_idx = values.len();
+            values.push(value);
+            *entry = Entry::Mutable {
+                entry_idx: value_idx,
+            }
+        };
     }
 
     pub fn next<L: BackingStoreLoad, C: TraversalCounter>(
@@ -2249,14 +2279,14 @@ impl<V> MutableTrie<V> {
         }
     }
 
-    /// Returns the new entry id, and potentially an existing one if the value
-    /// at the key existed.
+    /// Returns the new entry id, and a boolean indicating whether
+    /// an entry already existed at the key. If it did, it was replaced.
     pub fn insert(
         &mut self,
         loader: &mut impl BackingStoreLoad,
         key: &[u8],
         new_value: V,
-    ) -> Result<(EntryId, Option<EntryId>), AttemptToModifyLockedArea> {
+    ) -> Result<(EntryId, bool), AttemptToModifyLockedArea> {
         let (current_generation, older_generations) = self
             .generations
             .split_last_mut()
@@ -2285,7 +2315,7 @@ impl<V> MutableTrie<V> {
                 },
             });
             current_generation.root = Some(root_idx);
-            return Ok((entry_idx, None));
+            return Ok((entry_idx, false));
         };
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
@@ -2301,16 +2331,21 @@ impl<V> MutableTrie<V> {
             let checkpoint = key_iter.pos;
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
+                    let old_entry_idx = node.value;
+                    if let Some(idx) = old_entry_idx {
+                        self.set_entry_value(idx, new_value);
+                        return Ok((idx, true));
+                    }
+                    // insert the new value.
                     let value_idx = self.values.len();
                     self.values.push(new_value);
-                    let old_entry_idx = node.value;
                     // insert new entry
                     let entry_idx: EntryId = self.entries.len().into();
                     self.entries.push(Entry::Mutable {
                         entry_idx: value_idx,
                     });
                     node.value = Some(entry_idx);
-                    return Ok((entry_idx, old_entry_idx));
+                    return Ok((entry_idx, false));
                 }
                 FollowStem::KeyIsPrefix {
                     stem_step,
@@ -2351,7 +2386,7 @@ impl<V> MutableTrie<V> {
                         },
                     };
                     owned_nodes.push(new_node);
-                    return Ok((entry_idx, None));
+                    return Ok((entry_idx, false));
                 }
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -2388,7 +2423,7 @@ impl<V> MutableTrie<V> {
                                     value: tinyvec::TinyVec::new(),
                                 },
                             });
-                            return Ok((entry_idx, None));
+                            return Ok((entry_idx, false));
                         }
                     }
                 }
@@ -2465,7 +2500,7 @@ impl<V> MutableTrie<V> {
                     } else {
                         current_generation.root = Some(new_node_idx);
                     }
-                    return Ok((entry_idx, None));
+                    return Ok((entry_idx, false));
                 }
             }
         }

@@ -51,6 +51,10 @@ name = "wasm"
 harness = false
 
 [[bench]]
+name = "v1-host-functions"
+harness = false
+
+[[bench]]
 name = "trie_benches"
 harness = false
 

@@ -62,6 +62,14 @@ pub trait TraversalCounter {
     type Err: std::fmt::Debug;
     fn tick(&mut self, num: u64) -> Result<(), Self::Err>;
 }
+
+/// A trait that supports counting new memory allocations in the tree.
+pub trait AllocCounter<V> {
+    type Err: std::fmt::Debug;
+    /// Charge for allocating the given extra number of bytes.
+    fn allocate(&mut self, data: &V) -> Result<(), Self::Err>;
+}
+
 /// A counter that does not count anything, and always returns Ok(()).
 pub struct EmptyCounter;
 #[derive(Debug, Copy, Clone, Error)]
@@ -74,6 +82,13 @@ impl TraversalCounter for EmptyCounter {
 
     #[inline(always)]
     fn tick(&mut self, _num: u64) -> Result<(), Self::Err> { Ok(()) }
+}
+
+impl<V> AllocCounter<V> for EmptyCounter {
+    type Err = NoError;
+
+    #[inline(always)]
+    fn allocate(&mut self, _data: &V) -> Result<(), Self::Err> { Ok(()) }
 }
 
 /// A type that can be used to collect auxiliary information while a mutable
@@ -178,7 +193,7 @@ impl<X: Seek + Write> BackingStoreStore for Storable<X> {
 /// Generic wrapper for a loader. This implements loadable for any S that can be
 /// seen as a byte array. Since this type is often used with a `S = &[u8]` we
 /// make it [Copy] to be able to share the backing buffer.
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Loader<S> {
     pub inner: S,
 }

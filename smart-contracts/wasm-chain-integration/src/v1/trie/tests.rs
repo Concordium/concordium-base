@@ -787,7 +787,10 @@ fn prop_matches_reference_after_new_gen_mutate() {
             let reference_iter = reference.iter();
             for (k, _) in reference_iter {
                 if let Some(entry) = trie.get_entry(&mut loader, k) {
-                    if let Some(v) = trie.get_mut(entry, &mut loader) {
+                    if let Some(v) = trie
+                        .get_mut(entry, &mut loader, &mut EmptyCounter)
+                        .expect("Empty counter does not error.")
+                    {
                         *v = vec![17];
                     } else {
                         return false;
@@ -878,46 +881,6 @@ fn prop_matches_reference_after_new_gen_mutate() {
 }
 
 #[test]
-/// A basic unit test to make sure that we cannot acquire too many iterators
-/// with the same key.
-fn too_many_iterators() -> anyhow::Result<()> {
-    let inputs = vec![([0].into(), vec![1]), (vec![0, 0], vec![1]), ([1].into(), vec![2])];
-    let (mut trie, mut loader) = make_mut_trie(inputs);
-    let prefixes: &[&[u8]] = &[&[], &[0], &[0, 0], &[1]];
-    let mut iters = Vec::new();
-    for prefix in prefixes {
-        let iter = trie
-            .iter(&mut loader, &prefix)
-            .expect("Acquiring the first iterator should succeed.")
-            .expect("Prefix exists.");
-        iters.push(iter);
-        for i in 1..u16::MAX {
-            if trie.iter(&mut loader, &prefix).is_err() {
-                bail!("Acquiring the {}th iterator should succeed.", u32::from(i) + 1)
-            }
-        }
-        let _ =
-            trie.iter(&mut loader, &prefix).expect_err("We should now have exceeded the limit.");
-    }
-    // now delete one
-    for iter in iters.iter() {
-        ensure!(
-            trie.delete_iter(iter),
-            "Deleting the iterator should succeed, since there should be u16::MAX of them."
-        );
-    }
-    // now add one back, check it succeeds, and then add another, and check it fails
-    for prefix in prefixes {
-        let _ = trie
-            .iter(&mut loader, &prefix)
-            .expect("We should succeed since we just removed one iterator.");
-        let _ =
-            trie.iter(&mut loader, &prefix).expect_err("We should now have exceeded the limit.");
-    }
-    Ok(())
-}
-
-#[test]
 /// Check that mutating the new generation does not affect the previous one.
 fn prop_iterator_get_key() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>, prefix: Vec<u8>| -> anyhow::Result<()> {
@@ -943,7 +906,7 @@ fn prop_iterator_get_key() {
             return Ok(());
         };
         ensure!(
-            iterator.get_key() == &prefix,
+            iterator.get_key() == prefix,
             "Initial key returned by get_key should be the given prefix {:?}, but it is {:?}.",
             prefix,
             iterator.get_key()

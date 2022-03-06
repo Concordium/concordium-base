@@ -1,5 +1,7 @@
-use super::{trie, types::*};
-use crate::v1::trie::MutableState;
+use super::{
+    trie::{self, MutableState},
+    types::*,
+};
 use anyhow::{ensure, Context};
 use quickcheck::*;
 
@@ -23,6 +25,7 @@ fn prop_create_write_read_delete() {
         };
         let mut m_state = MutableState::initial_state();
         let mut state = InstanceState::new(0, loader, m_state.get_inner());
+        let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         for (k, v) in &inputs {
             let entry = state
                 .create_entry(k)
@@ -33,7 +36,7 @@ fn prop_create_write_read_delete() {
                 state.lookup_entry(k).convert().context("Lookup entry should be valid.")?;
 
             let write_res = state
-                .entry_write(entry, v, 0)
+                .entry_write(&mut energy, entry, v, 0)
                 .context(format!("Failed writing {:?} to key {:?}.", v, k))?;
 
             ensure!(
@@ -58,8 +61,8 @@ fn prop_create_write_read_delete() {
                 read1,
                 v.len()
             );
-            ensure!(state.delete_entry(entry) == 2, "Entry should be deleted.");
-            ensure!(state.delete_entry(entry) == 1, "Entry was already deleted.");
+            ensure!(state.delete_entry(k).unwrap() == 2, "Entry should be deleted.");
+            ensure!(state.delete_entry(k).unwrap() == 1, "Entry was already deleted.");
             let mut buff0 = vec![0; v.len()];
             ensure!(
                 state.entry_read(entry, &mut buff0, 0) == u32::MAX,
@@ -67,14 +70,11 @@ fn prop_create_write_read_delete() {
             );
 
             let write_res = state
-                .entry_write(entry, v, 0)
+                .entry_write(&mut energy, entry, v, 0)
                 .context(format!("Failed writing {:?} to key {:?}.", v, k))?;
 
             ensure!(write_res == u32::MAX, "Entry write on deleted entry should return u32::MAX.");
-            ensure!(
-                state.delete_entry(lookup_entry) == 1,
-                "Entry should already have been deleted."
-            );
+            ensure!(state.delete_entry(k).unwrap() == 1, "Entry should already have been deleted.");
 
             ensure!(
                 state.entry_read(entry, &mut buff0, 0) == u32::MAX,
@@ -104,6 +104,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let k = &[42];
     let entry = state
         .create_entry(k)
@@ -113,13 +114,13 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
 
     let mut non_overflowing_buffer = vec![0; crate::constants::MAX_ENTRY_SIZE];
     let write_past = state
-        .entry_write(entry, &[0], crate::constants::MAX_ENTRY_SIZE as u32)
+        .entry_write(&mut energy, entry, &[0], crate::constants::MAX_ENTRY_SIZE as u32)
         .context("Writing past MAX_ENTRY_SIZE should return Ok")?;
 
     ensure!(write_past == 0, "Writing past MAX_ENTRY_SIZE should return 0.");
 
     ensure!(
-        state.entry_write(entry, &non_overflowing_buffer, 0).is_ok(),
+        state.entry_write(&mut energy, entry, &non_overflowing_buffer, 0).is_ok(),
         "The data should be written"
     );
     ensure!(
@@ -129,7 +130,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
     );
     let mut overflowing_buffer = vec![0; crate::constants::MAX_ENTRY_SIZE + 1];
     let written = state
-        .entry_write(entry, &overflowing_buffer, 0)
+        .entry_write(&mut energy, entry, &overflowing_buffer, 0)
         .context("Write should've returned Ok(0)")?;
 
     ensure!(
@@ -178,7 +179,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
         "Resizing to MAX_ENTRY_SIZE + 1 should have been completed successfully."
     );
 
-    ensure!(state.delete_entry(entry) == 2, "Deletion of entry {:?} should return 2", k);
+    ensure!(state.delete_entry(k).unwrap() == 2, "Deletion of entry {:?} should return 2", k);
     let resize_status = state
         .entry_resize(&mut energy_supplied, entry, 0)
         .context("Resizing of invalidated entry should not have returned an Err.")?;
@@ -204,7 +205,7 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         .convert()
         .context("Entry should be some.")?;
 
-    ensure!(state.delete_entry(entry) == 2, "Deleting an entry should return 1.");
+    ensure!(state.delete_entry(&[0]).unwrap() == 2, "Deleting an entry should return 1.");
     ensure!(
         state.entry_size(entry) == u32::MAX,
         "Entry size of invalidated entry should return u32::MAX."
@@ -242,7 +243,7 @@ fn prop_entry_write_resizing() {
         };
         let mut m_state = MutableState::initial_state();
         let mut state = InstanceState::new(0, loader, m_state.get_inner());
-
+        let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         for (k, v) in &inputs {
             let entry = state
                 .create_entry(k)
@@ -251,7 +252,7 @@ fn prop_entry_write_resizing() {
                 .context("Entry should be valid")?;
 
             let written = state
-                .entry_write(entry, v, 0)
+                .entry_write(&mut energy, entry, v, 0)
                 .context(format!("Writing to entry failed {:?}", k))?;
             ensure!(written as usize == v.len(), "Write should return the correct length written");
 
@@ -320,7 +321,7 @@ fn prop_iterators() {
         };
         let mut m_state = MutableState::initial_state();
         let mut state = InstanceState::new(0, loader, m_state.get_inner());
-
+        let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         // create the state with some locked parts.
         for (k, v) in &inputs {
             let entry = state
@@ -336,7 +337,7 @@ fn prop_iterators() {
             );
 
             let write_len = state
-                .entry_write(entry, v, 0)
+                .entry_write(&mut energy, entry, v, 0)
                 .context(format!("Entry should have been written to {:?}", k))?;
             ensure!(
                 write_len as usize == v.len(),
@@ -344,7 +345,7 @@ fn prop_iterators() {
             );
 
             if k.len() > 5 {
-                let entry = state
+                let _entry = state
                     .create_entry(k)
                     .context("Creating an entry on locked part should not fail.")?
                     .convert()
@@ -372,7 +373,7 @@ fn prop_iterators() {
                 );
 
                 ensure!(
-                    state.delete_entry(entry) == 0,
+                    state.delete_entry(k).unwrap() == 0,
                     "Deleting a locked part of the tree should return in 0."
                 );
                 let mut extended_key = k.clone();
@@ -401,7 +402,7 @@ fn prop_iterators() {
         for (k, v) in &inputs {
             // make sure we don't try delete in suffixes of an already deleted prefix key.
             if !removed_prefixes.iter().cloned().any(|x| k.starts_with(&x.to_vec())) {
-                let entry = state
+                let _entry = state
                     .lookup_entry(k)
                     .convert()
                     .context(format!("Could not lookup entry with key {:?}", k))?;
@@ -409,7 +410,7 @@ fn prop_iterators() {
                 if k.len() <= 5 {
                     if v.len() % 2 == 0 {
                         ensure!(
-                            state.delete_entry(entry) == 2,
+                            state.delete_entry(k).unwrap() == 2,
                             "The entry {:?} should have been deleted.",
                             k
                         );
@@ -426,7 +427,7 @@ fn prop_iterators() {
                     removed_prefixes.push(k);
                 } else {
                     ensure!(
-                        state.delete_entry(entry) == 0,
+                        state.delete_entry(k).unwrap() == 0,
                         "The entry {:?} should not have been deleted.",
                         k
                     );
@@ -451,7 +452,7 @@ fn prop_iterator_traversing() {
         };
         let mut m_state = MutableState::initial_state();
         let mut state = InstanceState::new(0, loader, m_state.get_inner());
-
+        let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         let mut prefixes = trie::low_level::PrefixesMap::new();
         for (k, v) in &inputs {
             let entry = state
@@ -460,7 +461,8 @@ fn prop_iterator_traversing() {
                 .convert()
                 .context("Entry should be Some.")?;
 
-            let write_result = state.entry_write(entry, v, 0).context("Write should be ok.")?;
+            let write_result =
+                state.entry_write(&mut energy, entry, v, 0).context("Write should be ok.")?;
             ensure!(
                 write_result as usize == v.len(),
                 "Incorrect amount of bytes written {:?} expected {:?}",
@@ -539,20 +541,6 @@ fn test_iterator_errors() -> anyhow::Result<()> {
         state.iterator(&[42]).convert().is_none(),
         "Calling iter on on existent part of tree should return Ok(None)",
     );
-
-    for _ in 0..u16::MAX - 1 {
-        ensure!(
-            state.iterator(&[0]).convert().is_some(),
-            "Creating iterators below u16::MAX should be ok"
-        );
-    }
-
-    ensure!(
-        state.iterator(&[0]) == InstanceStateIteratorResultOption::NEW_ERR,
-        "Creating u16::MAX + 1 iterators should return Iterator overflow should return \
-         Some(InstanceStateIteratorResultOption::NEW_ERR)"
-    );
-
     Ok(())
 }
 
@@ -573,27 +561,33 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let key = &[0];
     ensure!(state.create_entry(key).is_ok(), "Entry should have been created.");
 
     let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
-    ensure!(state.iterator_delete(iter) == 1, "Iterator should have been deleted.");
-    ensure!(state.iterator_delete(iter) == 0, "Iterator should already have been deleted.");
-    ensure!(state.iterator_delete(42.into()) == u32::MAX, "Iterator should never have existed..");
-
-    let mut energy_supplied = crate::InterpreterEnergy {
-        energy: 100,
-    };
+    ensure!(
+        state.iterator_delete(&mut energy, iter).unwrap() == 1,
+        "Iterator should have been deleted."
+    );
+    ensure!(
+        state.iterator_delete(&mut energy, iter).unwrap() == 0,
+        "Iterator should already have been deleted."
+    );
+    ensure!(
+        state.iterator_delete(&mut energy, 42.into()).unwrap() == u32::MAX,
+        "Iterator should never have existed.."
+    );
 
     let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
     // consume the whole contents of the iterator and it should return NEW_OK_NONE
     ensure!(
-        state.iterator_next(&mut energy_supplied, iter).is_ok(),
+        state.iterator_next(&mut energy, iter).is_ok(),
         "Calling next on the iterator at the root of [0] should go fine."
     );
     let last_key_size = state.iterator_key_size(iter);
     let iter_result = state
-        .iterator_next(&mut energy_supplied, iter)
+        .iterator_next(&mut energy, iter)
         .context("Calling next on a non existing iterator should not result in Err.")?;
     ensure!(
         iter_result == InstanceStateEntryResultOption::NEW_OK_NONE,
@@ -626,7 +620,7 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
     );
 
     let iter_result = state
-        .iterator_next(&mut energy_supplied, 42.into())
+        .iterator_next(&mut energy, 42.into())
         .context("Calling next on a non existing iterator should not result in Err.")?;
     ensure!(
         iter_result == InstanceStateEntryResultOption::NEW_ERR,
@@ -644,6 +638,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let entry = state
         .create_entry(&[0])
         .context("Entry should return Ok")?
@@ -652,10 +647,6 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
 
     let (gen, idx) = entry.split();
     let entry_invalid_gen = InstanceStateEntry::new(gen + 1, idx); // invalid generation
-    ensure!(
-        state.delete_entry(entry_invalid_gen) == 1,
-        "Deleting entry with invalid generation should return 1"
-    );
     let mut buff = vec![0; 32];
     ensure!(
         state.entry_read(entry_invalid_gen, &mut buff, 0) == u32::MAX,
@@ -663,7 +654,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
     );
 
     let write_res = state
-        .entry_write(entry_invalid_gen, &buff, 0)
+        .entry_write(&mut energy, entry_invalid_gen, &buff, 0)
         .context("Writing to entry with invalid generation should return u32::MAX.")?;
     ensure!(
         write_res == u32::MAX,
@@ -675,11 +666,8 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
         "Getting size of entry with invalid generation should return u32::MAX."
     );
 
-    let mut energy_supplied = crate::InterpreterEnergy {
-        energy: 0,
-    };
     let resize_res = state
-        .entry_resize(&mut energy_supplied, entry_invalid_gen, 42)
+        .entry_resize(&mut energy, entry_invalid_gen, 42)
         .context("Resizing entry with invalid generation should return u32::MAX.")?;
     ensure!(
         resize_res == u32::MAX,
@@ -692,7 +680,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
         .convert()
         .context("Creating iter with new generation should not fail.")?;
     ensure!(
-        state.iterator_delete(iter_invalid_gen) == u32::MAX,
+        state.iterator_delete(&mut energy, iter_invalid_gen).unwrap() == u32::MAX,
         "Deleting iterator with invalid generation should return u32::MAX."
     );
 
@@ -707,7 +695,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
     );
 
     let next_res = state
-        .iterator_next(&mut energy_supplied, iter_invalid_gen)
+        .iterator_next(&mut energy, iter_invalid_gen)
         .context("Calling next on iterator with invalid generation should return Ok.")?;
 
     ensure!(
