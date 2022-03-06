@@ -157,10 +157,7 @@ unsafe extern "C" fn call_init_v1(
         }
     });
     // do not drop the pointer, we are not the owner
-    #[allow(unused_must_use)]
-    {
-        Arc::into_raw(artifact);
-    }
+    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or_else(|_| std::ptr::null_mut())
 }
@@ -295,10 +292,7 @@ unsafe extern "C" fn call_receive_v1(
         }
     });
     // do not drop the pointer, we are not the owner
-    #[allow(unused_must_use)]
-    {
-        Arc::into_raw(artifact);
-    }
+    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or_else(|_| std::ptr::null_mut())
 }
@@ -538,10 +532,7 @@ unsafe extern "C" fn artifact_v1_to_bytes(
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
-    #[allow(unused_must_use)]
-    {
-        Arc::into_raw(artifact);
-    }
+    let _ = Arc::into_raw(artifact);
     ptr
 }
 
