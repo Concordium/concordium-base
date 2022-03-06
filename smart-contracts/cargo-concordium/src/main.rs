@@ -10,6 +10,7 @@ use concordium_contracts_common::{
     schema::{Function, Type},
     to_bytes, Amount, OwnedReceiveName, Parameter,
 };
+use ptree::{print_tree_with, PrintConfig, TreeBuilder};
 use std::{
     fs::{self, File},
     io::Read,
@@ -21,7 +22,6 @@ use wasm_chain_integration::{
     v1::{self, ReturnValue},
     InterpreterEnergy,
 };
-
 mod build;
 mod context;
 mod schema_json;
@@ -40,7 +40,17 @@ enum Command {
         name = "run",
         about = "Locally simulate invocation method of a smart contract and inspect the state."
     )]
-    Run(RunCommand),
+    Run(Box<RunCommand>),
+    #[structopt(name = "display-state", about = "Display the contract state as a tree.")]
+    DisplayState {
+        #[structopt(
+            name = "state-bin",
+            long = "state-bin",
+            help = "Path to the file with state that is to be displayed. The state must be for a \
+                    V1 contract."
+        )]
+        state_bin_path: PathBuf,
+    },
     #[structopt(name = "test", about = "Build and run tests using a Wasm interpreter.")]
     Test {
         #[structopt(
@@ -166,16 +176,22 @@ enum RunCommand {
             short = "c",
             help = "Name of the contract to instantiate."
         )]
-        contract_name: String,
+        contract_name:        String,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the init context file."
         )]
-        context:       Option<PathBuf>,
+        context:              Option<PathBuf>,
+        #[structopt(
+            name = "display-state",
+            long = "display-state",
+            help = "Pretty print the contract state at the end of execution."
+        )]
+        should_display_state: bool,
         #[structopt(flatten)]
-        runner:        Runner,
+        runner:               Runner,
     },
     #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
@@ -200,29 +216,35 @@ enum RunCommand {
             help = "File with existing state of the contract in JSON, requires a schema is \
                     present either embedded or using --schema."
         )]
-        state_json_path: Option<PathBuf>,
+        state_json_path:      Option<PathBuf>,
         #[structopt(
             name = "state-bin",
             long = "state-bin",
             help = "File with existing state of the contract in binary."
         )]
-        state_bin_path:  Option<PathBuf>,
+        state_bin_path:       Option<PathBuf>,
         #[structopt(
             name = "balance",
             long = "balance",
             help = "Balance on the contract at the time it is invoked. Overrides the balance in \
                     the receive context."
         )]
-        balance:         Option<u64>,
+        balance:              Option<u64>,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the receive context file."
         )]
-        context:         Option<PathBuf>,
+        context:              Option<PathBuf>,
+        #[structopt(
+            name = "display-state",
+            long = "display-state",
+            help = "Pretty print the contract state at the end of execution."
+        )]
+        should_display_state: bool,
         #[structopt(flatten)]
-        runner:          Runner,
+        runner:               Runner,
     },
 }
 
@@ -247,7 +269,7 @@ pub fn main() -> anyhow::Result<()> {
     };
     match cmd {
         Command::Run(run_cmd) => {
-            let runner = match run_cmd {
+            let runner = match *run_cmd {
                 RunCommand::Init {
                     ref runner,
                     ..
@@ -276,8 +298,8 @@ pub fn main() -> anyhow::Result<()> {
                  size of the provided data."
             );
             match wasm_version {
-                utils::WasmVersion::V0 => handle_run_v0(run_cmd, module)?,
-                utils::WasmVersion::V1 => handle_run_v1(run_cmd, module)?,
+                utils::WasmVersion::V0 => handle_run_v0(*run_cmd, module)?,
+                utils::WasmVersion::V1 => handle_run_v1(*run_cmd, module)?,
             }
         }
         Command::Test {
@@ -308,14 +330,14 @@ pub fn main() -> anyhow::Result<()> {
                     ModuleSchema::V0(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v0(&contract_name, &contract_schema);
+                            print_contract_schema_v0(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
                     ModuleSchema::V1(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v1(&contract_name, &contract_schema);
+                            print_contract_schema_v1(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
@@ -342,8 +364,37 @@ pub fn main() -> anyhow::Result<()> {
                 bold_style.paint(size)
             )
         }
+        Command::DisplayState {
+            state_bin_path,
+        } => display_state_from_file(state_bin_path)?,
     };
     Ok(())
+}
+
+/// Loads the contract state from file and displays it as a tree by printing to
+/// stdout.
+fn display_state_from_file(file_path: PathBuf) -> anyhow::Result<()> {
+    let file = File::open(&file_path)
+        .with_context(|| format!("Could not read state file {}.", file_path.display()))?;
+    let mut reader = std::io::BufReader::new(file);
+    let state = v1::trie::PersistentState::deserialize(&mut reader)
+        .context("Could not deserialize the provided state.")?;
+
+    display_state(&state)
+}
+
+/// Displays the contract state as a tree by printing to stdout.
+fn display_state(state: &v1::trie::PersistentState) -> Result<(), anyhow::Error> {
+    let mut loader = v1::trie::Loader::new([]);
+
+    let mut tree_builder = TreeBuilder::new("StateRoot".into());
+    state.display_tree(&mut tree_builder, &mut loader);
+    let tree = tree_builder.build();
+    // We don't want to depend on some global config as it opens up for all sorts of
+    // corner-case bugs since we are not in control and thus inconsistent user
+    // experience.
+    let config = PrintConfig::default();
+    print_tree_with(&tree, &config).context("Could not print the state as a tree.")
 }
 
 /// Print the summary of the contract schema.
@@ -471,7 +522,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         match (runner.ignore_state_schema, &contract_schema_state_opt) {
             (false, Some(state_schema)) => {
                 let s = state_schema
-                    .to_json_string_pretty(&state)
+                    .to_json_string_pretty(state)
                     .map_err(|_| anyhow::anyhow!("Could not encode state to JSON."))?;
                 if runner.schema_path.is_some() {
                     eprintln!("The new state is: (Using provided schema)\n{}", s)
@@ -495,7 +546,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                  this contract.",
             )?;
             let json_string = schema_state
-                .to_json_string_pretty(&state)
+                .to_json_string_pretty(state)
                 .map_err(|_| anyhow::anyhow!("Could not output contract state in JSON."))?;
             fs::write(file_path, json_string).context("Could not write out the state.")?;
         }
@@ -525,7 +576,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             };
             let name = format!("init_{}", contract_name);
             let res = v0::invoke_init_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 init_ctx,
                 &name,
@@ -609,7 +660,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     let state_json: serde_json::Value =
                         serde_json::from_slice(&file).context("Could not parse state JSON.")?;
                     let mut state_bytes = Vec::new();
-                    write_bytes_from_json_schema_type(&schema_state, &state_json, &mut state_bytes)
+                    write_bytes_from_json_schema_type(schema_state, &state_json, &mut state_bytes)
                         .context("Could not generate state bytes using schema and JSON.")?;
                     state_bytes
                 }
@@ -617,7 +668,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
 
             let name = format!("{}.{}", contract_name, func);
             let res = v0::invoke_receive_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 receive_ctx,
                 &init_state,
@@ -753,7 +804,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         }
     };
     let print_state = |mut state: v1::trie::MutableState,
-                       loader: &mut v1::trie::Loader<&[u8]>|
+                       loader: &mut v1::trie::Loader<&[u8]>,
+                       should_display_state: bool|
      -> anyhow::Result<()> {
         let mut collector = v1::trie::SizeCollector::default();
         let frozen = state.freeze(loader, &mut collector);
@@ -765,6 +817,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 .context("Could not create file to write state into.")?;
             frozen.serialize(loader, &mut out_file).context("Could not write the state.")?;
             eprintln!("Resulting state written to {}.", file_path.display());
+        }
+        if should_display_state {
+            display_state(&frozen)?;
         }
         Ok(())
     };
@@ -794,6 +849,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     match run_cmd {
         RunCommand::Init {
             ref context,
+            should_display_state,
             ..
         } => {
             let init_ctx: InitContextOpt = match context {
@@ -808,7 +864,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             // empty initial backing store.
             let mut loader = v1::trie::Loader::new(&[][..]);
             let res = v1::invoke_init_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 init_ctx,
                 &name,
@@ -826,7 +882,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 } => {
                     eprintln!("Init call succeeded. The following logs were produced:");
                     print_logs(logs);
-                    print_state(state, &mut loader)?;
+                    print_state(state, &mut loader, should_display_state)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(
@@ -866,6 +922,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             ref state_bin_path,
             balance,
             ref context,
+            should_display_state,
             ..
         } => {
             let mut receive_ctx: ReceiveContextOptV1 = match context {
@@ -912,7 +969,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 ReceiveContextOptV1,
                 ReceiveContextOptV1,
             >(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 receive_ctx,
                 name.as_receive_name(),
@@ -931,7 +988,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     eprintln!("Receive method succeeded. The following logs were produced.");
                     print_logs(logs);
                     if state_changed {
-                        print_state(mutable_state, &mut loader)?;
+                        print_state(mutable_state, &mut loader, should_display_state)?;
                     } else {
                         eprintln!("The state of the contract did not change.");
                     }
@@ -971,7 +1028,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     );
                     print_logs(logs);
                     if state_changed {
-                        print_state(mutable_state, &mut loader)?;
+                        print_state(mutable_state, &mut loader, should_display_state)?;
                     } else {
                         eprintln!("The state of the contract did not change.");
                     }
@@ -1039,7 +1096,7 @@ fn get_parameter(
                 .context("Could not parse the JSON in parameter-json file.")?;
             let mut parameter_bytes = Vec::new();
             write_bytes_from_json_schema_type(
-                &parameter_schema,
+                parameter_schema,
                 &parameter_json,
                 &mut parameter_bytes,
             )

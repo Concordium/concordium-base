@@ -289,7 +289,6 @@
 
   ;; TODO:
   ;; - state_entry_resize
-  ;; - invoke
 
   ;; ;; try to do the most pessimistic sequence of resizes.
   ;; ;; resize from 0 to max sizes back to 0, repeat

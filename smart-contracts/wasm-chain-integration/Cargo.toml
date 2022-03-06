@@ -12,6 +12,7 @@ enable-ffi = []
 default=["enable-ffi"]
 fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
 fuzz-coverage = ["wasm-transform/fuzz-coverage"]
+display-state = ["ptree"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
@@ -25,6 +26,7 @@ thiserror = "1"
 byteorder = "1.4"
 tinyvec = {version = "1.5", features = ["alloc"]}
 slab = "0.4.5"
+ptree = { version = "0.4.0", optional = true }
 
 arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
 wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
