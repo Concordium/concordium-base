@@ -833,7 +833,10 @@ macro_rules! get_string {
 }
 
 /// Make a wrapper for functions of the form
-///
+/// ```
+///    f(success: *mut u8) -> *mut c_char
+/// ```
+/// or
 /// ```
 ///    f(input_ptr: *const c_char, success: *mut u8) -> *mut c_char
 /// ```
