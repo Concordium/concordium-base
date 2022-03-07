@@ -10,7 +10,7 @@ use wasm_chain_integration::{v0, v1, ExecResult};
 /// Used when simulating contracts to allow the user to only specify the
 /// necessary context fields.
 /// The default value is `None` for all `Option` fields.
-#[derive(Clone, serde::Deserialize, Default)]
+#[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ChainMetadataOpt {
     slot_time: Option<SlotTime>,
@@ -54,7 +54,7 @@ impl v0::HasInitContext for InitContextOpt {
 /// context fields used by the contract.
 /// The default value is `None` for all `Option` fields and the default of
 /// `ChainMetadataOpt` for `metadata`.
-#[derive(Clone, serde::Deserialize, Default)]
+#[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ReceiveContextOpt {
     #[serde(default)]
@@ -114,7 +114,7 @@ fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> ExecResult<A> {
 /// context fields used by the contract.
 /// The default value is `None` for all `Option` fields and the default of
 /// `ChainMetadataOpt` for `metadata`.
-#[derive(Clone, serde::Deserialize, Default)]
+#[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ReceiveContextOptV1 {
     #[serde(flatten)]

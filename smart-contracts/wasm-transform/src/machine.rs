@@ -479,13 +479,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         self.run_config(host, config)
     }
 
-    /// Returns the index of the given, otherwise an Err.
+    /// Returns the index of the given entrypoint if it exists.
     fn get_entrypoint_index<Q>(&self, name: &Q) -> RunResult<&FuncIndex>
     where
         Q: std::fmt::Display + Ord + ?Sized,
         Name: std::borrow::Borrow<Q>, {
-        self
-            .export
+        self.export
             .get(name)
             .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))
     }

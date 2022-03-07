@@ -8,7 +8,7 @@ use clap::AppSettings;
 use concordium_contracts_common::{
     from_bytes,
     schema::{Function, Type},
-    to_bytes, Amount, OwnedReceiveName, Parameter,
+    to_bytes, Amount, OwnedReceiveName, Parameter, ReceiveName,
 };
 use ptree::{print_tree_with, PrintConfig, TreeBuilder};
 use std::{
@@ -19,10 +19,9 @@ use std::{
 use structopt::StructOpt;
 use wasm_chain_integration::{
     utils, v0,
-    v1::{self, InvokeError, ReceiveResult, ReturnValue},
-    ExecResult, InterpreterEnergy,
+    v1::{self, ReturnValue},
+    InterpreterEnergy,
 };
-use wasm_transform::artifact::CompiledFunction;
 mod build;
 mod context;
 mod schema_json;
@@ -961,15 +960,42 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
             };
 
+            let artifact = wasm_transform::utils::instantiate_with_metering(
+                &v1::ConcordiumAllowedImports,
+                module,
+            )?;
+            let name = {
+                let chosen_name = format!("{}.{}", contract_name, func);
+                if let Err(e) = ReceiveName::is_valid_receive_name(&chosen_name) {
+                    anyhow::bail!("Invalid contract or receive function name: {}", e)
+                }
+                if artifact.has_entrypoint(chosen_name.as_str()) {
+                    OwnedReceiveName::new_unchecked(chosen_name)
+                } else {
+                    let fallback_name = format!("{}.", contract_name);
+                    if artifact.has_entrypoint(fallback_name.as_str()) {
+                        eprintln!(
+                            "The contract '{}' does not have the entrypoint '{}'. Using the \
+                             fallback entrypoint instead.",
+                            contract_name, func
+                        );
+                        OwnedReceiveName::new_unchecked(fallback_name)
+                    } else {
+                        anyhow::bail!(
+                            "The contract '{}' has neither the requested entrypoint '{}', nor a \
+                             fallback entrypoint.",
+                            contract_name,
+                            func
+                        );
+                    }
+                }
+            };
+
             let mut mutable_state = init_state.thaw();
             let inner = mutable_state.get_inner(&mut loader);
             let instance_state = v1::InstanceState::new(0, loader, inner);
-            let res = v1::invoke_receive_with_metering_from_source::<
-                _,
-                ReceiveContextOptV1,
-                ReceiveContextOptV1,
-            >(
-                module,
+            let res = v1::invoke_receive::<_, _, _, ReceiveContextOptV1>(
+                std::sync::Arc::new(artifact),
                 runner.amount.micro_ccd,
                 receive_ctx,
                 name.as_receive_name(),
