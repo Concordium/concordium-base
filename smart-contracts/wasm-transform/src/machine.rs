@@ -399,10 +399,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
     ) -> RunResult<ExecutionOutcome<H::Interrupt>>
     where
         Name: std::borrow::Borrow<Q>, {
-        let start = *self
-            .export
-            .get(name)
-            .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))?;
+        let start = *self.get_entrypoint_index(name)?;
         // FIXME: The next restriction could easily be lifted, but it is not a problem
         // for now.
         ensure!(start as usize >= self.imports.len(), RuntimeError::DirectlyCallImport);
@@ -480,6 +477,25 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             max_memory,
         };
         self.run_config(host, config)
+    }
+
+    /// Returns the index of the given, otherwise an Err.
+    fn get_entrypoint_index<Q>(&self, name: &Q) -> RunResult<&FuncIndex>
+    where
+        Q: std::fmt::Display + Ord + ?Sized,
+        Name: std::borrow::Borrow<Q>, {
+        self
+            .export
+            .get(name)
+            .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))
+    }
+
+    /// Returns `true` if the given entrypoint name exists, `false` otherwise.
+    pub fn has_entrypoint<Q>(&self, name: &Q) -> bool
+    where
+        Q: std::fmt::Display + Ord + ?Sized,
+        Name: std::borrow::Borrow<Q>, {
+        self.get_entrypoint_index(name).is_ok()
     }
 
     pub fn run_config<H: Host<I>>(

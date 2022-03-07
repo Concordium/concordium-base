@@ -9,6 +9,7 @@ use arbitrary::Arbitrary;
 use concordium_contracts_common::OwnedEntrypointName;
 use derive_more::{From, Into};
 use serde::Deserialize as SerdeDeserialize;
+use thiserror::Error;
 use wasm_transform::{
     artifact::TryFromImport,
     output::Output,

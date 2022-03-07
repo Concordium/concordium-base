@@ -1269,6 +1269,13 @@ pub fn invoke_receive_with_metering_from_source<
     instance_state: InstanceState<'b, BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    ensure!(
+        artifact.has_entrypoint(receive_name.get_chain_name()),
+        InvokeError::InvalidEntrypoint(
+            receive_name.contract_name().to_string(),
+            receive_name.entrypoint_name().to_string(),
+        )
+    );
     invoke_receive(
         Arc::new(artifact),
         amount,

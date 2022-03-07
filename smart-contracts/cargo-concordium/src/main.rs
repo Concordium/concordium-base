@@ -19,9 +19,10 @@ use std::{
 use structopt::StructOpt;
 use wasm_chain_integration::{
     utils, v0,
-    v1::{self, ReturnValue},
-    InterpreterEnergy,
+    v1::{self, InvokeError, ReceiveResult, ReturnValue},
+    ExecResult, InterpreterEnergy,
 };
+use wasm_transform::artifact::CompiledFunction;
 mod build;
 mod context;
 mod schema_json;
@@ -960,8 +961,6 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
             };
 
-            let name = OwnedReceiveName::new(format!("{}.{}", contract_name, func))
-                .map_err(|e| anyhow::anyhow!("Invalid contract or receive function name: {}", e))?;
             let mut mutable_state = init_state.thaw();
             let inner = mutable_state.get_inner(&mut loader);
             let instance_state = v1::InstanceState::new(0, loader, inner);
