@@ -3,7 +3,8 @@
 ## Unreleased
   - New functions `create_configure_baker_transaction` and `create_configure_delegation_transaction`
     have been added to support the new transaction types `configure baker` and `configure delegation`
-    that are introduced in Protocol Version 4. 
+    that are introduced in Protocol Version 4.
+  - A new function `generate_baker_keys` have been added.
 
 ## 0.9.0
    - The functions `create_transfer` and `create_encrypted_transfer` have been extended to support
