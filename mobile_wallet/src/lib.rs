@@ -30,7 +30,7 @@ use crypto_common::types::KeyPair;
 type ExampleCurve = G1;
 
 /// Baker keys
-#[derive(SerdeDeserialize)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BakerKeys {
     #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
@@ -267,6 +267,26 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
     });
 
     Ok(to_string(&response)?)
+}
+
+fn generate_baker_keys_aux() -> anyhow::Result<String> {
+    let mut csprng = thread_rng();
+    let election_private_key = ecvrf::SecretKey::generate(&mut csprng);
+    let election_verify_key = ecvrf::PublicKey::from(&election_private_key);
+    let signature_sign_key = ed25519::SecretKey::generate(&mut csprng);
+    let signature_verify_key = ed25519::PublicKey::from(&signature_sign_key);
+    let aggregation_sign_key = aggregate_sig::SecretKey::<Bls12>::generate(&mut csprng);
+    let aggregation_verify_key =
+        aggregate_sig::PublicKey::<Bls12>::from_secret(&aggregation_sign_key);
+    let keys = BakerKeys {
+        election_verify_key,
+        election_private_key,
+        signature_verify_key,
+        signature_sign_key,
+        aggregation_verify_key,
+        aggregation_sign_key,
+    };
+    Ok(to_string(&keys)?)
 }
 
 fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String> {
@@ -822,6 +842,14 @@ macro_rules! get_string {
 ///    f(input_ptr_1: *const c_char, input_ptr_2: *const c_char, success: *mut u8) -> *mut c_char
 /// ```
 macro_rules! make_wrapper {
+    ($(#[$attr:meta])* => $f:ident > $call:expr) => {
+        $(#[$attr])*
+        #[no_mangle]
+        pub unsafe fn $f(success: *mut u8) -> *mut c_char {
+            let response = $call();
+            encode_response(response, success)
+        }
+    };
     ($(#[$attr:meta])* => $f:ident -> $call:expr) => {
         $(#[$attr])*
         #[no_mangle]
@@ -885,6 +913,16 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_configure_baker_transaction -> create_configure_baker_transaction_aux);
+
+make_wrapper!(
+    /// Return a NUL-terminated UTF8-encoded string. The returned string must be freed
+    /// by the caller by calling the function 'free_response_string'. In case of
+    /// failure the function returns an error message as the response, and sets the
+    /// 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    => generate_baker_keys > generate_baker_keys_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

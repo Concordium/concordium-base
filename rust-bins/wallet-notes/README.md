@@ -227,6 +227,22 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [create_configure_baker-transaction-input.json](files/create_configure_baker-transaction-input.json).
 An example output to this request is in the file [create_configure_baker-transaction-output.json](files/create_configure_baker-transaction-output.json).
 
+## generate_baker_keys
+
+Semantics: Generates baker keys.
+
+This functiones takes no input. An output of the function could look like
+```json
+{
+    "electionVerifyKey": "7c6804c3a3460c0a90a4d7bf6e2787c70a32a8d35faf8725862d73172f1c5383",
+    "electionPrivateKey": "69e736da67e493bc1a781d835f6877e4aa2102fe4c118de9d4435b6a4b5cba4a",
+    "signatureVerifyKey": "c1a11131f42df6328a8e111524b1e45c9b537c8f60d442540d8001756c82c20b",
+    "signatureSignKey": "44da32121d641e0e1be49900164a5c6eca2a594f1676cb7d744b171e74676b18",
+    "aggregationVerifyKey": "922668fdbdcf66a1dec7d5d284e9c3dba2f4fc10856face74db06189691e9609b5cc78fc77398af7bae2f2ee6e0361f1057e2627f1988d15bb16a6096382a1220f8e8c820e1a38df0c6357b6639241ea97e12c4f33365241b7186a98d6161b85",
+    "aggregationSignKey": "48a3748a9ecf98fbccac29b7ccd0e1074f2bca73655154242c3c2835945601e9"
+}
+```
+
 ## create_encrypted_transfer_ext
 
 Semantics: Create an encrypted transfer transaction with the provided values.
