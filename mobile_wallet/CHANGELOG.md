@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
   - New functions `create_configure_baker_transaction` and `create_configure_delegation_transaction`
     have been added to support the new transaction types `configure baker` and `configure delegation`
     that are introduced in Protocol Version 4.
