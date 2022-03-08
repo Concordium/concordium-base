@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, TemplateHaskell, StandaloneDeriving, DeriveTraversable, RankNTypes, DataKinds, KindSignatures, TypeFamilies, GADTs, TypeApplications #-}
+{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, TemplateHaskell, StandaloneDeriving, DeriveTraversable, RankNTypes, DataKinds, TypeFamilies, GADTs, TypeApplications #-}
 -- |Types for chain update instructions, together with basic validation functions.
 -- For specification, see: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
 --
@@ -22,8 +22,13 @@
 --   - parameters for distribution of newly minted tokens
 --   - parameters controlling the transaction fee distribution
 --   - parameters controlling the GAS account
+--   - parameters pertaining to bakers (P1-P3) and baker pools (P4 onwards)
+--   - anonymity revokers (append only)
+--   - identity providers (append only)
+--   - parameters determining cooldown times (P4 onwards)
+--   - parameters determining reward period length and mint rate (P4 onwards)
 --
--- Each parameter has an independent update queue.
+-- Each parameter (or parameter group) has an independent update queue.
 -- Sequence numbers for each different parameter are thus independent.
 -- (Note, where two parameters are tightly coupled, such that one should
 -- not be changed independently of the other, then they should be combined
@@ -33,7 +38,6 @@
 -- The implementation should stop the current chain when a protocol update takes effect.
 -- If it supports the new protocol version, it should begin a new chain according to that protocol,
 -- and based on the state when the update took effect.
--- (Currently, this is not implemented.)
 --
 -- Emergency updates are inherently outside the scope of the chain implementation itself.
 -- The chain only records the keys authorized for emergency updates, but does
@@ -147,7 +151,7 @@ data Authorizations cpv = Authorizations {
         asParamTransactionFeeDistribution :: !AccessStructure,
         -- |Parameter keys: GAS rewards
         asParamGASRewards :: !AccessStructure,
-        -- |Parameter keys: Baker Minimum Threshold
+        -- |Parameter keys: Baker Minimum Threshold/Pool parameters
         asBakerStakeThreshold :: !AccessStructure,
         -- |Parameter keys: ArIdentity and ArInfo
         asAddAnonymityRevoker :: !AccessStructure,
@@ -734,11 +738,13 @@ data UpdatePayload
     | BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
     -- ^Update the minimum amount to register as a baker with chain parameter version 0
     | RootUpdatePayload !RootUpdate
-    -- ^Root level updates for chain parameters version 1
+    -- ^Root level update
     | Level1UpdatePayload !Level1Update
-    -- ^Level 1 update for chain parameters version 1
+    -- ^Level 1 update
     | AddAnonymityRevokerUpdatePayload !ArInfo
+    -- ^Add an anonymity revoker
     | AddIdentityProviderUpdatePayload !IpInfo
+    -- ^Add an identity provider
     | CooldownParametersCPV1UpdatePayload !(CooldownParameters 'ChainParametersV1)
     -- ^Cooldown parameters with chain parameter version 1
     | PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
