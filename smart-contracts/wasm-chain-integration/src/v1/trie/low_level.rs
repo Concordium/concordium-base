@@ -1490,9 +1490,9 @@ impl<V> CachedRef<Hashed<Node<V>>> {
                 key,
                 ..
             } => {
-                let node: Node<V> =
-                    Node::<V>::load_from_location(loader, *key).expect("Failed to read.");
-                node.thaw(borrowed_values, entries, generation)
+                let node: Hashed<Node<V>> =
+                    Hashed::<Node<V>>::load_from_location(loader, *key).expect("Failed to read.");
+                node.data.thaw(borrowed_values, entries, generation)
             }
             CachedRef::Memory {
                 value,
