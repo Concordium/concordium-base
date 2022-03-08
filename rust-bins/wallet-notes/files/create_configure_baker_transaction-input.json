@@ -29,7 +29,7 @@
     "capital": "1000000",
     "restakeEarnings": true,
     "openStatus": "openForAll",
-    "url": "http://example",
+    "metadataUrl": "http://example",
     "transactionFeeCommission": 0,
     "bakingRewardCommission": 50000,
     "finalizationRewardCommission": 100000,

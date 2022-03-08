@@ -225,6 +225,10 @@ The following fields are optional:
 
 - `"capital"` ... string containing the amount to be staked.
 
+- `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
+
+- `"metadataUrl"` ... string containing a metadata URL. Max size is 2048 bytes.
+
 - `"openStatus"` ... whether the pool is closed, open for delegation or closed for new delegators.
   This is indicated with one of the strings `"openForAll"`, `"closedForNew"`, or `"closedForAll"`.
 

@@ -309,7 +309,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         None => None,
     };
 
-    let maybe_url: Option<UrlText> = match v.get("url") {
+    let maybe_url: Option<UrlText> = match v.get("metadataUrl") {
         Some(m) => Some(from_value(m.clone())?),
         None => None,
     };
