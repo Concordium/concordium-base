@@ -169,14 +169,31 @@ must be a valid JSON object with fields
 
 - `"energy"` ... max energy wanted for the transfer.
 
+The following fields are optional:
+
 - `"capital"` ... string containing the amount to be staked.
 
-- `"restakeEarnings"` ... bool indicating whether earnings should be restaked
+- `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
 
 - `"delegationTarget"` ... JSON indicating either delegation to the L-pool or to a baker pool.
 
+The delegation target should either be of the form
+```json
+{
+    "type": "delegateToLPool"
+}
+```
+or
 
-To add a delegator, all of the fields must be present. For an existing delegator the fields that are present will be updated on chain. A delegator is removed if the `capital` is set to `"0"`.
+```json
+{
+    "type": "delegateToBaker",
+    "targetBaker": 100
+}
+```
+where `100` should be replaced with relevant baker id.
+
+To add a delegator, all of the optional fields must be present. For an existing delegator the fields that are present will be updated on chain. A delegator is removed if the `capital` is set to `"0"`.
 
 The returned value is a JSON object with the following fields:
 
@@ -204,9 +221,12 @@ must be a valid JSON object with fields
 
 - `"energy"` ... max energy wanted for the transfer.
 
+The following fields are optional:
+
 - `"capital"` ... string containing the amount to be staked.
 
 - `"openStatus"` ... whether the pool is closed, open for delegation or closed for new delegators.
+  This is indicated with one of the strings `"openForAll"`, `"closedForNew"`, or `"closedForAll"`.
 
 - `"transactionFeeCommission"` ... number indicating the transaction fee commission in parts per hundred thousand.
 
@@ -214,9 +234,9 @@ must be a valid JSON object with fields
 
 - `"finalizationRewardCommission"` ... number indicating the finalization reward commission in parts per hundred thousand.
 
-- `"bakerKeys"` ... the baker keys.
+- `"bakerKeys"` ... the baker keys. These are generated using the function `generate_baker_keys` documented below.
 
-To add a baker, all of the fields must be present. For an existing baker the fields that are present will be updated on chain. A baker is removed if the `capital` is set to `"0"`.
+To add a baker, all of the optional fields must be present. For an existing baker the fields that are present will be updated on chain. A baker is removed if the `capital` is set to `"0"`.
 
 The returned value is a JSON object with the following fields:
 
@@ -242,6 +262,8 @@ This functiones takes no input. An output of the function could look like
     "aggregationSignKey": "48a3748a9ecf98fbccac29b7ccd0e1074f2bca73655154242c3c2835945601e9"
 }
 ```
+
+Note: In order for a node to use the baker credentials to bake, the field `"bakerId"` with the ID of the baker needs to be added to the above JSON.
 
 ## create_encrypted_transfer_ext
 

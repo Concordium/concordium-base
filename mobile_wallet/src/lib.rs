@@ -231,15 +231,15 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
 
     let mut bitmap: u16 = 0b0000000000000000;
     if maybe_capital.is_some() {
-        bitmap |= 0b0000000000000100;
+        bitmap |= 1 << 0;
     }
 
     if maybe_restake_earnings.is_some() {
-        bitmap |= 0b0000000000000010;
+        bitmap |= 1 << 1;
     }
 
     if maybe_delegation_target.is_some() {
-        bitmap |= 0b0000000000000001;
+        bitmap |= 1 << 2;
     }
 
     let (hash, body) = {
@@ -336,35 +336,35 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
 
     let mut bitmap: u16 = 0b0000000000000000;
     if maybe_capital.is_some() {
-        bitmap |= 0b0000000010000000;
+        bitmap |= 1 << 0;
     }
 
     if maybe_restake_earnings.is_some() {
-        bitmap |= 0b0000000001000000;
+        bitmap |= 1 << 1;
     }
 
     if maybe_openstatus.is_some() {
-        bitmap |= 0b0000000000100000;
+        bitmap |= 1 << 2;
     }
 
     if maybe_baker_keys.is_some() {
-        bitmap |= 0b0000000000010000;
+        bitmap |= 1 << 3;
     }
 
     if maybe_url.is_some() {
-        bitmap |= 0b0000000000001000;
+        bitmap |= 1 << 4;
     }
 
     if maybe_transaction_fee.is_some() {
-        bitmap |= 0b0000000000000100;
+        bitmap |= 1 << 5;
     }
 
     if maybe_baking_reward.is_some() {
-        bitmap |= 0b0000000000000010;
+        bitmap |= 1 << 6;
     }
 
     if maybe_finalization_reward.is_some() {
-        bitmap |= 0b0000000000000001;
+        bitmap |= 1 << 7;
     }
 
     let (hash, body) = {
@@ -382,7 +382,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         }
         if let Some(baker_keys) = maybe_baker_keys {
             let mut challenge = Vec::new();
-            challenge.put(b"addBaker");
+            challenge.put(b"configureBaker");
             challenge.put(&ctx.from);
             challenge.put(&baker_keys.election_verify_key);
             challenge.put(&baker_keys.signature_verify_key);
