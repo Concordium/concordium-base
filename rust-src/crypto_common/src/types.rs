@@ -1,6 +1,8 @@
 //! Common types needed in concordium.
 
-use crate::{Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial};
+use crate::{
+    serial_string, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial,
+};
 use byteorder::ReadBytesExt;
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
@@ -36,6 +38,80 @@ pub struct KeyIndex(pub u8);
 /// Index of the credential that is to be used.
 pub struct CredentialIndex {
     pub index: u8,
+}
+
+pub struct UrlText {
+    pub url: String,
+}
+
+pub const MAX_URL_SIZE: usize = 2048; // Needs to be same as maxUrlTextLength in Types.hs in haskell-src
+
+impl Serial for UrlText {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.url.len() as u16).serial(out);
+        serial_string(&self.url, out)
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for UrlText {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>, {
+        let url = String::deserialize(deserializer)?;
+        if url.len() <= MAX_URL_SIZE {
+            Ok(UrlText { url })
+        } else {
+            Err(serde::de::Error::custom("Url length out of bounds."))
+        }
+    }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+pub enum OpenStatus {
+    #[serde(rename = "openForAll")]
+    OpenForAll,
+    #[serde(rename = "closedForNew")]
+    ClosedForNew,
+    #[serde(rename = "closedForAll")]
+    ClosedForAll,
+}
+
+impl Serial for OpenStatus {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match *self {
+            OpenStatus::OpenForAll => out.write_u8(0),
+            OpenStatus::ClosedForNew => out.write_u8(1),
+            OpenStatus::ClosedForAll => out.write_u8(2),
+        }
+        .expect("Writing to a buffer should not fail.");
+    }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum DelegationTarget {
+    #[serde(rename = "delegateToLPool")]
+    DelegateToLPool,
+    #[serde(rename = "delegateToBaker")]
+    DelegateToBaker {
+        #[serde(rename = "targetBaker")]
+        target_baker: u64,
+    },
+}
+
+impl Serial for DelegationTarget {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match *self {
+            DelegationTarget::DelegateToLPool => out
+                .write_u8(0)
+                .expect("Writing to a buffer should not fail."),
+            DelegationTarget::DelegateToBaker { target_baker } => {
+                out.write_u8(1)
+                    .expect("Writing to a buffer should not fail.");
+                target_baker.serial(out)
+            }
+        }
+    }
 }
 
 #[repr(transparent)]

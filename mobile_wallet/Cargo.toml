@@ -26,6 +26,18 @@ libc = "0.2"
 path = "../rust-src/crypto_common"
 version = "0"
 
+[dependencies.ecvrf]
+path = "../rust-src/ecvrf"
+version = "0"
+
+[dependencies.aggregate_sig]
+path = "../rust-src/aggregate_sig"
+version = "0"
+
+[dependencies.random_oracle]
+path = "../rust-src/random_oracle"
+version = "0"
+
 [dependencies.curve_arithmetic]
 path = "../rust-src/curve_arithmetic"
 version = "0"

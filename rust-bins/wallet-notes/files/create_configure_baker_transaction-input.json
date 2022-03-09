@@ -1,0 +1,44 @@
+{
+    "from": "3ZFGxLtnUUSJGW2WqjMh1DDjxyq5rnytCwkSqxFTpsWSFdQnNn",
+    "to": "4a3wqcAdVz7QC34rxyXNzRwYMgBKPBNYWfyTBnjAaLpeR6H3pR",
+    "expiry": 1585699200,
+    "nonce": 1,
+    "keys": {
+      "keys": {
+        "0": {
+          "keys": {
+            "0": {
+              "signKey": "64ba478c8c33ed3722ad4c5cab1b4376ff16c5fac2400695d53f0a416f2ec2a1",
+              "verifyKey": "62d162afce2b9d2cb20f4486ced04537c32f0e6b8a0e033d067ca05a22615054"
+            },
+            "1": {
+              "signKey": "76dd1512865cc3729b4a495cada741b889872b7308e5b61f7e2f71382e8d5395",
+              "verifyKey": "c2cde026f8c8482b8730d0571dcab27bed59c3ef11532d3a62cdd8d1bb7fbf94"
+            },
+            "2": {
+              "signKey": "ebb2fab346b0c7d8e51f63292f11e1d8f59c3f86629012ab454339e5ec60cfeb",
+              "verifyKey": "0e818bf96c12a1cc086bf3808f8a0553e948f2d10084f4f307c10b1fe865cd39"
+            }
+          },
+          "threshold": 2
+        }
+      },
+      "threshold": 1
+    },
+    "energy": 1000,
+    "capital": "1000000",
+    "restakeEarnings": true,
+    "openStatus": "openForAll",
+    "metadataUrl": "http://example",
+    "transactionFeeCommission": 0,
+    "bakingRewardCommission": 50000,
+    "finalizationRewardCommission": 100000,
+    "bakerKeys": {
+      "aggregationSignKey": "1670f97140af04396bb08089a4af6d3c792c8464aa134b500f29d017fab8137d",
+      "aggregationVerifyKey": "b5f3e6ff6b9b895ab7a4ace5e32ab232164e8e61a8377dcd305e72f21d941c272484d1e5982dc1512c21dc822f192a1d0399fc5daefb073c2bdf0b44e9f4c5e87b29a8a9848ab7421d1c228ef2ded728f1e515be5a4913f70553ee6152328a3a",
+      "electionPrivateKey": "fcf2114c175885b23e6e02091b4768ac815c635b149805f3e1cdb7f9d25cc3c8",
+      "electionVerifyKey": "307872797a03decf898a8a542e5c105466d42687b597756e6b1d1bd5ff47ad1c",
+      "signatureSignKey": "c23087b3b5ca21128e076d1db513a9e85c8346fe495c191747a5209ba5902263",
+      "signatureVerifyKey": "6130b9f10e5ba13aa57929eeab9f8795754c315b6ed19f922d2ca3d096493445"
+    }
+  }
