@@ -34,7 +34,7 @@ fn prop_storing_caches() {
         };
         let mut ser = Vec::new();
         let _ = frozen.store_update(&mut ser);
-        ensure!(frozen.data.is_stored(), "Not all data is stored.");
+        ensure!(frozen.get(&mut loader).data.is_stored(), "Not all data is stored.");
         Ok(())
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
@@ -52,7 +52,13 @@ fn prop_storing() {
             // check that the computed size at least accounts for all the data
             // keys are partially shared so we cannot easily bound those.
             let data_size = reference.values().map(|v| v.len() as u64).sum::<u64>();
-            ensure!(collector.collect() > data_size);
+            let calculated_size = collector.collect();
+            ensure!(
+                calculated_size > data_size,
+                "Calculated size ({}) does not account for data size ({}).",
+                calculated_size,
+                data_size
+            );
             t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
@@ -64,8 +70,40 @@ fn prop_storing() {
         let mut loader = Loader {
             inner: backing_store,
         };
-        let trie = Hashed::<Node<Value>>::load_from_location(&mut loader, root);
-        ensure!(trie.is_ok(), "Failed to deserialize {:?}", loader.inner);
+        let trie = CachedRef::<Hashed<Node<Value>>>::load_from_location(&mut loader, root)
+            .context("Could not deserialize.")?;
+        let mut mutable = trie.make_mutable(0, &mut loader);
+        let mut iterator = mutable
+            .iter(&mut loader, &[])
+            .expect("This is the first iterator, so no overflow.")
+            .expect("Trie is not empty, so this should succeed.");
+        for ((k, v), i) in reference.iter().zip(0..) {
+            let entry = mutable
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .context("Trie iterator ends early.")?;
+            mutable
+                .with_entry(entry, &mut loader, |ev| -> anyhow::Result<()> {
+                    ensure!(
+                        v == ev,
+                        "Reference value does not match the trie value {:?} != {:?} ({})",
+                        v,
+                        ev,
+                        i
+                    );
+                    Ok(())
+                })
+                .context("Entry should exist.")??;
+            let it_key = iterator.get_key();
+            ensure!(
+                it_key == k,
+                "Iterator returns incorrect key, {:?} != {:?}, {:#?}",
+                it_key,
+                k,
+                mutable
+            );
+        }
+
         Ok(())
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
@@ -84,18 +122,22 @@ fn prop_serialization() {
             return Ok(());
         };
         let mut out = Vec::new();
-        frozen.serialize(&mut loader, &mut out).context("Serialization failed.")?;
-        let original_hash = frozen.hash;
+        frozen.use_value_(&mut loader, |loader, node| {
+            node.serialize(loader, &mut out).context("Serialization failed.")
+        })?;
+        let original_hash = frozen.hash(&mut loader);
         let mut source = std::io::Cursor::new(&out);
-        let deserialized =
-            Hashed::<Node<Value>>::deserialize(&mut source).context("Failed to deserialize")?;
+        let deserialized = CachedRef::Memory {
+            value: Hashed::<Node<Value>>::deserialize(&mut source)
+                .context("Failed to deserialize")?,
+        };
         ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
-        let deserialized_hash = deserialized.hash;
+        let deserialized_hash = deserialized.hash(&mut loader);
         ensure!(
             original_hash == deserialized_hash,
             "Hashes of the original and deserialized tree differ."
         );
-        let mut mutable = deserialized.data.make_mutable(0);
+        let mut mutable = deserialized.make_mutable(0, &mut loader);
         let mut iterator = if let Some(i) =
             mutable.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
         {
@@ -134,16 +176,16 @@ fn prop_storing_preseves_hash() {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
             return Ok(());
         };
-        let hash_1 = frozen.hash;
+        let hash_1 = frozen.hash(&mut loader);
         let mut backing_store = Vec::new();
         let top = frozen.store_update(&mut backing_store).expect("Storing succeeds.");
         let root = backing_store.store_raw(&top).expect("Storing to a vector succeeds.");
         let mut loader = Loader {
             inner: backing_store,
         };
-        let trie = Hashed::<Node<Value>>::load_from_location(&mut loader, root)
+        let trie = CachedRef::<Hashed<Node<Value>>>::load_from_location(&mut loader, root)
             .context("Failed to deserialize.")?;
-        let hash_2 = trie.hash;
+        let hash_2 = trie.hash(&mut loader);
         ensure!(hash_1 == hash_2, "Hashes differ.");
         Ok(())
     };
@@ -165,7 +207,7 @@ fn prop_hash_independent_of_order() {
                 ensure!(inputs.is_empty(), "Empty tree, but non-empty inputs.");
                 return Ok(());
             };
-            let hash = frozen.hash;
+            let hash = frozen.hash(&mut loader);
             // swap pairs and make another tree
             let len = inputs.len(); // we know this is non-zero.
             for (l, r) in swaps {
@@ -177,7 +219,7 @@ fn prop_hash_independent_of_order() {
             } else {
                 bail!("The first tree was not empty, but the second one is.");
             };
-            let hash_1 = frozen_1.hash;
+            let hash_1 = frozen_1.hash(&mut loader);
             ensure!(hash == hash_1, "Hashes differ.");
             Ok(())
         };
@@ -738,16 +780,12 @@ fn prop_matches_reference_after_freeze_thaw() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
-        let trie = if let Some(Hashed {
-            data: trie,
-            ..
-        }) = trie.freeze(&mut loader, &mut EmptyCollector)
-        {
+        let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
             trie
         } else {
             return reference.is_empty();
         };
-        let mut trie = trie.make_mutable(0);
+        let mut trie = trie.make_mutable(0, &mut loader);
         let mut iterator = if let Some(i) =
             trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
         {
@@ -774,6 +812,93 @@ fn prop_matches_reference_after_freeze_thaw() {
             .is_none() // there are no values left to iterate.
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
+}
+
+/// Check that it costs nothing to freeze a tree that is not modified.
+#[test]
+/// Check that the mutable trie and its iterator match the reference
+/// implementation after a freeze/thaw step.
+/// Check also that the collector result is unaffected by freeze/thaw and
+/// storing.
+fn prop_freeze_unmodified() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>, new: Vec<Vec<u8>>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs.clone());
+        let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            trie
+        } else {
+            ensure!(reference.is_empty(), "Cannot freeze, but reference is not empty.");
+            return Ok(());
+        };
+        let mut m1 = trie.make_mutable(0, &mut loader);
+
+        for k in &new {
+            m1.get_entry(&mut loader, k);
+        }
+
+        let mut collector = SizeCollector::default();
+        m1.freeze(&mut loader, &mut collector).expect("Freezing m1 should succeed.");
+        let s1 = collector.collect();
+        ensure!(s1 == 0, "Non-zero cost {}.", s1);
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, _) -> _);
+}
+
+#[test]
+/// Check that the mutable trie and its iterator match the reference
+/// implementation after a freeze/thaw step.
+/// Check also that the collector result is unaffected by freeze/thaw and
+/// storing.
+fn prop_freeze_collector() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>, new: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs.clone());
+        let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            trie
+        } else {
+            ensure!(reference.is_empty(), "Cannot freeze, but reference is not empty.");
+            return Ok(());
+        };
+        let (trie_1, mut loader_1) = make_mut_trie(inputs);
+        let mut trie_1 = if let Some(trie_1) = trie_1.freeze(&mut loader_1, &mut EmptyCollector) {
+            trie_1
+        } else {
+            ensure!(reference.is_empty(), "Cannot freeze, but reference is not empty.");
+            return Ok(());
+        };
+        let mut buf = Vec::new();
+        let mut store = Vec::new();
+        trie_1.store_update_buf(&mut store, &mut buf).expect("Storing trie_1 should succeed.");
+        let stored_location = store.store_raw(&buf).expect("Storing the tree should succeed.");
+        let mut loader_1 = Loader {
+            inner: store,
+        };
+        let trie_1 =
+            CachedRef::<Hashed<Node<Value>>>::load_from_location(&mut loader_1, stored_location)
+                .expect("Loading of the tree failed.");
+        let mut m1 = trie.make_mutable(0, &mut loader);
+        let mut m2 = trie_1.make_mutable(0, &mut loader_1);
+
+        for (k, v) in &new {
+            m1.insert(&mut loader, k, v.clone()).expect("Inserting in m1 should succeed.");
+        }
+
+        for (k, v) in new {
+            m2.insert(&mut loader_1, &k, v).expect("Inserting in m2 should succeed.");
+        }
+        let mut collector = SizeCollector::default();
+        let mut collector_1 = SizeCollector::default();
+        let d1 = format!("{:#?}", m1);
+        let d2 = format!("{:#?}", m2);
+        m1.freeze(&mut loader, &mut collector).expect("Freezing m1 should succeed.");
+        m2.freeze(&mut loader_1, &mut collector_1).expect("Freezing m2 should succeed");
+        let s1 = collector.collect();
+        let s2 = collector_1.collect();
+        ensure!(s1 == s2, "Sizes differ {} != {} {} {}.", s1, s2, d1, d2);
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, _) -> _);
 }
 
 #[test]

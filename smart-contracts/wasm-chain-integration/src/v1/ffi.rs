@@ -224,9 +224,9 @@ unsafe extern "C" fn call_receive_v1(
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
         let state_ptr = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
-        let mut state = (&mut *state_ptr).make_fresh_generation();
-        let inner = state.get_inner();
-        let instance_state = InstanceState::new(0, loader, inner);
+        let mut loader = loader;
+        let mut state = (&mut *state_ptr).make_fresh_generation(&mut loader);
+        let instance_state = InstanceState::new(0, loader, state.get_inner(&mut loader));
         match std::str::from_utf8(receive_name)
             .ok()
             .and_then(|s| OwnedReceiveName::new(s.into()).ok())
@@ -624,7 +624,7 @@ extern "C" fn freeze_mutable_state_v1(
 ) -> *mut PersistentState {
     let tree = unsafe { &mut *tree };
     let persistent = tree.freeze(&mut loader, &mut EmptyCollector);
-    let hash = persistent.hash();
+    let hash = persistent.hash(&mut loader);
     let hash: &[u8] = hash.as_ref();
     unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
     Box::into_raw(Box::new(persistent))
@@ -655,9 +655,13 @@ extern "C" fn cache_persistent_state_v1(mut loader: LoadCallBack, tree: *mut Per
 }
 
 #[no_mangle]
-extern "C" fn hash_persistent_state_v1(tree: *mut PersistentState, hash_buf: *mut u8) {
+extern "C" fn hash_persistent_state_v1(
+    mut loader: LoadCallBack,
+    tree: *mut PersistentState,
+    hash_buf: *mut u8,
+) {
     let tree = unsafe { &mut *tree };
-    let hash = tree.hash();
+    let hash = tree.hash(&mut loader);
     let hash: &[u8] = hash.as_ref();
     unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
 }
@@ -734,7 +738,7 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
         let mut mutable = PersistentState::Empty.thaw();
         let mut loader = trie::Loader::new(&[]);
         {
-            let mut state_lock = mutable.get_inner().state.lock().unwrap();
+            let mut state_lock = mutable.get_inner(&mut loader).state.lock().unwrap();
             let mut hasher = sha2::Sha512::new();
             hasher.update(&seed.to_be_bytes());
             for i in 0..len {

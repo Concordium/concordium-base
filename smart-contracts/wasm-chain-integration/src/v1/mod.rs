@@ -861,10 +861,11 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    loader: BackingStore,
+    mut loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let mut initial_state = trie::MutableState::initial_state();
-    let state_ref = InstanceState::new(0, loader, initial_state.get_inner());
+    let inner = initial_state.get_inner(&mut loader);
+    let state_ref = InstanceState::new(0, loader, inner);
     let mut host = InitHost {
         energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
@@ -1106,15 +1107,16 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
     energy: InterpreterEnergy, // remaining energy for execution
     state_trie: &mut trie::MutableState,
     state_updated: bool,
-    backing_store: BackingStore,
+    mut backing_store: BackingStore,
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
+    let inner = state_trie.get_inner(&mut backing_store);
     let state = InstanceState::migrate(
         state_updated,
         interrupted_state.host.current_generation,
         interrupted_state.host.entry_mapping,
         interrupted_state.host.iterators,
         backing_store,
-        state_trie.get_inner(),
+        inner,
     );
     let mut host = ReceiveHost {
         stateless: interrupted_state.host.stateless,

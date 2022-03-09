@@ -293,7 +293,7 @@ impl<V> Default for CachedRef<V> {
 
 impl<V: Loadable> CachedRef<V> {
     #[inline(always)]
-    pub fn get(&self, loader: &mut impl BackingStoreLoad) -> V
+    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> V
     where
         V: Clone, {
         match self {
@@ -315,34 +315,44 @@ impl<V: Loadable> CachedRef<V> {
     /// Apply the supplied function to the contained value. The value is loaded
     /// if it is not yet cached. Note that this will **not** cache the
     /// value, the loaded value will be dropped.
-    pub fn use_value<X>(&self, loader: &mut impl BackingStoreLoad, f: impl FnOnce(&V) -> X) -> X {
+    #[inline(always)]
+    pub(crate) fn use_value<X>(
+        &self,
+        loader: &mut impl BackingStoreLoad,
+        f: impl FnOnce(&V) -> X,
+    ) -> X {
+        self.use_value_(loader, |_, x| f(x))
+    }
+
+    /// Apply the supplied function to the contained value. The value is loaded
+    /// if it is not yet cached. Note that this will **not** cache the
+    /// value, the loaded value will be dropped.
+    pub(crate) fn use_value_<X, L: BackingStoreLoad>(
+        &self,
+        loader: &mut L,
+        f: impl FnOnce(&mut L, &V) -> X,
+    ) -> X {
         match self {
             CachedRef::Disk {
                 key,
             } => {
                 let loaded = V::load_from_location(loader, *key).unwrap();
-                f(&loaded)
+                f(loader, &loaded)
             }
             CachedRef::Memory {
                 value,
                 ..
-            } => f(value),
+            } => f(loader, value),
             CachedRef::Cached {
                 value,
                 ..
-            } => f(value),
+            } => f(loader, value),
         }
     }
 }
 
 impl<V> CachedRef<V> {
-    pub fn new(value: V) -> CachedRef<V> {
-        CachedRef::Memory {
-            value,
-        }
-    }
-
-    pub fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) -> &mut V
+    pub(crate) fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) -> &mut V
     where
         V: Loadable, {
         match self {
@@ -401,7 +411,7 @@ impl<V> CachedRef<V> {
         }
     }
 
-    pub fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
+    pub(crate) fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -444,7 +454,7 @@ impl<V> CachedRef<V> {
     /// Get a mutable reference to the value, **if it is only in memory**.
     /// Otherwise return the key.
     #[inline]
-    pub fn get_mut_or_key(&mut self) -> Result<&mut V, Reference> {
+    pub(crate) fn get_mut_or_key(&mut self) -> Result<&mut V, Reference> {
         match self {
             CachedRef::Disk {
                 key,
@@ -462,7 +472,7 @@ impl<V> CachedRef<V> {
     /// Get a mutable reference to the value, **if it is memory or cached**.
     /// If it is only on disk return None
     #[inline]
-    pub fn get_value(self) -> Option<V> {
+    pub(crate) fn get_value(self) -> Option<V> {
         match self {
             CachedRef::Disk {
                 ..
@@ -890,6 +900,8 @@ struct MutableNode<V> {
     value:      Option<EntryId>,
     path:       Stem,
     children:   ChildrenCow<V>,
+    /// This is None if the node is modified
+    origin:     Option<CachedRef<Hashed<Node<V>>>>,
 }
 
 impl<V> ChildrenCow<V> {
@@ -915,6 +927,7 @@ impl<V> Default for MutableNode<V> {
                 generation: 0,
                 value:      tinyvec::TinyVec::new(),
             },
+            origin:     None,
         }
     }
 }
@@ -945,6 +958,7 @@ impl<V> MutableNode<V> {
             value,
             path: self.path.clone(), // this is a cheap clone as well.
             children: self.children.clone(),
+            origin: self.origin.clone(),
         }
     }
 }
@@ -1067,8 +1081,12 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
     mutable: Option<EntryId>,
     loader: &mut Ctx,
     collector: &mut C,
-) -> Option<Link<Hashed<CachedRef<V>>>> {
-    let entry_idx = mutable?;
+) -> (bool, Option<Link<Hashed<CachedRef<V>>>>) {
+    let entry_idx = if let Some(entry_idx) = mutable {
+        entry_idx
+    } else {
+        return (false, None);
+    };
     match entries[entry_idx] {
         Entry::ReadOnly {
             borrowed,
@@ -1076,14 +1094,17 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
             ..
         } => {
             if borrowed {
-                Some(borrowed_values[entry_idx].clone())
+                (false, Some(borrowed_values[entry_idx].clone()))
             } else {
                 let value = std::mem::take(&mut owned_values[entry_idx]);
                 let hash = value.hash(loader);
                 collector.add_value(&value);
-                Some(Link::new(Hashed::new(hash, CachedRef::Memory {
-                    value,
-                })))
+                (
+                    true,
+                    Some(Link::new(Hashed::new(hash, CachedRef::Memory {
+                        value,
+                    }))),
+                )
             }
         }
         Entry::Mutable {
@@ -1093,11 +1114,14 @@ fn freeze_value<Ctx, V: Default + ToSHA256<Ctx>, C: Collector<V>>(
             let value = std::mem::take(&mut owned_values[entry_idx]);
             collector.add_value(&value);
             let hash = value.hash(loader);
-            Some(Link::new(Hashed::new(hash, CachedRef::Memory {
-                value,
-            })))
+            (
+                true,
+                Some(Link::new(Hashed::new(hash, CachedRef::Memory {
+                    value,
+                }))),
+            )
         }
-        Entry::Deleted => None,
+        Entry::Deleted => (true, None),
     }
 }
 
@@ -1251,13 +1275,22 @@ impl<V: AsRef<[u8]>> Hashed<Node<V>> {
 }
 
 impl<V: AsRef<[u8]>> Node<V> {
+    pub fn store_update<S: BackingStoreStore>(
+        &mut self,
+        backing_store: &mut S,
+    ) -> Result<Vec<u8>, WriteError> {
+        let mut buf = Vec::new();
+        self.store_update_buf(backing_store, &mut buf)?;
+        Ok(buf)
+    }
+
     pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
     ) -> StoreResult<()> {
         let mut stack = Vec::new();
-        for (_, ch) in self.children.iter().rev() {
+        for (_, ch) in self.children.iter() {
             stack.push((ch.clone(), false));
         }
         let store_node = |node: &mut Node<V>,
@@ -1306,7 +1339,7 @@ impl<V: AsRef<[u8]>> Node<V> {
                         node_ref_mut.cache_with(key);
                     } else {
                         stack.push((node_ref_clone, true));
-                        for (_, ch) in hashed_node.data.children.iter().rev() {
+                        for (_, ch) in hashed_node.data.children.iter() {
                             stack.push((ch.clone(), false));
                         }
                     }
@@ -1492,23 +1525,69 @@ impl<V> CachedRef<Hashed<Node<V>>> {
             } => {
                 let node: Hashed<Node<V>> =
                     Hashed::<Node<V>>::load_from_location(loader, *key).expect("Failed to read.");
-                node.data.thaw(borrowed_values, entries, generation)
+                node.data.thaw(self, borrowed_values, entries, generation)
             }
             CachedRef::Memory {
                 value,
                 ..
-            } => value.data.thaw(borrowed_values, entries, generation),
+            } => value.data.thaw(self, borrowed_values, entries, generation),
             CachedRef::Cached {
                 value,
                 ..
-            } => value.data.thaw(borrowed_values, entries, generation),
+            } => value.data.thaw(self, borrowed_values, entries, generation),
         }
+    }
+
+    pub fn make_mutable(
+        &self,
+        generation: u32,
+        loader: &mut impl BackingStoreLoad,
+    ) -> MutableTrie<V> {
+        let mut borrowed_values = Vec::new();
+        let mut entries = Vec::new();
+        let root_node = self.thaw(&mut borrowed_values, &mut entries, generation, loader);
+        MutableTrie {
+            generations: vec![Generation::new(Some(0))],
+            values: Vec::new(),
+            nodes: vec![root_node],
+            borrowed_values,
+            entries,
+        }
+    }
+
+    pub fn store_update<S: BackingStoreStore>(
+        &mut self,
+        backing_store: &mut S,
+    ) -> Result<Vec<u8>, WriteError>
+    where
+        V: AsRef<[u8]>, {
+        let mut buf = Vec::new();
+        self.store_update_buf(backing_store, &mut buf)?;
+        Ok(buf)
+    }
+
+    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
+        &mut self,
+        backing_store: &mut S,
+        buf: &mut W,
+    ) -> StoreResult<()>
+    where
+        V: AsRef<[u8]>, {
+        let reference = match self.get_mut_or_key() {
+            Ok(node) => {
+                let data: Vec<u8> = node.store_update(backing_store)?;
+                backing_store.store_raw(&data)?
+            }
+            Err(reference) => reference,
+        };
+        reference.store(buf)
     }
 }
 
 impl<V> Node<V> {
     fn thaw(
         &self,
+        origin: &CachedRef<Hashed<Node<V>>>,
         borrowed_values: &mut Vec<Link<Hashed<CachedRef<V>>>>,
         entries: &mut Vec<Entry>,
         generation: u32,
@@ -1531,19 +1610,7 @@ impl<V> Node<V> {
             value: entry_idx,
             path: self.path.clone(),
             children: ChildrenCow::Borrowed(self.children.clone()),
-        }
-    }
-
-    pub fn make_mutable(&self, generation: u32) -> MutableTrie<V> {
-        let mut borrowed_values = Vec::new();
-        let mut entries = Vec::new();
-        let root_node = self.thaw(&mut borrowed_values, &mut entries, generation);
-        MutableTrie {
-            generations: vec![Generation::new(Some(0))],
-            values: Vec::new(),
-            nodes: vec![root_node],
-            borrowed_values,
-            entries,
+            origin: Some(origin.clone()),
         }
     }
 }
@@ -1885,7 +1952,7 @@ impl<V> MutableTrie<V> {
         self,
         loader: &mut Ctx,
         collector: &mut C,
-    ) -> Option<Hashed<Node<V>>>
+    ) -> Option<CachedRef<Hashed<Node<V>>>>
     where
         V: ToSHA256<Ctx> + Default, {
         let mut owned_nodes = self.nodes;
@@ -1913,7 +1980,7 @@ impl<V> MutableTrie<V> {
             let node = std::mem::take(&mut owned_nodes[node_idx]);
             match node.children {
                 ChildrenCow::Borrowed(children) => {
-                    let value = freeze_value(
+                    let (changed, value) = freeze_value(
                         &mut borrowed_values,
                         &mut values,
                         &entries,
@@ -1921,6 +1988,12 @@ impl<V> MutableTrie<V> {
                         loader,
                         collector,
                     );
+                    if let Some(origin) = node.origin {
+                        if !changed {
+                            nodes.insert(node_idx, (false, origin));
+                            continue;
+                        }
+                    }
                     collector.add_path(node.path.len());
                     collector.add_children(children.len());
                     let value = Node {
@@ -1929,23 +2002,25 @@ impl<V> MutableTrie<V> {
                         children,
                     };
                     let hash = value.hash(loader);
-                    nodes.insert(node_idx, Hashed::new(hash, value));
+                    nodes.insert(
+                        node_idx,
+                        (true, CachedRef::Memory {
+                            value: Hashed::new(hash, value),
+                        }),
+                    );
                 }
                 ChildrenCow::Owned {
                     value: owned,
                     ..
                 } => {
                     let mut children = Vec::with_capacity(owned.len());
+                    let mut changed = false;
                     for child in owned {
-                        let child_node = nodes.remove(&child.index()).unwrap();
-                        children.push((
-                            child.key(),
-                            Link::new(CachedRef::Memory {
-                                value: child_node,
-                            }),
-                        ));
+                        let (child_changed, child_node) = nodes.remove(&child.index()).unwrap();
+                        changed = changed || child_changed;
+                        children.push((child.key(), Link::new(child_node)));
                     }
-                    let value = freeze_value(
+                    let (value_changed, value) = freeze_value(
                         &mut borrowed_values,
                         &mut values,
                         &entries,
@@ -1953,6 +2028,12 @@ impl<V> MutableTrie<V> {
                         loader,
                         collector,
                     );
+                    if let Some(origin) = node.origin {
+                        if !value_changed && !changed {
+                            nodes.insert(node_idx, (false, origin));
+                            continue;
+                        }
+                    }
                     collector.add_path(node.path.len());
                     collector.add_children(children.len());
                     let new_node = Node {
@@ -1961,14 +2042,19 @@ impl<V> MutableTrie<V> {
                         children,
                     };
                     let hash = new_node.hash(loader);
-                    nodes.insert(node_idx, Hashed::new(hash, new_node));
+                    nodes.insert(
+                        node_idx,
+                        (true, CachedRef::Memory {
+                            value: Hashed::new(hash, new_node),
+                        }),
+                    );
                 }
             }
         }
         let mut nodes_iter = nodes.into_iter();
         if let Some((_, root)) = nodes_iter.next() {
             assert!(nodes_iter.next().is_none(), "Invariant violation.");
-            Some(root)
+            Some(root.1)
         } else {
             unreachable!("Invariant violation. Root not in the nodes map.");
         }
@@ -2067,6 +2153,7 @@ impl<V> MutableTrie<V> {
                             let node = std::mem::take(&mut owned_nodes[node_idx]); // invalidate the node.
                             let child_node = &mut owned_nodes[child.index()];
                             child_node.path.prepend_parts(node.path, child.key());
+                            child_node.origin = None;
                             if let Some((child_idx, father_idx)) = father {
                                 // skip the current node
                                 // father's child pointer should point directly to the node's child,
@@ -2112,6 +2199,7 @@ impl<V> MutableTrie<V> {
                                     let node = std::mem::take(&mut owned_nodes[father_idx]); // invalidate the node.
                                     let child_node = &mut owned_nodes[child.index()];
                                     child_node.path.prepend_parts(node.path, child.key());
+                                    child_node.origin = None;
                                     if let Some((child_idx, grandfather_idx)) = grandfather {
                                         // skip the current node
                                         // grandfather's child pointer should point directly to the
@@ -2279,6 +2367,7 @@ impl<V> MutableTrie<V> {
                                     std::mem::take(&mut owned_nodes[parent_idx]);
                                 let child_node = &mut owned_nodes[child.index()];
                                 child_node.path.prepend_parts(parent_node.path, child.key());
+                                child_node.origin = None;
                                 if let Some((child_idx, grandparent_idx)) = grandparent_idx {
                                     // skip the parent
                                     // grandfather's child pointer should point directly to the
@@ -2353,6 +2442,7 @@ impl<V> MutableTrie<V> {
                     generation: generation_idx,
                     value:      tinyvec::TinyVec::new(),
                 },
+                origin:     None,
             });
             current_generation.root = Some(root_idx);
             return Ok((entry_idx, false));
@@ -2367,6 +2457,7 @@ impl<V> MutableTrie<V> {
         loop {
             let owned_nodes_len = owned_nodes.len();
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            node.origin = None; // the node is on the modified path
             let mut stem_iter = node.path.iter();
             let checkpoint = key_iter.pos;
             match follow_stem(&mut key_iter, &mut stem_iter) {
@@ -2424,6 +2515,7 @@ impl<V> MutableTrie<V> {
                             generation,
                             value: tinyvec::tiny_vec![[_; INLINE_CAPACITY] => KeyIndexPair::new(stem_step, node_idx)],
                         },
+                        origin: None,
                     };
                     owned_nodes.push(new_node);
                     return Ok((entry_idx, false));
@@ -2462,6 +2554,7 @@ impl<V> MutableTrie<V> {
                                     generation,
                                     value: tinyvec::TinyVec::new(),
                                 },
+                                origin: None,
                             });
                             return Ok((entry_idx, false));
                         }
@@ -2497,6 +2590,7 @@ impl<V> MutableTrie<V> {
                                 generation: generation as u32,
                                 value:      tinyvec::TinyVec::new(),
                             },
+                            origin: None,
                         };
                         owned_nodes.push(remaining_key_node);
                     }
@@ -2524,6 +2618,7 @@ impl<V> MutableTrie<V> {
                                 generation,
                                 value: children,
                             },
+                            origin: None,
                         };
                         owned_nodes.push(new_node);
                     }

@@ -1,5 +1,5 @@
 use super::{
-    low_level::{MutableTrie, Node},
+    low_level::{CachedRef, MutableTrie, Node},
     types::*,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -14,11 +14,11 @@ pub type Value = Vec<u8>;
 #[derive(Debug, Clone)]
 pub enum PersistentState {
     Empty,
-    Root(Hashed<Node<Value>>),
+    Root(CachedRef<Hashed<Node<Value>>>),
 }
 
-impl From<Hashed<Node<Value>>> for PersistentState {
-    fn from(root: Hashed<Node<Value>>) -> Self { Self::Root(root) }
+impl From<CachedRef<Hashed<Node<Value>>>> for PersistentState {
+    fn from(root: CachedRef<Hashed<Node<Value>>>) -> Self { Self::Root(root) }
 }
 
 impl Loadable for PersistentState {
@@ -28,7 +28,7 @@ impl Loadable for PersistentState {
     ) -> LoadResult<Self> {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
-            1 => Ok(Self::Root(Hashed::<Node<Value>>::load(loader, source)?)),
+            1 => Ok(Self::Root(CachedRef::load(loader, source)?)),
             tag => Err(LoadError::IncorrectTag {
                 tag,
             }),
@@ -72,7 +72,7 @@ impl PersistentState {
             PersistentState::Empty => out.write_u8(0)?,
             PersistentState::Root(ht) => {
                 out.write_u8(1)?;
-                ht.serialize(loader, out)?
+                ht.use_value_(loader, |loader, node| node.serialize(loader, out))?
             }
         }
         Ok(())
@@ -81,7 +81,12 @@ impl PersistentState {
     pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self> {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
-            1 => Ok(Self::Root(Hashed::<Node<_>>::deserialize(source)?)),
+            1 => {
+                let node = Hashed::<Node<_>>::deserialize(source)?;
+                Ok(PersistentState::Root(CachedRef::Memory {
+                    value: node,
+                }))
+            }
             tag => anyhow::bail!("Invalid persistent tree tag: {}", tag),
         }
     }
@@ -92,7 +97,7 @@ impl PersistentState {
         match self {
             PersistentState::Empty => None,
             PersistentState::Root(node) => {
-                let data = node.data.lookup(loader, key)?;
+                let data = node.use_value_(loader, |loader, node| node.data.lookup(loader, key))?;
                 let borrowed = data.borrow();
                 Some(borrowed.data.get(loader))
             }
@@ -142,18 +147,18 @@ impl PersistentState {
         }
     }
 
-    pub fn hash(&self) -> super::Hash {
+    pub fn hash(&self, loader: &mut impl BackingStoreLoad) -> super::Hash {
         match self {
             PersistentState::Empty => super::Hash::zero(), /* FIXME: Think about what */
             // the correct thing would
             // be.
-            PersistentState::Root(root) => root.hash,
+            PersistentState::Root(root) => root.hash(loader),
         }
     }
 
     pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let PersistentState::Root(node) = self {
-            node.data.cache(loader)
+            node.load_and_cache(loader).data.cache(loader);
         }
     }
 }
@@ -170,7 +175,10 @@ impl MutableState {
 
     /// Get the inner mutable state. If it does not yet exist create it,
     /// otherwise return it.
-    pub fn get_inner(&mut self) -> &mut MutableStateInner {
+    pub fn get_inner<'a, 'b>(
+        &'a mut self,
+        loader: &'b mut impl BackingStoreLoad,
+    ) -> &'a mut MutableStateInner {
         if let Some(inner) = self.inner.as_mut() {
             inner.state.lock().expect("Another thread panicked").normalize(inner.root);
         } else {
@@ -184,7 +192,7 @@ impl MutableState {
                     });
                 }
                 PersistentState::Root(root_node) => {
-                    let state = Arc::new(Mutex::new(root_node.data.make_mutable(0)));
+                    let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
                     self.inner = Some(MutableStateInner {
                         root,
                         state,
@@ -195,8 +203,8 @@ impl MutableState {
         self.inner.as_mut().expect("This cannot fail since we just set self.inner to Some.")
     }
 
-    /// Get a frsh mutable state generation.
-    pub fn make_fresh_generation(&mut self) -> Self {
+    /// Get a fresh mutable state generation.
+    pub fn make_fresh_generation(&mut self, loader: &mut impl BackingStoreLoad) -> Self {
         if let Some(inner) = self.inner.as_mut() {
             let mut trie = inner.state.lock().expect("Another thread panicked.");
             trie.normalize(inner.root);
@@ -219,7 +227,7 @@ impl MutableState {
                     });
                 }
                 PersistentState::Root(root_node) => {
-                    let state = Arc::new(Mutex::new(root_node.data.make_mutable(0)));
+                    let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
                     self.inner = Some(MutableStateInner {
                         root,
                         state,

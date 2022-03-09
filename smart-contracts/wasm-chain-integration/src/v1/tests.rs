@@ -20,11 +20,12 @@ const NUM_TESTS: u64 = 100000;
 /// 7. Deleting already deleted entries returns u32::MAX
 fn prop_create_write_read_delete() {
     let prop = |inputs: Vec<(Vec<u8>, trie::Value)>| -> anyhow::Result<()> {
-        let loader = trie::Loader {
+        let mut loader = trie::Loader {
             inner: Vec::<u8>::new(),
         };
         let mut m_state = MutableState::initial_state();
-        let mut state = InstanceState::new(0, loader, m_state.get_inner());
+        let inner = m_state.get_inner(&mut loader);
+        let mut state = InstanceState::new(0, loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         for (k, v) in &inputs {
             let entry = state
@@ -99,11 +100,12 @@ fn prop_create_write_read_delete() {
 /// 7. Resizing without enough energy returns an Err.
 /// 8. Resizing an invalidated entry returns u32::MAX.
 fn test_overflowing_write_resize() -> anyhow::Result<()> {
-    let loader = trie::Loader {
+    let mut loader = trie::Loader {
         inner: Vec::<u8>::new(),
     };
     let mut m_state = MutableState::initial_state();
-    let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let inner = m_state.get_inner(&mut loader);
+    let mut state = InstanceState::new(0, loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let k = &[42];
     let entry = state
@@ -194,11 +196,12 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
 /// 3. Looking up an invalid entry returns InstanceStateEntryOption::NEW_NONE.
 /// 4. Delete prefix on non existent key in tree returns 1.
 fn test_size_of_invalid_entry() -> anyhow::Result<()> {
-    let loader = trie::Loader {
+    let mut loader = trie::Loader {
         inner: Vec::<u8>::new(),
     };
     let mut m_state = MutableState::initial_state();
-    let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let inner = m_state.get_inner(&mut loader);
+    let mut state = InstanceState::new(0, loader, inner);
     let entry = state
         .create_entry(&[0])
         .context("Entry should be created.")?
@@ -238,11 +241,12 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
 /// 4. That the size after resizing is as expected.
 fn prop_entry_write_resizing() {
     let prop = |inputs: Vec<(Vec<u8>, trie::Value)>| -> anyhow::Result<()> {
-        let loader = trie::Loader {
+        let mut loader = trie::Loader {
             inner: Vec::<u8>::new(),
         };
         let mut m_state = MutableState::initial_state();
-        let mut state = InstanceState::new(0, loader, m_state.get_inner());
+        let inner = m_state.get_inner(&mut loader);
+        let mut state = InstanceState::new(0, loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         for (k, v) in &inputs {
             let entry = state
@@ -280,11 +284,12 @@ fn prop_entry_write_resizing() {
 #[test]
 /// Test that prefix removal fails correctly if out of energy
 fn test_prefix_removal_fails_if_out_of_energy() -> anyhow::Result<()> {
-    let loader = trie::Loader {
+    let mut loader = trie::Loader {
         inner: Vec::<u8>::new(),
     };
     let mut m_state = MutableState::initial_state();
-    let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let inner = m_state.get_inner(&mut loader);
+    let mut state = InstanceState::new(0, loader, inner);
     let key = vec![1];
     for k in &key {
         let entry = state
@@ -316,11 +321,12 @@ fn test_prefix_removal_fails_if_out_of_energy() -> anyhow::Result<()> {
 /// modification.
 fn prop_iterators() {
     let prop = |inputs: Vec<(Vec<u8>, trie::Value)>| -> anyhow::Result<()> {
-        let loader = trie::Loader {
+        let mut loader = trie::Loader {
             inner: Vec::<u8>::new(),
         };
         let mut m_state = MutableState::initial_state();
-        let mut state = InstanceState::new(0, loader, m_state.get_inner());
+        let inner = m_state.get_inner(&mut loader);
+        let mut state = InstanceState::new(0, loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         // create the state with some locked parts.
         for (k, v) in &inputs {
@@ -447,11 +453,12 @@ fn prop_iterators() {
 /// 4. Traverse with out of energy returns Err.
 fn prop_iterator_traversing() {
     let prop = |inputs: Vec<(Vec<u8>, trie::Value)>| -> anyhow::Result<()> {
-        let loader = trie::Loader {
+        let mut loader = trie::Loader {
             inner: Vec::<u8>::new(),
         };
         let mut m_state = MutableState::initial_state();
-        let mut state = InstanceState::new(0, loader, m_state.get_inner());
+        let inner = m_state.get_inner(&mut loader);
+        let mut state = InstanceState::new(0, loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         let mut prefixes = trie::low_level::PrefixesMap::new();
         for (k, v) in &inputs {
@@ -508,11 +515,12 @@ fn prop_iterator_traversing() {
 /// 4. Iterator on non existant part of tree returns Ok(None)
 /// 5. Creating too many iterators on the same key should return Err.
 fn test_iterator_errors() -> anyhow::Result<()> {
-    let loader = trie::Loader {
+    let mut loader = trie::Loader {
         inner: Vec::<u8>::new(),
     };
     let mut m_state = MutableState::initial_state();
-    let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let inner = m_state.get_inner(&mut loader);
+    let mut state = InstanceState::new(0, loader, inner);
 
     ensure!(state.create_entry(&[0, 1]).is_ok(), "Entry should have been created");
     ensure!(state.create_entry(&[0, 2]).is_ok(), "Entry should have been created");
@@ -556,11 +564,12 @@ fn test_iterator_errors() -> anyhow::Result<()> {
 /// 7. Check that an exhausted iterator returns the last visited node when
 ///    querying for key size and key length.
 fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
-    let loader = trie::Loader {
+    let mut loader = trie::Loader {
         inner: Vec::<u8>::new(),
     };
     let mut m_state = MutableState::initial_state();
-    let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let inner = m_state.get_inner(&mut loader);
+    let mut state = InstanceState::new(0, loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let key = &[0];
     ensure!(state.create_entry(key).is_ok(), "Entry should have been created.");
@@ -633,11 +642,12 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
 /// Tests that operations on entries and iterators with invalid generations
 /// fails as expected.
 fn test_invalid_generation_operations() -> anyhow::Result<()> {
-    let loader = trie::Loader {
+    let mut loader = trie::Loader {
         inner: Vec::<u8>::new(),
     };
     let mut m_state = MutableState::initial_state();
-    let mut state = InstanceState::new(0, loader, m_state.get_inner());
+    let inner = m_state.get_inner(&mut loader);
+    let mut state = InstanceState::new(0, loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let entry = state
         .create_entry(&[0])
