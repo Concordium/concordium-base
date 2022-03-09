@@ -29,6 +29,10 @@ pipeline {
                     # Move into folder
                     cd mobile_wallet
 
+                    # Setup rust to use nightly channel
+                    rustup default nightly
+                    rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
                     # Build android
                     min_ver=29
                     cargo ndk --target aarch64-linux-android --platform ${min_ver} -- build --release
