@@ -214,20 +214,11 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
 
     let ctx: TransferContext = from_value(v.clone())?;
 
-    let maybe_capital: Option<Amount> = match v.get("capital") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_capital: Option<Amount> = maybe_get(&v, "capital")?;
 
-    let maybe_restake_earnings: Option<bool> = match v.get("restakeEarnings") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_restake_earnings: Option<bool> = maybe_get(&v, "restakeEarnings")?;
 
-    let maybe_delegation_target: Option<DelegationTarget> = match v.get("delegationTarget") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_delegation_target: Option<DelegationTarget> = maybe_get(&v, "delegationTarget")?;
 
     let mut bitmap: u16 = 0b0000000000000000;
     if maybe_capital.is_some() {
@@ -294,45 +285,21 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
 
     let ctx: TransferContext = from_value(v.clone())?;
 
-    let maybe_capital: Option<Amount> = match v.get("capital") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_capital: Option<Amount> = maybe_get(&v, "capital")?;
 
-    let maybe_restake_earnings: Option<bool> = match v.get("restakeEarnings") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_restake_earnings: Option<bool> = maybe_get(&v, "restakeEarnings")?;
 
-    let maybe_openstatus: Option<OpenStatus> = match v.get("openStatus") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_openstatus: Option<OpenStatus> = maybe_get(&v, "openStatus")?;
 
-    let maybe_url: Option<UrlText> = match v.get("metadataUrl") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_url: Option<UrlText> = maybe_get(&v, "metadataUrl")?;
 
-    let maybe_transaction_fee: Option<u32> = match v.get("transactionFeeCommission") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_transaction_fee: Option<u32> = maybe_get(&v, "transactionFeeCommission")?;
 
-    let maybe_baking_reward: Option<u32> = match v.get("bakingRewardCommission") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_baking_reward: Option<u32> = maybe_get(&v, "bakingRewardCommission")?;
 
-    let maybe_finalization_reward: Option<u32> = match v.get("finalizationRewardCommission") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_finalization_reward: Option<u32> = maybe_get(&v, "finalizationRewardCommission")?;
 
-    let maybe_baker_keys: Option<BakerKeys> = match v.get("bakerKeys") {
-        Some(m) => Some(from_value(m.clone())?),
-        None => None,
-    };
+    let maybe_baker_keys: Option<BakerKeys> = maybe_get(&v, "bakerKeys")?;
 
     let mut bitmap: u16 = 0b0000000000000000;
     if maybe_capital.is_some() {
@@ -536,6 +503,14 @@ fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> anyhow::Re
     match v.get(fname) {
         Some(v) => Ok(from_value(v.clone())?),
         None => bail!(format!("Field {} not present, but should be.", fname)),
+    }
+}
+
+/// Extract a field with a given name from the JSON value if it exists.
+fn maybe_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> anyhow::Result<Option<A>> {
+    match v.get(fname) {
+        Some(v) => Ok(Some(from_value(v.clone())?)),
+        None => Ok(None),
     }
 }
 
