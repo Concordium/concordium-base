@@ -152,8 +152,7 @@ int main(int argc, char *argv[]) {
       uint8_t flag = 1;
       char *out;
       out = generate_baker_keys(&flag);
-      printf("%s\n", out);
-      return (int)flag;
+      return printStr(out, flag);
     }
   }
 }
