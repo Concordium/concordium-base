@@ -291,8 +291,11 @@ instance HashableTo H.Hash (WasmModuleV V1) where
 
 -- |Name of an init method inside a module.
 newtype InitName = InitName { initName :: Text }
-    deriving(Eq, Show, Ord)
+    deriving(Eq, Ord)
     deriving(AE.ToJSON) via Text
+
+instance Show InitName where
+  show InitName{..} = show initName
 
 -- |Check whether the given text is a valid init name.
 -- This is the case if
@@ -333,8 +336,11 @@ instance Serialize InitName where
 
 -- |Name of a receive method inside a module.
 newtype ReceiveName = ReceiveName { receiveName :: Text }
-    deriving (Eq, Show, Ord)
+    deriving (Eq, Ord)
     deriving(AE.ToJSON) via Text
+
+instance Show ReceiveName where
+  show ReceiveName{..} = show receiveName
 
 -- |Check whether the given text is a valid receive name.
 -- This is the case if
