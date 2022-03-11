@@ -465,6 +465,12 @@ newtype ContractState = ContractState {contractState :: BS.ByteString }
 instance AE.ToJSON ContractState where
   toJSON ContractState{..} = AE.String (Text.decodeUtf8 (BS16.encode contractState))
 
+instance AE.FromJSON ContractState where
+  parseJSON = AE.withText "ContractState" $ \csText ->
+    let (contractState, rest) = BS16.decode (Text.encodeUtf8 csText)
+    in if BS.null rest then return ContractState{..}
+       else fail "Invalid hex string."
+
 -- The show instance just displays the bytes directly.
 instance Show ContractState where
   show ContractState{..} = show (BS.unpack contractState)
@@ -713,7 +719,10 @@ data ContractExecutionFailure =
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
 
--- |Data about the contract that is returned by a node query.
+-- |Data about the contract that is returned by a node query. The V0 and V1
+-- instances are almost the same, but because the state of V1 instances is
+-- unbounded in general, we cannot return it as such in queries. Thus there is
+-- no "model" field for V1 instances.
 data InstanceInfo = InstanceInfoV0 {
   iiModel :: !ContractState,
   iiOwner :: !AccountAddress,
@@ -730,7 +739,7 @@ data InstanceInfo = InstanceInfoV0 {
   iiSourceModule :: !ModuleRef
   } deriving(Eq, Show)
 
--- |Helper function for JSON encoding an 'Instance'.
+-- |Helper function for JSON encoding an 'InstanceInfo'.
 instancePairs :: AE.KeyValue kv => InstanceInfo -> [kv]
 {-# INLINE instancePairs #-}
 instancePairs InstanceInfoV0{..} =
@@ -754,3 +763,16 @@ instancePairs InstanceInfoV1{..} =
 instance AE.ToJSON InstanceInfo where
     toJSON inst = AE.object $ instancePairs inst
     toEncoding inst = AE.pairs $ mconcat $ instancePairs inst
+
+instance AE.FromJSON InstanceInfo where
+  parseJSON = AE.withObject "InstanceInfo" $ \obj -> do
+    iiOwner <- obj AE..: "owner"
+    iiAmount <- obj AE..: "amount"
+    iiMethods <- obj AE..: "methods"
+    iiName <- obj AE..: "name"
+    iiSourceModule <- obj AE..: "sourceModule"
+    (obj AE..: "version") >>= \case
+      V0 -> do
+        iiModel <- obj AE..: "model"
+        return InstanceInfoV0{..}
+      V1 -> return InstanceInfoV1{..}
