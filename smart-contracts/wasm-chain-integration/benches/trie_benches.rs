@@ -51,9 +51,10 @@ fn make_btree(words: &[Vec<u8>]) -> BTreeMap<&[u8], [u8; 8]> {
     tree
 }
 
-fn make_trie(words: &[Vec<u8>]) -> (Option<Node<[u8; 8]>>, VecLoader) {
+#[allow(clippy::type_complexity)] // this is a test, so a bit of complexity is OK.
+fn make_trie(words: &[Vec<u8>]) -> (Option<CachedRef<Hashed<Node<[u8; 8]>>>>, VecLoader) {
     let (trie, mut loader) = make_mut_trie(words);
-    (trie.freeze(&mut loader, &mut EmptyCollector).map(|x| x.data), loader)
+    (trie.freeze(&mut loader, &mut EmptyCollector), loader)
 }
 
 fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie<[u8; 8]>, VecLoader) {
@@ -156,7 +157,7 @@ fn trie_cache(b: &mut Criterion) {
 fn trie_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_trie(&words);
-    let trie = trie.unwrap();
+    let trie = trie.unwrap().get(&mut loader).data;
     b.bench_function("trie get", |b| {
         b.iter(|| {
             for w in words.iter() {
@@ -187,7 +188,7 @@ fn trie_hash(b: &mut Criterion) {
 fn mut_trie_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_trie(&words);
-    let mut trie = trie.unwrap().make_mutable(0);
+    let mut trie = trie.unwrap().make_mutable(0, &mut loader);
     b.bench_function("trie mut get", |b| {
         b.iter(|| {
             for w in words.iter() {
@@ -229,7 +230,7 @@ fn mut_trie_delete(b: &mut Criterion) {
 fn trie_thaw_delete(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_trie(&words);
-    let mut trie = trie.unwrap().make_mutable(0);
+    let mut trie = trie.unwrap().make_mutable(0, &mut loader);
     b.bench_function("trie thaw delete", |b| {
         b.iter(|| {
             for w in words.iter() {
@@ -259,7 +260,7 @@ fn mut_trie_freeze(b: &mut Criterion) {
 fn mut_trie_freeze_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_mut_trie(&words);
-    let frozen = trie.freeze(&mut loader, &mut EmptyCollector).unwrap().data;
+    let frozen = trie.freeze(&mut loader, &mut EmptyCollector).unwrap().get(&mut loader).data;
     b.bench_function("trie mut freeze get", |b| {
         b.iter(|| {
             for w in words.iter() {

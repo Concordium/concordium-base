@@ -823,7 +823,7 @@ fn prop_matches_reference_after_freeze_thaw() {
 fn prop_freeze_unmodified() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>, new: Vec<Vec<u8>>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
-        let (trie, mut loader) = make_mut_trie(inputs.clone());
+        let (trie, mut loader) = make_mut_trie(inputs);
         let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
             trie
         } else {

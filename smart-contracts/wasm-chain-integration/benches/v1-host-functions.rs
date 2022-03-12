@@ -116,10 +116,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter_batched(
                 mk_data,
                 |(mut mutable_state, _, parameters)| {
-                    let backing_store = Loader {
+                    let mut backing_store = Loader {
                         inner: Vec::new(),
                     };
-                    let state = InstanceState::new(0, backing_store, mutable_state.get_inner());
+                    let inner = mutable_state.get_inner(&mut backing_store);
+                    let state = InstanceState::new(0, backing_store, inner);
                     let mut host = ReceiveHost::<_, Vec<u8>, _> {
                         energy: start_energy,
                         stateless: StateLessReceiveHost {
@@ -260,10 +261,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter_batched(
                 mk_data,
                 |(mut mutable_state, _, parameters)| {
-                    let backing_store = Loader {
+                    let mut backing_store = Loader {
                         inner: Vec::new(),
                     };
-                    let state = InstanceState::new(0, backing_store, mutable_state.get_inner());
+                    let inner = mutable_state.get_inner(&mut backing_store);
+                    let state = InstanceState::new(0, backing_store, inner);
                     let mut host = ReceiveHost::<_, Vec<u8>, _> {
                         energy: start_energy,
                         stateless: StateLessReceiveHost {

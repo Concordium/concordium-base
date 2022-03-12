@@ -293,7 +293,7 @@ impl<V> Default for CachedRef<V> {
 
 impl<V: Loadable> CachedRef<V> {
     #[inline(always)]
-    pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> V
+    pub fn get(&self, loader: &mut impl BackingStoreLoad) -> V
     where
         V: Clone, {
         match self {
