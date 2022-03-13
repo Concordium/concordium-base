@@ -1,10 +1,10 @@
 //! Benchmarks to help establish costs for V1 host functions. The benchmarks
 //! are written with the intent that they measure representative or worst-case
-//! uses of functions. Execution time, as well as energy throughput are
-//! measured. These are then used as input to assigning costs to relevant
-//! operations. Note that often there are other concerns than just execution
-//! time when assigning costs, so benchmarks here should generally only ensure
-//! that a sufficiently low upper bound is there.
+//! uses of functions, depending on the needs. Execution time, as well as energy
+//! throughput are measured. These are then used as input to assigning costs to
+//! relevant operations. Note that often there are other concerns than just
+//! execution time when assigning costs, so benchmarks here should generally
+//! only ensure that a sufficiently low upper bound is there.
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
@@ -26,6 +26,7 @@ use wasm_transform::{machine, parse, validate};
 
 static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/v1/host-functions.wasm");
 
+/// Construct the initial state for the benchmark from given key-value pairs.
 fn mk_state<A: AsRef<[u8]>, B: Copy>(inputs: &[(A, B)]) -> (MutableState, Loader<Vec<u8>>)
 where
     Vec<u8>: From<B>, {
@@ -46,7 +47,7 @@ where
 
 /// Benchmarks for host functions.
 /// The preconditions (expected state and param) for each function are specified
-/// in host-functions.wat
+/// in ./code/v1/host-functions.wat
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("v1 host functions");
 

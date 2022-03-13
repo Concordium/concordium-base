@@ -814,6 +814,12 @@ type ChildLink<V> = Link<CachedRef<Hashed<Node<V>>>>;
 pub struct Node<V> {
     /// Since a single node owns each value using Hashed<Cached<V>>
     /// here makes sense, it makes it so that the hash is stored inline.
+    ///
+    /// Note: This would ideally have further refinement. If data is less than
+    /// 64 bytes there is no real use in storing the hash or the value
+    /// behind an indirection, and it is in fact quite wasteful. More so for
+    /// smaller values. Ideally we'd revise this so that if data is small it
+    /// would be stored inline.
     value:    Option<Link<Hashed<CachedRef<V>>>>,
     path:     Stem,
     /// Children, ordered by increasing key.
@@ -867,7 +873,6 @@ where
     fn hash(&self, ctx: &mut Ctx) -> Hash { self.use_value(ctx, |v| v.hash(&mut ())) }
 }
 
-// TODO: Review and revise for security and correctness.
 impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V> {
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();

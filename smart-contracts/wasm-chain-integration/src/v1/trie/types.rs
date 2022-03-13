@@ -130,7 +130,10 @@ impl SizeCollector {
 // when we store data.
 impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
     #[inline]
-    fn add_value(&mut self, data: &V) { self.num_bytes += data.as_ref().len() as u64; }
+    fn add_value(&mut self, data: &V) {
+        self.num_bytes += data.as_ref().len() as u64;
+        self.num_bytes += 32; // store the hash of the value.
+    }
 
     #[inline]
     fn add_path(&mut self, path: usize) {
@@ -431,7 +434,7 @@ impl<A> IndexMut<EntryId> for Vec<A> {
 
 #[derive(Debug, Error, Eq, PartialEq)]
 /// An error used to indicate when too many iterators were acquired at the same
-/// location in the tree. The maximum number is [u16::MAX].
+/// location in the tree. The maximum number is [u32::MAX].
 #[error("Too many iterators at the same root.")]
 pub struct TooManyIterators;
 

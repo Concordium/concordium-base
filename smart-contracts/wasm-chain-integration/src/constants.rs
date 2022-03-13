@@ -200,5 +200,3 @@ pub fn write_output_cost(x: u32) -> u64 { 10 + u64::from(x) }
 /// and 3000000NRG there can be at most 100MB of output produced.
 #[inline(always)]
 pub fn additional_output_size_cost(x: u64) -> u64 { 30 * x }
-
-// TODO: Maximum memory possible with create_entry/lookup_entry

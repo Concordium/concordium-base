@@ -1,3 +1,7 @@
+//! The high-level API that is meant to be used by the rest of the project.
+//! It exposes two main constructs, the [PersistentState] and [MutableState]
+//! that provide all the needed functionality for the implementation of contract
+//! state.
 use super::{
     low_level::{CachedRef, MutableTrie, Node},
     types::*,
@@ -5,6 +9,7 @@ use super::{
 use byteorder::{ReadBytesExt, WriteBytesExt};
 #[cfg(feature = "display-state")]
 use ptree::TreeBuilder;
+use sha2::Digest;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub type Value = Vec<u8>;
@@ -21,6 +26,8 @@ impl From<CachedRef<Hashed<Node<Value>>>> for PersistentState {
     fn from(root: CachedRef<Hashed<Node<Value>>>) -> Self { Self::Root(root) }
 }
 
+/// Load the persistent state. This only loads the root of the tree. In order to
+/// cache the entire tree into memory use [PersistentTree::cache] afterwards.
 impl Loadable for PersistentState {
     fn load<S: std::io::Read, F: BackingStoreLoad>(
         loader: &mut F,
@@ -37,6 +44,9 @@ impl Loadable for PersistentState {
 }
 
 impl PersistentState {
+    /// Store the tree into the backing store, and modify the tree so that it
+    /// records where parts of it are stored. The root of the tree is written
+    /// into the provided buffer.
     pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
@@ -54,6 +64,8 @@ impl PersistentState {
         }
     }
 
+    /// Like [Self::store_update_buf], but returns a freshly allocated buffer
+    /// for the root instead of using the provided one.
     pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
@@ -63,6 +75,13 @@ impl PersistentState {
         backing_store.store_raw(&top)
     }
 
+    /// Serialize the tree into the provided buffer. Note that this is very
+    /// different from [Self::store_update]. Whereas that stores the part of
+    /// the tree that are only in memory into the provided backing store, this
+    /// function loads the entire tree and serializes it, in a custom format,
+    /// into the provided buffer. As a result this is an expensive operation
+    /// that should only be used when incrementally storing the tree is not
+    /// an option.
     pub fn serialize(
         &self,
         loader: &mut impl BackingStoreLoad,
@@ -78,6 +97,7 @@ impl PersistentState {
         Ok(())
     }
 
+    /// Dual to [Self::serialize].
     pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self> {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
@@ -104,19 +124,55 @@ impl PersistentState {
         }
     }
 
+    /// Generate a fresh mutable state from the persistent state.
+    pub fn thaw(&self) -> MutableState {
+        MutableState {
+            inner:      None,
+            persistent: self.clone(),
+        }
+    }
+
+    /// Compute the hash of the persistent state. This is a cheap operation
+    /// since the state hash is stored precomputed, however if the tree is not
+    /// loaded into memory then the hash will have to be retrieved from the
+    /// backing store using the provided loader.
+    pub fn hash(&self, loader: &mut impl BackingStoreLoad) -> super::Hash {
+        match self {
+            PersistentState::Empty => {
+                // hash of the node starts with either a 0 or 1 byte. This makes it distinct,
+                // but is otherwise an arbitrary choice.
+                super::Hash::from(<[u8; 32]>::from(sha2::Sha256::digest(b"empty contract state")))
+            }
+            PersistentState::Root(root) => root.hash(loader),
+        }
+    }
+
+    /// Cache the state, that is, load the entire state into memory from the
+    /// backing store. References to the backing store are retained.
+    pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
+        if let PersistentState::Root(node) = self {
+            node.load_and_cache(loader).data.cache(loader);
+        }
+    }
+
     #[cfg(feature = "display-state")]
     pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
         match self {
             Self::Empty => {}
-            Self::Root(node) => node.data.display_tree(builder, loader),
+            Self::Root(node) => {
+                node.use_value_(loader, |loader, tree| tree.data.display_tree(builder, loader))
+            }
         }
     }
 }
 
 #[derive(Debug, Clone)]
-/// Clone on this structure is designed to be cheap, and it is a shallow copy.
-/// Modifications of the inner MutableTrie on either the clone or the original
-/// propagate to the other.
+/// This type is a technical device to support lazy conversion of
+/// [PersistentState] to [MutableState]. It contains the runtime representation
+/// of the tree that supports efficient updates.
+/// Clone on this structure is designed to be cheap, **and it is a shallow
+/// copy**. Modifications of the inner MutableTrie on either the clone or the
+/// original propagate to the other.
 pub struct MutableStateInner {
     /// Current root of the tree. The current generation.
     root:      u32,
@@ -129,38 +185,17 @@ pub struct MutableStateInner {
     pub state: Arc<Mutex<MutableTrie<Value>>>,
 }
 
+/// A lock guard derived from [MutableStateInner]. Only one can exist at the
+/// time.
 pub type StateTrie<'a> = MutexGuard<'a, MutableTrie<Value>>;
 
 /// The mutable contract state.
 #[derive(Debug, Clone)]
 pub struct MutableState {
-    inner:  Option<MutableStateInner>,
-    /// The original persistent state from which this mutable one is derived.
-    origin: PersistentState,
-}
-
-impl PersistentState {
-    pub fn thaw(&self) -> MutableState {
-        MutableState {
-            inner:  None,
-            origin: self.clone(),
-        }
-    }
-
-    pub fn hash(&self, loader: &mut impl BackingStoreLoad) -> super::Hash {
-        match self {
-            PersistentState::Empty => super::Hash::zero(), /* FIXME: Think about what */
-            // the correct thing would
-            // be.
-            PersistentState::Root(root) => root.hash(loader),
-        }
-    }
-
-    pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
-        if let PersistentState::Root(node) = self {
-            node.load_and_cache(loader).data.cache(loader);
-        }
-    }
+    inner:      Option<MutableStateInner>,
+    /// The original state this mutable state is derived from, or after
+    /// freezing, the new persistent state.
+    persistent: PersistentState,
 }
 
 impl MutableState {
@@ -168,8 +203,8 @@ impl MutableState {
     /// executing in.
     pub fn initial_state() -> Self {
         Self {
-            inner:  None,
-            origin: PersistentState::Empty,
+            inner:      None,
+            persistent: PersistentState::Empty,
         }
     }
 
@@ -183,7 +218,7 @@ impl MutableState {
             inner.state.lock().expect("Another thread panicked").normalize(inner.root);
         } else {
             let root = 0;
-            match &self.origin {
+            match &self.persistent {
                 PersistentState::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
                     self.inner = Some(MutableStateInner {
@@ -203,22 +238,25 @@ impl MutableState {
         self.inner.as_mut().expect("This cannot fail since we just set self.inner to Some.")
     }
 
-    /// Get a fresh mutable state generation.
+    /// Get a fresh mutable state generation. Modifications on this generation
+    /// will not be reflected in the current one. To resume execution of the
+    /// previous generation the inner state must first be normalized to the
+    /// previous generation.
     pub fn make_fresh_generation(&mut self, loader: &mut impl BackingStoreLoad) -> Self {
         if let Some(inner) = self.inner.as_mut() {
             let mut trie = inner.state.lock().expect("Another thread panicked.");
             trie.normalize(inner.root);
             trie.new_generation();
             Self {
-                inner:  Some(MutableStateInner {
+                inner:      Some(MutableStateInner {
                     root:  inner.root + 1,
                     state: inner.state.clone(),
                 }),
-                origin: self.origin.clone(),
+                persistent: self.persistent.clone(),
             }
         } else {
             let root = 0;
-            match &self.origin {
+            match &self.persistent {
                 PersistentState::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
                     self.inner = Some(MutableStateInner {
@@ -239,11 +277,13 @@ impl MutableState {
     }
 
     /// Make the state persistent. This leaves the mutable state empty.
+    /// This function is idempotent.
     pub fn freeze<C: Collector<Value>>(
         &mut self,
         loader: &mut impl BackingStoreLoad,
         collector: &mut C,
     ) -> PersistentState {
+        // Replace the inner mutable state with None.
         let inner = self.inner.take();
         match inner {
             Some(inner) => {
@@ -252,27 +292,13 @@ impl MutableState {
                     MutableTrie::empty(),
                 );
                 trie.normalize(inner.root);
-                self.origin = match trie.freeze(loader, collector) {
+                self.persistent = match trie.freeze(loader, collector) {
                     Some(node) => PersistentState::Root(node),
                     None => PersistentState::Empty,
                 };
-                self.origin.clone()
+                self.persistent.clone()
             }
-            None => self.origin.clone(),
+            None => self.persistent.clone(),
         }
     }
 }
-
-// DONE
-// load
-// free
-// write
-// hash
-// freeze (need to add loader)
-// thaw
-// cache
-
-// TODO
-// get_new_state_size
-// serialize persistent state
-// deserialize persistent state

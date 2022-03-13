@@ -963,7 +963,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             let name = OwnedReceiveName::new(format!("{}.{}", contract_name, func))
                 .map_err(|e| anyhow::anyhow!("Invalid contract or receive function name: {}", e))?;
             let mut mutable_state = init_state.thaw();
-            let instance_state = v1::InstanceState::new(0, loader, mutable_state.get_inner());
+            let inner = mutable_state.get_inner(&mut loader);
+            let instance_state = v1::InstanceState::new(0, loader, inner);
             let res = v1::invoke_receive_with_metering_from_source::<
                 _,
                 ReceiveContextOptV1,

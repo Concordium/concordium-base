@@ -127,6 +127,10 @@ pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
 }
 
 #[derive(Debug)]
+/// Part of the receive host that is stored to handle the interrupt.
+/// This part is not changed during the handling of the interrupt, however
+/// before execution resumes, after returning from handling of the interrupt,
+/// the logs and parameters are set appropriately.
 pub struct StateLessReceiveHost<ParamType, Ctx> {
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
