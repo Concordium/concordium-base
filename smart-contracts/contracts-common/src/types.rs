@@ -934,6 +934,7 @@ impl<'a> AsRef<[u8]> for OwnedParameter {
     fn as_ref(&self) -> &[u8] { self.0.as_ref() }
 }
 
+/// Convert the vector into a parameter as is.
 impl From<Vec<u8>> for OwnedParameter {
     #[inline(always)]
     fn from(param: Vec<u8>) -> Self { Self(param) }
@@ -945,9 +946,6 @@ impl OwnedParameter {
     /// Construct an `OwnedParameter` by serializing the input using its
     /// `Serial` instance.
     pub fn new<D: Serial>(data: &D) -> Self { Self(to_bytes(data)) }
-
-    /// Construct an `OwnedParameter` from the raw, serialized, data.
-    pub fn new_raw(data: Vec<u8>) -> Self { Self(data) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
