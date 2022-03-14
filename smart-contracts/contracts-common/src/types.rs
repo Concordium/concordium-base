@@ -789,13 +789,13 @@ impl<'a> ReceiveName<'a> {
     /// operation that requires memory allocation.
     pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 
-    /// Try to extract the contract name by splitting at the first dot.
+    /// Extract the contract name by splitting at the first dot.
     pub fn contract_name(&self) -> &str { self.get_name_parts().0 }
 
-    /// Try to extract the func name by splitting at the first dot.
+    /// Extract the entrypoint name by splitting at the first dot.
     pub fn entrypoint_name(&self) -> EntrypointName { EntrypointName(self.get_name_parts().1) }
 
-    /// Try to extract (contract_name, func_name) by splitting at the first dot.
+    /// Extract (contract_name, func_name) by splitting at the first dot.
     fn get_name_parts(&self) -> (&str, &str) {
         let mut splitter = self.get_chain_name().splitn(2, '.');
         let contract = splitter.next().unwrap_or("");
