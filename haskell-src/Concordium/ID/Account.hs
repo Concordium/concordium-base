@@ -88,6 +88,5 @@ verifyInitialAccountCreation :: IpInfo -> TransactionTime -> InitialCredentialBy
 verifyInitialAccountCreation ipInfo tt aciBytes = unsafePerformIO $ do
   res <- withIpInfo ipInfo $ \ipInfoPtr ->
     unsafeUseAsCStringLen aciBytes $ \(aciBytesPtr, aciBytesLen) ->
-      -- TODO: ensure that we only call this on nonempty byte lists
       verifyInitialCDIFFI ipInfoPtr (castPtr aciBytesPtr) (fromIntegral aciBytesLen) tt
   return (res == 1)

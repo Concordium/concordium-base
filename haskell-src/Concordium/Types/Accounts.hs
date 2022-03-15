@@ -496,7 +496,6 @@ toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
             BakerInfoExV1{..} -> Just _bieBakerPoolInfo
         }
   where
-    -- TODO: Check this logic is correct.
     pcTime (PendingChangeEffectiveV0 e) = epochConv e
     pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
 toAccountStakingInfo _ (AccountStakeDelegate AccountDelegationV1{..}) =
@@ -507,7 +506,6 @@ toAccountStakingInfo _ (AccountStakeDelegate AccountDelegationV1{..}) =
           asiDelegationPendingChange = pcTime <$> _delegationPendingChange
         }
   where
-    -- TODO: Check this logic is correct.
     pcTime :: PendingChangeEffective 'AccountV1 -> UTCTime
     pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
 
