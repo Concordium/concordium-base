@@ -2,6 +2,7 @@
 -- |Types related to blocks
 module Concordium.Types.Block where
 
+import Control.Monad
 import Data.Aeson
 import Data.Hashable (Hashable)
 import Data.Proxy
@@ -25,8 +26,22 @@ type EpochLength = Slot
 type Epoch = Word64
 
 -- |Length of a reward period in epochs.
+-- Must always be a strictly positive integer.
 newtype RewardPeriodLength = RewardPeriodLength {rewardPeriodEpochs :: Epoch}
-  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, ToJSON)
+
+instance S.Serialize RewardPeriodLength where
+  put = S.put . rewardPeriodEpochs
+  get = do
+    rewardPeriodEpochs <- S.get
+    when (rewardPeriodEpochs == 0) $ fail "reward period length may not be 0"
+    return RewardPeriodLength{..}
+
+instance FromJSON RewardPeriodLength where
+  parseJSON v = do
+    rewardPeriodEpochs <- parseJSON v
+    when (rewardPeriodEpochs == 0) $ fail "reward period length may not be 0"
+    return RewardPeriodLength{..}
 
 -- |Block height relative to the genesis block on the block's chain.
 -- In the event of a protocol update, a new chain is created with the new genesis block having
