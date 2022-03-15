@@ -162,7 +162,7 @@ impl str::FromStr for Amount {
 impl Amount {
     /// Create amount from a number of microCCD
     #[inline(always)]
-    pub fn from_micro_ccd(micro_ccd: u64) -> Amount {
+    pub const fn from_micro_ccd(micro_ccd: u64) -> Amount {
         Amount {
             micro_ccd,
         }
@@ -170,7 +170,7 @@ impl Amount {
 
     /// Create amount from a number of CCD
     #[inline(always)]
-    pub fn from_ccd(ccd: u64) -> Amount {
+    pub const fn from_ccd(ccd: u64) -> Amount {
         Amount {
             micro_ccd: ccd * 1_000_000,
         }
@@ -178,7 +178,7 @@ impl Amount {
 
     /// Create zero amount
     #[inline(always)]
-    pub fn zero() -> Amount {
+    pub const fn zero() -> Amount {
         Amount {
             micro_ccd: 0,
         }
