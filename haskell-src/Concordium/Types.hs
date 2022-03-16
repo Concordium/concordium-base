@@ -676,7 +676,7 @@ transactionExpired (TransactionTime x) (Timestamp t) = 1000*x < t
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
-    deriving (Eq, Ord, Enum, Num, Integral, Real)
+    deriving (Eq, Ord, Show, Enum, Num, Integral, Real)
 
 amountToDelta :: Amount -> AmountDelta
 amountToDelta = fromIntegral
