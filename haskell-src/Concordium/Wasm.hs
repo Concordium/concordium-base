@@ -51,6 +51,7 @@ module Concordium.Wasm (
   WasmModule(..),
   wasmVersion,
   wasmSource,
+  demoteWasmVersion,
   WasmModuleV(..),
   getModuleRef,
   WasmVersion(..),
@@ -69,6 +70,7 @@ module Concordium.Wasm (
   ReceiveName(..),
   isValidReceiveName,
   contractAndFunctionName,
+  makeFallbackReceiveName,
   extractInitReceiveNames,
   EntrypointName(..),
   isValidEntrypointName,
@@ -106,7 +108,10 @@ module Concordium.Wasm (
   SuccessfulResultData(..),
   getSuccessfulResultData,
   -- *** Failed execution
-  ContractExecutionFailure(..)
+  ContractExecutionFailure(..),
+
+  -- |Instance queries
+  InstanceInfo(..)
   ) where
 
 import Control.Monad
@@ -121,6 +126,7 @@ import Data.Char (isPunctuation, isAlphaNum, isAscii)
 import qualified Data.HashMap.Strict as HM
 import Data.Hashable
 import Data.Int (Int32)
+import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Serialize
 import qualified Data.Text as Text
@@ -197,6 +203,9 @@ instance IsWasmVersion 'V0 where
 instance IsWasmVersion 'V1 where
   getWasmVersion = SV1
 
+demoteWasmVersion :: SWasmVersion v -> WasmVersion
+demoteWasmVersion SV0 = V0
+demoteWasmVersion SV1 = V1
 
 -- | The source of a contract in binary wasm format.
 newtype ModuleSource (v :: WasmVersion) = ModuleSource { moduleSource :: ByteString }
@@ -412,6 +421,13 @@ extractInitReceiveNames nameText = do
   let cname = "init_" <> Text.takeWhile (/= '.') nameText
   return (InitName cname, ReceiveName nameText)
 
+-- |Derive the name of a fallback entrypoint for the contract.
+-- This is defined as the entrypoint "contractName.", i.e., with the empty function name.
+makeFallbackReceiveName :: ReceiveName -> ReceiveName
+makeFallbackReceiveName r =
+  let (cname, _) = contractAndFunctionName r
+  in ReceiveName (cname <> ".")
+
 instance AE.FromJSON ReceiveName where
   parseJSON = AE.withText "ReceiveName" $ \receiveName -> do
     if isValidReceiveName receiveName then return ReceiveName{..}
@@ -454,6 +470,12 @@ newtype ContractState = ContractState {contractState :: BS.ByteString }
 
 instance AE.ToJSON ContractState where
   toJSON ContractState{..} = AE.String (Text.decodeUtf8 (BS16.encode contractState))
+
+instance AE.FromJSON ContractState where
+  parseJSON = AE.withText "ContractState" $ \csText ->
+    let (contractState, rest) = BS16.decode (Text.encodeUtf8 csText)
+    in if BS.null rest then return ContractState{..}
+       else fail "Invalid hex string."
 
 -- The show instance just displays the bytes directly.
 instance Show ContractState where
@@ -702,3 +724,61 @@ data ContractExecutionFailure =
   ContractReject { rejectReason :: Int32 } -- ^Contract decided to terminate execution.
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
+
+-- |Data about the contract that is returned by a node query. The V0 and V1
+-- instances are almost the same, but because the state of V1 instances is
+-- unbounded in general, we cannot return it as such in queries. Thus there is
+-- no "model" field for V1 instances.
+data InstanceInfo = InstanceInfoV0 {
+  iiModel :: !ContractState,
+  iiOwner :: !AccountAddress,
+  iiAmount :: !Amount,
+  iiMethods :: !(Set.Set ReceiveName),
+  iiName :: !InitName,
+  iiSourceModule :: !ModuleRef
+  }
+  | InstanceInfoV1 {
+  iiOwner :: !AccountAddress,
+  iiAmount :: !Amount,
+  iiMethods :: !(Set.Set ReceiveName),
+  iiName :: !InitName,
+  iiSourceModule :: !ModuleRef
+  } deriving(Eq, Show)
+
+-- |Helper function for JSON encoding an 'InstanceInfo'.
+instancePairs :: AE.KeyValue kv => InstanceInfo -> [kv]
+{-# INLINE instancePairs #-}
+instancePairs InstanceInfoV0{..} =
+    [ "model" AE..= iiModel,
+      "owner" AE..= iiOwner,
+      "amount" AE..= iiAmount,
+      "methods" AE..= iiMethods,
+      "name" AE..= iiName,
+      "sourceModule" AE..= iiSourceModule,
+      "version" AE..= V0
+    ]
+instancePairs InstanceInfoV1{..} =
+    [ "owner" AE..= iiOwner,
+      "amount" AE..= iiAmount,
+      "methods" AE..= iiMethods,
+      "name" AE..= iiName,
+      "sourceModule" AE..= iiSourceModule,
+      "version" AE..= V1
+    ]
+
+instance AE.ToJSON InstanceInfo where
+    toJSON inst = AE.object $ instancePairs inst
+    toEncoding inst = AE.pairs $ mconcat $ instancePairs inst
+
+instance AE.FromJSON InstanceInfo where
+  parseJSON = AE.withObject "InstanceInfo" $ \obj -> do
+    iiOwner <- obj AE..: "owner"
+    iiAmount <- obj AE..: "amount"
+    iiMethods <- obj AE..: "methods"
+    iiName <- obj AE..: "name"
+    iiSourceModule <- obj AE..: "sourceModule"
+    (obj AE..: "version") >>= \case
+      V0 -> do
+        iiModel <- obj AE..: "model"
+        return InstanceInfoV0{..}
+      V1 -> return InstanceInfoV1{..}
