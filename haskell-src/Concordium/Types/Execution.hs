@@ -115,7 +115,7 @@ instance S.Serialize DelegationTarget where
     1 -> DelegateToBaker <$> S.get
     _ -> fail "Invalid DelegationTarget"
 
--- |A collection of baker keys with correspnding proofs.
+-- |A collection of baker keys with corresponding proofs.
 data BakerKeysWithProofs =
   BakerKeysWithProofs {
     -- |Public key to verify the baker has won the election.

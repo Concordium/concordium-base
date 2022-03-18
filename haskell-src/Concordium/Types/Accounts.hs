@@ -190,6 +190,10 @@ bieBakerPoolInfo :: Lens' (BakerInfoEx 'AccountV1) BakerPoolInfo
 bieBakerPoolInfo =
   lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
+-- |Note that the serialization of 'BakerInfoEx' matches exactly
+-- the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve
+-- compatibility between versions, allowing 'BakerInfoEx' to be used where
+-- 'BakerInfo' was used.
 instance forall av. IsAccountVersion av => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
     put BakerInfoExV1{..} = put _bieBakerInfo >> put _bieBakerPoolInfo
