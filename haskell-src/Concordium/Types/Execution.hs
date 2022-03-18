@@ -40,6 +40,9 @@ import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
 import Concordium.Crypto.EncryptedTransfers
+import qualified Concordium.Crypto.VRF as VRF
+import qualified Concordium.Crypto.BlockSignature as Sig
+import qualified Concordium.Crypto.BlsSignature as Bls
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -145,6 +148,11 @@ instance S.Serialize BakerKeysWithProofs where
     S.put bkwpProofAggregation
 
   get = BakerKeysWithProofs <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
+
+-- |Size of a serialized 'BakerKeysWithProofs' structure
+bakerKeysWithProofsSize :: PayloadSize
+bakerKeysWithProofsSize = fromIntegral $
+  VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --

@@ -56,3 +56,7 @@ verify vfKey bs (Signature s) = Ed25519.verify vfKey bs s
 
 newKeyPair :: IO KeyPair
 newKeyPair = uncurry KeyPair <$> Ed25519.newKeyPair
+
+-- |Size of a serialized public key
+publicKeySize :: Int
+publicKeySize = Ed25519.verifyKeySize
