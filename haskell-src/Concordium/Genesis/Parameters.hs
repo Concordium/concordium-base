@@ -105,7 +105,7 @@ makeGenesisChainParametersV1 ::
     -- |Minimum equity capital required for a new baker.
     Amount -> 
     -- |Maximum fraction of the total supply of that a new baker can have.
-    AmountFraction ->
+    CapitalBound ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
     -- to equity capital.
     LeverageFactor ->

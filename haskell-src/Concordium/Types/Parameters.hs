@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -480,11 +481,50 @@ maximumCommissionRates CommissionRanges{..} = CommissionRates {
         _transactionCommission=irMax _transactionCommissionRange
     }
 
-type LeverageFactor = Ratio Word64
+-- |A leverage factor, which determines the maximum ratio of a baker's effective stake to its
+-- equity capital. This is cannot be less than 1.
+-- This is mostly a thin wrapper around @Ratio Word64@, except deserialization checks
+-- that the denominator is non-zero and the value is at least 1.
+newtype LeverageFactor = LeverageFactor {theLeverageFactor :: Ratio Word64}
+  deriving newtype (Eq, Ord, Show, Num, Real, Fractional, RealFrac, ToJSON)
+
+instance Serialize LeverageFactor where
+  put (LeverageFactor l) = put (numerator l) >> put (denominator l)
+  get = do
+    num <- get
+    den <- get
+    when (den == 0) $ fail "0 denominator"
+    when (gcd num den /= 1) $ fail "non-normalized ratio"
+    when (den > num) $ fail "leverage factor < 1"
+    return $ LeverageFactor $ num % den
+
+instance FromJSON LeverageFactor where
+  parseJSON v = do
+    r <- parseJSON v
+    when (r < 1) $ fail "leverage factor < 1"
+    return $ LeverageFactor r
 
 -- |Apply a leverage factor to a capital amount.
 applyLeverageFactor :: LeverageFactor -> Amount -> Amount
-applyLeverageFactor leverage (Amount amt) = Amount (truncate (leverage * (amt % 1)))
+applyLeverageFactor leverage (Amount amt) = Amount (truncate (theLeverageFactor leverage * (amt % 1)))
+
+-- |A bound on the relative share of the total staked capital that a baker can have as its stake.
+-- This is required to be greater than 0.
+newtype CapitalBound = CapitalBound {theCapitalBound :: AmountFraction}
+  deriving newtype (Eq, Ord, Show, ToJSON)
+
+instance Serialize CapitalBound where
+  put = put . theCapitalBound
+  get = do
+    cb <- get
+    when (cb == AmountFraction 0) $ fail "zero-valued capital bound"
+    return $ CapitalBound cb
+
+instance FromJSON CapitalBound where
+  parseJSON v = do
+    cb <- parseJSON v
+    when (cb == AmountFraction 0) $ fail "zero-valued capital bound"
+    return $ CapitalBound cb
 
 data PoolParameters cpv where
     PoolParametersV0 :: { -- |Minimum threshold required for registering as a baker.
@@ -497,7 +537,7 @@ data PoolParameters cpv where
       -- |Minimum equity capital required for a new baker.
       _ppMinimumEquityCapital :: !Amount,
       -- |Maximum fraction of the total staked capital of that a new baker can have.
-      _ppCapitalBound :: !AmountFraction,
+      _ppCapitalBound :: !CapitalBound,
       -- |The maximum leverage that a baker can have as a ratio of total stake
       -- to equity capital.
       _ppLeverageBound :: !LeverageFactor
@@ -567,7 +607,7 @@ ppMinimumEquityCapital =
 
 -- |Lens for '_ppCapitalBound'
 {-# INLINE ppCapitalBound #-}
-ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) AmountFraction
+ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) CapitalBound
 ppCapitalBound =
   lens _ppCapitalBound (\pp x -> pp{_ppCapitalBound = x})
 
@@ -699,7 +739,7 @@ makeChainParametersV1 ::
     -- |Minimum equity capital required for a new baker.
     Amount ->
     -- |Maximum fraction of the total supply of that a new baker can have.
-    AmountFraction ->
+    CapitalBound ->
     -- |The maximum leverage that a baker can have as a ratio of total stake
     -- to equity capital.
     LeverageFactor ->
