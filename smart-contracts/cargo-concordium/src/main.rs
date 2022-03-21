@@ -83,8 +83,8 @@ enum Command {
         )]
         out:          Option<PathBuf>,
         #[structopt(
-            name = "version",
-            long = "version",
+            name = "contract-version",
+            long = "contract-version",
             short = "v",
             help = "Build a module of the given version.",
             default_value = "V1"
@@ -203,12 +203,12 @@ enum RunCommand {
         )]
         contract_name: String,
         #[structopt(
-            name = "function",
-            long = "func",
+            name = "entrypoint",
+            long = "entrypoint",
             short = "f",
-            help = "Name of the receive-function to receive message."
+            help = "Name of the entrypoint to invoke."
         )]
-        func:          String,
+        entrypoint:    String,
 
         #[structopt(
             name = "state-json",
@@ -476,9 +476,9 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         RunCommand::Receive {
             ref runner,
             ref contract_name,
-            ref func,
+            ref entrypoint,
             ..
-        } => (contract_name, runner, Some(func)),
+        } => (contract_name, runner, Some(entrypoint)),
     };
 
     // get the module schema if available.
@@ -507,8 +507,8 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     let contract_schema_state_opt =
         contract_schema_opt.and_then(|contract_schema| contract_schema.state.clone());
     let contract_schema_func_opt = contract_schema_opt.and_then(|contract_schema| {
-        if let Some(func) = is_receive {
-            contract_schema.receive.get(func)
+        if let Some(entrypoint) = is_receive {
+            contract_schema.receive.get(entrypoint)
         } else {
             contract_schema.init.as_ref()
         }
@@ -613,7 +613,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             }
         }
         RunCommand::Receive {
-            ref func,
+            ref entrypoint,
             ref state_bin_path,
             ref state_json_path,
             balance,
@@ -666,7 +666,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
             };
 
-            let name = format!("{}.{}", contract_name, func);
+            let name = format!("{}.{}", contract_name, entrypoint);
             let res = v0::invoke_receive_with_metering_from_source(
                 module,
                 runner.amount.micro_ccd,
@@ -762,9 +762,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         RunCommand::Receive {
             ref runner,
             ref contract_name,
-            ref func,
+            ref entrypoint,
             ..
-        } => (contract_name, runner, Some(func)),
+        } => (contract_name, runner, Some(entrypoint)),
     };
 
     // get the module schema if available.
@@ -919,7 +919,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             }
         }
         RunCommand::Receive {
-            ref func,
+            ref entrypoint,
             ref state_bin_path,
             balance,
             ref context,
@@ -966,7 +966,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 module,
             )?;
             let name = {
-                let chosen_name = format!("{}.{}", contract_name, func);
+                let chosen_name = format!("{}.{}", contract_name, entrypoint);
                 if let Err(e) = ReceiveName::is_valid_receive_name(&chosen_name) {
                     anyhow::bail!("Invalid contract or receive function name: {}", e)
                 }
@@ -978,7 +978,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                         eprintln!(
                             "The contract '{}' does not have the entrypoint '{}'. Using the \
                              fallback entrypoint instead.",
-                            contract_name, func
+                            contract_name, entrypoint
                         );
                         OwnedReceiveName::new_unchecked(fallback_name)
                     } else {
@@ -986,7 +986,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                             "The contract '{}' has neither the requested entrypoint '{}', nor a \
                              fallback entrypoint.",
                             contract_name,
-                            func
+                            entrypoint
                         );
                     }
                 }

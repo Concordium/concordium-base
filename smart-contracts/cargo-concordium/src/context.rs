@@ -17,7 +17,9 @@ pub(crate) struct ChainMetadataOpt {
 }
 
 impl v0::HasChainMetadata for ChainMetadataOpt {
-    fn slot_time(&self) -> ExecResult<SlotTime> { unwrap_ctx_field(self.slot_time, "slotTime") }
+    fn slot_time(&self) -> ExecResult<SlotTime> {
+        unwrap_ctx_field(self.slot_time, "metadata.slotTime")
+    }
 }
 
 /// An init context with optional fields.
@@ -31,7 +33,7 @@ pub(crate) struct InitContextOpt {
     #[serde(default)]
     metadata:        ChainMetadataOpt,
     init_origin:     Option<AccountAddress>,
-    #[serde(deserialize_with = "deserialize_policy_bytes_from_json")]
+    #[serde(default, deserialize_with = "deserialize_policy_bytes_from_json")]
     sender_policies: Option<v0::OwnedPolicyBytes>,
 }
 
@@ -65,7 +67,7 @@ pub(crate) struct ReceiveContextOpt {
     pub(crate) self_balance: Option<Amount>,
     sender:                  Option<Address>,
     owner:                   Option<AccountAddress>,
-    #[serde(deserialize_with = "deserialize_policy_bytes_from_json")]
+    #[serde(default, deserialize_with = "deserialize_policy_bytes_from_json")]
     sender_policies:         Option<v0::OwnedPolicyBytes>,
 }
 
