@@ -160,8 +160,20 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
     }
 }
 
-/// v1 host functions.
 mod host {
+    //! v1 host function implementations. Functions in this inner module are
+    //! mostly just wrappers. They parse relevant arguments from the
+    //! machine, e.g., read values from the stack or memory, and push values to
+    //! the stack and update the memory, and account for some energy use.
+    //! The main logic (e.g., updating state) is usually handed over to the
+    //! relevant component (e.g., the state), except when the logic is very
+    //! simple. For this reason the functions generally don't have much
+    //! documentation on their own, and one should look at underlying
+    //! function to determine detailed behaviour.
+    //!
+    //! These functions are safety-critical, and must withstand malicious use.
+    //! Thus they are written in a very defensive way to make sure no out of
+    //! bounds accesses occur.
     use super::*;
     use concordium_contracts_common::{
         Cursor, EntrypointName, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE,
@@ -170,9 +182,10 @@ mod host {
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
 
-    // Parse the call arguments. This is using the serialization as defined in the
-    // smart contracts code since the arguments will be written by a smart
-    // contract. Returns Ok(None) if there is insufficient energy.
+    /// Parse the call arguments. This is using the serialization as defined in
+    /// the smart contracts code since the arguments will be written by a
+    /// smart contract. Returns `Ok(Err(OutOfEnergy))` if there is
+    /// insufficient energy.
     fn parse_call_args(
         energy: &mut InterpreterEnergy,
         cursor: &mut Cursor<&[u8]>,
@@ -244,6 +257,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `invoke` host function.
     pub fn invoke(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -292,13 +306,12 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    /// Get the parameter section. This differs from the v0 version in that it
-    /// expects an argument on the stack to indicate which parameter to check.
+    /// Get the parameter size. This differs from the v0 version in that it
+    /// expects an argument on the stack to indicate which parameter to use.
     pub fn get_parameter_size(
         stack: &mut machine::RuntimeStack,
         parameters: &[impl AsRef<[u8]>],
     ) -> machine::RunResult<()> {
-        // TODO: Verify cost below.
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let param_num = unsafe { stack.pop_u32() } as usize;
@@ -311,6 +324,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Get the parameter section. This differs from the v0 version in that it
+    /// expects an argument on the stack to indicate which parameter to use.
     pub fn get_parameter_section(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -337,6 +352,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_lookup_entry` host function. See
+    /// [InstanceState::lookup_entry] for detailed documentation.
     pub fn state_lookup_entry<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -355,6 +372,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_create_entry` host function. See
+    /// [InstanceState::create_entry] for detailed documentation.
     pub fn state_create_entry<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -373,6 +392,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_delete_entry` host function. See
+    /// [InstanceState::delete_entry] for detailed documentation.
     pub fn state_delete_entry<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -391,6 +412,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_delete_prefix` host function. See
+    /// [InstanceState::delete_prefix] for detailed documentation.
     pub fn state_delete_prefix<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -410,6 +433,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_iterator` host function. See
+    /// [InstanceState::iterator] for detailed documentation.
     pub fn state_iterator<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -428,6 +453,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_iterator_next` host function. See
+    /// [InstanceState::iterator_next] for detailed documentation.
     pub fn state_iterator_next<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -439,6 +466,8 @@ mod host {
         Ok(())
     }
 
+    /// Handle the `state_iterator_delete` host function. See
+    /// [InstanceState::iterator_delete] for detailed documentation.
     pub fn state_iterator_delete<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -450,6 +479,9 @@ mod host {
         Ok(())
     }
 
+    /// Handle the `state_iterator_key_size` host function. See
+    /// [InstanceState::iterator_key_size] for detailed documentation.
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub fn state_iterator_key_size<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -464,6 +496,8 @@ mod host {
         Ok(())
     }
 
+    /// Handle the `state_iterator_key_read` host function. See
+    /// [InstanceState::iterator_key_read] for detailed documentation.
     pub fn state_iterator_key_read<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -483,7 +517,8 @@ mod host {
         Ok(())
     }
 
-    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_entry_read` host function. See
+    /// [InstanceState::entry_read] for detailed documentation.
     pub fn state_entry_read<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -503,7 +538,8 @@ mod host {
         Ok(())
     }
 
-    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_entry_write` host function. See
+    /// [InstanceState::entry_write] for detailed documentation.
     pub fn state_entry_write<'a, BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -525,6 +561,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_entry_size` host function. See
+    /// [InstanceState::entry_size] for detailed documentation.
     pub fn state_entry_size<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -538,6 +576,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_entry_resize` host function. See
+    /// [InstanceState::entry_resize] for detailed documentation.
     pub fn state_entry_resize<'a, BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -552,6 +592,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `get_receive_entrypoint_size` host function.
     pub fn get_receive_entrypoint_size(
         stack: &mut machine::RuntimeStack,
         entrypoint: EntrypointName,
@@ -562,6 +603,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `get_receive_entrypoint` host function.
     pub fn get_receive_entrypoint(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,

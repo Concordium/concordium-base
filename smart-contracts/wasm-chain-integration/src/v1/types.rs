@@ -836,7 +836,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             current_generation,
             backing_store,
             changed: false,
-            state_trie: state.state.lock().unwrap(),
+            state_trie: state.lock(),
             iterators: Vec::new(),
             entry_mapping: Vec::new(),
         }
@@ -857,7 +857,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 current_generation: current_generation + 1,
                 backing_store,
                 changed: false,
-                state_trie: state.state.lock().unwrap(),
+                state_trie: state.lock(),
                 iterators: Vec::new(),
                 entry_mapping: Vec::new(),
             }
@@ -866,7 +866,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                 current_generation,
                 backing_store,
                 changed: false,
-                state_trie: state.state.lock().unwrap(),
+                state_trie: state.lock(),
                 iterators,
                 entry_mapping,
             }

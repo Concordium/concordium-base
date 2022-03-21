@@ -206,7 +206,9 @@ unsafe extern "C" fn call_receive_v1(
     receive_ctx_bytes: *const u8, // receive context
     receive_ctx_bytes_len: size_t,
     amount: u64,
-    receive_name: *const u8, // name of the entrypoint that was named
+    // name of the entrypoint that was named. If `call_default` is set below than this will be
+    // different from the entrypoint that is actually invoked.
+    receive_name: *const u8,
     receive_name_len: size_t,
     call_default: u8, // non-zero if to call the default/fallback instead
     state_ptr_ptr: *mut *mut MutableState,
@@ -292,7 +294,9 @@ unsafe extern "C" fn call_receive_v1(
                     Err(_trap) => std::ptr::null_mut(),
                 }
             }
-            None => std::ptr::null_mut(), // should not happen.
+            // should not happen, unless the caller violated the precondition and invoked an
+            // incorrect entrypoint.
+            None => std::ptr::null_mut(),
         }
     });
     // do not drop the pointer, we are not the owner
@@ -360,7 +364,6 @@ unsafe extern "C" fn validate_and_process_v1(
 }
 
 #[no_mangle]
-/// TODO: Signal whether the state was updated in the new state version.
 /// Resume execution of a contract after an interrupt.
 ///
 /// # Safety
@@ -765,7 +768,7 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
         let mut mutable = PersistentState::Empty.thaw();
         let mut loader = trie::Loader::new(&[]);
         {
-            let mut state_lock = mutable.get_inner(&mut loader).state.lock().unwrap();
+            let mut state_lock = mutable.get_inner(&mut loader).lock();
             let mut hasher = sha2::Sha512::new();
             hasher.update(&seed.to_be_bytes());
             for i in 0..len {

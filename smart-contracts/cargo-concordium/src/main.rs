@@ -809,9 +809,10 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
      -> anyhow::Result<()> {
         let mut collector = v1::trie::SizeCollector::default();
         let frozen = state.freeze(loader, &mut collector);
-        // TODO: Decide on terminology to use for this so that it is clear what it
-        // means. This then needs to be documented.
-        println!("The resulting state will cost {} storage energy.", collector.collect());
+        println!(
+            "The contract will produce {}B of additional state that will be charged for.",
+            collector.collect()
+        );
         if let Some(file_path) = &runner.out_bin {
             let mut out_file = std::fs::File::create(file_path)
                 .context("Could not create file to write state into.")?;
@@ -952,9 +953,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     let mut reader = std::io::BufReader::new(file);
                     let init_state = v1::trie::PersistentState::deserialize(&mut reader)
                         .context("Could not deserialize the provided state.")?;
-                    // TODO: since we deserialized the entire state we do not need a loader.
-                    // However we should probably change how state is stored by cargo-concordium and
-                    // load it lazily.
+                    // Since we deserialized the entire state we do not need a loader.
+                    // Once this is changed to load data lazily from a file, the loader will be
+                    // needed.
                     let loader = v1::trie::Loader::new(&[][..]);
                     (init_state, loader)
                 }

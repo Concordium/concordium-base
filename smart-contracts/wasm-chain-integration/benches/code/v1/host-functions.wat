@@ -9,7 +9,7 @@
   (import "concordium" "get_parameter_size" (func $get_parameter_size (param $index i32) (result i32)))
   (import "concordium" "get_parameter_section" (func $get_parameter_section (param $index i32) (param $write_location i32) (param $length i32) (param $offset i32) (result i32)))
 
-  ;; state function
+  ;; State functions
   (import "concordium" "state_create_entry" (func $state_create_entry (param $key_start i32) (param $key_length i32) (result i64)))
   (import "concordium" "state_entry_size" (func $state_entry_size (param $entry i64) (result i32)))
   (import "concordium" "state_entry_read" (func $state_entry_read (param $entry i64) (param $write_location i32) (param $length i32) (param $offset i32) (result i32)))
@@ -286,27 +286,6 @@
     )
     (return (i32.const 0))
   )
-
-  ;; TODO:
-  ;; - state_entry_resize
-
-  ;; ;; try to do the most pessimistic sequence of resizes.
-  ;; ;; resize from 0 to max sizes back to 0, repeat
-  ;; (func (export "hostfn.resize_state") (param $arg i64) (result i32)
-  ;;   (loop $loop
-  ;;     (if (i64.eqz (local.get $arg))
-  ;;       (block
-  ;;         (local.set $arg (i64.const 1))
-  ;;         (call $resize_state (i32.const 0))
-  ;;         (br $loop)
-  ;;       )
-  ;;     )
-  ;;     (local.set $arg (i64.const 0))
-  ;;     (call $resize_state (i32.const 16383))
-  ;;     (br $loop)
-  ;;   )
-  ;;   (return (i32.const 0))
-  ;; )
 
   (memory 1)
 )

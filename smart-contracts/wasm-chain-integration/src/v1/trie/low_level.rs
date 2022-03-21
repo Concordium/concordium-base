@@ -352,6 +352,9 @@ impl<V: Loadable> CachedRef<V> {
 }
 
 impl<V> CachedRef<V> {
+    /// If the value only exists in the backing store load it and cache it.
+    /// This function assumes that the backing store contains data at the given
+    /// reference, and will panic otherwise.
     pub(crate) fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) -> &mut V
     where
         V: Loadable, {
@@ -359,7 +362,7 @@ impl<V> CachedRef<V> {
             CachedRef::Disk {
                 key,
             } => {
-                let value = V::load_from_location(loader, *key).unwrap(); // TODO: Error handling.
+                let value = V::load_from_location(loader, *key).unwrap();
                 *self = CachedRef::Cached {
                     key: *key,
                     value,
@@ -493,8 +496,6 @@ impl<V> CachedRef<V> {
 /// representation where common parts of the key are stored inline in a single
 /// node instead of having many nodes with a single child.
 struct Stem {
-    // TODO: Split into short + long, or use smallvec/tinyvec, but make sure to benchmark any
-    // improvements.
     pub(crate) data:         Box<[u8]>,
     /// Whether the last chunk is partial or not.
     pub(crate) last_partial: bool,
@@ -504,8 +505,6 @@ struct Stem {
 /// A mutable version of the stem.
 /// This is an implementation detail of the iterator.
 struct MutStem {
-    // TODO: Split into short + long, or use smallvec/tinyvec, but make sure to benchmark any
-    // improvements.
     pub(crate) data:         Vec<u8>,
     /// Whether the last chunk is partial or not.
     pub(crate) last_partial: bool,
@@ -1317,7 +1316,6 @@ impl<V: AsRef<[u8]>> Node<V> {
             // So using u8 is safe.
             buf.write_u8(node.children.len() as u8)?;
             for (k, _) in node.children.iter() {
-                // TODO: This can be revised by combining the reference and the key.
                 buf.write_u8(k.value)?;
                 ref_stack.pop().unwrap().store(buf)?;
             }
@@ -1472,7 +1470,7 @@ impl Entry {
     }
 }
 
-type Position = u16;
+type Position = u8;
 
 #[derive(Debug)]
 pub struct Iterator {
@@ -2860,9 +2858,9 @@ fn follow_stem(key_iter: &mut StemIter, stem_iter: &mut StemIter) -> FollowStem 
 }
 
 impl<V: Clone> Node<V> {
-    /// TODO: This is not very efficient. It involves cloning nodes, which is
-    /// not all that cheap.
-    /// We also don't need this in production, so it is low priority to fix.
+    /// **This is not efficient.** It involves cloning nodes, which is
+    /// not all that cheap, even with reference counting.
+    /// This should only be used in testing/debugging and not in production.
     pub fn lookup(
         &self,
         loader: &mut impl BackingStoreLoad,

@@ -73,18 +73,18 @@ pub fn traverse_key_cost(key_len: u32) -> u64 {
 }
 
 /// Cost of creating an entry in the instance state.
-#[inline(always)]
+#[inline]
 pub fn create_entry_cost(key_len: u32) -> u64 {
     // 48 accounts for overall administrative costs and storing the indirection
-    // for the entry.
+    // for the entry. The 8 and 100 come from experimentation and benchmarking.
     // We want to encourage short keys so we charge linearly for those.
-    if key_len <= 40 {
+    if key_len <= 64 {
         48 + 8 * copy_from_host_cost(key_len) + 100 * u64::from(key_len)
     } else {
         let len = u64::from(key_len);
         let q = 100u64.checked_mul(len * len);
         if let Some(q) = q {
-            48 + 8 * copy_from_host_cost(key_len) + q / 40
+            48 + 8 * copy_from_host_cost(key_len) + q / 64
         } else {
             u64::MAX
         }
@@ -94,7 +94,11 @@ pub fn create_entry_cost(key_len: u32) -> u64 {
 /// Cost of looking up an entry in the instance state.
 /// Compared to creating an entry this does not require extra storage for the
 /// key. The only cost is tree traversal and storing an indirection, which is 8
-/// bytes.
+/// bytes. With this cost we limit the amount of extra storage that is needed.
+/// For each entry lookup we allocate a new pointer indirection. Which is 8
+/// bytes. With these costs we limit the amount of memory needed to store these
+/// indirections to 300MB for 3_000_000NRG (with current conversion rates of NRG
+/// to InterpreterEnergy).
 #[inline(always)]
 pub fn lookup_entry_cost(key_len: u32) -> u64 {
     80 + 4 * copy_from_host_cost(key_len) + 16 * u64::from(key_len)
@@ -121,17 +125,25 @@ pub fn delete_prefix_find_cost(len: u32) -> u64 { 10 * u64::from(len) }
 
 /// Cost of a new iterator. This accounts for tree traversal as well
 /// as the storage the execution engine needs to keep for the iterator.
-/// Since we have to store the key for the iterator we have to charge adequately
-/// so that memory use is bounded. This is the reason for the 100 factor.
+/// When looking up an iterator we construct a structure that keeps track of the
+/// current position in the tree. This iterator is constructed for any key,
+/// including the empty key. Hence the base cost of 80 is there to ensure we
+/// don't run out of memory. It limits memory use to around 300MB in the worst
+/// case.
+///
+/// Additionally, since we have to store the key for the iterator we have to
+/// charge adequately so that memory use is bounded. This is the reason for the
+/// 100 factor.
 #[inline(always)]
-pub fn new_iterator_cost(len: u32) -> u64 { 32 + 100 * u64::from(len) }
+pub fn new_iterator_cost(len: u32) -> u64 { 80 + 100 * u64::from(len) }
 
 /// Basic administrative cost that is charged when an invalid iterator is
 /// attempted to be deleted.
 pub const DELETE_ITERATOR_BASE_COST: u64 = 10;
 
 /// Delete an iterator. Since we need to unlock the region locked by it this
-/// cost is based on the length of the key.
+/// cost is based on the length of the key. The exact factor of 32 is estimated
+/// based on benchmarks.
 #[inline(always)]
 pub fn delete_iterator_cost(len: u32) -> u64 { 32 + 32 * u64::from(len) }
 

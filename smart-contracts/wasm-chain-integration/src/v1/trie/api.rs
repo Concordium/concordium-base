@@ -175,14 +175,21 @@ impl PersistentState {
 /// original propagate to the other.
 pub struct MutableStateInner {
     /// Current root of the tree. The current generation.
-    root:      u32,
+    root:  u32,
     /// The mutable trie itself. The root is an index in the array of generation
     /// roots.
     /// The idea is that the mutex is acquired at the start of execution of the
     /// contract and released at the end.
     /// The reason for the mutex is that we need to be able to clone this so
     /// that we can share it inside the single transaction.
-    pub state: Arc<Mutex<MutableTrie<Value>>>,
+    state: Arc<Mutex<MutableTrie<Value>>>,
+}
+
+impl MutableStateInner {
+    #[inline(always)]
+    /// Get exclusive access to the state trie. The state trie must be dropped
+    /// to release the lock.
+    pub fn lock(&self) -> StateTrie { self.state.lock().expect("Another thread panicked.") }
 }
 
 /// A lock guard derived from [MutableStateInner]. Only one can exist at the
@@ -215,7 +222,7 @@ impl MutableState {
         loader: &'b mut impl BackingStoreLoad,
     ) -> &'a mut MutableStateInner {
         if let Some(inner) = self.inner.as_mut() {
-            inner.state.lock().expect("Another thread panicked").normalize(inner.root);
+            inner.lock().normalize(inner.root);
         } else {
             let root = 0;
             match &self.persistent {
@@ -244,7 +251,7 @@ impl MutableState {
     /// previous generation.
     pub fn make_fresh_generation(&mut self, loader: &mut impl BackingStoreLoad) -> Self {
         if let Some(inner) = self.inner.as_mut() {
-            let mut trie = inner.state.lock().expect("Another thread panicked.");
+            let mut trie = inner.lock();
             trie.normalize(inner.root);
             trie.new_generation();
             Self {
@@ -287,10 +294,7 @@ impl MutableState {
         let inner = self.inner.take();
         match inner {
             Some(inner) => {
-                let mut trie = std::mem::replace(
-                    &mut *inner.state.lock().expect("Another thread panicked."),
-                    MutableTrie::empty(),
-                );
+                let mut trie = std::mem::replace(&mut *inner.lock(), MutableTrie::empty());
                 trie.normalize(inner.root);
                 self.persistent = match trie.freeze(loader, collector) {
                     Some(node) => PersistentState::Root(node),
