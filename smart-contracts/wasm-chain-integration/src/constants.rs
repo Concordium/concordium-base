@@ -81,6 +81,8 @@ pub fn create_entry_cost(key_len: u32) -> u64 {
     if key_len <= 64 {
         48 + 8 * copy_from_host_cost(key_len) + 100 * u64::from(key_len)
     } else {
+        // And charge quadratically for larger keys (more than 64 bytes).
+        // With this the largest key is around 40kB with 3_000_000NRG.
         let len = u64::from(key_len);
         let q = 100u64.checked_mul(len * len);
         if let Some(q) = q {
@@ -116,7 +118,7 @@ pub const MEMORY_COST_FACTOR: u32 = 100;
 /// Cost of the invoke action. This is just the base cost to cover
 /// administrative costs of an invoke. Specific costs of the action are charged
 /// later by the scheduler.
-pub const INVOKE_BASE_COST: u64 = 500; // currently set as log event base cost. Revise based on benchmarks.
+pub const INVOKE_BASE_COST: u64 = 500;
 
 /// Cost of delete_prefix which accounts for finding the prefix. It is
 /// parametrized by the length of the key.
@@ -165,8 +167,9 @@ pub fn delete_entry_cost(key_len: u32) -> u64 {
     80 + 4 * copy_from_host_cost(key_len) + 16 * u64::from(key_len)
 }
 
-/// Base cost of resizing an entry. This accounts for lookup.
-/// TODO: Benchmark.
+/// Base cost of resizing an entry. This accounts for lookup of the entry.
+/// When the entry is resized to a larger value there is additional cost charged
+/// based on how much extra memory there is.
 pub const RESIZE_ENTRY_BASE_COST: u64 = 10;
 
 /// Maximum size (in bytes) of data in the entry. The execution engine relies on

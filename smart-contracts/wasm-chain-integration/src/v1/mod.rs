@@ -354,11 +354,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_lookup_entry` host function. See
     /// [InstanceState::lookup_entry] for detailed documentation.
-    pub fn state_lookup_entry<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_lookup_entry<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
@@ -374,11 +374,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_create_entry` host function. See
     /// [InstanceState::create_entry] for detailed documentation.
-    pub fn state_create_entry<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_create_entry<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
@@ -394,11 +394,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_entry` host function. See
     /// [InstanceState::delete_entry] for detailed documentation.
-    pub fn state_delete_entry<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_delete_entry<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
@@ -414,11 +414,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_prefix` host function. See
     /// [InstanceState::delete_prefix] for detailed documentation.
-    pub fn state_delete_prefix<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_delete_prefix<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
@@ -435,11 +435,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_iterator` host function. See
     /// [InstanceState::iterator] for detailed documentation.
-    pub fn state_iterator<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_iterator<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let prefix_len = unsafe { stack.pop_u32() };
         let prefix_start = unsafe { stack.pop_u32() } as usize;
@@ -455,10 +455,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_iterator_next` host function. See
     /// [InstanceState::iterator_next] for detailed documentation.
-    pub fn state_iterator_next<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_iterator_next<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let iter_index = unsafe { stack.pop_u64() };
         let entry_option = state.iterator_next(energy, InstanceStateIterator::from(iter_index))?;
@@ -468,10 +468,10 @@ mod host {
 
     /// Handle the `state_iterator_delete` host function. See
     /// [InstanceState::iterator_delete] for detailed documentation.
-    pub fn state_iterator_delete<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_iterator_delete<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let iter = unsafe { stack.pop_u64() };
         let result = state.iterator_delete(energy, InstanceStateIterator::from(iter))?;
@@ -482,10 +482,10 @@ mod host {
     /// Handle the `state_iterator_key_size` host function. See
     /// [InstanceState::iterator_key_size] for detailed documentation.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_iterator_key_size<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_iterator_key_size<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         energy.tick_energy(constants::ITERATOR_KEY_SIZE_COST)?;
         // the cost of this function is adequately reflected by the base cost of a
@@ -498,11 +498,11 @@ mod host {
 
     /// Handle the `state_iterator_key_read` host function. See
     /// [InstanceState::iterator_key_read] for detailed documentation.
-    pub fn state_iterator_key_read<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_iterator_key_read<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
@@ -519,11 +519,11 @@ mod host {
 
     /// Handle the `state_entry_read` host function. See
     /// [InstanceState::entry_read] for detailed documentation.
-    pub fn state_entry_read<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_entry_read<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
@@ -540,11 +540,11 @@ mod host {
 
     /// Handle the `state_entry_write` host function. See
     /// [InstanceState::entry_write] for detailed documentation.
-    pub fn state_entry_write<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_entry_write<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
@@ -563,10 +563,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_entry_size` host function. See
     /// [InstanceState::entry_size] for detailed documentation.
-    pub fn state_entry_size<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_entry_size<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u64() };
         energy.tick_energy(constants::ENTRY_SIZE_COST)?;
@@ -578,10 +578,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_entry_resize` host function. See
     /// [InstanceState::entry_resize] for detailed documentation.
-    pub fn state_entry_resize<'a, BackingStore: BackingStoreLoad>(
+    pub fn state_entry_resize<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        state: &mut InstanceState<'a, BackingStore>,
+        state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         energy.tick_energy(constants::RESIZE_ENTRY_BASE_COST)?;
         let new_size = unsafe { stack.pop_u32() };
@@ -1078,7 +1078,7 @@ where
             config,
         }) => {
             let remaining_energy = host.energy.energy;
-            // logs are returned per section that is executed.
+            // Logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
             // existing logs.
             let logs = std::mem::take(&mut stateless.logs);
@@ -1116,7 +1116,6 @@ where
 
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<
-    'b,
     BackingStore: BackingStoreLoad,
     R: RunnableCode,
     Ctx1: HasReceiveContext,
@@ -1128,7 +1127,7 @@ pub fn invoke_receive<
     receive_name: ReceiveName,
     param: ParameterRef,
     energy: InterpreterEnergy,
-    instance_state: InstanceState<'b, BackingStore>,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>> {
     let mut host = ReceiveHost {
         energy,
@@ -1240,7 +1239,6 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_artifact<
     'a,
-    'b,
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
@@ -1251,7 +1249,7 @@ pub fn invoke_receive_from_artifact<
     receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    instance_state: InstanceState<'b, BackingStore>,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
@@ -1268,7 +1266,6 @@ pub fn invoke_receive_from_artifact<
 /// Invokes an receive-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
-    'b,
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
@@ -1279,7 +1276,7 @@ pub fn invoke_receive_from_source<
     receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    instance_state: InstanceState<'b, BackingStore>,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
@@ -1297,7 +1294,6 @@ pub fn invoke_receive_from_source<
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<
-    'b,
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
@@ -1308,7 +1304,7 @@ pub fn invoke_receive_with_metering_from_source<
     receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
-    instance_state: InstanceState<'b, BackingStore>,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
