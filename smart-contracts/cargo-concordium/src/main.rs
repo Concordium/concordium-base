@@ -702,7 +702,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                                     data.to_addr.subindex,
                                     name_str,
                                     data.amount,
-                                    parameter
+                                    data.parameter
                                 )
                             }
                             v0::Action::SimpleTransfer {
