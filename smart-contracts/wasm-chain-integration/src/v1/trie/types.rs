@@ -249,6 +249,7 @@ pub trait Loadable: Sized {
 /// cachedref. But it saves on the length which is significant for the concrete
 /// use-case, hence I opted for it.
 impl Loadable for Vec<u8> {
+    #[inline]
     fn load<S: std::io::Read, F: BackingStoreLoad>(
         _loader: &mut F,
         source: &mut S,
@@ -256,6 +257,21 @@ impl Loadable for Vec<u8> {
         let mut ret = Vec::new();
         source.read_to_end(&mut ret)?;
         Ok(ret)
+    }
+}
+
+/// This loadable instance means that we can only retrieve the boxed slice behind a
+/// cachedref. But it saves on the length which is significant for the concrete
+/// use-case, hence I opted for it.
+impl Loadable for Box<[u8]> {
+    #[inline]
+    fn load<S: std::io::Read, F: BackingStoreLoad>(
+        _loader: &mut F,
+        source: &mut S,
+    ) -> LoadResult<Self> {
+        let mut ret = Vec::new();
+        source.read_to_end(&mut ret)?;
+        Ok(ret.into_boxed_slice())
     }
 }
 
@@ -364,6 +380,20 @@ impl<Ctx> ToSHA256<Ctx> for u64 {
 }
 
 impl<Ctx> ToSHA256<Ctx> for Vec<u8> {
+    #[inline(always)]
+    fn hash(&self, ctx: &mut Ctx) -> Hash {
+        self[..].hash(ctx)
+    }
+}
+
+impl<Ctx> ToSHA256<Ctx> for Box<[u8]> {
+    #[inline(always)]
+    fn hash(&self, ctx: &mut Ctx) -> Hash {
+        self[..].hash(ctx)
+    }
+}
+
+impl<Ctx> ToSHA256<Ctx> for [u8] {
     #[inline(always)]
     fn hash(&self, _ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();

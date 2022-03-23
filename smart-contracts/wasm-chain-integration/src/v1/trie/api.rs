@@ -119,7 +119,7 @@ impl PersistentState {
             PersistentState::Root(node) => {
                 let data = node.use_value_(loader, |loader, node| node.data.lookup(loader, key))?;
                 let borrowed = data.borrow();
-                Some(borrowed.data.get(loader))
+                Some(borrowed.get(loader))
             }
         }
     }

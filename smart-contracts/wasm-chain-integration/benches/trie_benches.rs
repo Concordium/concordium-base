@@ -43,27 +43,27 @@ fn get_data() -> Vec<Vec<u8>> {
 
 type VecLoader = Loader<Vec<u8>>;
 
-fn make_btree(words: &[Vec<u8>]) -> BTreeMap<&[u8], [u8; 8]> {
+fn make_btree(words: &[Vec<u8>]) -> BTreeMap<&[u8], Box<[u8]>> {
     let mut tree = BTreeMap::new();
     for w in words {
-        tree.insert(&w[..], (w.len() as u64).to_ne_bytes());
+        tree.insert(&w[..], (w.len() as u64).to_ne_bytes().into());
     }
     tree
 }
 
 #[allow(clippy::type_complexity)] // this is a test, so a bit of complexity is OK.
-fn make_trie(words: &[Vec<u8>]) -> (Option<CachedRef<Hashed<Node<[u8; 8]>>>>, VecLoader) {
+fn make_trie(words: &[Vec<u8>]) -> (Option<CachedRef<Hashed<Node<Box<[u8]>>>>>, VecLoader) {
     let (trie, mut loader) = make_mut_trie(words);
     (trie.freeze(&mut loader, &mut EmptyCollector), loader)
 }
 
-fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie<[u8; 8]>, VecLoader) {
+fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie<Box<[u8]>>, VecLoader) {
     let mut node = MutableTrie::empty();
     let mut loader = Loader {
         inner: Vec::<u8>::new(),
     };
     for w in words {
-        node.insert(&mut loader, &w, (w.len() as u64).to_ne_bytes())
+        node.insert(&mut loader, &w, (w.len() as u64).to_ne_bytes().into())
             .expect("No locks, so cannot fail.");
     }
     (node, loader)
@@ -127,7 +127,7 @@ fn trie_deserialize(b: &mut Criterion) {
             let mut loader = Loader {
                 inner: &backing_store,
             };
-            let trie = Node::<[u8; 8]>::load_from_location(&mut loader, root);
+            let trie = Node::<Box<[u8]>>::load_from_location(&mut loader, root);
             assert!(trie.is_ok(), "Tree deserialization failed.");
         })
     });
@@ -146,7 +146,7 @@ fn trie_cache(b: &mut Criterion) {
             let mut loader = Loader {
                 inner: &backing_store,
             };
-            let mut trie = Node::<[u8; 8]>::load_from_location(&mut loader, root);
+            let mut trie = Node::<Box<[u8]>>::load_from_location(&mut loader, root);
             assert!(trie.is_ok(), "Tree deserialization failed.");
             trie.as_mut().unwrap().cache(&mut loader);
             assert!(trie.unwrap().is_cached(), "Tree is not cached.")
@@ -180,7 +180,7 @@ fn trie_hash(b: &mut Criterion) {
     });
     b.bench_function("hash data", |b| {
         b.iter(|| {
-            1231312u64.hash(&mut loader);
+            let _: [u8; 32] = sha2::Sha256::digest([17u8; 0]).into();
         })
     });
 }
