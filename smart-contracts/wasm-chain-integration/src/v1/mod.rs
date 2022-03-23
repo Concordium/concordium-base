@@ -192,6 +192,9 @@ mod host {
     ) -> ParseResult<Result<Interrupt, OutOfEnergy>> {
         let address = cursor.get()?;
         let parameter_len: u16 = cursor.get()?;
+        if usize::from(parameter_len) > constants::MAX_PARAMETER_SIZE {
+            return Err(ParseError {});
+        }
         if energy.tick_energy(constants::copy_to_host_cost(parameter_len.into())).is_err() {
             return Ok(Err(OutOfEnergy));
         }
