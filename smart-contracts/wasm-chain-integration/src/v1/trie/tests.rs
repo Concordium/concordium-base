@@ -8,7 +8,7 @@ const NUM_TESTS: u64 = 100000;
 /// Construt a mutable trie with the given contents.
 /// The loader that was used during construction is returned, but in reality it
 /// is not needed since the entire tree is in-memory.
-fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie<Value>, Loader<Value>) {
+fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie, Loader<Value>) {
     let mut node = MutableTrie::empty();
     let mut loader = Loader {
         inner: Vec::<u8>::new(),
@@ -70,7 +70,7 @@ fn prop_storing() {
         let mut loader = Loader {
             inner: backing_store,
         };
-        let trie = CachedRef::<Hashed<Node<Value>>>::load_from_location(&mut loader, root)
+        let trie = CachedRef::<Hashed<Node>>::load_from_location(&mut loader, root)
             .context("Could not deserialize.")?;
         let mut mutable = trie.make_mutable(0, &mut loader);
         let mut iterator = mutable
@@ -128,8 +128,7 @@ fn prop_serialization() {
         let original_hash = frozen.hash(&mut loader);
         let mut source = std::io::Cursor::new(&out);
         let deserialized = CachedRef::Memory {
-            value: Hashed::<Node<Value>>::deserialize(&mut source)
-                .context("Failed to deserialize")?,
+            value: Hashed::<Node>::deserialize(&mut source).context("Failed to deserialize")?,
         };
         ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
         let deserialized_hash = deserialized.hash(&mut loader);
@@ -183,7 +182,7 @@ fn prop_storing_preseves_hash() {
         let mut loader = Loader {
             inner: backing_store,
         };
-        let trie = CachedRef::<Hashed<Node<Value>>>::load_from_location(&mut loader, root)
+        let trie = CachedRef::<Hashed<Node>>::load_from_location(&mut loader, root)
             .context("Failed to deserialize.")?;
         let hash_2 = trie.hash(&mut loader);
         ensure!(hash_1 == hash_2, "Hashes differ.");
@@ -874,9 +873,8 @@ fn prop_freeze_collector() {
         let mut loader_1 = Loader {
             inner: store,
         };
-        let trie_1 =
-            CachedRef::<Hashed<Node<Value>>>::load_from_location(&mut loader_1, stored_location)
-                .expect("Loading of the tree failed.");
+        let trie_1 = CachedRef::<Hashed<Node>>::load_from_location(&mut loader_1, stored_location)
+            .expect("Loading of the tree failed.");
         let mut m1 = trie.make_mutable(0, &mut loader);
         let mut m2 = trie_1.make_mutable(0, &mut loader_1);
 
@@ -951,7 +949,7 @@ fn prop_matches_reference_after_new_gen_mutate() {
                 {
                     let lookup_result = trie
                         .with_entry(entry, &mut loader, |ev| {
-                            ev == &[17] || additions_map.get(k) == Some(ev)
+                            ev == [17] || additions_map.get(k).map(AsRef::as_ref) == Some(ev)
                         })
                         .unwrap_or(false);
                     if !lookup_result {

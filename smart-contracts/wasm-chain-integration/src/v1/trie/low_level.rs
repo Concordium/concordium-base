@@ -811,45 +811,55 @@ impl<const N: usize> Chunk<N> {
 }
 
 /// Recursive link to a child node.
-type ChildLink<V> = Link<CachedRef<Hashed<Node<V>>>>;
+type ChildLink = Link<CachedRef<Hashed<Node>>>;
+
+/// Link to a value.
+type ValueLink = Link<InlineOrHashed>;
 
 #[derive(Debug)]
 /// A value that is either stored inline without a hash, or with a cached hash
 /// and a pointer to the actual value. The intention is that small values will
 /// be stored inline and larger values behind and indirection.
-pub enum InlineOrHashed<V> {
-    Inline(V),
-    Indirect(Hashed<CachedRef<V>>),
+pub enum InlineOrHashed {
+    Inline([u8; INLINE_VALUE_LEN + 1]),
+    Indirect(Hashed<CachedRef<Box<[u8]>>>),
 }
 
-impl<V: AsRef<[u8]>> InlineOrHashed<V> {
-    pub fn new<Ctx>(ctx: &mut Ctx, value: V) -> Self
-    where
-        V: ToSHA256<Ctx>, {
-        if value.as_ref().len() <= INLINE_VALUE_LEN {
-            Self::Inline(value)
+#[inline(always)]
+/// Read an inline buffer **assuming `len <= INLINE_VALUE_LEN`. Otherwise this
+/// function will panic.
+fn read_buf(source: &mut impl std::io::Read, len: u8) -> LoadResult<InlineOrHashed> {
+    let mut buf = [0u8; INLINE_VALUE_LEN + 1];
+    buf[0] = len;
+    source.read_exact(&mut buf[1..][0..usize::from(len)])?;
+    Ok(InlineOrHashed::Inline(buf))
+}
+
+impl InlineOrHashed {
+    pub fn new<Ctx>(ctx: &mut Ctx, value: Vec<u8>) -> Self {
+        if value.len() <= INLINE_VALUE_LEN {
+            let mut buf: [u8; INLINE_VALUE_LEN + 1] = [0u8; INLINE_VALUE_LEN + 1];
+            buf[0] = value.len() as u8;
+            buf[1..=value.len()].copy_from_slice(&value);
+            Self::Inline(buf)
         } else {
             Self::Indirect(Hashed::new(value.hash(ctx), CachedRef::Memory {
-                value,
+                value: value.into_boxed_slice(),
             }))
         }
     }
-}
 
-impl<V> InlineOrHashed<V> {
     #[inline(always)]
     /// Apply the provided function to the contained value. If the value is only
     /// in the backing store it is temporarily loaded.
     pub(crate) fn use_value<X>(
         &self,
         loader: &mut impl BackingStoreLoad,
-        f: impl FnOnce(&V) -> X,
-    ) -> X
-    where
-        V: Loadable, {
+        f: impl FnOnce(&[u8]) -> X,
+    ) -> X {
         match self {
-            InlineOrHashed::Inline(v) => f(v),
-            InlineOrHashed::Indirect(indirect) => indirect.data.use_value(loader, f),
+            InlineOrHashed::Inline(v) => f(&v[1..][0..usize::from(v[0])]),
+            InlineOrHashed::Indirect(indirect) => indirect.data.use_value(loader, |b| f(&b[..])),
         }
     }
 
@@ -861,45 +871,38 @@ impl<V> InlineOrHashed<V> {
     pub(crate) fn use_value_and_hash<X>(
         &self,
         loader: &mut impl BackingStoreLoad,
-        f: impl FnOnce(Option<&Hash>, &V) -> X,
-    ) -> X
-    where
-        V: Loadable, {
+        f: impl FnOnce(Option<&Hash>, &[u8]) -> X,
+    ) -> X {
         match self {
-            InlineOrHashed::Inline(v) => f(None, v),
+            InlineOrHashed::Inline(v) => f(None, &v[1..][0..usize::from(v[0])]),
             InlineOrHashed::Indirect(indirect) => {
                 indirect.data.use_value(loader, |v| f(Some(&indirect.hash), v))
             }
         }
     }
 
-    pub(crate) fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) -> &mut V
-    where
-        V: Loadable, {
+    pub(crate) fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         match self {
-            InlineOrHashed::Inline(v) => v,
-            InlineOrHashed::Indirect(indirect) => indirect.data.load_and_cache(loader),
+            InlineOrHashed::Inline(_) => (), // already loaded
+            InlineOrHashed::Indirect(indirect) => {
+                indirect.data.load_and_cache(loader);
+            }
         }
     }
 
-    pub fn get(&self, loader: &mut impl BackingStoreLoad) -> V
-    where
-        V: Clone + Loadable, {
+    pub fn get(&self, loader: &mut impl BackingStoreLoad) -> Vec<u8> {
         match self {
-            InlineOrHashed::Inline(v) => v.clone(),
-            InlineOrHashed::Indirect(indirect) => indirect.data.get(loader),
+            InlineOrHashed::Inline(v) => v[1..][0..v[0].into()].to_vec(),
+            InlineOrHashed::Indirect(indirect) => Vec::from(indirect.data.get(loader)),
         }
     }
 }
 
-impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed<V>
-where
-    V: ToSHA256<Ctx>,
-{
+impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed {
     #[inline(always)]
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         match self {
-            InlineOrHashed::Inline(v) => v.hash(ctx),
+            InlineOrHashed::Inline(v) => (&v[1..][0..usize::from(v[0])]).hash(ctx),
             InlineOrHashed::Indirect(indirect) => indirect.hash(ctx),
         }
     }
@@ -908,7 +911,7 @@ where
 #[derive(Debug)]
 /// A persistent node. Cloning this is cheap, it only copies pointers and
 /// increments reference counts.
-pub struct Node<V> {
+pub struct Node {
     /// Since a single node owns each value using Hashed<Cached<V>>
     /// here makes sense, it makes it so that the hash is stored inline.
     ///
@@ -917,17 +920,17 @@ pub struct Node<V> {
     /// behind an indirection, and it is in fact quite wasteful. More so for
     /// smaller values. Ideally we'd revise this so that if data is small it
     /// would be stored inline.
-    value:    Option<Link<InlineOrHashed<V>>>,
+    value:    Option<ValueLink>,
     path:     Stem,
     /// Children, ordered by increasing key.
     /// In contrast to Hashed<Cached<..>> above for the value, here we store the
     /// hash behind a pointer indirection. The reason for this is that there
     /// are going to be many pointers to the same node, and we want to avoid
     /// duplicating node hashes.
-    children: Vec<(Chunk<4>, ChildLink<V>)>,
+    children: Vec<(Chunk<4>, ChildLink)>,
 }
 
-impl<V> Drop for Node<V> {
+impl Drop for Node {
     fn drop(&mut self) {
         let mut stack = Vec::new();
         // if we are the only owner of the children we can deallocate them.
@@ -952,7 +955,7 @@ impl<V> Drop for Node<V> {
     }
 }
 
-impl<V> Clone for Node<V> {
+impl Clone for Node {
     fn clone(&self) -> Self {
         Self {
             value:    self.value.clone(),
@@ -970,10 +973,7 @@ where
     fn hash(&self, ctx: &mut Ctx) -> Hash { self.use_value_(ctx, |ctx, v| v.hash(ctx)) }
 }
 
-impl<V, Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node<V>
-where
-    V: ToSHA256<Ctx> + From<Vec<u8>>,
-{
+impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node {
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();
         match &self.value {
@@ -999,17 +999,17 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct MutableNode<V> {
+struct MutableNode {
     generation: u32,
     /// Pointer to the table of entries, if the node has a value.
     value:      Option<EntryId>,
     path:       Stem,
-    children:   ChildrenCow<V>,
+    children:   ChildrenCow,
     /// This is None if the node is modified
-    origin:     Option<CachedRef<Hashed<Node<V>>>>,
+    origin:     Option<CachedRef<Hashed<Node>>>,
 }
 
-impl<V> ChildrenCow<V> {
+impl ChildrenCow {
     #[inline]
     fn len(&self) -> usize {
         match self {
@@ -1022,7 +1022,7 @@ impl<V> ChildrenCow<V> {
     }
 }
 
-impl<V> Default for MutableNode<V> {
+impl Default for MutableNode {
     fn default() -> Self {
         Self {
             generation: 0,
@@ -1037,7 +1037,7 @@ impl<V> Default for MutableNode<V> {
     }
 }
 
-impl<V> MutableNode<V> {
+impl MutableNode {
     pub fn migrate(&self, entries: &mut Vec<Entry>, generation: u32) -> Self {
         let value = if let Some(idx) = self.value {
             let new_entry_idx = entries.len();
@@ -1125,29 +1125,29 @@ impl Generation {
 }
 
 #[derive(Debug, Clone)]
-pub struct MutableTrie<V> {
+pub struct MutableTrie {
     /// Roots for previous generations.
     generations:     Vec<Generation>,
     /// Entries. These are pointers to either [MutableTrie::values] or
     /// [MutableTrie::borrowed_values].
     entries:         Vec<Entry>,
-    values:          Vec<V>,
-    borrowed_values: Vec<Link<InlineOrHashed<V>>>,
+    values:          Vec<Vec<u8>>,
+    borrowed_values: Vec<ValueLink>,
     /// List of all the nodes for all generations. Nodes for new generations are
     /// always added at the end.
-    nodes:           Vec<MutableNode<V>>,
+    nodes:           Vec<MutableNode>,
 }
 
 #[derive(Debug)]
-enum ChildrenCow<V> {
-    Borrowed(Vec<(Chunk<4>, ChildLink<V>)>),
+enum ChildrenCow {
+    Borrowed(Vec<(Chunk<4>, ChildLink)>),
     Owned {
         generation: u32,
         value:      tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>,
     },
 }
 
-impl<V> ChildrenCow<V> {
+impl ChildrenCow {
     /// Return a reference to the owned value, if the enum is an owned variant.
     /// Otherwise return [None].
     #[inline]
@@ -1179,14 +1179,14 @@ impl<V> ChildrenCow<V> {
     }
 }
 
-fn freeze_value<Ctx, V: Default + ToSHA256<Ctx> + AsRef<[u8]>, C: Collector<V>>(
-    borrowed_values: &mut [Link<InlineOrHashed<V>>],
-    owned_values: &mut [V],
+fn freeze_value<Ctx, C: Collector<Vec<u8>>>(
+    borrowed_values: &mut [ValueLink],
+    owned_values: &mut [Vec<u8>],
     entries: &[Entry],
     mutable: Option<EntryId>,
     loader: &mut Ctx,
     collector: &mut C,
-) -> (bool, Option<Link<InlineOrHashed<V>>>) {
+) -> (bool, Option<ValueLink>) {
     let entry_idx = if let Some(entry_idx) = mutable {
         entry_idx
     } else {
@@ -1251,7 +1251,7 @@ impl<const N: usize> KeyIndexPair<N> {
     }
 }
 
-impl<V> Clone for ChildrenCow<V> {
+impl Clone for ChildrenCow {
     fn clone(&self) -> Self {
         match self {
             ChildrenCow::Borrowed(rc) => ChildrenCow::Borrowed(rc.clone()),
@@ -1279,7 +1279,7 @@ impl<V> Loadable for CachedRef<V> {
     }
 }
 
-impl<V: From<Vec<u8>>> Loadable for Node<V> {
+impl Loadable for Node {
     fn load<S: std::io::Read, F: BackingStoreLoad>(
         loader: &mut F,
         source: &mut S,
@@ -1288,11 +1288,9 @@ impl<V: From<Vec<u8>>> Loadable for Node<V> {
         let value = if has_value {
             let tag = source.read_u8()?;
             let val = if usize::from(tag) <= INLINE_VALUE_LEN {
-                let mut v = vec![0u8; tag.into()];
-                source.read_exact(&mut v)?;
-                InlineOrHashed::Inline(v.into())
+                read_buf(source, tag)?
             } else {
-                InlineOrHashed::Indirect(Hashed::<CachedRef<V>>::load(loader, source)?)
+                InlineOrHashed::Indirect(Hashed::<CachedRef<Box<[u8]>>>::load(loader, source)?)
             };
             Some(Link::new(val))
         } else {
@@ -1302,7 +1300,7 @@ impl<V: From<Vec<u8>>> Loadable for Node<V> {
         let mut branches = Vec::with_capacity(num_branches.into());
         for _ in 0..num_branches {
             let key = Chunk::new(source.read_u8()?);
-            let reference = CachedRef::<Hashed<Node<V>>>::load(loader, source)?;
+            let reference = CachedRef::<Hashed<Node>>::load(loader, source)?;
             branches.push((key, Link::new(reference)));
         }
         Ok(Node {
@@ -1313,7 +1311,7 @@ impl<V: From<Vec<u8>>> Loadable for Node<V> {
     }
 }
 
-impl<V: Loadable + From<Vec<u8>> + Debug> Node<V> {
+impl Node {
     /// The entire tree in memory.
     pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let Some(v) = self.value.as_mut() {
@@ -1338,7 +1336,7 @@ impl<V: Loadable + From<Vec<u8>> + Debug> Node<V> {
     #[cfg(feature = "display-state")]
     pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
         let value = if let Some(ref value) = self.value {
-            value.borrow().data.use_value(loader, |value| format!(", value = {:?}", value))
+            value.borrow().use_value(loader, |value| format!(", value = {:?}", value))
         } else {
             String::new()
         };
@@ -1354,7 +1352,7 @@ impl<V: Loadable + From<Vec<u8>> + Debug> Node<V> {
     }
 }
 
-impl<V: AsRef<[u8]>> Hashed<Node<V>> {
+impl Hashed<Node> {
     pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
@@ -1374,7 +1372,7 @@ impl<V: AsRef<[u8]>> Hashed<Node<V>> {
     }
 }
 
-impl<V: AsRef<[u8]>> Node<V> {
+impl Node {
     pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
@@ -1393,7 +1391,7 @@ impl<V: AsRef<[u8]>> Node<V> {
         for (_, ch) in self.children.iter() {
             stack.push((ch.clone(), false));
         }
-        let store_node = |node: &mut Node<V>,
+        let store_node = |node: &mut Node,
                           buf: &mut Vec<u8>,
                           backing_store: &mut S,
                           ref_stack: &mut Vec<Reference>|
@@ -1407,8 +1405,8 @@ impl<V: AsRef<[u8]>> Node<V> {
                 let mut borrowed = v.borrow_mut();
                 match &mut *borrowed {
                     InlineOrHashed::Inline(v) => {
-                        buf.write_u8(v.as_ref().len() as u8)?;
-                        buf.write_all(v.as_ref())?;
+                        buf.write_u8(v[0])?;
+                        buf.write_all(&v[1..][0..usize::from(v[0])])?;
                     }
                     InlineOrHashed::Indirect(indirect) => {
                         buf.write_u8(0b1111_1111u8)?;
@@ -1466,10 +1464,10 @@ impl<V: AsRef<[u8]>> Node<V> {
 
 /// Make the children owned, and return whether the node has a value, the new
 /// length of owned_nodes, and a mutable reference to the children.
-fn make_owned<'a, 'b, V: From<Vec<u8>>>(
+fn make_owned<'a, 'b>(
     idx: usize,
-    borrowed_values: &mut Vec<Link<InlineOrHashed<V>>>,
-    owned_nodes: &'a mut Vec<MutableNode<V>>,
+    borrowed_values: &mut Vec<ValueLink>,
+    owned_nodes: &'a mut Vec<MutableNode>,
     entries: &'a mut Vec<Entry>,
     loader: &'b mut impl BackingStoreLoad,
 ) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>) {
@@ -1618,21 +1616,21 @@ impl Iterator {
     pub fn get_root(&self) -> &[u8] { &self.root }
 }
 
-impl<V: From<Vec<u8>>> CachedRef<Hashed<Node<V>>> {
+impl CachedRef<Hashed<Node>> {
     fn thaw(
         &self,
-        borrowed_values: &mut Vec<Link<InlineOrHashed<V>>>,
+        borrowed_values: &mut Vec<ValueLink>,
         entries: &mut Vec<Entry>,
         generation: u32,
         loader: &mut impl BackingStoreLoad,
-    ) -> MutableNode<V> {
+    ) -> MutableNode {
         match self {
             CachedRef::Disk {
                 key,
                 ..
             } => {
-                let node: Hashed<Node<V>> =
-                    Hashed::<Node<V>>::load_from_location(loader, *key).expect("Failed to read.");
+                let node: Hashed<Node> =
+                    Hashed::<Node>::load_from_location(loader, *key).expect("Failed to read.");
                 node.data.thaw(self, borrowed_values, entries, generation)
             }
             CachedRef::Memory {
@@ -1646,11 +1644,7 @@ impl<V: From<Vec<u8>>> CachedRef<Hashed<Node<V>>> {
         }
     }
 
-    pub fn make_mutable(
-        &self,
-        generation: u32,
-        loader: &mut impl BackingStoreLoad,
-    ) -> MutableTrie<V> {
+    pub fn make_mutable(&self, generation: u32, loader: &mut impl BackingStoreLoad) -> MutableTrie {
         let mut borrowed_values = Vec::new();
         let mut entries = Vec::new();
         let root_node = self.thaw(&mut borrowed_values, &mut entries, generation, loader);
@@ -1666,9 +1660,7 @@ impl<V: From<Vec<u8>>> CachedRef<Hashed<Node<V>>> {
     pub fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
-    ) -> Result<Vec<u8>, WriteError>
-    where
-        V: AsRef<[u8]>, {
+    ) -> Result<Vec<u8>, WriteError> {
         let mut buf = Vec::new();
         self.store_update_buf(backing_store, &mut buf)?;
         Ok(buf)
@@ -1678,9 +1670,7 @@ impl<V: From<Vec<u8>>> CachedRef<Hashed<Node<V>>> {
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
-    ) -> StoreResult<()>
-    where
-        V: AsRef<[u8]>, {
+    ) -> StoreResult<()> {
         let reference = match self.get_mut_or_key() {
             Ok(node) => {
                 let data: Vec<u8> = node.store_update(backing_store)?;
@@ -1692,14 +1682,14 @@ impl<V: From<Vec<u8>>> CachedRef<Hashed<Node<V>>> {
     }
 }
 
-impl<V> Node<V> {
+impl Node {
     fn thaw(
         &self,
-        origin: &CachedRef<Hashed<Node<V>>>,
-        borrowed_values: &mut Vec<Link<InlineOrHashed<V>>>,
+        origin: &CachedRef<Hashed<Node>>,
+        borrowed_values: &mut Vec<ValueLink>,
         entries: &mut Vec<Entry>,
         generation: u32,
-    ) -> MutableNode<V> {
+    ) -> MutableNode {
         let entry = self.value.as_ref().map(|v| {
             let entry_idx = borrowed_values.len();
             borrowed_values.push(v.clone());
@@ -1723,7 +1713,7 @@ impl<V> Node<V> {
     }
 }
 
-impl<V> MutableTrie<V> {
+impl MutableTrie {
     pub fn empty() -> Self {
         Self {
             generations:     vec![Generation::new(None)],
@@ -1738,7 +1728,7 @@ impl<V> MutableTrie<V> {
     pub fn is_empty(&self) -> bool { self.generations.last().map_or(false, |x| x.root.is_none()) }
 }
 
-impl<V: From<Vec<u8>>> MutableTrie<V> {
+impl MutableTrie {
     pub fn new_generation(&mut self) {
         let num_nodes = self.nodes.len();
         let num_values = self.values.len();
@@ -1799,14 +1789,12 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
     /// mutable. The counter is invoked in case a copy of the entry must be made
     /// and gives the caller the ability to terminate if too much data must
     /// be copied.
-    pub fn get_mut<A: AllocCounter<V>>(
+    pub fn get_mut<A: AllocCounter<Vec<u8>>>(
         &mut self,
         entry: EntryId,
         loader: &mut impl BackingStoreLoad,
         counter: &mut A,
-    ) -> Result<Option<&mut V>, A::Err>
-    where
-        V: Clone + Loadable, {
+    ) -> Result<Option<&mut Vec<u8>>, A::Err> {
         let values = &mut self.values;
         let borrowed_entries = &mut self.borrowed_values;
         let entries = &mut self.entries;
@@ -1842,7 +1830,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
 
     /// Set the entry to contain the given value, overwriting any existing
     /// value.
-    fn set_entry_value(&mut self, entry: EntryId, value: V) {
+    fn set_entry_value(&mut self, entry: EntryId, value: Vec<u8>) {
         let values = &mut self.values;
         let entries = &mut self.entries;
         let entry = &mut entries[entry];
@@ -1999,7 +1987,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
     /// the value if successful. This is analogous to `get_mut`, except that
     /// it avoids copying the value in case the value is currently not owned
     /// for the relevant generation.
-    pub fn set(&mut self, entry: EntryId, new_value: V) -> Option<&mut V> {
+    pub fn set(&mut self, entry: EntryId, new_value: Vec<u8>) -> Option<&mut Vec<u8>> {
         let values = &mut self.values;
         let entries = &mut self.entries;
         match entries[entry] {
@@ -2024,15 +2012,12 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
     }
 
     /// Use the entry. This does not modify any structure.
-    pub fn with_entry<X, F>(
+    pub fn with_entry<X>(
         &self,
         entry: EntryId,
         loader: &mut impl BackingStoreLoad,
-        f: F,
-    ) -> Option<X>
-    where
-        F: FnOnce(&V) -> X,
-        V: Loadable, {
+        f: impl FnOnce(&[u8]) -> X,
+    ) -> Option<X> {
         let values = &self.values;
         let borrowed_values = &self.borrowed_values;
         match self.entries[entry] {
@@ -2043,12 +2028,12 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
                 if borrowed {
                     borrowed_values.get(entry_idx).map(|v| v.borrow().use_value(loader, f))
                 } else {
-                    values.get(entry_idx).map(f)
+                    values.get(entry_idx).map(|b| f(&b[..]))
                 }
             }
             Entry::Mutable {
                 entry_idx,
-            } => return values.get(entry_idx).map(f),
+            } => return values.get(entry_idx).map(|b| f(&b[..])),
             Entry::Deleted => None,
         }
     }
@@ -2056,13 +2041,11 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
     /// TODO: It might be useful to return a list of new nodes so that they
     /// may be persisted quicker than traversing the tree again.
     /// Freeze the current generation. Returns None if the tree was empty.
-    pub fn freeze<Ctx: BackingStoreLoad, C: Collector<V>>(
+    pub fn freeze<Ctx: BackingStoreLoad, C: Collector<Vec<u8>>>(
         self,
         loader: &mut Ctx,
         collector: &mut C,
-    ) -> Option<CachedRef<Hashed<Node<V>>>>
-    where
-        V: ToSHA256<Ctx> + Default + AsRef<[u8]>, {
+    ) -> Option<CachedRef<Hashed<Node>>> {
         let mut owned_nodes = self.nodes;
         let mut values = self.values;
         let entries = self.entries;
@@ -2212,9 +2195,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
         &mut self,
         loader: &mut impl BackingStoreLoad,
         key: &[u8],
-    ) -> Result<bool, AttemptToModifyLockedArea>
-    where
-        V: Default, {
+    ) -> Result<bool, AttemptToModifyLockedArea> {
         let mut key_iter = StemIter::new(key);
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
@@ -2268,7 +2249,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
                                 // instead of the node.
                                 // the only thing that needs to be transferred from the node to the
                                 // child is (potentially) the stem of the node.
-                                let father_node: &mut MutableNode<_> =
+                                let father_node: &mut MutableNode =
                                     unsafe { owned_nodes.get_unchecked_mut(father_idx) };
                                 if let Some((_, children)) = father_node.children.get_owned_mut() {
                                     let child_place: &mut KeyIndexPair<4> =
@@ -2314,7 +2295,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
                                         // node's child, instead of the node.
                                         // the only thing that needs to be transferred from the node
                                         // to the child is (potentially) the stem of the node.
-                                        let grandfather_node: &mut MutableNode<_> = unsafe {
+                                        let grandfather_node: &mut MutableNode = unsafe {
                                             owned_nodes.get_unchecked_mut(grandfather_idx)
                                         };
                                         if let Some((_, children)) =
@@ -2380,9 +2361,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
         loader: &mut L,
         key: &[u8],
         counter: &mut C,
-    ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err>
-    where
-        V: Default, {
+    ) -> Result<Result<bool, AttemptToModifyLockedArea>, C::Err> {
         let mut key_iter = StemIter::new(key);
         let owned_nodes = &mut self.nodes;
         let borrowed_values = &mut self.borrowed_values;
@@ -2471,7 +2450,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
                         if !has_value && children.len() == 1 {
                             // collapse path.
                             if let Some(child) = children.pop() {
-                                let parent_node: MutableNode<_> =
+                                let parent_node: MutableNode =
                                     std::mem::take(&mut owned_nodes[parent_idx]);
                                 let child_node = &mut owned_nodes[child.index()];
                                 child_node.path.prepend_parts(parent_node.path, child.key());
@@ -2483,7 +2462,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
                                     // the only thing that needs to be transferred from the node
                                     // to the child is (potentially) the stem of the node.
                                     // All other values in the node are empty.
-                                    let grandparent_node: &mut MutableNode<_> =
+                                    let grandparent_node: &mut MutableNode =
                                         unsafe { owned_nodes.get_unchecked_mut(grandparent_idx) };
                                     if let Some((_, children)) =
                                         grandparent_node.children.get_owned_mut()
@@ -2522,7 +2501,7 @@ impl<V: From<Vec<u8>>> MutableTrie<V> {
         &mut self,
         loader: &mut impl BackingStoreLoad,
         key: &[u8],
-        new_value: V,
+        new_value: Vec<u8>,
     ) -> Result<(EntryId, bool), AttemptToModifyLockedArea> {
         let (current_generation, older_generations) = self
             .generations
@@ -2798,7 +2777,7 @@ fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), 
     Ok((path, (tag & 0b100_0000 != 0)))
 }
 
-impl<V: From<Vec<u8>> + AsRef<[u8]> + Loadable> Hashed<Node<V>> {
+impl Hashed<Node> {
     /// Serialize the node and its children into a byte array.
     /// Note that this serializes the entire tree together with its children, so
     /// it is different from store_update which only traverses the part of
@@ -2845,10 +2824,8 @@ impl<V: From<Vec<u8>> + AsRef<[u8]> + Loadable> Hashed<Node<V>> {
     }
 
     /// The inverse of [serialize](Self::serialize).
-    pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self>
-    where
-        V: From<Vec<u8>>, {
-        let mut parents: Vec<Link<CachedRef<Hashed<Node<V>>>>> = Vec::new();
+    pub fn deserialize(source: &mut impl std::io::Read) -> anyhow::Result<Self> {
+        let mut parents: Vec<Link<CachedRef<Hashed<Node>>>> = Vec::new();
         let mut todo = std::collections::VecDeque::new();
         todo.push_back(0); // dummy initial value, will not be used.
         while let Some(key) = todo.pop_front() {
@@ -2858,9 +2835,7 @@ impl<V: From<Vec<u8>> + AsRef<[u8]> + Loadable> Hashed<Node<V>> {
             let value = if has_value {
                 let value_len = source.read_u32::<BigEndian>()?;
                 if value_len as usize <= INLINE_VALUE_LEN {
-                    let mut val = vec![0u8; value_len as usize];
-                    source.read_exact(&mut val)?;
-                    Some(Link::new(InlineOrHashed::Inline(val.into())))
+                    Some(Link::new(read_buf(source, value_len as u8)?))
                 } else {
                     let value_hash = Hash::read(source)?;
                     let mut val = vec![0u8; value_len as usize];
@@ -2971,15 +2946,11 @@ fn follow_stem(key_iter: &mut StemIter, stem_iter: &mut StemIter) -> FollowStem 
     }
 }
 
-impl<V: Clone + From<Vec<u8>>> Node<V> {
+impl Node {
     /// **This is not efficient.** It involves cloning nodes, which is
     /// not all that cheap, even with reference counting.
     /// This should only be used in testing/debugging and not in production.
-    pub fn lookup(
-        &self,
-        loader: &mut impl BackingStoreLoad,
-        key: &[u8],
-    ) -> Option<Link<InlineOrHashed<V>>> {
+    pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[u8]) -> Option<ValueLink> {
         let mut key_iter = StemIter::new(key);
         let mut path = self.path.clone();
         let mut children = self.children.clone();

@@ -260,9 +260,9 @@ impl Loadable for Vec<u8> {
     }
 }
 
-/// This loadable instance means that we can only retrieve the boxed slice behind a
-/// cachedref. But it saves on the length which is significant for the concrete
-/// use-case, hence I opted for it.
+/// This loadable instance means that we can only retrieve the boxed slice
+/// behind a cachedref. But it saves on the length which is significant for the
+/// concrete use-case, hence I opted for it.
 impl Loadable for Box<[u8]> {
     #[inline]
     fn load<S: std::io::Read, F: BackingStoreLoad>(
@@ -381,16 +381,12 @@ impl<Ctx> ToSHA256<Ctx> for u64 {
 
 impl<Ctx> ToSHA256<Ctx> for Vec<u8> {
     #[inline(always)]
-    fn hash(&self, ctx: &mut Ctx) -> Hash {
-        self[..].hash(ctx)
-    }
+    fn hash(&self, ctx: &mut Ctx) -> Hash { self[..].hash(ctx) }
 }
 
 impl<Ctx> ToSHA256<Ctx> for Box<[u8]> {
     #[inline(always)]
-    fn hash(&self, ctx: &mut Ctx) -> Hash {
-        self[..].hash(ctx)
-    }
+    fn hash(&self, ctx: &mut Ctx) -> Hash { self[..].hash(ctx) }
 }
 
 impl<Ctx> ToSHA256<Ctx> for [u8] {

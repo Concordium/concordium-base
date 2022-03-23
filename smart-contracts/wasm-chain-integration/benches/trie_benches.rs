@@ -52,12 +52,12 @@ fn make_btree(words: &[Vec<u8>]) -> BTreeMap<&[u8], Box<[u8]>> {
 }
 
 #[allow(clippy::type_complexity)] // this is a test, so a bit of complexity is OK.
-fn make_trie(words: &[Vec<u8>]) -> (Option<CachedRef<Hashed<Node<Box<[u8]>>>>>, VecLoader) {
+fn make_trie(words: &[Vec<u8>]) -> (Option<CachedRef<Hashed<Node>>>, VecLoader) {
     let (trie, mut loader) = make_mut_trie(words);
     (trie.freeze(&mut loader, &mut EmptyCollector), loader)
 }
 
-fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie<Box<[u8]>>, VecLoader) {
+fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie, VecLoader) {
     let mut node = MutableTrie::empty();
     let mut loader = Loader {
         inner: Vec::<u8>::new(),
@@ -127,7 +127,7 @@ fn trie_deserialize(b: &mut Criterion) {
             let mut loader = Loader {
                 inner: &backing_store,
             };
-            let trie = Node::<Box<[u8]>>::load_from_location(&mut loader, root);
+            let trie = Node::load_from_location(&mut loader, root);
             assert!(trie.is_ok(), "Tree deserialization failed.");
         })
     });
@@ -146,7 +146,7 @@ fn trie_cache(b: &mut Criterion) {
             let mut loader = Loader {
                 inner: &backing_store,
             };
-            let mut trie = Node::<Box<[u8]>>::load_from_location(&mut loader, root);
+            let mut trie = Node::load_from_location(&mut loader, root);
             assert!(trie.is_ok(), "Tree deserialization failed.");
             trie.as_mut().unwrap().cache(&mut loader);
             assert!(trie.unwrap().is_cached(), "Tree is not cached.")

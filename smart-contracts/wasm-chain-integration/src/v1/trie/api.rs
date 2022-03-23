@@ -19,11 +19,11 @@ pub type Value = Vec<u8>;
 #[derive(Debug, Clone)]
 pub enum PersistentState {
     Empty,
-    Root(CachedRef<Hashed<Node<Value>>>),
+    Root(CachedRef<Hashed<Node>>),
 }
 
-impl From<CachedRef<Hashed<Node<Value>>>> for PersistentState {
-    fn from(root: CachedRef<Hashed<Node<Value>>>) -> Self { Self::Root(root) }
+impl From<CachedRef<Hashed<Node>>> for PersistentState {
+    fn from(root: CachedRef<Hashed<Node>>) -> Self { Self::Root(root) }
 }
 
 /// Load the persistent state. This only loads the root of the tree. In order to
@@ -102,7 +102,7 @@ impl PersistentState {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
             1 => {
-                let node = Hashed::<Node<_>>::deserialize(source)?;
+                let node = Hashed::<Node>::deserialize(source)?;
                 Ok(PersistentState::Root(CachedRef::Memory {
                     value: node,
                 }))
@@ -182,7 +182,7 @@ pub struct MutableStateInner {
     /// contract and released at the end.
     /// The reason for the mutex is that we need to be able to clone this so
     /// that we can share it inside the single transaction.
-    state: Arc<Mutex<MutableTrie<Value>>>,
+    state: Arc<Mutex<MutableTrie>>,
 }
 
 impl MutableStateInner {
@@ -194,7 +194,7 @@ impl MutableStateInner {
 
 /// A lock guard derived from [MutableStateInner]. Only one can exist at the
 /// time.
-pub type StateTrie<'a> = MutexGuard<'a, MutableTrie<Value>>;
+pub type StateTrie<'a> = MutexGuard<'a, MutableTrie>;
 
 /// The mutable contract state.
 #[derive(Debug, Clone)]
