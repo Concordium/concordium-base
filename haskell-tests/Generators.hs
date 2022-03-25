@@ -115,6 +115,10 @@ genUrlText =
 genAmountFraction :: Gen AmountFraction
 genAmountFraction = makeAmountFraction <$> arbitrary `suchThat` (<= 100000)
 
+
+genCapitalBound :: Gen CapitalBound
+genCapitalBound = CapitalBound <$> makeAmountFraction <$> arbitrary `suchThat` (\x -> x <= 100000 && x > 0)
+
 genInclusiveRangeOfAmountFraction :: Gen (InclusiveRange AmountFraction)
 genInclusiveRangeOfAmountFraction = do
     (irMin, irMax) <- ((,) <$> genAmountFraction <*> genAmountFraction)
@@ -412,6 +416,9 @@ genCooldownParametersV1 =
 genTimeParametersV0 :: Gen (TimeParameters 'ChainParametersV0)
 genTimeParametersV0 = return TimeParametersV0
 
+genRewardPeriodLength :: Gen RewardPeriodLength
+genRewardPeriodLength = RewardPeriodLength <$> choose (1, maxBound) -- to make sure that reward period length is >= 1
+
 genTimeParametersV1 :: Gen (TimeParameters 'ChainParametersV1)
 genTimeParametersV1 = TimeParametersV1 <$> (RewardPeriodLength <$> arbitrary) <*> genMintRate
 
@@ -423,7 +430,7 @@ genPoolParametersV1 = do
     _ppLPoolCommissions <- genCommissionRates
     _ppCommissionBounds <- genCommissionRanges
     _ppMinimumEquityCapital <- genAmount
-    _ppCapitalBound <- genAmountFraction
+    _ppCapitalBound <- genCapitalBound
     _ppLeverageBound <- genLeverageFactor
     return PoolParametersV1{..}
 
@@ -801,10 +808,13 @@ genRatioOfWord64 = do
     return $ num % den
 
 genLeverageFactor :: Gen LeverageFactor
-genLeverageFactor = genRatioOfWord64
+genLeverageFactor = LeverageFactor <$> do
+    den <- choose (1, maxBound)
+    num <- choose (den, maxBound) -- to make sure that the leverage factor is >= 1
+    return $ num % den
 
 genExchangeRate :: Gen ExchangeRate
-genExchangeRate = ExchangeRate <$> genLeverageFactor
+genExchangeRate = ExchangeRate <$> genRatioOfWord64
 
 genEnergyRate :: Gen EnergyRate
 genEnergyRate = max <*> negate <$> arbitrary
