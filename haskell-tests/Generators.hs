@@ -637,12 +637,11 @@ instance Arbitrary RejectReason where
               return NotAllowedToReceiveEncrypted,
               return NotAllowedToHandleEncrypted,
               return MissingBakerAddParameters,
-              return UnexpectedBakerRemoveParameters,
               return CommissionsNotInRangeForBaking,
               return AlreadyADelegator,
               return InsufficientBalanceForDelegationStake,
               return MissingDelegationAddParameters,
-              return UnexpectedDelegationRemoveParameters,
+              return InsufficientDelegationStake,
               return DelegatorInCooldown,
               NotADelegator <$> genAccountAddress
             ]

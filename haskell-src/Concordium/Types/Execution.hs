@@ -1932,8 +1932,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NotAllowedToHandleEncrypted
                   -- |A configure baker transaction is missing one or more arguments in order to add a baker.
                   | MissingBakerAddParameters
-                  -- |A configure baker transaction to remove baker is passed unexpected arguments.
-                  | UnexpectedBakerRemoveParameters
                   -- |Not all baker commissions are within allowed ranges
                   | CommissionsNotInRangeForBaking
                   -- |Tried to add baker for an account that already has a delegator
@@ -1942,8 +1940,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InsufficientBalanceForDelegationStake
                   -- |A configure delegation transaction is missing one or more arguments in order to add a delegator.
                   | MissingDelegationAddParameters
-                  -- |A configure delegation transaction to remove delegation is passed unexpected arguments.
-                  | UnexpectedDelegationRemoveParameters
+                  -- |The delegation stake when adding a baker was 0.
+                  | InsufficientDelegationStake
                   -- |The change could not be made because the delegator is in cooldown
                   | DelegatorInCooldown
                   -- |Account is not a delegation account
@@ -2013,12 +2011,11 @@ instance S.Serialize RejectReason where
     NotAllowedToReceiveEncrypted -> S.putWord8 39
     NotAllowedToHandleEncrypted -> S.putWord8 40
     MissingBakerAddParameters ->  S.putWord8 41
-    UnexpectedBakerRemoveParameters -> S.putWord8 42
     CommissionsNotInRangeForBaking -> S.putWord8 43
     AlreadyADelegator -> S.putWord8 44
     InsufficientBalanceForDelegationStake -> S.putWord8 45
     MissingDelegationAddParameters -> S.putWord8 46
-    UnexpectedDelegationRemoveParameters -> S.putWord8 47
+    InsufficientDelegationStake -> S.putWord8 47
     DelegatorInCooldown -> S.putWord8 48
     NotADelegator addr -> S.putWord8 49 <> S.put addr
     DelegationTargetNotABaker bid -> S.putWord8 50 <> S.put bid
@@ -2075,12 +2072,11 @@ instance S.Serialize RejectReason where
     39 -> return NotAllowedToReceiveEncrypted
     40 -> return NotAllowedToHandleEncrypted
     41 -> return MissingBakerAddParameters
-    42 -> return UnexpectedBakerRemoveParameters
     43 -> return CommissionsNotInRangeForBaking
     44 -> return AlreadyADelegator
     45 -> return InsufficientBalanceForDelegationStake
     46 -> return MissingDelegationAddParameters
-    47 -> return UnexpectedDelegationRemoveParameters
+    47 -> return InsufficientDelegationStake
     48 -> return DelegatorInCooldown
     49 -> NotADelegator <$> S.get
     50 -> DelegationTargetNotABaker <$> S.get
