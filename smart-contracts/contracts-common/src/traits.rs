@@ -111,6 +111,9 @@ pub trait Read {
         let bytes = read_n_bytes!(1, self);
         Ok(i8::from_le_bytes(bytes))
     }
+
+    /// Load an array of the given size.
+    fn read_array<const N: usize>(&mut self) -> ParseResult<[u8; N]> { Ok(read_n_bytes!(N, self)) }
 }
 
 /// The `Write` trait provides functionality for writing to byte streams.
