@@ -278,6 +278,9 @@ makeLenses ''AccountBaker
 instance HasBakerInfo (AccountBaker av) where
     bakerInfo = accountBakerInfo . bakerInfo
 
+instance HasBakerPoolInfo (AccountBaker 'AccountV1) where
+    bakerPoolInfo = accountBakerInfo . bakerPoolInfo
+
 -- |Serialize an 'AccountBaker'
 putAccountBaker :: IsAccountVersion av => Putter (AccountBaker av)
 putAccountBaker AccountBaker{..} = do
