@@ -1932,8 +1932,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | NotAllowedToHandleEncrypted
                   -- |A configure baker transaction is missing one or more arguments in order to add a baker.
                   | MissingBakerAddParameters
-                  -- |Not all baker commissions are within allowed ranges
-                  | CommissionsNotInRangeForBaking
+                  -- |Finalization reward commission is not in the valid range for a baker
+                  | FinalizationRewardCommissionNotInRange
+                  -- |Baking reward commission is not in the valid range for a baker
+                  | BakingRewardCommissionNotInRange
+                  -- |Transaction fee commission is not in the valid range for a baker
+                  | TransactionFeeCommissionNotInRange
                   -- |Tried to add baker for an account that already has a delegator
                   | AlreadyADelegator
                   -- |The amount on the account was insufficient to cover the proposed stake
@@ -1952,6 +1956,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | StakeOverMaximumThresholdForPool
                   -- |The amount would result in pool with a too high fraction of delegated capital.
                   | PoolWouldBecomeOverDelegated
+                  -- |The pool is not open to delegators.
+                  | PoolClosed
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2011,16 +2017,19 @@ instance S.Serialize RejectReason where
     NotAllowedToReceiveEncrypted -> S.putWord8 39
     NotAllowedToHandleEncrypted -> S.putWord8 40
     MissingBakerAddParameters ->  S.putWord8 41
-    CommissionsNotInRangeForBaking -> S.putWord8 43
-    AlreadyADelegator -> S.putWord8 44
-    InsufficientBalanceForDelegationStake -> S.putWord8 45
-    MissingDelegationAddParameters -> S.putWord8 46
-    InsufficientDelegationStake -> S.putWord8 47
-    DelegatorInCooldown -> S.putWord8 48
-    NotADelegator addr -> S.putWord8 49 <> S.put addr
-    DelegationTargetNotABaker bid -> S.putWord8 50 <> S.put bid
-    StakeOverMaximumThresholdForPool -> S.putWord8 51
-    PoolWouldBecomeOverDelegated -> S.putWord8 52
+    FinalizationRewardCommissionNotInRange -> S.putWord8 42
+    BakingRewardCommissionNotInRange -> S.putWord8 43
+    TransactionFeeCommissionNotInRange -> S.putWord8 44
+    AlreadyADelegator -> S.putWord8 45
+    InsufficientBalanceForDelegationStake -> S.putWord8 46
+    MissingDelegationAddParameters -> S.putWord8 47
+    InsufficientDelegationStake -> S.putWord8 48
+    DelegatorInCooldown -> S.putWord8 49
+    NotADelegator addr -> S.putWord8 50 <> S.put addr
+    DelegationTargetNotABaker bid -> S.putWord8 51 <> S.put bid
+    StakeOverMaximumThresholdForPool -> S.putWord8 52
+    PoolWouldBecomeOverDelegated -> S.putWord8 53
+    PoolClosed -> S.putWord8 54
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -2072,16 +2081,19 @@ instance S.Serialize RejectReason where
     39 -> return NotAllowedToReceiveEncrypted
     40 -> return NotAllowedToHandleEncrypted
     41 -> return MissingBakerAddParameters
-    43 -> return CommissionsNotInRangeForBaking
-    44 -> return AlreadyADelegator
-    45 -> return InsufficientBalanceForDelegationStake
-    46 -> return MissingDelegationAddParameters
-    47 -> return InsufficientDelegationStake
-    48 -> return DelegatorInCooldown
-    49 -> NotADelegator <$> S.get
-    50 -> DelegationTargetNotABaker <$> S.get
-    51 -> return StakeOverMaximumThresholdForPool
-    52 -> return PoolWouldBecomeOverDelegated
+    42 -> return FinalizationRewardCommissionNotInRange
+    43 -> return BakingRewardCommissionNotInRange
+    44 -> return TransactionFeeCommissionNotInRange
+    45 -> return AlreadyADelegator
+    46 -> return InsufficientBalanceForDelegationStake
+    47 -> return MissingDelegationAddParameters
+    48 -> return InsufficientDelegationStake
+    49 -> return DelegatorInCooldown
+    50 -> NotADelegator <$> S.get
+    51 -> DelegationTargetNotABaker <$> S.get
+    52 -> return StakeOverMaximumThresholdForPool
+    53 -> return PoolWouldBecomeOverDelegated
+    54 -> return PoolClosed
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
