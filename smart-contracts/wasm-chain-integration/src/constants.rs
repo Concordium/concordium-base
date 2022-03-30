@@ -177,14 +177,14 @@ pub const RESIZE_ENTRY_BASE_COST: u64 = 10;
 /// Realistically this is much above any bound implied by energy, however it is
 /// good to have it explicit since correctness of the implementation relies on
 /// this.
-pub const MAX_ENTRY_SIZE: usize = 1 << 31;
+pub const MAX_ENTRY_SIZE: usize = 1 << 30;
 
 /// Maximum size of a key in V1 contract state. The execution engine relies on
 /// this being strictly less than [u32::MAX].
 /// Realistically this is much above any bound implied by energy, however it is
 /// good to have it explicit since correctness of the implementation relies on
 /// this.
-pub const MAX_KEY_SIZE: usize = 1 << 31;
+pub const MAX_KEY_SIZE: usize = 1 << 30;
 
 /// Cost of allocating additional data in the entry. The argument is the
 /// number of additional bytes.
