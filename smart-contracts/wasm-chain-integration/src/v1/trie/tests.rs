@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 const NUM_TESTS: u64 = 100000;
 
-/// Construt a mutable trie with the given contents.
+/// Construct a mutable trie with the given contents.
 /// The loader that was used during construction is returned, but in reality it
 /// is not needed since the entire tree is in-memory.
 fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie, Loader<Value>) {
@@ -18,6 +18,81 @@ fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie, Loader
             .expect("No iterators are present, so insert should succeed");
     }
     (node, loader)
+}
+
+#[test]
+/// Check that deleting and then freezing behaves correctly, and the
+/// resulting tree is correct.
+fn prop_delete_freeze_lookup() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>, key: Vec<u8>| -> anyhow::Result<()> {
+        // construct the tree first
+        let mut reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs);
+        // freeze it
+        let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        // then thaw it. This makes the tree persistent, and only the root mutable.
+        let mut thawed = frozen.make_mutable(0, &mut loader);
+        // then delete from the thawed tree
+        let existed =
+            thawed.delete(&mut loader, &key).expect("No iterators, so no part should be locked.");
+        let existed_reference = reference.remove(&key);
+        ensure!(
+            existed == existed_reference.is_some(),
+            "Incorrect removal result ({}) compared to reference ({}).",
+            existed,
+            existed_reference.is_some()
+        );
+        // freeze it again
+        let frozen = if let Some(t) = thawed.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        // and then make sure the frozen tree matches the (updated) reference.
+        let mut trie = frozen.make_mutable(0, &mut loader);
+        let mut iterator = if let Some(i) =
+            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        {
+            i
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        let reference_iter = reference.iter();
+        for (k, v) in reference_iter {
+            let entry = trie
+                .next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .context("Trie iterator ends early.")?;
+            ensure!(
+                trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
+                "Reference value does not match the trie value."
+            );
+            let it_key = iterator.get_key();
+            ensure!(
+                it_key == k,
+                "Iterator returns incorrect key, {:?} != {:?}, {:#?}, {:#?}",
+                it_key,
+                k,
+                iterator,
+                trie
+            );
+        }
+        ensure!(
+            trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
+                .expect("Empty counter does not fail.")
+                .is_none(),
+            "Trie iterator has remaining values."
+        );
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
 }
 
 #[test]

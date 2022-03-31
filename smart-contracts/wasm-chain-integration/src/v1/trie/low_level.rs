@@ -2234,6 +2234,8 @@ impl MutableTrie {
                         // no value here, so no entry was found
                         return Ok(false);
                     }
+                    // mark the node as modified
+                    node.origin = None;
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if children.len() == 1 {
@@ -2263,11 +2265,22 @@ impl MutableTrie {
                                 // set the root to the new child
                                 generation.root = Some(child.index());
                             }
+                        } else {
+                            unsafe {
+                                // we checked length is 1 before popping.
+                                std::hint::unreachable_unchecked();
+                            }
                         }
                     } else if children.is_empty() {
                         // no children are left, and also no value, we need to delete the child from
                         // the father.
                         if let Some((child_idx, father_idx)) = father {
+                            {
+                                // the node will have a child removed, mark it as modified.
+                                let father_node: &mut MutableNode =
+                                    unsafe { owned_nodes.get_unchecked_mut(father_idx) };
+                                father_node.origin = None;
+                            }
                             let (has_value, _, father_children) = make_owned(
                                 father_idx,
                                 borrowed_values,
@@ -2298,6 +2311,8 @@ impl MutableTrie {
                                         let grandfather_node: &mut MutableNode = unsafe {
                                             owned_nodes.get_unchecked_mut(grandfather_idx)
                                         };
+                                        // the node was modified
+                                        grandfather_node.origin = None;
                                         if let Some((_, children)) =
                                             grandfather_node.children.get_owned_mut()
                                         {
@@ -2314,6 +2329,7 @@ impl MutableTrie {
                                         generation.root = Some(child.index());
                                     }
                                 } else {
+                                    // we checked length is 1.
                                     unsafe { std::hint::unreachable_unchecked() }
                                 }
                             }
@@ -2441,6 +2457,12 @@ impl MutableTrie {
                     // pointer to point to the relevant node, or None if we
                     // deleted the entire tree.
                     if let Some((child_idx, parent_idx)) = parent_idx {
+                        {
+                            // mark the parent as modified since we remove one if its children
+                            let parent_node: &mut MutableNode =
+                                unsafe { owned_nodes.get_unchecked_mut(parent_idx) };
+                            parent_node.origin = None;
+                        }
                         let (has_value, _, children) =
                             make_owned(parent_idx, borrowed_values, owned_nodes, entries, loader);
 
@@ -2464,6 +2486,8 @@ impl MutableTrie {
                                     // All other values in the node are empty.
                                     let grandparent_node: &mut MutableNode =
                                         unsafe { owned_nodes.get_unchecked_mut(grandparent_idx) };
+                                    // grandparent was modified
+                                    grandparent_node.origin = None;
                                     if let Some((_, children)) =
                                         grandparent_node.children.get_owned_mut()
                                     {
