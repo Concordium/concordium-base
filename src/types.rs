@@ -541,7 +541,7 @@ impl fmt::Display for ParseDurationError {
 ///
 /// # Example
 /// The duration of 10 days, 1 hour, 2minutes and 7 seconds is:
-/// ```ignore
+/// ```text
 /// "10d 1h 2m 3s 4s"
 /// ```
 impl str::FromStr for Duration {
@@ -1246,24 +1246,23 @@ pub mod attributes {
 /// or parameters.
 ///
 /// ```ignore
+/// # use concordium_std::*;
 /// enum MyCustomReceiveError {
 ///     Parsing
 /// }
 ///
 /// impl From<ParseError> for MyCustomReceiveError {
-///     fn from(_: ParseError) -> Self { MyCustomReceiveError::ParseParams }
+///     fn from(_: ParseError) -> Self { MyCustomReceiveError::Parsing }
 /// }
 ///
-/// #[receive(contract = "mycontract", name="some_receive_name")]
-/// fn contract_receive<R: HasReceiveContext, L: HasLogger, A: HasActions>(
-///     ctx: &R,
-///     receive_amount: Amount,
-///     logger: &mut L,
-///     state: &mut State,
+/// #[receive(contract = "mycontract", name="some_receive_name", mutable)]
+/// fn contract_receive<S: HasStateApi>(
+///     ctx: &impl HasReceiveContext,
+///     host: &mut impl HasHost<State, StateApiType = S>,
 /// ) -> Result<A, MyCustomReceiveError> {
-///     ...
+///     // ...
 ///     let msg: MyParameterType = ctx.parameter_cursor().get()?;
-///     ...
+///     // ...
 /// }
 /// ```
 #[derive(Debug, Default, PartialEq, Eq)]
