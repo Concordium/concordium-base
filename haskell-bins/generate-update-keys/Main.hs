@@ -46,6 +46,7 @@ readHigherAuthDetails = maybeReader $ \s -> case reads s of
     _ -> Nothing
   _ -> Nothing
 
+-- |Common parameters for generating update keys across all protocol versions.
 data CommonUpdateKeys = CommonUpdateKeys {
     -- |Number of keys to generate
     cukKeyCount :: Word16,
@@ -72,6 +73,7 @@ data CommonUpdateKeys = CommonUpdateKeys {
     cukAddIdentityProvider :: AuthDetails
 } deriving (Show)
 
+-- |Parameters for generating chain parameter update keys.
 data GenerateUpdateKeys
     = GenerateUpdateKeysCPV0 {
         -- |Common across chain parameters versions
@@ -134,64 +136,47 @@ main = customExecParser p opts >>= generateKeys
                         \ the level 2 keys, thus not being counted in the total number of generated keys."
         p = prefs showHelpOnEmpty
 
+-- |Generate chain update keys.
 generateKeys :: GenerateUpdateKeys -> IO ()
-generateKeys guk = case guk of
-    GenerateUpdateKeysCPV0{gukCommon=CommonUpdateKeys{..}} -> do
-        let makeAS = makeASf cukKeyCount
-        let makeHAS = makeHASf cukKeyPath
-        let makeKey = makeKeyf cukKeyPath
-        when (cukKeyCount == 0) $ die "At least one level 2 key is required."
-        asEmergency <- makeAS cukEmergency "Emergency update access structure"
-        asProtocol <- makeAS cukProtocol "Protocol update access structure"
-        asParamElectionDifficulty <- makeAS cukElectionDifficulty "Election difficulty update access structure"
-        asParamEuroPerEnergy <- makeAS cukEuroEnergy "Euro-energy rate update access structure"
-        asParamMicroGTUPerEuro <- makeAS cukGTUEuro "GTU-Euro rate update access structure"
-        asParamFoundationAccount <- makeAS cukFoundationAccount "Foundation account update access structure"
-        asParamMintDistribution <- makeAS cukMintDistribution "Mint distribution update access structure"
-        asParamTransactionFeeDistribution <- makeAS cukTransactionFeeDistribution "Transaction fee distribution update access structure"
-        asParamGASRewards <- makeAS cukGASRewards "GAS rewards update access structure"
-        asBakerStakeThreshold <- makeAS cukBakerStakeThreshold "Baker minimum threshold access structure"
-        asAddAnonymityRevoker <- makeAS cukAddAnonymityRevoker "Add anonymity revoker access structure"
-        asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
-        asCooldownParameters <- pure NothingForCPV1
-        asTimeParameters <- pure NothingForCPV1
-        putStrLn "Generating keys..."
-        asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..cukKeyCount-1]]
-        rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"
-        level1Keys <- makeHAS cukLevel1Keys "level1-key" "Level 1 key structure"
-        let keyCollection = UpdateKeysCollection {level2Keys = Authorizations{..},..}
-        LBS.writeFile cukAuthorizationFile (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} keyCollection)
-    GenerateUpdateKeysCPV1{gukCommon=CommonUpdateKeys{..},..} -> do
-        let makeAS = makeASf cukKeyCount
-        let makeHAS = makeHASf cukKeyPath
-        let makeKey = makeKeyf cukKeyPath
-        when (cukKeyCount == 0) $ die "At least one level 2 key is required."
-        asEmergency <- makeAS cukEmergency "Emergency update access structure"
-        asProtocol <- makeAS cukProtocol "Protocol update access structure"
-        asParamElectionDifficulty <- makeAS cukElectionDifficulty "Election difficulty update access structure"
-        asParamEuroPerEnergy <- makeAS cukEuroEnergy "Euro-energy rate update access structure"
-        asParamMicroGTUPerEuro <- makeAS cukGTUEuro "GTU-Euro rate update access structure"
-        asParamFoundationAccount <- makeAS cukFoundationAccount "Foundation account update access structure"
-        asParamMintDistribution <- makeAS cukMintDistribution "Mint distribution update access structure"
-        asParamTransactionFeeDistribution <- makeAS cukTransactionFeeDistribution "Transaction fee distribution update access structure"
-        asParamGASRewards <- makeAS cukGASRewards "GAS rewards update access structure"
-        asBakerStakeThreshold <- makeAS cukBakerStakeThreshold "Baker minimum threshold access structure"
-        asAddAnonymityRevoker <- makeAS cukAddAnonymityRevoker "Add anonymity revoker access structure"
-        asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
-        cooldownParameters <- makeAS gukCooldownParameters "Add identity provider access structure"
-        timeParameters <- makeAS gukCooldownParameters "Add identity provider access structure"
-        let asCooldownParameters = JustForCPV1 cooldownParameters
-        let asTimeParameters = JustForCPV1 timeParameters
-        putStrLn "Generating keys..."
-        asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..cukKeyCount-1]]
-        rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"
-        level1Keys <- makeHAS cukLevel1Keys "level1-key" "Level 1 key structure"
-        let keyCollection = UpdateKeysCollection {level2Keys = Authorizations{..},..}
-        LBS.writeFile cukAuthorizationFile (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} keyCollection)
+generateKeys guk = do
+    when (cukKeyCount == 0) $ die "At least one level 2 key is required."
+    asEmergency <- makeAS cukEmergency "Emergency update access structure"
+    asProtocol <- makeAS cukProtocol "Protocol update access structure"
+    asParamElectionDifficulty <- makeAS cukElectionDifficulty "Election difficulty update access structure"
+    asParamEuroPerEnergy <- makeAS cukEuroEnergy "Euro-energy rate update access structure"
+    asParamMicroGTUPerEuro <- makeAS cukGTUEuro "GTU-Euro rate update access structure"
+    asParamFoundationAccount <- makeAS cukFoundationAccount "Foundation account update access structure"
+    asParamMintDistribution <- makeAS cukMintDistribution "Mint distribution update access structure"
+    asParamTransactionFeeDistribution <- makeAS cukTransactionFeeDistribution "Transaction fee distribution update access structure"
+    asParamGASRewards <- makeAS cukGASRewards "GAS rewards update access structure"
+    asBakerStakeThreshold <- makeAS cukBakerStakeThreshold "Baker minimum threshold access structure"
+    asAddAnonymityRevoker <- makeAS cukAddAnonymityRevoker "Add anonymity revoker access structure"
+    asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
+    let asKeys = Vec.empty -- Placeholder; replaced in doGenerateKeys
+    case guk of
+        GenerateUpdateKeysCPV0{} -> doGenerateKeys Authorizations{
+            asCooldownParameters = NothingForCPV1,
+            asTimeParameters = NothingForCPV1,
+            ..}
+        GenerateUpdateKeysCPV1{..} -> do
+            asCooldownParameters <- JustForCPV1 <$>
+                makeAS gukCooldownParameters "Add identity provider access structure"
+            asTimeParameters <- JustForCPV1 <$>
+                makeAS gukCooldownParameters "Add identity provider access structure"
+            doGenerateKeys Authorizations{..}
     where
+        CommonUpdateKeys{..} = gukCommon guk
+        doGenerateKeys level2KeysPre = do
+            putStrLn "Generating keys..."
+            asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0..cukKeyCount-1]]
+            let level2Keys = level2KeysPre{asKeys = asKeys}
+            rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"
+            level1Keys <- makeHAS cukLevel1Keys "level1-key" "Level 1 key structure"
+            let keyCollection = UpdateKeysCollection {..}
+            LBS.writeFile cukAuthorizationFile (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} keyCollection)
         keyComp = AE.keyOrder ["keys","emergency","protocol","electionDifficulty","euroPerEnergy","microGTUPerEuro","schemeId"]
                     <> compare
-        makeASf keyCount AuthDetails{..} desc = do
+        makeAS AuthDetails{..} desc = do
             let accessPublicKeys = Set.fromList adKeys
                 nKeys = Set.size accessPublicKeys
                 -- maxKey should only be evaluated after determining accessPublicKeys to have at least one
@@ -200,13 +185,13 @@ generateKeys guk = case guk of
             when (adThreshold < 1) $ die (desc ++ ": threshold must be at least 1")
             when (nKeys < 1) $ die (desc ++ ": number of keys provided must be at least 1")
             when (fromIntegral adThreshold > nKeys) $ die (desc ++ ": threshold (" ++ show adThreshold ++ ") cannot exceed number of keys (" ++ show nKeys ++ ")")
-            when (maxKey >= keyCount) $ die (desc ++ ": key index " ++ show maxKey ++ " is out of bounds. Maximal index is " ++ show (keyCount - 1))
+            when (maxKey >= cukKeyCount) $ die (desc ++ ": key index " ++ show maxKey ++ " is out of bounds. Maximal index is " ++ show (cukKeyCount - 1))
             return AccessStructure{accessThreshold= UpdateKeysThreshold adThreshold,..}
-        makeHASf keyPath HigherAuthDetails{..} name desc = do
+        makeHAS HigherAuthDetails{..} name desc = do
           when (hadThreshold > hadNumKeys) $ die (desc ++ ": threshold (" ++ show hadThreshold ++ ") cannot exceed number of keys (" ++ show hadNumKeys ++ ")")
-          hlkKeys <- Vec.fromList <$> sequence [ makeKeyf keyPath k name | k <- [0..hadNumKeys-1] ]
+          hlkKeys <- Vec.fromList <$> sequence [ makeKey k name | k <- [0..hadNumKeys-1] ]
           return HigherLevelKeys{hlkThreshold = UpdateKeysThreshold hadThreshold,..}
-        makeKeyf keyPath k desc = do
+        makeKey k desc = do
             kp <- newKeyPair Ed25519
-            LBS.writeFile (keyPath </> (desc ++ "-" ++ show k ++ ".json")) (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} kp)
+            LBS.writeFile (cukKeyPath </> (desc ++ "-" ++ show k ++ ".json")) (AE.encodePretty' AE.defConfig{AE.confCompare=keyComp} kp)
             return (correspondingVerifyKey kp)
