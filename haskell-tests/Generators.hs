@@ -644,13 +644,19 @@ instance Arbitrary RejectReason where
               return NotAllowedToReceiveEncrypted,
               return NotAllowedToHandleEncrypted,
               return MissingBakerAddParameters,
-              return CommissionsNotInRangeForBaking,
+              return FinalizationRewardCommissionNotInRange,
+              return BakingRewardCommissionNotInRange,
+              return TransactionFeeCommissionNotInRange,
               return AlreadyADelegator,
               return InsufficientBalanceForDelegationStake,
               return MissingDelegationAddParameters,
               return InsufficientDelegationStake,
               return DelegatorInCooldown,
-              NotADelegator <$> genAccountAddress
+              NotADelegator <$> genAccountAddress,
+              DelegationTargetNotABaker <$> genBakerId,
+              return StakeOverMaximumThresholdForPool,
+              return PoolWouldBecomeOverDelegated,
+              return PoolClosed
             ]
 
 genValidResult :: IsProtocolVersion pv => SProtocolVersion pv -> Gen ValidResult
