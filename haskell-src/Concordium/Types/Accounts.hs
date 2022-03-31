@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -72,7 +71,6 @@ module Concordium.Types.Accounts (
     AccountInfo (..),
     AccountStakingInfo (..),
     toAccountStakingInfo,
-    AccountStakingDelegationInfo (..),
 ) where
 
 import Data.Aeson
@@ -117,6 +115,7 @@ instance Serialize BakerInfo where
         _bakerAggregationVerifyKey <- get
         return BakerInfo{..}
 
+-- Define the class 'HasBakerInfo' with accessor lenses and an instance for 'BakerInfo'.
 makeClassy ''BakerInfo
 
 -- |Additional information about a baking pool.
@@ -143,6 +142,7 @@ instance Serialize BakerPoolInfo where
         _poolCommissionRates <- get
         return BakerPoolInfo{..}
 
+-- Define the class 'HasBakerPoolInfo' with accessor lenses and an instance for 'BakerPoolInfo'.
 makeClassy ''BakerPoolInfo
 
 -- |Helper function for defining 'ToJSON'.
@@ -164,7 +164,9 @@ instance FromJSON BakerPoolInfo where
         _poolCommissionRates <- o .: "commissionRates"
         return BakerPoolInfo{..}
 
--- |Extended baker information.
+-- |Extended baker information. Protocol version 4 introduces baking pools that allow delegation.
+-- Thus, for 'P4' onwards, the baker info is extended with 'BakerPoolInfo' that describes the
+-- pool.
 data BakerInfoEx (av :: AccountVersion) where
     BakerInfoExV0 :: !BakerInfo -> BakerInfoEx 'AccountV0
     BakerInfoExV1 ::
@@ -404,8 +406,13 @@ getAccountStake = case accountVersion @av of
 newtype AccountStakeHash (av :: AccountVersion) = AccountStakeHash Hash.Hash
     deriving (Eq, Ord, Show, Serialize, ToJSON, FromJSON) via Hash.Hash
 
+-- |Hash of 'AccountStakeNone' in 'AccountV0'.
+accountStakeNoneHashV0 :: AccountStakeHash 'AccountV0
+{-# NOINLINE accountStakeNoneHashV0 #-}
+accountStakeNoneHashV0 = AccountStakeHash $ Hash.hash ""
+
 instance HashableTo (AccountStakeHash 'AccountV0) (AccountStake 'AccountV0) where
-    getHash AccountStakeNone = AccountStakeHash $ Hash.hash ""
+    getHash AccountStakeNone = accountStakeNoneHashV0
     getHash (AccountStakeBaker AccountBaker{..}) =
         AccountStakeHash $
             Hash.hashLazy $
@@ -415,8 +422,14 @@ instance HashableTo (AccountStakeHash 'AccountV0) (AccountStake 'AccountV0) wher
                     put _accountBakerInfo
                     put _bakerPendingChange
 
+-- |Hash of 'AccountStakeNone' in 'AccountV1'.
+accountStakeNoneHashV1 :: AccountStakeHash 'AccountV1
+{-# NOINLINE accountStakeNoneHashV1 #-}
+accountStakeNoneHashV1 = AccountStakeHash $ Hash.hash "NoStake"
+
+-- |The 'AccountV1' hashing of 'AccountStake' uses tags to enforce distinction between the cases.
 instance HashableTo (AccountStakeHash 'AccountV1) (AccountStake 'AccountV1) where
-    getHash AccountStakeNone = AccountStakeHash $ Hash.hash "NoStake"
+    getHash AccountStakeNone = accountStakeNoneHashV1
     getHash (AccountStakeBaker AccountBaker{..}) =
         AccountStakeHash $
             Hash.hashLazy $
@@ -445,31 +458,9 @@ getAccountStakeHash = case accountVersion @av of
     SAccountV0 -> getHash
     SAccountV1 -> getHash
 
-data AccountStakingDelegationInfo = AccountStakingDelegationInfo
-    { asdiStakedAmount :: !Amount,
-      asdiStakeEarnings :: !Bool,
-      asdiDelegationTarget :: !BakerId
-    }
-    deriving (Eq, Show)
-
-accountStakingDelegationInfoPairs :: (KeyValue kv) => AccountStakingDelegationInfo -> [kv]
-accountStakingDelegationInfoPairs AccountStakingDelegationInfo{..} =
-    [ "stakedAmount" .= asdiStakedAmount,
-      "restakeEarnings" .= asdiStakeEarnings,
-      "delegationTarget" .= asdiDelegationTarget
-    ]
-
-instance ToJSON AccountStakingDelegationInfo where
-    toJSON asdi = object $ accountStakingDelegationInfoPairs asdi
-    toEncoding asdi = pairs $ mconcat $ accountStakingDelegationInfoPairs asdi
-
-instance FromJSON AccountStakingDelegationInfo where
-    parseJSON = withObject "Account delegation info" $ \o -> do
-        asdiStakedAmount <- o .: "stakedAmount"
-        asdiStakeEarnings <- o .: "restakeEarnings"
-        asdiDelegationTarget <- o .: "delegationTarget"
-        return AccountStakingDelegationInfo{..}
-
+-- |A representation type (used for queries) for the staking status of an account.
+-- This representation is agnostic to the protocol version and represents pending change times
+-- as UTCTime.
 data AccountStakingInfo
     = -- |The account is not a baker or delegator.
       AccountStakingNone
@@ -490,6 +481,9 @@ data AccountStakingInfo
         }
     deriving (Eq, Show)
 
+-- |Convert an 'AccountStake' to an 'AccountStakingInfo'.
+-- This takes a function for converting an epoch time to a 'UTCTime' (of the start of the epoch).
+-- (This is used for rendering cooldowns prior to 'P4'.)
 toAccountStakingInfo :: (Epoch -> UTCTime) -> AccountStake av -> AccountStakingInfo
 toAccountStakingInfo _ AccountStakeNone = AccountStakingNone
 toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =

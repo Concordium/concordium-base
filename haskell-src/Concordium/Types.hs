@@ -221,8 +221,10 @@ import qualified Data.Serialize.Get as G
 
 import Lens.Micro.Platform
 
+-- |A value equipped with its hash.
 data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
 
+-- |A value equipped with a 'Hash.Hash'.
 type Hashed = Hashed' Hash.Hash
 
 instance HashableTo h (Hashed' h a) where
@@ -233,6 +235,7 @@ instance HashableTo h (Hashed' h a) where
 unhashed :: (HashableTo h a) => Lens' (Hashed' h a) a
 unhashed f h = makeHashed <$> f (_unhashed h)
 
+-- |Construct a hashed value, given that the value is of a hashable type.
 makeHashed :: HashableTo h a => a -> Hashed' h a
 makeHashed v = Hashed v (getHash v)
 
@@ -246,9 +249,12 @@ instance (Show a) => Show (Hashed' h a) where
     show = show . _unhashed
 
 -- * Types related to bakers.
+
+-- |The ID of a baker, which is the index of its account.
 newtype BakerId = BakerId {bakerAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
+-- |The ID of a delegator, which is the index of its account.
 newtype DelegatorId = DelegatorId {delegatorAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
@@ -552,13 +558,14 @@ fractionToRational (AmountFraction f) = partsPerHundredThousandsToRational f
 -- |The commission rates charged by a pool owner.
 data CommissionRates = CommissionRates
     { -- |Fraction of finalization rewards charged by the pool owner.
-      _finalizationCommission :: AmountFraction,
+      _finalizationCommission :: !AmountFraction,
       -- |Fraction of baking rewards charged by the pool owner.
-      _bakingCommission :: AmountFraction,
+      _bakingCommission :: !AmountFraction,
       -- |Fraction of transaction rewards charged by the pool owner.
-      _transactionCommission :: AmountFraction
+      _transactionCommission :: !AmountFraction
     }
     deriving (Eq, Show)
+-- Note: lenses are derived at the end of the file.
 
 instance S.Serialize CommissionRates where
   put CommissionRates{..} = do

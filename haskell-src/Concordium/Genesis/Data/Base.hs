@@ -166,7 +166,10 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
             fail "Invalid foundation account."
         return GenesisState{..}
 
-toChainParameters :: (Vec.Vector GenesisAccount) -> GenesisChainParameters' cpv -> ChainParameters' cpv
+-- |Construct chain parameters from the genesis accounts and 'GenesisChainParameters'.
+-- It is required that an account with address matching the one in the genesis chain parameters
+-- is present in the vector of genesis accounts, or else this function will error.
+toChainParameters :: Vec.Vector GenesisAccount -> GenesisChainParameters' cpv -> ChainParameters' cpv
 toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..} where
     _cpElectionDifficulty = gcpElectionDifficulty
     _cpExchangeRates = gcpExchangeRates
@@ -180,7 +183,7 @@ toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{.
     _cpPoolParameters = gcpPoolParameters
 
 -- |Convert 'GenesisParameters' to genesis data.
--- This is an auxiliary function since the same parameters are used for P1 and P2 genesis.
+-- This is an auxiliary function since much of the behaviour is shared between protocol versions.
 parametersToState :: GenesisParameters pv -> (CoreGenesisParameters, GenesisState pv)
 parametersToState GenesisParameters{..} =
     (CoreGenesisParameters{..}, GenesisState{..})

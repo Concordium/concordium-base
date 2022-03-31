@@ -156,6 +156,11 @@ pvGenesisBlockHash (PVGenesisData gd) = genesisBlockHash gd
 pvProtocolVersion :: PVGenesisData -> ProtocolVersion
 pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion (protocolVersion @pv)
 
+-- |The 'StateMigrationParameters' type encapsulates additional data that is required when migrating
+-- state from one protocol version to another.  As the state for an older protocol version may not
+-- include state information that is required in a newer protocol version, these parameters
+-- determine how to fill the gaps.  Principally, these parameters are derived from the data
+-- supplied with the protocol update, though some may also derive from other data about the chain.
 data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) where
     -- |No state migration is performed.
     StateMigrationParametersTrivial :: StateMigrationParameters p p

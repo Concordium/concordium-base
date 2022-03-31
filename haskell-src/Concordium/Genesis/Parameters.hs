@@ -14,14 +14,16 @@ import Concordium.Types.IdentityProviders
 import Concordium.Types.Parameters
 import Concordium.Types.Updates
 
+-- |Representation format for the chain parameters at genesis.  This is used in the construction of
+-- genesis data from JSON files.
 data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParameters
     { -- |Election difficulty parameter.
-      gcpElectionDifficulty :: !ElectionDifficulty,
-      -- |Exchange rates.
-      gcpExchangeRates :: !ExchangeRates,
-      -- |Cooldown parameters.
-      gcpCooldownParameters :: !(CooldownParameters cpv),
-      -- |Time parameters.
+      gcpElectionDifficulty :: !ElectionDifficulty
+    ,  -- |Exchange rates.
+      gcpExchangeRates :: !ExchangeRates
+    , -- |Cooldown parameters.
+      gcpCooldownParameters :: !(CooldownParameters cpv)
+    , -- |Time parameters.
       gcpTimeParameters :: !(TimeParameters cpv)
     , -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
@@ -37,153 +39,59 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
 
 type GenesisChainParameters pv = GenesisChainParameters' (ChainParametersVersionFor pv)
 
--- |Constructor for chain parameters.
-makeGenesisChainParametersV0 :: 
-    -- |Election difficulty
-    ElectionDifficulty ->
-    -- |Euro:Energy rate
-    ExchangeRate ->
-    -- |uGTU:Euro rate
-    ExchangeRate ->
-    -- |Baker cooldown
-    Epoch ->
-    -- |Account creation limit
-    CredentialsPerBlockLimit ->
-    -- |Reward parameters
-    RewardParameters 'ChainParametersV0 ->
-    -- |Foundation account
-    AccountAddress ->
-    -- |Minimum threshold required for registering as a baker
-    Amount ->
-    GenesisChainParameters' 'ChainParametersV0
-makeGenesisChainParametersV0
-    gcpElectionDifficulty
-    _erEuroPerEnergy
-    _erMicroGTUPerEuro
-    _cpBakerExtraCooldownEpochs
-    gcpAccountCreationLimit
-    gcpRewardParameters
-    gcpFoundationAccount
-    _ppBakerStakeThreshold = GenesisChainParameters{..}
-      where
-        gcpCooldownParameters = CooldownParametersV0{..}
-        gcpTimeParameters = TimeParametersV0
-        gcpPoolParameters = PoolParametersV0{..}
-        gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
-
-makeGenesisChainParametersV1 ::
-    -- |Election difficulty
-    ElectionDifficulty ->
-    -- |Euro:Energy rate
-    ExchangeRate ->
-    -- |uGTU:Euro rate
-    ExchangeRate ->
-    -- |Number of seconds that pool owners must cooldown
-    -- when reducing their equity capital or closing the pool.
-    DurationSeconds ->
-    -- |Number of seconds that a delegator must cooldown
-    -- when reducing their delegated stake.
-    DurationSeconds ->
-    -- |Account creation limit
-    CredentialsPerBlockLimit ->
-    -- |Reward parameters
-    RewardParameters 'ChainParametersV1 ->
-    -- |Foundation account
-    AccountAddress ->
-    -- |Fraction of finalization rewards charged by the L-Pool.
-    AmountFraction ->
-    -- |Fraction of baking rewards charged by the L-pool.
-    AmountFraction ->
-    -- |Fraction of transaction rewards charged by the L-pool.
-    AmountFraction ->
-    -- |The range of allowed finalization commisions for normal pools.
-    InclusiveRange AmountFraction ->
-    -- |The range of allowed baker commisions for normal pools.
-    InclusiveRange AmountFraction ->
-    -- |The range of allowed transaction commisions for normal pools.
-    InclusiveRange AmountFraction ->
-    -- |Minimum equity capital required for a new baker.
-    Amount -> 
-    -- |Maximum fraction of the total supply of that a new baker can have.
-    CapitalBound ->
-    -- |The maximum leverage that a baker can have as a ratio of total stake
-    -- to equity capital.
-    LeverageFactor ->
-    -- |Length of a payday in epochs.
-    RewardPeriodLength ->
-    -- |Mint rate calculated per payday.
-    MintRate ->
-    GenesisChainParameters' 'ChainParametersV1
-makeGenesisChainParametersV1 
-    gcpElectionDifficulty
-    _erEuroPerEnergy
-    _erMicroGTUPerEuro
-    _cpPoolOwnerCooldown
-    _cpDelegatorCooldown
-    gcpAccountCreationLimit
-    gcpRewardParameters
-    gcpFoundationAccount
-    _finalizationCommission
-    _bakingCommission
-    _transactionCommission
-    _finalizationCommissionRange
-    _bakingCommissionRange
-    _transactionCommissionRange
-    _ppMinimumEquityCapital
-    _ppCapitalBound
-    _ppLeverageBound
-    _tpRewardPeriodLength
-    _tpMintPerPayday = GenesisChainParameters{..}
-      where
-        gcpCooldownParameters = CooldownParametersV1{..}
-        gcpTimeParameters = TimeParametersV1{..}
-        gcpPoolParameters = PoolParametersV1{..}
-        gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
-        _ppLPoolCommissions = CommissionRates{..}
-        _ppCommissionBounds = CommissionRanges{..}
-
 instance IsChainParametersVersion cpv => FromJSON (GenesisChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of 
       SCPV0 -> parseJSONForGCPV0
       SCPV1 -> parseJSONForGCPV1
 
-
+-- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV0'.
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
 parseJSONForGCPV0 = 
-    withObject "GenesisChainParameters" $ \v ->
-        makeGenesisChainParametersV0
-            <$> v .: "electionDifficulty"
-            <*> v .: "euroPerEnergy"
-            <*> v .: "microGTUPerEuro"
-            <*> v .: "bakerCooldownEpochs"
-            <*> v .: "accountCreationLimit"
-            <*> v .: "rewardParameters"
-            <*> v .: "foundationAccount"
-            <*> v .: "minimumThresholdForBaking"
+    withObject "GenesisChainParameters" $ \v -> do
+        gcpElectionDifficulty <- v .: "electionDifficulty"
+        _erEuroPerEnergy <- v .: "euroPerEnergy"
+        _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
+        _cpBakerExtraCooldownEpochs <- v .: "bakerCooldownEpochs"
+        gcpAccountCreationLimit <- v .: "accountCreationLimit"
+        gcpRewardParameters <- v .: "rewardParameters"
+        gcpFoundationAccount <- v .: "foundationAccount"
+        _ppBakerStakeThreshold <- v .: "minimumThresholdForBaking"
+        let gcpCooldownParameters = CooldownParametersV0{..}
+            gcpTimeParameters = TimeParametersV0
+            gcpPoolParameters = PoolParametersV0{..}
+            gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+        return GenesisChainParameters{..}
 
+-- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
 parseJSONForGCPV1 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV1)
 parseJSONForGCPV1 = 
-    withObject "GenesisChainParametersV1" $ \v ->
-        makeGenesisChainParametersV1
-            <$> v .: "electionDifficulty"
-            <*> v .: "euroPerEnergy"
-            <*> v .: "microGTUPerEuro"
-            <*> v .: "poolOwnerCooldown"
-            <*> v .: "delegatorCooldown"
-            <*> v .: "accountCreationLimit"
-            <*> v .: "rewardParameters"
-            <*> v .: "foundationAccount"
-            <*> v .: "finalizationCommissionLPool"
-            <*> v .: "bakingCommissionLPool"
-            <*> v .: "transactionCommissionLPool"
-            <*> v .: "finalizationCommissionRange"
-            <*> v .: "bakingCommissionRange"
-            <*> v .: "transactionCommissionRange"
-            <*> v .: "minimumEquityCapital"
-            <*> v .: "capitalBound"
-            <*> v .: "leverageBound"
-            <*> v .: "rewardPeriodLength"
-            <*> v .: "mintPerPayday"
+    withObject "GenesisChainParametersV1" $ \v -> do
+        gcpElectionDifficulty <- v .: "electionDifficulty"
+        _erEuroPerEnergy <- v .: "euroPerEnergy"
+        _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
+        _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
+        _cpDelegatorCooldown <- v .: "delegatorCooldown"
+        gcpAccountCreationLimit <- v .: "accountCreationLimit"
+        gcpRewardParameters <- v .: "rewardParameters"
+        gcpFoundationAccount <- v .: "foundationAccount"
+        _finalizationCommission <- v .: "finalizationCommissionLPool"
+        _bakingCommission <- v .: "bakingCommissionLPool"
+        _transactionCommission <- v .: "transactionCommissionLPool"
+        _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+        _bakingCommissionRange <- v .: "bakingCommissionRange"
+        _transactionCommissionRange <- v .: "transactionCommissionRange"
+        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
+        _ppCapitalBound <- v .: "capitalBound"
+        _ppLeverageBound <- v .: "leverageBound"
+        _tpRewardPeriodLength <- v .: "rewardPeriodLength"
+        _tpMintPerPayday <- v .: "mintPerPayday"
+        let gcpCooldownParameters = CooldownParametersV1{..}
+            gcpTimeParameters = TimeParametersV1{..}
+            gcpPoolParameters = PoolParametersV1{..}
+            gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+            _ppLPoolCommissions = CommissionRates{..}
+            _ppCommissionBounds = CommissionRanges{..}
+        return GenesisChainParameters{..}
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
     toJSON GenesisChainParameters{..} =
@@ -286,9 +194,6 @@ instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) wher
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $
             fail $ "Foundation account (" ++ show facct ++ ") is not in initialAccounts"
         return GenesisParameters{..}
-
--- |Alias for the current version of the genesis parameter format.
--- type GenesisParameters = GenesisParametersV2
 
 -- |Version number identifying the current version of the genesis parameter format.
 genesisParametersVersion :: Version

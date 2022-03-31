@@ -30,6 +30,9 @@ import Concordium.Utils
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
+-- |The mint-per-slot rate is part of the 'MintDistribution' parameters for 'ChainParametersV0',
+-- but as of 'ChainParametersV1' is replaced by a mint-per-payday rate in the 'TimeParameters'.
+-- 'MintPerSlotForCPV0' 
 data MintPerSlotForCPV0 cpv where
   MintPerSlotForCPV0Some :: {_mpsMintPerSlot :: !MintRate} -> MintPerSlotForCPV0 'ChainParametersV0
   MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1
@@ -63,6 +66,7 @@ data MintDistribution cpv = MintDistribution {
     -- |FinRewMintFrac: the fraction allocated to finalization rewards
     _mdFinalizationReward :: !AmountFraction
 } deriving (Eq, Show)
+-- Define 'HasMintDistribution' class with accessor lenses, and instance for 'MintDistribution'.
 makeClassy ''MintDistribution
 
 instance ToJSON (MintDistribution cpv) where
@@ -110,6 +114,7 @@ data TransactionFeeDistribution = TransactionFeeDistribution {
     -- |The fraction allocated to the GAS account
     _tfdGASAccount :: !AmountFraction
 } deriving (Eq, Show)
+-- Define 'HasTransactionFeeDistribution' class with accessor lenses, and instance for 'TransactionFeeDistribution'.
 makeClassy ''TransactionFeeDistribution
 
 instance ToJSON TransactionFeeDistribution where
@@ -137,6 +142,8 @@ instance HashableTo Hash.Hash TransactionFeeDistribution where
 
 instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 
+-- |Parameters that determine the proportion of the GAS account that is paid to the baker (pool)
+-- under various circumstances.
 data GASRewards = GASRewards {
   -- |BakerPrevTransFrac: fraction paid to baker
   _gasBaker :: !AmountFraction,
@@ -152,6 +159,8 @@ data GASRewards = GASRewards {
 } deriving (Eq, Show)
 makeClassy ''GASRewards
 
+-- JSON serialization for the GASRewards structure with fields "baker", "finalizationProof",
+-- "accountCreation" and "chainUpdate".
 $(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
 
 instance Serialize GASRewards where
@@ -247,12 +256,21 @@ makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro = ExchangeRates{..}
   where
     _erEnergyRate = computeEnergyRate _erMicroGTUPerEuro _erEuroPerEnergy
 
+-- |Lenses (and a getter) for accessing the 'ExchangeRates' fields.
+-- Note that 'energyRate' is a getter, since it should not be updated directly, but only as a
+-- result of changes to the 'euroPerEnergy' or 'migroGTUPerEuro' updates.
 class HasExchangeRates t where
+    -- |Access the 'ExchangeRates' structure.
     exchangeRates :: Lens' t ExchangeRates
+    -- |Access the Euro per energy rate.
+    -- Updating this also affects the energy rate.
     euroPerEnergy :: Lens' t ExchangeRate
     euroPerEnergy = exchangeRates . lens _erEuroPerEnergy (\er epe -> er{_erEuroPerEnergy = epe, _erEnergyRate = computeEnergyRate (_erMicroGTUPerEuro er) epe})
+    -- |Access the microGTU [microCCD] per Euro rate.
+    -- Updating this also affects the energy rate.
     microGTUPerEuro :: Lens' t ExchangeRate
     microGTUPerEuro = exchangeRates . lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
+    -- |Getter for the energy to GTU [CCD] rate.
     energyRate :: SimpleGetter t EnergyRate
     energyRate = exchangeRates . to _erEnergyRate
 
@@ -262,24 +280,9 @@ instance HasExchangeRates ExchangeRates where
     microGTUPerEuro = lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
     energyRate = to _erEnergyRate
 
--- |Euro:Energy rate parameter.
-{-# INLINE erEuroPerEnergy #-}
-erEuroPerEnergy :: Lens' ExchangeRates ExchangeRate
-erEuroPerEnergy = lens _erEuroPerEnergy (\er epe -> er{_erEuroPerEnergy = epe, _erEnergyRate = computeEnergyRate (_erMicroGTUPerEuro er) epe})
-
--- |uGTU:Euro rate parameter.
-{-# INLINE erMicroGTUPerEuro #-}
-erMicroGTUPerEuro :: Lens' ExchangeRates ExchangeRate
-erMicroGTUPerEuro = lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
-
--- |uGTU:Energy rate parameter (derived).
-{-# INLINE erEnergyRate #-}
-erEnergyRate :: SimpleGetter ExchangeRates EnergyRate
-erEnergyRate = to _erEnergyRate
-
 -- |Version-indexed type of cooldown parameters.
--- This is a newtype to provide instances of 'Eq' and 'Show'.
-data CooldownParameters cpv where
+-- This is a GADT to provide instances of 'Eq' and 'Show'.
+data CooldownParameters (cpv :: ChainParametersVersion) where
     CooldownParametersV0 ::
         { -- |Number of additional epochs that bakers must cool down when
           -- removing stake. The cool-down will effectively be 2 epochs
@@ -362,10 +365,18 @@ instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) wher
   put = putCooldownParameters
   get = getCooldownParameters
 
-data TimeParameters cpv where
+-- |The time parameters are introduced as of 'ChainParametersV1', and consist of the reward period
+-- length and the mint rate per payday.  These are coupled as a change to either affects the
+-- overall rate of minting.
+data TimeParameters (cpv :: ChainParametersVersion) where
+    -- |For 'ChainParametersV0', there are no time parameters.
     TimeParametersV0 :: TimeParameters 'ChainParametersV0
+    -- |For 'ChainParametersV1', the time parameters are the reward period length and mint rate per
+    -- payday.
     TimeParametersV1 :: {
+         -- |Length of a reward period (a number of epochs).
          _tpRewardPeriodLength :: RewardPeriodLength,
+         -- |Mint rate per payday (as a proportion of the extant supply).
          _tpMintPerPayday :: !MintRate
     } -> TimeParameters 'ChainParametersV1
 
@@ -375,24 +386,24 @@ tpRewardPeriodLength :: Lens' (TimeParameters 'ChainParametersV1) RewardPeriodLe
 tpRewardPeriodLength =
   lens _tpRewardPeriodLength (\tp x -> tp{_tpRewardPeriodLength = x})
 
-
 -- |Lens for '_tpMintPerPayday'
 {-# INLINE tpMintPerPayday #-}
 tpMintPerPayday :: Lens' (TimeParameters 'ChainParametersV1) MintRate
 tpMintPerPayday =
   lens _tpMintPerPayday (\tp x -> tp{_tpMintPerPayday = x})
 
+deriving instance Eq (TimeParameters cpv)
+deriving instance Show (TimeParameters cpv)
+
+-- |Serialize 'TimeParameters'.
+-- (This dispatches on the GADT, and so does not require @IsChainParameters cpv@.)
 putTimeParameters :: Putter (TimeParameters cpv)
 putTimeParameters TimeParametersV0 = return ()
 putTimeParameters TimeParametersV1{..} = do
         put _tpRewardPeriodLength
         put _tpMintPerPayday
 
-instance HashableTo Hash.Hash (TimeParameters cpv) where
-    getHash = Hash.hash . runPut . putTimeParameters
-
-instance Monad m => MHashableTo m Hash.Hash (TimeParameters cpv)
-
+-- |Deserialize 'TimeParameters'.
 getTimeParameters :: forall cpv. IsChainParametersVersion cpv => Get (TimeParameters cpv)
 getTimeParameters = case chainParametersVersion @cpv of
     SCPV0 -> return TimeParametersV0
@@ -413,8 +424,14 @@ instance FromJSON (TimeParameters 'ChainParametersV1) where
   parseJSON = withObject "TimeParametersV1" $ \v ->
     TimeParametersV1 <$> v .: "rewardPeriodLength" <*> v .: "mintPerPayday"
 
-deriving instance Eq (TimeParameters cpv)
-deriving instance Show (TimeParameters cpv)
+-- |The 'HashableTo' instance for 'TimeParameters' is used in hashing the state for queued updates.
+-- It is not necessary to include the version in the hash computation, as it is implicit from the
+-- context.
+instance HashableTo Hash.Hash (TimeParameters cpv) where
+    getHash = Hash.hash . runPut . putTimeParameters
+
+instance Monad m => MHashableTo m Hash.Hash (TimeParameters cpv)
+
 
 -- |A range that includes both endpoints.
 data InclusiveRange a = InclusiveRange {irMin :: !a, irMax :: !a}
@@ -448,6 +465,7 @@ instance (Serialize a, Ord a) => Serialize (InclusiveRange a) where
 isInRange :: Ord a => a -> InclusiveRange a -> Bool
 isInRange v InclusiveRange{..} = irMin <= v && v <= irMax
 
+-- |Determine the closest value to a target within the given 'InclusiveRange'.
 closestInRange :: Ord a => a -> InclusiveRange a -> a
 closestInRange v r
   | isInRange v r = v

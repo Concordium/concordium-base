@@ -365,8 +365,8 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             putStrLn ""
             putStrLn "Chain parameters: "
             putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
-            putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. erEuroPerEnergy)
-            putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. erMicroGTUPerEuro)
+            putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
+            putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
             printCooldownParametersV1 _cpCooldownParameters
             putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
             printPoolParametersV1 _cpPoolParameters

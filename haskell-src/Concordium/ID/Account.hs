@@ -88,5 +88,7 @@ verifyInitialAccountCreation :: IpInfo -> TransactionTime -> InitialCredentialBy
 verifyInitialAccountCreation ipInfo tt aciBytes = unsafePerformIO $ do
   res <- withIpInfo ipInfo $ \ipInfoPtr ->
     unsafeUseAsCStringLen aciBytes $ \(aciBytesPtr, aciBytesLen) ->
+      -- This use of unsafe is fine, since 'verifyInitialCDIFFI' respects the length, and will
+      -- not dereference the pointer if the length is 0.
       verifyInitialCDIFFI ipInfoPtr (castPtr aciBytesPtr) (fromIntegral aciBytesLen) tt
   return (res == 1)

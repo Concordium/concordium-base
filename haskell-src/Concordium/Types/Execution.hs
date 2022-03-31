@@ -150,8 +150,8 @@ instance S.Serialize BakerKeysWithProofs where
   get = BakerKeysWithProofs <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
 
 -- |Size of a serialized 'BakerKeysWithProofs' structure
-bakerKeysWithProofsSize :: PayloadSize
-bakerKeysWithProofsSize = fromIntegral $
+bakerKeysWithProofsSize :: Int
+bakerKeysWithProofsSize =
   VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
 
 -- |The transaction payload. Defines the supported kinds of transactions.
@@ -306,6 +306,9 @@ data Payload =
       twswmSchedule :: ![(Timestamp, Amount)]
       }
   -- | Configure a baker on an account.
+  -- The serialization uses a bitmap to indicate which fields are present.
+  -- The bitmap it 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+  -- could be added, while retaining the validity of existing transactions).
   | ConfigureBaker {
       -- |The equity capital of the baker
       cbCapital :: !(Maybe Amount),
@@ -325,6 +328,7 @@ data Payload =
       cbFinalizationRewardCommission :: !(Maybe AmountFraction)
   }
   -- | Configure an account's stake delegation.
+  -- As with 'ConfigureBaker', the serialization uses a 16-bit bitmap.
   | ConfigureDelegation {
       -- |The capital delegated to the pool.
       cdCapital :: !(Maybe Amount),
@@ -1025,182 +1029,181 @@ data Event =
   deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
-putEvent = \case
-  ModuleDeployed mref ->
-    S.putWord8 0 <>
-    S.put mref
-  ContractInitialized{..} ->
-    S.putWord8 1 <>
-    S.put ecRef <>
-    S.put ecAddress <>
-    S.put ecAmount <>
-    S.put ecInitName <>
-    S.put ecContractVersion <>
-    S.putWord32be (fromIntegral (length ecEvents)) <>
-    mapM_ S.put ecEvents
-  Updated{..} ->
-    S.putWord8 2 <>
-    S.put euAddress <>
-    S.put euInstigator <>
-    S.put euAmount <>
-    S.put euMessage <>
-    S.put euReceiveName <>
-    S.put euContractVersion <>
-    S.putWord32be (fromIntegral (length euEvents)) <>
-    mapM_ S.put euEvents
-  Transferred{..} ->
-    S.putWord8 3 <>
-    S.put etFrom <>
-    S.put etAmount <>
-    S.put etTo
-  AccountCreated addr ->
-    S.putWord8 4 <>
-    S.put addr
-  CredentialDeployed{..} ->
-    S.putWord8 5 <>
-    S.put ecdRegId <>
-    S.put ecdAccount
-  BakerAdded {..} ->
-    S.putWord8 6 <>
-    S.put ebaBakerId <>
-    S.put ebaAccount <>
-    S.put ebaSignKey <>
-    S.put ebaElectionKey <>
-    S.put ebaAggregationKey <>
-    S.put ebaStake <>
-    putBool ebaRestakeEarnings
-  BakerRemoved {..} ->
-    S.putWord8 7 <>
-    S.put ebrBakerId <>
-    S.put ebrAccount
-  BakerStakeIncreased {..} ->
-    S.putWord8 8 <>
-    S.put ebsiBakerId <>
-    S.put ebsiAccount <>
-    S.put ebsiNewStake
-  BakerStakeDecreased {..} ->
-    S.putWord8 9 <>
-    S.put ebsiBakerId <>
-    S.put ebsiAccount <>
-    S.put ebsiNewStake
-  BakerSetRestakeEarnings {..} ->
-    S.putWord8 10 <>
-    S.put ebsreBakerId <>
-    S.put ebsreAccount <>
-    putBool ebsreRestakeEarnings
-  BakerKeysUpdated {..} ->
-    S.putWord8 11 <>
-    S.put ebkuBakerId <>
-    S.put ebkuAccount <>
-    S.put ebkuSignKey <>
-    S.put ebkuElectionKey <>
-    S.put ebkuAggregationKey
-  CredentialKeysUpdated {..} ->
-    S.putWord8 12 <>
-    S.put ckuCredId
-  NewEncryptedAmount{..} ->
-    S.putWord8 13 <>
-    S.put neaAccount <>
-    S.put neaNewIndex <>
-    S.put neaEncryptedAmount
-  EncryptedAmountsRemoved{..} ->
-    S.putWord8 14 <>
-    S.put earAccount <>
-    S.put earNewAmount <>
-    S.put earInputAmount <>
-    S.put earUpToIndex
-  AmountAddedByDecryption {..} ->
-    S.putWord8 15 <>
-    S.put aabdAccount <>
-    S.put aabdAmount
-  EncryptedSelfAmountAdded{..} ->
-    S.putWord8 16 <>
-    S.put eaaAccount <>
-    S.put eaaNewAmount <>
-    S.put eaaAmount
-  UpdateEnqueued {..} ->
-    S.putWord8 17 <>
-    S.put ueEffectiveTime <>
-    putUpdatePayload uePayload
-  TransferredWithSchedule {..} ->
-    S.putWord8 18 <>
-    S.put etwsFrom <>
-    S.put etwsTo <>
-    putListOf S.put etwsAmount
-  CredentialsUpdated {..} ->
-    S.putWord8 19 <>
-    S.put cuAccount <>
-    putListOf S.put cuNewCredIds <>
-    putListOf S.put cuRemovedCredIds <>
-    S.put cuNewThreshold
-  DataRegistered {..} ->
-    S.putWord8 20 <>
-    S.put drData
-  TransferMemo {..} ->
-    S.putWord8 21 <>
-    S.put tmMemo
-  Interrupted {..} ->
-    S.putWord8 22 <>
-    S.put iAddress <>
-    S.putWord32be (fromIntegral (length iEvents)) <>
-    mapM_ S.put iEvents
-  Resumed {..} ->
-    S.putWord8 23 <>
-    S.put rAddress <>
-    putBool rSuccess
-  BakerSetOpenStatus {..} ->
-    S.putWord8 24 <>
-    S.put ebsosBakerId <>
-    S.put ebsosAccount <>
-    S.put ebsosOpenStatus
-  BakerSetMetadataURL {..} ->
-    S.putWord8 25 <>
-    S.put ebsmuBakerId <>
-    S.put ebsmuAccount <>
-    S.put ebsmuMetadataURL
-  BakerSetTransactionFeeCommission {..} ->
-    S.putWord8 26 <>
-    S.put ebstfcBakerId <>
-    S.put ebstfcAccount <>
-    S.put ebstfcTransactionFeeCommission
-  BakerSetBakingRewardCommission {..} ->
-    S.putWord8 27 <>
-    S.put ebsbrcBakerId <>
-    S.put ebsbrcAccount <>
-    S.put ebsbrcBakingRewardCommission
-  BakerSetFinalizationRewardCommission {..} ->
-    S.putWord8 28 <>
-    S.put ebsfrcBakerId <>
-    S.put ebsfrcAccount <>
-    S.put ebsfrcFinalizationRewardCommission
-  DelegationStakeIncreased{..} ->
-    S.putWord8 29 <>
-    S.put edsiDelegatorId <>
-    S.put edsiAccount <>
-    S.put edsiNewStake
-  DelegationStakeDecreased{..} ->
-    S.putWord8 30 <>
-    S.put edsdDelegatorId <>
-    S.put edsdAccount <>
-    S.put edsdNewStake
-  DelegationSetRestakeEarnings{..} ->
-    S.putWord8 31 <>
-    S.put edsreDelegatorId <>
-    S.put edsreAccount <>
-    S.put edsreRestakeEarnings
-  DelegationSetDelegationTarget{..} ->
-    S.putWord8 32 <>
-    S.put edsdtDelegatorId <>
-    S.put edsdtAccount <>
-    S.put edsdtDelegationTarget
-  DelegationAdded{..} ->
-    S.putWord8 33 <>
-    S.put edaDelegatorId <>
-    S.put edaAccount
-  DelegationRemoved{..} ->
-    S.putWord8 34 <>
-    S.put edrDelegatorId <>
-    S.put edrAccount
+putEvent = \case ModuleDeployed mref ->
+                   S.putWord8 0 <>
+                   S.put mref
+                 ContractInitialized{..} ->
+                   S.putWord8 1 <>
+                   S.put ecRef <>
+                   S.put ecAddress <>
+                   S.put ecAmount <>
+                   S.put ecInitName <>
+                   S.put ecContractVersion <>
+                   S.putWord32be (fromIntegral (length ecEvents)) <>
+                   mapM_ S.put ecEvents
+                 Updated{..} ->
+                   S.putWord8 2 <>
+                   S.put euAddress <>
+                   S.put euInstigator <>
+                   S.put euAmount <>
+                   S.put euMessage <>
+                   S.put euReceiveName <>
+                   S.put euContractVersion <>
+                   S.putWord32be (fromIntegral (length euEvents)) <>
+                   mapM_ S.put euEvents
+                 Transferred{..} ->
+                   S.putWord8 3 <>
+                   S.put etFrom <>
+                   S.put etAmount <>
+                   S.put etTo
+                 AccountCreated addr ->
+                   S.putWord8 4 <>
+                   S.put addr
+                 CredentialDeployed{..} ->
+                   S.putWord8 5 <>
+                   S.put ecdRegId <>
+                   S.put ecdAccount
+                 BakerAdded {..} ->
+                   S.putWord8 6 <>
+                   S.put ebaBakerId <>
+                   S.put ebaAccount <>
+                   S.put ebaSignKey <>
+                   S.put ebaElectionKey <>
+                   S.put ebaAggregationKey <>
+                   S.put ebaStake <>
+                   putBool ebaRestakeEarnings
+                 BakerRemoved {..} ->
+                   S.putWord8 7 <>
+                   S.put ebrBakerId <>
+                   S.put ebrAccount
+                 BakerStakeIncreased {..} ->
+                   S.putWord8 8 <>
+                   S.put ebsiBakerId <>
+                   S.put ebsiAccount <>
+                   S.put ebsiNewStake
+                 BakerStakeDecreased {..} ->
+                   S.putWord8 9 <>
+                   S.put ebsiBakerId <>
+                   S.put ebsiAccount <>
+                   S.put ebsiNewStake
+                 BakerSetRestakeEarnings {..} ->
+                   S.putWord8 10 <>
+                   S.put ebsreBakerId <>
+                   S.put ebsreAccount <>
+                   putBool ebsreRestakeEarnings
+                 BakerKeysUpdated {..} ->
+                   S.putWord8 11 <>
+                   S.put ebkuBakerId <>
+                   S.put ebkuAccount <>
+                   S.put ebkuSignKey <>
+                   S.put ebkuElectionKey <>
+                   S.put ebkuAggregationKey
+                 CredentialKeysUpdated {..} ->
+                   S.putWord8 12 <>
+                   S.put ckuCredId
+                 NewEncryptedAmount{..} ->
+                   S.putWord8 13 <>
+                   S.put neaAccount <>
+                   S.put neaNewIndex <>
+                   S.put neaEncryptedAmount
+                 EncryptedAmountsRemoved{..} ->
+                   S.putWord8 14 <>
+                   S.put earAccount <>
+                   S.put earNewAmount <>
+                   S.put earInputAmount <>
+                   S.put earUpToIndex
+                 AmountAddedByDecryption {..} ->
+                   S.putWord8 15 <>
+                   S.put aabdAccount <>
+                   S.put aabdAmount
+                 EncryptedSelfAmountAdded{..} ->
+                   S.putWord8 16 <>
+                   S.put eaaAccount <>
+                   S.put eaaNewAmount <>
+                   S.put eaaAmount
+                 UpdateEnqueued {..} ->
+                   S.putWord8 17 <>
+                   S.put ueEffectiveTime <>
+                   putUpdatePayload uePayload
+                 TransferredWithSchedule {..} ->
+                   S.putWord8 18 <>
+                   S.put etwsFrom <>
+                   S.put etwsTo <>
+                   putListOf S.put etwsAmount
+                 CredentialsUpdated {..} ->
+                   S.putWord8 19 <>
+                   S.put cuAccount <>
+                   putListOf S.put cuNewCredIds <>
+                   putListOf S.put cuRemovedCredIds <>
+                   S.put cuNewThreshold
+                 DataRegistered {..} ->
+                   S.putWord8 20 <>
+                   S.put drData
+                 TransferMemo {..} ->
+                   S.putWord8 21 <>
+                   S.put tmMemo
+                 Interrupted {..} ->
+                   S.putWord8 22 <>
+                   S.put iAddress <>
+                   S.putWord32be (fromIntegral (length iEvents)) <>
+                   mapM_ S.put iEvents
+                 Resumed {..} ->
+                   S.putWord8 23 <>
+                   S.put rAddress <>
+                   putBool rSuccess
+                 BakerSetOpenStatus {..} ->
+                   S.putWord8 24 <>
+                   S.put ebsosBakerId <>
+                   S.put ebsosAccount <>
+                   S.put ebsosOpenStatus
+                 BakerSetMetadataURL {..} ->
+                   S.putWord8 25 <>
+                   S.put ebsmuBakerId <>
+                   S.put ebsmuAccount <>
+                   S.put ebsmuMetadataURL
+                 BakerSetTransactionFeeCommission {..} ->
+                   S.putWord8 26 <>
+                   S.put ebstfcBakerId <>
+                   S.put ebstfcAccount <>
+                   S.put ebstfcTransactionFeeCommission
+                 BakerSetBakingRewardCommission {..} ->
+                   S.putWord8 27 <>
+                   S.put ebsbrcBakerId <>
+                   S.put ebsbrcAccount <>
+                   S.put ebsbrcBakingRewardCommission
+                 BakerSetFinalizationRewardCommission {..} ->
+                   S.putWord8 28 <>
+                   S.put ebsfrcBakerId <>
+                   S.put ebsfrcAccount <>
+                   S.put ebsfrcFinalizationRewardCommission
+                 DelegationStakeIncreased{..} ->
+                   S.putWord8 29 <>
+                   S.put edsiDelegatorId <>
+                   S.put edsiAccount <>
+                   S.put edsiNewStake
+                 DelegationStakeDecreased{..} ->
+                   S.putWord8 30 <>
+                   S.put edsdDelegatorId <>
+                   S.put edsdAccount <>
+                   S.put edsdNewStake
+                 DelegationSetRestakeEarnings{..} ->
+                   S.putWord8 31 <>
+                   S.put edsreDelegatorId <>
+                   S.put edsreAccount <>
+                   S.put edsreRestakeEarnings
+                 DelegationSetDelegationTarget{..} ->
+                   S.putWord8 32 <>
+                   S.put edsdtDelegatorId <>
+                   S.put edsdtAccount <>
+                   S.put edsdtDelegationTarget
+                 DelegationAdded{..} ->
+                   S.putWord8 33 <>
+                   S.put edaDelegatorId <>
+                   S.put edaAccount
+                 DelegationRemoved{..} ->
+                   S.putWord8 34 <>
+                   S.put edrDelegatorId <>
+                   S.put edrAccount
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
