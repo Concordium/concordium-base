@@ -863,7 +863,6 @@ mod tests {
 
         let seed: u64 = random();
         let mut rng = Pcg64::seed_from_u64(seed);
-        println!("Seed {}", seed);
         let mut data = [0u8; 100000];
         rng.fill_bytes(&mut data);
 
