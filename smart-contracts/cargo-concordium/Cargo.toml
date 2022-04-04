@@ -17,6 +17,7 @@ cargo_toml = "0.8.1"
 anyhow = "1.0.33"
 ansi_term = "0.12"
 ptree = "0.4"
+strsim = "0.10"
 
 [features]
 
