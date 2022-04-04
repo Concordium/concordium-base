@@ -20,6 +20,47 @@ fn make_mut_trie<A: AsRef<[u8]>>(words: Vec<(A, Value)>) -> (MutableTrie, Loader
     (node, loader)
 }
 
+fn compare_to_reference(
+    trie: &mut MutableTrie,
+    loader: &mut Loader<Vec<u8>>,
+    reference: &BTreeMap<Vec<u8>, Value>,
+) -> anyhow::Result<()> {
+    let mut iterator = if let Some(i) =
+        trie.iter(loader, &[]).expect("This is the first iterator, so no overflow.")
+    {
+        i
+    } else {
+        ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+        return Ok(());
+    };
+    for (k, v) in reference.iter() {
+        let entry = trie
+            .next(loader, &mut iterator, &mut EmptyCounter)
+            .expect("Empty counter does not fail.")
+            .context("Trie iterator ends early.")?;
+        ensure!(
+            trie.with_entry(entry, loader, |ev| v == ev).unwrap_or(false),
+            "Reference value does not match the trie value."
+        );
+        let it_key = iterator.get_key();
+        ensure!(
+            it_key == k,
+            "Iterator returns incorrect key, {:?} != {:?}, {:#?}, {:#?}",
+            it_key,
+            k,
+            iterator,
+            trie
+        );
+    }
+    ensure!(
+        trie.next(loader, &mut iterator, &mut EmptyCounter)
+            .expect("Empty counter does not fail.")
+            .is_none(),
+        "Trie iterator has remaining values."
+    );
+    Ok(())
+}
+
 #[test]
 /// Check that deleting and then freezing behaves correctly, and the
 /// resulting tree is correct.
@@ -56,41 +97,49 @@ fn prop_delete_freeze_lookup() {
         };
         // and then make sure the frozen tree matches the (updated) reference.
         let mut trie = frozen.make_mutable(0, &mut loader);
-        let mut iterator = if let Some(i) =
-            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-        {
-            i
+        compare_to_reference(&mut trie, &mut loader, &reference)
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+}
+
+#[test]
+/// Check that inserting and then freezing behaves correctly, and the
+/// resulting tree is correct.
+fn prop_insert_freeze_lookup() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>, key: Vec<u8>| -> anyhow::Result<()> {
+        // construct the tree first
+        let mut reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs);
+        // freeze it
+        let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            t
         } else {
             ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
             return Ok(());
         };
-        let reference_iter = reference.iter();
-        for (k, v) in reference_iter {
-            let entry = trie
-                .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-                .context("Trie iterator ends early.")?;
-            ensure!(
-                trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
-                "Reference value does not match the trie value."
-            );
-            let it_key = iterator.get_key();
-            ensure!(
-                it_key == k,
-                "Iterator returns incorrect key, {:?} != {:?}, {:#?}, {:#?}",
-                it_key,
-                k,
-                iterator,
-                trie
-            );
-        }
+        // then thaw it. This makes the tree persistent, and only the root mutable.
+        let mut thawed = frozen.make_mutable(0, &mut loader);
+        // then insert into the thawed tree
+        let existed = thawed
+            .insert(&mut loader, &key, Vec::new())
+            .expect("No iterators, so no part should be locked.");
+        let existed_reference = reference.insert(key, Vec::new());
         ensure!(
-            trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-                .is_none(),
-            "Trie iterator has remaining values."
+            existed.1 == existed_reference.is_some(),
+            "Incorrect insertion result ({}) compared to reference ({}).",
+            existed.1,
+            existed_reference.is_some()
         );
-        Ok(())
+        // freeze it again
+        let frozen = if let Some(t) = thawed.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        // and then make sure the frozen tree matches the (updated) reference.
+        let mut trie = frozen.make_mutable(0, &mut loader);
+        compare_to_reference(&mut trie, &mut loader, &reference)
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
 }
@@ -212,28 +261,7 @@ fn prop_serialization() {
             "Hashes of the original and deserialized tree differ."
         );
         let mut mutable = deserialized.make_mutable(0, &mut loader);
-        let mut iterator = if let Some(i) =
-            mutable.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-        {
-            i
-        } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
-            return Ok(());
-        };
-        let reference_iter = reference.iter();
-        for (k, v) in reference_iter {
-            let entry = mutable
-                .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-                .context("Trie iterator ends early.")?;
-            ensure!(
-                mutable.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
-                "Reference value does not match the trie value."
-            );
-            let it_key = iterator.get_key();
-            ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}.", it_key, k);
-        }
-        Ok(())
+        compare_to_reference(&mut mutable, &mut loader, &reference)
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
@@ -307,41 +335,7 @@ fn prop_matches_reference_basic() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (mut trie, mut loader) = make_mut_trie(inputs);
-        let mut iterator = if let Some(i) =
-            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-        {
-            i
-        } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
-            return Ok(());
-        };
-        let reference_iter = reference.iter();
-        for (k, v) in reference_iter {
-            let entry = trie
-                .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-                .context("Trie iterator ends early.")?;
-            ensure!(
-                trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
-                "Reference value does not match the trie value."
-            );
-            let it_key = iterator.get_key();
-            ensure!(
-                it_key == k,
-                "Iterator returns incorrect key, {:?} != {:?}, {:#?}, {:#?}",
-                it_key,
-                k,
-                iterator,
-                trie
-            );
-        }
-        ensure!(
-            trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-                .is_none(),
-            "Trie iterator has remaining values."
-        );
-        Ok(())
+        compare_to_reference(&mut trie, &mut loader, &reference)
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
@@ -374,7 +368,6 @@ fn prop_matches_reference_delete_subtree() {
                 }
             }
 
-            let reference_iter = reference.iter();
             ensure!(
                 Ok(true)
                     == trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap(),
@@ -390,35 +383,7 @@ fn prop_matches_reference_delete_subtree() {
                 )
             }
 
-            let mut iterator = if let Some(i) =
-                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-            {
-                i
-            } else if !reference.is_empty() {
-                bail!("Iterator is empty, but the reference is not.");
-            } else {
-                continue;
-            };
-            for (k, v) in reference_iter {
-                if let Some(entry) = trie
-                    .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                    .expect("Empty counter does not fail.")
-                {
-                    ensure!(
-                        trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
-                        "Entry value does not match reference value."
-                    );
-                    let it_key = iterator.get_key();
-                    ensure!(it_key == k, "Iterator returns incorrect key, {:?} != {:?}", it_key, k);
-                }
-            }
-            // there are no values left to iterate.
-            ensure!(
-                trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
-                    .expect("Empty counter does not fail.")
-                    .is_none(),
-                "Iterator has remaining values."
-            );
+            compare_to_reference(&mut trie, &mut loader, &reference)?;
         }
         Ok(())
     };
@@ -752,54 +717,26 @@ fn prop_iterator_locked_for_modification() {
 /// Check that the mutable trie delete prefix does not affect generations that
 /// are frozen.
 fn prop_matches_reference_checkpoint_delete_subtree() {
-    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let (mut trie, mut loader) = make_mut_trie(inputs.clone());
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         for (prefix, _) in inputs.iter() {
             trie.new_generation();
             trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter)
                 .unwrap()
-                .expect("No iterators are present, so we should be able to delete the prefix.");
+                .context("No iterators are present, so we should be able to delete the prefix.")?;
         }
         trie.normalize(0);
-        let mut iterator = if let Some(i) =
-            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-        {
-            i
-        } else {
-            return reference.is_empty();
-        };
-        for (k, v) in reference.iter() {
-            if let Some(entry) = trie
-                .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-            {
-                if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
-                    return false;
-                }
-                if iterator.get_key() != k {
-                    return false;
-                }
-            }
-        }
-        // there are no values left to iterate.
-        if trie
-            .next(&mut loader, &mut iterator, &mut EmptyCounter)
-            .expect("Empty counter does not fail.")
-            .is_some()
-        {
-            return false;
-        }
-        true
+        compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> _);
 }
 
 #[test]
 /// Check that the mutable trie and its iterator match the reference
 /// implementation, after deleting a single value.
 fn prop_matches_reference_delete() {
-    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         for (to_delete, _) in inputs.iter() {
             let reference = inputs
                 .iter()
@@ -807,85 +744,34 @@ fn prop_matches_reference_delete() {
                 .cloned()
                 .collect::<BTreeMap<_, _>>();
             let (mut trie, mut loader) = make_mut_trie(inputs.clone());
-            let reference_iter = reference.iter();
             if trie.delete(&mut loader, &to_delete[..]).is_err() {
-                return false;
+                bail!("Failed to delete.");
             }
-            let mut iterator = if let Some(i) =
-                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-            {
-                i
-            } else if !reference.is_empty() {
-                return false;
-            } else {
-                continue;
-            };
-            for (k, v) in reference_iter {
-                if let Some(entry) = trie
-                    .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                    .expect("Empty counter does not fail.")
-                {
-                    if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
-                        return false;
-                    }
-                    if iterator.get_key() != k {
-                        return false;
-                    }
-                }
-            }
-            // there are no values left to iterate.
-            if trie
-                .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-                .is_some()
-            {
-                return false;
-            }
+            compare_to_reference(&mut trie, &mut loader, &reference)?;
         }
-        true
+        Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> _);
 }
 
 #[test]
 /// Check that the mutable trie and its iterator match the reference
 /// implementation after a freeze/thaw step.
 fn prop_matches_reference_after_freeze_thaw() {
-    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> bool {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
             trie
+        } else if reference.is_empty() {
+            return Ok(());
         } else {
-            return reference.is_empty();
+            bail!("Failure to freeze should only happen for an empty collection.");
         };
         let mut trie = trie.make_mutable(0, &mut loader);
-        let mut iterator = if let Some(i) =
-            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
-        {
-            i
-        } else {
-            return reference.is_empty();
-        };
-        let reference_iter = reference.iter();
-        for (k, v) in reference_iter {
-            if let Some(entry) = trie
-                .next(&mut loader, &mut iterator, &mut EmptyCounter)
-                .expect("Empty counter does not fail.")
-            {
-                if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
-                    return false;
-                }
-                if iterator.get_key() != k {
-                    return false;
-                }
-            }
-        }
-        trie.next(&mut loader, &mut iterator, &mut EmptyCounter)
-            .expect("Empty counter does not fail.")
-            .is_none() // there are no values left to iterate.
+        compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> bool);
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> _);
 }
 
 /// Check that it costs nothing to freeze a tree that is not modified.
