@@ -541,7 +541,7 @@ impl fmt::Display for ParseDurationError {
 ///
 /// # Example
 /// The duration of 10 days, 1 hour, 2minutes and 7 seconds is:
-/// ```ignore
+/// ```text
 /// "10d 1h 2m 3s 4s"
 /// ```
 impl str::FromStr for Duration {
@@ -766,6 +766,7 @@ impl fmt::Display for NewContractNameError {
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
+#[repr(transparent)]
 pub struct ReceiveName<'a>(&'a str);
 
 impl<'a> ReceiveName<'a> {
@@ -778,6 +779,7 @@ impl<'a> ReceiveName<'a> {
 
     /// Create a new ReceiveName without checking the format. Expected format:
     /// "<contract_name>.<func_name>".
+    #[inline(always)]
     pub fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
@@ -791,7 +793,7 @@ impl<'a> ReceiveName<'a> {
     pub fn contract_name(self) -> &'a str { self.get_name_parts().0 }
 
     /// Extract the entrypoint name by splitting at the first dot.
-    pub fn entrypoint_name(&self) -> EntrypointName { EntrypointName(self.get_name_parts().1) }
+    pub fn entrypoint_name(self) -> EntrypointName<'a> { EntrypointName(self.get_name_parts().1) }
 
     /// Extract (contract_name, func_name) by splitting at the first dot.
     fn get_name_parts(self) -> (&'a str, &'a str) {
@@ -823,7 +825,9 @@ impl<'a> ReceiveName<'a> {
 }
 
 /// A receive name (owned version). Expected format:
-/// "<contract_name>.<func_name>".
+/// "<contract_name>.<func_name>". Most methods are available only on the
+/// [`ReceiveName`] type, the intention is to access those via the
+/// [`as_receive_name`](OwnedReceiveName::as_receive_name) method.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "derive-serde", serde(try_from = "String"))]
@@ -832,6 +836,7 @@ pub struct OwnedReceiveName(String);
 impl convert::TryFrom<String> for OwnedReceiveName {
     type Error = NewReceiveNameError;
 
+    #[inline(always)]
     fn try_from(value: String) -> Result<Self, Self::Error> { OwnedReceiveName::new(value) }
 }
 
@@ -848,16 +853,19 @@ impl OwnedReceiveName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
 
-    /// Convert to ReceiveName by reference.
+    /// Convert to [`ReceiveName`]. See [`ReceiveName`] for additional methods
+    /// available on the type.
     #[inline(always)]
     pub fn as_receive_name(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
 }
 
 /// An entrypoint name (borrowed version). Expected format:
-/// "<func_name>" where
+/// "<func_name>" where the name of the function consists solely of ASCII
+/// alphanumeric or punctuation characters.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize))]
 #[cfg_attr(feature = "derive-serde", serde(transparent))]
+#[repr(transparent)]
 pub struct EntrypointName<'a>(pub(crate) &'a str);
 
 impl<'a> EntrypointName<'a> {
@@ -874,6 +882,7 @@ impl<'a> EntrypointName<'a> {
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
+    #[inline(always)]
     pub fn new_unchecked(name: &'a str) -> Self { Self(name) }
 }
 
@@ -890,7 +899,9 @@ impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
 }
 
 /// An entrypoint name (owned version). Expected format:
-/// "<func_name>" where
+/// "<func_name>". Most methods on this type are available via the
+/// [`as_entrypoint_name`](OwnedEntrypointName::as_entrypoint_name) and the
+/// methods on the [`EntrypointName`] type.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "derive-serde", serde(into = "String", try_from = "String"))]
@@ -921,8 +932,10 @@ impl OwnedEntrypointName {
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
+    #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { Self(name) }
 
+    #[inline(always)]
     pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
 }
 
@@ -1244,24 +1257,23 @@ pub mod attributes {
 /// or parameters.
 ///
 /// ```ignore
+/// # use concordium_std::*;
 /// enum MyCustomReceiveError {
 ///     Parsing
 /// }
 ///
 /// impl From<ParseError> for MyCustomReceiveError {
-///     fn from(_: ParseError) -> Self { MyCustomReceiveError::ParseParams }
+///     fn from(_: ParseError) -> Self { MyCustomReceiveError::Parsing }
 /// }
 ///
-/// #[receive(contract = "mycontract", name="some_receive_name")]
-/// fn contract_receive<R: HasReceiveContext, L: HasLogger, A: HasActions>(
-///     ctx: &R,
-///     receive_amount: Amount,
-///     logger: &mut L,
-///     state: &mut State,
+/// #[receive(contract = "mycontract", name="some_receive_name", mutable)]
+/// fn contract_receive<S: HasStateApi>(
+///     ctx: &impl HasReceiveContext,
+///     host: &mut impl HasHost<State, StateApiType = S>,
 /// ) -> Result<A, MyCustomReceiveError> {
-///     ...
+///     // ...
 ///     let msg: MyParameterType = ctx.parameter_cursor().get()?;
-///     ...
+///     // ...
 /// }
 /// ```
 #[derive(Debug, Default, PartialEq, Eq)]
