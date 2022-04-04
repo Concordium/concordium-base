@@ -339,7 +339,9 @@ impl<'a> Serial for ContractName<'a> {
 }
 
 impl Serial for OwnedContractName {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.as_ref().serial(out) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.as_contract_name().serial(out)
+    }
 }
 
 impl Deserial for OwnedContractName {

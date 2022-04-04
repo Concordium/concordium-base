@@ -677,13 +677,19 @@ impl<'a> ContractName<'a> {
     }
 
     /// Create a new ContractName without checking the format. Expected format:
-    /// "init_<contract_name>".
+    /// "init_<contract_name>". If this precondition is not satisfied then
+    /// the behaviour of any methods on this type is unspecified, and may
+    /// include panics.
     #[inline(always)]
     pub fn new_unchecked(name: &'a str) -> Self { ContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
     pub fn get_chain_name(self) -> &'a str { self.0 }
+
+    /// Extract the contract name by removing the "init_" prefix.
+    #[inline(always)]
+    pub fn contract_name(self) -> &'a str { self.get_chain_name().strip_prefix("init_").unwrap() }
 
     /// Check whether the given string is a valid contract initialization
     /// function name. This is the case if and only if
@@ -728,17 +734,9 @@ impl OwnedContractName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
 
-    /// Get contract name used on chain: "init_<contract_name>".
-    #[inline(always)]
-    pub fn get_chain_name(&self) -> &String { &self.0 }
-
-    /// Try to extract the contract name by removing the "init_" prefix.
-    #[inline(always)]
-    pub fn contract_name(&self) -> Option<&str> { self.get_chain_name().strip_prefix("init_") }
-
     /// Convert to ContractName by reference.
     #[inline(always)]
-    pub fn as_ref(&self) -> ContractName { ContractName(self.get_chain_name().as_str()) }
+    pub fn as_contract_name(&self) -> ContractName { ContractName(self.0.as_str()) }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -790,13 +788,13 @@ impl<'a> ReceiveName<'a> {
     pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 
     /// Extract the contract name by splitting at the first dot.
-    pub fn contract_name(&self) -> &str { self.get_name_parts().0 }
+    pub fn contract_name(self) -> &'a str { self.get_name_parts().0 }
 
     /// Extract the entrypoint name by splitting at the first dot.
     pub fn entrypoint_name(&self) -> EntrypointName { EntrypointName(self.get_name_parts().1) }
 
     /// Extract (contract_name, func_name) by splitting at the first dot.
-    fn get_name_parts(&self) -> (&str, &str) {
+    fn get_name_parts(self) -> (&'a str, &'a str) {
         let mut splitter = self.get_chain_name().splitn(2, '.');
         let contract = splitter.next().unwrap_or("");
         let func = splitter.next().unwrap_or("");
@@ -1416,9 +1414,9 @@ mod test {
 
     #[test]
     fn test_getters_for_owned_contract_name() {
-        let contract_name = OwnedContractName::new("init_contract".to_string()).unwrap();
+        let contract_name = ContractName::new("init_contract").unwrap();
         assert_eq!(contract_name.get_chain_name(), "init_contract");
-        assert_eq!(contract_name.contract_name(), Some("contract"));
+        assert_eq!(contract_name.contract_name(), "contract");
     }
 
     #[test]
