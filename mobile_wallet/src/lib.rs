@@ -294,13 +294,17 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
     let maybe_url: Option<UrlText> = maybe_get(&v, "metadataUrl")?;
 
     let maybe_transaction_fee_float: Option<f64> = maybe_get(&v, "transactionFeeCommission")?;
-    let maybe_transaction_fee: Option<u32> = maybe_transaction_fee_float.map(|x| (x*100_000.0).round() as u32);
+    let maybe_transaction_fee: Option<u32> =
+        maybe_transaction_fee_float.map(|x| (x * 100_000.0).round() as u32);
 
     let maybe_baking_reward_float: Option<f64> = maybe_get(&v, "bakingRewardCommission")?;
-    let maybe_baking_reward: Option<u32> = maybe_baking_reward_float.map(|x| (x*100_000.0).round() as u32);
+    let maybe_baking_reward: Option<u32> =
+        maybe_baking_reward_float.map(|x| (x * 100_000.0).round() as u32);
 
-    let maybe_finalization_reward_float: Option<f64> = maybe_get(&v, "finalizationRewardCommission")?;
-    let maybe_finalization_reward: Option<u32> = maybe_finalization_reward_float.map(|x| (x*100_000.0).round() as u32);
+    let maybe_finalization_reward_float: Option<f64> =
+        maybe_get(&v, "finalizationRewardCommission")?;
+    let maybe_finalization_reward: Option<u32> =
+        maybe_finalization_reward_float.map(|x| (x * 100_000.0).round() as u32);
 
     let maybe_baker_keys: Option<BakerKeys> = maybe_get(&v, "bakerKeys")?;
 
