@@ -833,8 +833,7 @@ mod impls {
                 Type::ContractName(size_len) => {
                     let contract_name = OwnedContractName::new(deserial_string(source, *size_len)?)
                         .map_err(|_| ParseError::default())?;
-                    let name_without_init =
-                        contract_name.contract_name().ok_or_else(ParseError::default)?;
+                    let name_without_init = contract_name.as_contract_name().contract_name();
                     Ok(json!({ "contract": name_without_init }))
                 }
                 Type::ReceiveName(size_len) => {
