@@ -593,6 +593,13 @@ impl convert::AsRef<[u8]> for AccountAddress {
     fn as_ref(&self) -> &[u8] { &self.0 }
 }
 
+impl AccountAddress {
+    /// Check whether `self` is an alias of `other`. Two addresses are aliases
+    /// if they identify the same account. This is defined to be when the
+    /// addresses agree on the first 29 bytes.
+    pub fn is_alias(&self, other: &AccountAddress) -> bool { self.0[0..29] == other.0[0..29] }
+}
+
 /// Address of a contract.
 #[derive(Eq, PartialEq, Copy, Clone, Debug, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
