@@ -88,13 +88,13 @@ impl Serial for OpenStatus {
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
-#[serde(tag = "type")]
+#[serde(tag = "delegateType")]
 pub enum DelegationTarget {
-    #[serde(rename = "delegateToLPool")]
+    #[serde(rename = "L-Pool")]
     DelegateToLPool,
-    #[serde(rename = "delegateToBaker")]
+    #[serde(rename = "Baker")]
     DelegateToBaker {
-        #[serde(rename = "targetBaker")]
+        #[serde(rename = "bakerId")]
         target_baker: u64,
     },
 }

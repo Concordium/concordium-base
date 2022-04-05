@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+  - JSON serialization of the Rust type `DelegationTarget` has been updated to be consistent with the JSON serialization of the corresponding Haskell type.
+  - JSON serialization of commission rates have been updated so that now they are given as the actual rate,
+    instead of parts per hundred thausands. This means for example that now `0.05` or `5.0e-2` should be used as input
+    instead of `5000`.
+
 ## 0.10.0
   - New functions `create_configure_baker_transaction` and `create_configure_delegation_transaction`
     have been added to support the new transaction types `configure baker` and `configure delegation`
