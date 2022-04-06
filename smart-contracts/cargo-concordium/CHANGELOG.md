@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 - Add support for V1 contract execution.
+- Support contracts written with Rust edition 2021.
 
 ## 1.1.1
 - Clarify that energy units used by `cargo-concordium` are "interpreter energy"
