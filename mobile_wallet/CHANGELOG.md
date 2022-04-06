@@ -5,6 +5,8 @@
   - JSON serialization of commission rates have been updated so that now they are given as the actual rate,
     instead of parts per hundred thausands. This means for example that now `0.05` or `5.0e-2` should be used as input
     instead of `5000`.
+  - The files `mobile_wallet.h`, `wallet.kt` and `android.rs` has been updated with the functions `generate_baker_keys`,
+    `create_configure_baker_transaction` and `create_configure_delegation_transaction`.
 
 ## 0.10.0
   - New functions `create_configure_baker_transaction` and `create_configure_delegation_transaction`
