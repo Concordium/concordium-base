@@ -1,6 +1,5 @@
 {
     "from": "3ZFGxLtnUUSJGW2WqjMh1DDjxyq5rnytCwkSqxFTpsWSFdQnNn",
-    "to": "4a3wqcAdVz7QC34rxyXNzRwYMgBKPBNYWfyTBnjAaLpeR6H3pR",
     "expiry": 1585699200,
     "nonce": 1,
     "keys": {
@@ -29,8 +28,8 @@
     "capital": "1000000",
     "restakeEarnings": true,
     "delegationTarget": {
-        "type": "delegateToBaker",
-	"targetBaker": 100
+        "delegateType": "Baker",
+	      "bakerId": 100
     }
 }
 

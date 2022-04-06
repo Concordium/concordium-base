@@ -2,9 +2,10 @@
 #![allow(unused_assignments)]
 
 use crate::{
-    check_account_address, combine_encrypted_amounts, create_credential, create_encrypted_transfer,
+    check_account_address, combine_encrypted_amounts, create_configure_baker_transaction,
+    create_configure_delegation_transaction, create_credential, create_encrypted_transfer,
     create_id_request_and_private_data, create_pub_to_sec_transfer, create_sec_to_pub_transfer,
-    create_transfer, decrypt_encrypted_amount, generate_accounts,
+    create_transfer, decrypt_encrypted_amount, generate_accounts, generate_baker_keys,
 };
 use jni::{
     objects::{JClass, JString, JValue},
@@ -166,6 +167,118 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
     let mut success: u8 = 127;
     let cstr_res = unsafe {
         let unsafe_res_ptr = create_transfer(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `create_configure_delegation_transaction` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1configure_1delegation_1transaction(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr =
+            create_configure_delegation_transaction(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `create_configure_baker_transaction` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1configure_1baker_1transaction(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = create_configure_baker_transaction(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `generate_baker_keys` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_generate_1baker_1keys(
+    env: JNIEnv,
+    _: JClass,
+) -> jobject {
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = generate_baker_keys(&mut success);
         if unsafe_res_ptr.is_null() {
             return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
         }

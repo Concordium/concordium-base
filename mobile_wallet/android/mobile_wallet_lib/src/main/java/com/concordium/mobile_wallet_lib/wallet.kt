@@ -4,6 +4,9 @@ external fun create_id_request_and_private_data(input: String) : ReturnValue
 external fun create_credential(input: String) : ReturnValue
 external fun generate_accounts(input: String) : ReturnValue
 external fun create_transfer(input: String) : ReturnValue
+external fun generate_baker_keys() : ReturnValue
+external fun create_configure_delegation_transaction(input: String) : ReturnValue
+external fun create_configure_baker_transaction(input: String) : ReturnValue
 external fun create_encrypted_transfer(input: String) : ReturnValue
 external fun create_pub_to_sec_transfer(input: String) : ReturnValue
 external fun create_sec_to_pub_transfer(input: String) : ReturnValue

@@ -180,18 +180,18 @@ The following fields are optional:
 The delegation target should either be of the form
 ```json
 {
-    "type": "delegateToLPool"
+    "delegateType": "L-Pool"
 }
 ```
 or
 
 ```json
 {
-    "type": "delegateToBaker",
-    "targetBaker": 100
+    "delegateType": "bakerId",
+    "bakerId": 100
 }
 ```
-where `100` should be replaced with relevant baker id.
+where `100` should be replaced with the relevant baker id.
 
 To add a delegator, all of the optional fields must be present. For an existing delegator the fields that are present will be updated on chain. A delegator is removed if the `capital` is set to `"0"`.
 
@@ -232,11 +232,11 @@ The following fields are optional:
 - `"openStatus"` ... whether the pool is closed, open for delegation or closed for new delegators.
   This is indicated with one of the strings `"openForAll"`, `"closedForNew"`, or `"closedForAll"`.
 
-- `"transactionFeeCommission"` ... number indicating the transaction fee commission in parts per hundred thousand.
+- `"transactionFeeCommission"` ... number indicating the transaction fee commission, e.g. `0.05` or `5e-2`.
 
-- `"bakingRewardCommission"` ... number indicating the baking reward commission in parts per hundred thousand.
+- `"bakingRewardCommission"` ... number indicating the baking reward commission, e.g. `0.05` or `5e-2`.
 
-- `"finalizationRewardCommission"` ... number indicating the finalization reward commission in parts per hundred thousand.
+- `"finalizationRewardCommission"` ... number indicating the finalization reward commission, e.g. `0.05` or `5e-2`.
 
 - `"bakerKeys"` ... the baker keys. These are generated using the function `generate_baker_keys` documented below.
 

@@ -1,6 +1,5 @@
 {
     "from": "3ZFGxLtnUUSJGW2WqjMh1DDjxyq5rnytCwkSqxFTpsWSFdQnNn",
-    "to": "4a3wqcAdVz7QC34rxyXNzRwYMgBKPBNYWfyTBnjAaLpeR6H3pR",
     "expiry": 1585699200,
     "nonce": 1,
     "keys": {
@@ -31,8 +30,8 @@
     "openStatus": "openForAll",
     "metadataUrl": "http://example",
     "transactionFeeCommission": 0,
-    "bakingRewardCommission": 50000,
-    "finalizationRewardCommission": 100000,
+    "bakingRewardCommission": 0.5,
+    "finalizationRewardCommission": 1,
     "bakerKeys": {
       "aggregationSignKey": "1670f97140af04396bb08089a4af6d3c792c8464aa134b500f29d017fab8137d",
       "aggregationVerifyKey": "b5f3e6ff6b9b895ab7a4ace5e32ab232164e8e61a8377dcd305e72f21d941c272484d1e5982dc1512c21dc822f192a1d0399fc5daefb073c2bdf0b44e9f4c5e87b29a8a9848ab7421d1c228ef2ded728f1e515be5a4913f70553ee6152328a3a",
