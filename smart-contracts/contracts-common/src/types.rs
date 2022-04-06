@@ -855,6 +855,26 @@ impl OwnedReceiveName {
         Ok(OwnedReceiveName(name))
     }
 
+    /// Construct a receive name from contract and entrypoint names.
+    pub fn construct(
+        contract: ContractName,
+        entrypoint: EntrypointName,
+    ) -> Result<Self, NewReceiveNameError> {
+        let mut rm = contract.contract_name().to_string();
+        rm.push('.');
+        rm.push_str(entrypoint.0);
+        Self::new(rm)
+    }
+
+    /// Construct a receive name from contract and entrypoint names, assuming
+    /// that the resulting name is valid.
+    pub fn construct_unchecked(contract: ContractName, entrypoint: EntrypointName) -> Self {
+        let mut rm = contract.contract_name().to_string();
+        rm.push('.');
+        rm.push_str(entrypoint.0);
+        Self::new_unchecked(rm)
+    }
+
     /// Create a new OwnedReceiveName without checking the format. Expected
     /// format: "<contract_name>.<func_name>".
     #[inline(always)]
