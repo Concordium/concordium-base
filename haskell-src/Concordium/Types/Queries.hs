@@ -524,7 +524,9 @@ data PoolStatus
           -- |Any pending change to the baker's stake.
           psBakerStakePendingChange :: !PoolPendingChange,
           -- |Status of the pool in the current reward period.
-          psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus)
+          psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
+          -- |Total capital staked across all pools.
+          psAllPoolTotalCapital :: !Amount
         }
     | LPoolStatus
         { -- |The total capital delegated to the L-pool.
@@ -534,7 +536,9 @@ data PoolStatus
           -- |The transaction fees accruing to the L-pool in the current reward period.
           psCurrentPaydayTransactionFeesEarned :: !Amount,
           -- |The effective delegated capital to the L-pool for the current reward period.
-          psCurrentPaydayDelegatedCapital :: !Amount
+          psCurrentPaydayDelegatedCapital :: !Amount,
+          -- |Total capital staked across all pools.
+          psAllPoolTotalCapital :: !Amount
         }
     deriving (Eq, Show)
 
