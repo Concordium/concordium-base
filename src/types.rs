@@ -162,7 +162,7 @@ impl str::FromStr for Amount {
 impl Amount {
     /// Create amount from a number of microCCD
     #[inline(always)]
-    pub fn from_micro_ccd(micro_ccd: u64) -> Amount {
+    pub const fn from_micro_ccd(micro_ccd: u64) -> Amount {
         Amount {
             micro_ccd,
         }
@@ -170,7 +170,7 @@ impl Amount {
 
     /// Create amount from a number of CCD
     #[inline(always)]
-    pub fn from_ccd(ccd: u64) -> Amount {
+    pub const fn from_ccd(ccd: u64) -> Amount {
         Amount {
             micro_ccd: ccd * 1_000_000,
         }
@@ -178,7 +178,7 @@ impl Amount {
 
     /// Create zero amount
     #[inline(always)]
-    pub fn zero() -> Amount {
+    pub const fn zero() -> Amount {
         Amount {
             micro_ccd: 0,
         }
@@ -541,7 +541,7 @@ impl fmt::Display for ParseDurationError {
 ///
 /// # Example
 /// The duration of 10 days, 1 hour, 2minutes and 7 seconds is:
-/// ```ignore
+/// ```text
 /// "10d 1h 2m 3s 4s"
 /// ```
 impl str::FromStr for Duration {
@@ -591,6 +591,13 @@ impl convert::AsRef<[u8; 32]> for AccountAddress {
 
 impl convert::AsRef<[u8]> for AccountAddress {
     fn as_ref(&self) -> &[u8] { &self.0 }
+}
+
+impl AccountAddress {
+    /// Check whether `self` is an alias of `other`. Two addresses are aliases
+    /// if they identify the same account. This is defined to be when the
+    /// addresses agree on the first 29 bytes.
+    pub fn is_alias(&self, other: &AccountAddress) -> bool { self.0[0..29] == other.0[0..29] }
 }
 
 /// Address of a contract.
@@ -677,13 +684,19 @@ impl<'a> ContractName<'a> {
     }
 
     /// Create a new ContractName without checking the format. Expected format:
-    /// "init_<contract_name>".
+    /// "init_<contract_name>". If this precondition is not satisfied then
+    /// the behaviour of any methods on this type is unspecified, and may
+    /// include panics.
     #[inline(always)]
     pub fn new_unchecked(name: &'a str) -> Self { ContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
     pub fn get_chain_name(self) -> &'a str { self.0 }
+
+    /// Extract the contract name by removing the "init_" prefix.
+    #[inline(always)]
+    pub fn contract_name(self) -> &'a str { self.get_chain_name().strip_prefix("init_").unwrap() }
 
     /// Check whether the given string is a valid contract initialization
     /// function name. This is the case if and only if
@@ -728,17 +741,9 @@ impl OwnedContractName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
 
-    /// Get contract name used on chain: "init_<contract_name>".
-    #[inline(always)]
-    pub fn get_chain_name(&self) -> &String { &self.0 }
-
-    /// Try to extract the contract name by removing the "init_" prefix.
-    #[inline(always)]
-    pub fn contract_name(&self) -> Option<&str> { self.get_chain_name().strip_prefix("init_") }
-
     /// Convert to ContractName by reference.
     #[inline(always)]
-    pub fn as_ref(&self) -> ContractName { ContractName(self.get_chain_name().as_str()) }
+    pub fn as_contract_name(&self) -> ContractName { ContractName(self.0.as_str()) }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -768,6 +773,7 @@ impl fmt::Display for NewContractNameError {
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
+#[repr(transparent)]
 pub struct ReceiveName<'a>(&'a str);
 
 impl<'a> ReceiveName<'a> {
@@ -780,6 +786,7 @@ impl<'a> ReceiveName<'a> {
 
     /// Create a new ReceiveName without checking the format. Expected format:
     /// "<contract_name>.<func_name>".
+    #[inline(always)]
     pub fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
@@ -788,6 +795,20 @@ impl<'a> ReceiveName<'a> {
     /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
     pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
+
+    /// Extract the contract name by splitting at the first dot.
+    pub fn contract_name(self) -> &'a str { self.get_name_parts().0 }
+
+    /// Extract the entrypoint name by splitting at the first dot.
+    pub fn entrypoint_name(self) -> EntrypointName<'a> { EntrypointName(self.get_name_parts().1) }
+
+    /// Extract (contract_name, func_name) by splitting at the first dot.
+    fn get_name_parts(self) -> (&'a str, &'a str) {
+        let mut splitter = self.get_chain_name().splitn(2, '.');
+        let contract = splitter.next().unwrap_or("");
+        let func = splitter.next().unwrap_or("");
+        (contract, func)
+    }
 
     /// Check whether the given string is a valid contract receive function
     /// name. This is the case if and only if
@@ -811,9 +832,20 @@ impl<'a> ReceiveName<'a> {
 }
 
 /// A receive name (owned version). Expected format:
-/// "<contract_name>.<func_name>".
+/// "<contract_name>.<func_name>". Most methods are available only on the
+/// [`ReceiveName`] type, the intention is to access those via the
+/// [`as_receive_name`](OwnedReceiveName::as_receive_name) method.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "derive-serde", serde(try_from = "String"))]
 pub struct OwnedReceiveName(String);
+
+impl convert::TryFrom<String> for OwnedReceiveName {
+    type Error = NewReceiveNameError;
+
+    #[inline(always)]
+    fn try_from(value: String) -> Result<Self, Self::Error> { OwnedReceiveName::new(value) }
+}
 
 impl OwnedReceiveName {
     /// Create a new OwnedReceiveName and check the format. Expected format:
@@ -823,34 +855,44 @@ impl OwnedReceiveName {
         Ok(OwnedReceiveName(name))
     }
 
-    /// Create a new OwnedReceiveName without checking the format. Expected
-    /// format: "<contract_name>.<func_name>".
-    pub fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
-
-    /// Get receive name used on chain: "<contract_name>.<func_name>".
-    pub fn get_chain_name(&self) -> &String { &self.0 }
-
-    /// Try to extract the contract name by splitting at the first dot.
-    pub fn contract_name(&self) -> Option<&str> { self.get_name_parts().map(|parts| parts.0) }
-
-    /// Try to extract the func name by splitting at the first dot.
-    pub fn func_name(&self) -> Option<&str> { self.get_name_parts().map(|parts| parts.1) }
-
-    /// Try to extract (contract_name, func_name) by splitting at the first dot.
-    fn get_name_parts(&self) -> Option<(&str, &str)> {
-        let mut splitter = self.get_chain_name().splitn(2, '.');
-        let contract = splitter.next()?;
-        let func = splitter.next()?;
-        Some((contract, func))
+    /// Construct a receive name from contract and entrypoint names.
+    pub fn construct(
+        contract: ContractName,
+        entrypoint: EntrypointName,
+    ) -> Result<Self, NewReceiveNameError> {
+        let mut rm = contract.contract_name().to_string();
+        rm.push('.');
+        rm.push_str(entrypoint.0);
+        Self::new(rm)
     }
 
-    /// Convert to ReceiveName by reference.
-    pub fn as_ref(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
+    /// Construct a receive name from contract and entrypoint names, assuming
+    /// that the resulting name is valid.
+    pub fn construct_unchecked(contract: ContractName, entrypoint: EntrypointName) -> Self {
+        let mut rm = contract.contract_name().to_string();
+        rm.push('.');
+        rm.push_str(entrypoint.0);
+        Self::new_unchecked(rm)
+    }
+
+    /// Create a new OwnedReceiveName without checking the format. Expected
+    /// format: "<contract_name>.<func_name>".
+    #[inline(always)]
+    pub fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
+
+    /// Convert to [`ReceiveName`]. See [`ReceiveName`] for additional methods
+    /// available on the type.
+    #[inline(always)]
+    pub fn as_receive_name(&self) -> ReceiveName { ReceiveName(self.0.as_str()) }
 }
 
 /// An entrypoint name (borrowed version). Expected format:
-/// "<func_name>" where
+/// "<func_name>" where the name of the function consists solely of ASCII
+/// alphanumeric or punctuation characters.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize))]
+#[cfg_attr(feature = "derive-serde", serde(transparent))]
+#[repr(transparent)]
 pub struct EntrypointName<'a>(pub(crate) &'a str);
 
 impl<'a> EntrypointName<'a> {
@@ -867,6 +909,7 @@ impl<'a> EntrypointName<'a> {
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
+    #[inline(always)]
     pub fn new_unchecked(name: &'a str) -> Self { Self(name) }
 }
 
@@ -883,8 +926,12 @@ impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
 }
 
 /// An entrypoint name (owned version). Expected format:
-/// "<func_name>" where
+/// "<func_name>". Most methods on this type are available via the
+/// [`as_entrypoint_name`](OwnedEntrypointName::as_entrypoint_name) and the
+/// methods on the [`EntrypointName`] type.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "derive-serde", serde(into = "String", try_from = "String"))]
 pub struct OwnedEntrypointName(pub(crate) String);
 
 impl fmt::Display for OwnedEntrypointName {
@@ -893,6 +940,12 @@ impl fmt::Display for OwnedEntrypointName {
 
 impl From<OwnedEntrypointName> for String {
     fn from(oen: OwnedEntrypointName) -> Self { oen.0 }
+}
+
+impl convert::TryFrom<String> for OwnedEntrypointName {
+    type Error = NewReceiveNameError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> { OwnedEntrypointName::new(value) }
 }
 
 impl OwnedEntrypointName {
@@ -906,8 +959,10 @@ impl OwnedEntrypointName {
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
+    #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { Self(name) }
 
+    #[inline(always)]
     pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
 }
 
@@ -998,8 +1053,8 @@ pub type SlotTime = Timestamp;
     derive(SerdeSerialize, SerdeDeserialize),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
-#[derive(Debug)]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
+#[derive(Debug, Clone)]
 pub struct ChainMetadata {
     pub slot_time: SlotTime,
 }
@@ -1229,24 +1284,23 @@ pub mod attributes {
 /// or parameters.
 ///
 /// ```ignore
+/// # use concordium_std::*;
 /// enum MyCustomReceiveError {
 ///     Parsing
 /// }
 ///
 /// impl From<ParseError> for MyCustomReceiveError {
-///     fn from(_: ParseError) -> Self { MyCustomReceiveError::ParseParams }
+///     fn from(_: ParseError) -> Self { MyCustomReceiveError::Parsing }
 /// }
 ///
-/// #[receive(contract = "mycontract", name="some_receive_name")]
-/// fn contract_receive<R: HasReceiveContext, L: HasLogger, A: HasActions>(
-///     ctx: &R,
-///     receive_amount: Amount,
-///     logger: &mut L,
-///     state: &mut State,
+/// #[receive(contract = "mycontract", name="some_receive_name", mutable)]
+/// fn contract_receive<S: HasStateApi>(
+///     ctx: &impl HasReceiveContext,
+///     host: &mut impl HasHost<State, StateApiType = S>,
 /// ) -> Result<A, MyCustomReceiveError> {
-///     ...
+///     // ...
 ///     let msg: MyParameterType = ctx.parameter_cursor().get()?;
-///     ...
+///     // ...
 /// }
 /// ```
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -1399,9 +1453,9 @@ mod test {
 
     #[test]
     fn test_getters_for_owned_contract_name() {
-        let contract_name = OwnedContractName::new("init_contract".to_string()).unwrap();
+        let contract_name = ContractName::new("init_contract").unwrap();
         assert_eq!(contract_name.get_chain_name(), "init_contract");
-        assert_eq!(contract_name.contract_name(), Some("contract"));
+        assert_eq!(contract_name.contract_name(), "contract");
     }
 
     #[test]
@@ -1454,8 +1508,11 @@ mod test {
     #[test]
     fn test_getters_for_owned_receive_name() {
         let receive_name = OwnedReceiveName::new("contract.receive".to_string()).unwrap();
-        assert_eq!(receive_name.get_chain_name(), "contract.receive");
-        assert_eq!(receive_name.contract_name(), Some("contract"));
-        assert_eq!(receive_name.func_name(), Some("receive"));
+        assert_eq!(receive_name.as_receive_name().get_chain_name(), "contract.receive");
+        assert_eq!(receive_name.as_receive_name().contract_name(), "contract");
+        assert_eq!(
+            receive_name.as_receive_name().entrypoint_name(),
+            EntrypointName::new_unchecked("receive")
+        );
     }
 }
