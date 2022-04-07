@@ -661,7 +661,7 @@ impl InstanceStateEntry {
     #[inline]
     pub fn split(self) -> (InstanceCounter, usize) {
         let idx = self.index & 0xffff_ffff;
-        let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
+        let generation = self.index >> 32;
         (generation as u32, idx as usize)
     }
 
@@ -753,7 +753,7 @@ impl InstanceStateIterator {
     #[inline]
     pub fn split(self) -> (InstanceCounter, usize) {
         let idx = self.index & 0xffff_ffff;
-        let generation = (self.index >> 32) & 0x7fff_ffff; // set the first bit to 0.
+        let generation = self.index >> 32;
         (generation as u32, idx as usize)
     }
 }
