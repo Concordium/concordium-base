@@ -3,26 +3,29 @@ use crate::types::*;
 use alloc::vec::Vec;
 use core::{default::Default, mem::MaybeUninit, slice};
 
-/// This is the equivalent to the
+/// This is essentially equivalent to the
 /// [SeekFrom](https://doc.rust-lang.org/std/io/enum.SeekFrom.html) type from
 /// the rust standard library, but reproduced here to avoid dependency on
-/// `std::io`.
+/// `std::io`, as well as to use 32-bit integers to specify positions. This
+/// saves some computation and space, and is adequate for the kind of data sizes
+/// that are possible in smart contracts.
 pub enum SeekFrom {
-    Start(u64),
-    End(i64),
-    Current(i64),
+    Start(u32),
+    End(i32),
+    Current(i32),
 }
 
 /// The `Seek` trait provides a cursor which can be moved within a stream of
 /// bytes. This is essentially a copy of
 /// [std::io::Seek](https://doc.rust-lang.org/std/io/trait.Seek.html), but
 /// avoiding its dependency on `std::io::Error`, and the associated code size
-/// increase.
+/// increase. Additionally, the positions are expressed in terms of 32-bit
+/// integers since this is adequate for the sizes of data in smart contracts.
 pub trait Seek {
     type Err;
     /// Seek to the new position. If successful, return the new position from
     /// the beginning of the stream.
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err>;
+    fn seek(&mut self, pos: SeekFrom) -> Result<u32, Self::Err>;
 }
 
 /// Reads `n` bytes from a given `source` without initializing the byte array
@@ -111,6 +114,9 @@ pub trait Read {
         let bytes = read_n_bytes!(1, self);
         Ok(i8::from_le_bytes(bytes))
     }
+
+    /// Load an array of the given size.
+    fn read_array<const N: usize>(&mut self) -> ParseResult<[u8; N]> { Ok(read_n_bytes!(N, self)) }
 }
 
 /// The `Write` trait provides functionality for writing to byte streams.
