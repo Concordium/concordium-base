@@ -60,6 +60,7 @@ module Concordium.Types (
   minNonce,
   AccountVerificationKey,
   AccountIndex(..),
+  AccountIdentifier(..),
 
   -- * Smart contracts
   ModuleRef(..),
@@ -506,6 +507,15 @@ newtype VoterPower = VoterPower AmountUnit
 -- 'BakerId'.
 newtype AccountIndex = AccountIndex Word64
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
+
+-- |The identifier associated with an account.
+data AccountIdentifier =
+  -- |Given credential registration id as an identifier.
+  CID !CredentialRegistrationID
+  -- |Given address as an identifier. Multiple addresses may refer to the same account.
+  | AA !AccountAddress
+  -- |Given index as an identifier.
+  | AI !AccountIndex
 
 instance S.Serialize AccountIndex where
     get = AccountIndex <$> G.getWord64be
