@@ -19,7 +19,7 @@ pub enum SeekFrom {
 /// bytes. This is essentially a copy of
 /// [std::io::Seek](https://doc.rust-lang.org/std/io/trait.Seek.html), but
 /// avoiding its dependency on `std::io::Error`, and the associated code size
-/// increase. Additionally, the positions are expressed in terms on 32-bit
+/// increase. Additionally, the positions are expressed in terms of 32-bit
 /// integers since this is adequate for the sizes of data in smart contracts.
 pub trait Seek {
     type Err;
