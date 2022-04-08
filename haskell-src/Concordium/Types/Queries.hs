@@ -240,22 +240,13 @@ instance Show BlockSummary where
 
 instance ToJSON BlockSummary where
     toJSON BlockSummary{..} =
-        object (commonFields ++ versionField)
-      where
-        commonFields =
+        object
             [ "transactionSummaries" .= bsTransactionSummaries,
               "specialEvents" .= bsSpecialEvents,
               "finalizationData" .= bsFinalizationData,
-              "updates" .= bsUpdates
+              "updates" .= bsUpdates,
+              "protocolVersion" .= demoteProtocolVersion bsProtocolVersion
             ]
-
-        -- The version field has been added in protocol version 4. For backwards compatibility,
-        -- we will not include that field in JSON for versions < 4.
-        versionField = case bsProtocolVersion of
-            SP1 -> []
-            SP2 -> []
-            SP3 -> []
-            SP4 -> ["protocolVersion" .= demoteProtocolVersion bsProtocolVersion]
 
 instance FromJSON BlockSummary where
     parseJSON =
@@ -277,6 +268,7 @@ instance FromJSON BlockSummary where
                 <*> (v .: "updates" :: Parser (Updates pv))
                 <*> pure spv
 
+-- |Status of the reward accounts. The type parameter determines the type used to represent time.
 data RewardStatus' t
     = RewardStatusV0
         { -- |The total CCD in existence
@@ -314,9 +306,9 @@ data RewardStatus' t
         }
     deriving (Eq, Show, Functor)
 
+-- |Status of the reward accounts, with times represented as 'UTCTime'.
 type RewardStatus = RewardStatus' UTCTime
 
--- $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''RewardStatus)
 instance ToJSON RewardStatus where
     toJSON RewardStatusV0{..} = object [
             "totalAmount" .= rsTotalAmount,
@@ -431,6 +423,10 @@ instance ToJSON BlockTransactionStatus where
               "result" .= outcome
             ]
 
+-- |A pending change (if any) to a baker pool.
+--
+-- The JSON encoding uses a tag "pendingChangeType", which is "NoChange", "ReduceBakerCapital",
+-- or "RemovePool". The contents is in an object under the field "pendingChangeDetails".
 data PoolPendingChange
     = -- |No change is pending.
       PPCNoChange
@@ -475,6 +471,7 @@ makePoolPendingChange (RemoveStake (PendingChangeEffectiveV1 et)) = PPCRemovePoo
     where
         ppcEffectiveTime = timestampToUTCTime et
 
+-- |Information about the status of a baker pool in the current reward period.
 data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
     { -- |The number of blocks baked in the current reward period.
       bpsBlocksBaked :: !Word64,

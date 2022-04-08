@@ -34,6 +34,8 @@ binarySearch valToKey vec key = snd <$> binarySearchI valToKey vec key
 
 -- |Perform a binary search on a sorted vector, returning the index and the value, if found.
 -- The first argument is a function that resolves an entry in a monad.
+-- Resolving entries should be idempotent, and there should be no requirements on which
+-- entries are resolved, how often and in which order.
 -- The second argument is a function that maps a value to its search key.
 -- The elements of the vector must be sorted in ascending order with respect to the key, with no
 -- duplicate keys.

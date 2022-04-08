@@ -369,7 +369,8 @@ data AccountStake (av :: AccountVersion) where
 
 -- |Serialize an 'AccountStake', depending on the account version.
 -- Note that it should be recorded earlier in the serialization whether the stake is
--- 'AccountStakeNone', since in that case nothing is written.
+-- 'AccountStakeNone', since in that case nothing is written.  This function is thus intended
+-- to be used in the context of a broader account serialization function.
 --
 -- For 'AccountV0', the baker is simply serialized. (Delegation is not possible.)
 --

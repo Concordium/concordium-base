@@ -8,7 +8,8 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- |Implementation of a maybe GADT which contains a value for chain parameter versions >= 1
--- and nothing for chain parameter version 0.
+-- and nothing for chain parameter version 0.  This is used to handle chain parameters that
+-- were introduced at ChainParametersV1 (i.e. protocol version P4).
 module Concordium.Types.ProtocolVersion.JustForCPV1 (
     JustForCPV1 (..),
     justForCPV1,
@@ -19,14 +20,13 @@ module Concordium.Types.ProtocolVersion.JustForCPV1 (
 
 import Data.Serialize
 
-import qualified Concordium.Crypto.SHA256 as SHA256
-import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
 
 -- |A value for chain parameter versions >= 1 and nothing for chain parameter version 0.
+-- The type is a 'Functor', 'Foldable' and 'Traversable' so that standard operations are available.
 data JustForCPV1 (cpv :: ChainParametersVersion) a where
-    NothingForCPV1 :: forall a. JustForCPV1 'ChainParametersV0 a
-    JustForCPV1 :: forall a. !a -> JustForCPV1 'ChainParametersV1 a
+    NothingForCPV1 :: JustForCPV1 'ChainParametersV0 a
+    JustForCPV1 :: !a -> JustForCPV1 'ChainParametersV1 a
 
 deriving instance Eq a => Eq (JustForCPV1 cpv a)
 deriving instance Show a => Show (JustForCPV1 cpv a)
@@ -39,8 +39,8 @@ justForCPV1 a =
         SCPV0 -> NothingForCPV1
         SCPV1 -> JustForCPV1 a
 
--- |Build a 'JustForCPV'. If chain parameter version 0, then 'NothingForCPV1' otherwise
--- 'JustForCPV1' with @a@.
+-- |Build a 'JustForCPV' inside an 'Applicative' functor.
+-- If chain parameter version 0, then 'NothingForCPV1' otherwise 'JustForCPV1' with @a@.
 justForCPV1A
     :: forall cpv f a
      . (Applicative f, IsChainParametersVersion cpv)
@@ -88,13 +88,3 @@ instance
     get = case chainParametersVersion @cpv of
         SCPV0 -> return NothingForCPV1
         SCPV1 -> JustForCPV1 <$> get
-
-instance HashableTo SHA256.Hash a => HashableTo SHA256.Hash (JustForCPV1 cpv a) where
-    getHash NothingForCPV1 = SHA256.hash "NothingForCPV1"
-    getHash (JustForCPV1 a) = SHA256.hashOfHashes (SHA256.hash "JustForCPV1") (getHash a)
-
-instance MHashableTo m SHA256.Hash a => MHashableTo m SHA256.Hash (JustForCPV1 cpv a) where
-    getHashM NothingForCPV1 =
-        return $ SHA256.hash "NothingForCPV1"
-    getHashM (JustForCPV1 a) =
-        SHA256.hashOfHashes (SHA256.hash "JustForCPV1") <$> getHashM a

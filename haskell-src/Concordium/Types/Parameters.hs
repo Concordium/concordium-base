@@ -258,7 +258,7 @@ makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro = ExchangeRates{..}
 
 -- |Lenses (and a getter) for accessing the 'ExchangeRates' fields.
 -- Note that 'energyRate' is a getter, since it should not be updated directly, but only as a
--- result of changes to the 'euroPerEnergy' or 'migroGTUPerEuro' updates.
+-- result of changes to the 'euroPerEnergy' or 'microGTUPerEuro' updates.
 class HasExchangeRates t where
     -- |Access the 'ExchangeRates' structure.
     exchangeRates :: Lens' t ExchangeRates
@@ -275,9 +275,13 @@ class HasExchangeRates t where
     energyRate = exchangeRates . to _erEnergyRate
 
 instance HasExchangeRates ExchangeRates where
+    {-# INLINE exchangeRates #-}
     exchangeRates = id
+    {-# INLINE euroPerEnergy #-}
     euroPerEnergy = lens _erEuroPerEnergy (\er epe -> er{_erEuroPerEnergy = epe, _erEnergyRate = computeEnergyRate (_erMicroGTUPerEuro er) epe})
+    {-# INLINE microGTUPerEuro #-}
     microGTUPerEuro = lens _erMicroGTUPerEuro (\er mgtupe -> er{_erMicroGTUPerEuro = mgtupe, _erEnergyRate = computeEnergyRate mgtupe (_erEuroPerEnergy er)})
+    {-# INLINE energyRate #-}
     energyRate = to _erEnergyRate
 
 -- |Version-indexed type of cooldown parameters.
@@ -544,6 +548,9 @@ instance FromJSON CapitalBound where
     when (cb == AmountFraction 0) $ fail "zero-valued capital bound"
     return $ CapitalBound cb
 
+-- |The 'PoolParameters' abstracts the parameters that affect baking pools. Prior to P4, there
+-- is no concept of a baking pool as such, so the pool parameters are considered just to be the
+-- baker stake threshold. From P4 onwards, a broader range of parameters is included.
 data PoolParameters cpv where
     PoolParametersV0 :: { -- |Minimum threshold required for registering as a baker.
       _ppBakerStakeThreshold :: Amount
@@ -662,7 +669,8 @@ instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
 deriving instance Eq (PoolParameters cpv)
 deriving instance Show (PoolParameters cpv)
 
--- |Updatable chain parameters.
+-- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
+-- reflects changes to the chain parameters across different protocol versions.
 data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
     { -- |Election difficulty parameter.
       _cpElectionDifficulty :: !ElectionDifficulty,
@@ -687,114 +695,11 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
 
 makeLenses ''ChainParameters'
 
-type ChainParameters pv = ChainParameters' (ChainParametersVersionFor pv)
-
--- |Constructor for chain parameters.
-makeChainParametersV0 ::
-    -- |Election difficulty
-    ElectionDifficulty ->
-    -- |Euro:Energy rate
-    ExchangeRate ->
-    -- |uGTU:Euro rate
-    ExchangeRate ->
-    -- |Baker cooldown
-    Epoch ->
-    -- |Account creation limit
-    CredentialsPerBlockLimit ->
-    -- |Reward parameters
-    RewardParameters 'ChainParametersV0 ->
-    -- |Foundation account
-    AccountIndex ->
-    -- |Minimum threshold required for registering as a baker
-    Amount ->
-    ChainParameters' 'ChainParametersV0
-makeChainParametersV0
-    _cpElectionDifficulty
-    _cpEuroPerEnergy
-    _cpMicroGTUPerEuro
-    _cpBakerExtraCooldownEpochs
-    _cpAccountCreationLimit
-    _cpRewardParameters
-    _cpFoundationAccount
-    _ppBakerStakeThreshold = ChainParameters{..}
-      where
-        _cpCooldownParameters = CooldownParametersV0{..}
-        _cpTimeParameters = TimeParametersV0
-        _cpPoolParameters = PoolParametersV0{..}
-        _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
-
-makeChainParametersV1 ::
-    -- |Election difficulty
-    ElectionDifficulty ->
-    -- |Euro:Energy rate
-    ExchangeRate ->
-    -- |uGTU:Euro rate
-    ExchangeRate ->
-    -- |Number of seconds that pool owners must cooldown
-    -- when reducing their equity capital or closing the pool.
-    DurationSeconds ->
-    -- |Number of seconds that a delegator must cooldown
-    -- when reducing their delegated stake.
-    DurationSeconds ->
-    -- |Account creation limit
-    CredentialsPerBlockLimit ->
-    -- |Reward parameters
-    RewardParameters 'ChainParametersV1 ->
-    -- |Foundation account
-    AccountIndex ->
-    -- |Fraction of finalization rewards charged by the L-Pool.
-    AmountFraction ->
-    -- |Fraction of baking rewards charged by the L-pool.
-    AmountFraction ->
-    -- |Fraction of transaction rewards charged by the L-pool.
-    AmountFraction ->
-    -- |The range of allowed finalization commissions for normal pools.
-    InclusiveRange AmountFraction ->
-    -- |The range of allowed baker commissions for normal pools.
-    InclusiveRange AmountFraction ->
-    -- |The range of allowed transaction commissions for normal pools.
-    InclusiveRange AmountFraction ->
-    -- |Minimum equity capital required for a new baker.
-    Amount ->
-    -- |Maximum fraction of the total supply of that a new baker can have.
-    CapitalBound ->
-    -- |The maximum leverage that a baker can have as a ratio of total stake
-    -- to equity capital.
-    LeverageFactor ->
-    -- |Length of a payday in epochs.
-    RewardPeriodLength ->
-    -- |Mint rate calculated per payday.
-    MintRate ->
-    ChainParameters' 'ChainParametersV1
-makeChainParametersV1
-    _cpElectionDifficulty
-    _cpEuroPerEnergy
-    _cpMicroGTUPerEuro
-    _cpPoolOwnerCooldown
-    _cpDelegatorCooldown
-    _cpAccountCreationLimit
-    _cpRewardParameters
-    _cpFoundationAccount
-    _finalizationCommission
-    _bakingCommission
-    _transactionCommission
-    _finalizationCommissionRange
-    _bakingCommissionRange
-    _transactionCommissionRange
-    _ppMinimumEquityCapital
-    _ppCapitalBound
-    _ppLeverageBound
-    _tpRewardPeriodLength
-    _tpMintPerPayday = ChainParameters{..}
-      where
-        _cpCooldownParameters = CooldownParametersV1{..}
-        _cpTimeParameters = TimeParametersV1{..}
-        _cpPoolParameters = PoolParametersV1{..}
-        _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
-        _ppLPoolCommissions = CommissionRates{..}
-        _ppCommissionBounds = CommissionRanges{..}
+-- |Chain parameters for a specific 'ProtocolVersion'.
+type ChainParameters (pv :: ProtocolVersion) = ChainParameters' (ChainParametersVersionFor pv)
 
 instance HasExchangeRates (ChainParameters' cpv) where
+    {-# INLINE exchangeRates #-}
     exchangeRates = cpExchangeRates
 
 instance HasRewardParameters (ChainParameters' cpv) cpv where
@@ -825,40 +730,50 @@ instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (Cha
 
 parseJSONForCPV0 :: Value -> Parser (ChainParameters' 'ChainParametersV0)
 parseJSONForCPV0 =
-    withObject "ChainParameters" $ \v ->
-        makeChainParametersV0
-            <$> v .: "electionDifficulty"
-            <*> v .: "euroPerEnergy"
+    withObject "ChainParameters" $ \v -> do
+      _cpElectionDifficulty <- v .: "electionDifficulty"
+      _cpExchangeRates <- makeExchangeRates
+            <$> v .: "euroPerEnergy"
             <*> v .: "microGTUPerEuro"
-            <*> v .: "bakerCooldownEpochs"
-            <*> v .: "accountCreationLimit"
-            <*> v .: "rewardParameters"
-            <*> v .: "foundationAccountIndex"
-            <*> v .: "minimumThresholdForBaking"
+      _cpCooldownParameters <- CooldownParametersV0
+            <$> v .: "bakerCooldownEpochs"
+      _cpAccountCreationLimit <- v .: "accountCreationLimit"
+      _cpRewardParameters <- v .: "rewardParameters"
+      _cpFoundationAccount <- v .: "foundationAccountIndex"
+      _cpPoolParameters <- PoolParametersV0
+            <$> v .: "minimumThresholdForBaking"
+      return ChainParameters{_cpTimeParameters = TimeParametersV0, ..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
 parseJSONForCPV1 =
-    withObject "ChainParametersV1" $ \v ->
-        makeChainParametersV1
-            <$> v .: "electionDifficulty"
-            <*> v .: "euroPerEnergy"
-            <*> v .: "microGTUPerEuro"
-            <*> v .: "poolOwnerCooldown"
-            <*> v .: "delegatorCooldown"
-            <*> v .: "accountCreationLimit"
-            <*> v .: "rewardParameters"
-            <*> v .: "foundationAccountIndex"
-            <*> v .: "finalizationCommissionLPool"
-            <*> v .: "bakingCommissionLPool"
-            <*> v .: "transactionCommissionLPool"
-            <*> v .: "finalizationCommissionRange"
-            <*> v .: "bakingCommissionRange"
-            <*> v .: "transactionCommissionRange"
-            <*> v .: "minimumEquityCapital"
-            <*> v .: "capitalBound"
-            <*> v .: "leverageBound"
-            <*> v .: "rewardPeriodLength"
-            <*> v .: "mintPerPayday"
+    withObject "ChainParametersV1" $ \v -> do
+        _cpElectionDifficulty <- v .: "electionDifficulty"
+        _cpEuroPerEnergy <- v .: "euroPerEnergy"
+        _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
+        _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
+        _cpDelegatorCooldown <- v .: "delegatorCooldown"
+        _cpAccountCreationLimit <- v .: "accountCreationLimit"
+        _cpRewardParameters <- v .: "rewardParameters"
+        _cpFoundationAccount <- v .: "foundationAccountIndex"
+        _finalizationCommission <- v .: "finalizationCommissionLPool"
+        _bakingCommission <- v .: "bakingCommissionLPool"
+        _transactionCommission <- v .: "transactionCommissionLPool"
+        _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+        _bakingCommissionRange <- v .: "bakingCommissionRange"
+        _transactionCommissionRange <- v .: "transactionCommissionRange"
+        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
+        _ppCapitalBound <- v .: "capitalBound"
+        _ppLeverageBound <- v .: "leverageBound"
+        _tpRewardPeriodLength <- v .: "rewardPeriodLength"
+        _tpMintPerPayday <- v .: "mintPerPayday"
+        let
+            _cpCooldownParameters = CooldownParametersV1{..}
+            _cpTimeParameters = TimeParametersV1{..}
+            _cpPoolParameters = PoolParametersV1{..}
+            _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
+            _ppLPoolCommissions = CommissionRates{..}
+            _ppCommissionBounds = CommissionRanges{..}
+        return ChainParameters{..}
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of

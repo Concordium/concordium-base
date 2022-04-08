@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
+-- |Test JSON serialization of 'GenesisChainParameters'.
 module Genesis.ParametersSpec (tests) where
 
 import Test.Hspec

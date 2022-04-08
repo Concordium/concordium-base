@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- | This module implements QuickCheck generators for types that are commonly used in tests.
 module Generators where
 
 import Test.QuickCheck
@@ -17,7 +18,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TE
-import Data.Time.Clock
 import qualified Data.Vector as Vec
 import qualified Data.Sequence as Seq
 import System.IO.Unsafe
@@ -105,6 +105,7 @@ genParameter = do
     n <- choose (0, 1000)
     Wasm.Parameter . BSS.pack <$> vector n
 
+-- |Generate a 'UrlText' that is a UTF-8 encoded string of no more than 'maxUrlTextLength' bytes.
 genUrlText :: Gen UrlText
 genUrlText =
     UrlText
@@ -112,12 +113,13 @@ genUrlText =
             (Text.pack <$> scale (min (fromIntegral maxUrlTextLength)) (listOf arbitrary))
             ((<= fromIntegral maxUrlTextLength) . BS.length . TE.encodeUtf8)
 
+-- |Generate an 'AmountFraction' in the range [0,1].
 genAmountFraction :: Gen AmountFraction
 genAmountFraction = makeAmountFraction <$> arbitrary `suchThat` (<= 100000)
 
-
+-- |Generate a 'CapitalBound', in the range (0,1]. (0 is not a valid 'CapitalBound'.)
 genCapitalBound :: Gen CapitalBound
-genCapitalBound = CapitalBound <$> makeAmountFraction <$> arbitrary `suchThat` (\x -> x <= 100000 && x > 0)
+genCapitalBound = CapitalBound . makeAmountFraction <$> arbitrary `suchThat` (\x -> x <= 100000 && x > 0)
 
 genInclusiveRangeOfAmountFraction :: Gen (InclusiveRange AmountFraction)
 genInclusiveRangeOfAmountFraction = do
@@ -420,7 +422,7 @@ genRewardPeriodLength :: Gen RewardPeriodLength
 genRewardPeriodLength = RewardPeriodLength <$> choose (1, maxBound) -- to make sure that reward period length is >= 1
 
 genTimeParametersV1 :: Gen (TimeParameters 'ChainParametersV1)
-genTimeParametersV1 = TimeParametersV1 <$> (RewardPeriodLength <$> arbitrary) <*> genMintRate
+genTimeParametersV1 = TimeParametersV1 <$> genRewardPeriodLength <*> genMintRate
 
 genPoolParametersV0 :: Gen (PoolParameters 'ChainParametersV0)
 genPoolParametersV0 = PoolParametersV0 <$> arbitrary
@@ -722,9 +724,6 @@ genAccountTransaction = do
 
     let atrSignature = TransactionSignature (Map.fromList allKeys)
     return $! makeAccountTransaction atrSignature atrHeader atrPayload
-
-baseTime :: UTCTime
-baseTime = read "2019-09-23 13:27:13.257285424 UTC"
 
 genTransaction :: Gen Transaction
 genTransaction = do

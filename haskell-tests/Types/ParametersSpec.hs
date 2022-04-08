@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
+-- |Tests for serialization of 'ChainParameters' (binary and JSON).
 module Types.ParametersSpec (tests) where
 
 import Test.Hspec

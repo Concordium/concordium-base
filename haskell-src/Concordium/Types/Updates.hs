@@ -126,6 +126,7 @@ instance Serialize AccessStructure where
         when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
 
+-- |Type for an access structure that was added in 'ChainParametersV0'.
 type AccessStructureForCPV1 cpv = JustForCPV1 cpv AccessStructure
 
 -- |The set of keys authorized for chain updates, together with
@@ -854,13 +855,13 @@ extractKeysIndices p =
     PoolParametersCPV1UpdatePayload{} -> f asBakerStakeThreshold
     TimeParametersCPV1UpdatePayload{} -> f' asTimeParameters
   where f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
-        f' v = h . v . level2Keys
+        f' v = keysForCPV1 . v . level2Keys
         g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0..(fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
-        h :: AccessStructureForCPV1 cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
-        h (JustForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
-        h NothingForCPV1 = (Set.empty, 1)
+        keysForCPV1 :: AccessStructureForCPV1 cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
+        keysForCPV1 (JustForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
+        keysForCPV1 NothingForCPV1 = (Set.empty, 1)
           -- The latter case happens if the UpdateKeysCollection is used with chain parameter version 0 but the update payload is
-          -- is a cooldown paramater update or a time parameter update, which only exists in chain parameter version 1.
+          -- is a cooldown parameter update or a time parameter update, which only exists in chain parameter version 1.
           -- Therefore, the empty set with threshold 1 is returned so that checkEnoughKeys will return false in this case.
 
 -- |Extract the vector of public keys that are authorized for this kind of update. Note

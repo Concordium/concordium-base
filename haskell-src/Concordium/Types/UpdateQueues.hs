@@ -64,6 +64,7 @@ putUpdateQueueV0With putElem UpdateQueue{..} = do
         putWord8 0
 
 -- |Deserialize an update queue in V0 format.
+-- The parameter defines how entries in the queue are deserialized.
 getUpdateQueueV0With :: Get e -> Get (UpdateQueue e)
 getUpdateQueueV0With getElem = do
         _uqNextSequenceNumber <- get
@@ -167,14 +168,15 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
             <> hsh _pPoolParametersQueue
             <> hsh _pAddAnonymityRevokerQueue
             <> hsh _pAddIdentityProviderQueue
-            <> hshMaybe _pCooldownParametersQueue
-            <> hshMaybe _pTimeParametersQueue
+            <> hshForCPV1 _pCooldownParametersQueue
+            <> hshForCPV1 _pTimeParametersQueue
         where
             hsh :: HashableTo H.Hash a => a -> BS.ByteString
             hsh = H.hashToByteString . getHash
-            hshMaybe :: HashableTo H.Hash e => UpdateQueueForCPV1 cpv e -> BS.ByteString
-            hshMaybe NothingForCPV1 = BS.empty
-            hshMaybe (JustForCPV1 uq) = hsh uq
+            -- For CPV1, produce the hash. For CPV0, produce the empty string.
+            hshForCPV1 :: HashableTo H.Hash e => UpdateQueueForCPV1 cpv e -> BS.ByteString
+            hshForCPV1 NothingForCPV1 = BS.empty
+            hshForCPV1 (JustForCPV1 uq) = hsh uq
 
 
 -- |Serialize the pending updates.
@@ -197,9 +199,10 @@ putPendingUpdatesV0 PendingUpdates{..} = do
         putUpdateQueueForCPV1 _pCooldownParametersQueue
         putUpdateQueueForCPV1 _pTimeParametersQueue
 
--- |Deserialize pending updates.
-getPendingUpdatesV0 :: forall oldpv pv. (IsProtocolVersion oldpv) => StateMigrationParameters oldpv pv -> Get (PendingUpdates (ChainParametersVersionFor pv))
-getPendingUpdatesV0 migration = do
+-- |Deserialize pending updates. The 'StateMigrationParameters' allow an old format to be
+-- deserialized as a new format by applying the migration.
+getPendingUpdates :: forall oldpv pv. (IsProtocolVersion oldpv) => StateMigrationParameters oldpv pv -> Get (PendingUpdates (ChainParametersVersionFor pv))
+getPendingUpdates migration = do
         _pRootKeysUpdateQueue <- getUpdateQueueV0
         _pLevel1KeysUpdateQueue <- getUpdateQueueV0
         -- Any pending updates to the authorizations are migrated.
@@ -348,7 +351,7 @@ data Updates' (cpv :: ChainParametersVersion) = Updates {
     -- |Pending updates.
     _pendingUpdates :: !(PendingUpdates cpv)
 } deriving (Show, Eq)
-makeClassy ''Updates'
+makeLenses ''Updates'
 
 type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv)
 
@@ -374,30 +377,26 @@ putUpdatesV0 Updates{..} = do
         putChainParameters _currentParameters
         putPendingUpdatesV0 _pendingUpdates
 
--- |Deserialize 'Updates' in V0 format, applying a migration as necessary.
-getUpdatesV0 :: forall oldpv pv. (IsProtocolVersion oldpv, IsProtocolVersion pv) =>
+-- |Deserialize 'Updates', applying a migration as necessary.
+getUpdates :: forall oldpv pv. (IsProtocolVersion oldpv, IsProtocolVersion pv) =>
     StateMigrationParameters oldpv pv
     -> Get (Updates' (ChainParametersVersionFor pv))
-getUpdatesV0 migration = do
+getUpdates migration = do
         _currentKeyCollection <- makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
         _currentProtocolUpdate <- getWord8 >>= \case
             0 -> return Nothing
             1 -> Just <$> get
             _ -> fail "Invalid Updates"
         _currentParameters <- migrateChainParameters migration <$> getChainParameters @(ChainParametersVersionFor oldpv)
-        _pendingUpdates <- getPendingUpdatesV0 migration
+        _pendingUpdates <- getPendingUpdates migration
         return Updates{..}
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
     toJSON Updates{..} = object $ [
             "keys" AE..= _unhashed _currentKeyCollection,
-            chainParametersJSON,
+            "chainParameters" AE..= _currentParameters,
             "updateQueues" AE..= _pendingUpdates
         ] <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
-      where
-        chainParametersJSON = case chainParametersVersion @cpv of
-            SCPV0 -> "chainParameters" AE..= _currentParameters
-            SCPV1 -> "chainParameters" AE..= _currentParameters
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) where
     parseJSON = withObject "Updates" $ \o -> do

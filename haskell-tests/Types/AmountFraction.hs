@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- |Test the JSON encoding and decoding of 'AmountFraction'.
 module Types.AmountFraction where
 
 import qualified Data.ByteString.Lazy as LBS
