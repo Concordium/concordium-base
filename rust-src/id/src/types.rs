@@ -147,6 +147,22 @@ impl AccountAddress {
         out.copy_from_slice(&hasher.finalize());
         AccountAddress(out)
     }
+
+    /// Check whether an address is an alias of another. Two addresses that are
+    /// aliases point to the same account.
+    pub fn is_alias_of(&self, other: &AccountAddress) -> bool { self.0[0..29] == other.0[0..29] }
+
+    /// Get the `n-th` alias of an address. There are 2^24 possible aliases.
+    /// If the counter is `>= 2^24` then this function will return [`None`].
+    pub fn get_alias(&self, counter: u32) -> Option<Self> {
+        if counter < (1 << 24) {
+            let mut data = self.0;
+            data[29..].copy_from_slice(&counter.to_be_bytes()[1..]);
+            Some(Self(data))
+        } else {
+            return None;
+        }
+    }
 }
 
 /// Threshold for the number of signatures required.
@@ -2208,5 +2224,24 @@ mod tests {
         assert_eq!(num, 517122);
         let ym1_parsed = YearMonth::try_from(num).unwrap();
         assert_eq!(ym1, ym1_parsed);
+    }
+
+    #[test]
+    fn test_aliases() -> anyhow::Result<()> {
+        use rand::{thread_rng, Rng};
+        let base = AccountAddress(thread_rng().gen());
+        for i in 0..(1 << 24) {
+            let alias = base
+                .get_alias(i)
+                .expect("Counter < 2^24, so alias should exist.");
+            anyhow::ensure!(
+                alias.is_alias_of(&base),
+                "Generated alias {:?} is not an alias of the base address {:?}.",
+                alias,
+                base
+            )
+        }
+        anyhow::ensure!(base.get_alias(1 << 24).is_none());
+        Ok(())
     }
 }
