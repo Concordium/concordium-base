@@ -408,14 +408,14 @@ printTimeParametersV1 tp = do
 
 printPoolParametersV1 :: PoolParameters 'ChainParametersV1 -> IO ()
 printPoolParametersV1 pp = do
-        putStrLn $ "  - L-Pool parameters:"
+        putStrLn $ "  - Passive delegation parameters:"
         putStrLn $ "    + finalization commission: "
-                    ++ show (pp ^. ppLPoolCommissions . finalizationCommission)
+                    ++ show (pp ^. ppPassiveCommissions . finalizationCommission)
         putStrLn $ "    + baking commission: "
-                    ++ show (pp ^. ppLPoolCommissions . bakingCommission)
+                    ++ show (pp ^. ppPassiveCommissions . bakingCommission)
         putStrLn $ "    + transaction commission: "
-                    ++ show (pp ^. ppLPoolCommissions . transactionCommission)
-        putStrLn $ "  - normal pool parameters:"
+                    ++ show (pp ^. ppPassiveCommissions . transactionCommission)
+        putStrLn $ "  - baker pool parameters:"
         putStrLn $ "    + allowed (inclusive) range for finalization commission: "
                     ++ showInclusiveRange show (pp ^. ppCommissionBounds . finalizationCommissionRange)
         putStrLn $ "    + allowed (inclusive) range for baking commission: "

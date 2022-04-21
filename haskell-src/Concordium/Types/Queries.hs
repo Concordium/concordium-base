@@ -497,9 +497,9 @@ $( deriveJSON
     ''CurrentPaydayBakerPoolStatus
  )
 
--- |Status information about a given pool.
+-- |Status information about a given pool, or of the passive delegators.
 --
--- Commission rates for the L-pool provide a basis for comparison with baking pools, however,
+-- Commission rates for the passive delegation provide a basis for comparison with baking pools, however,
 -- whereas the commission for baking pools is paid to the pool owner, "commission" is not paid
 -- to anyone.  Rather, it is used to determine the level of rewards paid to delegators, so that
 -- their earnings are commensurate to delegating to a baking pool with the same commission rates.
@@ -522,19 +522,19 @@ data PoolStatus
           psBakerStakePendingChange :: !PoolPendingChange,
           -- |Status of the pool in the current reward period.
           psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
-          -- |Total capital staked across all pools.
+          -- |Total capital staked across all pools, including passive delegation.
           psAllPoolTotalCapital :: !Amount
         }
-    | LPoolStatus
-        { -- |The total capital delegated to the L-pool.
+    | PassiveDelegationStatus
+        { -- |The total capital delegated passively.
           psDelegatedCapital :: !Amount,
-          -- |The L-pool commission rates.
+          -- |The passive delegation commission rates.
           psCommissionRates :: !CommissionRates,
-          -- |The transaction fees accruing to the L-pool in the current reward period.
+          -- |The transaction fees accruing to the passive delegators in the current reward period.
           psCurrentPaydayTransactionFeesEarned :: !Amount,
-          -- |The effective delegated capital to the L-pool for the current reward period.
+          -- |The effective delegated capital of passive delegators for the current reward period.
           psCurrentPaydayDelegatedCapital :: !Amount,
-          -- |Total capital staked across all pools.
+          -- |Total capital staked across all pools, including passive delegation.
           psAllPoolTotalCapital :: !Amount
         }
     deriving (Eq, Show)

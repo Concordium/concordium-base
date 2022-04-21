@@ -680,16 +680,16 @@ data SpecialTransactionOutcome =
     stoNewGASAccount :: !Amount,
     -- |The amount awarded to the baker.
     stoBakerReward :: !Amount,
-    -- |The amount awarded to the L-Pool.
-    stoLPoolReward :: !Amount,
+    -- |The amount awarded to the passive delegators.
+    stoPassiveReward :: !Amount,
     -- |The amount awarded to the foundation.
     stoFoundationCharge :: !Amount,
     -- |The baker of the block, who will receive the award.
     stoBakerId :: !BakerId
   }
-  -- |Payment distributed to a pool or L-Pool.
+  -- |Payment distributed to a pool or passive delegators.
   | PaydayPoolReward {
-    -- |The pool owner (L-Pool when 'Nothing').
+    -- |The pool owner (passive delegators when 'Nothing').
     stoPoolOwner :: !(Maybe BakerId),
     -- |Accrued transaction fees for pool.
     stoTransactionFees :: !Amount,
@@ -742,7 +742,7 @@ instance S.Serialize SpecialTransactionOutcome where
       S.put stoOldGASAccount
       S.put stoNewGASAccount
       S.put stoBakerReward
-      S.put stoLPoolReward
+      S.put stoPassiveReward
       S.put stoFoundationCharge
       S.put stoBakerId
     put PaydayPoolReward{..} = do
@@ -791,7 +791,7 @@ instance S.Serialize SpecialTransactionOutcome where
         stoOldGASAccount <- S.get
         stoNewGASAccount <- S.get
         stoBakerReward <- S.get
-        stoLPoolReward <- S.get
+        stoPassiveReward <- S.get
         stoFoundationCharge <- S.get
         stoBakerId <- S.get
         return BlockAccrueReward{..}

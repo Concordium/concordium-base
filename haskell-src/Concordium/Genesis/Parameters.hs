@@ -74,9 +74,9 @@ parseJSONForGCPV1 =
         gcpAccountCreationLimit <- v .: "accountCreationLimit"
         gcpRewardParameters <- v .: "rewardParameters"
         gcpFoundationAccount <- v .: "foundationAccount"
-        _finalizationCommission <- v .: "finalizationCommissionLPool"
-        _bakingCommission <- v .: "bakingCommissionLPool"
-        _transactionCommission <- v .: "transactionCommissionLPool"
+        _finalizationCommission <- v .: "passiveFinalizationCommission"
+        _bakingCommission <- v .: "passiveBakingCommission"
+        _transactionCommission <- v .: "passiveTransactionCommission"
         _finalizationCommissionRange <- v .: "finalizationCommissionRange"
         _bakingCommissionRange <- v .: "bakingCommissionRange"
         _transactionCommissionRange <- v .: "transactionCommissionRange"
@@ -89,7 +89,7 @@ parseJSONForGCPV1 =
             gcpTimeParameters = TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
-            _ppLPoolCommissions = CommissionRates{..}
+            _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
         return GenesisChainParameters{..}
 
@@ -117,9 +117,9 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
               "accountCreationLimit" AE..= gcpAccountCreationLimit,
               "rewardParameters" AE..= gcpRewardParameters,
               "foundationAccount" AE..= gcpFoundationAccount,
-              "finalizationCommissionLPool" AE..= _finalizationCommission (_ppLPoolCommissions gcpPoolParameters),
-              "bakingCommissionLPool" AE..= _bakingCommission (_ppLPoolCommissions gcpPoolParameters),
-              "transactionCommissionLPool" AE..= _transactionCommission (_ppLPoolCommissions gcpPoolParameters),
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions gcpPoolParameters),
               "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds gcpPoolParameters),
               "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds gcpPoolParameters),
               "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds gcpPoolParameters),

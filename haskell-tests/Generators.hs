@@ -268,7 +268,7 @@ genPayloadConfigureBaker = do
 
 genDelegationTarget :: Gen DelegationTarget
 genDelegationTarget =
-    oneof [return DelegateToLPool, DelegateToBaker . BakerId . AccountIndex <$> arbitrary]
+    oneof [return DelegatePassive, DelegateToBaker . BakerId . AccountIndex <$> arbitrary]
 
 genPayloadConfigureDelegation :: Gen Payload
 genPayloadConfigureDelegation = do
@@ -429,7 +429,7 @@ genPoolParametersV0 = PoolParametersV0 <$> arbitrary
 
 genPoolParametersV1 :: Gen (PoolParameters 'ChainParametersV1)
 genPoolParametersV1 = do
-    _ppLPoolCommissions <- genCommissionRates
+    _ppPassiveCommissions <- genCommissionRates
     _ppCommissionBounds <- genCommissionRanges
     _ppMinimumEquityCapital <- genAmount
     _ppCapitalBound <- genCapitalBound

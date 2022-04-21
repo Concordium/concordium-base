@@ -552,11 +552,13 @@ instance FromJSON CapitalBound where
 -- is no concept of a baking pool as such, so the pool parameters are considered just to be the
 -- baker stake threshold. From P4 onwards, a broader range of parameters is included.
 data PoolParameters cpv where
-    PoolParametersV0 :: { -- |Minimum threshold required for registering as a baker.
+    PoolParametersV0 :: {
+      -- |Minimum threshold required for registering as a baker.
       _ppBakerStakeThreshold :: Amount
     } -> PoolParameters 'ChainParametersV0
-    PoolParametersV1 :: { -- |Commission rates charged by the L-pool.
-      _ppLPoolCommissions :: !CommissionRates,
+    PoolParametersV1 :: {
+      -- |Commission rates charged for passive delegation.
+      _ppPassiveCommissions :: !CommissionRates,
       -- |Bounds on the commission rates that may be charged by bakers.
       _ppCommissionBounds :: !CommissionRanges,
       -- |Minimum equity capital required for a new baker.
@@ -575,9 +577,9 @@ instance ToJSON (PoolParameters cpv) where
         ]
   toJSON PoolParametersV1{..} =
         object [
-            "finalizationCommissionLPool" AE..= _finalizationCommission _ppLPoolCommissions,
-            "bakingCommissionLPool" AE..= _bakingCommission _ppLPoolCommissions,
-            "transactionCommissionLPool" AE..= _transactionCommission _ppLPoolCommissions,
+            "passiveFinalizationCommission" AE..= _finalizationCommission _ppPassiveCommissions,
+            "passiveBakingCommission" AE..= _bakingCommission _ppPassiveCommissions,
+            "passiveTransactionCommission" AE..= _transactionCommission _ppPassiveCommissions,
             "finalizationCommissionRange" AE..= _finalizationCommissionRange _ppCommissionBounds,
             "bakingCommissionRange" AE..= _bakingCommissionRange _ppCommissionBounds,
             "transactionCommissionRange" AE..= _transactionCommissionRange _ppCommissionBounds,
@@ -590,16 +592,16 @@ parsePoolParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> 
 parsePoolParametersJSON = case chainParametersVersion @cpv of
   SCPV0 -> withObject "PoolParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
   SCPV1 -> withObject "PoolParametersV1" $ \v -> do
-    _finalizationCommission <- v .: "finalizationCommissionLPool"
-    _bakingCommission <- v .: "bakingCommissionLPool"
-    _transactionCommission <- v .: "transactionCommissionLPool"
+    _finalizationCommission <- v .: "passiveFinalizationCommission"
+    _bakingCommission <- v .: "passiveBakingCommission"
+    _transactionCommission <- v .: "passiveTransactionCommission"
     _finalizationCommissionRange <- v .: "finalizationCommissionRange"
     _bakingCommissionRange <- v .: "bakingCommissionRange"
     _transactionCommissionRange <- v .: "transactionCommissionRange"
     _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
     _ppCapitalBound <- v .: "capitalBound"
     _ppLeverageBound <- v .: "leverageBound"
-    let _ppLPoolCommissions = CommissionRates{..}
+    let _ppPassiveCommissions = CommissionRates{..}
     let _ppCommissionBounds = CommissionRanges{..}
     return PoolParametersV1{..}
 
@@ -612,11 +614,11 @@ ppBakerStakeThreshold :: Lens' (PoolParameters 'ChainParametersV0) Amount
 ppBakerStakeThreshold =
   lens _ppBakerStakeThreshold (\pp x -> pp{_ppBakerStakeThreshold = x})
 
--- |Lens for '_ppLPoolCommissions'
-{-# INLINE ppLPoolCommissions #-}
-ppLPoolCommissions :: Lens' (PoolParameters 'ChainParametersV1) CommissionRates
-ppLPoolCommissions =
-  lens _ppLPoolCommissions (\pp x -> pp{_ppLPoolCommissions = x})
+-- |Lens for '_ppPassiveCommissions'
+{-# INLINE ppPassiveCommissions #-}
+ppPassiveCommissions :: Lens' (PoolParameters 'ChainParametersV1) CommissionRates
+ppPassiveCommissions =
+  lens _ppPassiveCommissions (\pp x -> pp{_ppPassiveCommissions = x})
 
 -- |Lens for '_ppCommissionBounds'
 {-# INLINE ppCommissionBounds #-}
@@ -646,7 +648,7 @@ putPoolParameters :: Putter (PoolParameters cpv)
 putPoolParameters PoolParametersV0{..} = do
     put _ppBakerStakeThreshold
 putPoolParameters PoolParametersV1{..} = do
-        put _ppLPoolCommissions
+        put _ppPassiveCommissions
         put _ppCommissionBounds
         put _ppMinimumEquityCapital
         put _ppCapitalBound
@@ -755,9 +757,9 @@ parseJSONForCPV1 =
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
-        _finalizationCommission <- v .: "finalizationCommissionLPool"
-        _bakingCommission <- v .: "bakingCommissionLPool"
-        _transactionCommission <- v .: "transactionCommissionLPool"
+        _finalizationCommission <- v .: "passiveFinalizationCommission"
+        _bakingCommission <- v .: "passiveBakingCommission"
+        _transactionCommission <- v .: "passiveTransactionCommission"
         _finalizationCommissionRange <- v .: "finalizationCommissionRange"
         _bakingCommissionRange <- v .: "bakingCommissionRange"
         _transactionCommissionRange <- v .: "transactionCommissionRange"
@@ -771,7 +773,7 @@ parseJSONForCPV1 =
             _cpTimeParameters = TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
-            _ppLPoolCommissions = CommissionRates{..}
+            _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
         return ChainParameters{..}
 
@@ -803,9 +805,9 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
               "accountCreationLimit" AE..= _cpAccountCreationLimit,
               "rewardParameters" AE..= _cpRewardParameters,
               "foundationAccountIndex" AE..= _cpFoundationAccount,
-              "finalizationCommissionLPool" AE..= _finalizationCommission (_ppLPoolCommissions _cpPoolParameters),
-              "bakingCommissionLPool" AE..= _bakingCommission (_ppLPoolCommissions _cpPoolParameters),
-              "transactionCommissionLPool" AE..= _transactionCommission (_ppLPoolCommissions _cpPoolParameters),
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions _cpPoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions _cpPoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions _cpPoolParameters),
               "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds _cpPoolParameters),
               "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds _cpPoolParameters),
               "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds _cpPoolParameters),

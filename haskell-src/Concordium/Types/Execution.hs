@@ -92,29 +92,29 @@ instance S.Serialize OpenStatus where
 -- "closedForNew" and "closedForAll".
 $(deriveJSON defaultOptions{constructorTagModifier=firstLower} ''OpenStatus)
 
--- |The pool to which a delegator may delegate.
+-- |The target to which a delegator may delegate.
 data DelegationTarget
-  = DelegateToLPool
-  -- ^Delegate to the lock-up pool (L-pool).
+  = DelegatePassive
+  -- ^Delegate passively.
   | DelegateToBaker {targetBaker :: !BakerId}
   -- ^Delegate to a specific baker.
   deriving (Eq, Show)
 
 instance AE.ToJSON DelegationTarget where
-  toJSON DelegateToLPool = AE.object ["delegateType" .= AE.String "L-Pool"]
+  toJSON DelegatePassive = AE.object ["delegateType" .= AE.String "Passive"]
   toJSON (DelegateToBaker bid) = AE.object ["delegateType" .= AE.String "Baker", "bakerId" .= bid]
 
 instance AE.FromJSON DelegationTarget where
   parseJSON = AE.withObject "DelegationTarget" $ \o -> o .: "delegateType" >>= \case
-    (AE.String "L-Pool") -> return DelegateToLPool
+    (AE.String "Passive") -> return DelegatePassive
     (AE.String "Baker") -> DelegateToBaker <$> o .: "bakerId"
     _ -> fail "Unsupported delegationType"
 
 instance S.Serialize DelegationTarget where
-  put DelegateToLPool = S.putWord8 0
+  put DelegatePassive = S.putWord8 0
   put (DelegateToBaker bid) = S.putWord8 1 >> S.put bid
   get = S.getWord8 >>= \case
-    0 -> return DelegateToLPool
+    0 -> return DelegatePassive
     1 -> DelegateToBaker <$> S.get
     _ -> fail "Invalid DelegationTarget"
 
