@@ -323,7 +323,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printAccessStructure "mint distribution" asParamMintDistribution
     printAccessStructure "transaction fee distribution" asParamTransactionFeeDistribution
     printAccessStructure "gas reward parameters" asParamGASRewards
-    printAccessStructure "baker stake threshold" asBakerStakeThreshold
+    printAccessStructure "baker stake threshold" asPoolParameters
     printAccessStructure "add anonymity revokers" asAddAnonymityRevoker
     printAccessStructure "add identity providers" asAddIdentityProvider
     mapM_ (printAccessStructure "cooldown parameters") asCooldownParameters

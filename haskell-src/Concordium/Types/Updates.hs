@@ -153,7 +153,7 @@ data Authorizations cpv = Authorizations {
         -- |Parameter keys: GAS rewards
         asParamGASRewards :: !AccessStructure,
         -- |Parameter keys: Baker Minimum Threshold/Pool parameters
-        asBakerStakeThreshold :: !AccessStructure,
+        asPoolParameters :: !AccessStructure,
         -- |Parameter keys: ArIdentity and ArInfo
         asAddAnonymityRevoker :: !AccessStructure,
         -- |Parameter keys: IdentityProviderIdentity and IpInfo
@@ -180,7 +180,7 @@ putAuthorizations Authorizations{..} = do
         put asParamMintDistribution
         put asParamTransactionFeeDistribution
         put asParamGASRewards
-        put asBakerStakeThreshold
+        put asPoolParameters
         put asAddAnonymityRevoker
         put asAddIdentityProvider
         put asCooldownParameters
@@ -206,7 +206,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
         asParamMintDistribution <- getChecked
         asParamTransactionFeeDistribution <- getChecked
         asParamGASRewards <- getChecked
-        asBakerStakeThreshold <- getChecked
+        asPoolParameters <- getChecked
         asAddAnonymityRevoker <- getChecked
         asAddIdentityProvider <- getChecked
         (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
@@ -248,7 +248,7 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
         asParamMintDistribution <- parseAS "mintDistribution"
         asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
         asParamGASRewards <- parseAS "paramGASRewards"
-        asBakerStakeThreshold <- parseAS "bakerStakeThreshold"
+        asPoolParameters <- parseAS "poolParameters"
         asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
         asAddIdentityProvider <- parseAS "addIdentityProvider"
         (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
@@ -274,7 +274,7 @@ instance AE.ToJSON (Authorizations cpv) where
                 "mintDistribution" AE..= t asParamMintDistribution,
                 "transactionFeeDistribution" AE..= t asParamTransactionFeeDistribution,
                 "paramGASRewards" AE..= t asParamGASRewards,
-                "bakerStakeThreshold" AE..= t asBakerStakeThreshold,
+                "poolParameters" AE..= t asPoolParameters,
                 "addAnonymityRevoker" AE..= t asAddAnonymityRevoker,
                 "addIdentityProvider" AE..= t asAddIdentityProvider
             ] ++ cooldownParameters ++ timeParameters)
@@ -846,13 +846,13 @@ extractKeysIndices p =
     MintDistributionCPV1UpdatePayload{} -> f asParamMintDistribution
     TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
     GASRewardsUpdatePayload{} -> f asParamGASRewards
-    BakerStakeThresholdUpdatePayload{} -> f asBakerStakeThreshold
+    BakerStakeThresholdUpdatePayload{} -> f asPoolParameters
     RootUpdatePayload{} -> g rootKeys
     Level1UpdatePayload{} -> g level1Keys
     AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
     AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
     CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
-    PoolParametersCPV1UpdatePayload{} -> f asBakerStakeThreshold
+    PoolParametersCPV1UpdatePayload{} -> f asPoolParameters
     TimeParametersCPV1UpdatePayload{} -> f' asTimeParameters
   where f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
         f' v = keysForCPV1 . v . level2Keys

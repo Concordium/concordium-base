@@ -68,7 +68,7 @@ data CommonUpdateKeys = CommonUpdateKeys {
     cukMintDistribution :: AuthDetails,
     cukTransactionFeeDistribution :: AuthDetails,
     cukGASRewards :: AuthDetails,
-    cukBakerStakeThreshold :: AuthDetails,
+    cukPoolParameters :: AuthDetails,
     cukAddAnonymityRevoker :: AuthDetails,
     cukAddIdentityProvider :: AuthDetails
 } deriving (Show)
@@ -108,7 +108,7 @@ commonParameters = CommonUpdateKeys
     <*> option readAuthDetails (metavar "ACSTR" <> long "mint-distribution" <> help "Mint distribution update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "fee-distribution" <> help "Transaction fee distribution update access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "gas-rewards" <> help "GAS rewards update access structure")
-    <*> option readAuthDetails (metavar "ACSTR" <> long "baker-minimum-threshold" <> help "Baker minimum threshold access structure")
+    <*> option readAuthDetails (metavar "ACSTR" <> long "pool-parameters" <> help "Pool parameters access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "add-anonymity-revoker" <> help "Add anonymity revoker access structure")
     <*> option readAuthDetails (metavar "ACSTR" <> long "add-identity-provider" <> help "Add identity provider access structure")
 
@@ -149,7 +149,7 @@ generateKeys guk = do
     asParamMintDistribution <- makeAS cukMintDistribution "Mint distribution update access structure"
     asParamTransactionFeeDistribution <- makeAS cukTransactionFeeDistribution "Transaction fee distribution update access structure"
     asParamGASRewards <- makeAS cukGASRewards "GAS rewards update access structure"
-    asBakerStakeThreshold <- makeAS cukBakerStakeThreshold "Baker minimum threshold access structure"
+    asPoolParameters <- makeAS cukPoolParameters "Baker minimum threshold access structure"
     asAddAnonymityRevoker <- makeAS cukAddAnonymityRevoker "Add anonymity revoker access structure"
     asAddIdentityProvider <- makeAS cukAddIdentityProvider "Add identity provider access structure"
     let asKeys = Vec.empty -- Placeholder; replaced in doGenerateKeys

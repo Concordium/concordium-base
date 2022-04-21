@@ -784,7 +784,7 @@ genAuthorizations = do
     asParamMintDistribution <- genAccessStructure
     asParamTransactionFeeDistribution <- genAccessStructure
     asParamGASRewards <- genAccessStructure
-    asBakerStakeThreshold <- genAccessStructure
+    asPoolParameters <- genAccessStructure
     asAddAnonymityRevoker <- genAccessStructure
     asAddIdentityProvider <- genAccessStructure
     asCooldownParameters <- justForCPV1A genAccessStructure
@@ -960,7 +960,7 @@ genAuthorizationsAndKeys thr = do
     asParamMintDistribution <- genAccessStructure
     asParamTransactionFeeDistribution <- genAccessStructure
     asParamGASRewards <- genAccessStructure
-    asBakerStakeThreshold <- genAccessStructure
+    asPoolParameters <- genAccessStructure
     asAddAnonymityRevoker <- genAccessStructure
     asAddIdentityProvider <- genAccessStructure
     asCooldownParameters <- justForCPV1A genAccessStructure
