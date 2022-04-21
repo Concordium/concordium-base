@@ -280,7 +280,9 @@ data RewardStatus' t
           -- |The amount in the finalization reward account
           rsFinalizationRewardAccount :: !Amount,
           -- |The amount in the GAS account
-          rsGasAccount :: !Amount
+          rsGasAccount :: !Amount,
+          -- |The protocol version
+          rsProtocolVersion :: !ProtocolVersion
         }
     | RewardStatusV1
         { -- |The total CCD in existence
@@ -315,7 +317,8 @@ instance ToJSON RewardStatus where
             "totalEncryptedAmount" .= rsTotalEncryptedAmount,
             "bakingRewardAccount" .= rsBakingRewardAccount,
             "finalizationRewardAccount" .= rsFinalizationRewardAccount,
-            "gasAccount" .= rsGasAccount
+            "gasAccount" .= rsGasAccount,
+            "protocolVersion" .= rsProtocolVersion
         ]
     toJSON RewardStatusV1{..} = object [
             "totalAmount" .= rsTotalAmount,
@@ -337,16 +340,15 @@ instance FromJSON RewardStatus where
         rsBakingRewardAccount <- obj .: "bakingRewardAccount"
         rsFinalizationRewardAccount <- obj .: "finalizationRewardAccount"
         rsGasAccount <- obj .: "gasAccount"
-        mProtocolVersion <- obj .:? "protocolVersion"
-        case mProtocolVersion of
-            Just pv | pv >= P4 -> do
-                rsFoundationTransactionRewards <- obj .: "foundationTransactionRewards"
-                rsNextPaydayTime <- obj .: "nextPaydayTime"
-                rsNextPaydayMintRate <- obj .: "nextPaydayMintRate"
-                rsTotalStakedCapital <- obj .: "totalStakedCapital"
-                rsProtocolVersion <- obj .: "protocolVersion"
-                return RewardStatusV1{..}
-            _ -> return RewardStatusV0{..}
+        rsProtocolVersion <- obj .: "protocolVersion"
+        if rsProtocolVersion >= P4 then do
+            rsFoundationTransactionRewards <- obj .: "foundationTransactionRewards"
+            rsNextPaydayTime <- obj .: "nextPaydayTime"
+            rsNextPaydayMintRate <- obj .: "nextPaydayMintRate"
+            rsTotalStakedCapital <- obj .: "totalStakedCapital"
+            return RewardStatusV1{..}
+        else
+            return RewardStatusV0{..}
 
 -- |Summary of a baker.
 data BakerSummary = BakerSummary
