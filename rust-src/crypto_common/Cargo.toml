@@ -29,6 +29,8 @@ anyhow = "1.0"
 thiserror = "1.0"
 derive_more = "0.99"
 
+schemars = "0.8"
+
 [dependencies.crypto_common_derive]
 path = "../crypto_common_derive"
 version = "0"

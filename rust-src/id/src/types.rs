@@ -64,6 +64,26 @@ pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 /// version byte 1.
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
+impl schemars::JsonSchema for AccountAddress {
+    fn schema_name() -> String {
+        "AccountAddress".into()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject{
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(StringValidation{
+                max_length: Some(50),
+                min_length: Some(50),
+                pattern: Some("^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]*".into()),
+            }.into()),
+            ..SchemaObject::default()
+        })
+    }
+}
+
+
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
 }
@@ -302,6 +322,7 @@ impl AccountOwnershipProof {
 /// A succinct identifier of an identity provider on the chain.
 /// In credential deployments, and other interactions with the chain this is
 /// used to identify which identity provider is meant.
+#[derive(schemars::JsonSchema)]
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
@@ -324,6 +345,7 @@ impl fmt::Display for IpIdentity {
 #[serde(into = "u32", try_from = "u32")]
 /// Identity of the anonymity revoker on the chain. This defines their
 /// evaluation point for secret sharing, and thus it cannot be 0.
+#[derive(schemars::JsonSchema)]
 pub struct ArIdentity(u32);
 
 impl Deserial for ArIdentity {
@@ -925,6 +947,7 @@ pub struct IpAnonymityRevokers<C: Curve> {
 /// Description either of an anonymity revoker or identity provider.
 /// Metadata that should be visible on the chain.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(schemars::JsonSchema)]
 pub struct Description {
     #[string_size_length = 4]
     #[serde(rename = "name")]
@@ -949,6 +972,7 @@ pub fn mk_dummy_description(name: String) -> Description {
 /// Public information about an identity provider.
 #[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
+#[derive(schemars::JsonSchema)]
 pub struct IpInfo<P: Pairing> {
     /// Unique identifier of the identity provider.
     #[serde(rename = "ipIdentity")]
@@ -958,6 +982,7 @@ pub struct IpInfo<P: Pairing> {
     pub ip_description:    Description,
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
+    #[schemars(with = "ArPublicKeySchemaType")]
     pub ip_verify_key:     ps_sig::PublicKey<P>,
     /// Ed public key of the IP
     #[serde(
@@ -965,6 +990,7 @@ pub struct IpInfo<P: Pairing> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
+    #[schemars(with = "ArPublicKeySchemaType")]
     pub ip_cdi_verify_key: ed25519::PublicKey,
 }
 
@@ -984,6 +1010,7 @@ pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 /// Typically an IP will hold a more than one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+#[derive(schemars::JsonSchema)]
 pub struct ArInfo<C: Curve> {
     /// unique identifier of the anonymity revoker
     #[serde(rename = "arIdentity")]
@@ -993,8 +1020,31 @@ pub struct ArInfo<C: Curve> {
     pub ar_description: Description,
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
+    #[schemars(with = "ArPublicKeySchemaType")]
     pub ar_public_key:  ArPublicKey<C>,
 }
+
+struct ArPublicKeySchemaType;
+
+impl schemars::JsonSchema for ArPublicKeySchemaType {
+    fn schema_name() -> String {
+        "PublicKey".into()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject{
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(StringValidation{
+                max_length: None,
+                min_length: Some(64),
+                pattern: Some("^([0-9]?[a-f]?)*$".into()),
+            }.into()),
+            ..SchemaObject::default()
+        })
+    }
+}
+
 
 /// Collection of anonymity revokers.
 #[derive(Debug, SerdeSerialize, SerdeDeserialize)]

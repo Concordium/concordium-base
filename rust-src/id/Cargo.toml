@@ -23,6 +23,8 @@ pairing = "0.15"
 derive_more = "0.99"
 thiserror = "1.0"
 
+schemars = "0.8"
+
 # only for printing account addresses
 base58check = "0.1"
 

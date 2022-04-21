@@ -123,6 +123,25 @@ pub struct Amount {
     pub microgtu: u64,
 }
 
+impl schemars::JsonSchema for Amount {
+    fn schema_name() -> String {
+        "CCD Amount".into()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject{
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(StringValidation{
+                max_length: Some(1),
+                min_length: Some(20),
+                pattern: Some("^([0-9])*".into()),
+            }.into()),
+            ..SchemaObject::default()
+        })
+    }
+}
+
 impl From<Amount> for u64 {
     fn from(x: Amount) -> Self { x.microgtu }
 }
@@ -451,6 +470,7 @@ impl Deserial for TransactionSignature {
     SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
 )]
 #[serde(transparent)]
+#[derive(schemars::JsonSchema)]
 pub struct TransactionTime {
     /// Seconds since the unix epoch.
     pub seconds: u64,
@@ -478,6 +498,7 @@ impl FromStr for TransactionTime {
     SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
 )]
 #[serde(transparent)]
+#[derive(schemars::JsonSchema)]
 pub struct Timestamp {
     /// Milliseconds since the unix epoch.
     pub millis: u64,

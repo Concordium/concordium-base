@@ -11,12 +11,12 @@ use curve_arithmetic::{multiexp, Curve, Value};
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct PublicKey<C: Curve> {
+pub struct PublicKey<C: Serialize> {
     pub generator: C,
     pub key:       C,
 }
 
-impl<C: Curve> Debug for PublicKey<C> {
+impl<C: Serialize + Debug> Debug for PublicKey<C> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(f, "PublicKey({:?}, {:?})", self.generator, self.key)
     }

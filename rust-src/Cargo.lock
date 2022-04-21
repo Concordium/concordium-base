@@ -457,6 +457,7 @@ dependencies = [
  "pairing",
  "pbkdf2",
  "rand",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -570,6 +571,12 @@ dependencies = [
  "serde",
  "thiserror",
 ]
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21e50f3adc76d6a43f5ed73b698a87d0760ca74617f60f7c3b879003536fdd28"
 
 [[package]]
 name = "ecvrf"
@@ -837,6 +844,7 @@ dependencies = [
  "rand",
  "rand_core 0.5.1",
  "random_oracle",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -1316,6 +1324,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6b5a3c80cea1ab61f4260238409510e814e38b4b563c06044edf91e7dc070e3"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41ae4dce13e8614c46ac3c38ef1c0d668b101df6ac39817aebdaa26642ddae9b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1357,6 +1389,17 @@ name = "serde_derive"
 version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed201699328568d8d08208fdd080e3ff594e6c422e438b6705905da01005d537"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dbab34ca63057a1f15280bdf3c39f2b1eb1b54c17e98360e511637aef7418c6"
 dependencies = [
  "proc-macro2",
  "quote",
