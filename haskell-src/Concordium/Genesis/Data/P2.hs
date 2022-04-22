@@ -1,4 +1,6 @@
--- |This module defines the genesis data fromat for the 'P2' protocol version.
+{-# LANGUAGE DataKinds #-}
+
+-- |This module defines the genesis data format for the 'P2' protocol version.
 module Concordium.Genesis.Data.P2 where
 
 import Data.Serialize
@@ -17,7 +19,7 @@ data GenesisDataP2
       genesisCore :: !CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-      genesisInitialState :: !GenesisState
+      genesisInitialState :: !(GenesisState 'P2)
     }
     | GDP2Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
@@ -76,7 +78,7 @@ putVersionedGenesisData gd = do
     putVersion 4
     putGenesisDataV4 gd
 
-parametersToGenesisData :: GenesisParameters -> GenesisDataP2
+parametersToGenesisData :: GenesisParameters 'P2 -> GenesisDataP2
 parametersToGenesisData = uncurry GDP2Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.

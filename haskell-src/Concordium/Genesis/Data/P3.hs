@@ -1,4 +1,6 @@
--- |This module defines the genesis data fromat for the 'P3' protocol version.
+{-# LANGUAGE DataKinds #-}
+
+-- |This module defines the genesis data format for the 'P3' protocol version.
 module Concordium.Genesis.Data.P3 where
 
 import Data.Serialize
@@ -17,7 +19,7 @@ data GenesisDataP3
       genesisCore :: !CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-      genesisInitialState :: !GenesisState
+      genesisInitialState :: !(GenesisState 'P3)
     }
     | GDP3Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
@@ -76,7 +78,7 @@ putVersionedGenesisData gd = do
     putVersion 5
     putGenesisDataV5 gd
 
-parametersToGenesisData :: GenesisParameters -> GenesisDataP3
+parametersToGenesisData :: GenesisParameters 'P3 -> GenesisDataP3
 parametersToGenesisData = uncurry GDP3Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.

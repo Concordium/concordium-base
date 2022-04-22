@@ -89,6 +89,13 @@ durationToNominalDiffTime dur = fromRational (toInteger (durationMillis dur) % 1
 addDuration :: Timestamp -> Duration -> Timestamp
 addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
 
+-- | Time duration in seconds
+newtype DurationSeconds = DurationSeconds { durationSeconds :: Word64 }
+  deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, Bounded, S.Serialize, FromJSON, ToJSON)
+
+addDurationSeconds :: Timestamp -> DurationSeconds -> Timestamp
+addDurationSeconds (Timestamp ts) (DurationSeconds d) = Timestamp (ts + d * 1000)
+
 -- |Check if whether the given timestamp is no greater than the end of the day
 -- of the given year and month.
 isTimestampBefore :: Timestamp -> YearMonth -> Bool

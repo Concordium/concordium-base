@@ -21,13 +21,17 @@ module Concordium.Types (
   -- * Mint and reward rates
   MintRate(..),
   mintAmount,
-  RewardFraction(..),
-  makeRewardFraction,
-  addRewardFraction,
+  AmountFraction(..),
+  makeAmountFraction,
+  addAmountFraction,
   hundredThousand,
-  complementRewardFraction,
+  complementAmountFraction,
   takeFraction,
   fractionToRational,
+  CommissionRates(..),
+  finalizationCommission,
+  bakingCommission,
+  transactionCommission,
   -- * Time units
   Duration(..),
   durationToNominalDiffTime,
@@ -37,6 +41,8 @@ module Concordium.Types (
   utcTimeToTimestamp,
   timestampToSeconds,
   addDuration,
+  DurationSeconds(..),
+  addDurationSeconds,
   TransactionTime(..),
   TransactionExpiryTime,
   utcTimeToTransactionTime,
@@ -75,6 +81,11 @@ module Concordium.Types (
   -- * Addresses
   Address(..),
 
+  -- * URLs
+  UrlText(..),
+  maxUrlTextLength,
+  emptyUrlText,
+
   -- * Registered Data
   RegisteredData(..),
   registeredDataFromBSS,
@@ -100,6 +111,7 @@ module Concordium.Types (
   BakerSignVerifyKey,
   LeadershipElectionNonce,
   BakerId(..),
+  DelegatorId(..),
   -- ** Block elements
   BlockNonce,
   BlockSignature,
@@ -113,6 +125,7 @@ module Concordium.Types (
   Slot(..),
   EpochLength,
   Epoch,
+  RewardPeriodLength(..),
   genesisSlot,
   CredentialsPerBlockLimit,
   -- ** Transactions
@@ -140,7 +153,8 @@ module Concordium.Types (
   FinalizationCommitteeSize,
 
   -- * Hashing
-  Hashed(..),
+  Hashed'(..),
+  Hashed,
   unhashed,
   makeHashed,
   
@@ -149,6 +163,7 @@ module Concordium.Types (
 
   -- * Protocol version
   module Concordium.Types.ProtocolVersion,
+  module Concordium.Types.ProtocolVersion.JustForCPV1,
 
   -- * Account address identifications.
   AccountAddressEq(..),
@@ -175,6 +190,7 @@ import Concordium.Types.SmartContracts
 import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
+import Concordium.Types.ProtocolVersion.JustForCPV1
 import Concordium.Constants
 import qualified Data.FixedByteString as FBS
 
@@ -198,6 +214,9 @@ import Data.Aeson.TH
 import Data.Time
 import Data.Time.Clock.POSIX
 
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
@@ -206,30 +225,41 @@ import Lens.Micro.Platform
 
 import Text.Read (readMaybe)
 
-data Hashed a = Hashed {_unhashed :: a, _hashed :: Hash.Hash}
+-- |A value equipped with its hash.
+data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
 
-instance HashableTo Hash.Hash (Hashed a) where
+-- |A value equipped with a 'Hash.Hash'.
+type Hashed = Hashed' Hash.Hash
+
+instance HashableTo h (Hashed' h a) where
     getHash = _hashed
 
 -- |This lens allows for getting and setting the value inside a Hashed structure.
 -- If a value is updated the new hash is recomputed automatically.
-unhashed :: (HashableTo Hash.Hash a) => Lens' (Hashed a) a
+unhashed :: (HashableTo h a) => Lens' (Hashed' h a) a
 unhashed f h = makeHashed <$> f (_unhashed h)
 
-makeHashed :: HashableTo Hash.Hash a => a -> Hashed a
+-- |Construct a hashed value, given that the value is of a hashable type.
+makeHashed :: HashableTo h a => a -> Hashed' h a
 makeHashed v = Hashed v (getHash v)
 
-instance Eq (Hashed a) where
+instance Eq h => Eq (Hashed' h a) where
     a == b = _hashed a == _hashed b
 
-instance Ord a => Ord (Hashed a) where
+instance (Eq h, Ord a) => Ord (Hashed' h a) where
     compare a b = compare (_unhashed a) (_unhashed b)
 
-instance (Show a) => Show (Hashed a) where
-    show = show . _hashed
+instance (Show a) => Show (Hashed' h a) where
+    show = show . _unhashed
 
 -- * Types related to bakers.
-newtype BakerId = BakerId AccountIndex
+
+-- |The ID of a baker, which is the index of its account.
+newtype BakerId = BakerId {bakerAccountIndex :: AccountIndex}
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
+
+-- |The ID of a delegator, which is the index of its account.
+newtype DelegatorId = DelegatorId {delegatorAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
 type LeadershipElectionNonce = Hash.Hash
@@ -243,7 +273,7 @@ type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 
 -- |A wrapper type over units that are measured as parts per 100000.
--- This wrapper will be used by both @RewardFraction@ and @ElectionDifficulty@.
+-- This wrapper will be used by both @AmountFraction@ and @ElectionDifficulty@.
 -- It was agreed in tokenomics discussions to be sufficient.
 newtype PartsPerHundredThousands = PartsPerHundredThousands { partsPerHundredThousand :: Word32 }
   deriving newtype (Eq, Ord, Num, Real, Enum, Integral)
@@ -298,6 +328,47 @@ takeFractionFromPartsPerHundredThousands f = fromInteger . (`div` 100000) . (toI
 
 partsPerHundredThousandsToRational :: PartsPerHundredThousands -> Rational
 partsPerHundredThousandsToRational f = toInteger (partsPerHundredThousand f) % 100000
+
+-- |A unicode representation of a Url.
+-- The Utf8 encoding of the Url must be at most 'maxUrlTextLength' bytes.
+newtype UrlText = UrlText T.Text
+  deriving newtype (Eq, Show)
+
+-- |The maximum allowed length of a 'UrlText' in bytes (Utf8 encoded).
+maxUrlTextLength :: Word16
+maxUrlTextLength = 2048
+
+instance S.Serialize UrlText where
+  put (UrlText url)
+    | len <= fromIntegral maxUrlTextLength = do
+      S.putWord16be (fromIntegral len)
+      S.putByteString enc
+    | otherwise = error "UrlText is too long"
+    where
+      enc = T.encodeUtf8 url
+      len = BS.length enc
+  get = do
+      len <- S.getWord16be
+      when (len > maxUrlTextLength) $
+        fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
+      bytes <- S.getByteString (fromIntegral len)
+      case T.decodeUtf8' bytes of
+        Left e -> fail (show e)
+        Right r -> return (UrlText r)
+
+instance AE.ToJSON UrlText where
+  toJSON (UrlText t) = AE.toJSON t
+  toEncoding (UrlText t) = AE.toEncoding t
+
+instance AE.FromJSON UrlText where
+  parseJSON = AE.withText "URL" $ \t -> do
+    let len = BS.length (T.encodeUtf8 t)
+    when (len > fromIntegral maxUrlTextLength) $
+      fail ("UrlText is too long (" ++ show len ++ " > " ++ show maxUrlTextLength ++ ")")
+    return (UrlText t)
+
+emptyUrlText :: UrlText
+emptyUrlText = UrlText ""
 
 -- |Due to limitations on the ledger, there has to be some restriction on the
 -- precision of the input for updating ElectionDifficult. For this purpose,
@@ -464,32 +535,66 @@ mintAmount :: MintRate -> Amount -> Amount
 {-# INLINE mintAmount #-}
 mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
 
--- |A fraction in [0,1], represented as parts per 100000.
--- This resolution (thousandths of a percent) was agreed in tokenomics discussions
--- to be sufficient.
-newtype RewardFraction = RewardFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
+-- |A fraction in [0,1] of an 'Amount', represented as parts per 100000.
+newtype AmountFraction = AmountFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
   deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize)
 
-makeRewardFraction
+makeAmountFraction
    :: Word32
-   -> RewardFraction
-makeRewardFraction = RewardFraction . makePartsPerHundredThousands
+   -> AmountFraction
+makeAmountFraction = AmountFraction . makePartsPerHundredThousands
 
-addRewardFraction :: RewardFraction -> RewardFraction -> Maybe RewardFraction
-addRewardFraction (RewardFraction a) (RewardFraction b) = RewardFraction <$> addPartsPerHundredThousands a b
+addAmountFraction :: AmountFraction -> AmountFraction -> Maybe AmountFraction
+addAmountFraction (AmountFraction a) (AmountFraction b) = AmountFraction <$> addPartsPerHundredThousands a b
 
 -- |Compute @1 - f@.
-complementRewardFraction :: RewardFraction -> RewardFraction
-complementRewardFraction (RewardFraction f) = RewardFraction $ complementPartsPerHundredThousands f
+complementAmountFraction :: AmountFraction -> AmountFraction
+complementAmountFraction (AmountFraction f) = AmountFraction $ complementPartsPerHundredThousands f
 
 -- |Compute a fraction of an amount.
 -- The amount is rounded down to the nearest microGTU.
-takeFraction :: RewardFraction -> Amount -> Amount
-takeFraction (RewardFraction f) = takeFractionFromPartsPerHundredThousands f
+takeFraction :: AmountFraction -> Amount -> Amount
+takeFraction (AmountFraction f) = takeFractionFromPartsPerHundredThousands f
 
-fractionToRational :: RewardFraction -> Rational
-fractionToRational (RewardFraction f) = partsPerHundredThousandsToRational f
+fractionToRational :: AmountFraction -> Rational
+fractionToRational (AmountFraction f) = partsPerHundredThousandsToRational f
 
+-- |The commission rates charged by a pool owner.
+data CommissionRates = CommissionRates
+    { -- |Fraction of finalization rewards charged by the pool owner.
+      _finalizationCommission :: !AmountFraction,
+      -- |Fraction of baking rewards charged by the pool owner.
+      _bakingCommission :: !AmountFraction,
+      -- |Fraction of transaction rewards charged by the pool owner.
+      _transactionCommission :: !AmountFraction
+    }
+    deriving (Eq, Show)
+-- Note: lenses are derived at the end of the file.
+
+instance S.Serialize CommissionRates where
+  put CommissionRates{..} = do
+    S.put _finalizationCommission
+    S.put _bakingCommission
+    S.put _transactionCommission
+  get = do
+    _finalizationCommission <- S.get
+    _bakingCommission <- S.get
+    _transactionCommission <- S.get
+    return CommissionRates{..}
+
+instance ToJSON CommissionRates where
+  toJSON CommissionRates{..} = object [
+      "finalizationCommission" AE..= _finalizationCommission,
+      "bakingCommission" AE..= _bakingCommission,
+      "transactionCommission" AE..= _transactionCommission
+      ]
+
+instance FromJSON CommissionRates where
+  parseJSON = withObject "CommissionRates" $ \o -> do
+    _finalizationCommission <- o .: "finalizationCommission"
+    _bakingCommission <- o .: "bakingCommission"
+    _transactionCommission <- o .: "transactionCommission"
+    return CommissionRates{..}
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -602,7 +707,7 @@ transactionExpired (TransactionTime x) (Timestamp t) = 1000*x < t
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
-    deriving (Eq, Ord, Enum, Num, Integral, Real)
+    deriving (Eq, Ord, Show, Enum, Num, Integral, Real)
 
 amountToDelta :: Amount -> AmountDelta
 amountToDelta = fromIntegral
@@ -723,8 +828,8 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   -- | Encrypted amount that is a result of this accounts' actions.
   -- In particular this list includes the aggregate of
   --
-  -- - remaining amounts that result when transfering to public balance
-  -- - remaining amounts when transfering to another account
+  -- - remaining amounts that result when transferring to public balance
+  -- - remaining amounts when transferring to another account
   -- - encrypted amounts that are transferred from public balance
   --
   -- When a transfer is made all of these must always be used.
@@ -993,3 +1098,4 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
+makeLenses ''CommissionRates

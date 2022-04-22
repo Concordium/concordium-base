@@ -1,4 +1,6 @@
--- |This module defines the genesis data fromat for the 'P1' protocol version.
+{-# LANGUAGE DataKinds #-}
+
+-- |This module defines the genesis data format for the 'P1' protocol version.
 module Concordium.Genesis.Data.P1 where
 
 import Data.Serialize
@@ -40,7 +42,7 @@ data GenesisDataP1
         { -- |The immutable genesis parameters.
           genesisCore :: !CoreGenesisParameters,
           -- |The blueprint for the initial state at genesis.
-          genesisInitialState :: !GenesisState
+          genesisInitialState :: !(GenesisState 'P1)
         }
     | -- |A re-genesis block.
       GDP1Regenesis
@@ -98,7 +100,7 @@ putVersionedGenesisData gd = do
     putVersion 3
     putGenesisDataV3 gd
 
-parametersToGenesisData :: GenesisParameters -> GenesisDataP1
+parametersToGenesisData :: GenesisParameters 'P1 -> GenesisDataP1
 parametersToGenesisData = uncurry GDP1Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.

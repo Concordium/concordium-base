@@ -1,10 +1,12 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 module Concordium.Common.Amount where
 
 import qualified Data.Serialize as S
 import Data.Word
 import Data.Aeson
 import Data.Hashable
+import Data.Semigroup
 import qualified Data.Text as Text
 import Data.Char
 import Test.QuickCheck
@@ -19,6 +21,7 @@ import qualified Text.ParserCombinators.ReadP as RP
 type AmountUnit = Word64
 newtype Amount = Amount { _amount :: AmountUnit }
     deriving newtype (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, Arbitrary)
+    deriving (Semigroup, Monoid) via (Sum AmountUnit)
 
 instance S.Serialize Amount where
   {-# INLINE get #-}

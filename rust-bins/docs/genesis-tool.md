@@ -196,7 +196,7 @@ Note that it is important to ensure that the key, e.g., `"1"` in the anonymity-r
             "authorizedKeys": [...],
             "threshold": 3
         },
-        "bakerStakeThreshold": {
+        "poolParameters": {
             "authorizedKeys": [...],
             "threshold": 3
         },
@@ -213,6 +213,14 @@ Note that it is important to ensure that the key, e.g., `"1"` in the anonymity-r
             "threshold": 3
         },
         "transactionFeeDistribution": {
+            "authorizedKeys": [...],
+            "threshold": 3
+        },
+        "cooldownParameters": { // For protocol version 4 onwards
+            "authorizedKeys": [...],
+            "threshold": 3
+        },
+        "timeParameters": { // For protocol version 4 onwards
             "authorizedKeys": [...],
             "threshold": 3
         }

@@ -1,18 +1,29 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Queries where
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Aeson.Types (Parser)
 import Data.Char (isLower)
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
+import Data.Word
 
 import Concordium.Types
+import Concordium.Types.Accounts
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
@@ -88,7 +99,7 @@ data ConsensusStatus = ConsensusStatus
       -- Initially this is equal to 'csGenesisBlock'.
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
-      csCurrentEraGenesisTime  :: !UTCTime
+      csCurrentEraGenesisTime :: !UTCTime
     }
     deriving (Show)
 
@@ -191,7 +202,9 @@ data FinalizationSummary = FinalizationSummary
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
 
 -- |Detailed information about a block.
-data BlockSummary = BlockSummary
+data BlockSummary = forall pv.
+      IsProtocolVersion pv =>
+    BlockSummary
     { -- |Details of transactions in the block
       bsTransactionSummaries :: !(Vec.Vector TransactionSummary),
       -- |Details of special events in the block
@@ -199,27 +212,143 @@ data BlockSummary = BlockSummary
       -- |Details of the finalization record in the block (if any)
       bsFinalizationData :: !(Maybe FinalizationSummary),
       -- |Details of the update queues and chain parameters as of the block
-      bsUpdates :: !Updates
+      bsUpdates :: !(Updates pv),
+      -- |Protocol version proxy
+      bsProtocolVersion :: SProtocolVersion pv
     }
-    deriving (Show)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockSummary)
+-- |Get 'Updates' from 'BlockSummary', with continuation to avoid "escaped type variables".
+{-# INLINE bsWithUpdates #-}
+bsWithUpdates :: BlockSummary -> (forall pv. IsProtocolVersion pv => SProtocolVersion pv -> Updates pv -> a) -> a
+bsWithUpdates BlockSummary{..} = \k -> k bsProtocolVersion bsUpdates
 
-data RewardStatus = RewardStatus
-    { -- |The total GTU in existence
-      rsTotalAmount :: !Amount,
-      -- |The total GTU in encrypted balances
-      rsTotalEncryptedAmount :: !Amount,
-      -- |The amount in the baking reward account
-      rsBakingRewardAccount :: !Amount,
-      -- |The amount in the finalization reward account
-      rsFinalizationRewardAccount :: !Amount,
-      -- |The amount in the GAS account
-      rsGasAccount :: !Amount
-    }
-    deriving (Show)
+instance Show BlockSummary where
+    showsPrec prec BlockSummary{..} = do
+        showParen (prec > 11) $
+            showString "BlockSummary "
+                . showString " {bsTransactionSummaries = "
+                . shows bsTransactionSummaries
+                . showString ",bsSpecialEvents = "
+                . shows bsSpecialEvents
+                . showString ",bsFinalizationData = "
+                . shows bsFinalizationData
+                . showString ",bsUpdates = "
+                . shows bsUpdates
+                . showString ",bsProtocolVersion = "
+                . shows (demoteProtocolVersion bsProtocolVersion)
+                . showString "}"
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''RewardStatus)
+instance ToJSON BlockSummary where
+    toJSON BlockSummary{..} =
+        object
+            [ "transactionSummaries" .= bsTransactionSummaries,
+              "specialEvents" .= bsSpecialEvents,
+              "finalizationData" .= bsFinalizationData,
+              "updates" .= bsUpdates,
+              "protocolVersion" .= demoteProtocolVersion bsProtocolVersion
+            ]
+
+instance FromJSON BlockSummary where
+    parseJSON =
+        withObject "BlockSummary" $ \v -> do
+            -- We have added the "protocolVersion" field in protocol version 4, so in order to parse
+            -- blocks summaries from older protocols, we allow this field to not exist. If the field
+            -- does not exist, then we proceed like the previous protocol (version 3).
+            mpv <- v .:? "protocolVersion"
+            case mpv of
+                Nothing -> parse (promoteProtocolVersion P3) v
+                Just pv -> parse (promoteProtocolVersion pv) v
+      where
+        parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
+        parse (SomeProtocolVersion (spv :: SProtocolVersion pv)) v =
+            BlockSummary
+                <$> v .: "transactionSummaries"
+                <*> v .: "specialEvents"
+                <*> v .: "finalizationData"
+                <*> (v .: "updates" :: Parser (Updates pv))
+                <*> pure spv
+
+-- |Status of the reward accounts. The type parameter determines the type used to represent time.
+data RewardStatus' t
+    = RewardStatusV0
+        { -- |The total CCD in existence
+          rsTotalAmount :: !Amount,
+          -- |The total CCD in encrypted balances
+          rsTotalEncryptedAmount :: !Amount,
+          -- |The amount in the baking reward account
+          rsBakingRewardAccount :: !Amount,
+          -- |The amount in the finalization reward account
+          rsFinalizationRewardAccount :: !Amount,
+          -- |The amount in the GAS account
+          rsGasAccount :: !Amount,
+          -- |The protocol version
+          rsProtocolVersion :: !ProtocolVersion
+        }
+    | RewardStatusV1
+        { -- |The total CCD in existence
+          rsTotalAmount :: !Amount,
+          -- |The total CCD in encrypted balances
+          rsTotalEncryptedAmount :: !Amount,
+          -- |The amount in the baking reward account
+          rsBakingRewardAccount :: !Amount,
+          -- |The amount in the finalization reward account
+          rsFinalizationRewardAccount :: !Amount,
+          -- |The amount in the GAS account
+          rsGasAccount :: !Amount,
+          -- |The transaction reward fraction accruing to the foundation (to be paid at next payday)
+          rsFoundationTransactionRewards :: !Amount,
+          -- |The time of the next payday
+          rsNextPaydayTime :: !t,
+          -- |The rate at which CCD will be minted (as a proportion of the total supply) at the next payday
+          rsNextPaydayMintRate :: !MintRate,
+          -- |The total capital put up as stake by bakers and delegators
+          rsTotalStakedCapital :: !Amount,
+          -- |The protocol version
+          rsProtocolVersion :: !ProtocolVersion
+        }
+    deriving (Eq, Show, Functor)
+
+-- |Status of the reward accounts, with times represented as 'UTCTime'.
+type RewardStatus = RewardStatus' UTCTime
+
+instance ToJSON RewardStatus where
+    toJSON RewardStatusV0{..} = object [
+            "totalAmount" .= rsTotalAmount,
+            "totalEncryptedAmount" .= rsTotalEncryptedAmount,
+            "bakingRewardAccount" .= rsBakingRewardAccount,
+            "finalizationRewardAccount" .= rsFinalizationRewardAccount,
+            "gasAccount" .= rsGasAccount,
+            "protocolVersion" .= rsProtocolVersion
+        ]
+    toJSON RewardStatusV1{..} = object [
+            "totalAmount" .= rsTotalAmount,
+            "totalEncryptedAmount" .= rsTotalEncryptedAmount,
+            "bakingRewardAccount" .= rsBakingRewardAccount,
+            "finalizationRewardAccount" .= rsFinalizationRewardAccount,
+            "gasAccount" .= rsGasAccount,
+            "foundationTransactionRewards" .= rsFoundationTransactionRewards,
+            "nextPaydayTime" .= rsNextPaydayTime,
+            "nextPaydayMintRate" .= rsNextPaydayMintRate,
+            "totalStakedCapital" .= rsTotalStakedCapital,
+            "protocolVersion" .= rsProtocolVersion
+        ]
+
+instance FromJSON RewardStatus where
+    parseJSON = withObject "RewardStatus" $ \obj -> do
+        rsTotalAmount <- obj .: "totalAmount"
+        rsTotalEncryptedAmount <- obj .: "totalEncryptedAmount"
+        rsBakingRewardAccount <- obj .: "bakingRewardAccount"
+        rsFinalizationRewardAccount <- obj .: "finalizationRewardAccount"
+        rsGasAccount <- obj .: "gasAccount"
+        rsProtocolVersion <- obj .: "protocolVersion"
+        if rsProtocolVersion >= P4 then do
+            rsFoundationTransactionRewards <- obj .: "foundationTransactionRewards"
+            rsNextPaydayTime <- obj .: "nextPaydayTime"
+            rsNextPaydayMintRate <- obj .: "nextPaydayMintRate"
+            rsTotalStakedCapital <- obj .: "totalStakedCapital"
+            return RewardStatusV1{..}
+        else
+            return RewardStatusV0{..}
 
 -- |Summary of a baker.
 data BakerSummary = BakerSummary
@@ -295,3 +424,128 @@ instance ToJSON BlockTransactionStatus where
             [ "status" .= String "finalized",
               "result" .= outcome
             ]
+
+-- |A pending change (if any) to a baker pool.
+--
+-- The JSON encoding uses a tag "pendingChangeType", which is "NoChange", "ReduceBakerCapital",
+-- or "RemovePool". The contents is in an object under the field "pendingChangeDetails".
+data PoolPendingChange
+    = -- |No change is pending.
+      PPCNoChange
+    | -- |A reduction in baker equity capital is pending.
+      PPCReduceBakerCapital
+        { -- |New baker equity capital.
+          ppcBakerEquityCapital :: !Amount,
+          -- |Effective time of the change.
+          ppcEffectiveTime :: !UTCTime
+        }
+    | -- |Removal of the pool is pending.
+      PPCRemovePool
+        { -- |Effective time of the change.
+          ppcEffectiveTime :: !UTCTime
+        }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          constructorTagModifier = drop 3,
+          sumEncoding =
+            TaggedObject
+                { tagFieldName = "pendingChangeType",
+                  contentsFieldName = "pendingChangeDetails"
+                }
+        }
+    ''PoolPendingChange
+ )
+
+-- |Construct a 'PoolPendingChange' from the 'StakePendingChange' of the pool owner.
+makePoolPendingChange ::
+    -- |Pool owner's pending stake change
+    StakePendingChange 'AccountV1 ->
+    PoolPendingChange
+makePoolPendingChange NoChange = PPCNoChange
+makePoolPendingChange (ReduceStake ppcBakerEquityCapital (PendingChangeEffectiveV1 et)) =
+    PPCReduceBakerCapital{..}
+    where
+        ppcEffectiveTime = timestampToUTCTime et
+makePoolPendingChange (RemoveStake (PendingChangeEffectiveV1 et)) = PPCRemovePool{..}
+    where
+        ppcEffectiveTime = timestampToUTCTime et
+
+-- |Information about the status of a baker pool in the current reward period.
+data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
+    { -- |The number of blocks baked in the current reward period.
+      bpsBlocksBaked :: !Word64,
+      -- |Whether the baker has contributed a finalization proof in the current reward period.
+      bpsFinalizationLive :: !Bool,
+      -- |The transaction fees accruing to the pool in the current reward period.
+      bpsTransactionFeesEarned :: !Amount,
+      -- |The effective stake of the baker in the current reward period.
+      bpsEffectiveStake :: !Amount,
+      -- |The lottery power of the baker in the current reward period.
+      bpsLotteryPower :: !Double,
+      -- |The effective equity capital of the baker for the current reward period.
+      bpsBakerEquityCapital :: !Amount,
+      -- |The effective delegated capital to the pool for the current reward period.
+      bpsDelegatedCapital :: !Amount
+    }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower
+        }
+    ''CurrentPaydayBakerPoolStatus
+ )
+
+-- |Status information about a given pool, or of the passive delegators.
+--
+-- Commission rates for the passive delegation provide a basis for comparison with baking pools, however,
+-- whereas the commission for baking pools is paid to the pool owner, "commission" is not paid
+-- to anyone.  Rather, it is used to determine the level of rewards paid to delegators, so that
+-- their earnings are commensurate to delegating to a baking pool with the same commission rates.
+data PoolStatus
+    = BakerPoolStatus
+        { -- |The 'BakerId' of the pool owner.
+          psBakerId :: !BakerId,
+          -- |The account address of the pool owner.
+          psBakerAddress :: !AccountAddress,
+          -- |The equity capital provided by the pool owner.
+          psBakerEquityCapital :: !Amount,
+          -- |The capital delegated to the pool by other accounts.
+          psDelegatedCapital :: !Amount,
+          -- |The maximum amount that may be delegated to the pool, accounting for leverage and
+          -- stake limits.
+          psDelegatedCapitalCap :: !Amount,
+          -- |The pool info associated with the pool: open status, metadata URL and commission rates.
+          psPoolInfo :: !BakerPoolInfo,
+          -- |Any pending change to the baker's stake.
+          psBakerStakePendingChange :: !PoolPendingChange,
+          -- |Status of the pool in the current reward period.
+          psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
+          -- |Total capital staked across all pools, including passive delegation.
+          psAllPoolTotalCapital :: !Amount
+        }
+    | PassiveDelegationStatus
+        { -- |The total capital delegated passively.
+          psDelegatedCapital :: !Amount,
+          -- |The passive delegation commission rates.
+          psCommissionRates :: !CommissionRates,
+          -- |The transaction fees accruing to the passive delegators in the current reward period.
+          psCurrentPaydayTransactionFeesEarned :: !Amount,
+          -- |The effective delegated capital of passive delegators for the current reward period.
+          psCurrentPaydayDelegatedCapital :: !Amount,
+          -- |Total capital staked across all pools, including passive delegation.
+          psAllPoolTotalCapital :: !Amount
+        }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          constructorTagModifier = reverse . drop (length ("Status" :: String)) . reverse,
+          sumEncoding = TaggedObject{tagFieldName = "poolType", contentsFieldName = "poolStatus"}
+        }
+    ''PoolStatus
+ )

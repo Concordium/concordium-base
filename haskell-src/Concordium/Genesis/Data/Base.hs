@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables #-}
+
 module Concordium.Genesis.Data.Base where
 
 import Control.Monad
@@ -119,7 +121,7 @@ putRegenesisData RegenesisData{..} = do
 --
 -- It is likely that the data in here will change for future protocol versions, but
 -- P1 and P2 updates share it.
-data GenesisState = GenesisState
+data GenesisState (pv :: ProtocolVersion) = GenesisState
     { -- |Cryptographic parameters for on-chain proofs.
       genesisCryptographicParameters :: !CryptographicParameters,
       -- |The initial collection of identity providers.
@@ -127,9 +129,9 @@ data GenesisState = GenesisState
       -- |The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
       -- |The initial update keys structure for chain updates.
-      genesisUpdateKeys :: !UpdateKeysCollection,
+      genesisUpdateKeys :: !(UpdateKeysCollection (ChainParametersVersionFor pv)),
       -- |The initial (updatable) chain parameters.
-      genesisChainParameters :: !ChainParameters,
+      genesisChainParameters :: !(ChainParameters pv),
       -- |The initial leadership election nonce.
       genesisLeadershipElectionNonce :: !LeadershipElectionNonce,
       -- |The initial accounts on the chain.
@@ -137,13 +139,13 @@ data GenesisState = GenesisState
     }
     deriving (Eq, Show)
 
-instance Serialize GenesisState where
+instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
     put GenesisState{..} = do
         put genesisCryptographicParameters
         put genesisIdentityProviders
         put genesisAnonymityRevokers
-        put genesisUpdateKeys
-        put genesisChainParameters
+        putUpdateKeysCollection genesisUpdateKeys
+        putChainParameters genesisChainParameters
         put genesisLeadershipElectionNonce
         putLength (length genesisAccounts)
         mapM_ putGenesisAccountGD3 genesisAccounts
@@ -151,8 +153,8 @@ instance Serialize GenesisState where
         genesisCryptographicParameters <- get
         genesisIdentityProviders <- get
         genesisAnonymityRevokers <- get
-        genesisUpdateKeys <- get
-        genesisChainParameters <- get
+        genesisUpdateKeys <- getUpdateKeysCollection
+        genesisChainParameters <- getChainParameters
         genesisLeadershipElectionNonce <- get
         nGenesisAccounts <- getLength
         genesisAccounts <- Vec.replicateM nGenesisAccounts getGenesisAccountGD3
@@ -164,10 +166,26 @@ instance Serialize GenesisState where
             fail "Invalid foundation account."
         return GenesisState{..}
 
+-- |Construct chain parameters from the genesis accounts and 'GenesisChainParameters'.
+-- It is required that an account with address matching the one in the genesis chain parameters
+-- is present in the vector of genesis accounts, or else this function will error.
+toChainParameters :: Vec.Vector GenesisAccount -> GenesisChainParameters' cpv -> ChainParameters' cpv
+toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..} where
+    _cpElectionDifficulty = gcpElectionDifficulty
+    _cpExchangeRates = gcpExchangeRates
+    _cpCooldownParameters = gcpCooldownParameters
+    _cpTimeParameters = gcpTimeParameters
+    _cpAccountCreationLimit = gcpAccountCreationLimit
+    _cpRewardParameters = gcpRewardParameters
+    _cpFoundationAccount = case Vec.findIndex ((gcpFoundationAccount ==) . gaAddress) genesisAccounts of
+        Nothing -> error "Foundation account is missing"
+        Just i -> fromIntegral i
+    _cpPoolParameters = gcpPoolParameters
+
 -- |Convert 'GenesisParameters' to genesis data.
--- This is an auxiliary function since the same parameters are used for P1 and P2 genesis.
-parametersToState :: GenesisParameters -> (CoreGenesisParameters, GenesisState)
-parametersToState GenesisParametersV2{gpChainParameters = GenesisChainParameters{..}, ..} =
+-- This is an auxiliary function since much of the behaviour is shared between protocol versions.
+parametersToState :: GenesisParameters pv -> (CoreGenesisParameters, GenesisState pv)
+parametersToState GenesisParameters{..} =
     (CoreGenesisParameters{..}, GenesisState{..})
   where
     genesisTime = gpGenesisTime
@@ -187,17 +205,4 @@ parametersToState GenesisParametersV2{gpChainParameters = GenesisChainParameters
         ars -> error $ "Inconsistent anonymity revoker ids: " ++ show ars
     genesisMaxBlockEnergy = gpMaxBlockEnergy
     genesisUpdateKeys = gpUpdateKeys
-    genesisChainParameters =
-        makeChainParameters
-            gcpElectionDifficulty
-            gcpEuroPerEnergy
-            gcpMicroGTUPerEuro
-            gcpBakerExtraCooldownEpochs
-            gcpAccountCreationLimit
-            gcpRewardParameters
-            foundationAccountIndex
-            gcpBakerStakeThreshold
-    foundationAccountIndex = case Vec.findIndex ((gcpFoundationAccount ==) . gaAddress) genesisAccounts of
-        Nothing -> error "Foundation account is missing"
-        Just i -> fromIntegral i
-
+    genesisChainParameters = toChainParameters genesisAccounts gpChainParameters

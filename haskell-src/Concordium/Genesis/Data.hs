@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -78,6 +79,7 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP2 -> GDP2 <$> P2.getGenesisDataV4
         SP3 -> GDP3 <$> P3.getGenesisDataV5
         SP4 -> GDP4 <$> P4.getGenesisDataV6
+
     put = case protocolVersion @pv of
         SP1 -> P1.putGenesisDataV3 . unGDP1
         SP2 -> P2.putGenesisDataV4 . unGDP2
@@ -104,6 +106,7 @@ getVersionedGenesisData = case protocolVersion @pv of
 -- | 3           | P1               |
 -- | 4           | P2               |
 -- | 5           | P3               |
+-- | 6           | P4               |
 -- +-------------+------------------+
 putVersionedGenesisData :: forall pv. IsProtocolVersion pv => Putter (GenesisData pv)
 putVersionedGenesisData = case protocolVersion @pv of
@@ -152,3 +155,14 @@ pvGenesisBlockHash (PVGenesisData gd) = genesisBlockHash gd
 -- |Helper function to project the protocol version out of 'PVGenesisData'.
 pvProtocolVersion :: PVGenesisData -> ProtocolVersion
 pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion (protocolVersion @pv)
+
+-- |The 'StateMigrationParameters' type encapsulates additional data that is required when migrating
+-- state from one protocol version to another.  As the state for an older protocol version may not
+-- include state information that is required in a newer protocol version, these parameters
+-- determine how to fill the gaps.  Principally, these parameters are derived from the data
+-- supplied with the protocol update, though some may also derive from other data about the chain.
+data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) where
+    -- |No state migration is performed.
+    StateMigrationParametersTrivial :: StateMigrationParameters p p
+    -- |The state is migrated from protocol version 'P3' to 'P4'.
+    StateMigrationParametersP3ToP4 :: P4.StateMigrationData -> StateMigrationParameters 'P3 'P4
