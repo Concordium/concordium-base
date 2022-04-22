@@ -27,7 +27,7 @@ impl From<CachedRef<Hashed<Node>>> for PersistentState {
 }
 
 /// Load the persistent state. This only loads the root of the tree. In order to
-/// cache the entire tree into memory use [PersistentTree::cache] afterwards.
+/// cache the entire tree into memory use [PersistentState::cache] afterwards.
 impl Loadable for PersistentState {
     fn load<S: std::io::Read, F: BackingStoreLoad>(
         loader: &mut F,

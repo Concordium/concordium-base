@@ -118,13 +118,13 @@ fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> ExecResult<A> {
 /// `ChainMetadataOpt` for `metadata`.
 #[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ReceiveContextOptV1 {
+pub(crate) struct ReceiveContextV1Opt {
     #[serde(flatten)]
     pub(crate) common: ReceiveContextOpt,
     entrypoint:        Option<OwnedEntrypointName>,
 }
 
-impl v0::HasReceiveContext for ReceiveContextOptV1 {
+impl v0::HasReceiveContext for ReceiveContextV1Opt {
     type MetadataType = ChainMetadataOpt;
 
     fn metadata(&self) -> &Self::MetadataType { &self.common.metadata }
@@ -154,7 +154,7 @@ impl v0::HasReceiveContext for ReceiveContextOptV1 {
     }
 }
 
-impl v1::HasReceiveContext for ReceiveContextOptV1 {
+impl v1::HasReceiveContext for ReceiveContextV1Opt {
     fn entrypoint(&self) -> ExecResult<EntrypointName> {
         let ep = unwrap_ctx_field(self.entrypoint.as_ref(), "entrypoint")?;
         Ok(ep.as_entrypoint_name())

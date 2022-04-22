@@ -1,6 +1,6 @@
 (module
 
-  ;; Simple init and receive functions used for benchmarkning the host functions.
+  ;; Simple init and receive functions used for benchmarking the host functions.
   ;;
   ;; A general precondition is that at least one page of linear memory is allocated.
   ;; Additional preconditions are listed above the relevant functions.

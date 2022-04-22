@@ -38,7 +38,7 @@ const INLINE_CAPACITY: usize = 4;
 const INLINE_VALUE_LEN: usize = 64;
 
 #[derive(Default, Debug, Clone)]
-/// An inner node in the [PrefixMap]. The default instance produces an empty
+/// An inner node in the [PrefixesMap]. The default instance produces an empty
 /// node with no values and no children.
 struct InnerNode {
     value:    Option<NonZeroU32>,
@@ -909,8 +909,8 @@ impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed {
 }
 
 #[derive(Debug)]
-/// A persistent node. Cloning this is cheap, it only copies pointers and
-/// increments reference counts.
+/// A persistent node. Cloning this is relatively cheap, it only copies pointers
+/// and increments reference counts.
 pub struct Node {
     /// Since a single node owns each value using Hashed<Cached<V>>
     /// here makes sense, it makes it so that the hash is stored inline.
@@ -933,9 +933,9 @@ pub struct Node {
 impl Drop for Node {
     fn drop(&mut self) {
         let mut stack = Vec::new();
-        // if we are the only owner of the children we can deallocate them.
         let children = std::mem::take(&mut self.children);
         for (_, child) in children.into_iter() {
+            // if we are the only owner of the child we can deallocate them.
             if let Ok(only_child) = child.try_unwrap() {
                 if let Some(memory_child) = only_child.get_value() {
                     stack.push(memory_child.data);

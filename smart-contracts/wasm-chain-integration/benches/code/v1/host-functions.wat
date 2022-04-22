@@ -1,6 +1,6 @@
 (module
 
-  ;; Simple init and receive functions used for benchmarkning host functions for V1 contracts.
+  ;; Simple init and receive functions used for benchmarking host functions for V1 contracts.
   ;;
   ;; A general precondition is that at least one page of linear memory is allocated.
   ;; Additional preconditions are listed above the relevant functions.

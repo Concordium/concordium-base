@@ -70,7 +70,7 @@ pub trait AllocCounter<V> {
     fn allocate(&mut self, data: &V) -> Result<(), Self::Err>;
 }
 
-/// A counter that does not count anything, and always returns Ok(()).
+/// A counter that does not count anything, and always returns `Ok(())`.
 pub struct EmptyCounter;
 #[derive(Debug, Copy, Clone, Error)]
 /// An error that cannot happen, i.e., this type is not inhabited and is used as

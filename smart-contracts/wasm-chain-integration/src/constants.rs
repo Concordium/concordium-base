@@ -33,20 +33,23 @@ pub const BASE_SEND_ACTION_COST: u64 = BASE_ACTION_COST + 72000;
 /// also requires allocations which are a significant cost.
 pub const BASE_SIMPLE_TRANSFER_ACTION_COST: u64 = BASE_ACTION_COST + 40000;
 
-/// TODO: These should in principle be const fn, but rust in 1.45.2 u64::from
-/// are not marked as const fn, so they are not.
+// TODO: These should in principle be const fn, but rust in 1.45.2 u64::from
+// are not marked as const fn, so they are not.
 
 /// Cost of copying the given amount of bytes from the host (e.g., parameter or
-/// contract state) to the Wasm memory.
+/// contract state) to the Wasm memory. The 10 is to account for copying empty
+/// buffers and is based on benchmarks.
 #[inline(always)]
 pub fn copy_from_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
 /// Cost of copying the given amount of bytes to the host (e.g., parameter or
-/// contract state) from the Wasm to host memory.
+/// contract state) from the Wasm to host memory. The 10 is to account for
+/// copying empty buffers and is based on benchmarks.
 #[inline(always)]
 pub fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
 
 /// Cost of allocating additional smart contract state. The argument is the
-/// number of additional bytes.
+/// number of additional bytes. The `/100` guarantees that with 3_000_000NRG
+/// we can produce at most 30MB additional contract state per block.
 #[inline(always)]
 pub fn additional_state_size_cost(x: u64) -> u64 { x / 100 }
 

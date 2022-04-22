@@ -1,3 +1,6 @@
+//! Implementation of the contract state trie that is exposed as a key-value
+//! store to smart contracts.
+
 #[cfg(test)]
 mod tests;
 

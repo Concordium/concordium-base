@@ -1,6 +1,6 @@
 use crate::{
     build::*,
-    context::{InitContextOpt, ReceiveContextOpt, ReceiveContextOptV1},
+    context::{InitContextOpt, ReceiveContextOpt, ReceiveContextV1Opt},
     schema_json::write_bytes_from_json_schema_type,
 };
 use anyhow::{bail, ensure, Context};
@@ -926,14 +926,14 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             should_display_state,
             ..
         } => {
-            let mut receive_ctx: ReceiveContextOptV1 = match context {
+            let mut receive_ctx: ReceiveContextV1Opt = match context {
                 Some(context_file) => {
                     let ctx_content =
                         fs::read(context_file).context("Could not read receive context file.")?;
                     serde_json::from_slice(&ctx_content)
                         .context("Could not parse receive context.")?
                 }
-                None => ReceiveContextOptV1::default(),
+                None => ReceiveContextV1Opt::default(),
             };
             // if the balance is set in the flag it overrides any balance that is set in the
             // context.
@@ -995,7 +995,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             let mut mutable_state = init_state.thaw();
             let inner = mutable_state.get_inner(&mut loader);
             let instance_state = v1::InstanceState::new(0, loader, inner);
-            let res = v1::invoke_receive::<_, _, _, ReceiveContextOptV1>(
+            let res = v1::invoke_receive::<_, _, _, ReceiveContextV1Opt>(
                 std::sync::Arc::new(artifact),
                 runner.amount.micro_ccd,
                 receive_ctx,
