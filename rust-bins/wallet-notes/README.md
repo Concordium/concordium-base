@@ -175,12 +175,12 @@ The following fields are optional:
 
 - `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
 
-- `"delegationTarget"` ... JSON indicating either delegation to the L-pool or to a baker pool.
+- `"delegationTarget"` ... JSON indicating either delegation a baker pool or passive delegation.
 
 The delegation target should either be of the form
 ```json
 {
-    "delegateType": "L-Pool"
+    "delegateType": "Passive"
 }
 ```
 or

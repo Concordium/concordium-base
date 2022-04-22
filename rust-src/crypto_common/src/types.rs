@@ -90,8 +90,8 @@ impl Serial for OpenStatus {
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(tag = "delegateType")]
 pub enum DelegationTarget {
-    #[serde(rename = "L-Pool")]
-    DelegateToLPool,
+    #[serde(rename = "Passive")]
+    DelegatePassive,
     #[serde(rename = "Baker")]
     DelegateToBaker {
         #[serde(rename = "bakerId")]
@@ -102,7 +102,7 @@ pub enum DelegationTarget {
 impl Serial for DelegationTarget {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match *self {
-            DelegationTarget::DelegateToLPool => out
+            DelegationTarget::DelegatePassive => out
                 .write_u8(0)
                 .expect("Writing to a buffer should not fail."),
             DelegationTarget::DelegateToBaker { target_baker } => {
