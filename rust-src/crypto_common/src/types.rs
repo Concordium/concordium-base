@@ -124,19 +124,20 @@ pub struct Amount {
 }
 
 impl schemars::JsonSchema for Amount {
-    fn schema_name() -> String {
-        "CCD Amount".into()
-    }
+    fn schema_name() -> String { "CCD Amount".into() }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         use schemars::schema::*;
-        Schema::Object(SchemaObject{
+        Schema::Object(SchemaObject {
             instance_type: Some(InstanceType::String.into()),
-            string: Some(StringValidation{
-                max_length: Some(1),
-                min_length: Some(20),
-                pattern: Some("^([0-9])*".into()),
-            }.into()),
+            string: Some(
+                StringValidation {
+                    min_length: Some(1),
+                    max_length: Some(20),
+                    pattern:    Some("^([0-9])*".into()),
+                }
+                .into(),
+            ),
             ..SchemaObject::default()
         })
     }

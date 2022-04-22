@@ -65,24 +65,26 @@ pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl schemars::JsonSchema for AccountAddress {
-    fn schema_name() -> String {
-        "AccountAddress".into()
-    }
+    fn schema_name() -> String { "AccountAddress".into() }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         use schemars::schema::*;
-        Schema::Object(SchemaObject{
+        Schema::Object(SchemaObject {
             instance_type: Some(InstanceType::String.into()),
-            string: Some(StringValidation{
-                max_length: Some(50),
-                min_length: Some(50),
-                pattern: Some("^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]*".into()),
-            }.into()),
+            string: Some(
+                StringValidation {
+                    max_length: Some(50),
+                    min_length: Some(50),
+                    pattern:    Some(
+                        "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]*".into(),
+                    ),
+                }
+                .into(),
+            ),
             ..SchemaObject::default()
         })
     }
 }
-
 
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
@@ -946,8 +948,9 @@ pub struct IpAnonymityRevokers<C: Curve> {
 
 /// Description either of an anonymity revoker or identity provider.
 /// Metadata that should be visible on the chain.
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[derive(schemars::JsonSchema)]
+#[derive(
+    PartialEq, Eq, Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema,
+)]
 pub struct Description {
     #[string_size_length = 4]
     #[serde(rename = "name")]
@@ -1027,24 +1030,24 @@ pub struct ArInfo<C: Curve> {
 struct ArPublicKeySchemaType;
 
 impl schemars::JsonSchema for ArPublicKeySchemaType {
-    fn schema_name() -> String {
-        "PublicKey".into()
-    }
+    fn schema_name() -> String { "PublicKey".into() }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         use schemars::schema::*;
-        Schema::Object(SchemaObject{
+        Schema::Object(SchemaObject {
             instance_type: Some(InstanceType::String.into()),
-            string: Some(StringValidation{
-                max_length: None,
-                min_length: Some(64),
-                pattern: Some("^([0-9]?[a-f]?)*$".into()),
-            }.into()),
+            string: Some(
+                StringValidation {
+                    max_length: None,
+                    min_length: Some(64),
+                    pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                }
+                .into(),
+            ),
             ..SchemaObject::default()
         })
     }
 }
-
 
 /// Collection of anonymity revokers.
 #[derive(Debug, SerdeSerialize, SerdeDeserialize)]
