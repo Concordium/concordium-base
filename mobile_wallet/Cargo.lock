@@ -3,6 +3,25 @@
 version = 3
 
 [[package]]
+name = "aggregate_sig"
+version = "0.1.0"
+dependencies = [
+ "crypto_common",
+ "crypto_common_derive",
+ "curve_arithmetic",
+ "ff",
+ "ffi_helpers",
+ "generic-array 0.14.4",
+ "id",
+ "pairing",
+ "rand",
+ "random_oracle",
+ "rayon",
+ "serde",
+ "sha2 0.9.8",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -333,6 +352,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ecvrf"
+version = "0.0.1"
+dependencies = [
+ "clear_on_drop",
+ "crypto_common",
+ "crypto_common_derive",
+ "curve25519-dalek",
+ "ffi_helpers",
+ "libc",
+ "rand",
+ "sha2 0.9.8",
+ "subtle",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "ed25519"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -649,14 +685,16 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.9.0"
+version = "0.11.0"
 dependencies = [
+ "aggregate_sig",
  "anyhow",
  "byteorder",
  "chrono",
  "crypto_common",
  "curve_arithmetic",
  "dodis_yampolskiy_prf",
+ "ecvrf",
  "ed25519-dalek",
  "eddsa_ed25519",
  "either",
@@ -672,6 +710,7 @@ dependencies = [
  "pedersen_scheme",
  "ps_sig",
  "rand",
+ "random_oracle",
  "serde",
  "serde_json",
  "sha2 0.9.8",

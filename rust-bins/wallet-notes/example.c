@@ -10,6 +10,9 @@ char* generate_accounts(char*, uint8_t*);
 uint8_t check_account_address(char*);
 
 char* create_transfer(char*, uint8_t*);
+char* create_configure_delegation_transaction(char*, uint8_t*);
+char* create_configure_baker_transaction(char*, uint8_t*);
+char* generate_baker_keys(uint8_t*);
 
 char* create_encrypted_transfer(char*, uint8_t*); //
 char* combine_encrypted_amounts(char*, char*, uint8_t*);
@@ -99,6 +102,12 @@ int main(int argc, char *argv[]) {
       } else if (ends_with(argv[1], "create_credential-input.json")) {
         out = create_credential(buffer, &flag);
         return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_configure_delegation_transaction-input.json")) {
+        out = create_configure_delegation_transaction(buffer, &flag);
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "create_configure_baker_transaction-input.json")) {
+        out = create_configure_baker_transaction(buffer, &flag);
+        return printStr(out, flag);
       } else if (ends_with(argv[1], "generate-accounts-input.json")) {
         out = generate_accounts(buffer, &flag);
         return printStr(out, flag);
@@ -139,6 +148,11 @@ int main(int argc, char *argv[]) {
       out = combine_encrypted_amounts(argv[2], argv[3], &flag);
       printf("%s\n", out);
       return (int)flag;
+    } else if (strcmp(argv[1], "generate-baker-keys") == 0) {
+      uint8_t flag = 1;
+      char *out;
+      out = generate_baker_keys(&flag);
+      return printStr(out, flag);
     }
   }
 }

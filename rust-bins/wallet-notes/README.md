@@ -152,6 +152,123 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [create_transfer-input.json](files/create_transfer-input.json).
 An example output to this request is in the file [create_transfer-output.json](files/create_transfer-output.json).
 
+## create_configure_delegation_transaction
+
+Semantics: Creates a `configure delegation`-transaction with the provided values.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+The following fields are optional:
+
+- `"capital"` ... string containing the amount to be staked.
+
+- `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
+
+- `"delegationTarget"` ... JSON indicating either delegation to the L-pool or to a baker pool.
+
+The delegation target should either be of the form
+```json
+{
+    "delegateType": "L-Pool"
+}
+```
+or
+
+```json
+{
+    "delegateType": "bakerId",
+    "bakerId": 100
+}
+```
+where `100` should be replaced with the relevant baker id.
+
+To add a delegator, all of the optional fields must be present. For an existing delegator the fields that are present will be updated on chain. A delegator is removed if the `capital` is set to `"0"`.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+Example input to this request are in the files [create_configure_delegation_transacion-input.json](files/create_configure_delegation_transacion-input.json) and [2-create_configure_delegation_transacion-input.json](2-files/create_configure_delegation_transacion-input.json).
+Example output to this request are in the files [2-files/create_configure_delegation_transacion-output.json](files/create_configure_delegation_transacion-output.json).
+
+## create_configure_baker_transaction
+
+Semantics: Creates a transfer transaction with the provided values.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+The following fields are optional:
+
+- `"capital"` ... string containing the amount to be staked.
+
+- `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
+
+- `"metadataUrl"` ... string containing a metadata URL. Max size is 2048 bytes.
+
+- `"openStatus"` ... whether the pool is closed, open for delegation or closed for new delegators.
+  This is indicated with one of the strings `"openForAll"`, `"closedForNew"`, or `"closedForAll"`.
+
+- `"transactionFeeCommission"` ... number indicating the transaction fee commission, e.g. `0.05` or `5e-2`.
+
+- `"bakingRewardCommission"` ... number indicating the baking reward commission, e.g. `0.05` or `5e-2`.
+
+- `"finalizationRewardCommission"` ... number indicating the finalization reward commission, e.g. `0.05` or `5e-2`.
+
+- `"bakerKeys"` ... the baker keys. These are generated using the function `generate_baker_keys` documented below.
+
+To add a baker, all of the optional fields must be present. For an existing baker the fields that are present will be updated on chain. A baker is removed if the `capital` is set to `"0"`.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+An example input to this request is in the file [create_configure_baker-transaction-input.json](files/create_configure_baker-transaction-input.json).
+An example output to this request is in the file [create_configure_baker-transaction-output.json](files/create_configure_baker-transaction-output.json).
+
+## generate_baker_keys
+
+Semantics: Generates baker keys.
+
+This functiones takes no input. An output of the function could look like
+```json
+{
+    "electionVerifyKey": "7c6804c3a3460c0a90a4d7bf6e2787c70a32a8d35faf8725862d73172f1c5383",
+    "electionPrivateKey": "69e736da67e493bc1a781d835f6877e4aa2102fe4c118de9d4435b6a4b5cba4a",
+    "signatureVerifyKey": "c1a11131f42df6328a8e111524b1e45c9b537c8f60d442540d8001756c82c20b",
+    "signatureSignKey": "44da32121d641e0e1be49900164a5c6eca2a594f1676cb7d744b171e74676b18",
+    "aggregationVerifyKey": "922668fdbdcf66a1dec7d5d284e9c3dba2f4fc10856face74db06189691e9609b5cc78fc77398af7bae2f2ee6e0361f1057e2627f1988d15bb16a6096382a1220f8e8c820e1a38df0c6357b6639241ea97e12c4f33365241b7186a98d6161b85",
+    "aggregationSignKey": "48a3748a9ecf98fbccac29b7ccd0e1074f2bca73655154242c3c2835945601e9"
+}
+```
+
+Note: In order for a node to use the baker credentials to bake, the field `"bakerId"` with the ID of the baker needs to be added to the above JSON.
+
 ## create_encrypted_transfer_ext
 
 Semantics: Create an encrypted transfer transaction with the provided values.
@@ -334,9 +451,9 @@ the result. On a linux system the program can be compiled and run like so.
   - First compile the libraries in [../mobile_wallet](../mobile-wallet) by running
     ```cargo build --release```.
   - Next from this directory run
-    ```gcc example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
+    ```gcc example.c -lmobile_wallet -L ../../mobile_wallet/target/release/ -o example```
     or
-    ```clang example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
+    ```clang example.c -lmobile_wallet -L ../../mobile_wallet/target/release/ -o example```
     depending on what C compiler is preffered.
 
 The binary can then be run with the following inputs:
@@ -372,6 +489,8 @@ The binary can then be run with the following inputs:
 |                                      | input                                                                                                  | output                                                                                                   |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
 | `create_id_request_and_private_data` | [`create_id_request_and_private_data-input.json`](files/create_id_request_and_private_data-input.json) | [`create_id_request_and_private_data-output.json`](files/create_id_request_and_private_data-output.json) |
+| `create_configure_baker_transaction` | [`create_configure_baker_transaction-input.json`](files/create_configure_baker_transaction-input.json) | [`create_configure_baker_transaction-output.json`](files/create_configure_baker_transaction-output.json) |
+| `create_configure_delegation_transaction` | [`create_configure_delegation_transaction-input.json`](files/create_configure_delegation_transaction-input.json) | [`create_configure_delegation_transaction-output.json`](files/create_configure_delegation_transaction-output.json) |
 | `create_credential`                  | [`create_credential-input.json`](files/create_credential-input.json)                                   | [`create_credential-output.json`](files/create_credential-output.json)                                   |
 | `create_transfer_ext`                | [`create_transfer-input.json`](files/create_transfer-input.json)                                       | [`create_transfer-output.json`](files/create_transfer-output.json)                                       |
 | `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](files/create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](files/create_encrypted_transfer-output.json)                   |

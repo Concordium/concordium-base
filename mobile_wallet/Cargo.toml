@@ -1,6 +1,6 @@
 [package]
 name = "mobile_wallet"
-version = "0.9.0"
+version = "0.11.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -24,6 +24,18 @@ libc = "0.2"
 
 [dependencies.crypto_common]
 path = "../rust-src/crypto_common"
+version = "0"
+
+[dependencies.ecvrf]
+path = "../rust-src/ecvrf"
+version = "0"
+
+[dependencies.aggregate_sig]
+path = "../rust-src/aggregate_sig"
+version = "0"
+
+[dependencies.random_oracle]
+path = "../rust-src/random_oracle"
 version = "0"
 
 [dependencies.curve_arithmetic]

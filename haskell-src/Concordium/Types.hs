@@ -66,6 +66,8 @@ module Concordium.Types (
   minNonce,
   AccountVerificationKey,
   AccountIndex(..),
+  AccountIdentifier(..),
+  decodeAccountIdentifier,
 
   -- * Smart contracts
   ModuleRef(..),
@@ -200,7 +202,7 @@ import Data.Hashable (Hashable (..))
 import Data.Word
 import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Bits
 import Data.Ratio
@@ -220,6 +222,8 @@ import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 
 import Lens.Micro.Platform
+
+import Text.Read (readMaybe)
 
 -- |A value equipped with its hash.
 data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
@@ -604,6 +608,26 @@ newtype VoterPower = VoterPower AmountUnit
 -- * Blockchain specific types.
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
+
+-- |The identifier associated with an account.
+data AccountIdentifier =
+  -- |Given credential registration id as an identifier.
+  CredRegID !CredentialRegistrationID
+  -- |Given address as an identifier. Multiple addresses may refer to the same account.
+  | AccAddress !AccountAddress
+  -- |Given index as an identifier.
+  | AccIndex !AccountIndex
+
+-- |Decode a null-terminated string as either an account address (base-58), account index (AccountIndex) or a
+-- credential registration ID (base-16).
+decodeAccountIdentifier :: ByteString -> Maybe AccountIdentifier
+decodeAccountIdentifier bs =
+    case addressFromBytes bs of
+        Left _ ->
+            case BSH.bsDeserializeBase16 bs of
+                Nothing -> AccIndex <$> readMaybe (BS.unpack bs)
+                Just cid -> Just $ CredRegID cid
+        Right acc -> Just $ AccAddress acc
 
 -- |The index of an account. Starting with 0,
 -- each account is allocated a sequential @AccountIndex@

@@ -378,25 +378,45 @@ impl DB {
 
     pub fn mark_finalized(&self, key: &str) {
         let mut lock = self.pending.lock().unwrap();
-        lock.remove(key);
-        let pending_path = self.root.join("pending").join(key);
-        std::fs::remove_file(pending_path).unwrap();
+        if lock.remove(key).is_some() {
+            let pending_path = self.root.join("pending").join(key);
+            if let Err(e) = std::fs::remove_file(pending_path) {
+                error!("Could not delete pending file: {}", e);
+            }
+        } else {
+            log::debug!(
+                "{} could not be marked as finalized, as it has already been removed from the \
+                 pending list.",
+                key
+            );
+        }
     }
 
     pub fn delete_all(&self, key: &str) {
         let mut lock = self.pending.lock().unwrap();
-        let ar_record_path = self.root.join("revocation").join(key);
-        let id_path = self.root.join("identity").join(key);
-        let pending_path = self.root.join("pending").join(key);
+        if lock.remove(key).is_some() {
+            let ar_record_path = self.root.join("revocation").join(key);
+            let id_path = self.root.join("identity").join(key);
+            let pending_path = self.root.join("pending").join(key);
 
-        std::fs::rename(
-            ar_record_path,
-            self.backup_root.join("revocation").join(key),
-        )
-        .unwrap();
-        std::fs::rename(id_path, self.backup_root.join("identity").join(key)).unwrap();
-        std::fs::remove_file(pending_path).unwrap();
-        lock.remove(key);
+            if let Err(e) = std::fs::rename(
+                ar_record_path,
+                self.backup_root.join("revocation").join(key),
+            ) {
+                error!("Could not back up the revocation record: {}", e);
+            }
+            if let Err(e) = std::fs::rename(id_path, self.backup_root.join("identity").join(key)) {
+                error!("Could not back up the identity object: {}", e);
+            }
+            if let Err(e) = std::fs::remove_file(pending_path) {
+                error!("Could not delete pending file: {}.", e)
+            }
+        } else {
+            log::debug!(
+                "{} could not be deleted, as it has already been removed from the pending list.",
+                key
+            );
+        }
     }
 
     pub fn is_pending(&self, key: &str) -> bool { self.pending.lock().unwrap().get(key).is_some() }
