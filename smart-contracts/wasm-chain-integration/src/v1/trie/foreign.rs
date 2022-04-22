@@ -3,9 +3,9 @@
 use super::*;
 
 /// Load a vector from the given location.
-pub type LoadCallBack = extern "C" fn(Reference) -> *mut Vec<u8>;
+pub type LoadCallback = extern "C" fn(Reference) -> *mut Vec<u8>;
 
-impl BackingStoreLoad for LoadCallBack {
+impl BackingStoreLoad for LoadCallback {
     type R = Vec<u8>;
 
     #[inline]
@@ -16,9 +16,9 @@ impl BackingStoreLoad for LoadCallBack {
 
 /// Store the given data and return the location where it can later be
 /// retrieved.
-pub type StoreCallBack = extern "C" fn(data: *const u8, len: libc::size_t) -> Reference;
+pub type StoreCallback = extern "C" fn(data: *const u8, len: libc::size_t) -> Reference;
 
-impl BackingStoreStore for StoreCallBack {
+impl BackingStoreStore for StoreCallback {
     #[inline]
     fn store_raw(&mut self, data: &[u8]) -> StoreResult<Reference> {
         Ok(self(data.as_ptr(), data.len()))

@@ -15,7 +15,7 @@
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
 use super::trie::{
-    foreign::{LoadCallBack, StoreCallBack},
+    foreign::{LoadCallback, StoreCallback},
     EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
 };
 use crate::{slice_from_c_bytes, v1::*};
@@ -102,7 +102,7 @@ unsafe extern "C" fn call_init_v1(
     // Operationally this is not really needed since nothing is loaded, since a fresh empty state
     // is initialized. However reflecting this in types would be a lot of extra work for no
     // real gain. So we require it.
-    loader: LoadCallBack,
+    loader: LoadCallback,
     artifact_ptr: *const ArtifactV1,
     init_ctx_bytes: *const u8, // pointer to an initcontext
     init_ctx_bytes_len: size_t,
@@ -201,7 +201,7 @@ unsafe extern "C" fn call_init_v1(
 /// returned.
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
-    loader: LoadCallBack,
+    loader: LoadCallback,
     artifact_ptr: *const ArtifactV1,
     receive_ctx_bytes: *const u8, // receive context
     receive_ctx_bytes_len: size_t,
@@ -377,7 +377,7 @@ unsafe extern "C" fn validate_and_process_v1(
 /// # Return value
 /// The return value has the same semantics as
 unsafe extern "C" fn resume_receive_v1(
-    loader: LoadCallBack,
+    loader: LoadCallback,
     // mutable pointer, we will mutate this, either to a new state in case another interrupt
     // occurred, or null
     config_ptr: *mut *mut ReceiveInterruptedStateV1,
@@ -589,7 +589,7 @@ unsafe extern "C" fn return_value_to_byte_array(
 /// Load the persistent state from a given location in the backing store. The
 /// store is accessed via the provided function pointer.
 extern "C" fn load_persistent_tree_v1(
-    mut loader: LoadCallBack,
+    mut loader: LoadCallback,
     location: Reference,
 ) -> *mut PersistentState {
     let tree = PersistentState::load_from_location(&mut loader, location);
@@ -604,7 +604,7 @@ extern "C" fn load_persistent_tree_v1(
 /// provided callback. The return value is a reference in the backing store that
 /// can be used to load the tree using [load_persistent_tree_v1].
 extern "C" fn store_persistent_tree_v1(
-    mut writer: StoreCallBack,
+    mut writer: StoreCallback,
     tree: *mut PersistentState,
 ) -> Reference {
     let tree = unsafe { &mut *tree };
@@ -634,7 +634,7 @@ extern "C" fn free_mutable_state_v1(tree: *mut MutableState) { unsafe { Box::fro
 /// The returned persistent state must be deallocated using
 /// [free_persistent_state_v1] in order to not leak memory.
 extern "C" fn freeze_mutable_state_v1(
-    mut loader: LoadCallBack,
+    mut loader: LoadCallback,
     tree: *mut MutableState,
     hash_buf: *mut u8,
 ) -> *mut PersistentState {
@@ -660,7 +660,7 @@ extern "C" fn thaw_persistent_state_v1(tree: *mut PersistentState) -> *mut Mutab
 /// The frozen tree is not returned, but it is stored in the "origin" field so
 /// that a call to freeze later on is essentially free.
 /// The mutable state should not be used after a call to this function.
-extern "C" fn get_new_state_size_v1(mut loader: LoadCallBack, tree: *mut MutableState) -> u64 {
+extern "C" fn get_new_state_size_v1(mut loader: LoadCallback, tree: *mut MutableState) -> u64 {
     let tree = unsafe { &mut *tree };
     let mut collector = SizeCollector::default();
     let _ = tree.freeze(&mut loader, &mut collector);
@@ -670,7 +670,7 @@ extern "C" fn get_new_state_size_v1(mut loader: LoadCallBack, tree: *mut Mutable
 #[no_mangle]
 /// Load the entire tree into memory. If any data is in the backing store it is
 /// loaded using the provided callback.
-extern "C" fn cache_persistent_state_v1(mut loader: LoadCallBack, tree: *mut PersistentState) {
+extern "C" fn cache_persistent_state_v1(mut loader: LoadCallback, tree: *mut PersistentState) {
     let tree = unsafe { &mut *tree };
     tree.cache(&mut loader)
 }
@@ -680,7 +680,7 @@ extern "C" fn cache_persistent_state_v1(mut loader: LoadCallBack, tree: *mut Per
 /// buffer which is assumed to be able to hold 32 bytes.
 /// The hash of the tree is cached, so this is generally a cheap function.
 extern "C" fn hash_persistent_state_v1(
-    mut loader: LoadCallBack,
+    mut loader: LoadCallback,
     tree: *mut PersistentState,
     hash_buf: *mut u8,
 ) {
@@ -696,7 +696,7 @@ extern "C" fn hash_persistent_state_v1(
 /// The returned byte array should be freed with `rs_free_array_len` from
 /// crypto-common.
 extern "C" fn serialize_persistent_state_v1(
-    mut loader: LoadCallBack,
+    mut loader: LoadCallback,
     tree: *mut PersistentState,
     out_len: *mut size_t,
 ) -> *mut u8 {
@@ -740,7 +740,7 @@ extern "C" fn copy_to_vec_ffi(data: *const u8, len: libc::size_t) -> *mut Vec<u8
 /// Lookup in the persistent state. **This should only be used for testing the
 /// integration**. It is not efficient compared to thawing and looking up.
 extern "C" fn persistent_state_v1_lookup(
-    mut loader: LoadCallBack,
+    mut loader: LoadCallback,
     key: *const u8,
     key_len: libc::size_t,
     tree: *mut PersistentState,
