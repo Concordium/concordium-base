@@ -96,11 +96,11 @@ jobs:
     # (the step is probably too fast for that to make sense though).
     - name: Run cargo clippy on all targets
       run: |
-        cargo clippy --manifest-path rust-src/Cargo.toml --workspace
-        cargo clippy --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
-        cargo clippy --manifest-path idiss/Cargo.toml
-        cargo clippy --manifest-path mobile_wallet/Cargo.toml
-        cargo clippy --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
+        cargo clippy --manifest-path rust-src/Cargo.toml --workspace -- -Dclippy::all
+        cargo clippy --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
+        cargo clippy --manifest-path idiss/Cargo.toml --all-features -- -Dclippy::all
+        cargo clippy --manifest-path mobile_wallet/Cargo.toml -- -Dclippy::all
+        cargo clippy --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
 
     # HASKELL #
 
