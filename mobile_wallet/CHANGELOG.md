@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.0
+  - JSON serialization of the Rust type `DelegationTarget` has been updated to be consistent with the JSON serialization of the corresponding Haskell type, due to the renaming of L-Pool to passive delegation.
+
 ## 0.11.0
   - JSON serialization of the Rust type `DelegationTarget` has been updated to be consistent with the JSON serialization of the corresponding Haskell type.
   - JSON serialization of commission rates have been updated so that now they are given as the actual rate,

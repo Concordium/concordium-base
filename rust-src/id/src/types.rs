@@ -160,7 +160,7 @@ impl AccountAddress {
             data[29..].copy_from_slice(&counter.to_be_bytes()[1..]);
             Some(Self(data))
         } else {
-            return None;
+            None
         }
     }
 }
