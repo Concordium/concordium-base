@@ -158,7 +158,7 @@ fn prop_storing_caches() {
         };
         let mut ser = Vec::new();
         let _ = frozen.store_update(&mut ser);
-        ensure!(frozen.get(&mut loader).data.is_stored(), "Not all data is stored.");
+        ensure!(frozen.get(&mut loader).data.is_cached(), "Not all data is stored.");
         Ok(())
     };
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
@@ -173,8 +173,8 @@ fn prop_storing() {
         let (trie, mut loader) = make_mut_trie(inputs);
         let mut collector = SizeCollector::default();
         let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut collector) {
-            // check that the computed size at least accounts for all the data
-            // keys are partially shared so we cannot easily bound those.
+            // Check that the computed size at least accounts for all the data.
+            // Keys are partially shared so we cannot easily bound those.
             let data_size = reference.values().map(|v| v.len() as u64).sum::<u64>();
             let calculated_size = collector.collect();
             ensure!(

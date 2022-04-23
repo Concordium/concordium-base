@@ -290,15 +290,6 @@ pub enum CachedRef<V> {
     },
 }
 
-/// The default hash implementation is not a valid value.
-impl<V> Default for CachedRef<V> {
-    fn default() -> Self {
-        CachedRef::Disk {
-            key: Default::default(),
-        }
-    }
-}
-
 pub enum MaybeOwned<'a, V, R: ?Sized = V> {
     Borrowed(&'a R),
     Owned(V),
@@ -937,21 +928,21 @@ impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed {
 /// A persistent node. Cloning this is relatively cheap, it only copies pointers
 /// and increments reference counts.
 pub struct Node {
-    /// Since a single node owns each value using Hashed<Cached<V>>
-    /// here makes sense, it makes it so that the hash is stored inline.
-    ///
-    /// Note: This would ideally have further refinement. If data is less than
-    /// 64 bytes there is no real use in storing the hash or the value
-    /// behind an indirection, and it is in fact quite wasteful. More so for
-    /// smaller values. Ideally we'd revise this so that if data is small it
-    /// would be stored inline.
+    /// An optional value at the node. Nodes may not have values if they are
+    /// branch nodes, that is, if they have two or more children. In general
+    /// a node should either have at least two children, or a value. It should
+    /// never be the case that the node does not have a value and only has one
+    /// child. In that case the `path` would be extended.
     value:    Option<ValueLink>,
+    /// The path above this node which is unique to this node from the parent
+    /// node. That is, there is no branching on that path, nor are there any
+    /// values. This achieves more compact trie representation.
     path:     Stem,
-    /// Children, ordered by increasing key.
-    /// In contrast to Hashed<Cached<..>> above for the value, here we store the
-    /// hash behind a pointer indirection. The reason for this is that there
-    /// are going to be many pointers to the same node, and we want to avoid
-    /// duplicating node hashes.
+    /// Children, **ordered by increasing key**.
+    /// In contrast to `Hashed<Cached<..>>` above for the value, here we store
+    /// the hash behind a pointer indirection. The reason for this is that
+    /// there are going to be many pointers to the same node, and we want to
+    /// avoid duplicating node hashes.
     children: Vec<(Chunk<4>, ChildLink)>,
 }
 
@@ -2888,6 +2879,15 @@ fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), 
     Ok((path, has_value))
 }
 
+/// A dummy invalid reference used in the `deserialize` method below where we
+/// have to "consume" nodes from a vector without changing indices. We do this
+/// by replacing nodes with a (cheap) value.
+const INVALID_NODE_CACHED_REF: CachedRef<Hashed<Node>> = CachedRef::Disk {
+    key: Reference {
+        reference: 0,
+    },
+};
+
 impl Hashed<Node> {
     /// Serialize the node and its children into a byte array.
     /// Note that this serializes the entire tree together with its children, so
@@ -2989,7 +2989,7 @@ impl Hashed<Node> {
             parents.push(new_node);
         }
         if let Some(root) = parents.into_iter().next() {
-            let rw = std::mem::take(&mut *root.borrow_mut());
+            let rw = std::mem::replace(&mut *root.borrow_mut(), INVALID_NODE_CACHED_REF);
             if let CachedRef::Memory {
                 value,
             } = rw

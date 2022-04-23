@@ -724,8 +724,8 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
 /// A receive context for V1 contracts.
 pub trait HasReceiveContext: v0::HasReceiveContext {
     /// Get the name of the entrypoint that was actually invoked.
-    /// This may differ from the name of the entrypoing that is actually invoked
-    /// in case the entrypoint that is invoke is the fallback one.
+    /// This may differ from the name of the entrypoint that is actually invoked
+    /// in case the entrypoint that is invoked is the fallback one.
     fn entrypoint(&self) -> ExecResult<EntrypointName>;
 }
 

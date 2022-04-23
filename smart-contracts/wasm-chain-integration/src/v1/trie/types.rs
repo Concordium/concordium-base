@@ -13,7 +13,7 @@ use thiserror::Error;
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, From, Into)]
 /// Reference to a storage location where an item may be retrieved.
 pub struct Reference {
-    reference: u64,
+    pub(crate) reference: u64,
 }
 
 impl Reference {
@@ -162,8 +162,8 @@ pub trait BackingStoreStore {
 /// Trait implemented by types that can load data from given locations.
 pub trait BackingStoreLoad {
     type R: AsRef<[u8]>;
-    /// Store the provided value and return a reference that can be used
-    /// to load it.
+    /// Load the provided value from the given location. The implementatation of
+    /// this should match [BackingStoreStore::store_raw].
     fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R>;
 }
 
@@ -179,11 +179,11 @@ impl BackingStoreStore for Vec<u8> {
 #[derive(Debug)]
 /// A generic wrapper that implements [BackingStoreStore] for any inner
 /// type that implements [Seek] and [Write].
-pub struct Storable<X> {
-    inner: X,
+pub struct Storer<X> {
+    pub inner: X,
 }
 
-impl<X: Seek + Write> BackingStoreStore for Storable<X> {
+impl<X: Seek + Write> BackingStoreStore for Storer<X> {
     fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError> {
         let pos = self.inner.seek(SeekFrom::Current(0))?;
         let data_len = data.len() as u32;
