@@ -157,7 +157,7 @@ fn trie_cache(b: &mut Criterion) {
 fn trie_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_trie(&words);
-    let trie = trie.unwrap().get(&mut loader).data;
+    let trie = trie.unwrap().get(&mut loader).to_owned().data;
     b.bench_function("trie get", |b| {
         b.iter(|| {
             for w in words.iter() {
@@ -260,7 +260,8 @@ fn mut_trie_freeze(b: &mut Criterion) {
 fn mut_trie_freeze_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_mut_trie(&words);
-    let frozen = trie.freeze(&mut loader, &mut EmptyCollector).unwrap().get(&mut loader).data;
+    let frozen =
+        trie.freeze(&mut loader, &mut EmptyCollector).unwrap().get(&mut loader).to_owned().data;
     b.bench_function("trie mut freeze get", |b| {
         b.iter(|| {
             for w in words.iter() {

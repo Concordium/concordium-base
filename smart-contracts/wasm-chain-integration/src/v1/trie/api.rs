@@ -91,7 +91,7 @@ impl PersistentState {
             PersistentState::Empty => out.write_u8(0)?,
             PersistentState::Root(ht) => {
                 out.write_u8(1)?;
-                let node = ht.get_ref(loader);
+                let node = ht.get(loader);
                 node.serialize(loader, out)?;
             }
         }
@@ -118,10 +118,10 @@ impl PersistentState {
         match self {
             PersistentState::Empty => None,
             PersistentState::Root(node) => {
-                let node = node.get_ref(loader);
+                let node = node.get(loader);
                 let data = node.data.lookup(loader, key)?;
                 let borrowed = data.borrow();
-                Some(borrowed.get(loader))
+                Some(borrowed.get_copy(loader))
             }
         }
     }
@@ -162,7 +162,7 @@ impl PersistentState {
         match self {
             Self::Empty => {}
             Self::Root(node) => {
-                let tree = node.get_ref(loader);
+                let tree = node.get(loader);
                 tree.data.display_tree(builder, loader)
             }
         }
