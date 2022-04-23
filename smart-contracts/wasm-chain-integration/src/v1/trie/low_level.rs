@@ -35,6 +35,7 @@ const INLINE_CAPACITY: usize = 4;
 /// with the node, and the hash will not be stored explicitly. Values bigger
 /// than this bound are stored via a [CachedRef] indirection, and the hash is
 /// explicitly stored inline with the node.
+/// This must never be more than 0b1111_1110.
 const INLINE_VALUE_LEN: usize = 64;
 
 #[derive(Default, Debug, Clone)]
@@ -333,6 +334,12 @@ impl<V: Loadable> CachedRef<V> {
     /// Apply the supplied function to the contained value. The value is loaded
     /// if it is not yet cached. Note that this will **not** cache the
     /// value, the loaded value will be dropped.
+    ///
+    /// In contrast to [`use_value`](Self::use_value) this function passed the
+    /// loader to the supplied callback (that is, the `loader` that the
+    /// caller supplies is passed). This can be useful in case the closure
+    /// needs access to the loader. This is not possible with
+    /// [`use_value`](Self::use_value) since mutable references are unique.
     pub(crate) fn use_value_<X, L: BackingStoreLoad>(
         &self,
         loader: &mut L,
@@ -821,7 +828,12 @@ type ValueLink = Link<InlineOrHashed>;
 /// and a pointer to the actual value. The intention is that small values will
 /// be stored inline and larger values behind and indirection.
 pub enum InlineOrHashed {
+    /// The value stored inline. The first byte is the actual length of the
+    /// value, which must be less than `INLINE_VALUE_LEN`. The remaining
+    /// length bytes are the actual value.
     Inline([u8; INLINE_VALUE_LEN + 1]),
+    /// A value stored together with a hash. The value is stored behind an
+    /// indirection, the hash is stored inline.
     Indirect(Hashed<CachedRef<Box<[u8]>>>),
 }
 
@@ -1382,15 +1394,34 @@ impl Node {
         Ok(buf)
     }
 
+    /// Store the node into the provided `buf`, and store and children
+    /// (transitively) into the provided `backing_store`. Only the children that
+    /// are not yet cached are stored. This modifies the node recursively so
+    /// that children pointers are [CachedRef::Cached] or [CachedRef::Disk].
     pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
     ) -> StoreResult<()> {
+        // This function would be very natural to write recursively, essentially
+        // - recursively write all the children that are only in memory
+        // - this would return Reference's to where these children are written in the
+        //   backing store
+        // - use these to write the node into the provided buffer (`buf`).
+        //
+        // However this would be prone to stack overflow since Rust generally has little
+        // control on stack size. Thus we write the function with an explicit
+        // stack, modelling the recursive function that way without using any explicit
+        // recursion. This gives more control and predictability.
+
+        // The stack of nodes to process. Initialized by all the children of the node.
         let mut stack = Vec::new();
         for (_, ch) in self.children.iter() {
             stack.push((ch.clone(), false));
         }
+        // A closure that stores the node (including the value) assuming all its
+        // children have already been stored and are in the correct positions in
+        // the `ref_stack`.
         let store_node = |node: &mut Node,
                           buf: &mut Vec<u8>,
                           backing_store: &mut S,
@@ -1405,10 +1436,15 @@ impl Node {
                 let mut borrowed = v.borrow_mut();
                 match &mut *borrowed {
                     InlineOrHashed::Inline(v) => {
+                        // write length as a single byte.
                         buf.write_u8(v[0])?;
                         buf.write_all(&v[1..][0..usize::from(v[0])])?;
                     }
                     InlineOrHashed::Indirect(indirect) => {
+                        // Since `INLINE_VALUE_LEN` is no more than `0b1111_1110`
+                        // the length of the inline variant will never have all 8 bits set.
+                        // We utilize this here to use this special tag value to indicate the
+                        // variant.
                         buf.write_u8(0b1111_1111u8)?;
                         buf.write_all(indirect.hash.as_ref())?;
                         indirect.data.store_and_cache(backing_store, buf)?;
@@ -1424,14 +1460,21 @@ impl Node {
             }
             Ok(())
         };
+        // the stack of References. When a node is fully stored then its reference (to
+        // the location in the backing store) is pushed to this stack.
         let mut ref_stack = Vec::<Reference>::new();
+        // A reusable buffer where nodes are stored before being written to the backing
+        // store. This is to reduce on the amount of small allocations
+        // compared to allocating a new vector for each of the child nodes.
         let mut tmp_buf = Vec::new();
         while let Some((node_ref, children_processed)) = stack.pop() {
             let node_ref_clone = node_ref.clone();
             let mut node_ref_mut = node_ref.borrow_mut();
             match node_ref_mut.get_mut_or_key() {
                 Ok(hashed_node) => {
+                    // the node is not stored in the backing store yet. So we need to do it.
                     if children_processed {
+                        // The node's children have already been processed. Store the node.
                         tmp_buf.clear();
                         tmp_buf.write_all(hashed_node.hash.as_ref())?;
                         store_node(
@@ -1444,13 +1487,21 @@ impl Node {
                         ref_stack.push(key);
                         node_ref_mut.cache_with(key);
                     } else {
+                        // the node's children have not yet been processed. Push the node back onto
+                        // the stack recording that now the children have
+                        // been processed.
                         stack.push((node_ref_clone, true));
+                        // and then push all the children to be processed.
                         for (_, ch) in hashed_node.data.children.iter() {
                             stack.push((ch.clone(), false));
                         }
                     }
                 }
                 Err(key) => {
+                    // the node is already stored on disk (either cached or not). So we do not need
+                    // to recurse down to the children since a general invariant
+                    // is that a cached (on disk) node has children and values that are cached or on
+                    // disk.
                     ref_stack.push(key);
                 }
             }
@@ -2756,19 +2807,24 @@ impl MutableTrie {
 /// Store the node's value tag (whether the value is present or not) together
 /// with the length of the stem. This should match
 /// [read_node_path_and_value_tag] below.
+/// The value tag encodes both the presence of the value in the node, as well as
+/// potentially the length of the node stem. The latter is only in the case the
+/// node stem fits into the 6 bits, otherwise we explicitly record the length as
+/// a big endian u32.
 #[inline(always)]
 fn write_node_path_and_value_tag(
     stem_len: usize,
     no_value: bool,
     out: &mut impl Write,
 ) -> Result<(), std::io::Error> {
+    // the second bit of the u8 encodes whether the node has a value (1) or not (0)
     let value_mask: u8 = if no_value {
         0
     } else {
         0b0100_0000
     };
-    // if the first bit is 0 then the first byte encodes
-    // path length + presence of value
+    // The first bit encodes whether there the length is encoded explicitly (1) or
+    // in the first byte (0).
     if stem_len <= INLINE_STEM_LENGTH {
         let tag = stem_len as u8 | value_mask;
         out.write_u8(tag)
@@ -2788,7 +2844,7 @@ fn write_node_path_and_value_tag(
 fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), std::io::Error> {
     let tag = source.read_u8()?;
     let path_len = if tag & 0b1000_0000 == 0 {
-        // stem length is encoded in the tag
+        // first bit is 1, stem length is encoded in the last 6 bits of the tag.
         u32::from(tag & 0b0011_1111)
     } else {
         // stem length follows as a u32
@@ -2798,7 +2854,10 @@ fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), 
     let mut path = vec![0u8; num_bytes as usize];
     source.read_exact(&mut path)?;
     let path = Stem::new(path.into_boxed_slice(), path_len as usize);
-    Ok((path, (tag & 0b100_0000 != 0)))
+    // Whether the node has a value or not is encoded in the second bit of the tag.
+    // Extract it.
+    let has_value = tag & 0b0100_0000 != 0;
+    Ok((path, has_value))
 }
 
 impl Hashed<Node> {

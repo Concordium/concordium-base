@@ -53,7 +53,7 @@ pub type LoadResult<A> = Result<A, LoadError>;
 
 /// Length of the stem that will be stored inline, i.e.,
 /// the stem length will be encoded in the tag bit, as opposed to separate
-/// 4 bytes.
+/// 4 bytes. This must always fit 6 bits, i.e., can be no more than 127.
 pub(crate) const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 
 /// A trait that supports keeping track of resources during tree traversal, to
