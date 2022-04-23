@@ -18,6 +18,7 @@ use std::{
     io::{Read, Write},
     iter::once,
     num::NonZeroU32,
+    ops::Deref,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
@@ -298,6 +299,35 @@ impl<V> Default for CachedRef<V> {
     }
 }
 
+pub enum MaybeOwned<'a, V, R: ?Sized = V> {
+    Borrowed(&'a R),
+    Owned(V),
+}
+
+impl<'a> Deref for MaybeOwned<'a, Box<[u8]>, [u8]> {
+    type Target = [u8];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MaybeOwned::Borrowed(v) => v,
+            MaybeOwned::Owned(o) => &*o,
+        }
+    }
+}
+
+impl<'a, V> Deref for MaybeOwned<'a, V> {
+    type Target = V;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MaybeOwned::Borrowed(v) => v,
+            MaybeOwned::Owned(o) => &*o,
+        }
+    }
+}
+
 impl<V: Loadable> CachedRef<V> {
     #[inline(always)]
     pub fn get(&self, loader: &mut impl BackingStoreLoad) -> V
@@ -322,44 +352,29 @@ impl<V: Loadable> CachedRef<V> {
     /// Apply the supplied function to the contained value. The value is loaded
     /// if it is not yet cached. Note that this will **not** cache the
     /// value, the loaded value will be dropped.
-    #[inline(always)]
-    pub(crate) fn use_value<X>(
-        &self,
-        loader: &mut impl BackingStoreLoad,
-        f: impl FnOnce(&V) -> X,
-    ) -> X {
-        self.use_value_(loader, |_, x| f(x))
-    }
-
-    /// Apply the supplied function to the contained value. The value is loaded
-    /// if it is not yet cached. Note that this will **not** cache the
-    /// value, the loaded value will be dropped.
     ///
     /// In contrast to [`use_value`](Self::use_value) this function passed the
     /// loader to the supplied callback (that is, the `loader` that the
     /// caller supplies is passed). This can be useful in case the closure
     /// needs access to the loader. This is not possible with
     /// [`use_value`](Self::use_value) since mutable references are unique.
-    pub(crate) fn use_value_<X, L: BackingStoreLoad>(
-        &self,
-        loader: &mut L,
-        f: impl FnOnce(&mut L, &V) -> X,
-    ) -> X {
+    #[inline]
+    pub(crate) fn get_ref<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<V> {
         match self {
             CachedRef::Disk {
                 key,
             } => {
                 let loaded = V::load_from_location(loader, *key).unwrap();
-                f(loader, &loaded)
+                MaybeOwned::Owned(loaded)
             }
             CachedRef::Memory {
                 value,
                 ..
-            } => f(loader, value),
+            } => MaybeOwned::Borrowed(value),
             CachedRef::Cached {
                 value,
                 ..
-            } => f(loader, value),
+            } => MaybeOwned::Borrowed(value),
         }
     }
 }
@@ -862,33 +877,38 @@ impl InlineOrHashed {
     }
 
     #[inline(always)]
-    /// Apply the provided function to the contained value. If the value is only
-    /// in the backing store it is temporarily loaded.
-    pub(crate) fn use_value<X>(
+    pub(crate) fn get_ref(
         &self,
         loader: &mut impl BackingStoreLoad,
-        f: impl FnOnce(&[u8]) -> X,
-    ) -> X {
+    ) -> MaybeOwned<Box<[u8]>, [u8]> {
         match self {
-            InlineOrHashed::Inline(v) => f(&v[1..][0..usize::from(v[0])]),
-            InlineOrHashed::Indirect(indirect) => indirect.data.use_value(loader, |b| f(&b[..])),
+            InlineOrHashed::Inline(v) => MaybeOwned::Borrowed(&v[1..][0..usize::from(v[0])]),
+            InlineOrHashed::Indirect(indirect) => {
+                let b = indirect.data.get_ref(loader);
+                match b {
+                    MaybeOwned::Borrowed(b) => MaybeOwned::Borrowed(&b[..]),
+                    MaybeOwned::Owned(o) => MaybeOwned::Owned(o),
+                }
+            }
         }
     }
 
     #[inline(always)]
-    /// Apply the provided function to the contained value and optionally the
-    /// hash. If the value is only in the backing store it is temporarily
-    /// loaded. If the hash is `None` then the contained value is inline,
-    /// otherwise it is `Some`.
-    pub(crate) fn use_value_and_hash<X>(
+    pub(crate) fn get_ref_and_hash(
         &self,
         loader: &mut impl BackingStoreLoad,
-        f: impl FnOnce(Option<&Hash>, &[u8]) -> X,
-    ) -> X {
+    ) -> (Option<&Hash>, MaybeOwned<Box<[u8]>, [u8]>) {
         match self {
-            InlineOrHashed::Inline(v) => f(None, &v[1..][0..usize::from(v[0])]),
+            InlineOrHashed::Inline(v) => {
+                (None, MaybeOwned::Borrowed(&v[1..][0..usize::from(v[0])]))
+            }
             InlineOrHashed::Indirect(indirect) => {
-                indirect.data.use_value(loader, |v| f(Some(&indirect.hash), v))
+                let b = indirect.data.get_ref(loader);
+                let hash = Some(&indirect.hash);
+                match b {
+                    MaybeOwned::Borrowed(b) => (hash, MaybeOwned::Borrowed(&b[..])),
+                    MaybeOwned::Owned(o) => (hash, MaybeOwned::Owned(o)),
+                }
             }
         }
     }
@@ -982,7 +1002,10 @@ where
     V: ToSHA256<Ctx>,
 {
     #[inline(always)]
-    fn hash(&self, ctx: &mut Ctx) -> Hash { self.use_value_(ctx, |ctx, v| v.hash(ctx)) }
+    fn hash(&self, ctx: &mut Ctx) -> Hash {
+        let v = self.get_ref(ctx);
+        v.hash(ctx)
+    }
 }
 
 impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node {
@@ -1348,7 +1371,9 @@ impl Node {
     #[cfg(feature = "display-state")]
     pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
         let value = if let Some(ref value) = self.value {
-            value.borrow().use_value(loader, |value| format!(", value = {:?}", value))
+            let value_ref = value.borrow();
+            let value = value_ref.get_ref(loader);
+            format!(", value = {:?}", value)
         } else {
             String::new()
         };
@@ -1357,7 +1382,7 @@ impl Node {
         for (key, node) in &self.children {
             builder.begin_child(format!("Child {:#x}", *key));
             let node = node.borrow();
-            let node = node.use_value(loader, |node| node.data.clone());
+            let node = node.get_ref(loader).data.clone();
             node.display_tree(builder, loader);
             builder.end_child();
         }
@@ -2063,6 +2088,13 @@ impl MutableTrie {
     }
 
     /// Use the entry. This does not modify any structure.
+    ///
+    /// Note that in case the entry is borrowed, i.e., in the persistent part of
+    /// the tree, the callback is called while a read lock to the specific
+    /// value is acquired. The lock is released after the closure returns.
+    /// Thus a precondition to this function is that a write lock is not
+    /// acquired to the specific value, and the callback does not attempt to
+    /// acquire it.
     pub fn with_entry<X>(
         &self,
         entry: EntryId,
@@ -2077,7 +2109,10 @@ impl MutableTrie {
                 entry_idx,
             } => {
                 if borrowed {
-                    borrowed_values.get(entry_idx).map(|v| v.borrow().use_value(loader, f))
+                    let v = borrowed_values.get(entry_idx)?;
+                    let v_ref = v.borrow();
+                    let x = v_ref.get_ref(loader);
+                    Some(f(&*x))
                 } else {
                     values.get(entry_idx).map(|b| f(&b[..]))
                 }
@@ -2885,21 +2920,22 @@ impl Hashed<Node> {
             // store the value
             if let Some(v) = node.value.as_ref() {
                 let borrowed = v.borrow();
-                borrowed.use_value_and_hash(loader, |mhash, v| {
-                    let len = v.as_ref().len();
-                    out.write_u32::<BigEndian>(len as u32)?;
-                    if let Some(hash) = mhash {
-                        out.write_all(hash.as_ref())?;
-                    }
-                    out.write_all(v.as_ref())
-                })?;
+                let (mhash, v) = borrowed.get_ref_and_hash(loader);
+                let len = v.as_ref().len();
+                out.write_u32::<BigEndian>(len as u32)?;
+                if let Some(hash) = mhash {
+                    out.write_all(hash.as_ref())?;
+                }
+                out.write_all(v.as_ref())?
             }
             // There can be at most 16 children, this is safe.
             out.write_u8(node.children.len() as u8)?;
             let parent_idx = node_counter;
             for (key, child) in node.children.iter() {
                 out.write_u8(key.value)?;
-                child.borrow().use_value(loader, |nd| queue.push_back((nd.clone(), parent_idx)));
+                let child_ref = child.borrow();
+                let nd = child_ref.get_ref(loader);
+                queue.push_back((nd.clone(), parent_idx));
             }
             node_counter += 1;
         }
@@ -3053,12 +3089,14 @@ impl Node {
                     key_step,
                 } => {
                     let (_, c) = children.iter().find(|&&(ck, _)| ck == key_step)?;
-                    c.borrow().use_value(loader, |node| {
+                    {
+                        let node_ref = c.borrow();
+                        let node = node_ref.get_ref(loader);
                         path = node.data.path.clone();
                         tmp.clear();
                         tmp.extend_from_slice(&node.data.children);
                         value = node.data.value.clone();
-                    });
+                    }
                     children.clear();
                     children.append(&mut tmp);
                 }

@@ -246,9 +246,8 @@ fn prop_serialization() {
             return Ok(());
         };
         let mut out = Vec::new();
-        frozen.use_value_(&mut loader, |loader, node| {
-            node.serialize(loader, &mut out).context("Serialization failed.")
-        })?;
+        let node = frozen.get_ref(&mut loader);
+        node.serialize(&mut loader, &mut out).context("Serialization failed.")?;
         let original_hash = frozen.hash(&mut loader);
         let mut source = std::io::Cursor::new(&out);
         let deserialized = CachedRef::Memory {

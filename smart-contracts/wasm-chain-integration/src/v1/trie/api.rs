@@ -91,7 +91,8 @@ impl PersistentState {
             PersistentState::Empty => out.write_u8(0)?,
             PersistentState::Root(ht) => {
                 out.write_u8(1)?;
-                ht.use_value_(loader, |loader, node| node.serialize(loader, out))?
+                let node = ht.get_ref(loader);
+                node.serialize(loader, out)?;
             }
         }
         Ok(())
@@ -117,7 +118,8 @@ impl PersistentState {
         match self {
             PersistentState::Empty => None,
             PersistentState::Root(node) => {
-                let data = node.use_value_(loader, |loader, node| node.data.lookup(loader, key))?;
+                let node = node.get_ref(loader);
+                let data = node.data.lookup(loader, key)?;
                 let borrowed = data.borrow();
                 Some(borrowed.get(loader))
             }
@@ -160,7 +162,8 @@ impl PersistentState {
         match self {
             Self::Empty => {}
             Self::Root(node) => {
-                node.use_value_(loader, |loader, tree| tree.data.display_tree(builder, loader))
+                let tree = node.get_ref(loader);
+                tree.data.display_tree(builder, loader)
             }
         }
     }
