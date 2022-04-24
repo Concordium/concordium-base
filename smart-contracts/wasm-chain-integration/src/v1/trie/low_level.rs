@@ -462,6 +462,8 @@ impl<V> CachedRef<V> {
                 value,
             } => {
                 let reference = backing_store.store_raw(value.as_ref())?;
+                // Take the value out of the cachedref and temporarily replace it with
+                // a dummy value.
                 let value = std::mem::replace(self, CachedRef::Disk {
                     reference,
                 });
@@ -469,6 +471,7 @@ impl<V> CachedRef<V> {
                     value,
                 } = value
                 {
+                    // and now write the cached value back in.
                     *self = CachedRef::Cached {
                         value,
                         reference,
@@ -848,10 +851,11 @@ type ValueLink = Link<InlineOrHashed>;
 /// and a pointer to the actual value. The intention is that small values will
 /// be stored inline and larger values behind and indirection.
 pub enum InlineOrHashed {
-    /// The value stored inline. The first byte is the actual length of the
-    /// value, which must be less than `INLINE_VALUE_LEN`. The remaining
-    /// length bytes are the actual value.
-    Inline([u8; INLINE_VALUE_LEN + 1]),
+    /// The value stored inline.
+    Inline {
+        len:  u8,
+        data: [u8; INLINE_VALUE_LEN],
+    },
     /// A value stored together with a hash. The value is stored behind an
     /// indirection, the hash is stored inline.
     Indirect(Hashed<CachedRef<Box<[u8]>>>),
@@ -861,10 +865,12 @@ pub enum InlineOrHashed {
 /// Read an inline buffer **assuming `len <= INLINE_VALUE_LEN`. Otherwise this
 /// function will panic.
 fn read_buf(source: &mut impl std::io::Read, len: u8) -> LoadResult<InlineOrHashed> {
-    let mut buf = [0u8; INLINE_VALUE_LEN + 1];
-    buf[0] = len;
-    source.read_exact(&mut buf[1..][0..usize::from(len)])?;
-    Ok(InlineOrHashed::Inline(buf))
+    let mut data = [0u8; INLINE_VALUE_LEN];
+    source.read_exact(&mut data[0..usize::from(len)])?;
+    Ok(InlineOrHashed::Inline {
+        len,
+        data,
+    })
 }
 
 /// A slice of bytes, either owned or borrowed.
@@ -876,10 +882,12 @@ impl InlineOrHashed {
     /// [INLINE_VALUE_LEN].
     pub fn new<Ctx>(ctx: &mut Ctx, value: Vec<u8>) -> Self {
         if value.len() <= INLINE_VALUE_LEN {
-            let mut buf: [u8; INLINE_VALUE_LEN + 1] = [0u8; INLINE_VALUE_LEN + 1];
-            buf[0] = value.len() as u8;
-            buf[1..=value.len()].copy_from_slice(&value);
-            Self::Inline(buf)
+            let mut data: [u8; INLINE_VALUE_LEN] = [0u8; INLINE_VALUE_LEN];
+            data[0..value.len()].copy_from_slice(&value);
+            Self::Inline {
+                len: value.len() as u8,
+                data,
+            }
         } else {
             Self::Indirect(Hashed::new(value.hash(ctx), CachedRef::Memory {
                 value: value.into_boxed_slice(),
@@ -892,7 +900,10 @@ impl InlineOrHashed {
     /// disk it is loaded using the provided loader.
     pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice {
         match self {
-            InlineOrHashed::Inline(v) => MaybeOwned::Borrowed(&v[1..][0..usize::from(v[0])]),
+            InlineOrHashed::Inline {
+                len,
+                data,
+            } => MaybeOwned::Borrowed(&data[0..usize::from(*len)]),
             InlineOrHashed::Indirect(indirect) => {
                 let b = indirect.data.get(loader);
                 match b {
@@ -912,9 +923,10 @@ impl InlineOrHashed {
         loader: &mut impl BackingStoreLoad,
     ) -> (Option<&Hash>, ByteSlice) {
         match self {
-            InlineOrHashed::Inline(v) => {
-                (None, MaybeOwned::Borrowed(&v[1..][0..usize::from(v[0])]))
-            }
+            InlineOrHashed::Inline {
+                len,
+                data,
+            } => (None, MaybeOwned::Borrowed(&data[0..usize::from(*len)])),
             InlineOrHashed::Indirect(indirect) => {
                 let b = indirect.data.get(loader);
                 let hash = Some(&indirect.hash);
@@ -928,7 +940,9 @@ impl InlineOrHashed {
 
     pub(crate) fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         match self {
-            InlineOrHashed::Inline(_) => (), // already loaded
+            InlineOrHashed::Inline {
+                ..
+            } => (), // already loaded
             InlineOrHashed::Indirect(indirect) => {
                 indirect.data.load_and_cache(loader);
             }
@@ -939,7 +953,10 @@ impl InlineOrHashed {
     /// structure, e.g., it does not cache the value.**
     pub fn get_copy(&self, loader: &mut impl BackingStoreLoad) -> Vec<u8> {
         match self {
-            InlineOrHashed::Inline(v) => v[1..][0..v[0].into()].to_vec(),
+            InlineOrHashed::Inline {
+                len,
+                data,
+            } => data[0..usize::from(*len)].to_vec(),
             InlineOrHashed::Indirect(indirect) => Vec::from(indirect.data.get(loader).make_owned()),
         }
     }
@@ -949,7 +966,10 @@ impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed {
     #[inline(always)]
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         match self {
-            InlineOrHashed::Inline(v) => (&v[1..][0..usize::from(v[0])]).hash(ctx),
+            InlineOrHashed::Inline {
+                len,
+                data,
+            } => (&data[0..usize::from(*len)]).hash(ctx),
             InlineOrHashed::Indirect(indirect) => indirect.hash(ctx),
         }
     }
@@ -1175,13 +1195,28 @@ impl Generation {
 }
 
 #[derive(Debug, Clone)]
+/// A mutable trie that exists during execution of a smart contract.
+/// Generally the [MutableTrie] is derived from a [Node], i.e., a persistent
+/// trie. After that, during execution, some parts are modified. When that
+/// happens the relevant part of the trie are copied so that the original
+/// persistent trie remains unmodified.
+/// In contrast to the [Node], all modifications on values purely owned by the
+/// [MutableTrie] are in-place, i.e., this structure is not persistent.
+///
+/// At the end of execution this trie is [frozen](MutableTrie::freeze) to obtain
+/// a new persistent trie.
 pub struct MutableTrie {
     /// Roots for previous generations.
     generations:     Vec<Generation>,
     /// Entries. These are pointers to either [MutableTrie::values] or
     /// [MutableTrie::borrowed_values].
     entries:         Vec<Entry>,
+    /// Values that are owned by this trie. This generally means that either
+    /// they have been modified from values in the persistent trie, or newly
+    /// created.
     values:          Vec<Vec<u8>>,
+    /// Values borrowed from a persistent tree. These are the values that have
+    /// not been modified from the versions that exist in the persistent tree.
     borrowed_values: Vec<ValueLink>,
     /// List of all the nodes for all generations. Nodes for new generations are
     /// always added at the end.
@@ -1362,7 +1397,8 @@ impl Loadable for Node {
 }
 
 impl Node {
-    /// The entire tree in memory.
+    /// Load the entire tree into memory, retaining pointers to where it was
+    /// loaded from in the backing store.
     pub fn cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         if let Some(v) = self.value.as_mut() {
             v.borrow_mut().load_and_cache(loader);
@@ -1475,10 +1511,13 @@ impl Node {
             if let Some(v) = &mut node.value {
                 let mut borrowed = v.borrow_mut();
                 match &mut *borrowed {
-                    InlineOrHashed::Inline(v) => {
+                    InlineOrHashed::Inline {
+                        len,
+                        data,
+                    } => {
                         // write length as a single byte.
-                        buf.write_u8(v[0])?;
-                        buf.write_all(&v[1..][0..usize::from(v[0])])?;
+                        buf.write_u8(*len)?;
+                        buf.write_all(&data[0..usize::from(*len)])?;
                     }
                     InlineOrHashed::Indirect(indirect) => {
                         // Since `INLINE_VALUE_LEN` is no more than `0b1111_1110`
@@ -1936,6 +1975,13 @@ impl MutableTrie {
         };
     }
 
+    /// Advance the iterator. The `counter` is used to keep track of resources
+    /// since in general advancing the iterator may have to traverse a large
+    /// part of the tree.
+    ///
+    /// The return value is an `Err` if the resource counter signals resource
+    /// exhaustion. Otherwise it is `None` if there is no further value to
+    /// be given out, and a pointer to an entry in case there is.
     pub fn next<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,

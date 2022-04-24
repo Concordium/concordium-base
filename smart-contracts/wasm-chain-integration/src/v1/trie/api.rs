@@ -183,7 +183,7 @@ pub struct MutableStateInner {
     /// roots.
     /// The idea is that the mutex is acquired at the start of execution of the
     /// contract and released at the end.
-    /// The reason for the mutex is that we need to be able to clone this so
+    /// The reason for the Arc is that we need to be able to clone this so
     /// that we can share it inside the single transaction.
     state: Arc<Mutex<MutableTrie>>,
 }
