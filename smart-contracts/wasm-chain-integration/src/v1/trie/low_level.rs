@@ -234,6 +234,35 @@ impl PrefixesMap {
 /// A link to a shared occurrence of a value V.
 /// This is used in this module to construct trees, allowing for sharing of
 /// values in trees and subtrees in case of the persistent tree.
+///
+/// This [Link] achieves the following properties
+/// - it is cheap to clone
+/// - it allows for inner mutability
+/// - it is safe to use in a concurrent context.
+///
+/// The cheap cloning is necessary to have efficient persistent trees. The
+/// [Link] is used to point to children, as well as values and in the persistent
+/// tree, modifying the value at a given point means we need to create copies of
+/// the spine of the tree up to the root. This involves cloning pointers to any
+/// parts that have not been modified. Thus these have to be cheap, so we use an
+/// [Arc].
+///
+/// Inner mutability is needed so that the persistent tree may be loaded from
+/// disk, as well as written to disk. This is achieved in combination with
+/// [CachedRef]. Instead of using an [RwLock] we could instead use a [Mutex]
+/// which would achieve the same API. However based on benchmarks the RwLock has
+/// negligible overhead in the case of a single reader, and thus the [RwLock]
+/// seems the more natural choice since it allows concurrent reads of the tree.
+///
+/// Finally, the reference counting must be atomic since parts of the tree are
+/// dropped concurrently. While all the operations of the smart contract
+/// execution engine are sequential, multiple states may be derived from the
+/// same state in different threads. Currently this happens when using
+/// invokeContract, but in the future with parallel block execution it might
+/// also happen during normal block processing.
+/// Additionally, if the Haskell runtime is configured with the parallel garbage
+/// collector then parts of the tree might be dropped concurrently. This also
+/// requires atomic reference counting.
 pub struct Link<V> {
     link: Arc<RwLock<V>>,
 }
@@ -279,14 +308,14 @@ impl<V> Link<V> {
 /// memory, purely in backing storage, or both in memory and in backing storage.
 pub enum CachedRef<V> {
     Disk {
-        key: Reference,
+        reference: Reference,
     },
     Memory {
         value: V,
     },
     Cached {
-        key:   Reference,
-        value: V,
+        reference: Reference,
+        value:     V,
     },
 }
 
@@ -336,9 +365,9 @@ impl<V: Loadable> CachedRef<V> {
     pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<V> {
         match self {
             CachedRef::Disk {
-                key,
+                reference,
             } => {
-                let loaded = V::load_from_location(loader, *key).unwrap();
+                let loaded = V::load_from_location(loader, *reference).unwrap();
                 MaybeOwned::Owned(loaded)
             }
             CachedRef::Memory {
@@ -362,11 +391,11 @@ impl<V> CachedRef<V> {
         V: Loadable, {
         match self {
             CachedRef::Disk {
-                key,
+                reference,
             } => {
-                let value = V::load_from_location(loader, *key).unwrap();
+                let value = V::load_from_location(loader, *reference).unwrap();
                 *self = CachedRef::Cached {
-                    key: *key,
+                    reference: *reference,
                     value,
                 };
                 if let CachedRef::Cached {
@@ -392,13 +421,13 @@ impl<V> CachedRef<V> {
     /// If the value is in memory, set it to cached with the given key.
     /// Otherwise do nothing. This of course has the precondition that the key
     /// stores the value in the relevant backing store. Internal use only.
-    fn cache_with(&mut self, key: Reference) {
+    fn cache_with(&mut self, reference: Reference) {
         if let CachedRef::Memory {
             ..
         } = self
         {
             let value = std::mem::replace(self, CachedRef::Disk {
-                key,
+                reference,
             });
             if let CachedRef::Memory {
                 value,
@@ -406,7 +435,7 @@ impl<V> CachedRef<V> {
             {
                 *self = CachedRef::Cached {
                     value,
-                    key,
+                    reference,
                 };
             } else {
                 // this is unreachable since we hold a mutable reference to the cached value
@@ -416,6 +445,8 @@ impl<V> CachedRef<V> {
         }
     }
 
+    /// If the value is purely in memory then store it the backing store.
+    /// Store the reference (in the backing store) into the provided buffer.
     pub(crate) fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
@@ -425,14 +456,14 @@ impl<V> CachedRef<V> {
         V: AsRef<[u8]>, {
         match self {
             CachedRef::Disk {
-                key,
-            } => key.store(buf),
+                reference,
+            } => reference.store(buf),
             CachedRef::Memory {
                 value,
             } => {
-                let key = backing_store.store_raw(value.as_ref())?;
+                let reference = backing_store.store_raw(value.as_ref())?;
                 let value = std::mem::replace(self, CachedRef::Disk {
-                    key,
+                    reference,
                 });
                 if let CachedRef::Memory {
                     value,
@@ -440,37 +471,37 @@ impl<V> CachedRef<V> {
                 {
                     *self = CachedRef::Cached {
                         value,
-                        key,
+                        reference,
                     };
                 } else {
                     // this is unreachable since we hold a mutable reference to the cached value
                     // and we know the value was a purely in-memory one
                     unsafe { std::hint::unreachable_unchecked() }
                 }
-                key.store(buf)
+                reference.store(buf)
             }
             CachedRef::Cached {
-                key,
+                reference,
                 ..
-            } => key.store(buf),
+            } => reference.store(buf),
         }
     }
 
     /// Get a mutable reference to the value, **if it is only in memory**.
-    /// Otherwise return the key.
+    /// Otherwise return the reference to the backing store.
     #[inline]
-    pub(crate) fn get_mut_or_key(&mut self) -> Result<&mut V, Reference> {
+    pub(crate) fn get_mut_or_reference(&mut self) -> Result<&mut V, Reference> {
         match self {
             CachedRef::Disk {
-                key,
-            } => Err(*key),
+                reference,
+            } => Err(*reference),
             CachedRef::Memory {
                 value,
             } => Ok(value),
             CachedRef::Cached {
-                key,
+                reference,
                 ..
-            } => Err(*key),
+            } => Err(*reference),
         }
     }
 
@@ -1293,7 +1324,7 @@ impl<V> Loadable for CachedRef<V> {
     ) -> LoadResult<Self> {
         let reference = Reference::load(loader, source)?;
         Ok(CachedRef::Disk {
-            key: reference,
+            reference,
         })
     }
 }
@@ -1479,7 +1510,7 @@ impl Node {
         while let Some((node_ref, children_processed)) = stack.pop() {
             let node_ref_clone = node_ref.clone();
             let mut node_ref_mut = node_ref.borrow_mut();
-            match node_ref_mut.get_mut_or_key() {
+            match node_ref_mut.get_mut_or_reference() {
                 Ok(hashed_node) => {
                     // the node is not stored in the backing store yet. So we need to do it.
                     if children_processed {
@@ -1686,11 +1717,11 @@ impl CachedRef<Hashed<Node>> {
     ) -> MutableNode {
         match self {
             CachedRef::Disk {
-                key,
+                reference,
                 ..
             } => {
-                let node: Hashed<Node> =
-                    Hashed::<Node>::load_from_location(loader, *key).expect("Failed to read.");
+                let node: Hashed<Node> = Hashed::<Node>::load_from_location(loader, *reference)
+                    .expect("Failed to read.");
                 node.data.thaw(self, borrowed_values, entries, generation)
             }
             CachedRef::Memory {
@@ -1731,7 +1762,7 @@ impl CachedRef<Hashed<Node>> {
         backing_store: &mut S,
         buf: &mut W,
     ) -> StoreResult<()> {
-        let reference = match self.get_mut_or_key() {
+        let reference = match self.get_mut_or_reference() {
             Ok(node) => {
                 let data: Vec<u8> = node.store_update(backing_store)?;
                 backing_store.store_raw(&data)?
@@ -2883,7 +2914,7 @@ fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), 
 /// have to "consume" nodes from a vector without changing indices. We do this
 /// by replacing nodes with a (cheap) value.
 const INVALID_NODE_CACHED_REF: CachedRef<Hashed<Node>> = CachedRef::Disk {
-    key: Reference {
+    reference: Reference {
         reference: 0,
     },
 };
@@ -3145,7 +3176,7 @@ impl Node {
         for child in self.children.iter() {
             match &*child.1.borrow() {
                 CachedRef::Disk {
-                    key: _,
+                    reference: _,
                 } => {
                     return false;
                 }
@@ -3157,7 +3188,7 @@ impl Node {
                     }
                 }
                 CachedRef::Cached {
-                    key: _,
+                    reference: _,
                     value,
                 } => {
                     if !value.data.is_cached() {
