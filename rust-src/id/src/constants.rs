@@ -25,7 +25,7 @@ pub type BaseField = <pairing::bls12_381::Bls12 as Pairing>::ScalarField;
 /// Index used to create the RegId of the initial credential.
 pub const INITIAL_CREDENTIAL_INDEX: u8 = 0;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, schemars::JsonSchema)]
 /// Concrete attribute values.
 /// All currently supported attributes are string values.
 pub struct AttributeKind(pub String);

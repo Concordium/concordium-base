@@ -8,7 +8,9 @@ pub const VERSION_0: Version = Version { value: 0 };
 /// integer represented by bytes, where MSB=1 indicates more bytes follow, and
 /// the 7 lower bits in a byte is Big Endian data bits for the value. A version
 /// number is bounded by u32 max.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema,
+)]
 #[serde(transparent)]
 pub struct Version {
     pub value: u32,
@@ -74,7 +76,7 @@ impl Deserial for Version {
 /// which is serialized using variable integer encoding.
 /// The caller is responsible for ensuring the data structure `T`
 /// is compatible with the version number.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema)]
 pub struct Versioned<T> {
     #[serde(rename = "v")]
     pub version: Version,
