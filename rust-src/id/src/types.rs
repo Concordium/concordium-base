@@ -1695,7 +1695,7 @@ pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 
 impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
 
-#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 /// A set of cryptographic parameters that are particular to the chain and
 /// shared by everybody that interacts with the chain.
@@ -1704,11 +1704,13 @@ pub struct GlobalContext<C: Curve> {
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
     #[serde(rename = "onChainCommitmentKey")]
+    #[schemars(with = "ArPublicKeySchemaType")]
     pub on_chain_commitment_key: PedersenKey<C>,
     /// Generators for the bulletproofs.
     /// It is unclear what length we will require here, or whether we'll allow
     /// dynamic generation.
     #[serde(rename = "bulletproofGenerators")]
+    #[schemars(with = "ArPublicKeySchemaType")]
     bulletproof_generators:      Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
