@@ -8,7 +8,9 @@ use curve_arithmetic::*;
 
 use std::ops::Deref;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize, schemars::JsonSchema,
+)]
 /// A Commitment is a group element.
 pub struct Commitment<C: Curve>(pub C);
 

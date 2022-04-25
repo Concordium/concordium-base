@@ -42,6 +42,29 @@ pub struct EncryptedAmount<C: Curve> {
     pub encryptions: [Cipher<C>; 2],
 }
 
+impl<C> schemars::JsonSchema for EncryptedAmount<C>
+where
+    C: Curve,
+{
+    fn schema_name() -> String { "EncryptedAmount".into() }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(
+                StringValidation {
+                    max_length: None,
+                    min_length: None, // TODO
+                    pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                }
+                .into(),
+            ),
+            ..SchemaObject::default()
+        })
+    }
+}
+
 impl<C: Curve> AsRef<[Cipher<C>; 2]> for EncryptedAmount<C> {
     fn as_ref(&self) -> &[Cipher<C>; 2] { &self.encryptions }
 }

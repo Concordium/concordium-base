@@ -11,7 +11,19 @@ use thiserror::*;
 
 /// Index of an account key that is to be used.
 #[derive(
-    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Display, From, Into,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Hash,
+    Serialize,
+    Display,
+    From,
+    Into,
+    schemars::JsonSchema,
 )]
 #[repr(transparent)]
 #[derive(SerdeSerialize)]
@@ -33,6 +45,7 @@ pub struct KeyIndex(pub u8);
     Display,
     From,
     Into,
+    schemars::JsonSchema,
 )]
 #[serde(transparent)]
 /// Index of the credential that is to be used.

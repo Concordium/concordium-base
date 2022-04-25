@@ -188,7 +188,9 @@ impl AccountAddress {
 }
 
 /// Threshold for the number of signatures required.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, Into)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, Into, schemars::JsonSchema,
+)]
 #[repr(transparent)]
 /// The values of this type must maintain the property that they are not 0.
 #[derive(SerdeSerialize)]
@@ -347,8 +349,27 @@ impl fmt::Display for IpIdentity {
 #[serde(into = "u32", try_from = "u32")]
 /// Identity of the anonymity revoker on the chain. This defines their
 /// evaluation point for secret sharing, and thus it cannot be 0.
-#[derive(schemars::JsonSchema)]
 pub struct ArIdentity(u32);
+
+impl schemars::JsonSchema for ArIdentity {
+    fn schema_name() -> String { "ArIdentity".into() }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(
+                StringValidation {
+                    max_length: Some(u32::MAX),
+                    min_length: Some(1),
+                    pattern:    Some("^([0-9]?)*$".into()),
+                }
+                .into(),
+            ),
+            ..SchemaObject::default()
+        })
+    }
+}
 
 impl Deserial for ArIdentity {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -407,7 +428,9 @@ impl ArIdentity {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, schemars::JsonSchema,
+)]
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(try_from = "AttributeStringTag", into = "AttributeStringTag")]
@@ -535,6 +558,14 @@ pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Seri
 pub struct YearMonth {
     pub year:  u16,
     pub month: u8,
+}
+
+impl schemars::JsonSchema for YearMonth {
+    fn schema_name() -> String { "YearMonth".into() }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        String::json_schema(gen)
+    }
 }
 
 impl ToString for YearMonth {
@@ -782,13 +813,38 @@ pub struct IpArDecryptedData<C: Curve> {
 /// Data relating to a single anonymity revoker sent by the account holder to
 /// the chain.
 /// Typically a vector of these will be sent to the chain.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema,
+)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ChainArData<C: Curve> {
     /// encrypted share of id cred pub
     #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
 }
+
+// impl<C> schemars::JsonSchema for ChainArData<C>
+// where
+//     C: Curve,
+// {
+//     fn schema_name() -> String { "ChainArData".into() }
+
+//     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) ->
+// schemars::schema::Schema {         use schemars::schema::*;
+//         Schema::Object(SchemaObject {
+//             instance_type: Some(InstanceType::String.into()),
+//             string: Some(
+//                 StringValidation {
+//                     max_length: None,
+//                     min_length: Some(64),
+//                     pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+//                 }
+//                 .into(),
+//             ),
+//             ..SchemaObject::default()
+//         })
+//     }
+// }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
 /// This is the decrypted counterpart of ChainArData.
@@ -1027,7 +1083,7 @@ pub struct ArInfo<C: Curve> {
     pub ar_public_key:  ArPublicKey<C>,
 }
 
-struct ArPublicKeySchemaType;
+pub struct ArPublicKeySchemaType;
 
 impl schemars::JsonSchema for ArPublicKeySchemaType {
     fn schema_name() -> String { "PublicKey".into() }
@@ -1075,7 +1131,9 @@ impl<C: Curve> HasArPublicKey<C> for ArPublicKey<C> {
 
 /// The commitments sent by the account holder to the chain in order to
 /// deploy credentials
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema,
+)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct CredentialDeploymentCommitments<C: Curve> {
     /// commitment to the prf key
@@ -1265,7 +1323,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize, schemars::JsonSchema)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -1320,6 +1378,50 @@ pub enum SchemeId {
 /// supported.
 pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
+}
+
+impl schemars::JsonSchema for VerifyKey {
+    fn schema_name() -> String { "VerifyKey".into() }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        let mut properties = BTreeMap::new();
+        properties.insert(
+            "verifyKey".to_string(),
+            Schema::Object(SchemaObject {
+                instance_type: Some(InstanceType::String.into()),
+                string: Some(
+                    StringValidation {
+                        max_length: Some(64),
+                        min_length: Some(64),
+                        pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                    }
+                    .into(),
+                ),
+                ..SchemaObject::default()
+            }),
+        );
+        properties.insert(
+            "schemeId".to_string(),
+            // Consider adding some validation. It seems to always be "Ed25519"
+            Schema::Object(SchemaObject {
+                instance_type: Some(InstanceType::String.into()),
+                ..SchemaObject::default()
+            }),
+        );
+
+        Schema::Object(SchemaObject {
+            instance_type: Some(InstanceType::Object.into()),
+            object: Some(
+                ObjectValidation {
+                    properties,
+                    ..ObjectValidation::default()
+                }
+                .into(),
+            ),
+            ..SchemaObject::default()
+        })
+    }
 }
 
 impl SerdeSerialize for VerifyKey {
@@ -1463,7 +1565,9 @@ impl VerifyKey {
 }
 
 /// Values (as opposed to proofs) in credential deployment.
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone, schemars::JsonSchema,
+)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -1499,7 +1603,9 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
 }
 
 /// Values in initial credential deployment.
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone, schemars::JsonSchema,
+)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -1580,7 +1686,7 @@ pub struct CredentialDeploymentInfo<
 /// Account credential with values and commitments, but without proofs.
 /// Serialization must match the serializaiton of `AccountCredential` in
 /// Haskell.
-#[derive(SerdeSerialize, SerdeDeserialize, Debug)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, schemars::JsonSchema)]
 #[serde(tag = "type", content = "contents")]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
@@ -1988,7 +2094,7 @@ impl InitialAccountDataWithSigning for InitialAccountData {
 
 /// Public credential keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone, schemars::JsonSchema)]
 pub struct CredentialPublicKeys {
     #[serde(rename = "keys")]
     pub keys:      BTreeMap<KeyIndex, VerifyKey>,

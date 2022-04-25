@@ -659,6 +659,7 @@ dependencies = [
  "pairing",
  "rand",
  "rand_core 0.5.1",
+ "schemars",
  "serde",
  "thiserror",
 ]
@@ -682,6 +683,7 @@ dependencies = [
  "pedersen_scheme",
  "rand",
  "random_oracle",
+ "schemars",
  "serde",
  "wasm-bindgen",
 ]
@@ -1060,6 +1062,7 @@ dependencies = [
  "pairing",
  "rand",
  "rand_core 0.5.1",
+ "schemars",
  "serde",
  "thiserror",
 ]

@@ -13,6 +13,29 @@ use std::rc::Rc;
 /// Encrypted message.
 pub struct Cipher<C: Curve>(pub C, pub C);
 
+impl<C> schemars::JsonSchema for Cipher<C>
+where
+    C: Curve,
+{
+    fn schema_name() -> std::string::String { "Cipher".into() }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(
+                StringValidation {
+                    max_length: None,
+                    min_length: Some(64), // TODO: Correct value here?
+                    pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                }
+                .into(),
+            ),
+            ..SchemaObject::default()
+        })
+    }
+}
+
 /// Randomness which was used to encrypt a message.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[repr(transparent)]

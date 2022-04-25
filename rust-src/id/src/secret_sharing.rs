@@ -8,7 +8,7 @@ use rand::*;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serial)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serial, schemars::JsonSchema)]
 /// Revealing threshold, i.e., degree of the polynomial + 1.
 /// This value must always be at least 1.
 #[derive(SerdeSerialize, SerdeDeserialize)]
