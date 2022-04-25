@@ -979,12 +979,12 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
 pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {
-        /// New state, if it changed.
-        new_state:   bool,
+        /// Whether the state has been updated or not.
+        state_updated: bool,
         /// Balance after the execution of the interrupt.
-        new_balance: Amount,
+        new_balance:   Amount,
         /// Some calls do not have any return values, such as transfers.
-        data:        Option<ParameterVec>,
+        data:          Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
@@ -1173,7 +1173,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
     };
     let response = match response {
         InvokeResponse::Success {
-            new_state,
+            state_updated,
             new_balance,
             data,
         } => {
@@ -1181,7 +1181,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
             // the response value is constructed by setting the last 5 bytes to 0
             // for the first 3 bytes, the first bit is 1 if the state changed, and 0
             // otherwise the remaining bits are the index of the parameter.
-            let tag = if new_state {
+            let tag = if state_updated {
                 0b1000_0000_0000_0000_0000_0000u64
             } else {
                 0

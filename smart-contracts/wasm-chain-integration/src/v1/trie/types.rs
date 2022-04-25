@@ -60,7 +60,10 @@ pub(crate) const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 /// make sure that resource bounds are not exceeded.
 pub trait TraversalCounter {
     type Err: std::fmt::Debug;
-    fn tick(&mut self, num: u64) -> Result<(), Self::Err>;
+    /// Count for traversing the given number of chunks of the key.
+    /// See [MutableTrie::next](super::low_level::MutableTrie::next) for details
+    /// on how this is used.
+    fn count_key_traverse_part(&mut self, num: u64) -> Result<(), Self::Err>;
 }
 
 /// A trait that supports counting new memory allocations in the tree.
@@ -81,7 +84,7 @@ impl TraversalCounter for EmptyCounter {
     type Err = NoError;
 
     #[inline(always)]
-    fn tick(&mut self, _num: u64) -> Result<(), Self::Err> { Ok(()) }
+    fn count_key_traverse_part(&mut self, _num: u64) -> Result<(), Self::Err> { Ok(()) }
 }
 
 impl<V> AllocCounter<V> for EmptyCounter {
@@ -94,14 +97,27 @@ impl<V> AllocCounter<V> for EmptyCounter {
 /// A type that can be used to collect auxiliary information while a mutable
 /// trie is being frozen. Particular use-cases of this are collecting the size
 /// of new data, as well as new persistent nodes.
-/// TODO: Methods should probably return Result/Option so that we can terminate
-/// early in case of out of energy.
+///
+/// Note that ideally these methods should return Result/Option so that we can
+/// terminate early in case of out of energy. However that is at the moment
+/// complex to set up with the way we exchange data through the FFI. Thus for
+/// now the behaviour is that we collect all the data, and then decide whether
+/// the collected size is too large. This is adequate since other energy bounds
+/// ensure that there is not too much data to collect, i.e., more than we could
+/// handle. Nevertheless it would be cleaner if we could terminate early.
 pub trait Collector<V> {
+    /// Account for the stored value.
     fn add_value(&mut self, data: &V);
+    /// Account for the stored path in the node (the "stem"). See
+    /// [low_level](super::low_level::Node) for an explanation of this concept.
+    /// The argument is the length of the path in **chunks**, i.e., 4-bit
+    /// segments.
     fn add_path(&mut self, path: usize);
+    /// Account for storing the given number of children.
     fn add_children(&mut self, num_children: usize);
 }
-/// Collector that does not collect anything.
+
+/// Collector that does not collect anything. Mainly for testing.
 pub struct EmptyCollector;
 
 impl<V> Collector<V> for EmptyCollector {
@@ -126,8 +142,6 @@ impl SizeCollector {
     pub fn collect(self) -> u64 { self.num_bytes }
 }
 
-// TODO: Make sure this is adequate. There is a bit of overhead with size length
-// when we store data.
 impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
     #[inline]
     fn add_value(&mut self, data: &V) {
@@ -211,9 +225,10 @@ impl<S> Loader<S> {
 }
 
 impl<'a, A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
-    type R = Vec<u8>;
+    // with 28 the size of the type is 32 bytes, with 29 it is 40.
+    // Since a normal vector takes 24 bytes always this seems a good compromise.
+    type R = tinyvec::TinyVec<[u8; 28]>;
 
-    // FIXME: This is inefficient. We allocate too many vectors.
     fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
         let slice = self.inner.as_ref();
         let mut c = std::io::Cursor::new(slice);
@@ -221,7 +236,7 @@ impl<'a, A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
         let len = c.read_u64::<BigEndian>()?;
         let end = (pos + 8 + len) as usize;
         if end <= slice.len() {
-            Ok(slice[pos as usize + 8..end].to_vec())
+            Ok(slice[pos as usize + 8..end].into())
         } else {
             Err(LoadError::OutOfBoundsRead)
         }

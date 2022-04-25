@@ -6,6 +6,37 @@
 //! unsafe, could trigger panics, or memory corruption. For this reason
 //! functions should only be used via the exposed high-level api in the
 //! `super::api` module, which is re-exported at the top-level.
+//!
+//! The low-level api is structured around two main structures, the [`Node`] and
+//! the [`MutableTrie`]. The former is used to express persistent trees that,
+//! once constructed, are never modified. The latter is used during transaction
+//! execution to efficiently update the state.
+//!
+//! The [`MutableTrie`] exists for the entire duration of the transaction, and
+//! is destroyed at the end. It supports generations, which are used for
+//! checkpointing and corresponding rollbacks.
+//!
+//! The overall flow of operations is as follows. Execution starts with the
+//! current contract state, which is a root [`Node`] (or an empty state). This
+//! node is then converted into a [`MutableTrie`] via
+//! [`make_mutable`](CachedRef::make_mutable)). The contract execution engine
+//! operates on this structure, which supports all the necessary operations,
+//! e.g., lookup, insert, creation and use of iterators.
+//!
+//! In case execution of contract `A` `invoke`'s contract `A` again (either
+//! directly, or via intermediate contract) execution of the inner contract `A`
+//! starts in the state at the time of `invoke`. Since the execution of the
+//! inner contract `A` might fail we must be able to roll back any state changes
+//! it has done up to that point. This is achieved via checkpointing which is
+//! achieved via generations. When the inner contract starts execution we create
+//! a checkpoint by starting a new generation of the [`MutableTrie`]. This
+//! allows for relatively efficient updates and rollbacks. If the execution of
+//! the inner contract succeeds then the outer `A` resumes in the newest
+//! generation. If it fails, the newest generation is deleted, along with any
+//! modifications.
+//!
+//! Thus generations in effect achieve a persistent data structure, but in such
+//! a way that updates are still almost as efficient as for a mutable trie.
 use super::types::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 #[cfg(feature = "display-state")]
@@ -36,7 +67,7 @@ const INLINE_CAPACITY: usize = 4;
 /// with the node, and the hash will not be stored explicitly. Values bigger
 /// than this bound are stored via a [CachedRef] indirection, and the hash is
 /// explicitly stored inline with the node.
-/// This must never be more than 0b1111_1110.
+/// This must never be more than `0b1111_1110`.
 const INLINE_VALUE_LEN: usize = 64;
 
 #[derive(Default, Debug, Clone)]
@@ -249,10 +280,11 @@ impl PrefixesMap {
 ///
 /// Inner mutability is needed so that the persistent tree may be loaded from
 /// disk, as well as written to disk. This is achieved in combination with
-/// [CachedRef]. Instead of using an [RwLock] we could instead use a [Mutex]
-/// which would achieve the same API. However based on benchmarks the RwLock has
-/// negligible overhead in the case of a single reader, and thus the [RwLock]
-/// seems the more natural choice since it allows concurrent reads of the tree.
+/// [CachedRef]. Instead of using an [RwLock] we could instead use a
+/// [Mutex](std::sync::Mutex) which would achieve the same API. However based on
+/// benchmarks the RwLock has negligible overhead in the case of a single
+/// reader, and thus the [RwLock] seems the more natural choice since it allows
+/// concurrent reads of the tree.
 ///
 /// Finally, the reference counting must be atomic since parts of the tree are
 /// dropped concurrently. While all the operations of the smart contract
@@ -533,7 +565,9 @@ impl<V> CachedRef<V> {
 /// node instead of having many nodes with a single child.
 struct Stem {
     pub(crate) data:         Box<[u8]>,
-    /// Whether the last chunk is partial or not.
+    /// Whether the last chunk is partial or not, i.e., whether all the bytes of
+    /// [`data`](Self::data) are in used, or whether only the first 4 bits
+    /// of the last byte are used.
     pub(crate) last_partial: bool,
 }
 
@@ -542,7 +576,9 @@ struct Stem {
 /// This is an implementation detail of the iterator.
 struct MutStem {
     pub(crate) data:         Vec<u8>,
-    /// Whether the last chunk is partial or not.
+    /// Whether the last chunk is partial or not, i.e., whether all the bytes of
+    /// [`data`](Self::data) are in used, or whether only the first 4 bits
+    /// of the last byte are used.
     pub(crate) last_partial: bool,
 }
 
@@ -580,10 +616,21 @@ impl MutStem {
         }
         if self.last_partial {
             let start = self.data.len();
+            // take the first 4 bits of the extension stem
             let left = second.data[0] & 0xf0;
-            *self.data.last_mut().expect("Odd has at least one field.") |= left >> 4;
+            *self
+                .data
+                .last_mut()
+                .expect("Since the last element is partial data has at least one field.") |=
+                left >> 4;
+            // now the `self` is complete, i.e., the last byte is fully used. We now extend
+            // it with any remaining part of the extension stem.
             if second.last_partial {
+                // first just append all the remaining bytes. This skips the second byte of the
+                // extension stem.
                 self.data.extend_from_slice(&second.data[1..]);
+                // and then shift them to the right by 4 bits, inserting the nibble we skipped.
+                // This means traversing all the bytes.
                 let mut right = second.data[0] & 0x0f;
                 for place in self.data.iter_mut().skip(start) {
                     let tmp = *place & 0x0f;
@@ -593,7 +640,10 @@ impl MutStem {
                 }
                 self.last_partial = false;
             } else {
+                // similar to the previous case, except we append the entire extension stem.
                 self.data.extend_from_slice(&second.data);
+                // and then **shift left** by 4 bits so that we don't duplicate the first 4 bits
+                // of the extension stem.
                 for (place, next) in self
                     .data
                     .iter_mut()
@@ -636,15 +686,10 @@ impl Stem {
 
     /// Return an iterator over the chunks of the stem.
     pub fn iter(&self) -> StemIter {
-        let len = if self.last_partial {
-            2 * self.data.len() - 1
-        } else {
-            2 * self.data.len()
-        };
         StemIter {
             data: &self.data,
-            pos: 0,
-            len,
+            pos:  0,
+            len:  self.len(),
         }
     }
 
@@ -1859,6 +1904,11 @@ impl MutableTrie {
 }
 
 impl MutableTrie {
+    /// Construct a new generation so that further modifications of the trie
+    /// will be reflected in that generation. All existing generations will not
+    /// be affected.
+    /// The effects of this method can be undone with
+    /// [`pop_generation`](Self::pop_generation).
     pub fn new_generation(&mut self) {
         let num_nodes = self.nodes.len();
         let num_values = self.values.len();
@@ -1887,8 +1937,9 @@ impl MutableTrie {
         }
     }
 
-    /// Pop a generation, removing all data that is only accessible from newer
-    /// generations. Return None if no generations are left.
+    /// Pop a generation, removing all data that is only accessible from the
+    /// most recent generation. Return [None] if no generations are left.
+    /// Inverse to [`new_generation`](Self::new_generation).
     pub fn pop_generation(&mut self) -> Option<()> {
         let generation = self.generations.pop()?;
         let checkpoint = generation.checkpoint;
@@ -1901,7 +1952,9 @@ impl MutableTrie {
 
     /// Modify the tree so that the given root is the latest trie generation.
     /// If that root is already the latest, or does not even exist, this does
-    /// nothing.
+    /// nothing. More recent generations are all dropped.
+    /// Analogous to [`pop_generation`](Self::pop_generation) except it
+    /// can be used to forget multiple generations more efficiently.
     pub fn normalize(&mut self, root: u32) {
         let new_len = root as usize + 1;
         let generation = self.generations.get(new_len);
@@ -1999,7 +2052,7 @@ impl MutableTrie {
                 next_child
             } else {
                 iterator.next_child = Some(0);
-                counter.tick(node.path.len() as u64)?;
+                counter.count_key_traverse_part(node.path.len() as u64)?;
                 if node.value.is_some() {
                     return Ok(node.value);
                 }
@@ -2013,14 +2066,16 @@ impl MutableTrie {
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                 let child = children[usize::from(next_child)];
                 iterator.current_node = child.index();
-                counter.tick(1)?;
+                counter.count_key_traverse_part(1)?;
                 iterator.key.push(child.key());
                 let child_node = &owned_nodes[child.index()];
                 iterator.key.extend(&child_node.path);
             } else {
                 // pop back up.
                 if let Some((parent_idx, next_child, key_len)) = iterator.stack.pop() {
-                    counter.tick(iterator.key.len().saturating_sub(key_len) as u64)?;
+                    counter.count_key_traverse_part(
+                        iterator.key.len().saturating_sub(key_len) as u64
+                    )?;
                     iterator.key.truncate(key_len);
                     iterator.current_node = parent_idx;
                     iterator.next_child = Some(next_child);
@@ -2185,9 +2240,14 @@ impl MutableTrie {
         }
     }
 
-    /// TODO: It might be useful to return a list of new nodes so that they
-    /// may be persisted quicker than traversing the tree again.
     /// Freeze the current generation. Returns None if the tree was empty.
+    //
+    // Note that as an optimization opportunity it might be useful to return a
+    // list of new nodes so that they may be persisted quicker than
+    // traversing the tree again. At the moment it is not always true that once
+    // a tree is frozen it will be persisted, but returning a list of node pointers
+    // might still be worth it. If we return a list of pointers there should be
+    // relatively small overhead.
     pub fn freeze<Ctx: BackingStoreLoad, C: Collector<Vec<u8>>>(
         self,
         loader: &mut Ctx,
@@ -2575,7 +2635,7 @@ impl MutableTrie {
                     // traverse each child subtree and invalidate them.
                     while let Some(node_idx) = nodes_to_invalidate.pop() {
                         let to_invalidate = &owned_nodes[node_idx];
-                        counter.tick(to_invalidate.path.len() as u64 + 1)?; // + 1 is for the step from the parent.
+                        counter.count_key_traverse_part(to_invalidate.path.len() as u64 + 1)?; // + 1 is for the step from the parent.
                         if let Some(entry) = to_invalidate.value {
                             let old_entry = std::mem::replace(&mut entries[entry], Entry::Deleted);
                             if let Some(idx) = old_entry.is_owned() {

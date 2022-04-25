@@ -805,7 +805,7 @@ impl trie::TraversalCounter for InterpreterEnergy {
     type Err = anyhow::Error;
 
     #[inline(always)]
-    fn tick(&mut self, num: u64) -> Result<(), Self::Err> {
+    fn count_key_traverse_part(&mut self, num: u64) -> Result<(), Self::Err> {
         self.tick_energy(crate::constants::TREE_TRAVERSAL_STEP_COST * num)
     }
 }

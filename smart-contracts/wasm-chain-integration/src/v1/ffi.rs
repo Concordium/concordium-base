@@ -382,7 +382,7 @@ unsafe extern "C" fn resume_receive_v1(
     // occurred, or null
     config_ptr: *mut *mut ReceiveInterruptedStateV1,
     // whether the state has been updated (non-zero) or not (zero)
-    new_state_tag: u8,
+    state_updated_tag: u8,
     state_ptr_ptr: *mut *mut MutableState,
     new_amount: u64,
     // whether the call succeeded or not.
@@ -405,7 +405,7 @@ unsafe extern "C" fn resume_receive_v1(
                 Some(data)
             }
         };
-        let state_updated = new_state_tag != 0;
+        let state_updated = state_updated_tag != 0;
         // NB: This must match the response encoding in V1.hs in consensus
         // If the first 3 bytes are all set that indicates an error.
         let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
@@ -428,7 +428,7 @@ unsafe extern "C" fn resume_receive_v1(
             }
         } else {
             InvokeResponse::Success {
-                new_state: state_updated,
+                state_updated,
                 new_balance: Amount::from_micro_ccd(new_amount),
                 data,
             }

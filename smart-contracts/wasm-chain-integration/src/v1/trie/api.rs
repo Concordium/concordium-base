@@ -1,7 +1,26 @@
 //! The high-level API that is meant to be used by the rest of the project.
-//! It exposes two main constructs, the [PersistentState] and [MutableState]
+//! It exposes two main constructs, the [`PersistentState`] and [`MutableState`]
 //! that provide all the needed functionality for the implementation of contract
 //! state.
+//!
+//! The [`PersistentState`] is immutable. It is "persistent" in the sense of
+//! persistent data structures, meaning that we never modify it in-place, but
+//! always create new versions. This state is used for recording the state of a
+//! smart contract at the end of a transaction execution.
+//!
+//! State modifications are done via the [`MutableState`] which exists during
+//! transaction execution. This type is modified in-place and supports rollbacks
+//! which are sometimes necessary during the transaction due to contract calls.
+//!
+//! The overall flow is that a [`PersistentState`] is
+//! [thawed](PersistentState::thaw) into a [`MutableState`] when the contract
+//! starts execution. Then a contract is executed, and if it terminates with
+//! success the resulting state is [frozen](MutableState::freeze) into a
+//! [`PersistentState`]. During this process only the part of the original state
+//! that has been modified is copied. The new [`PersistentState`] in general
+//! retains pointers to parts of the original state. This allows for efficient
+//! state updates where we only have to store the parts of the state that are
+//! new.
 use super::{
     low_level::{CachedRef, MutableTrie, Node},
     types::*,
@@ -171,13 +190,29 @@ impl PersistentState {
 
 #[derive(Debug, Clone)]
 /// This type is a technical device to support lazy conversion of
-/// [PersistentState] to [MutableState]. It contains the runtime representation
-/// of the tree that supports efficient updates.
-/// Clone on this structure is designed to be cheap, **and it is a shallow
-/// copy**. Modifications of the inner MutableTrie on either the clone or the
-/// original propagate to the other.
+/// [`PersistentState`] to [`MutableState`]. It contains the runtime
+/// representation of the tree that supports efficient updates.
+/// [`Clone`] on this structure is designed to be cheap, **and it is a shallow
+/// copy**. Modifications of the inner [`MutableTrie`] on either the clone or
+/// the original propagate to the other.
 pub struct MutableStateInner {
-    /// Current root of the tree. The current generation.
+    /// Current root of the tree. The current generation. Generations are a
+    /// device to support rollbacks. Rollbacks are necessary because of
+    /// re-entrancy.
+    ///
+    /// If a contract A calls another contract (i.e., using
+    /// `invoke`) it might call contract A (either directly, or indirectly
+    /// via some intermediate contracts). Since during execution of the
+    /// inner A the state may be modified, and then the execution might fail
+    /// (e.g., logic rejection, or runtime failure), we must be able to roll
+    /// back the state changes that occurred in the inner call when we
+    /// resume execution of the outer A. Generations support this. When we start
+    /// execution of the inner A we start a new generation. The process here is
+    /// really very similar to how we start a [`MutableState`] from a
+    /// [`PersistentState`] when we start the transaction, except that the
+    /// representation of generations is and the [`MutableTrie`] is quite
+    /// different, and more efficient than the representation of the
+    /// [`PersistentState`].
     root:  u32,
     /// The mutable trie itself. The root is an index in the array of generation
     /// roots.
@@ -255,7 +290,10 @@ impl MutableState {
     pub fn make_fresh_generation(&mut self, loader: &mut impl BackingStoreLoad) -> Self {
         if let Some(inner) = self.inner.as_mut() {
             let mut trie = inner.lock();
+            // make sure to forget any newer generations that might have been pushed and not
+            // yet cleaned up.
             trie.normalize(inner.root);
+            // and start a new one.
             trie.new_generation();
             Self {
                 inner:      Some(MutableStateInner {
