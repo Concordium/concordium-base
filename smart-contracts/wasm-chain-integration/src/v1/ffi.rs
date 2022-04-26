@@ -14,8 +14,14 @@
 //! In addition to pointers to structured objects, the remaining data passed
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
+use super::trie::{
+    foreign::{LoadCallback, StoreCallback},
+    EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
+};
 use crate::{slice_from_c_bytes, v1::*};
+use concordium_contracts_common::OwnedReceiveName;
 use libc::size_t;
+use sha2::Digest;
 use std::sync::Arc;
 use wasm_transform::{
     artifact::{CompiledFunction, OwnedArtifact},
@@ -93,6 +99,10 @@ type ReceiveInterruptedStateV1 = ReceiveInterruptedState<CompiledFunction>;
 /// returned.
 #[no_mangle]
 unsafe extern "C" fn call_init_v1(
+    // Operationally this is not really needed since nothing is loaded, since a fresh empty state
+    // is initialized. However reflecting this in types would be a lot of extra work for no
+    // real gain. So we require it.
+    loader: LoadCallback,
     artifact_ptr: *const ArtifactV1,
     init_ctx_bytes: *const u8, // pointer to an initcontext
     init_ctx_bytes_len: size_t,
@@ -104,6 +114,7 @@ unsafe extern "C" fn call_init_v1(
     energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
+    output_state_ptr: *mut *mut MutableState,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let res = std::panic::catch_unwind(|| {
@@ -116,10 +127,18 @@ unsafe extern "C" fn call_init_v1(
         .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(artifact.as_ref(), amount, init_ctx, name, parameter, energy);
+                let res = invoke_init(
+                    artifact.as_ref(),
+                    amount,
+                    init_ctx,
+                    name,
+                    parameter,
+                    energy,
+                    loader,
+                );
                 match res {
                     Ok(result) => {
-                        let (mut out, return_value) = result.extract();
+                        let (mut out, initial_state, return_value) = result.extract();
                         out.shrink_to_fit();
                         *output_len = out.len() as size_t;
                         let ptr = out.as_mut_ptr();
@@ -128,6 +147,10 @@ unsafe extern "C" fn call_init_v1(
                             *output_return_value = Box::into_raw(Box::new(return_value));
                         } else {
                             *output_return_value = std::ptr::null_mut();
+                        }
+                        if let Some(initial_state) = initial_state {
+                            let initial_state = Box::into_raw(Box::new(initial_state));
+                            *output_state_ptr = initial_state;
                         }
                         ptr
                     }
@@ -138,7 +161,7 @@ unsafe extern "C" fn call_init_v1(
         }
     });
     // do not drop the pointer, we are not the owner
-    Arc::into_raw(artifact);
+    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or_else(|_| std::ptr::null_mut())
 }
@@ -178,14 +201,17 @@ unsafe extern "C" fn call_init_v1(
 /// returned.
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
+    loader: LoadCallback,
     artifact_ptr: *const ArtifactV1,
     receive_ctx_bytes: *const u8, // receive context
     receive_ctx_bytes_len: size_t,
     amount: u64,
-    receive_name: *const u8, // name of the entrypoint to invoke
+    // name of the entrypoint that was named. If `call_default` is set below than this will be
+    // different from the entrypoint that is actually invoked.
+    receive_name: *const u8,
     receive_name_len: size_t,
-    state_bytes: *const u8, // serialized contract state
-    state_bytes_len: size_t,
+    call_default: u8, // non-zero if to call the default/fallback instead
+    state_ptr_ptr: *mut *mut MutableState,
     param_bytes: *const u8, // parameters to the entrypoint
     param_bytes_len: size_t,
     energy: InterpreterEnergy,
@@ -194,34 +220,61 @@ unsafe extern "C" fn call_receive_v1(
     output_len: *mut size_t,
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
-    let res = std::panic::catch_unwind(|| {
-        let receive_ctx = v0::deserial_receive_context(slice_from_c_bytes!(
+    let res = std::panic::catch_unwind(|| -> *mut u8 {
+        // For FFI we only pass v0 contexts to keep the other end simpler.
+        let receive_ctx_common = v0::deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
             receive_ctx_bytes_len as usize
         ))
         .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
-        let state = slice_from_c_bytes!(state_bytes, state_bytes_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
-        match std::str::from_utf8(receive_name) {
-            Ok(name) => {
+        let state_ptr = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
+        let mut loader = loader;
+        let mut state = (&mut *state_ptr).make_fresh_generation(&mut loader);
+        let instance_state = InstanceState::new(0, loader, state.get_inner(&mut loader));
+        match std::str::from_utf8(receive_name)
+            .ok()
+            .and_then(|s| OwnedReceiveName::new(s.into()).ok())
+        {
+            Some(name) => {
+                let entrypoint: OwnedEntrypointName =
+                    name.as_receive_name().entrypoint_name().into();
+                // the actual name to invoke
+                let actual_name = if call_default != 0 {
+                    let mut actual_name: String = name.as_receive_name().contract_name().into();
+                    actual_name.push('.');
+                    OwnedReceiveName::new_unchecked(actual_name)
+                } else {
+                    name
+                };
+
+                let receive_ctx = ReceiveContext {
+                    common: receive_ctx_common,
+                    entrypoint,
+                };
                 let res = invoke_receive(
                     artifact.clone(),
                     amount,
                     receive_ctx,
-                    state,
-                    name,
+                    actual_name.as_receive_name(),
                     parameter,
                     energy,
+                    instance_state,
                 );
                 match res {
                     Ok(result) => {
-                        let (mut out, config, return_value) = result.extract();
-                        out.shrink_to_fit();
-                        *output_len = out.len() as size_t;
-                        let ptr = out.as_mut_ptr();
-                        std::mem::forget(out);
-                        if let Some(config) = config {
+                        let ReceiveResultExtract {
+                            mut status,
+                            state_changed,
+                            interrupt_state,
+                            return_value,
+                        } = result.extract();
+                        status.shrink_to_fit();
+                        *output_len = status.len() as size_t;
+                        let ptr = status.as_mut_ptr();
+                        std::mem::forget(status);
+                        if let Some(config) = interrupt_state {
                             std::ptr::replace(output_config, Box::into_raw(config));
                         } else {
                             // make sure to set it to null to make the finalizer work correctly.
@@ -232,16 +285,22 @@ unsafe extern "C" fn call_receive_v1(
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
+                        if state_changed {
+                            let new_state = Box::into_raw(Box::new(state));
+                            *state_ptr_ptr = new_state;
+                        }
                         ptr
                     }
                     Err(_trap) => std::ptr::null_mut(),
                 }
             }
-            Err(_) => std::ptr::null_mut(), // should not happen.
+            // should not happen, unless the caller violated the precondition and invoked an
+            // incorrect entrypoint.
+            None => std::ptr::null_mut(),
         }
     });
     // do not drop the pointer, we are not the owner
-    Arc::into_raw(artifact);
+    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or_else(|_| std::ptr::null_mut())
 }
@@ -305,7 +364,6 @@ unsafe extern "C" fn validate_and_process_v1(
 }
 
 #[no_mangle]
-/// TODO: Signal whether the state was updated in the new state version.
 /// Resume execution of a contract after an interrupt.
 ///
 /// # Safety
@@ -319,14 +377,13 @@ unsafe extern "C" fn validate_and_process_v1(
 /// # Return value
 /// The return value has the same semantics as
 unsafe extern "C" fn resume_receive_v1(
+    loader: LoadCallback,
     // mutable pointer, we will mutate this, either to a new state in case another interrupt
     // occurred, or null
     config_ptr: *mut *mut ReceiveInterruptedStateV1,
     // whether the state has been updated (non-zero) or not (zero)
-    new_state_tag: u8,
-    // (potentially) updated state of the contract, or null if response_status is an error
-    state_bytes: *const u8,
-    state_bytes_len: size_t,
+    state_updated_tag: u8,
+    state_ptr_ptr: *mut *mut MutableState,
     new_amount: u64,
     // whether the call succeeded or not.
     response_status: u64,
@@ -348,6 +405,7 @@ unsafe extern "C" fn resume_receive_v1(
                 Some(data)
             }
         };
+        let state_updated = state_updated_tag != 0;
         // NB: This must match the response encoding in V1.hs in consensus
         // If the first 3 bytes are all set that indicates an error.
         let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
@@ -368,17 +426,9 @@ unsafe extern "C" fn resume_receive_v1(
                     data,
                 }
             }
-        } else if new_state_tag == 0 {
-            InvokeResponse::Success {
-                new_state: None,
-                new_balance: Amount::from_micro_ccd(new_amount),
-                data,
-            }
         } else {
-            let new_state =
-                slice_from_c_bytes!(state_bytes, state_bytes_len as usize).to_vec().into();
             InvokeResponse::Success {
-                new_state: Some(new_state),
+                state_updated,
                 new_balance: Amount::from_micro_ccd(new_amount),
                 data,
             }
@@ -388,19 +438,39 @@ unsafe extern "C" fn resume_receive_v1(
         // finalizer (`receive_interrupted_state_free`) will not end up double
         // freeing.
         let config = std::ptr::replace(config_ptr, std::ptr::null_mut());
-        let res = resume_receive(Box::from_raw(config), response, energy);
+        // since we will never roll back past this point, other than to the beginning of
+        // execution, we do not need to make a new generation for checkpoint
+        // reasons. We are not the owner of the state, so we make a clone of it.
+        // Before cloning we replace the contents of the pointer with a null pointer.
+        // Whether the contents is null or not at the end of execution signals whether
+        // the state has changed, so this is crucial.
+        let state_ref = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
+        // The clone is cheap since this is reference counted.
+        let mut state = (&*state_ref).clone();
+        // it is important to invalidate all previous iterators and entries we have
+        // given out. so we start a new generation.
+        let config = Box::from_raw(config);
+        let res = resume_receive(config, response, energy, &mut state, state_updated, loader);
         match res {
             Ok(result) => {
-                let (mut out, new_config, return_value) = result.extract();
-                out.shrink_to_fit();
-                *output_len = out.len() as size_t;
-                let ptr = out.as_mut_ptr();
-                std::mem::forget(out);
-                if let Some(config) = new_config {
+                let ReceiveResultExtract {
+                    mut status,
+                    state_changed,
+                    interrupt_state,
+                    return_value,
+                } = result.extract();
+                status.shrink_to_fit();
+                *output_len = status.len() as size_t;
+                let ptr = status.as_mut_ptr();
+                std::mem::forget(status);
+                if let Some(config) = interrupt_state {
                     std::ptr::replace(config_ptr, Box::into_raw(config));
                 } // otherwise leave config_ptr pointing to null
                 if let Some(return_value) = return_value {
                     *output_return_value = Box::into_raw(Box::new(return_value));
+                }
+                if state_changed {
+                    *state_ptr_ptr = Box::into_raw(Box::new(state))
                 }
                 ptr
             }
@@ -468,7 +538,7 @@ unsafe extern "C" fn artifact_v1_to_bytes(
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
-    Arc::into_raw(artifact);
+    let _ = Arc::into_raw(artifact);
     ptr
 }
 
@@ -513,4 +583,205 @@ unsafe extern "C" fn return_value_to_byte_array(
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
     ptr
+}
+
+#[no_mangle]
+/// Load the persistent state from a given location in the backing store. The
+/// store is accessed via the provided function pointer.
+extern "C" fn load_persistent_tree_v1(
+    mut loader: LoadCallback,
+    location: Reference,
+) -> *mut PersistentState {
+    let tree = PersistentState::load_from_location(&mut loader, location);
+    match tree {
+        Ok(tree) => Box::into_raw(Box::new(tree)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+/// Store the tree into a backing store, writing parts of the tree using the
+/// provided callback. The return value is a reference in the backing store that
+/// can be used to load the tree using [load_persistent_tree_v1].
+extern "C" fn store_persistent_tree_v1(
+    mut writer: StoreCallback,
+    tree: *mut PersistentState,
+) -> Reference {
+    let tree = unsafe { &mut *tree };
+    match tree.store_update(&mut writer) {
+        Ok(r) => r,
+        Err(_) => unreachable!(
+            "Storing the tree can only fail if the writer fails. This is assumed not to happen."
+        ),
+    }
+}
+
+#[no_mangle]
+/// Deallocate the persistent state, freeing as much memory as possible.
+extern "C" fn free_persistent_state_v1(tree: *mut PersistentState) {
+    unsafe { Box::from_raw(tree) };
+}
+
+#[no_mangle]
+/// Deallocate the mutable state.
+extern "C" fn free_mutable_state_v1(tree: *mut MutableState) { unsafe { Box::from_raw(tree) }; }
+
+#[no_mangle]
+/// Convert the mutable state to a persistent one. Return a pointer to the
+/// persistent state, and in addition write the hash of the resulting persistent
+/// state to the provided byte buffer. The byte buffer must be sufficient to
+/// hold 32 bytes.
+/// The returned persistent state must be deallocated using
+/// [free_persistent_state_v1] in order to not leak memory.
+extern "C" fn freeze_mutable_state_v1(
+    mut loader: LoadCallback,
+    tree: *mut MutableState,
+    hash_buf: *mut u8,
+) -> *mut PersistentState {
+    let tree = unsafe { &mut *tree };
+    let persistent = tree.freeze(&mut loader, &mut EmptyCollector);
+    let hash = persistent.hash(&mut loader);
+    let hash: &[u8] = hash.as_ref();
+    unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
+    Box::into_raw(Box::new(persistent))
+}
+
+#[no_mangle]
+/// Create a mutable state from a persistent one. This is generative, it creates
+/// independent mutable states in different calls.
+extern "C" fn thaw_persistent_state_v1(tree: *mut PersistentState) -> *mut MutableState {
+    let tree = unsafe { &*tree };
+    let thawed = tree.thaw();
+    Box::into_raw(Box::new(thawed))
+}
+
+#[no_mangle]
+/// Freeze the tree and get the new state size.
+/// The frozen tree is not returned, but it is stored in the "origin" field so
+/// that a call to freeze later on is essentially free.
+/// The mutable state should not be used after a call to this function.
+extern "C" fn get_new_state_size_v1(mut loader: LoadCallback, tree: *mut MutableState) -> u64 {
+    let tree = unsafe { &mut *tree };
+    let mut collector = SizeCollector::default();
+    let _ = tree.freeze(&mut loader, &mut collector);
+    collector.collect()
+}
+
+#[no_mangle]
+/// Load the entire tree into memory. If any data is in the backing store it is
+/// loaded using the provided callback.
+extern "C" fn cache_persistent_state_v1(mut loader: LoadCallback, tree: *mut PersistentState) {
+    let tree = unsafe { &mut *tree };
+    tree.cache(&mut loader)
+}
+
+#[no_mangle]
+/// Compute the hash of the persistent state and write it to the provided
+/// buffer which is assumed to be able to hold 32 bytes.
+/// The hash of the tree is cached, so this is generally a cheap function.
+extern "C" fn hash_persistent_state_v1(
+    mut loader: LoadCallback,
+    tree: *mut PersistentState,
+    hash_buf: *mut u8,
+) {
+    let tree = unsafe { &mut *tree };
+    let hash = tree.hash(&mut loader);
+    let hash: &[u8] = hash.as_ref();
+    unsafe { std::ptr::copy_nonoverlapping(hash.as_ptr(), hash_buf, 32) };
+}
+
+#[no_mangle]
+/// Serialize persistent state into a byte buffer. If any of the state is in the
+/// backing store it is loaded using the provided callback.
+/// The returned byte array should be freed with `rs_free_array_len` from
+/// crypto-common.
+extern "C" fn serialize_persistent_state_v1(
+    mut loader: LoadCallback,
+    tree: *mut PersistentState,
+    out_len: *mut size_t,
+) -> *mut u8 {
+    let tree = unsafe { &*tree };
+    let mut out = Vec::new();
+    match tree.serialize(&mut loader, &mut out) {
+        Ok(_) => {
+            out.shrink_to_fit();
+            unsafe { *out_len = out.len() as size_t };
+            let ptr = out.as_mut_ptr();
+            std::mem::forget(out);
+            ptr
+        }
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+/// Dual to [serialize_persistent_state_v1].
+extern "C" fn deserialize_persistent_state_v1(
+    source: *const u8,
+    len: size_t,
+) -> *mut PersistentState {
+    let slice = unsafe { std::slice::from_raw_parts(source, len) };
+    let mut source = std::io::Cursor::new(slice);
+    match PersistentState::deserialize(&mut source) {
+        // make sure to consume the entire input.
+        Ok(state) if source.position() == len as u64 => Box::into_raw(Box::new(state)),
+        _ => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+/// Take the byte array and copy it into a vector.
+/// The vector must be passed to Rust to be deallocated.
+extern "C" fn copy_to_vec_ffi(data: *const u8, len: libc::size_t) -> *mut Vec<u8> {
+    Box::into_raw(Box::new(unsafe { std::slice::from_raw_parts(data, len) }.to_vec()))
+}
+
+#[no_mangle]
+/// Lookup in the persistent state. **This should only be used for testing the
+/// integration**. It is not efficient compared to thawing and looking up.
+extern "C" fn persistent_state_v1_lookup(
+    mut loader: LoadCallback,
+    key: *const u8,
+    key_len: libc::size_t,
+    tree: *mut PersistentState,
+    out_len: *mut size_t,
+) -> *mut u8 {
+    let tree = unsafe { &*tree };
+    let key = unsafe { std::slice::from_raw_parts(key, key_len) };
+    match tree.lookup(&mut loader, key) {
+        Some(mut out) => {
+            out.shrink_to_fit();
+            unsafe { *out_len = out.len() as size_t };
+            let ptr = out.as_mut_ptr();
+            std::mem::forget(out);
+            ptr
+        }
+        None => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+/// Generate a persistent tree from a seed for testing. **This should only be
+/// used for testing.**
+extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut PersistentState {
+    let res = std::panic::catch_unwind(|| {
+        let mut mutable = PersistentState::Empty.thaw();
+        let mut loader = trie::Loader::new(&[]);
+        {
+            let mut state_lock = mutable.get_inner(&mut loader).lock();
+            let mut hasher = sha2::Sha512::new();
+            hasher.update(&seed.to_be_bytes());
+            for i in 0..len {
+                let data = hasher.finalize_reset();
+                hasher.update(&data);
+                state_lock.insert(&mut loader, &data, i.to_be_bytes().to_vec()).unwrap();
+            }
+        }
+        Box::new(mutable.freeze(&mut loader, &mut trie::EmptyCollector))
+    });
+    if let Ok(r) = res {
+        Box::into_raw(r)
+    } else {
+        std::ptr::null_mut()
+    }
 }

@@ -3,15 +3,20 @@ use anyhow::Context;
 use cargo_toml::Manifest;
 use concordium_contracts_common::*;
 use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::PathBuf,
     process::{Command, Stdio},
 };
-use wasm_chain_integration::{utils, v0, v1, ExecResult};
+use wasm_chain_integration::{
+    utils::{self, WasmVersion},
+    v0, v1, ExecResult,
+};
 use wasm_transform::{
     output::{write_custom_section, Output},
     parse::parse_skeleton,
-    types::CustomSection,
+    types::{CustomSection, ExportDescription, Module},
     utils::strip,
     validate::validate_module,
 };
@@ -59,7 +64,7 @@ pub fn build_contract(
     let schema = match version {
         utils::WasmVersion::V0 => {
             if build_schema.build() {
-                let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v0)
+                let schema = build_contract_schema(cargo_args, utils::generate_contract_schema_v0)
                     .context("Could not build module schema.")?;
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
@@ -77,7 +82,7 @@ pub fn build_contract(
         }
         utils::WasmVersion::V1 => {
             if build_schema.build() {
-                let schema = build_contract_schema(&cargo_args, utils::generate_contract_schema_v1)
+                let schema = build_contract_schema(cargo_args, utils::generate_contract_schema_v1)
                     .context("Could not build module schema.")?;
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
@@ -126,10 +131,20 @@ pub fn build_contract(
     // Remove all custom sections to reduce the size of the module
     strip(&mut skeleton);
     match version {
-        utils::WasmVersion::V0 => validate_module(&v0::ConcordiumAllowedImports, &skeleton)
-            .context("Could not validate resulting smart contract module as a V0 contract.")?,
-        utils::WasmVersion::V1 => validate_module(&v1::ConcordiumAllowedImports, &skeleton)
-            .context("Could not validate resulting smart contract module as a V1 contract.")?,
+        utils::WasmVersion::V0 => {
+            let module = validate_module(&v0::ConcordiumAllowedImports, &skeleton)
+                .context("Could not validate resulting smart contract module as a V0 contract.")?;
+            check_exports(&module, WasmVersion::V0)
+                .context("Contract and entrypoint validation failed for a V0 contract.")?;
+            module
+        }
+        utils::WasmVersion::V1 => {
+            let module = validate_module(&v1::ConcordiumAllowedImports, &skeleton)
+                .context("Could not validate resulting smart contract module as a V1 contract.")?;
+            check_exports(&module, WasmVersion::V1)
+                .context("Contract and entrypoint validation failed for a V1 contract.")?;
+            module
+        }
     };
 
     // We output a versioned module that can be directly deployed to the chain,
@@ -166,6 +181,99 @@ pub fn build_contract(
     let total_module_len = output_bytes.len();
     fs::write(out_filename, output_bytes)?;
     Ok((total_module_len, return_schema))
+}
+
+/// Check that exports of module conform to the specification so that they will
+/// be accepted by the chain.
+fn check_exports(module: &Module, version: WasmVersion) -> anyhow::Result<()> {
+    // collect contracts in the module.
+    let mut contracts = BTreeSet::new();
+    let mut methods = BTreeMap::<_, BTreeSet<OwnedEntrypointName>>::new();
+    for export in &module.export.exports {
+        if let ExportDescription::Func {
+            ..
+        } = export.description
+        {
+            if let Ok(cn) = ContractName::new(export.name.as_ref()) {
+                contracts.insert(cn.contract_name());
+            } else if let Ok(rn) = ReceiveName::new(export.name.as_ref()) {
+                methods
+                    .entry(rn.contract_name())
+                    .or_insert_with(BTreeSet::new)
+                    .insert(rn.entrypoint_name().into());
+            } else {
+                // for V0 contracts we do not allow any other functions.
+                match version {
+                    WasmVersion::V0 => anyhow::bail!(
+                        "The module has '{}' as an exposed function, which is neither a valid \
+                         init or receive method.\nV0 contracts do not allow any exported \
+                         functions that are neither init or receive methods.\n",
+                        export.name.as_ref()
+                    ),
+                    WasmVersion::V1 => (),
+                }
+            }
+        }
+    }
+    for (cn, _ens) in methods {
+        if let Some(closest) = find_closest(contracts.iter().copied(), cn) {
+            if closest.is_empty() {
+                anyhow::bail!(
+                    "An entrypoint is declared for a contract '{}', but no contracts exist in the \
+                     module.",
+                    cn
+                );
+            } else if closest.len() == 1 {
+                anyhow::bail!(
+                    "An entrypoint is declared for a contract '{}', but such a contract does not \
+                     exist in the module.\nPerhaps you meant '{}'?",
+                    cn,
+                    closest[0]
+                );
+            } else {
+                let list =
+                    closest.into_iter().map(|x| format!("'{}'", x)).collect::<Vec<_>>().join(", ");
+                anyhow::bail!(
+                    "An entrypoint is declared for a contract '{}', but such a contract does not \
+                     exist in the module.\nPerhaps you meant one of [{}].",
+                    cn,
+                    list
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Find the string closest to the list of strings. If an exact match is found
+/// return `None`, otherwise return `Some` with a list of strings that are
+/// closest according to the [optimal string alignment metric](https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance distance).
+fn find_closest<'a>(
+    list: impl IntoIterator<Item = &'a str>,
+    goal: &'a str,
+) -> Option<Vec<&'a str>> {
+    let mut out = Vec::new();
+    let mut least = usize::MAX;
+    for cn in list.into_iter() {
+        let dist = strsim::osa_distance(cn, goal);
+        if dist == 0 {
+            return None;
+        }
+        match dist.cmp(&least) {
+            Ordering::Less => {
+                out.clear();
+                out.push(cn);
+                least = dist;
+            }
+            Ordering::Equal => {
+                out.push(cn);
+            }
+            Ordering::Greater => {
+                // do nothing since this candidate is not useful
+            }
+        }
+    }
+    Some(out)
 }
 
 /// Generates the contract schema by compiling with the 'build-schema' feature

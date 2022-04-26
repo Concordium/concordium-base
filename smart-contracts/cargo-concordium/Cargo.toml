@@ -16,6 +16,8 @@ serde_json="1.0.56"
 cargo_toml = "0.11.5"
 anyhow = "1.0.33"
 ansi_term = "0.12"
+ptree = "0.4"
+strsim = "0.10"
 
 [features]
 
@@ -24,13 +26,14 @@ path = "../wasm-transform"
 version = "0"
 
 [dependencies.wasm-chain-integration]
-version = "0.1"
+version = "0.2"
 path = "../wasm-chain-integration/"
+features = ["display-state"]
 
 [dev-dependencies]
 criterion = "0.3"
 
 [dependencies.concordium-contracts-common]
-version = "2.0"
+version = "3.0"
 path = "../concordium-contracts-common"
 features = ["derive-serde", "std"]

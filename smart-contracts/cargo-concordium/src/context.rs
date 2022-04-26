@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use concordium_contracts_common::{
-    AccountAddress, Address, Amount, ContractAddress, OwnedPolicy, Serial, SlotTime,
+    AccountAddress, Address, Amount, ContractAddress, EntrypointName, OwnedEntrypointName,
+    OwnedPolicy, Serial, SlotTime,
 };
 use serde::Deserialize;
-use wasm_chain_integration::{v0, ExecResult};
+use wasm_chain_integration::{v0, v1, ExecResult};
 
 /// A chain metadata with an optional field.
 /// Used when simulating contracts to allow the user to only specify the
@@ -16,7 +17,9 @@ pub(crate) struct ChainMetadataOpt {
 }
 
 impl v0::HasChainMetadata for ChainMetadataOpt {
-    fn slot_time(&self) -> ExecResult<SlotTime> { unwrap_ctx_field(self.slot_time, "slotTime") }
+    fn slot_time(&self) -> ExecResult<SlotTime> {
+        unwrap_ctx_field(self.slot_time, "metadata.slotTime")
+    }
 }
 
 /// An init context with optional fields.
@@ -30,7 +33,7 @@ pub(crate) struct InitContextOpt {
     #[serde(default)]
     metadata:        ChainMetadataOpt,
     init_origin:     Option<AccountAddress>,
-    #[serde(deserialize_with = "deserialize_policy_bytes_from_json")]
+    #[serde(default, deserialize_with = "deserialize_policy_bytes_from_json")]
     sender_policies: Option<v0::OwnedPolicyBytes>,
 }
 
@@ -64,7 +67,7 @@ pub(crate) struct ReceiveContextOpt {
     pub(crate) self_balance: Option<Amount>,
     sender:                  Option<Address>,
     owner:                   Option<AccountAddress>,
-    #[serde(deserialize_with = "deserialize_policy_bytes_from_json")]
+    #[serde(default, deserialize_with = "deserialize_policy_bytes_from_json")]
     sender_policies:         Option<v0::OwnedPolicyBytes>,
 }
 
@@ -105,6 +108,56 @@ fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> ExecResult<A> {
              fields the contract uses.",
             name,
         )),
+    }
+}
+
+/// A receive context with optional fields.
+/// Used when simulating contracts to allow the user to only specify the
+/// context fields used by the contract.
+/// The default value is `None` for all `Option` fields and the default of
+/// `ChainMetadataOpt` for `metadata`.
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReceiveContextV1Opt {
+    #[serde(flatten)]
+    pub(crate) common: ReceiveContextOpt,
+    entrypoint:        Option<OwnedEntrypointName>,
+}
+
+impl v0::HasReceiveContext for ReceiveContextV1Opt {
+    type MetadataType = ChainMetadataOpt;
+
+    fn metadata(&self) -> &Self::MetadataType { &self.common.metadata }
+
+    fn invoker(&self) -> ExecResult<&AccountAddress> {
+        unwrap_ctx_field(self.common.invoker.as_ref(), "invoker")
+    }
+
+    fn self_address(&self) -> ExecResult<&ContractAddress> {
+        unwrap_ctx_field(self.common.self_address.as_ref(), "selfAddress")
+    }
+
+    fn self_balance(&self) -> ExecResult<Amount> {
+        unwrap_ctx_field(self.common.self_balance, "selfBalance")
+    }
+
+    fn sender(&self) -> ExecResult<&Address> {
+        unwrap_ctx_field(self.common.sender.as_ref(), "sender")
+    }
+
+    fn owner(&self) -> ExecResult<&AccountAddress> {
+        unwrap_ctx_field(self.common.owner.as_ref(), "owner")
+    }
+
+    fn sender_policies(&self) -> ExecResult<&[u8]> {
+        unwrap_ctx_field(self.common.sender_policies.as_ref().map(Vec::as_ref), "senderPolicies")
+    }
+}
+
+impl v1::HasReceiveContext for ReceiveContextV1Opt {
+    fn entrypoint(&self) -> ExecResult<EntrypointName> {
+        let ep = unwrap_ctx_field(self.entrypoint.as_ref(), "entrypoint")?;
+        Ok(ep.as_entrypoint_name())
     }
 }
 

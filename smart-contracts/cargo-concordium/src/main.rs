@@ -1,6 +1,6 @@
 use crate::{
     build::*,
-    context::{InitContextOpt, ReceiveContextOpt},
+    context::{InitContextOpt, ReceiveContextOpt, ReceiveContextV1Opt},
     schema_json::write_bytes_from_json_schema_type,
 };
 use anyhow::{bail, ensure, Context};
@@ -8,8 +8,9 @@ use clap::AppSettings;
 use concordium_contracts_common::{
     from_bytes,
     schema::{Function, Type},
-    to_bytes, Amount, Parameter,
+    to_bytes, Amount, OwnedReceiveName, Parameter, ReceiveName,
 };
+use ptree::{print_tree_with, PrintConfig, TreeBuilder};
 use std::{
     fs::{self, File},
     io::Read,
@@ -21,7 +22,6 @@ use wasm_chain_integration::{
     v1::{self, ReturnValue},
     InterpreterEnergy,
 };
-
 mod build;
 mod context;
 mod schema_json;
@@ -40,7 +40,17 @@ enum Command {
         name = "run",
         about = "Locally simulate invocation method of a smart contract and inspect the state."
     )]
-    Run(RunCommand),
+    Run(Box<RunCommand>),
+    #[structopt(name = "display-state", about = "Display the contract state as a tree.")]
+    DisplayState {
+        #[structopt(
+            name = "state-bin",
+            long = "state-bin",
+            help = "Path to the file with state that is to be displayed. The state must be for a \
+                    V1 contract."
+        )]
+        state_bin_path: PathBuf,
+    },
     #[structopt(name = "test", about = "Build and run tests using a Wasm interpreter.")]
     Test {
         #[structopt(
@@ -73,8 +83,8 @@ enum Command {
         )]
         out:          Option<PathBuf>,
         #[structopt(
-            name = "version",
-            long = "version",
+            name = "contract-version",
+            long = "contract-version",
             short = "v",
             help = "Build a module of the given version.",
             default_value = "V1"
@@ -166,16 +176,22 @@ enum RunCommand {
             short = "c",
             help = "Name of the contract to instantiate."
         )]
-        contract_name: String,
+        contract_name:        String,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the init context file."
         )]
-        context:       Option<PathBuf>,
+        context:              Option<PathBuf>,
+        #[structopt(
+            name = "display-state",
+            long = "display-state",
+            help = "Pretty print the contract state at the end of execution."
+        )]
+        should_display_state: bool,
         #[structopt(flatten)]
-        runner:        Runner,
+        runner:               Runner,
     },
     #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
@@ -187,12 +203,12 @@ enum RunCommand {
         )]
         contract_name: String,
         #[structopt(
-            name = "function",
-            long = "func",
+            name = "entrypoint",
+            long = "entrypoint",
             short = "f",
-            help = "Name of the receive-function to receive message."
+            help = "Name of the entrypoint to invoke."
         )]
-        func:          String,
+        entrypoint:    String,
 
         #[structopt(
             name = "state-json",
@@ -200,29 +216,35 @@ enum RunCommand {
             help = "File with existing state of the contract in JSON, requires a schema is \
                     present either embedded or using --schema."
         )]
-        state_json_path: Option<PathBuf>,
+        state_json_path:      Option<PathBuf>,
         #[structopt(
             name = "state-bin",
             long = "state-bin",
             help = "File with existing state of the contract in binary."
         )]
-        state_bin_path:  Option<PathBuf>,
+        state_bin_path:       Option<PathBuf>,
         #[structopt(
             name = "balance",
             long = "balance",
             help = "Balance on the contract at the time it is invoked. Overrides the balance in \
                     the receive context."
         )]
-        balance:         Option<u64>,
+        balance:              Option<u64>,
         #[structopt(
             name = "context",
             long = "context",
             short = "t",
             help = "Path to the receive context file."
         )]
-        context:         Option<PathBuf>,
+        context:              Option<PathBuf>,
+        #[structopt(
+            name = "display-state",
+            long = "display-state",
+            help = "Pretty print the contract state at the end of execution."
+        )]
+        should_display_state: bool,
         #[structopt(flatten)]
-        runner:          Runner,
+        runner:               Runner,
     },
 }
 
@@ -247,7 +269,7 @@ pub fn main() -> anyhow::Result<()> {
     };
     match cmd {
         Command::Run(run_cmd) => {
-            let runner = match run_cmd {
+            let runner = match *run_cmd {
                 RunCommand::Init {
                     ref runner,
                     ..
@@ -276,8 +298,8 @@ pub fn main() -> anyhow::Result<()> {
                  size of the provided data."
             );
             match wasm_version {
-                utils::WasmVersion::V0 => handle_run_v0(run_cmd, module)?,
-                utils::WasmVersion::V1 => handle_run_v1(run_cmd, module)?,
+                utils::WasmVersion::V0 => handle_run_v0(*run_cmd, module)?,
+                utils::WasmVersion::V1 => handle_run_v1(*run_cmd, module)?,
             }
         }
         Command::Test {
@@ -308,14 +330,14 @@ pub fn main() -> anyhow::Result<()> {
                     ModuleSchema::V0(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v0(&contract_name, &contract_schema);
+                            print_contract_schema_v0(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
                     ModuleSchema::V1(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v1(&contract_name, &contract_schema);
+                            print_contract_schema_v1(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
@@ -342,8 +364,37 @@ pub fn main() -> anyhow::Result<()> {
                 bold_style.paint(size)
             )
         }
+        Command::DisplayState {
+            state_bin_path,
+        } => display_state_from_file(state_bin_path)?,
     };
     Ok(())
+}
+
+/// Loads the contract state from file and displays it as a tree by printing to
+/// stdout.
+fn display_state_from_file(file_path: PathBuf) -> anyhow::Result<()> {
+    let file = File::open(&file_path)
+        .with_context(|| format!("Could not read state file {}.", file_path.display()))?;
+    let mut reader = std::io::BufReader::new(file);
+    let state = v1::trie::PersistentState::deserialize(&mut reader)
+        .context("Could not deserialize the provided state.")?;
+
+    display_state(&state)
+}
+
+/// Displays the contract state as a tree by printing to stdout.
+fn display_state(state: &v1::trie::PersistentState) -> Result<(), anyhow::Error> {
+    let mut loader = v1::trie::Loader::new([]);
+
+    let mut tree_builder = TreeBuilder::new("StateRoot".into());
+    state.display_tree(&mut tree_builder, &mut loader);
+    let tree = tree_builder.build();
+    // We don't want to depend on some global config as it opens up for all sorts of
+    // corner-case bugs since we are not in control and thus inconsistent user
+    // experience.
+    let config = PrintConfig::default();
+    print_tree_with(&tree, &config).context("Could not print the state as a tree.")
 }
 
 /// Print the summary of the contract schema.
@@ -425,9 +476,9 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         RunCommand::Receive {
             ref runner,
             ref contract_name,
-            ref func,
+            ref entrypoint,
             ..
-        } => (contract_name, runner, Some(func)),
+        } => (contract_name, runner, Some(entrypoint)),
     };
 
     // get the module schema if available.
@@ -456,8 +507,8 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     let contract_schema_state_opt =
         contract_schema_opt.and_then(|contract_schema| contract_schema.state.clone());
     let contract_schema_func_opt = contract_schema_opt.and_then(|contract_schema| {
-        if let Some(func) = is_receive {
-            contract_schema.receive.get(func)
+        if let Some(entrypoint) = is_receive {
+            contract_schema.receive.get(entrypoint)
         } else {
             contract_schema.init.as_ref()
         }
@@ -471,7 +522,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         match (runner.ignore_state_schema, &contract_schema_state_opt) {
             (false, Some(state_schema)) => {
                 let s = state_schema
-                    .to_json_string_pretty(&state)
+                    .to_json_string_pretty(state)
                     .map_err(|_| anyhow::anyhow!("Could not encode state to JSON."))?;
                 if runner.schema_path.is_some() {
                     eprintln!("The new state is: (Using provided schema)\n{}", s)
@@ -495,7 +546,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                  this contract.",
             )?;
             let json_string = schema_state
-                .to_json_string_pretty(&state)
+                .to_json_string_pretty(state)
                 .map_err(|_| anyhow::anyhow!("Could not output contract state in JSON."))?;
             fs::write(file_path, json_string).context("Could not write out the state.")?;
         }
@@ -525,7 +576,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             };
             let name = format!("init_{}", contract_name);
             let res = v0::invoke_init_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 init_ctx,
                 &name,
@@ -562,7 +613,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             }
         }
         RunCommand::Receive {
-            ref func,
+            ref entrypoint,
             ref state_bin_path,
             ref state_json_path,
             balance,
@@ -609,15 +660,15 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     let state_json: serde_json::Value =
                         serde_json::from_slice(&file).context("Could not parse state JSON.")?;
                     let mut state_bytes = Vec::new();
-                    write_bytes_from_json_schema_type(&schema_state, &state_json, &mut state_bytes)
+                    write_bytes_from_json_schema_type(schema_state, &state_json, &mut state_bytes)
                         .context("Could not generate state bytes using schema and JSON.")?;
                     state_bytes
                 }
             };
 
-            let name = format!("{}.{}", contract_name, func);
+            let name = format!("{}.{}", contract_name, entrypoint);
             let res = v0::invoke_receive_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 receive_ctx,
                 &init_state,
@@ -651,7 +702,7 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                                     data.to_addr.subindex,
                                     name_str,
                                     data.amount,
-                                    parameter
+                                    data.parameter
                                 )
                             }
                             v0::Action::SimpleTransfer {
@@ -711,9 +762,9 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         RunCommand::Receive {
             ref runner,
             ref contract_name,
-            ref func,
+            ref entrypoint,
             ..
-        } => (contract_name, runner, Some(func)),
+        } => (contract_name, runner, Some(entrypoint)),
     };
 
     // get the module schema if available.
@@ -752,10 +803,24 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             eprintln!("{}: {:?}", i, item)
         }
     };
-    let print_result = |state: v0::State, logs: v0::Logs| -> anyhow::Result<()> {
-        print_logs(logs);
+    let print_state = |mut state: v1::trie::MutableState,
+                       loader: &mut v1::trie::Loader<&[u8]>,
+                       should_display_state: bool|
+     -> anyhow::Result<()> {
+        let mut collector = v1::trie::SizeCollector::default();
+        let frozen = state.freeze(loader, &mut collector);
+        println!(
+            "The contract will produce {}B of additional state that will be charged for.",
+            collector.collect()
+        );
         if let Some(file_path) = &runner.out_bin {
-            fs::write(file_path, &state.state).context("Could not write state to file")?;
+            let mut out_file = std::fs::File::create(file_path)
+                .context("Could not create file to write state into.")?;
+            frozen.serialize(loader, &mut out_file).context("Could not write the state.")?;
+            eprintln!("Resulting state written to {}.", file_path.display());
+        }
+        if should_display_state {
+            display_state(&frozen)?;
         }
         Ok(())
     };
@@ -785,6 +850,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     match run_cmd {
         RunCommand::Init {
             ref context,
+            should_display_state,
             ..
         } => {
             let init_ctx: InitContextOpt = match context {
@@ -796,13 +862,16 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 None => InitContextOpt::default(),
             };
             let name = format!("init_{}", contract_name);
+            // empty initial backing store.
+            let mut loader = v1::trie::Loader::new(&[][..]);
             let res = v1::invoke_init_with_metering_from_source(
-                &module,
+                module,
                 runner.amount.micro_ccd,
                 init_ctx,
                 &name,
                 &parameter,
                 runner.energy,
+                loader,
             )
             .context("Initialization failed due to a runtime error.")?;
             match res {
@@ -813,7 +882,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                     return_value,
                 } => {
                     eprintln!("Init call succeeded. The following logs were produced:");
-                    print_result(state, logs)?;
+                    print_logs(logs);
+                    print_state(state, &mut loader, should_display_state)?;
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(
@@ -849,66 +919,106 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             }
         }
         RunCommand::Receive {
-            ref func,
+            ref entrypoint,
             ref state_bin_path,
             balance,
             ref context,
+            should_display_state,
             ..
         } => {
-            let mut receive_ctx: ReceiveContextOpt = match context {
+            let mut receive_ctx: ReceiveContextV1Opt = match context {
                 Some(context_file) => {
                     let ctx_content =
                         fs::read(context_file).context("Could not read receive context file.")?;
                     serde_json::from_slice(&ctx_content)
                         .context("Could not parse receive context.")?
                 }
-                None => ReceiveContextOpt::default(),
+                None => ReceiveContextV1Opt::default(),
             };
             // if the balance is set in the flag it overrides any balance that is set in the
             // context.
             if let Some(balance) = balance {
-                receive_ctx.self_balance =
+                receive_ctx.common.self_balance =
                     Some(concordium_contracts_common::Amount::from_micro_ccd(balance));
             }
 
             // initial state of the smart contract, read from either a binary or json file.
-            let init_state = match state_bin_path {
+            let (init_state, mut loader) = match state_bin_path {
                 None => bail!(
                     "The current state is required for simulating an update to a contract \
                      instance. Use --state-bin."
                 ),
                 Some(file_path) => {
-                    let mut file = File::open(&file_path).context("Could not read state file.")?;
-                    let metadata = file.metadata().context("Could not read file metadata.")?;
-                    let mut init_state = Vec::with_capacity(metadata.len() as usize);
-                    file.read_to_end(&mut init_state).context("Reading the state file failed.")?;
-                    init_state
+                    let file = File::open(&file_path).context("Could not read state file.")?;
+                    let mut reader = std::io::BufReader::new(file);
+                    let init_state = v1::trie::PersistentState::deserialize(&mut reader)
+                        .context("Could not deserialize the provided state.")?;
+                    // Since we deserialized the entire state we do not need a loader.
+                    // Once this is changed to load data lazily from a file, the loader will be
+                    // needed.
+                    let loader = v1::trie::Loader::new(&[][..]);
+                    (init_state, loader)
                 }
             };
 
-            let name = format!("{}.{}", contract_name, func);
-            let res = v1::invoke_receive_with_metering_from_source::<
-                ReceiveContextOpt,
-                ReceiveContextOpt,
-            >(
-                &module,
+            let artifact = wasm_transform::utils::instantiate_with_metering(
+                &v1::ConcordiumAllowedImports,
+                module,
+            )?;
+            let name = {
+                let chosen_name = format!("{}.{}", contract_name, entrypoint);
+                if let Err(e) = ReceiveName::is_valid_receive_name(&chosen_name) {
+                    anyhow::bail!("Invalid contract or receive function name: {}", e)
+                }
+                if artifact.has_entrypoint(chosen_name.as_str()) {
+                    OwnedReceiveName::new_unchecked(chosen_name)
+                } else {
+                    let fallback_name = format!("{}.", contract_name);
+                    if artifact.has_entrypoint(fallback_name.as_str()) {
+                        eprintln!(
+                            "The contract '{}' does not have the entrypoint '{}'. Using the \
+                             fallback entrypoint instead.",
+                            contract_name, entrypoint
+                        );
+                        OwnedReceiveName::new_unchecked(fallback_name)
+                    } else {
+                        anyhow::bail!(
+                            "The contract '{}' has neither the requested entrypoint '{}', nor a \
+                             fallback entrypoint.",
+                            contract_name,
+                            entrypoint
+                        );
+                    }
+                }
+            };
+
+            let mut mutable_state = init_state.thaw();
+            let inner = mutable_state.get_inner(&mut loader);
+            let instance_state = v1::InstanceState::new(0, loader, inner);
+            let res = v1::invoke_receive::<_, _, _, ReceiveContextV1Opt>(
+                std::sync::Arc::new(artifact),
                 runner.amount.micro_ccd,
                 receive_ctx,
-                &init_state,
-                &name,
+                name.as_receive_name(),
                 &parameter,
                 runner.energy,
+                instance_state,
             )
             .context("Calling receive failed.")?;
             match res {
                 v1::ReceiveResult::Success {
                     logs,
-                    state,
+                    state_changed,
                     remaining_energy,
                     return_value,
                 } => {
                     eprintln!("Receive method succeeded. The following logs were produced.");
-                    print_result(state, logs)?;
+                    print_logs(logs);
+                    if state_changed {
+                        print_state(mutable_state, &mut loader, should_display_state)?;
+                    } else {
+                        eprintln!("The state of the contract did not change.");
+                    }
                     eprintln!("\nThe following return value was returned.");
                     print_return_value(return_value)?;
                     eprintln!(
@@ -934,6 +1044,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                 }
                 v1::ReceiveResult::Interrupt {
                     remaining_energy,
+                    state_changed,
                     logs,
                     config: _,
                     interrupt,
@@ -943,6 +1054,11 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
                          time of the interrupt."
                     );
                     print_logs(logs);
+                    if state_changed {
+                        print_state(mutable_state, &mut loader, should_display_state)?;
+                    } else {
+                        eprintln!("The state of the contract did not change.");
+                    }
                     match interrupt {
                         v1::Interrupt::Transfer {
                             to,
@@ -1007,7 +1123,7 @@ fn get_parameter(
                 .context("Could not parse the JSON in parameter-json file.")?;
             let mut parameter_bytes = Vec::new();
             write_bytes_from_json_schema_type(
-                &parameter_schema,
+                parameter_schema,
                 &parameter_json,
                 &mut parameter_bytes,
             )

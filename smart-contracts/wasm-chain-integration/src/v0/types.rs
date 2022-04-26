@@ -23,8 +23,8 @@ pub type OwnedPolicyBytes = Vec<u8>;
 /// Chain context accessible to the init methods.
 ///
 /// TODO: We could optimize this to be initialized lazily
-#[derive(SerdeDeserialize)]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Debug, Clone))]
+#[derive(SerdeDeserialize, Debug, Clone)]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[serde(rename_all = "camelCase")]
 pub struct InitContext<Policies = Vec<OwnedPolicy>> {
     pub metadata:        ChainMetadata,
@@ -47,9 +47,9 @@ impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
 /// Chain context accessible to the receive methods.
 ///
 /// TODO: We could optimize this to be initialized lazily.
-#[derive(SerdeDeserialize, Debug)]
+#[derive(SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary, Clone))]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
     pub metadata:        ChainMetadata,
     pub invoker:         AccountAddress,  //32 bytes

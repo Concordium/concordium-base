@@ -1,7 +1,8 @@
 # Changelog
 
 ## Unreleased changes
-- Add support for V1 contract execution.
+- Add support for V1 contract builds, testing, and execution.
+- The output of `cargo concordium build` is now versioned.
 - Support contracts written with Rust edition 2021.
 
 ## 1.1.1

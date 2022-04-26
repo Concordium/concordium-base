@@ -1,12 +1,20 @@
+#[cfg(test)]
+mod tests;
+
 #[cfg(feature = "enable-ffi")]
 mod ffi;
+pub mod trie;
 mod types;
 
 use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
-use concordium_contracts_common::{AccountAddress, Amount, ContractAddress, OwnedEntrypointName};
+use concordium_contracts_common::{
+    AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
+    OwnedEntrypointName, ReceiveName,
+};
 use machine::Value;
 use std::{borrow::Borrow, io::Write, sync::Arc};
+use trie::BackingStoreLoad;
 pub use types::*;
 use wasm_transform::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
@@ -70,7 +78,7 @@ impl Interrupt {
 /// This keeps track of the current state and logs, gives access to the context,
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
-pub struct InitHost<ParamType, Ctx> {
+pub struct InitHost<'a, BackingStore, ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:            InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -79,7 +87,7 @@ pub struct InitHost<ParamType, Ctx> {
     /// Logs produced during execution.
     pub logs:              v0::Logs,
     /// The contract's state.
-    pub state:             v0::State,
+    pub state:             InstanceState<'a, BackingStore>,
     /// The response from the call.
     pub return_value:      ReturnValue,
     /// The parameter to the init method.
@@ -88,10 +96,11 @@ pub struct InitHost<ParamType, Ctx> {
     pub init_ctx:          Ctx,
 }
 
-impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<InitHost<ParameterRef<'a>, Ctx1>>
-    for InitHost<ParameterVec, Ctx2>
+impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
+    From<InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>>
+    for InitHost<'b, BackingStore, ParameterVec, Ctx2>
 {
-    fn from(host: InitHost<ParameterRef<'a>, Ctx1>) -> Self {
+    fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>) -> Self {
         Self {
             energy:            host.energy,
             activation_frames: host.activation_frames,
@@ -111,16 +120,23 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<InitHost<ParameterRef<'a>, Ctx1>>
 /// This keeps track of the current state and logs, gives access to the context,
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
-pub struct ReceiveHost<ParamType, Ctx> {
-    /// Remaining energy for execution.
-    pub energy:            InterpreterEnergy,
+pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
+    pub energy:    InterpreterEnergy,
+    pub stateless: StateLessReceiveHost<ParamType, Ctx>,
+    pub state:     InstanceState<'a, BackingStore>,
+}
+
+#[derive(Debug)]
+/// Part of the receive host that is stored to handle the interrupt.
+/// This part is not changed during the handling of the interrupt, however
+/// before execution resumes, after returning from handling of the interrupt,
+/// the logs and parameters are set appropriately.
+pub struct StateLessReceiveHost<ParamType, Ctx> {
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames: u32,
     /// Logs produced during execution.
     pub logs:              v0::Logs,
-    /// The contract's state.
-    pub state:             v0::State,
     /// Return value from execution.
     pub return_value:      ReturnValue,
     /// The parameter to the receive method, as well as any responses from
@@ -130,15 +146,13 @@ pub struct ReceiveHost<ParamType, Ctx> {
     pub receive_ctx:       Ctx,
 }
 
-impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<ReceiveHost<ParameterRef<'a>, Ctx1>>
-    for ReceiveHost<ParameterVec, Ctx2>
+impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx1>>
+    for StateLessReceiveHost<ParameterVec, Ctx2>
 {
-    fn from(host: ReceiveHost<ParameterRef<'a>, Ctx1>) -> Self {
+    fn from(host: StateLessReceiveHost<ParameterRef<'a>, Ctx1>) -> Self {
         Self {
-            energy:            host.energy,
             activation_frames: host.activation_frames,
             logs:              host.logs,
-            state:             host.state,
             return_value:      host.return_value,
             parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
             receive_ctx:       host.receive_ctx.into(),
@@ -146,24 +160,41 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<ReceiveHost<ParameterRef<'a>, Ctx1>>
     }
 }
 
-/// v1 host functions.
 mod host {
-    use concordium_contracts_common::{Cursor, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE};
-
+    //! v1 host function implementations. Functions in this inner module are
+    //! mostly just wrappers. They parse relevant arguments from the
+    //! machine, e.g., read values from the stack or memory, and push values to
+    //! the stack and update the memory, and account for some energy use.
+    //! The main logic (e.g., updating state) is usually handed over to the
+    //! relevant component (e.g., the state), except when the logic is very
+    //! simple. For this reason the functions generally don't have much
+    //! documentation on their own, and one should look at underlying
+    //! function to determine detailed behaviour.
+    //!
+    //! These functions are safety-critical, and must withstand malicious use.
+    //! Thus they are written in a very defensive way to make sure no out of
+    //! bounds accesses occur.
     use super::*;
+    use concordium_contracts_common::{
+        Cursor, EntrypointName, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE,
+    };
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
 
-    // Parse the call arguments. This is using the serialization as defined in the
-    // smart contracts code since the arguments will be written by a smart
-    // contract. Returns Ok(None) if there is insufficient energy.
+    /// Parse the call arguments. This is using the serialization as defined in
+    /// the smart contracts code since the arguments will be written by a
+    /// smart contract. Returns `Ok(Err(OutOfEnergy))` if there is
+    /// insufficient energy.
     fn parse_call_args(
         energy: &mut InterpreterEnergy,
         cursor: &mut Cursor<&[u8]>,
     ) -> ParseResult<Result<Interrupt, OutOfEnergy>> {
         let address = cursor.get()?;
         let parameter_len: u16 = cursor.get()?;
+        if usize::from(parameter_len) > constants::MAX_PARAMETER_SIZE {
+            return Err(ParseError {});
+        }
         if energy.tick_energy(constants::copy_to_host_cost(parameter_len.into())).is_err() {
             return Ok(Err(OutOfEnergy));
         }
@@ -187,6 +218,7 @@ mod host {
     /// Write to the return value.
     fn write_return_value_helper(
         rv: &mut ReturnValue,
+        energy: &mut InterpreterEnergy,
         offset: u32,
         bytes: &[u8],
     ) -> ExecResult<u32> {
@@ -199,6 +231,9 @@ mod host {
             as usize;
         let end = std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32;
         if rv.len() < end as usize {
+            energy.tick_energy(constants::additional_output_size_cost(
+                u64::from(end) - rv.len() as u64,
+            ))?;
             rv.resize(end as usize, 0u8);
         }
         let written = (&mut rv[offset..end as usize]).write(bytes)?;
@@ -216,15 +251,16 @@ mod host {
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
-        energy.tick_energy(constants::copy_to_host_cost(length))?;
+        energy.tick_energy(constants::write_output_cost(length))?;
         let end = start + length as usize; // this cannot overflow on 64-bit machines.
         ensure!(end <= memory.len(), "Illegal memory access.");
-        let res = write_return_value_helper(rv, offset, &memory[start..end])?;
+        let res = write_return_value_helper(rv, energy, offset, &memory[start..end])?;
         stack.push_value(res);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `invoke` host function.
     pub fn invoke(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -238,7 +274,8 @@ mod host {
             TRANSFER_TAG => {
                 ensure!(
                     length == ACCOUNT_ADDRESS_SIZE + 8,
-                    "Transfers must have exactly 40 bytes of payload."
+                    "Transfers must have exactly 40 bytes of payload, but was {}",
+                    length
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
@@ -272,13 +309,12 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    /// Get the parameter section. This differs from the v0 version in that it
-    /// expects an argument on the stack to indicate which parameter to check.
+    /// Get the parameter size. This differs from the v0 version in that it
+    /// expects an argument on the stack to indicate which parameter to use.
     pub fn get_parameter_size(
         stack: &mut machine::RuntimeStack,
         parameters: &[impl AsRef<[u8]>],
     ) -> machine::RunResult<()> {
-        // TODO: Verify cost below.
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let param_num = unsafe { stack.pop_u32() } as usize;
@@ -291,6 +327,8 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Get the parameter section. This differs from the v0 version in that it
+    /// expects an argument on the stack to indicate which parameter to use.
     pub fn get_parameter_section(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -315,12 +353,280 @@ mod host {
         }
         Ok(())
     }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_lookup_entry` host function. See
+    /// [InstanceState::lookup_entry] for detailed documentation.
+    pub fn state_lookup_entry<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() };
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::lookup_entry_cost(key_len))?;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let result = state.lookup_entry(key);
+        stack.push_value(u64::from(result));
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_create_entry` host function. See
+    /// [InstanceState::create_entry] for detailed documentation.
+    pub fn state_create_entry<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() };
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::create_entry_cost(key_len))?;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let entry_index = state.create_entry(key)?;
+        stack.push_value(u64::from(entry_index));
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_delete_entry` host function. See
+    /// [InstanceState::delete_entry] for detailed documentation.
+    pub fn state_delete_entry<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() };
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        let key_end = key_start + key_len as usize;
+        energy.tick_energy(constants::delete_entry_cost(key_len))?;
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        let result = state.delete_entry(key)?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_delete_prefix` host function. See
+    /// [InstanceState::delete_prefix] for detailed documentation.
+    pub fn state_delete_prefix<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let key_len = unsafe { stack.pop_u32() };
+        let key_start = unsafe { stack.pop_u32() } as usize;
+        let key_end = key_start + key_len as usize;
+        // this cannot overflow on 64-bit platforms, so it is safe to just add
+        ensure!(key_end <= memory.len(), "Illegal memory access.");
+        let key = &memory[key_start..key_end];
+        energy.tick_energy(constants::delete_prefix_find_cost(key_len))?;
+        let result = state.delete_prefix(energy, key)?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_iterator` host function. See
+    /// [InstanceState::iterator] for detailed documentation.
+    pub fn state_iterator<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let prefix_len = unsafe { stack.pop_u32() };
+        let prefix_start = unsafe { stack.pop_u32() } as usize;
+        let prefix_end = prefix_start + prefix_len as usize;
+        ensure!(prefix_end <= memory.len(), "Illegal memory access.");
+        energy.tick_energy(constants::new_iterator_cost(prefix_len))?;
+        let prefix = &memory[prefix_start..prefix_end];
+        let iterator_index = state.iterator(prefix);
+        stack.push_value(u64::from(iterator_index));
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_iterator_next` host function. See
+    /// [InstanceState::iterator_next] for detailed documentation.
+    pub fn state_iterator_next<BackingStore: BackingStoreLoad>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let iter_index = unsafe { stack.pop_u64() };
+        let entry_option = state.iterator_next(energy, InstanceStateIterator::from(iter_index))?;
+        stack.push_value(u64::from(entry_option));
+        Ok(())
+    }
+
+    /// Handle the `state_iterator_delete` host function. See
+    /// [InstanceState::iterator_delete] for detailed documentation.
+    pub fn state_iterator_delete<BackingStore: BackingStoreLoad>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let iter = unsafe { stack.pop_u64() };
+        let result = state.iterator_delete(energy, InstanceStateIterator::from(iter))?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    /// Handle the `state_iterator_key_size` host function. See
+    /// [InstanceState::iterator_key_size] for detailed documentation.
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn state_iterator_key_size<BackingStore: BackingStoreLoad>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        energy.tick_energy(constants::ITERATOR_KEY_SIZE_COST)?;
+        // the cost of this function is adequately reflected by the base cost of a
+        // function call so we do not charge extra.
+        let iter = unsafe { stack.pop_u64() };
+        let result = state.iterator_key_size(InstanceStateIterator::from(iter));
+        stack.push_value(result);
+        Ok(())
+    }
+
+    /// Handle the `state_iterator_key_read` host function. See
+    /// [InstanceState::iterator_key_read] for detailed documentation.
+    pub fn state_iterator_key_read<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let start = unsafe { stack.pop_u32() } as usize;
+        let iter = unsafe { stack.pop_u64() };
+        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        let dest_end = start + length as usize;
+        ensure!(dest_end <= memory.len(), "Illegal memory access.");
+        let dest = &mut memory[start..dest_end];
+        let result = state.iterator_key_read(InstanceStateIterator::from(iter), dest, offset);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    /// Handle the `state_entry_read` host function. See
+    /// [InstanceState::entry_read] for detailed documentation.
+    pub fn state_entry_read<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let dest_start = unsafe { stack.pop_u32() } as usize;
+        let entry_index = unsafe { stack.pop_u64() };
+        energy.tick_energy(constants::read_entry_cost(length))?;
+        let dest_end = dest_start + length as usize;
+        ensure!(dest_end <= memory.len(), "Illegal memory access.");
+        let dest = &mut memory[dest_start..dest_end];
+        let result = state.entry_read(InstanceStateEntry::from(entry_index), dest, offset);
+        stack.push_value(result);
+        Ok(())
+    }
+
+    /// Handle the `state_entry_write` host function. See
+    /// [InstanceState::entry_write] for detailed documentation.
+    pub fn state_entry_write<BackingStore: BackingStoreLoad>(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let offset = unsafe { stack.pop_u32() };
+        let length = unsafe { stack.pop_u32() };
+        let source_start = unsafe { stack.pop_u32() } as usize;
+        let entry_index = unsafe { stack.pop_u64() };
+        energy.tick_energy(constants::write_entry_cost(length))?;
+        let source_end = source_start + length as usize;
+        ensure!(source_end <= memory.len(), "Illegal memory access.");
+        let source = &memory[source_start..source_end];
+        let result =
+            state.entry_write(energy, InstanceStateEntry::from(entry_index), source, offset)?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_entry_size` host function. See
+    /// [InstanceState::entry_size] for detailed documentation.
+    pub fn state_entry_size<BackingStore: BackingStoreLoad>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        let entry_index = unsafe { stack.pop_u64() };
+        energy.tick_energy(constants::ENTRY_SIZE_COST)?;
+        let result = state.entry_size(InstanceStateEntry::from(entry_index));
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `state_entry_resize` host function. See
+    /// [InstanceState::entry_resize] for detailed documentation.
+    pub fn state_entry_resize<BackingStore: BackingStoreLoad>(
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+        state: &mut InstanceState<BackingStore>,
+    ) -> machine::RunResult<()> {
+        energy.tick_energy(constants::RESIZE_ENTRY_BASE_COST)?;
+        let new_size = unsafe { stack.pop_u32() };
+        let entry_index = unsafe { stack.pop_u64() };
+        let result = state.entry_resize(energy, InstanceStateEntry::from(entry_index), new_size)?;
+        stack.push_value(result);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `get_receive_entrypoint_size` host function.
+    pub fn get_receive_entrypoint_size(
+        stack: &mut machine::RuntimeStack,
+        entrypoint: EntrypointName,
+    ) -> machine::RunResult<()> {
+        let size: u32 = entrypoint.size();
+        stack.push_value(size);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `get_receive_entrypoint` host function.
+    pub fn get_receive_entrypoint(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        entrypoint: EntrypointName,
+    ) -> machine::RunResult<()> {
+        let start = unsafe { stack.pop_u32() };
+        let size = entrypoint.size();
+        // overflow here is not possible on 64-bit machines
+        let end: usize = start as usize + size as usize;
+        ensure!(end <= memory.len(), "Illegal memory access.");
+        let entrypoint_str: &str = entrypoint.into();
+        memory[start as usize..end].copy_from_slice(entrypoint_str.as_bytes());
+        Ok(())
+    }
 }
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
-impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImports>
-    for InitHost<ParamType, Ctx>
+impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext>
+    machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = NoInterrupt;
 
@@ -363,17 +669,46 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImp
                 CommonFunc::LogEvent => {
                     v0::host::log_event(memory, stack, &mut self.energy, &mut self.logs)
                 }
-                CommonFunc::LoadState => {
-                    v0::host::load_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::WriteState => {
-                    v0::host::write_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::ResizeState => {
-                    v0::host::resize_state(stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::StateSize => v0::host::state_size(stack, &mut self.state),
                 CommonFunc::GetSlotTime => v0::host::get_slot_time(stack, self.init_ctx.metadata()),
+                CommonFunc::StateLookupEntry => {
+                    host::state_lookup_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateCreateEntry => {
+                    host::state_create_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeleteEntry => {
+                    host::state_delete_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeletePrefix => {
+                    host::state_delete_prefix(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratePrefix => {
+                    host::state_iterator(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorNext => {
+                    host::state_iterator_next(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorDelete => {
+                    host::state_iterator_delete(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeySize => {
+                    host::state_iterator_key_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeyRead => {
+                    host::state_iterator_key_read(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryRead => {
+                    host::state_entry_read(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryWrite => {
+                    host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntrySize => {
+                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryResize => {
+                    host::state_entry_resize(stack, &mut self.energy, &mut self.state)
+                }
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 v0::host::get_init_origin(memory, stack, self.init_ctx.init_origin())?
@@ -386,8 +721,44 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext> machine::Host<ProcessedImp
     }
 }
 
-impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<ProcessedImports>
-    for ReceiveHost<ParamType, Ctx>
+/// A receive context for V1 contracts.
+pub trait HasReceiveContext: v0::HasReceiveContext {
+    /// Get the name of the entrypoint that was actually invoked.
+    /// This may differ from the name of the entrypoint that is actually invoked
+    /// in case the entrypoint that is invoked is the fallback one.
+    fn entrypoint(&self) -> ExecResult<EntrypointName>;
+}
+
+impl<X: AsRef<[u8]>> v0::HasReceiveContext for ReceiveContext<X> {
+    type MetadataType = ChainMetadata;
+
+    fn metadata(&self) -> &Self::MetadataType { &self.common.metadata }
+
+    fn invoker(&self) -> ExecResult<&AccountAddress> { Ok(&self.common.invoker) }
+
+    fn self_address(&self) -> ExecResult<&ContractAddress> { Ok(&self.common.self_address) }
+
+    fn self_balance(&self) -> ExecResult<Amount> { Ok(self.common.self_balance) }
+
+    fn sender(&self) -> ExecResult<&Address> { Ok(&self.common.sender) }
+
+    fn owner(&self) -> ExecResult<&AccountAddress> { Ok(&self.common.owner) }
+
+    fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.common.sender_policies.as_ref()) }
+}
+
+impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
+    #[inline(always)]
+    fn entrypoint(&self) -> ExecResult<EntrypointName> { Ok(self.entrypoint.as_entrypoint_name()) }
+}
+
+impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
+    #[inline(always)]
+    fn entrypoint(&self) -> ExecResult<EntrypointName> { (*self).entrypoint() }
+}
+
+impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceiveContext>
+    machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx>
 {
     type Interrupt = Interrupt;
 
@@ -405,8 +776,10 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<Processed
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         match f.tag {
             ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => v0::host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => v0::host::track_return(&mut self.activation_frames),
+            ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
+            ImportFunc::TrackReturn => {
+                v0::host::track_return(&mut self.stateless.activation_frames)
+            }
             ImportFunc::ChargeMemoryAlloc => {
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
@@ -415,56 +788,102 @@ impl<ParamType: AsRef<[u8]>, Ctx: v0::HasReceiveContext> machine::Host<Processed
                     memory,
                     stack,
                     &mut self.energy,
-                    &mut self.return_value,
+                    &mut self.stateless.return_value,
                 ),
-                CommonFunc::GetParameterSize => host::get_parameter_size(stack, &self.parameters),
-                CommonFunc::GetParameterSection => {
-                    host::get_parameter_section(memory, stack, &mut self.energy, &self.parameters)
+                CommonFunc::GetParameterSize => {
+                    host::get_parameter_size(stack, &self.stateless.parameters)
                 }
+                CommonFunc::GetParameterSection => host::get_parameter_section(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &self.stateless.parameters,
+                ),
                 CommonFunc::GetPolicySection => v0::host::get_policy_section(
                     memory,
                     stack,
                     &mut self.energy,
-                    self.receive_ctx.sender_policies(),
+                    self.stateless.receive_ctx.sender_policies(),
                 ),
                 CommonFunc::LogEvent => {
-                    v0::host::log_event(memory, stack, &mut self.energy, &mut self.logs)
+                    v0::host::log_event(memory, stack, &mut self.energy, &mut self.stateless.logs)
                 }
-                CommonFunc::LoadState => {
-                    v0::host::load_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::WriteState => {
-                    v0::host::write_state(memory, stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::ResizeState => {
-                    v0::host::resize_state(stack, &mut self.energy, &mut self.state)
-                }
-                CommonFunc::StateSize => v0::host::state_size(stack, &mut self.state),
                 CommonFunc::GetSlotTime => {
-                    v0::host::get_slot_time(stack, self.receive_ctx.metadata())
+                    v0::host::get_slot_time(stack, self.stateless.receive_ctx.metadata())
+                }
+                CommonFunc::StateLookupEntry => {
+                    host::state_lookup_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateCreateEntry => {
+                    host::state_create_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeleteEntry => {
+                    host::state_delete_entry(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateDeletePrefix => {
+                    host::state_delete_prefix(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratePrefix => {
+                    host::state_iterator(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorNext => {
+                    host::state_iterator_next(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorDelete => {
+                    host::state_iterator_delete(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeySize => {
+                    host::state_iterator_key_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateIteratorKeyRead => {
+                    host::state_iterator_key_read(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryRead => {
+                    host::state_entry_read(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryWrite => {
+                    host::state_entry_write(memory, stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntrySize => {
+                    host::state_entry_size(stack, &mut self.energy, &mut self.state)
+                }
+                CommonFunc::StateEntryResize => {
+                    host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
                     return host::invoke(memory, stack, &mut self.energy);
                 }
-                ReceiveOnlyFunc::GetReceiveInvoker => {
-                    v0::host::get_receive_invoker(memory, stack, self.receive_ctx.invoker())
-                }
+                ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
+                    memory,
+                    stack,
+                    self.stateless.receive_ctx.invoker(),
+                ),
                 ReceiveOnlyFunc::GetReceiveSelfAddress => v0::host::get_receive_self_address(
                     memory,
                     stack,
-                    self.receive_ctx.self_address(),
+                    self.stateless.receive_ctx.self_address(),
                 ),
-                ReceiveOnlyFunc::GetReceiveSelfBalance => {
-                    v0::host::get_receive_self_balance(stack, self.receive_ctx.self_balance())
-                }
+                ReceiveOnlyFunc::GetReceiveSelfBalance => v0::host::get_receive_self_balance(
+                    stack,
+                    self.stateless.receive_ctx.self_balance(),
+                ),
                 ReceiveOnlyFunc::GetReceiveSender => {
-                    v0::host::get_receive_sender(memory, stack, self.receive_ctx.sender())
+                    v0::host::get_receive_sender(memory, stack, self.stateless.receive_ctx.sender())
                 }
                 ReceiveOnlyFunc::GetReceiveOwner => {
-                    v0::host::get_receive_owner(memory, stack, self.receive_ctx.owner())
+                    v0::host::get_receive_owner(memory, stack, self.stateless.receive_ctx.owner())
                 }
+                ReceiveOnlyFunc::GetReceiveEntrypointSize => host::get_receive_entrypoint_size(
+                    stack,
+                    self.stateless.receive_ctx.entrypoint()?,
+                ),
+                ReceiveOnlyFunc::GetReceiveEntryPoint => host::get_receive_entrypoint(
+                    memory,
+                    stack,
+                    self.stateless.receive_ctx.entrypoint()?,
+                ),
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 bail!("Not implemented for receive.");
@@ -484,38 +903,38 @@ pub type ParameterRef<'a> = &'a [u8];
 pub type ParameterVec = Vec<u8>;
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<R: RunnableCode>(
+pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    mut loader: BackingStore,
 ) -> ExecResult<InitResult> {
+    let mut initial_state = trie::MutableState::initial_state();
+    let inner = initial_state.get_inner(&mut loader);
+    let state_ref = InstanceState::new(0, loader, inner);
     let mut host = InitHost {
         energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
-        state: v0::State::new(None),
+        state: state_ref,
         return_value: Vec::new(),
         parameter,
         init_ctx,
     };
-
     let result = artifact.borrow().run(&mut host, init_name, &[Value::I64(amount as i64)]);
-    process_init_result(host, result)
-}
-
-fn process_init_result<Param, Ctx>(
-    host: InitHost<Param, Ctx>,
-    result: machine::RunResult<ExecutionOutcome<NoInterrupt>>,
-) -> ExecResult<InitResult> {
+    let return_value = std::mem::take(&mut host.return_value);
+    let remaining_energy = host.energy.energy;
+    let logs = std::mem::take(&mut host.logs);
+    // release lock on the state
+    drop(host);
     match result {
         Ok(ExecutionOutcome::Success {
             result,
             ..
         }) => {
-            let remaining_energy = host.energy.energy;
             // process the return value.
             // - 0 indicates success
             // - positive values are a protocol violation, so they lead to a runtime error
@@ -523,15 +942,15 @@ fn process_init_result<Param, Ctx>(
             if let Some(Value::I32(n)) = result {
                 if n == 0 {
                     Ok(InitResult::Success {
-                        state: host.state,
-                        logs: host.logs,
-                        return_value: host.return_value,
+                        logs,
+                        return_value,
                         remaining_energy,
+                        state: initial_state,
                     })
                 } else {
                     Ok(InitResult::Reject {
                         reason: reason_from_wasm_error_code(n)?,
-                        return_value: host.return_value,
+                        return_value,
                         remaining_energy,
                     })
                 }
@@ -549,7 +968,7 @@ fn process_init_result<Param, Ctx>(
             } else {
                 Ok(InitResult::Trap {
                     error,
-                    remaining_energy: host.energy.energy,
+                    remaining_energy,
                 })
             }
         }
@@ -560,12 +979,12 @@ fn process_init_result<Param, Ctx>(
 pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {
-        /// New state, if it changed.
-        new_state:   Option<v0::State>,
+        /// Whether the state has been updated or not.
+        state_updated: bool,
         /// Balance after the execution of the interrupt.
-        new_balance: Amount,
+        new_balance:   Amount,
         /// Some calls do not have any return values, such as transfers.
-        data:        Option<ParameterVec>,
+        data:          Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
     /// and the contract responded with the given error code and data.
@@ -577,54 +996,58 @@ pub enum InvokeResponse {
 
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<'a>(
-    artifact_bytes: &'a [u8],
+pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
+    artifact_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source(
+pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source(
+pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
-fn process_receive_result<Param, R: RunnableCode, Ctx1, Ctx2>(
+fn process_receive_result<BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
-    mut host: ReceiveHost<Param, Ctx1>,
+    host: ReceiveHost<'_, BackingStore, Param, Ctx1>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>>
 where
-    ReceiveHost<ParameterVec, Ctx2>: From<ReceiveHost<Param, Ctx1>>, {
+    StateLessReceiveHost<ParameterVec, Ctx2>: From<StateLessReceiveHost<Param, Ctx1>>, {
+    let mut stateless = host.stateless;
     match result {
         Ok(ExecutionOutcome::Success {
             result,
@@ -634,15 +1057,15 @@ where
             if let Some(Value::I32(n)) = result {
                 if n >= 0 {
                     Ok(ReceiveResult::Success {
-                        logs: host.logs,
-                        state: host.state,
-                        return_value: host.return_value,
+                        logs: stateless.logs,
+                        state_changed: host.state.changed,
+                        return_value: stateless.return_value,
                         remaining_energy,
                     })
                 } else {
                     Ok(ReceiveResult::Reject {
                         reason: reason_from_wasm_error_code(n)?,
-                        return_value: host.return_value,
+                        return_value: stateless.return_value,
                         remaining_energy,
                     })
                 }
@@ -658,15 +1081,23 @@ where
             config,
         }) => {
             let remaining_energy = host.energy.energy;
-            // logs are returned per section that is executed.
+            // Logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
             // existing logs.
-            let logs = std::mem::take(&mut host.logs);
+            let logs = std::mem::take(&mut stateless.logs);
+            let state_changed = host.state.changed;
+            let host = SavedHost {
+                stateless:          stateless.into(),
+                current_generation: host.state.current_generation,
+                entry_mapping:      host.state.entry_mapping,
+                iterators:          host.state.iterators,
+            };
             Ok(ReceiveResult::Interrupt {
                 remaining_energy,
+                state_changed,
                 logs,
                 config: Box::new(ReceiveInterruptedState {
-                    host: host.into(),
+                    host,
                     artifact,
                     config,
                 }),
@@ -687,57 +1118,80 @@ where
 }
 
 /// Invokes an receive-function from a given artifact
-pub fn invoke_receive<R: RunnableCode, Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive<
+    BackingStore: BackingStoreLoad,
+    R: RunnableCode,
+    Ctx1: HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     artifact: Arc<Artifact<ProcessedImports, R>>,
     amount: u64,
     receive_ctx: Ctx1,
-    current_state: &[u8],
-    receive_name: &str,
+    receive_name: ReceiveName,
     param: ParameterRef,
     energy: InterpreterEnergy,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>> {
     let mut host = ReceiveHost {
         energy,
-        activation_frames: constants::MAX_ACTIVATION_FRAMES,
-        logs: v0::Logs::new(),
-        state: v0::State::new(Some(current_state)),
-        return_value: Vec::new(),
-        parameters: vec![param],
-        receive_ctx,
+        stateless: StateLessReceiveHost {
+            activation_frames: constants::MAX_ACTIVATION_FRAMES,
+            logs: v0::Logs::new(),
+            return_value: Vec::new(),
+            parameters: vec![param],
+            receive_ctx,
+        },
+        state: instance_state,
     };
 
-    let result = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]);
+    let result =
+        artifact.run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
     process_receive_result(artifact, host, result)
 }
 
-pub fn resume_receive(
-    mut interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
+pub fn resume_receive<BackingStore: BackingStoreLoad>(
+    interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
+    state_trie: &mut trie::MutableState,
+    state_updated: bool,
+    mut backing_store: BackingStore,
 ) -> ExecResult<ReceiveResult<CompiledFunction>> {
-    interrupted_state.host.energy = energy;
+    let inner = state_trie.get_inner(&mut backing_store);
+    let state = InstanceState::migrate(
+        state_updated,
+        interrupted_state.host.current_generation,
+        interrupted_state.host.entry_mapping,
+        interrupted_state.host.iterators,
+        backing_store,
+        inner,
+    );
+    let mut host = ReceiveHost {
+        stateless: interrupted_state.host.stateless,
+        energy,
+        state,
+    };
     let response = match response {
         InvokeResponse::Success {
-            new_state,
+            state_updated,
             new_balance,
             data,
         } => {
-            interrupted_state.host.receive_ctx.self_balance = new_balance;
+            host.stateless.receive_ctx.common.self_balance = new_balance;
             // the response value is constructed by setting the last 5 bytes to 0
             // for the first 3 bytes, the first bit is 1 if the state changed, and 0
             // otherwise the remaining bits are the index of the parameter.
-            let tag = if let Some(new_state) = new_state {
-                interrupted_state.host.state = new_state;
+            let tag = if state_updated {
                 0b1000_0000_0000_0000_0000_0000u64
             } else {
                 0
             };
             if let Some(data) = data {
-                let len = interrupted_state.host.parameters.len();
+                let len = host.stateless.parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
                     bail!("Too many calls.")
                 }
-                interrupted_state.host.parameters.push(data);
+                host.stateless.parameters.push(data);
                 // return the index of the parameter to retrieve.
                 (len as u64 | tag) << 40
             } else {
@@ -754,11 +1208,11 @@ pub fn resume_receive(
         } => {
             // state did not change
             if let Some(data) = data {
-                let len = interrupted_state.host.parameters.len();
+                let len = host.stateless.parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
                     bail!("Too many calls.")
                 }
-                interrupted_state.host.parameters.push(data);
+                host.stateless.parameters.push(data);
                 // return the index of the parameter to retrieve.
                 (len as u64) << 40 | code
             } else {
@@ -767,9 +1221,9 @@ pub fn resume_receive(
         }
     };
     // push the response from the invoke
-    interrupted_state.config.push_value(response);
-    let mut host = interrupted_state.host;
-    let result = interrupted_state.artifact.run_config(&mut host, interrupted_state.config);
+    let mut config = interrupted_state.config;
+    config.push_value(response);
+    let result = interrupted_state.artifact.run_config(&mut host, config);
     process_receive_result(interrupted_state.artifact, host, result)
 }
 
@@ -786,70 +1240,83 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
 
 /// Invokes an receive-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_from_artifact<'a, Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive_from_artifact<
+    'a,
+    BackingStore: BackingStoreLoad,
+    Ctx1: HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     artifact_bytes: &'a [u8],
     amount: u64,
     receive_ctx: Ctx1,
-    current_state: &[u8],
-    receive_name: &str,
+    receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
         Arc::new(artifact),
         amount,
         receive_ctx,
-        current_state,
         receive_name,
         parameter,
         energy,
+        instance_state,
     )
 }
 
 /// Invokes an receive-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive_from_source<
+    BackingStore: BackingStoreLoad,
+    Ctx1: HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
-    current_state: &[u8],
-    receive_name: &str,
+    receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
         Arc::new(artifact),
         amount,
         receive_ctx,
-        current_state,
         receive_name,
         parameter,
         energy,
+        instance_state,
     )
 }
 
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_receive_with_metering_from_source<Ctx1: v0::HasReceiveContext, Ctx2: From<Ctx1>>(
+pub fn invoke_receive_with_metering_from_source<
+    BackingStore: BackingStoreLoad,
+    Ctx1: HasReceiveContext,
+    Ctx2: From<Ctx1>,
+>(
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
-    current_state: &[u8],
-    receive_name: &str,
+    receive_name: ReceiveName,
     parameter: ParameterRef,
     energy: InterpreterEnergy,
+    instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
         Arc::new(artifact),
         amount,
         receive_ctx,
-        current_state,
         receive_name,
         parameter,
         energy,
+        instance_state,
     )
 }
