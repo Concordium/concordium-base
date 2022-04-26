@@ -931,6 +931,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         energy: &mut InterpreterEnergy,
         key: &[u8],
     ) -> StateResult<u32> {
+        self.changed = true;
         if let Ok(b) = self.state_trie.delete_prefix(&mut self.backing_store, key, energy)? {
             if b {
                 Ok(2)
