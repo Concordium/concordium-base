@@ -272,8 +272,8 @@ impl PrefixesMap {
 /// - it is safe to use in a concurrent context.
 ///
 /// The cheap cloning is necessary to have efficient persistent trees. The
-/// [Link] is used to point to children, as well as values and in the persistent
-/// tree, modifying the value at a given point means we need to create copies of
+/// [Link] is used to point to children, as well as values, in the persistent
+/// tree. Modifying the value at a given point means we need to create copies of
 /// the spine of the tree up to the root. This involves cloning pointers to any
 /// parts that have not been modified. Thus these have to be cheap, so we use an
 /// [Arc].
