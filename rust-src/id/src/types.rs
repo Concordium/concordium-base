@@ -1073,6 +1073,7 @@ pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 pub struct ArInfo<C: Curve> {
     /// unique identifier of the anonymity revoker
     #[serde(rename = "arIdentity")]
+    #[schemars(with = "u32")] // ArIdentity is a string in AccountInfo, but a u32 here..
     pub ar_identity:    ArIdentity,
     /// description of the anonymity revoker (e.g. name, contact number)
     #[serde(rename = "arDescription")]
