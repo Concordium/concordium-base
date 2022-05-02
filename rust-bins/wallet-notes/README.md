@@ -201,8 +201,8 @@ The returned value is a JSON object with the following fields:
 
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
 
-Example input to this request are in the files [create_configure_delegation_transacion-input.json](files/create_configure_delegation_transacion-input.json) and [2-create_configure_delegation_transacion-input.json](2-files/create_configure_delegation_transacion-input.json).
-Example output to this request are in the files [2-files/create_configure_delegation_transacion-output.json](files/create_configure_delegation_transacion-output.json).
+Example input to this request are in the files [create_configure_delegation_transacion-input.json](./files/create_configure_delegation_transaction-input.json) and [2-create_configure_delegation_transaction-input.json](./files/2-create_configure_delegation_transaction-input.json).
+Example output to this request are in the files [create_configure_delegation_transacion-output.json](./files/create_configure_delegation_transaction-output.json) and [2-create_configure_delegation_transacion-output.json](./files/2-create_configure_delegation_transaction-output.json).
 
 ## create_configure_baker_transaction
 
@@ -248,8 +248,8 @@ The returned value is a JSON object with the following fields:
 
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
 
-An example input to this request is in the file [create_configure_baker-transaction-input.json](files/create_configure_baker-transaction-input.json).
-An example output to this request is in the file [create_configure_baker-transaction-output.json](files/create_configure_baker-transaction-output.json).
+An example input to this request is in the file [create_configure_baker_transaction-input.json](./files/create_configure_baker_transaction-input.json).
+An example output to this request is in the file [create_configure_baker_transaction-output.json](./files/create_configure_baker_transaction-output.json).
 
 ## generate_baker_keys
 
