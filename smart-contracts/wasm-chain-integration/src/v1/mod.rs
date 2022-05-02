@@ -13,6 +13,7 @@ use concordium_contracts_common::{
     OwnedEntrypointName, ReceiveName,
 };
 use machine::Value;
+use sha3::Digest;
 use std::{borrow::Borrow, io::Write, sync::Arc};
 use trie::BackingStoreLoad;
 pub use types::*;
@@ -621,6 +622,104 @@ mod host {
         memory[start as usize..end].copy_from_slice(entrypoint_str.as_bytes());
         Ok(())
     }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn verify_ed25519_signature(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        todo!()
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn verify_ecdsa_secp256k1_signature(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        let message_start = unsafe { stack.pop_u32() };
+        let signature_start = unsafe { stack.pop_u32() };
+        let public_key_start = unsafe { stack.pop_u32() };
+        let message_end = message_start as usize + 32;
+        ensure!(message_end <= memory.len(), "Illegal memory access.");
+        let public_key_end = public_key_start as usize + 33;
+        ensure!(public_key_end <= memory.len(), "Illegal memory access.");
+        let signature_end = signature_start as usize + 64;
+        ensure!(signature_end <= memory.len(), "Illegal memory access.");
+        let signature = secp256k1::ecdsa::Signature::from_compact(
+            &memory[signature_start as usize..signature_end],
+        );
+        let message = secp256k1::Message::from_slice(&memory[message_start as usize..message_end]);
+        let public_key =
+            secp256k1::PublicKey::from_slice(&memory[public_key_start as usize..public_key_end]);
+        match (signature, message, public_key) {
+            (Ok(signature), Ok(message), Ok(public_key)) => {
+                let verifier = secp256k1::Secp256k1::verification_only();
+                if verifier.verify_ecdsa(&message, &signature, &public_key).is_ok() {
+                    stack.push_value(1u32);
+                } else {
+                    stack.push_value(0u32);
+                }
+            }
+            _ => stack.push_value(0u32),
+        }
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn hash_sha2_256(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        let output_start = unsafe { stack.pop_u32() };
+        let data_len = unsafe { stack.pop_u32() };
+        let data_start = unsafe { stack.pop_u32() };
+        let data_end = data_start as usize + data_len as usize;
+        ensure!(data_end <= memory.len(), "Illegal memory access.");
+        let output_end = output_start as usize + 32;
+        ensure!(output_end <= memory.len(), "Illegal memory access.");
+        let hash = sha2::Sha256::digest(&memory[data_start as usize..data_end]);
+        memory[output_start as usize..output_end].copy_from_slice(&hash);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn hash_sha3_256(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        let output_start = unsafe { stack.pop_u32() };
+        let data_len = unsafe { stack.pop_u32() };
+        let data_start = unsafe { stack.pop_u32() };
+        let data_end = data_start as usize + data_len as usize;
+        ensure!(data_end <= memory.len(), "Illegal memory access.");
+        let output_end = output_start as usize + 32;
+        ensure!(output_end <= memory.len(), "Illegal memory access.");
+        let hash = sha3::Sha3_256::digest(&memory[data_start as usize..data_end]);
+        memory[output_start as usize..output_end].copy_from_slice(&hash);
+        Ok(())
+    }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    pub fn hash_keccak_256(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        let output_start = unsafe { stack.pop_u32() };
+        let data_len = unsafe { stack.pop_u32() };
+        let data_start = unsafe { stack.pop_u32() };
+        let data_end = data_start as usize + data_len as usize;
+        ensure!(data_end <= memory.len(), "Illegal memory access.");
+        let output_end = output_start as usize + 32;
+        ensure!(output_end <= memory.len(), "Illegal memory access.");
+        let hash = sha3::Keccak256::digest(&memory[data_start as usize..data_end]);
+        memory[output_start as usize..output_end].copy_from_slice(&hash);
+        Ok(())
+    }
 }
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
@@ -709,6 +808,15 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }
+                CommonFunc::VerifyEd25519 => {
+                    host::verify_ed25519_signature(memory, stack, &mut self.energy)
+                }
+                CommonFunc::VerifySecp256k1 => {
+                    host::verify_ecdsa_secp256k1_signature(memory, stack, &mut self.energy)
+                }
+                CommonFunc::HashSHA2_256 => host::hash_sha2_256(memory, stack, &mut self.energy),
+                CommonFunc::HashSHA3_256 => host::hash_sha3_256(memory, stack, &mut self.energy),
+                CommonFunc::HashKeccak256 => host::hash_keccak_256(memory, stack, &mut self.energy),
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 v0::host::get_init_origin(memory, stack, self.init_ctx.init_origin())?
@@ -850,6 +958,15 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 CommonFunc::StateEntryResize => {
                     host::state_entry_resize(stack, &mut self.energy, &mut self.state)
                 }
+                CommonFunc::VerifyEd25519 => {
+                    host::verify_ed25519_signature(memory, stack, &mut self.energy)
+                }
+                CommonFunc::VerifySecp256k1 => {
+                    host::verify_ecdsa_secp256k1_signature(memory, stack, &mut self.energy)
+                }
+                CommonFunc::HashSHA2_256 => host::hash_sha2_256(memory, stack, &mut self.energy),
+                CommonFunc::HashSHA3_256 => host::hash_sha3_256(memory, stack, &mut self.energy),
+                CommonFunc::HashKeccak256 => host::hash_keccak_256(memory, stack, &mut self.energy),
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {

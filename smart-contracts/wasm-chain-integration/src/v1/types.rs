@@ -303,6 +303,12 @@ pub enum CommonFunc {
     StateEntryWrite,
     StateEntrySize,
     StateEntryResize,
+    // Cryptographic functions
+    VerifyEd25519,
+    VerifySecp256k1,
+    HashSHA2_256,
+    HashSHA3_256,
+    HashKeccak256,
 }
 
 #[repr(u8)]
@@ -416,6 +422,11 @@ impl Output for ImportFunc {
                 CommonFunc::StateEntrySize => 20,
                 CommonFunc::StateEntryResize => 21,
                 CommonFunc::WriteOutput => 22,
+                CommonFunc::VerifyEd25519 => 32,
+                CommonFunc::VerifySecp256k1 => 33,
+                CommonFunc::HashSHA2_256 => 34,
+                CommonFunc::HashSHA3_256 => 35,
+                CommonFunc::HashKeccak256 => 36,
             },
             ImportFunc::InitOnly(io) => match io {
                 InitOnlyFunc::GetInitOrigin => 23,
@@ -506,6 +517,13 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "state_entry_write" => type_matches!(ty => [I64, I32, I32, I32]; I32),
                 "state_entry_size" => type_matches!(ty => [I64]; I32),
                 "state_entry_resize" => type_matches!(ty => [I64, I32]; I32),
+                "verify_ed25519_signature" => type_matches!(ty => [I32, I32, I32, I32]; I32),
+                "verify_ecdsa_secp256k1_signature" => {
+                    type_matches!(ty => [I32, I32, I32]; I32)
+                }
+                "hash_sha2_256" => type_matches!(ty => [I32, I32, I32]),
+                "hash_sha3_256" => type_matches!(ty => [I32, I32, I32]),
+                "hash_keccak_256" => type_matches!(ty => [I32, I32, I32]),
                 _ => false,
             }
         } else {
@@ -600,6 +618,13 @@ impl TryFromImport for ProcessedImports {
                 "state_entry_write" => ImportFunc::Common(CommonFunc::StateEntryWrite),
                 "state_entry_size" => ImportFunc::Common(CommonFunc::StateEntrySize),
                 "state_entry_resize" => ImportFunc::Common(CommonFunc::StateEntryResize),
+                "verify_ed25519_signature" => ImportFunc::Common(CommonFunc::VerifyEd25519),
+                "verify_ecdsa_secp256k1_signature" => {
+                    ImportFunc::Common(CommonFunc::VerifySecp256k1)
+                }
+                "hash_sha2_256" => ImportFunc::Common(CommonFunc::HashSHA2_256),
+                "hash_sha3_256" => ImportFunc::Common(CommonFunc::HashSHA3_256),
+                "hash_keccak_256" => ImportFunc::Common(CommonFunc::HashKeccak256),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {
