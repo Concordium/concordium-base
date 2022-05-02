@@ -202,7 +202,7 @@ The returned value is a JSON object with the following fields:
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
 
 Example input to this request are in the files [create_configure_delegation_transacion-input.json](./files/create_configure_delegation_transaction-input.json) and [2-create_configure_delegation_transaction-input.json](./files/2-create_configure_delegation_transaction-input.json).
-Example output to this request are in the files [2-create_configure_delegation_transacion-output.json](./files/2-create_configure_delegation_transaction-output.json).
+Example output to this request are in the files [create_configure_delegation_transacion-output.json](./files/create_configure_delegation_transaction-output.json) and [2-create_configure_delegation_transacion-output.json](./files/2-create_configure_delegation_transaction-output.json).
 
 ## create_configure_baker_transaction
 
