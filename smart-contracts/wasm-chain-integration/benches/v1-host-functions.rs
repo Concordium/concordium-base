@@ -9,6 +9,7 @@ use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use sha2::Digest;
 use std::time::Duration;
 use wasm_chain_integration::{
     constants::MAX_ACTIVATION_FRAMES,
@@ -340,6 +341,135 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let mut params = vec![0u8; 16 + 2 + n + 2 + 8]; // address + amount
             params[16..16 + 2].copy_from_slice(&(n as u16).to_le_bytes());
             add_invoke_benchmark(name, params, Some(n));
+        }
+    }
+
+    let mut add_crypto_primitive_benchmark = |name: &'static str, params: Vec<u8>, name_ext| {
+        let args = [machine::Value::I64(0)];
+        let inputs: Vec<(Vec<u8>, [u8; 1])> = Vec::new();
+        let artifact = &artifact;
+        let params = &params;
+        let mk_data = || {
+            let (a, b) = mk_state(&inputs);
+            (a, b, vec![params.clone()])
+        };
+        let receive_ctx = &receive_ctx;
+        let args = &args[..];
+        let bench_name = if let Some(n) = name_ext {
+            format!("{} n = {}", name, n)
+        } else {
+            name.to_string()
+        };
+        group.bench_function(bench_name, move |b: &mut criterion::Bencher| {
+            b.iter_batched(
+                mk_data,
+                |(mut mutable_state, _, parameters)| {
+                    let mut backing_store = Loader {
+                        inner: Vec::new(),
+                    };
+                    let inner = mutable_state.get_inner(&mut backing_store);
+                    let state = InstanceState::new(0, backing_store, inner);
+                    let mut host = ReceiveHost::<_, Vec<u8>, _> {
+                        energy: start_energy,
+                        stateless: StateLessReceiveHost {
+                            activation_frames: MAX_ACTIVATION_FRAMES,
+                            logs: v0::Logs::new(),
+                            receive_ctx,
+                            return_value: Vec::new(),
+                            parameters,
+                        },
+                        state,
+                    };
+                    let r = artifact
+                        .run(&mut host, name, args)
+                        .expect_err("Execution should fail due to out of energy.");
+                    // Should fail due to out of energy.
+                    assert!(
+                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                        "Execution did not fail due to out of energy: {}.",
+                        r
+                    );
+                    let params = std::mem::take(&mut host.stateless.parameters);
+                    // it is not ideal to drop the host here since it could significantly affect the
+                    // cost for small samples.
+                    drop(host);
+                    // return the state so that its drop is not counted in the benchmark.
+                    (mutable_state, params)
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    };
+
+    {
+        // n is the length of the data to be hashed
+        for n in [0u32, 10, 20, 50, 100, 1000, 10_000, 100_000] {
+            let name = "hostfn.verify_ed25519_signature";
+            let sk = ed25519_zebra::SigningKey::from([1u8; 32]);
+            let sig = sk.sign(&vec![0u8; n as usize]); // sign a zero message of a given length.
+            let pk = ed25519_zebra::VerificationKey::from(&sk);
+            let mut params = Vec::with_capacity(100);
+            params.extend_from_slice(pk.as_ref());
+            params.extend_from_slice(&<[u8; 64]>::from(sig)[..]);
+            params.extend_from_slice(&n.to_le_bytes());
+            add_crypto_primitive_benchmark(name, params, Some(n));
+        }
+    }
+
+    {
+        // ecdsa verification has a fixed message length
+        let name = "hostfn.verify_ecdsa_secp256k1_signature";
+        let signer = secp256k1::Secp256k1::new();
+        let sk = secp256k1::SecretKey::from_slice(&[
+            0xc9, 0xef, 0x15, 0x44, 0x4b, 0x1e, 0x88, 0x5f, 0x0e, 0xd0, 0x36, 0xaa, 0xc8, 0x64,
+            0x6f, 0xb0, 0xc6, 0x11, 0x88, 0x6e, 0x8c, 0x40, 0x91, 0xa1, 0xb7, 0xb2, 0xb5, 0xa0,
+            0x95, 0xd2, 0xd6, 0xba,
+        ])
+        .expect("Key generated with openssl, so should be valid.");
+        let message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[])[..])
+            .expect("Hashes are valid messages.");
+        let sig = signer.sign_ecdsa(&message, &sk);
+        let pk = secp256k1::PublicKey::from_slice(&[
+            0x04, 0xbb, 0xc0, 0xa1, 0xad, 0x6f, 0x0d, 0x2c, 0x1f, 0x32, 0x50, 0xd9, 0x08, 0x78,
+            0x15, 0x37, 0xd6, 0x8c, 0xf4, 0xa6, 0x96, 0x41, 0x74, 0xb9, 0x70, 0x36, 0x2c, 0x66,
+            0x47, 0x52, 0x11, 0xc6, 0xf8, 0x70, 0xd4, 0xc1, 0x99, 0xc7, 0x93, 0xbf, 0x3d, 0x6c,
+            0x21, 0x55, 0x2d, 0xad, 0xee, 0xc5, 0x1b, 0x6a, 0x3f, 0xa6, 0x0a, 0x7c, 0x1a, 0x1f,
+            0x63, 0xd5, 0x8f, 0xf5, 0x51, 0x7b, 0x74, 0xf8, 0x12,
+        ])
+        .expect(
+            "Should be a valid public key matching the secret key above. Generated with openssl.",
+        );
+        let mut params = Vec::with_capacity(100);
+        params.extend_from_slice(&pk.serialize());
+        params.extend_from_slice(&sig.serialize_compact());
+        params.extend_from_slice(message.as_ref());
+        add_crypto_primitive_benchmark(name, params, None);
+    }
+
+    {
+        // n is the length of the data to be hashed
+        for n in [0u32, 10, 20, 50, 100, 1000, 10_000, 100_000] {
+            let name = "hostfn.hash_sha2_256";
+            let params = n.to_le_bytes().to_vec(); // length to hash
+            add_crypto_primitive_benchmark(name, params, Some(n));
+        }
+    }
+
+    {
+        // n is the length of the data to be hashed
+        for n in [0u32, 10, 20, 50, 100, 1000, 10_000, 100_000] {
+            let name = "hostfn.hash_sha3_256";
+            let params = n.to_le_bytes().to_vec(); // length to hash
+            add_crypto_primitive_benchmark(name, params, Some(n));
+        }
+    }
+
+    {
+        // n is the length of the data to be hashed
+        for n in [0u32, 10, 20, 50, 100, 1000, 10_000, 100_000] {
+            let name = "hostfn.hash_keccak_256";
+            let params = n.to_le_bytes().to_vec(); // length to hash
+            add_crypto_primitive_benchmark(name, params, Some(n));
         }
     }
 

@@ -175,6 +175,8 @@ mod host {
     //! These functions are safety-critical, and must withstand malicious use.
     //! Thus they are written in a very defensive way to make sure no out of
     //! bounds accesses occur.
+    use std::convert::TryFrom;
+
     use super::*;
     use concordium_contracts_common::{
         Cursor, EntrypointName, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE,
@@ -629,7 +631,35 @@ mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
-        todo!()
+        let message_len = unsafe { stack.pop_u32() };
+        let message_start = unsafe { stack.pop_u32() };
+        let signature_start = unsafe { stack.pop_u32() };
+        let public_key_start = unsafe { stack.pop_u32() };
+        let message_end = message_start as usize + message_len as usize;
+        ensure!(message_end <= memory.len(), "Illegal memory access.");
+        let public_key_end = public_key_start as usize + 32;
+        ensure!(public_key_end <= memory.len(), "Illegal memory access.");
+        let signature_end = signature_start as usize + 64;
+        ensure!(signature_end <= memory.len(), "Illegal memory access.");
+        // expensive operations start now.
+        energy.tick_energy(constants::verify_ed25519_cost(message_len))?;
+        let signature =
+            ed25519_zebra::Signature::try_from(&memory[signature_start as usize..signature_end]);
+        let message = &memory[message_start as usize..message_end];
+        let public_key = ed25519_zebra::VerificationKey::try_from(
+            &memory[public_key_start as usize..public_key_end],
+        );
+        match (signature, public_key) {
+            (Ok(ref signature), Ok(public_key)) => {
+                if public_key.verify(signature, message).is_ok() {
+                    stack.push_value(1u32);
+                } else {
+                    stack.push_value(0u32);
+                }
+            }
+            _ => stack.push_value(0u32),
+        }
+        Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
@@ -647,6 +677,8 @@ mod host {
         ensure!(public_key_end <= memory.len(), "Illegal memory access.");
         let signature_end = signature_start as usize + 64;
         ensure!(signature_end <= memory.len(), "Illegal memory access.");
+        // expensive operations start now.
+        energy.tick_energy(constants::VERIFY_ECDSA_SECP256K1_COST)?;
         let signature = secp256k1::ecdsa::Signature::from_compact(
             &memory[signature_start as usize..signature_end],
         );
@@ -680,6 +712,8 @@ mod host {
         ensure!(data_end <= memory.len(), "Illegal memory access.");
         let output_end = output_start as usize + 32;
         ensure!(output_end <= memory.len(), "Illegal memory access.");
+        // expensive operations start here
+        energy.tick_energy(constants::hash_sha2_256_cost(data_len))?;
         let hash = sha2::Sha256::digest(&memory[data_start as usize..data_end]);
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
@@ -698,6 +732,8 @@ mod host {
         ensure!(data_end <= memory.len(), "Illegal memory access.");
         let output_end = output_start as usize + 32;
         ensure!(output_end <= memory.len(), "Illegal memory access.");
+        // expensive operations start here
+        energy.tick_energy(constants::hash_sha3_256_cost(data_len))?;
         let hash = sha3::Sha3_256::digest(&memory[data_start as usize..data_end]);
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
@@ -716,6 +752,8 @@ mod host {
         ensure!(data_end <= memory.len(), "Illegal memory access.");
         let output_end = output_start as usize + 32;
         ensure!(output_end <= memory.len(), "Illegal memory access.");
+        // expensive operations start here
+        energy.tick_energy(constants::hash_keccak_256_cost(data_len))?;
         let hash = sha3::Keccak256::digest(&memory[data_start as usize..data_end]);
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())

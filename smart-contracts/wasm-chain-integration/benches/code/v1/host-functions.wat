@@ -40,6 +40,13 @@
   ;; return a value
   (import "concordium" "write_output" (func $write_output (param $start i32) (param $length i32) (param $offset i32) (result i32)))
 
+  ;; cryptographic primitives
+  (import "concordium" "verify_ed25519_signature" (func $verify_ed25519_signature (param $public_key i32) (param $signature i32) (param $message i32) (param $message_len i32) (result i32)))
+  (import "concordium" "verify_ecdsa_secp256k1_signature" (func $verify_ecdsa_secp256k1_signature (param $public_key i32) (param $signature i32) (param $message i32) (result i32)))
+  (import "concordium" "hash_sha2_256" (func $hash_sha2_256 (param $data i32) (param $data_len i32) (param $output i32)))
+  (import "concordium" "hash_sha3_256" (func $hash_sha3_256 (param $data i32) (param $data_len i32) (param $output i32)))
+  (import "concordium" "hash_keccak_256" (func $hash_keccak_256 (param $data i32) (param $data_len i32) (param $output i32)))
+
   ;; Precondition. Read the parameter index from the first 4 bytes of the memory, interpreting it in little endian.
   (func (export "hostfn.get_parameter_size") (param i64) (result i32)
     (local $idx i32)
@@ -287,7 +294,61 @@
     (return (i32.const 0))
   )
 
-  (memory 1)
+  (func (export "hostfn.verify_ed25519_signature") (param i64) (result i32)
+      (local $len i32)
+      (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 100) (i32.const 0))
+      (local.set $len (i32.load (i32.const 96)))
+      (loop $loop
+        (call $verify_ed25519_signature (i32.const 0) (i32.const 32) (i32.const 100) (local.get $len))
+        (br_if $loop) ;; only loop if we succeeded in verifying the signature
+      )
+      (return (i32.const 0))
+  )
+
+  (func (export "hostfn.verify_ecdsa_secp256k1_signature") (param i64) (result i32)
+      (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 129) (i32.const 0))
+      (loop $loop
+        (call $verify_ecdsa_secp256k1_signature (i32.const 0) (i32.const 33) (i32.const 97))
+        (br_if $loop) ;; only loop if we succeeded in verifying the signature
+      )
+      (return (i32.const 0))
+  )
+
+  (func (export "hostfn.hash_sha2_256") (param i64) (result i32)
+      (local $len i32)
+      (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 4) (i32.const 0))
+      (local.set $len (i32.load (i32.const 0)))
+      (loop $loop
+        (call $hash_sha2_256 (i32.const 0) (local.get $len) (i32.const 0))
+        (br $loop)
+      )
+      (return (i32.const 0))
+  )
+
+  (func (export "hostfn.hash_sha3_256") (param i64) (result i32)
+      (local $len i32)
+      (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 4) (i32.const 0))
+      (local.set $len (i32.load (i32.const 0)))
+      (loop $loop
+        (call $hash_sha3_256 (i32.const 0) (local.get $len) (i32.const 0))
+        (br $loop)
+      )
+      (return (i32.const 0))
+  )
+
+  (func (export "hostfn.hash_keccak_256") (param i64) (result i32)
+      (local $len i32)
+      (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 4) (i32.const 0))
+      (local.set $len (i32.load (i32.const 0)))
+      (loop $loop
+        (call $hash_keccak_256 (i32.const 0) (local.get $len) (i32.const 0))
+        (br $loop)
+      )
+      (return (i32.const 0))
+  )
+
+
+  (memory 2)
 )
 
 ;; Local Variables:
