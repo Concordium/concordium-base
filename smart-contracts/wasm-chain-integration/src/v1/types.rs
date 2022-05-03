@@ -390,6 +390,11 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             29 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntrypointSize)),
             30 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntryPoint)),
             31 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke)),
+            32 => Ok(ImportFunc::Common(CommonFunc::VerifyEd25519)),
+            33 => Ok(ImportFunc::Common(CommonFunc::VerifySecp256k1)),
+            34 => Ok(ImportFunc::Common(CommonFunc::HashSHA2_256)),
+            35 => Ok(ImportFunc::Common(CommonFunc::HashSHA3_256)),
+            36 => Ok(ImportFunc::Common(CommonFunc::HashKeccak256)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
