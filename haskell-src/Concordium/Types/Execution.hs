@@ -536,6 +536,7 @@ bitFor _ Nothing = zeroBits
 bitFor i (Just _) = bit i
 
 -- |Get the payload of the given size.
+-- This will only deserialize payloads that are supported at the given protocol version.
 getPayload :: SProtocolVersion pv -> PayloadSize -> S.Get Payload
 getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
   -- isolate is required to consume all the bytes it is meant to.
@@ -706,6 +707,8 @@ safeSetFromAscList = go Set.empty Nothing
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
+-- |Deserialize a payload.
+-- This will only deserialize payloads that are supported at the given protocol version.
 decodePayload :: SProtocolVersion pv -> PayloadSize -> EncodedPayload -> Either String Payload
 decodePayload spv size (EncodedPayload s) = S.runGet (getPayload spv size) . BSS.fromShort $ s
 {-# INLINE decodePayload #-}
