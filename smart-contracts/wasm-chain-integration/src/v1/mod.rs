@@ -1,4 +1,6 @@
 #[cfg(test)]
+mod crypto_primitives_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(feature = "enable-ffi")]
