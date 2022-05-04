@@ -22,6 +22,9 @@ serde = "1.0"
 num_enum = "0.5"
 derive_more = "0.99"
 sha2 = "0.10"
+sha3 = "0.10"
+secp256k1 = "0.22"
+ed25519-zebra = "2.2" # TODO: After we only support Rust 1.54+ change to the latest version (3.*)
 thiserror = "1"
 byteorder = "1.4"
 tinyvec = {version = "1.5", features = ["alloc"]}

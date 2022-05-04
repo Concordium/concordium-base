@@ -218,3 +218,21 @@ pub fn write_output_cost(x: u32) -> u64 { 10 + u64::from(x) }
 /// and 3000000NRG there can be at most 100MB of output produced.
 #[inline(always)]
 pub fn additional_output_size_cost(x: u64) -> u64 { 30 * x }
+
+/// Cost of verification of an ed25519 with the Zebra implementation.
+/// The cost depends on the size of the message and is based on benchmarking.
+pub fn verify_ed25519_cost(message_len: u32) -> u64 { 100_000 + 100 * u64::from(message_len) }
+
+/// Cost of verification of an ecdsa over secp256k1 with the bitcoin-core
+/// implementation. Since signature verification only works on 32 byte messages
+/// (which are meant to be hashes) the cost is constant.
+pub const VERIFY_ECDSA_SECP256K1_COST: u64 = 100_000;
+
+/// Cost of computing a SHA2-256 digest of the message of the given length.
+pub fn hash_sha2_256_cost(data_len: u32) -> u64 { 500 + 7 * u64::from(data_len) }
+
+/// Cost of computing a SHA3-256 digest of the message of the given length.
+pub fn hash_sha3_256_cost(data_len: u32) -> u64 { 500 + 5 * u64::from(data_len) }
+
+/// Cost of computing a Keccak-256 digest of the message of the given length.
+pub fn hash_keccak_256_cost(data_len: u32) -> u64 { 500 + 5 * u64::from(data_len) }
