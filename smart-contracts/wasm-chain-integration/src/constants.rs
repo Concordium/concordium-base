@@ -232,7 +232,7 @@ pub const VERIFY_ECDSA_SECP256K1_COST: u64 = 100_000;
 pub fn hash_sha2_256_cost(data_len: u32) -> u64 { 500 + 7 * u64::from(data_len) }
 
 /// Cost of computing a SHA3-256 digest of the message of the given length.
-pub fn hash_sha3_256_cost(data_len: u32) -> u64 { 600 + 5 * u64::from(data_len) }
+pub fn hash_sha3_256_cost(data_len: u32) -> u64 { 500 + 5 * u64::from(data_len) }
 
 /// Cost of computing a Keccak-256 digest of the message of the given length.
-pub fn hash_keccak_256_cost(data_len: u32) -> u64 { 600 + 5 * u64::from(data_len) }
+pub fn hash_keccak_256_cost(data_len: u32) -> u64 { 500 + 5 * u64::from(data_len) }
