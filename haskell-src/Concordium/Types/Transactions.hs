@@ -435,9 +435,13 @@ transactionHashFromBareBlockItem = transactionHashFromBytes . S.runPut . putBare
 
 -- |Try to parse a versioned block item, stripping the version, and
 -- reconstructing the block item metadata from the raw data.
--- The parsing format is determined by the version.
+-- The parsing format is determined by the version tag.
 --
 -- The only supported version at the moment is version 0.
+--
+-- Note, the deserialization is parametrised by the protocol version.
+-- For version 0 serialization, the protocol version will only determine __whether__ the block item
+-- can be deserialized, and not __how__ it is deserialized.
 --
 -- * @SPEC: <$DOCS/Versioning#binary-format>
 -- * @SPEC: <$DOCS/Versioning>
