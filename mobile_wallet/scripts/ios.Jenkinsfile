@@ -1,7 +1,15 @@
 pipeline {
-    agent none
+    agent { label 'jenkins-worker' }
     environment {
-        FILENAME = 'libmobile_wallet.a'
+        FILENAME_ROOT = 'libmobile_wallet'
+        VERSION = sh(
+            returnStdout: true,
+            script: '''\
+                # Extract version number if not set as parameter
+                [ -z "$VERSION" ] && VERSION=$(awk '/version = / { print substr($3, 2, length($3)-2); exit }' mobile_wallet/Cargo.toml)
+                echo -n "$VERSION"
+            '''.stripIndent()
+        )
         S3_BUCKET = 's3://static-libraries.concordium.com/iOS'
     }
     stages {
@@ -20,7 +28,7 @@ pipeline {
 
                     # Prepate output
                     mkdir ../out
-                    cp target/universal/release/${FILENAME} ../out/
+                    cp target/universal/release/${FILENAME_ROOT}.a ../out/
                 '''.stripIndent()
                 stash includes: 'out/**/*', name: 'release'
             }
@@ -32,7 +40,7 @@ pipeline {
                 unstash 'release'
                 sh '''\
                     # Push to s3
-                    aws s3 cp "out/${FILENAME}" "${S3_BUCKET}/${FILENAME}" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+                    aws s3 cp "out/${FILENAME_ROOT}.a" "${S3_BUCKET}/${FILENAME_ROOT}_${VERSION}.a" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
                 '''.stripIndent()
             }
         }
