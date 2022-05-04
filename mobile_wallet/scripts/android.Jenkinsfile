@@ -65,7 +65,7 @@ pipeline {
 
                     # Build rust library
                     cd mobile_wallet_lib
-                    ./gradlew build
+                    ./gradlew build --info
 
                     # Prepate output
                     mkdir ../../../out/
