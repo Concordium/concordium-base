@@ -10,7 +10,6 @@ import qualified Data.ByteString.Base16 as BS16
 import Data.Text.Encoding as Text
 
 import qualified Data.Aeson as AE
-import qualified Data.Aeson.Encoding as AE
 import qualified Data.Aeson.Types as AE
 import qualified Data.Text as Text
 import Prelude hiding (fail)
@@ -78,10 +77,12 @@ instance FBS.FixedLength a => AE.ToJSON (FBSHex a) where
 
 fbsHexFromText :: forall a . FBS.FixedLength a => Text.Text -> AE.Parser (FBSHex a)
 fbsHexFromText t =
-  let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
-    in if BS.null rest && BS.length bs == FBS.fixedLength (undefined :: a) then return (FBSHex (FBS.fromByteString bs))
-       else if not (BS.null rest) then AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
-            else AE.typeMismatch "Decoded string not of correct length" (AE.String t)
+  case BS16.decode (Text.encodeUtf8 t) of
+    Right bs ->
+      if BS.length bs == FBS.fixedLength (undefined :: a)
+        then return (FBSHex (FBS.fromByteString bs))
+        else AE.typeMismatch "Decoded string not of correct length" (AE.String t)
+    Left _ -> AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
 instance FBS.FixedLength a => AE.FromJSON (FBSHex a) where
   parseJSON = AE.withText "FixedByteStringHex" $ fbsHexFromText
@@ -90,7 +91,7 @@ instance FBS.FixedLength a => AE.FromJSONKey (FBSHex a) where
   fromJSONKey = AE.FromJSONKeyTextParser fbsHexFromText
 
 instance FBS.FixedLength a => AE.ToJSONKey (FBSHex a) where
-  toJSONKey = AE.ToJSONKeyText serializeBase16 (AE.text . serializeBase16)
+  toJSONKey = AE.toJSONKeyText serializeBase16
 
 -- |Type whose only purpose is to enable derivation of serialization instances.
 newtype Short65K = Short65K ShortByteString
@@ -113,9 +114,9 @@ instance AE.ToJSON Short65K where
 -- |JSON instances based on base16 encoding.
 instance AE.FromJSON Short65K where
   parseJSON = AE.withText "Short65K" $ \t ->
-    let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
-    in if BS.null rest then return (Short65K (BSS.toShort bs))
-       else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
+    case BS16.decode (Text.encodeUtf8 t) of
+      Right bs -> return (Short65K (BSS.toShort bs))
+      Left _ -> AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
 
 -- |JSON instances based on base16 encoding.
@@ -125,9 +126,9 @@ instance AE.ToJSON ByteStringHex where
 -- |JSON instances based on base16 encoding.
 instance AE.FromJSON ByteStringHex where
   parseJSON = AE.withText "ByteStringHex" $ \t ->
-    let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
-    in if BS.null rest then return (ByteStringHex (BSS.toShort bs))
-       else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
+    case BS16.decode (Text.encodeUtf8 t) of
+      Right bs -> return (ByteStringHex (BSS.toShort bs))
+      Left _ -> AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
 -- |Use the serialize instance of a type to deserialize. In contrast to
 -- 'bsDeserializeBase16' this takes Text as input.
@@ -137,29 +138,23 @@ deserializeBase16 = bsDeserializeBase16 . Text.encodeUtf8
 -- |Try to decode a hex string and deserialize it with the provided instance.
 bsDeserializeBase16 :: (Serialize a, MonadFail m) => BS.ByteString -> m a
 bsDeserializeBase16 input =
-        if BS.null rest then
-            case decode bs of
-                Left er -> fail er
-                Right r -> return r
-        else
-            fail $ "Could not decode as base-16: " ++ show input
-    where
-        (bs, rest) = BS16.decode input
-
+  case BS16.decode input of
+    Right bs ->
+      case decode bs of
+        Left er -> fail er
+        Right r -> return r
+    Left _ -> fail $ "Could not decode as base-16: " ++ show input
 
 -- |Use the serialize instance to convert from base 16 to value, but add
 -- explicit length as 4 bytes big endian in front.
 deserializeBase16WithLength4 :: (Serialize a, MonadFail m) => Text.Text -> m a
 deserializeBase16WithLength4 t =
-        if BS.null rest then
-            case decode (runPut (putWord32be (fromIntegral (BS.length bs))) <> bs) of
-                Left er -> fail er
-                Right r -> return r
-        else
-            fail $ "Could not decode as base-16: " ++ show t
-    where
-        (bs, rest) = BS16.decode (Text.encodeUtf8 t)
-
+  case BS16.decode (Text.encodeUtf8 t) of
+    Right bs ->
+      case decode (runPut (putWord32be (fromIntegral (BS.length bs))) <> bs) of
+        Left er -> fail er
+        Right r -> return r
+    Left _ -> fail $ "Could not decode as base-16: " ++ show t
 
 serializeBase16 :: (Serialize a) => a -> Text.Text
 serializeBase16 = Text.decodeUtf8 . BS16.encode . encode

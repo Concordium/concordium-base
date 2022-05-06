@@ -18,7 +18,7 @@
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
 #
-resolver: lts-17.4
+resolver: lts-19.6
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -59,7 +59,8 @@ extra-lib-dirs:
 # arch: x86_64
 #
 # Extra directories used by stack for building
-# extra-include-dirs: [/path/to/dir]
+extra-include-dirs:
+    - /Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk/usr/include/ffi/
 # extra-lib-dirs: [/path/to/dir]
 #
 # Allow a newer minor version of GHC than the snapshot specifies
