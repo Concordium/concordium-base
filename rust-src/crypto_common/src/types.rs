@@ -116,11 +116,25 @@ impl Serial for DelegationTarget {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-/// An amount of GTU. The lowest expressible amount is 1microGTU. The string
+/// An amount of CCD. The lowest expressible amount is 1microCCD. The string
 /// representation of this type uses a decimal separator with at most 6
 /// decimals.
 pub struct Amount {
     pub microgtu: u64,
+}
+
+impl Amount {
+    pub fn from_micro_ccd(micro_ccd: u64) -> Self {
+        Self {
+            microgtu: micro_ccd,
+        }
+    }
+
+    pub fn from_ccd(ccd: u64) -> Self {
+        Self {
+            microgtu: ccd * 1_000_000,
+        }
+    }
 }
 
 impl From<Amount> for u64 {
