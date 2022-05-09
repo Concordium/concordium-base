@@ -49,7 +49,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - ghc: 8.10.4 # used as cache key only; stack uses the one specified in stack.yaml
+        - ghc: 9.0.2 # used as cache key only; stack uses the one specified in stack.yaml
           rust: 1.53
 
     steps:
