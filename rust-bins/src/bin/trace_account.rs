@@ -45,18 +45,18 @@ impl<'de> SerdeDeserialize<'de> for AmountDelta {
             .parse::<i128>()
             .map_err(|e| D::Error::custom(format!("Could not parse amount delta: {}", e)))?;
         if n >= 0 {
-            let microgtu: u64 = n
+            let microccd: u64 = n
                 .try_into()
                 .map_err(|_| D::Error::custom("Amount delta out of range."))?;
-            Ok(AmountDelta::PositiveAmount(Amount::from(microgtu)))
+            Ok(AmountDelta::PositiveAmount(Amount::from(microccd)))
         } else {
             let m = n
                 .checked_abs()
                 .ok_or_else(|| D::Error::custom("Amount delta out of range."))?;
-            let microgtu: u64 = m
+            let microccd: u64 = m
                 .try_into()
                 .map_err(|_| D::Error::custom("Amount delta out of range."))?;
-            Ok(AmountDelta::NegativeAmount(Amount::from(microgtu)))
+            Ok(AmountDelta::NegativeAmount(Amount::from(microccd)))
         }
     }
 }
@@ -493,7 +493,7 @@ fn trace_single_account(
                                     );
                                     assert!(before >= after);
                                     let amount = Amount {
-                                        microgtu: before.microgtu - after.microgtu,
+                                        microccd: before.microccd - after.microccd,
                                     };
                                     writeln!(
                                         writer,

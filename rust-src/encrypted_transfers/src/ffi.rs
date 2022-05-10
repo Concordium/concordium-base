@@ -81,11 +81,11 @@ unsafe extern "C" fn group_element_from_seed(
 #[no_mangle]
 unsafe extern "C" fn encrypt_amount_with_zero_randomness(
     ctx_ptr: *const GlobalContext<Group>,
-    microgtu: u64,
+    microccd: u64,
     out_high_ptr: *mut *const Cipher<Group>,
     out_low_ptr: *mut *const Cipher<Group>,
 ) {
-    let encrypted = encrypt_amount_with_fixed_randomness(from_ptr!(ctx_ptr), Amount { microgtu });
+    let encrypted = encrypt_amount_with_fixed_randomness(from_ptr!(ctx_ptr), Amount { microccd });
     *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
     *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
 }
@@ -99,7 +99,7 @@ unsafe extern "C" fn make_encrypted_transfer_data(
     receiver_pk_ptr: *const elgamal::PublicKey<Group>,
     sender_sk_ptr: *const elgamal::SecretKey<Group>,
     input_amount_ptr: *const AggregatedDecryptedAmount<Group>,
-    microgtu: u64,
+    microccd: u64,
     high_remaining: *mut *const Cipher<Group>,
     low_remaining: *mut *const Cipher<Group>,
     high_transfer: *mut *const Cipher<Group>,
@@ -122,7 +122,7 @@ unsafe extern "C" fn make_encrypted_transfer_data(
         &receiver_pk,
         &sender_sk,
         &input_amount,
-        Amount { microgtu },
+        Amount { microccd },
         &mut csprng,
     ) {
         Some(it) => it,
@@ -217,7 +217,7 @@ unsafe extern "C" fn make_sec_to_pub_data(
     ctx_ptr: *const GlobalContext<Group>,
     sender_sk_ptr: *const elgamal::SecretKey<Group>,
     input_amount_ptr: *const AggregatedDecryptedAmount<Group>,
-    microgtu: u64,
+    microccd: u64,
     high_remaining: *mut *const Cipher<Group>,
     low_remaining: *mut *const Cipher<Group>,
     out_index: *mut u64,
@@ -235,7 +235,7 @@ unsafe extern "C" fn make_sec_to_pub_data(
         &ctx,
         &sender_sk,
         &input_amount,
-        Amount { microgtu },
+        Amount { microccd },
         &mut csprng,
     ) {
         Some(it) => it,
@@ -268,7 +268,7 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
     initial_low_ptr: *const Cipher<Group>,
     remaining_high_ptr: *const Cipher<Group>,
     remaining_low_ptr: *const Cipher<Group>,
-    microgtu: u64,
+    microccd: u64,
     encrypted_agg_index: u64,
     transfer_proof_ptr: *const u8,
     transfer_proof_len: size_t,
@@ -296,7 +296,7 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
         return 0;
     };
 
-    let transfer_amount = Amount { microgtu };
+    let transfer_amount = Amount { microccd };
 
     let transfer_data = SecToPubAmountTransferData {
         remaining_amount,
@@ -319,7 +319,7 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
 unsafe extern "C" fn make_aggregated_decrypted_amount(
     encrypted_high_ptr: *const Cipher<Group>,
     encrypted_low_ptr: *const Cipher<Group>,
-    microgtu: u64,
+    microccd: u64,
     agg_index: u64,
 ) -> *mut AggregatedDecryptedAmount<Group> {
     let encrypted_high = from_ptr!(encrypted_high_ptr);
@@ -329,7 +329,7 @@ unsafe extern "C" fn make_aggregated_decrypted_amount(
     };
     Box::into_raw(Box::new(AggregatedDecryptedAmount {
         agg_encrypted_amount,
-        agg_amount: Amount { microgtu },
+        agg_amount: Amount { microccd },
         agg_index: agg_index.into(),
     }))
 }
@@ -365,7 +365,7 @@ unsafe extern "C" fn decrypt_amount(
     let amount = EncryptedAmount {
         encryptions: [*from_ptr!(low_ptr), *from_ptr!(high_ptr)],
     };
-    crate::decrypt_amount(from_ptr!(table_ptr), &sk, &amount).microgtu
+    crate::decrypt_amount(from_ptr!(table_ptr), &sk, &amount).microccd
 }
 
 /// # Safety
@@ -375,13 +375,13 @@ unsafe extern "C" fn decrypt_amount(
 unsafe extern "C" fn encrypt_amount(
     ctx_ptr: *const GlobalContext<Group>,
     pk_ptr: *const elgamal::PublicKey<Group>,
-    microgtu: u64,
+    microccd: u64,
     out_high_ptr: *mut *const Cipher<Group>,
     out_low_ptr: *mut *const Cipher<Group>,
 ) {
     let gc = from_ptr!(ctx_ptr);
     let pk = from_ptr!(pk_ptr);
-    let encrypted = crate::encrypt_amount(gc, &pk, Amount { microgtu }, &mut rand::thread_rng()).0;
+    let encrypted = crate::encrypt_amount(gc, &pk, Amount { microccd }, &mut rand::thread_rng()).0;
     *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
     *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
 }
