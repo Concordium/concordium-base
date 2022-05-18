@@ -225,6 +225,9 @@ import Lens.Micro.Platform
 
 import Text.Read (readMaybe)
 
+import Test.QuickCheck ( Arbitrary )
+import Test.QuickCheck.Arbitrary (Arbitrary(arbitrary))
+
 -- |A value equipped with its hash.
 data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
 
@@ -276,7 +279,7 @@ type LotteryPower = Ratio Amount
 -- This wrapper will be used by both @AmountFraction@ and @ElectionDifficulty@.
 -- It was agreed in tokenomics discussions to be sufficient.
 newtype PartsPerHundredThousands = PartsPerHundredThousands { partsPerHundredThousand :: Word32 }
-  deriving newtype (Eq, Ord, Num, Real, Enum, Integral)
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Arbitrary)
 
 hundredThousand :: Word32
 hundredThousand = 100000
@@ -529,6 +532,12 @@ instance HashableTo Hash.Hash MintRate where
 
 instance Monad m => MHashableTo m Hash.Hash MintRate
 
+instance Arbitrary MintRate where
+  arbitrary = do
+    mrMantissa <- arbitrary
+    mrExponent <- arbitrary
+    return MintRate{..}
+
 -- |Compute an amount minted at a given rate.
 -- The amount is rounded down to the nearest microGTU.
 mintAmount :: MintRate -> Amount -> Amount
@@ -537,7 +546,7 @@ mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrManti
 
 -- |A fraction in [0,1] of an 'Amount', represented as parts per 100000.
 newtype AmountFraction = AmountFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
-  deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize)
+  deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize, Arbitrary)
 
 makeAmountFraction
    :: Word32
