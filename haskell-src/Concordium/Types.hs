@@ -225,7 +225,7 @@ import Lens.Micro.Platform
 
 import Text.Read (readMaybe)
 
-import Test.QuickCheck ( Arbitrary )
+import Test.QuickCheck ( Arbitrary, choose )
 import Test.QuickCheck.Arbitrary (Arbitrary(arbitrary))
 
 -- |A value equipped with its hash.
@@ -279,7 +279,7 @@ type LotteryPower = Ratio Amount
 -- This wrapper will be used by both @AmountFraction@ and @ElectionDifficulty@.
 -- It was agreed in tokenomics discussions to be sufficient.
 newtype PartsPerHundredThousands = PartsPerHundredThousands { partsPerHundredThousand :: Word32 }
-  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Arbitrary)
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral)
 
 hundredThousand :: Word32
 hundredThousand = 100000
@@ -306,6 +306,9 @@ instance FromJSON PartsPerHundredThousands where
     unless (v >= 0 && v <= fromIntegral hundredThousand) $ fail "Fraction out of bounds"
     return (PartsPerHundredThousands (fromIntegral v))
   parseJSON _ = fail "Expected number"
+
+instance Arbitrary PartsPerHundredThousands where
+  arbitrary = PartsPerHundredThousands <$> choose (0, hundredThousand)
 
 -- |Make a 'PartsPerHundredThousands'.
 makePartsPerHundredThousands
