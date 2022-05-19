@@ -538,7 +538,11 @@ instance Monad m => MHashableTo m Hash.Hash MintRate
 instance Arbitrary MintRate where
   arbitrary = do
     mrMantissa <- arbitrary
-    mrExponent <- arbitrary
+    let mantissaDigits = ceiling . logBase (10 :: Double) . fromIntegral $ mrMantissa
+    -- By making the exponent no less than the number of decimal digits in the mantissa, we assure
+    -- that the mint rate value stays below 1. As per comment for the `MintRate` definition,
+    -- exponents above 29 aren't used in practice.
+    mrExponent <- choose (mantissaDigits, 29)
     return MintRate{..}
 
 -- |Compute an amount minted at a given rate.
