@@ -54,6 +54,23 @@ data CoreGenesisParameters = CoreGenesisParameters
     }
     deriving (Eq, Show)
 
+-- |Extract the core genesis parameters.
+coreGenesisParameters :: BasicGenesisData gd => gd -> CoreGenesisParameters
+coreGenesisParameters gd = CoreGenesisParameters{
+    genesisTime = gdGenesisTime gd,
+    genesisSlotDuration = gdSlotDuration gd,
+    genesisEpochLength = gdEpochLength gd,
+    genesisFinalizationParameters = gdFinalizationParameters gd,
+    genesisMaxBlockEnergy = gdMaxBlockEnergy gd
+    }
+
+instance BasicGenesisData CoreGenesisParameters where
+  gdGenesisTime = genesisTime
+  gdSlotDuration = genesisSlotDuration
+  gdMaxBlockEnergy = genesisMaxBlockEnergy
+  gdFinalizationParameters = genesisFinalizationParameters
+  gdEpochLength = genesisEpochLength
+
 instance Serialize CoreGenesisParameters where
     put CoreGenesisParameters{..} = do
         put genesisTime

@@ -218,3 +218,9 @@ genesisBlockHash GDP4MigrateFromP3{genesisRegenesis = RegenesisData{..}, ..} = B
     put genesisTerminalBlock
     put genesisStateHash
     put genesisMigration
+
+-- |The hash of the first genesis block in the chain.
+firstGenesisBlockHash :: GenesisDataP4 -> BlockHash
+firstGenesisBlockHash GDP4Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP4MigrateFromP3{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash other@GDP4Initial{} = genesisBlockHash other

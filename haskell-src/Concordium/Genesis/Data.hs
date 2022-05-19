@@ -12,6 +12,7 @@ module Concordium.Genesis.Data (
     module Concordium.Genesis.Data,
 ) where
 
+import Data.ByteString (ByteString)
 import Data.Function (on)
 import Data.Serialize
 
@@ -23,6 +24,7 @@ import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
 import Concordium.Types
+import Concordium.Types.ProtocolVersion (SomeProtocolVersion)
 
 -- |Data family for genesis data.
 -- This has been chosen to be a data family so that the genesis data
@@ -124,6 +126,14 @@ genesisBlockHash = case protocolVersion @pv of
     SP2 -> P2.genesisBlockHash . unGDP2
     SP3 -> P3.genesisBlockHash . unGDP3
     SP4 -> P4.genesisBlockHash . unGDP4
+
+-- Original genesis hash
+firstGenesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHash
+firstGenesisBlockHash = case protocolVersion @pv of
+    SP1 -> P1.firstGenesisBlockHash . unGDP1
+    SP2 -> P2.firstGenesisBlockHash . unGDP2
+    SP3 -> P3.firstGenesisBlockHash . unGDP3
+    SP4 -> P4.firstGenesisBlockHash . unGDP4
 
 -- |A dependent pair of a protocol version and genesis data.
 data PVGenesisData = forall pv. IsProtocolVersion pv => PVGenesisData (GenesisData pv)

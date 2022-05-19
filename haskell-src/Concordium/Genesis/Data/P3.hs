@@ -107,3 +107,8 @@ genesisBlockHash GDP3Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash .
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
+
+-- |The hash of the first genesis block in the chain.
+firstGenesisBlockHash :: GenesisDataP3 -> BlockHash
+firstGenesisBlockHash GDP3Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash other@GDP3Initial{} = genesisBlockHash other
