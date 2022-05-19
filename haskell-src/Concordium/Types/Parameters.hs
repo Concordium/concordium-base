@@ -105,8 +105,8 @@ instance IsChainParametersVersion cpv => HashableTo Hash.Hash (MintDistribution 
 
 instance Arbitrary (MintDistribution 'ChainParametersV1) where
   arbitrary = do
-    mps <- vector 2 `suchThat` (\[x, y] -> isJust $ addAmountFraction x y)
-    return $ MintDistribution MintPerSlotForCPV0None (mps !! 0) (mps !! 1)
+    (x, y) <- arbitrary `suchThat` (\(x, y) -> isJust $ addAmountFraction x y)
+    return $ MintDistribution MintPerSlotForCPV0None x y
 
 instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
 
