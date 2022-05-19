@@ -10,11 +10,12 @@ import Data.Word
 import Database.Persist.Class
 import Database.Persist.Sql
 import qualified Data.Serialize as S
+import Test.QuickCheck
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot {theSlot :: Word64} deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON)
+newtype Slot = Slot {theSlot :: Word64} deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON, Arbitrary)
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
