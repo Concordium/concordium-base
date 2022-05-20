@@ -654,6 +654,7 @@ dependencies = [
 name = "ed25519_hd_key_derivation"
 version = "1.0.0"
 dependencies = [
+ "ed25519-dalek",
  "hex",
  "hmac 0.12.1",
  "regex",
@@ -956,6 +957,20 @@ name = "keccak"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
+
+[[package]]
+name = "key_derivation"
+version = "1.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "ed25519_hd_key_derivation",
+ "hex",
+ "hmac 0.12.1",
+ "keygen_bls",
+ "pairing",
+ "regex",
+ "sha2 0.10.2",
+]
 
 [[package]]
 name = "keygen_bls"

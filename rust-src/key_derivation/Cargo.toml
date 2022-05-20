@@ -1,0 +1,26 @@
+[package]
+name = "key_derivation"
+version = "1.0.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE"
+
+[dependencies]
+hex = "0.4.3"
+hmac = "0.12.1"
+sha2 = "0.10.2"
+regex = "1.5.5"
+pairing = "0.15"
+ed25519-dalek = "1.0.0"
+
+[dependencies.ed25519_hd_key_derivation]
+path = "../ed25519_hd_key_derivation"
+version = "1.0.0"
+
+[dependencies.keygen_bls]
+path = "../keygen_bls"
+version = "2.0.0"
+
+[lib]
+name = "key_derivation"
+crate-type = ["rlib"]
