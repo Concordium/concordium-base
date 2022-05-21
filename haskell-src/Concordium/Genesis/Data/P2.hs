@@ -4,6 +4,7 @@
 module Concordium.Genesis.Data.P2 where
 
 import Data.Serialize
+import Data.Word
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -63,6 +64,28 @@ putGenesisDataV4 GDP2Regenesis{..} = do
   putWord8 1
   putRegenesisData genesisRegenesis
 
+-- |Deserialize genesis configuration from the serialized genesis data.
+getGenesisConfigurationV4 :: BlockHash -> Get GenesisConfiguration
+getGenesisConfigurationV4 genHash = do
+    getWord8 >>= \case
+        0 -> do
+            _gcCore <- get
+            return GenesisConfiguration{
+                _gcTag = 0,
+                _gcCurrentHash = genHash,
+                _gcFirstGenesis = genHash,
+                ..
+                }
+        1 -> do
+          _gcCore <- get
+          _gcFirstGenesis <- get
+          return GenesisConfiguration{
+            _gcTag = 1,
+            _gcCurrentHash = genHash,
+            ..
+            }
+        _ -> fail "Unrecognised genesis data type"
+
 -- |Deserialize genesis data with a version tag. The expected version tag is 4
 -- and this must be distinct from version tags of other genesis data formats.
 getVersionedGenesisData :: Get GenesisDataP2
@@ -112,3 +135,8 @@ genesisBlockHash GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash .
 firstGenesisBlockHash :: GenesisDataP2 -> BlockHash
 firstGenesisBlockHash GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
 firstGenesisBlockHash other@GDP2Initial{} = genesisBlockHash other
+
+-- |Tag of the genesis data used for serialization.
+genesisVariantTag :: GenesisDataP2 -> Word8
+genesisVariantTag GDP2Initial{} = 0
+genesisVariantTag GDP2Regenesis{} = 1
