@@ -171,6 +171,17 @@ getPVGenesisData = do
     6 -> PVGenesisData . GDP4 <$> P4.getGenesisDataV6
     n -> fail $ "Unsupported genesis version: " ++ show n
 
+-- |Assuming the same input as 'getPVGenesisData', return just the protocol version.
+getPVGenesisDataPV :: Get SomeProtocolVersion
+getPVGenesisDataPV = do
+  getVersion >>= \case
+    3 -> return $ SomeProtocolVersion SP1
+    4 -> return $ SomeProtocolVersion SP2
+    5 -> return $ SomeProtocolVersion SP3
+    6 -> return $ SomeProtocolVersion SP4
+    n -> fail $ "Unsupported genesis version: " ++ show n
+
+
 -- |Serialize genesis data with a version tag. This is a helper function that
 -- modulo types does exactly the same as 'putVersionedGenesisData' defined
 -- above.
