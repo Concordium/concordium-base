@@ -91,6 +91,9 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP3 -> P3.putGenesisDataV5 . unGDP3
         SP4 -> P4.putGenesisDataV6 . unGDP4
 
+-- |Deserialize 'GenesisConfiguration' given the hash of the genesis. If
+-- 'GenesisData' is decodable (using its Serialize instance) from a given
+-- bytestring then 'getGenesisConfiguration' will also succeed parsing.
 getGenesisConfiguration :: SProtocolVersion pv -> BlockHash -> Get GenesisConfiguration
 getGenesisConfiguration spv genHash = case spv of
         SP1 -> P1.getGenesisConfigurationV3 genHash
