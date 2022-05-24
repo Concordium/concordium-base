@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 3.0.0 (2022-05-17)
+
 - Introduce Entrypoint and Parameter types, and their owned versions.
 - Add a new schema version for V1 smart contracts. 
   This adds schema for return values of init and receive functions, and removes the state schema.
