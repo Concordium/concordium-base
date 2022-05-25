@@ -58,6 +58,10 @@ version = "0"
 path = "../rust-src/pedersen_scheme"
 version = "0"
 
+[dependencies.key_derivation]
+path = "../rust-src/key_derivation"
+version = "1.0.0"
+
 [dependencies.ps_sig]
 path = "../rust-src/ps_sig"
 version = "0"

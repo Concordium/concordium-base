@@ -969,6 +969,7 @@ dependencies = [
  "keygen_bls",
  "pairing",
  "regex",
+ "serde",
  "sha2 0.10.2",
 ]
 

@@ -1,8 +1,10 @@
 use ed25519_hd_key_derivation::derive;
 use keygen_bls::keygen_bls;
 use pairing::bls12_381::FrRepr;
+use serde::Deserialize;
 use std::fmt;
 
+#[derive(Deserialize)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -32,8 +34,8 @@ fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> [u8; 32] {
 }
 
 pub struct ConcordiumHdWallet {
-    seed: Vec<u8>,
-    net:  Net,
+    pub seed: Vec<u8>,
+    pub net:  Net,
 }
 
 impl ConcordiumHdWallet {

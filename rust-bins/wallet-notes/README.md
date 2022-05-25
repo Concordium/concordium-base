@@ -444,6 +444,57 @@ The return value is a a JSON array with JSON objects as entries. Each object has
 
 With meaning that can be discerned from their names.
 
+## get_identity_keys_and_randomness
+
+Semantics: Deterministically derives id_cred_sec, prf_key and blinding randomness for an identity.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a testnet. Has to be "Mainnet" or "Testnet", all other values will fail.
+
+- `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"idCredSec"` ... the id_cred_sec as a hex encoded string.
+
+- `"prfKey"` ... the prf_key as a hex encoded string.
+
+- `"blindingRandomness"` ... the blinding randomness as a hex encoded string.
+
+An example input to this request is in the file [get_identity_keys_and_randomness-input.json](files/get_identity_keys_and_randomness-input.json).
+An example output to this request is in the file [get_identity_keys_and_randomness-output.json](files/get_identity_keys_and_randomness-output.json).
+
+## get_account_keys_and_randomness
+
+Semantics: Deterministically derives signing key, verification key and attribute randomness for an account.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a testnet. Has to be "Mainnet" or "Testnet", all other values will fail.
+
+- `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
+
+- `"accountCredentialIndex"` ... the index of the account credential to derive keys and randomness for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"signingKey"` ... the account signing key as a hex encoded string.
+
+- `"verifyKey"` ... the account verification key as a hex encoded string.
+
+- `"attributeCommitmentRandomness"` ... a map with attribute indices as keys and the corresponding attribute commitment randomness as values. 
+
+An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
+An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
+
+
 ## Example
 The [Example C program](example.c) that uses the library is available. This
 program reads a JSON file and passes it to the library, retrieving and printing
