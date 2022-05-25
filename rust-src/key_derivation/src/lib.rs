@@ -108,9 +108,9 @@ mod tests {
 
     #[test]
     pub fn account_signing_key() {
-        let id_cred_sec = create_wallet(Net::Mainnet, TEST_SEED_1).get_account_signing_key(55, 7);
+        let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1).get_account_signing_key(55, 7);
         assert_eq!(
-            hex::encode(&id_cred_sec),
+            hex::encode(&signing_key),
             "b44f7320f156971927596f471a2302e5be8d3717a85bedfc5a0e2994615eea7d"
         );
     }
@@ -182,9 +182,9 @@ mod tests {
 
     #[test]
     pub fn testnet_account_signing_key() {
-        let id_cred_sec = create_wallet(Net::Testnet, TEST_SEED_1).get_account_signing_key(55, 7);
+        let signing_key = create_wallet(Net::Testnet, TEST_SEED_1).get_account_signing_key(55, 7);
         assert_eq!(
-            hex::encode(&id_cred_sec),
+            hex::encode(&signing_key),
             "67a5619aaa5d67b548f83c857c92024f57a9d902f273a62f283f2536fcb203aa"
         );
     }
