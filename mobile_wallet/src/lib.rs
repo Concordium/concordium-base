@@ -824,7 +824,7 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
             attribute_tag.0.into(),
         );
         let commitment_randomness_hex = hex::encode(commitment_randomness);
-        attribute_commitment_randomness.insert(attribute_tag, commitment_randomness_hex);
+        attribute_commitment_randomness.insert(attribute_tag.0, commitment_randomness_hex);
     }
 
     let response = json!({
