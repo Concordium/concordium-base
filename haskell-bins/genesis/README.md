@@ -96,6 +96,7 @@ testing purposes they may be generated using the
 - If `--gdver=4` then the tool will output initial genesis for protocol version 2.
 - If `--gdver=5` then the tool will output initial genesis for protocol version 3.
 - If `--gdver=6` then the tool will output initial genesis for protocol version 4.
+- If `--gdver=7` then the tool will output initial genesis for protocol version 5.
 
 ## Printing contents of genesis blocks
 

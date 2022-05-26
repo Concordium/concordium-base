@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Concordium.Types.Migration where
@@ -27,6 +28,14 @@ migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{
         }
   where
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
+migrateAuthorizations (StateMigrationParametersP3ToP5 migration) Authorizations{..} =
+    Authorizations
+        { asCooldownParameters = JustForCPV1 updateCooldownParametersAccessStructure,
+          asTimeParameters = JustForCPV1 updateTimeParametersAccessStructure,
+          ..
+        }
+  where
+    P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
 
 -- |Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -42,18 +51,28 @@ migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
 -- |Apply a state migration to a 'MintDistribution' structure.
 --
 -- [P3 to P4]: the mint-per-slot rate is removed.
+-- [P3 to P5]: the mint-per-slot rate is removed.
 migrateMintDistribution ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
     MintDistribution (ChainParametersVersionFor oldpv) ->
     MintDistribution (ChainParametersVersionFor pv)
 migrateMintDistribution StateMigrationParametersTrivial mint = mint
-migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
+migrateMintDistribution StateMigrationParametersP3ToP4{} mint =
+    migrateMintDistributionV0V1 mint
+migrateMintDistribution StateMigrationParametersP3ToP5{} mint =
+    migrateMintDistributionV0V1 mint
+
+migrateMintDistributionV0V1 ::
+    MintDistribution 'ChainParametersV0 ->
+    MintDistribution 'ChainParametersV1
+migrateMintDistributionV0V1 MintDistribution{..} =
     MintDistribution{_mdMintPerSlot = MintPerSlotForCPV0None, ..}
 
 -- |Apply a state migration to a 'PoolParameters' structure.
 --
 -- [P3 to P4]: the new pool parameters are defined by the migration parameters.
+-- [P3 to P5]: the new pool parameters are defined by the migration parameters.
 migratePoolParameters ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -61,11 +80,21 @@ migratePoolParameters ::
     PoolParameters (ChainParametersVersionFor pv)
 migratePoolParameters StateMigrationParametersTrivial poolParams = poolParams
 migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
+    migratePoolParametersV0V1 migration
+migratePoolParameters (StateMigrationParametersP3ToP5 migration) _ =
+    migratePoolParametersV0V1 migration
+
+migratePoolParametersV0V1 ::
+    P4.StateMigrationData ->
+    PoolParameters 'ChainParametersV1
+migratePoolParametersV0V1 migration =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
 
 -- |Apply a state migration to a 'ChainParameters' structure.
 --
 -- [P3 to P4]: the new cooldown, time and pool parameters are given by the migration parameters;
+--   the mint-per-slot rate is removed from the reward parameters.
+-- [P3 to P5]: the new cooldown, time and pool parameters are given by the migration parameters;
 --   the mint-per-slot rate is removed from the reward parameters.
 migrateChainParameters ::
     forall oldpv pv.
@@ -73,25 +102,38 @@ migrateChainParameters ::
     ChainParameters oldpv ->
     ChainParameters pv
 migrateChainParameters StateMigrationParametersTrivial cps = cps
-migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParameters{..} =
+migrateChainParameters (StateMigrationParametersP3ToP4 migration) cps =
+    migrateChainParametersV0V1 migration cps
+migrateChainParameters (StateMigrationParametersP3ToP5 migration) cps =
+    migrateChainParametersV0V1 migration cps
+
+migrateChainParametersV0V1 ::
+    P4.StateMigrationData ->
+    ChainParameters' 'ChainParametersV0 ->
+    ChainParameters' 'ChainParametersV1
+migrateChainParametersV0V1 migration ChainParameters{..} =
     ChainParameters
         { _cpCooldownParameters = updateCooldownParameters,
           _cpTimeParameters = updateTimeParameters,
           _cpRewardParameters =
             RewardParameters
-                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                { _rpMintDistribution = migrateMintDistributionV0V1 _rpMintDistribution,
                   ..
                 },
-          _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+          _cpPoolParameters = migratePoolParametersV0V1 migration,
           ..
         }
   where
     RewardParameters{..} = _cpRewardParameters
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
 
+
 -- |Apply a state migration to an 'AccountStake' structure.
 --
 -- [P3 to P4]: bakers have the default baker pool information applied to them, where the pool status
+--   and commission rates are given by the migration parameters; pending changes are converted from
+--   epoch times to absolute times.
+-- [P3 to P5]: bakers have the default baker pool information applied to them, where the pool status
 --   and commission rates are given by the migration parameters; pending changes are converted from
 --   epoch times to absolute times.
 migrateAccountStake ::
@@ -100,7 +142,17 @@ migrateAccountStake ::
     AccountStake (AccountVersionFor oldpv) ->
     AccountStake (AccountVersionFor pv)
 migrateAccountStake StateMigrationParametersTrivial = id
-migrateAccountStake (StateMigrationParametersP3ToP4 migration@P4.StateMigrationData{..}) =
+migrateAccountStake (StateMigrationParametersP3ToP4 migration) =
+    migrateAccountStakeV0V1 migration
+migrateAccountStake (StateMigrationParametersP3ToP5 migration) =
+    migrateAccountStakeV0V1 migration
+
+-- |A helper function to migrate accounts from V0 to V1
+migrateAccountStakeV0V1 ::
+    P4.StateMigrationData
+    -> AccountStake 'AccountV0
+    -> AccountStake 'AccountV1
+migrateAccountStakeV0V1 migration@P4.StateMigrationData{..} =
     \case
         AccountStakeNone -> AccountStakeNone
         AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV0 bi, ..} ->

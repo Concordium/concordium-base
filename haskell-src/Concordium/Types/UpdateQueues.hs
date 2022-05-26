@@ -226,6 +226,8 @@ getPendingUpdates migration = do
                 return (_pCooldownParametersQueue, _pTimeParametersQueue)
             StateMigrationParametersP3ToP4 _ ->
                 return (JustForCPV1 emptyUpdateQueue, JustForCPV1 emptyUpdateQueue)
+            StateMigrationParametersP3ToP5 _ ->
+                return (JustForCPV1 emptyUpdateQueue, JustForCPV1 emptyUpdateQueue)
         return PendingUpdates{..}
 
 

@@ -30,6 +30,7 @@ import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
+import qualified Concordium.Genesis.Data.P5 as P5
 import qualified Concordium.Genesis.Data.Base as GDBase
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
@@ -84,7 +85,7 @@ generateGenesisData = GenerateGenesisData {
                         opt (Nothing :: Maybe FilePath) &=
                         typFile &=
                         help "JSON file with update keys.",
-    gdVersion = 6 &=
+    gdVersion = 7 &=
         explicit &=
         name "gdver" &=
         typ "VER" &=
@@ -177,6 +178,7 @@ main = cmdArgsRun mode >>=
                     4 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP2 $ P2.parametersToGenesisData p 
                     5 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP3 $ P3.parametersToGenesisData p 
                     6 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP4 $ P4.parametersToGenesisData p 
+                    7 -> parseParametersAndGetGenesisData value $ \p -> PVGenesisData . GDP5 $ P5.parametersToGenesisData p 
                     n -> do
                       putStrLn $ "Unsupported genesis data version: " ++ show n
                       exitFailure
@@ -204,12 +206,16 @@ main = cmdArgsRun mode >>=
                   gd@(GDP3 P3.GDP3Initial{..}) -> printInitial SP3 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP4 -> case gdata of
                   GDP4 P4.GDP4Regenesis{..} -> printRegenesis P4 genesisRegenesis
-                  GDP4 P4.GDP4MigrateFromP3{..} -> printP3P4Migration genesisRegenesis genesisMigration
+                  GDP4 P4.GDP4MigrateFromP3{..} -> printP3P4Migration P4 genesisRegenesis genesisMigration
                   gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
+                SP5 -> case gdata of
+                  GDP5 (P5.GenesisDataP5 P4.GDP4Regenesis{..}) -> printRegenesis P5 genesisRegenesis
+                  GDP5 (P5.GenesisDataP5 P4.GDP4MigrateFromP3{..}) -> printP3P4Migration P5 genesisRegenesis genesisMigration
+                  gd@(GDP5 (P5.GenesisDataP5 P4.GDP4Initial{..})) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
 
-printP3P4Migration :: RegenesisData -> P4.StateMigrationData -> IO ()
-printP3P4Migration regen P4.StateMigrationData{migrationProtocolUpdateData=P4.ProtocolUpdateData{..},..} = do
-    putStrLn "Migration from protocol P3 to P4"
+printP3P4Migration :: ProtocolVersion -> RegenesisData -> P4.StateMigrationData -> IO ()
+printP3P4Migration pv regen P4.StateMigrationData{migrationProtocolUpdateData=P4.ProtocolUpdateData{..},..} = do
+    putStrLn $ "Migration from protocol P3 to " ++ show pv
     printRegenesis P4 regen
     putStrLn ""
     putStrLn "Migration parameters:"

@@ -34,6 +34,7 @@ data ProtocolVersion
     | P2
     | P3
     | P4
+    | P5
     deriving (Eq, Show, Ord)
 
 -- |The singleton type associated with 'ProtocolVersion'.
@@ -44,18 +45,21 @@ data SProtocolVersion (pv :: ProtocolVersion) where
     SP2 :: SProtocolVersion 'P2
     SP3 :: SProtocolVersion 'P3
     SP4 :: SProtocolVersion 'P4
+    SP5 :: SProtocolVersion 'P5
 
 protocolVersionToWord64 :: ProtocolVersion -> Word64
 protocolVersionToWord64 P1 = 1
 protocolVersionToWord64 P2 = 2
 protocolVersionToWord64 P3 = 3
 protocolVersionToWord64 P4 = 4
+protocolVersionToWord64 P5 = 5
 
 protocolVersionFromWord64 :: MonadFail m => Word64 -> m ProtocolVersion
 protocolVersionFromWord64 1 = return P1
 protocolVersionFromWord64 2 = return P2
 protocolVersionFromWord64 3 = return P3
 protocolVersionFromWord64 4 = return P4
+protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 type family PVNat (pv :: ProtocolVersion) :: Nat where
@@ -63,6 +67,7 @@ type family PVNat (pv :: ProtocolVersion) :: Nat where
     PVNat 'P2 = 2
     PVNat 'P3 = 3
     PVNat 'P4 = 4
+    PVNat 'P5 = 5
 
 type SupportsDelegation pv = 4 <= PVNat pv
 
@@ -105,12 +110,17 @@ instance IsProtocolVersion 'P4 where
     protocolVersion = SP4
     {-# INLINE protocolVersion #-}
 
+instance IsProtocolVersion 'P5 where
+    protocolVersion = SP5
+    {-# INLINE protocolVersion #-}
+
 -- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
 demoteProtocolVersion SP1 = P1
 demoteProtocolVersion SP2 = P2
 demoteProtocolVersion SP3 = P3
 demoteProtocolVersion SP4 = P4
+demoteProtocolVersion SP5 = P5
 
 -- |An existentially quantified protocol version.
 data SomeProtocolVersion where
@@ -123,6 +133,7 @@ promoteProtocolVersion P1 = SomeProtocolVersion SP1
 promoteProtocolVersion P2 = SomeProtocolVersion SP2
 promoteProtocolVersion P3 = SomeProtocolVersion SP3
 promoteProtocolVersion P4 = SomeProtocolVersion SP4
+promoteProtocolVersion P5 = SomeProtocolVersion SP5
 
 data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
     deriving (Eq, Show)
@@ -132,6 +143,7 @@ type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParameters
     ChainParametersVersionFor 'P2 = 'ChainParametersV0
     ChainParametersVersionFor 'P3 = 'ChainParametersV0
     ChainParametersVersionFor 'P4 = 'ChainParametersV1
+    ChainParametersVersionFor 'P5 = 'ChainParametersV1
 
 data SChainParametersVersion (cpv :: ChainParametersVersion) where
     SCPV0 :: SChainParametersVersion 'ChainParametersV0
@@ -157,6 +169,7 @@ chainParametersVersionFor spv = case spv of
     SP2 -> SCPV0
     SP3 -> SCPV0
     SP4 -> SCPV1
+    SP5 -> SCPV1
 
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
 demoteChainParameterVersion SCPV0 = ChainParametersV0
@@ -183,6 +196,7 @@ type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
     AccountVersionFor 'P2 = 'AccountV0
     AccountVersionFor 'P3 = 'AccountV0
     AccountVersionFor 'P4 = 'AccountV1
+    AccountVersionFor 'P5 = 'AccountV1
 
 -- |Projection of 'SProtocolVersion' to 'SAccountVersion'.
 accountVersionFor :: SProtocolVersion pv -> SAccountVersion (AccountVersionFor pv)
@@ -190,6 +204,7 @@ accountVersionFor SP1 = SAccountV0
 accountVersionFor SP2 = SAccountV0
 accountVersionFor SP3 = SAccountV0
 accountVersionFor SP4 = SAccountV1
+accountVersionFor SP5 = SAccountV1
 
 class IsAccountVersion (av :: AccountVersion) where
     -- |The singleton associated with the account version
@@ -214,6 +229,7 @@ supportsDelegation SP1 = False
 supportsDelegation SP2 = False
 supportsDelegation SP3 = False
 supportsDelegation SP4 = True
+supportsDelegation SP5 = True
 
 -- |Whether the protocol version supports V1 smart contracts.
 -- (V1 contracts are supported in 'P4' onwards.)
@@ -222,3 +238,4 @@ supportsV1Contracts SP1 = False
 supportsV1Contracts SP2 = False
 supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
+supportsV1Contracts SP5 = True
