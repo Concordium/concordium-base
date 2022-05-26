@@ -377,7 +377,7 @@ instance HasCredentialType AccountCreation where
   {-# INLINE credentialType #-}
   credentialType = credentialType . credential
 
-instance CredentialValuesFields AccountCreation where
+instance CredentialValuesFields CredentialRegistrationID AccountCreation where
   {-# INLINE credId #-}
   credId = credId . credential
   {-# INLINE ipId #-}
@@ -391,7 +391,7 @@ instance HasCredentialType a => HasCredentialType (WithMetadata a) where
   {-# INLINE credentialType #-}
   credentialType = credentialType . wmdData
 
-instance CredentialValuesFields a => CredentialValuesFields (WithMetadata a) where
+instance CredentialValuesFields CredentialRegistrationID a => CredentialValuesFields CredentialRegistrationID (WithMetadata a) where
   {-# INLINE credId #-}
   credId = credId . wmdData
   {-# INLINE ipId #-}

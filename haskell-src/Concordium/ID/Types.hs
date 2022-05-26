@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -119,6 +119,10 @@ addressFromRegId :: CredentialRegistrationID -> AccountAddress
 addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
   where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode fbs)
 
+addressFromRegIdRaw :: CredentialRegistrationIDRaw -> AccountAddress
+addressFromRegIdRaw regIdRaw = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
+  where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode regIdRaw)
+
 
 -- |Index of the credential key needed to determine what key the signature should
 -- be checked with.
@@ -155,6 +159,14 @@ data AccountInformation = AccountInformation {
   aiThreshold :: !AccountThreshold 
 } deriving(Eq, Show, Ord)
 
+-- |The information about an account's credentials necessary for verifying the signature(s) on
+-- a transaction. Namely, the account threshold, and for each credential, its threshold and
+-- public keys.
+data LoadedAccountInformation = LoadedAccountInformation {
+  laiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
+  laiThreshold :: !AccountThreshold,
+  laiCredIds :: ![CredentialRegistrationIDRaw]
+} deriving(Eq, Show, Ord)
 
 -- |SHA256 hashing instance for `AccountInformation`
 -- Security considerations: It is crucial to use a cryptographic secure hash instance for `AccountInformation`.
@@ -168,11 +180,11 @@ instance HashableTo SHA256.Hash AccountInformation where
 matchesAccountInformation :: AccountInformation -> SHA256.Hash -> Bool
 matchesAccountInformation ai h = getHash ai == h
 
-getCredentialPublicKeys :: AccountCredential -> CredentialPublicKeys
+getCredentialPublicKeys :: AccountCredential' credTy -> CredentialPublicKeys
 getCredentialPublicKeys (InitialAC icdv) = icdvAccount icdv
 getCredentialPublicKeys (NormalAC cdv _) = cdvPublicKeys cdv
 
-getAccountInformation :: AccountThreshold -> Map.Map CredentialIndex AccountCredential -> AccountInformation
+getAccountInformation :: AccountThreshold -> Map.Map CredentialIndex (AccountCredential' credTy) -> AccountInformation
 getAccountInformation threshold credentials = AccountInformation {
   aiCredentials = fmap getCredentialPublicKeys credentials,
   aiThreshold = threshold
@@ -602,13 +614,13 @@ instance Serialize CredentialAccount where
         return $! NewAccount keys threshold
       _ -> fail "Input must be either a new account with a list of keys and threshold."
 
-data CredentialDeploymentValues = CredentialDeploymentValues {
+data CredentialDeploymentValues' credTy = CredentialDeploymentValues {
   -- |Either an address of an existing account, or the list of keys the newly
   -- created account should have, together with a threshold for how many are needed
   -- Its address is derived from the registration id of this credential.
   cdvPublicKeys :: !CredentialPublicKeys,
   -- |Registration id of __this__ credential.
-  cdvCredId     :: !CredentialRegistrationID,
+  cdvCredId     :: !credTy,
   -- |Identity of the identity provider who signed the identity object from
   -- which this credential is derived.
   cdvIpId      :: !IdentityProviderIdentity,
@@ -618,12 +630,15 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   cdvArData :: !(Map.Map ArIdentity ChainArData),
   -- |Policy. At the moment only opening of specific commitments.
   cdvPolicy :: !Policy
-} deriving(Eq, Show)
+} deriving(Eq, Show, Functor)
+
+type CredentialDeploymentValues = CredentialDeploymentValues' CredentialRegistrationID
+type CredentialDeploymentValuesRaw = CredentialDeploymentValues' CredentialRegistrationIDRaw
 
 credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
 credentialAccountAddress cdv = addressFromRegId (cdvCredId cdv)
 
-credentialDeploymentValuesList :: CredentialDeploymentValues -> [Pair]
+credentialDeploymentValuesList :: ToJSON credTy => CredentialDeploymentValues' credTy -> [Pair]
 credentialDeploymentValuesList CredentialDeploymentValues{..} =
   [
     "credentialPublicKeys" .= cdvPublicKeys,
@@ -638,7 +653,7 @@ instance ToJSON CredentialDeploymentValues where
   toJSON =
     object . credentialDeploymentValuesList
 
-instance FromJSON CredentialDeploymentValues where
+instance FromJSON credTy => FromJSON (CredentialDeploymentValues' credTy) where
   parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
     cdvPublicKeys <- v .: "credentialPublicKeys"
     cdvCredId <- v .: "credId"
@@ -664,7 +679,7 @@ putPolicy Policy{..} =
      putWord16be (fromIntegral l) <>
      mapM_ (putTwoOf put put) (Map.toAscList pItems)
 
-instance Serialize CredentialDeploymentValues where
+instance Serialize credTy => Serialize (CredentialDeploymentValues' credTy) where
   get = do
     cdvPublicKeys <- get
     cdvCredId <- get
@@ -755,25 +770,27 @@ instance Serialize InitialCredentialAccount where
 
 -- |The data for the initial account creation. This is submitted by the identity
 -- provider on behalf of the account holder.
-data InitialCredentialDeploymentValues = InitialCredentialDeploymentValues {
+data InitialCredentialDeploymentValues' ty = InitialCredentialDeploymentValues {
   -- |List of keys the new account should have, together with a threshold
   -- for how many are needed. Its address is derived from the registration
   -- id of this credential.
   icdvAccount :: !CredentialPublicKeys,
   -- |Registration id of __this__ credential.
-  icdvRegId :: !CredentialRegistrationID,
+  icdvRegId :: !ty,
   -- |Identity of the identity provider who signed this account creation
   icdvIpId :: !IdentityProviderIdentity,
   -- |Policy.
   icdvPolicy :: !Policy
-} deriving(Eq, Show)
+} deriving(Eq, Show, Functor)
+
+type InitialCredentialDeploymentValues = InitialCredentialDeploymentValues' CredentialRegistrationID
 
 -- |Address of the account that is created as a result of the initial credential
 -- deployment.
 initialCredentialAccountAddress :: InitialCredentialDeploymentValues -> AccountAddress
 initialCredentialAccountAddress icdv = addressFromRegId (icdvRegId icdv)
 
-instance ToJSON InitialCredentialDeploymentValues where
+instance ToJSON credTy => ToJSON (InitialCredentialDeploymentValues' credTy) where
   toJSON InitialCredentialDeploymentValues{..} =
     object [
     "credentialPublicKeys" .= icdvAccount,
@@ -782,7 +799,7 @@ instance ToJSON InitialCredentialDeploymentValues where
     "policy" .= icdvPolicy
     ]
 
-instance FromJSON InitialCredentialDeploymentValues where
+instance FromJSON credTy => FromJSON (InitialCredentialDeploymentValues' credTy) where
   parseJSON = withObject "InitialCredentialDeploymentValues" $ \v -> do
     icdvAccount <- v .: "credentialPublicKeys"
     icdvRegId <- v .: "regId"
@@ -790,7 +807,7 @@ instance FromJSON InitialCredentialDeploymentValues where
     icdvPolicy <- v .: "policy"
     return InitialCredentialDeploymentValues{..}
 
-instance Serialize InitialCredentialDeploymentValues where
+instance Serialize credTy => Serialize (InitialCredentialDeploymentValues' credTy) where
   get = do
     icdvAccount <- get
     icdvRegId <- get
@@ -862,10 +879,30 @@ instance Serialize AccountCredentialWithProofs where
     _ -> fail "Unsupported credential type."
 
 -- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed and commitments kept.
-data AccountCredential =
-  InitialAC InitialCredentialDeploymentValues
-  | NormalAC CredentialDeploymentValues CredentialDeploymentCommitments
-  deriving(Eq, Show)
+data AccountCredential' credTy =
+  InitialAC (InitialCredentialDeploymentValues' credTy)
+  | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
+  deriving(Eq, Show, Functor)
+
+newtype CredentialRegistrationIDRaw = CredentialRegistrationIDRaw (FBS.FixedByteString RegIdSize)
+    deriving(Eq, Ord)
+    deriving (Show, Serialize, FromJSON, ToJSON) via FBSHex RegIdSize
+
+unsafeCredIdFromRaw :: CredentialRegistrationIDRaw -> CredentialRegistrationID
+unsafeCredIdFromRaw (CredentialRegistrationIDRaw fbs) =
+  case decode (FBS.toByteString fbs) of
+    Left _ -> error "Precondition violation. Invalid registration ID."
+    Right v -> v
+
+toRawCredId :: CredentialRegistrationID -> CredentialRegistrationIDRaw
+toRawCredId = CredentialRegistrationIDRaw . FBS.fromByteString . encode
+
+type AccountCredential = AccountCredential' CredentialRegistrationID
+
+type AccountCredentialRaw = AccountCredential' CredentialRegistrationIDRaw
+
+toRawAccountCredential :: AccountCredential -> AccountCredentialRaw
+toRawAccountCredential = fmap toRawCredId
 
 data CredentialType = Initial | Normal
     deriving(Eq, Show)
@@ -889,7 +926,7 @@ instance Serialize CredentialType where
     1 -> return Normal
     _ -> fail "Unsupported credential type."
 
-instance Serialize AccountCredential where
+instance Serialize credTy => Serialize (AccountCredential' credTy) where
   put (InitialAC icdi) = putWord8 0 <> put icdi
   put (NormalAC cdi coms) = putWord8 1 <> put cdi <> put coms
 
@@ -905,7 +942,7 @@ instance FromJSON AccountCredentialWithProofs where
       Initial -> InitialACWP <$> v .: "contents"
       Normal -> NormalACWP <$> v .: "contents"
 
-instance FromJSON AccountCredential where
+instance FromJSON credTy => FromJSON (AccountCredential' credTy) where
   parseJSON = withObject "Account credential" $ \v -> do
     ty <- v .: "type"
     case ty of
@@ -916,23 +953,23 @@ instance FromJSON AccountCredential where
         coms <- withObject "Credential commitments" (.: "commitments") co
         return $ NormalAC cdv coms
 
-instance ToJSON AccountCredential where
+instance ToJSON credTy => ToJSON (AccountCredential' credTy) where
   toJSON (InitialAC icdv) = object ["type" .= Initial, "contents" .= icdv]
   toJSON (NormalAC cdv coms) = object ["type" .= Normal, "contents" .= object (credentialDeploymentValuesList cdv ++ ["commitments" .= coms])]
 
 -- |Helper class to unify access to fields of CredentialDeploymentValues
 -- for both the values, as well as values with proofs.
-class CredentialValuesFields a where
+class CredentialValuesFields credTy a | a -> credTy where
   -- |Extract the validity information for the credential.
   {-# INLINE validTo #-}
   validTo :: a -> CredentialValidTo
   validTo = pValidTo . policy
-  credId :: a -> CredentialRegistrationID
+  credId :: a -> credTy
   ipId :: a -> IdentityProviderIdentity
   policy :: a -> Policy
   credPubKeys :: a -> CredentialPublicKeys
 
-instance CredentialValuesFields CredentialDeploymentInformation where
+instance CredentialValuesFields CredentialRegistrationID CredentialDeploymentInformation where
   {-# INLINE credId #-}
   credId = cdvCredId . cdiValues
   {-# INLINE ipId #-}
@@ -942,7 +979,7 @@ instance CredentialValuesFields CredentialDeploymentInformation where
   {-# INLINE credPubKeys #-}
   credPubKeys = cdvPublicKeys . cdiValues
 
-instance CredentialValuesFields AccountCredential where
+instance CredentialValuesFields credTy (AccountCredential' credTy) where
   credId (NormalAC cdv _) = cdvCredId cdv
   credId (InitialAC icdv) = icdvRegId icdv
 
@@ -956,7 +993,7 @@ instance CredentialValuesFields AccountCredential where
   credPubKeys (NormalAC cdv _) = cdvPublicKeys cdv
 
 
-instance CredentialValuesFields AccountCredentialWithProofs where
+instance CredentialValuesFields CredentialRegistrationID AccountCredentialWithProofs where
   credId (NormalACWP cdi) = cdvCredId . cdiValues $ cdi
   credId (InitialACWP icdi) = icdvRegId . icdiValues $ icdi
 

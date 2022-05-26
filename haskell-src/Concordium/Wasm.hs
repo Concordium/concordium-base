@@ -568,7 +568,7 @@ data SenderPolicy = SenderPolicy {
   spItems :: ![(AttributeTag, AttributeValue)]
   }
 
-mkSenderPolicy :: AccountCredential -> SenderPolicy
+mkSenderPolicy :: AccountCredential' credTy -> SenderPolicy
 mkSenderPolicy ac =
     SenderPolicy{
        spCreatedAt = createdAtTs,
