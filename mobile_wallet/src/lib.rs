@@ -770,11 +770,14 @@ fn decrypt_encrypted_amount_aux(input: &str) -> anyhow::Result<Amount> {
 
 fn parse_wallet_input(v: &Value) -> anyhow::Result<ConcordiumHdWallet> {
     let seed_hex: String = try_get(v, "seed")?;
-    let net: Net = try_get(v, "net")?;
-    let wallet = ConcordiumHdWallet {
-        seed: hex::decode(&seed_hex)?,
-        net,
+    let seed_decoded = hex::decode(&seed_hex)?;
+    let seed: [u8; 64] = match seed_decoded.try_into() {
+        Ok(s) => s,
+        Err(_) => bail!("The provided seed {} was not 64 bytes", seed_hex),
     };
+
+    let net: Net = try_get(v, "net")?;
+    let wallet = ConcordiumHdWallet { seed, net };
     Ok(wallet)
 }
 
@@ -783,13 +786,13 @@ fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let wallet = parse_wallet_input(&v)?;
     let identity_index = try_get(&v, "identityIndex")?;
 
-    let id_cred_sec = wallet.get_id_cred_sec(identity_index);
+    let id_cred_sec = wallet.get_id_cred_sec(identity_index)?;
     let id_cred_sec_hex = hex::encode(id_cred_sec);
 
-    let prf_key = wallet.get_prf_key(identity_index);
+    let prf_key = wallet.get_prf_key(identity_index)?;
     let prf_key_hex = hex::encode(prf_key);
 
-    let blinding_randomness = wallet.get_blinding_randomness(identity_index);
+    let blinding_randomness = wallet.get_blinding_randomness(identity_index)?;
     let blinding_randomness_hex = hex::encode(blinding_randomness);
 
     let response = json!({
@@ -807,11 +810,11 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let account_credential_index = try_get(&v, "accountCredentialIndex")?;
 
     let account_signing_key =
-        wallet.get_account_signing_key(identity_index, account_credential_index);
+        wallet.get_account_signing_key(identity_index, account_credential_index)?;
     let account_signing_key_hex = hex::encode(account_signing_key);
 
     let account_verify_key =
-        wallet.get_account_public_key(identity_index, account_credential_index);
+        wallet.get_account_public_key(identity_index, account_credential_index)?;
     let account_verify_key_hex = hex::encode(account_verify_key);
 
     let mut attribute_commitment_randomness = HashMap::new();
@@ -821,8 +824,8 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
         let commitment_randomness = wallet.get_attribute_commitment_randomness(
             identity_index,
             account_credential_index,
-            attribute_tag.0.into(),
-        );
+            attribute_tag,
+        )?;
         let commitment_randomness_hex = hex::encode(commitment_randomness);
         attribute_commitment_randomness.insert(attribute_tag.0, commitment_randomness_hex);
     }
@@ -830,7 +833,7 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let response = json!({
         "signingKey": account_signing_key_hex,
         "verifyKey": account_verify_key_hex,
-        "attributeCommitmentRandomness": json!(attribute_commitment_randomness)
+        "attributeCommitmentRandomness": attribute_commitment_randomness
     });
     Ok(to_string(&response)?)
 }

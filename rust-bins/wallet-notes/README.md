@@ -453,7 +453,7 @@ must be a valid JSON object with fields
 
 - `"seed"` ... the seed used to derive keys from, as a hex string.
 
-- `"net"` ... determines whether to derive keys for Mainnet or a testnet. Has to be "Mainnet" or "Testnet", all other values will fail.
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
 
 - `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
 
@@ -477,7 +477,7 @@ must be a valid JSON object with fields
 
 - `"seed"` ... the seed used to derive keys from, as a hex string.
 
-- `"net"` ... determines whether to derive keys for Mainnet or a testnet. Has to be "Mainnet" or "Testnet", all other values will fail.
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
 
 - `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
 

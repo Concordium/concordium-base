@@ -1,13 +1,28 @@
 use hmac::{Hmac, Mac};
 use regex::Regex;
 use sha2::Sha512;
+use thiserror::Error;
 
 const ED25519_CURVE: &[u8; 12] = b"ed25519 seed";
 const HARDENED_OFFSET: u32 = 0x80000000;
 
+#[derive(Debug, Error, PartialEq)]
+pub enum DeriveError {
+    #[error("Invalid derivation path.")]
+    InvalidPath,
+    #[error("Seed must be between 128 and 512 bits.")]
+    InvalidSeed,
+}
+
+/// An extended private key, e.g. the private key and its corresponding chain
+/// code.
 pub struct HdKeys {
-    pub key:    [u8; 32],
-    chain_code: [u8; 32],
+    /// The private key part of the hierarchical deterministic key derivation.
+    /// This will contain the private key material to be consumed.
+    pub private_key: [u8; 32],
+    /// The chain code part of the hierarchical deterministic key derivation.
+    /// This is only used internally in the algorithm.
+    chain_code:      [u8; 32],
 }
 
 fn get_master_key_from_seed(seed: &[u8]) -> HdKeys {
@@ -15,74 +30,117 @@ fn get_master_key_from_seed(seed: &[u8]) -> HdKeys {
     mac.update(&seed);
     let i = mac.finalize().into_bytes();
     let mut il = [0u8; 32];
-    il.clone_from_slice(&i[0..32]);
+    il.copy_from_slice(&i[0..32]);
     let mut ir = [0u8; 32];
-    ir.clone_from_slice(&i[32..64]);
+    ir.copy_from_slice(&i[32..64]);
 
     HdKeys {
-        key:        il,
-        chain_code: ir,
+        private_key: il,
+        chain_code:  ir,
     }
 }
 
-fn ckd_priv(keys: HdKeys, index: u32) -> HdKeys {
+/// Derives a child extended key from a parent extended key and an index.
+fn ckd_priv(parent_keys: HdKeys, index: u32) -> Result<HdKeys, DeriveError> {
     if index & HARDENED_OFFSET == 0 {
-        panic!("Received a non-hardened index!");
+        return Err(DeriveError::InvalidPath);
     }
 
     let mut data = vec![0u8];
-    data.extend_from_slice(&keys.key);
+    data.extend_from_slice(&parent_keys.private_key);
     data.extend_from_slice(&index.to_be_bytes());
 
-    let mut mac = Hmac::<Sha512>::new_from_slice(&keys.chain_code).unwrap();
+    let mut mac = Hmac::<Sha512>::new_from_slice(&parent_keys.chain_code).unwrap();
     mac.update(&data);
     let i = mac.finalize().into_bytes();
     let mut il = [0u8; 32];
-    il.clone_from_slice(&i[0..32]);
+    il.copy_from_slice(&i[0..32]);
     let mut ir = [0u8; 32];
-    ir.clone_from_slice(&i[32..64]);
+    ir.copy_from_slice(&i[32..64]);
 
-    HdKeys {
-        key:        il,
-        chain_code: ir,
-    }
+    Ok(HdKeys {
+        private_key: il,
+        chain_code:  ir,
+    })
 }
 
-fn is_valid_path(path: &str) -> bool {
-    let path_regex = Regex::new("^m(/[0-9]+')+$").unwrap();
+/// Checks whether a given key derivation path is a valid key derivation
+/// path for the ed25519 SLIP0010 standard, and returns the path split
+/// into each index of the path with the hardening offset applied.
+///
+/// A valid path is of the form
+///
+/// * `m/x_0'/.../x_n'`
+///
+/// where `x_i < 2^31 (2147483648)` and `n >= 0`.
+///
+/// Note that the `'` after each integer value means that the path is hardened,
+/// which is a requirement for key derivation paths for ed25519. Hardening
+/// ensures that the highest-order bit of each u32 value in the path is set to
+/// `1` so that all values in the path are `>= 2^31`. A path with a non-hardened
+/// value will not validate.
+///
+/// # Examples
+/// ```
+/// use ed25519_hd_key_derivation::parse_path;
+///
+/// let path = "m/44'/919'/0'/0'";
+/// let valid_path_indices: Vec<u32> = match parse_path(&path) {
+///     Ok(s) => s,
+///     Err(e) => panic!("The path was invalid"),
+/// };
+/// ```
+pub fn parse_path(path: &str) -> Result<Vec<u32>, DeriveError> {
+    let path_regex = Regex::new("^m((/0')|(/[1-9]([0-9])*'))+$").unwrap();
     if !path_regex.is_match(path) {
-        return false;
+        return Err(DeriveError::InvalidPath);
     }
 
-    let segments: Vec<&str> = path.split('/').collect();
-    segments
-        .iter()
-        .skip(1)
-        .map(|seg| seg.replace("'", ""))
-        .all(|seg| seg.parse::<u32>().is_ok())
+    let mut parsed_path = Vec::new();
+    for segment in path.split('/').skip(1) {
+        let without_hardening_char = segment.replace("'", "");
+        match without_hardening_char.parse::<u32>() {
+            Ok(s) => {
+                if s >= 2147483648 {
+                    return Err(DeriveError::InvalidPath);
+                }
+                parsed_path.push(s + HARDENED_OFFSET)
+            }
+            Err(_) => return Err(DeriveError::InvalidPath),
+        }
+    }
+    Ok(parsed_path)
 }
 
 /// Derives hierarchical deterministic keys for ed25519 according to the SLIP0010 (https://github.com/satoshilabs/slips/blob/master/slip-0010.md)
 /// specification.
-pub fn derive(path: &str, seed: &[u8]) -> Result<HdKeys, String> {
-    if !is_valid_path(path) {
-        return Err(String::from("Invalid derivation path"));
+///
+/// # Arguments
+/// * `path` - A string slice thats holds the key derivation path
+/// * `seed` - A byte array slice of length between 16 and 64 bytes that holds
+///   the seed to derive keys from
+///
+/// # Examples
+/// ```
+/// use ed25519_hd_key_derivation::derive;
+///
+/// let seed = [0u8; 64];
+/// let keys = derive("m/44'/919'/0'/0'", &seed);
+/// ```
+pub fn derive(path: &str, seed: &[u8]) -> Result<HdKeys, DeriveError> {
+    if seed.len() < 16 || seed.len() > 64 {
+        return Err(DeriveError::InvalidSeed);
     }
-
+    let parsed_path = parse_path(path)?;
     let master_key = get_master_key_from_seed(&seed);
-
-    let segments: Vec<&str> = path.split('/').collect();
-    let segments = segments
-        .iter()
-        .skip(1)
-        .map(|seg| seg.replace("'", ""))
-        .map(|seg| seg.parse::<u32>().unwrap())
-        .collect::<Vec<_>>();
-
-    let result: HdKeys = segments.iter().fold(master_key, |accum, index| {
-        ckd_priv(accum, *index + HARDENED_OFFSET)
-    });
-    Ok(result)
+    let mut current_key = master_key;
+    for index in parsed_path {
+        current_key = match ckd_priv(current_key, index) {
+            Ok(k) => k,
+            Err(_) => return Err(DeriveError::InvalidPath),
+        };
+    }
+    Ok(current_key)
 }
 
 #[cfg(test)]
@@ -95,39 +153,102 @@ mod tests {
     fn assert_keys(seed: &str, path: &str, chain_code: &str, private_key: &str, public_key: &str) {
         let seed = hex::decode(seed).unwrap();
         let keys = derive(&path, &seed).unwrap();
-        let secret_key = ed25519_dalek::SecretKey::from_bytes(&keys.key).unwrap();
+        let secret_key = ed25519_dalek::SecretKey::from_bytes(&keys.private_key).unwrap();
         let public_key_derived = ed25519_dalek::PublicKey::from(&secret_key).to_bytes();
-        assert_eq!(keys.chain_code.to_vec(), hex::decode(chain_code).unwrap());
-        assert_eq!(keys.key.to_vec(), hex::decode(private_key).unwrap());
+        assert_eq!(
+            keys.chain_code.to_vec(),
+            hex::decode(chain_code).unwrap(),
+            "The two chain codes have to be equal"
+        );
+        assert_eq!(
+            keys.private_key.to_vec(),
+            hex::decode(private_key).unwrap(),
+            "The two private keys have to be equal"
+        );
         assert_eq!(
             public_key_derived.to_vec(),
-            hex::decode(public_key).unwrap()
-        )
+            hex::decode(public_key).unwrap(),
+            "The two public keys have to be equal"
+        );
+    }
+
+    #[test]
+    pub fn test_invalid_seed_small() {
+        let valid_path = "m/44'/919'";
+        let invalid_seed_small = hex::decode("ababababababababababababababab").unwrap();
+        let result = derive(valid_path, &invalid_seed_small);
+        assert_eq!(
+            result.err().unwrap(),
+            DeriveError::InvalidSeed,
+            "Seed {:?} with length {} should be invalid",
+            invalid_seed_small,
+            invalid_seed_small.len()
+        );
+    }
+
+    #[test]
+    pub fn test_invalid_seed_large() {
+        let valid_path = "m/44'/919'";
+        let invalid_seed_large = hex::decode("abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab12").unwrap();
+        let result = derive(valid_path, &invalid_seed_large);
+        assert_eq!(
+            result.err().unwrap(),
+            DeriveError::InvalidSeed,
+            "Seed {:?} with length {} should be invalid",
+            invalid_seed_large,
+            invalid_seed_large.len()
+        );
     }
 
     #[test]
     pub fn test_valid_path() {
-        let valid_path = "m/44'/919'";
-        assert!(is_valid_path(&valid_path));
+        let valid_path = "m/44'/919'/0'/1'/0'";
+        assert!(
+            parse_path(&valid_path).is_ok(),
+            "Path {} should be valid.",
+            valid_path
+        );
+    }
+
+    #[test]
+    pub fn test_0_prefixed_path_is_invalid() {
+        let valid_path = "m/44'/919'/0315'";
+        assert!(
+            parse_path(&valid_path).is_err(),
+            "Path {} should be invalid.",
+            valid_path
+        );
     }
 
     #[test]
     pub fn test_non_hardened_path() {
         let non_hardened_path = "m/44'/919'/53100'/581";
-        assert!(!is_valid_path(&non_hardened_path));
+        assert!(
+            parse_path(&non_hardened_path).is_err(),
+            "Path {} should be invalid as it contains an un-hardened index",
+            non_hardened_path
+        );
     }
 
     #[test]
     pub fn test_out_of_bounds_path() {
-        let out_of_bounds_index_path = "m/44'/919'/4294967296'";
-        assert!(!is_valid_path(&out_of_bounds_index_path));
+        let out_of_bounds_index_path = "m/44'/919'/2147483648'";
+        assert!(
+            parse_path(&out_of_bounds_index_path).is_err(),
+            "Path {} should be invalid as an index is out of bounds",
+            out_of_bounds_index_path
+        );
     }
 
     #[test]
     pub fn test_derive_invalid_path() {
         let invalid_path = "m/4//146";
         let seed = hex::decode("123456").unwrap();
-        assert!(derive(&invalid_path, &seed).is_err());
+        assert!(
+            derive(&invalid_path, &seed).is_err(),
+            "Path {} should be invalid as it is malformed",
+            invalid_path
+        );
     }
 
     #[test]
@@ -140,7 +261,7 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(
-            master_key.key.to_vec(),
+            master_key.private_key.to_vec(),
             hex::decode("2b4be7f19ee27bbf30c667b642d5f4aa69fd169872f8fc3059c08ebae2eb19e7")
                 .unwrap()
         );
@@ -211,7 +332,7 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(
-            master_key.key.to_vec(),
+            master_key.private_key.to_vec(),
             hex::decode("171cb88b1b3c1db25add599712e36245d75bc65a1a5c9e18d76f9f2b1eab4012")
                 .unwrap()
         );

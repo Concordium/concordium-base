@@ -449,6 +449,7 @@ dependencies = [
  "hmac 0.12.1",
  "regex",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
@@ -744,6 +745,7 @@ dependencies = [
  "ed25519_hd_key_derivation",
  "hex",
  "hmac 0.12.1",
+ "id",
  "keygen_bls",
  "pairing",
  "regex",

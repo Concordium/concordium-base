@@ -22,6 +22,10 @@ version = "1.0.0"
 path = "../keygen_bls"
 version = "2.0.0"
 
+[dependencies.id]
+path = "../id"
+version = "0"
+
 [lib]
 name = "key_derivation"
 crate-type = ["rlib"]
