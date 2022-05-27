@@ -287,6 +287,24 @@ type AccountSignature = Signature
 newtype AccountEncryptionKey = AccountEncryptionKey {_elgamalPublicKey :: ElgamalPublicKey}
     deriving (Eq, Show, Serialize, FromJSON, ToJSON) via ElgamalPublicKey
 
+data AccountEncryptionKeySize
+
+instance FBS.FixedLength AccountEncryptionKeySize where
+  fixedLength _ = 2 * 48
+
+newtype AccountEncryptionKeyRaw = AccountEncryptionKeyRaw (FBS.FixedByteString AccountEncryptionKeySize)
+    deriving(Eq, Ord)
+    deriving (Show, Serialize, FromJSON, ToJSON) via FBSHex AccountEncryptionKeySize
+
+unsafeEncryptionKeyFromRaw :: AccountEncryptionKeyRaw -> AccountEncryptionKey
+unsafeEncryptionKeyFromRaw (AccountEncryptionKeyRaw fbs) =
+  case decode (FBS.toByteString fbs) of
+    Left _ -> error "Precondition violation. Invalid encryption key."
+    Right v -> v
+
+toRawEncryptionKey :: AccountEncryptionKey -> AccountEncryptionKeyRaw
+toRawEncryptionKey = AccountEncryptionKeyRaw . FBS.fromByteString . encode
+
 makeEncryptionKey :: GlobalContext -> CredentialRegistrationID -> AccountEncryptionKey
 makeEncryptionKey gc (RegIdCred ge) = AccountEncryptionKey (deriveElgamalPublicKey gc ge)
 
