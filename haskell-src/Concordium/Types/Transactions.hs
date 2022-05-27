@@ -33,6 +33,7 @@ import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
 import Concordium.Types.Updates
+import qualified Concordium.Wasm as Wasm
 
 -- * Account transactions
 
@@ -831,7 +832,22 @@ getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf
 -- TODO: fix this to use an lfmb tree. Potentially change storage type to the tree in blockstate too.
 -- Does this need to be domain seperated? (Would require serialisation changes?)
 instance HashableTo TransactionOutcomesHashV0 TransactionOutcomes where
-    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
+    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.runPut $ putTransactionOutcomes . transformOutcomes $ transactionoutcomes
+      where transformOutcomes TransactionOutcomes{..} = TransactionOutcomes{
+              outcomeValues = Vec.map transformSummary outcomeValues,
+              ..
+              }
+            transformSummary TransactionSummary{..} = TransactionSummary{tsResult = transformResult tsType tsResult,..}
+            transformResult _ ts@TxReject{} = ts
+            transformResult trType ts@TxSuccess {..}
+                | trType /= TSTAccountTransaction (Just TTUpdate) = ts
+                | otherwise = TxSuccess (snd $ foldl' transformEvent ([], []) . reverse $ vrEvents)
+            transformEvent :: ([(ContractAddress, Amount)], [Event]) -> Event -> ([(ContractAddress, Amount)], [Event])
+            transformEvent (stack, rest) ev@Updated{euContractVersion = Wasm.V1,..} = ((euAddress, euAmount):stack, ev:rest)
+            transformEvent (stack@((from, transferAmount):_), rest) Transferred{etFrom=fromAddress@(AddressContract from'),..} | from == from' = (stack, Transferred{etAmount = transferAmount,etFrom = fromAddress, ..}:rest)
+            transformEvent ((addr, _):stack, rest) ev@Resumed{..} | rAddress /= addr = (stack, ev:rest)
+            transformEvent (stack, rest) ev = (stack, ev:rest)
+
 
 emptyTransactionOutcomes :: TransactionOutcomes
 emptyTransactionOutcomes = TransactionOutcomes Vec.empty Seq.empty
