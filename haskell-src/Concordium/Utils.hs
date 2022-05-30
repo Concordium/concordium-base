@@ -23,11 +23,11 @@ class (Ixed m) => At' m where
   at' :: Index m -> Lens' m (Maybe (IxValue m))
 
 instance (Hashable k, Eq k) => At' (H.HashMap k v) where
-  at' = flip H.alterF
+  at' k f = H.alterF f k
   {-# INLINE at' #-}
 
 instance Ord k => At' (M.Map k v) where
-  at' = flip M.alterF
+  at' k f = M.alterF f k
   {-# INLINE at' #-}
 
 

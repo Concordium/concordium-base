@@ -9,6 +9,8 @@ import qualified Data.ByteString.Lazy.Char8 as LBS8
 import qualified Data.Map.Strict as OrdMap
 import Data.Aeson
 import Data.Aeson.Encode.Pretty
+import Data.Aeson.Key (fromText)
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Serialize as S
 import Control.Monad
 import Text.Printf
@@ -20,8 +22,7 @@ import Data.Maybe
 import Data.Ratio
 import System.FilePath
 
-import Data.Text(Text)
-import qualified Data.HashMap.Strict as Map
+import Data.Text (Text)
 import Concordium.Common.Version
 import Concordium.Types.Parameters
 import Concordium.Genesis.Parameters
@@ -104,7 +105,7 @@ mode = cmdArgsMode $ modes [generateGenesisData, printGenesisBlock]
     &= help "Generate genesis data or display the genesis block."
 
 modifyValueWith :: Text -> Value -> Value -> Maybe Value
-modifyValueWith key val (Object obj) = Just (Object (Map.insert key val obj))
+modifyValueWith key val (Object obj) = Just (Object $ KM.insert (fromText key) val obj)
 modifyValueWith _ _ _ = Nothing
 
 maybeModifyValue :: Maybe FilePath -> Text -> Value -> IO Value

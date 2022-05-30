@@ -171,8 +171,8 @@ genByteString = do
 
 genPayloadDeployModule :: ProtocolVersion -> Gen Payload
 genPayloadDeployModule pv =
-    let genV0 = DeployModule . Wasm.WasmModuleV0 . Wasm.WasmModuleV . Wasm.ModuleSource <$> genByteString
-        genV1 = DeployModule . Wasm.WasmModuleV1 . Wasm.WasmModuleV . Wasm.ModuleSource <$> genByteString
+    let genV0 = DeployModule . Wasm.WasmModuleV0 . Wasm.WasmModuleV . Wasm.ModuleSource <$> Generators.genByteString
+        genV1 = DeployModule . Wasm.WasmModuleV1 . Wasm.WasmModuleV . Wasm.ModuleSource <$> Generators.genByteString
     in if pv <= P3 then -- protocol versions <= 3 only allow version 0 Wasm modules.
                genV0
         else oneof [genV0, genV1]

@@ -115,10 +115,8 @@ instance AE.FromJSON InvokeContractResult where
       _ -> fail $ "Invalid tag: " ++ tag
     where decodeReturnValue rv = case BS16.decode . Text.encodeUtf8 <$> rv of
             Nothing -> return Nothing
-            Just (bs, unparsed) ->
-              if BS.null unparsed
-                then return (Just bs)
-                else fail $ "Failed decoding return value from base16."
+            Just (Right bs) -> return (Just bs)
+            Just (Left _) -> fail "Failed decoding return value from base16."
 
 instance AE.ToJSON InvokeContractResult where
   toJSON Failure{..} = AE.object $ [
