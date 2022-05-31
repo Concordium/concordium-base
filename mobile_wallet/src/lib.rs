@@ -787,18 +787,15 @@ fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let identity_index = try_get(&v, "identityIndex")?;
 
     let id_cred_sec = wallet.get_id_cred_sec(identity_index)?;
-    let id_cred_sec_hex = hex::encode(id_cred_sec);
 
     let prf_key = wallet.get_prf_key(identity_index)?;
-    let prf_key_hex = hex::encode(prf_key);
 
     let blinding_randomness = wallet.get_blinding_randomness(identity_index)?;
-    let blinding_randomness_hex = hex::encode(blinding_randomness);
 
     let response = json!({
-        "idCredSec": id_cred_sec_hex,
-        "prfKey": prf_key_hex,
-        "blindingRandomness": blinding_randomness_hex
+        "idCredSec": base16_encode_string(&id_cred_sec),
+        "prfKey": base16_encode_string(&prf_key),
+        "blindingRandomness": base16_encode_string(&blinding_randomness)
     });
     Ok(to_string(&response)?)
 }
@@ -826,7 +823,7 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
             account_credential_index,
             attribute_tag,
         )?;
-        let commitment_randomness_hex = hex::encode(commitment_randomness);
+        let commitment_randomness_hex = base16_encode_string(&commitment_randomness);
         attribute_commitment_randomness.insert(attribute_tag.0, commitment_randomness_hex);
     }
 

@@ -1,37 +1,37 @@
-use ed25519_hd_key_derivation::{derive, DeriveError};
-use id::types::AttributeTag;
+use ed25519_dalek::{PublicKey, SecretKey};
+use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
+use id::{
+    curve_arithmetic::Curve, pedersen_commitment::Randomness as CommitmentRandomness,
+    types::AttributeTag,
+};
 use keygen_bls::keygen_bls;
-use pairing::bls12_381::FrRepr;
+use pairing::bls12_381::{Bls12, G1};
+use ps_sig::SigRetrievalRandomness;
 use serde::Deserialize;
 use std::fmt;
 
-#[derive(Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 pub enum Net {
     Mainnet,
     Testnet,
 }
 
-impl fmt::Display for Net {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Net::Mainnet => write!(f, "919"),
-            Net::Testnet => write!(f, "1"),
+impl Net {
+    /// Get
+    pub fn net_code(self) -> u32 {
+        match self {
+            Net::Mainnet => 919,
+            Net::Testnet => 1,
         }
     }
 }
 
-fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> [u8; 32] {
-    let bls_key_fr = keygen_bls(&key_seed, b"").unwrap();
-    let fr_repr = FrRepr::from(bls_key_fr);
-    let fr_repr_ref = fr_repr.as_ref();
-    let key_bytes: Vec<u8> = fr_repr_ref
-        .iter()
-        .rev()
-        .flat_map(|val| val.to_be_bytes())
-        .collect();
-    let mut bls_key = [0u8; 32];
-    bls_key.clone_from_slice(&key_bytes[0..32]);
-    bls_key
+impl fmt::Display for Net {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.net_code()) }
+}
+
+fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <G1 as Curve>::Scalar {
+    keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
 }
 
 /// A structure that is used to derive private key material and randomness
@@ -52,76 +52,104 @@ pub struct ConcordiumHdWallet {
     pub net:  Net,
 }
 
+pub type CredId = <G1 as Curve>::Scalar;
+pub type PrfKey = dodis_yampolskiy_prf::SecretKey<G1>;
+
 impl ConcordiumHdWallet {
-    fn make_path(&self, path: &str) -> String {
-        let root_path: &str = "m/44'";
-        let derivation_path = format!("{}/{}'/{}", root_path, &self.net, path);
-        derivation_path
+    fn make_path(&self, path: &[u32]) -> Result<Vec<u32>, DeriveError> {
+        let root_path: Vec<u32> = vec![harden(44), harden(self.net.net_code())];
+        let mut derivation_path = root_path;
+        for &index in path {
+            derivation_path.push(checked_harden(index)?)
+        }
+        Ok(derivation_path)
     }
 
+    /// Get the account signing key for the identity `identity_index` and
+    /// credential `credential_counter`.
     pub fn get_account_signing_key(
         &self,
         identity_index: u32,
         credential_counter: u32,
-    ) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_path(&format!("{}'/0'/{}'", identity_index, credential_counter));
-        let private_key = match derive(&path, &self.seed) {
-            Ok(keys) => keys.private_key,
-            Err(e) => return Err(e),
-        };
-        Ok(private_key)
+    ) -> Result<SecretKey, DeriveError> {
+        let path = self.make_path(&[identity_index, 0, credential_counter])?;
+        let keys = derive_from_parsed_path(&path, &self.seed)?;
+        Ok(SecretKey::from_bytes(&keys.private_key)
+            .expect("The byte array has correct length, so this cannot fail."))
     }
 
+    /// Get the public key corresponding for the identity `identity_index` and
+    /// credential `credential_counter`. Note that this is just a convenience
+    /// wrapper. The same can be achieved by using [`PublicKey::from`] on
+    /// the result of
+    /// [`get_account_signing_key`](Self::get_account_signing_key).
     pub fn get_account_public_key(
         &self,
         identity_index: u32,
         credential_counter: u32,
-    ) -> Result<[u8; 32], DeriveError> {
-        let account_signing_key =
-            self.get_account_signing_key(identity_index, credential_counter)?;
-        let secret_key = ed25519_dalek::SecretKey::from_bytes(&account_signing_key).unwrap();
-        let public_key = ed25519_dalek::PublicKey::from(&secret_key);
-        Ok(public_key.to_bytes())
+    ) -> Result<PublicKey, DeriveError> {
+        let secret_key = self.get_account_signing_key(identity_index, credential_counter)?;
+        let public_key = PublicKey::from(&secret_key);
+        Ok(public_key)
     }
 
-    pub fn get_id_cred_sec(&self, identity_index: u32) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_path(&format!("{}'/2'", identity_index));
-        let id_cred_sec_seed = derive(&path, &self.seed)?.private_key;
+    /// Compute the `idCredSec` for the given identity index.
+    pub fn get_id_cred_sec(&self, identity_index: u32) -> Result<CredId, DeriveError> {
+        let path = self.make_path(&[identity_index, 2])?;
+        let id_cred_sec_seed = derive_from_parsed_path(&path, &self.seed)?.private_key;
         Ok(bls_key_bytes_from_seed(id_cred_sec_seed))
     }
 
-    pub fn get_prf_key(&self, identity_index: u32) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_path(&format!("{}'/3'", identity_index));
-        let prf_key_seed = derive(&path, &self.seed)?.private_key;
-        Ok(bls_key_bytes_from_seed(prf_key_seed))
+    /// Compute the `prfKey` for the given identity index.
+    pub fn get_prf_key(&self, identity_index: u32) -> Result<PrfKey, DeriveError> {
+        let path = self.make_path(&[identity_index, 3])?;
+        let prf_key_seed = derive_from_parsed_path(&path, &self.seed)?.private_key;
+        Ok(PrfKey::new(bls_key_bytes_from_seed(prf_key_seed)))
     }
 
-    pub fn get_blinding_randomness(&self, identity_index: u32) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_path(&format!("{}'/4'", identity_index));
-        let blinding_randomness_seed = derive(&path, &self.seed)?.private_key;
-        Ok(bls_key_bytes_from_seed(blinding_randomness_seed))
+    /// Compute the randomness that can be used to retrieve the signature from
+    /// the blinded signature on the attribute list that is received from the
+    /// identity provider.
+    pub fn get_blinding_randomness(
+        &self,
+        identity_index: u32,
+    ) -> Result<SigRetrievalRandomness<Bls12>, DeriveError> {
+        let path = self.make_path(&[identity_index, 4])?;
+        let blinding_randomness_seed = derive_from_parsed_path(&path, &self.seed)?.private_key;
+        Ok(SigRetrievalRandomness::new(bls_key_bytes_from_seed(
+            blinding_randomness_seed,
+        )))
     }
 
+    /// Get the randomness for the specific identity, credential, and attribute.
+    /// This randomness is used to make a commitment to the attribute when the
+    /// credential is deployed to the chain, and may later be used to open the
+    /// commitment, or prove certain other properties about the values contained
+    /// in the commitment.
     pub fn get_attribute_commitment_randomness(
         &self,
         identity_index: u32,
         credential_counter: u32,
         attribute_tag: AttributeTag,
-    ) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_path(&format!(
-            "{}'/5'/{}'/{}'",
-            identity_index, credential_counter, attribute_tag.0
-        ));
-        let attribute_commitment_randomness_seed = derive(&path, &self.seed).unwrap().private_key;
-        Ok(bls_key_bytes_from_seed(
+    ) -> Result<CommitmentRandomness<G1>, DeriveError> {
+        let path = self.make_path(&[
+            identity_index,
+            5,
+            credential_counter,
+            attribute_tag.0.into(),
+        ])?;
+        let attribute_commitment_randomness_seed =
+            derive_from_parsed_path(&path, &self.seed)?.private_key;
+        Ok(CommitmentRandomness::new(bls_key_bytes_from_seed(
             attribute_commitment_randomness_seed,
-        ))
+        )))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crypto_common::base16_encode_string;
     use ed25519_dalek::*;
     use hex;
     use std::convert::TryInto;
@@ -160,16 +188,15 @@ mod tests {
 
     #[test]
     pub fn account_signing_key_matches_public_key() {
-        let public_key = create_wallet(Net::Mainnet, TEST_SEED_1)
+        let pk = create_wallet(Net::Mainnet, TEST_SEED_1)
             .get_account_public_key(0, 0)
             .unwrap();
         let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1)
             .get_account_signing_key(0, 0)
             .unwrap();
 
-        let sk = ed25519_dalek::SecretKey::from_bytes(&signing_key).unwrap();
+        let sk = ed25519_dalek::SecretKey::from(signing_key);
         let expanded_sk = ExpandedSecretKey::from(&sk);
-        let pk = ed25519_dalek::PublicKey::from_bytes(&public_key).unwrap();
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);
@@ -186,7 +213,7 @@ mod tests {
             .get_id_cred_sec(115)
             .unwrap();
         assert_eq!(
-            hex::encode(&id_cred_sec),
+            base16_encode_string(&id_cred_sec),
             "27db5d5c1e346670bd2d9b4235a180629c750b067a83942e55fc43303531c1aa"
         );
     }
@@ -197,7 +224,7 @@ mod tests {
             .get_prf_key(35)
             .unwrap();
         assert_eq!(
-            hex::encode(&prf_key),
+            base16_encode_string(&prf_key),
             "1c8a30e2136dcc5e4f8b6fa359e908718d65ea2c2638d8fa6ff72c24d8ed3d68"
         );
     }
@@ -208,7 +235,7 @@ mod tests {
             .get_blinding_randomness(5713)
             .unwrap();
         assert_eq!(
-            hex::encode(&blinding_randomness),
+            base16_encode_string(&blinding_randomness),
             "2924d5bc605cc06632e061cec491c1f6b476b3abe51e526f641bcea355cd8bf6"
         );
     }
@@ -219,7 +246,7 @@ mod tests {
             .get_attribute_commitment_randomness(0, 4, AttributeTag(0))
             .unwrap();
         assert_eq!(
-            hex::encode(&attribute_commitment_randomness),
+            base16_encode_string(&attribute_commitment_randomness),
             "462e12bbda5b58ac6e3be920d41adce8b9d0779c13c34913b1f61748f0bbf051"
         );
     }
@@ -230,7 +257,7 @@ mod tests {
             .get_account_signing_key(55, 7)
             .unwrap();
         assert_eq!(
-            hex::encode(&signing_key),
+            base16_encode_string(&signing_key),
             "67a5619aaa5d67b548f83c857c92024f57a9d902f273a62f283f2536fcb203aa"
         );
     }
@@ -241,23 +268,22 @@ mod tests {
             .get_account_public_key(341, 9)
             .unwrap();
         assert_eq!(
-            hex::encode(&public_key),
+            base16_encode_string(&public_key),
             "b90e8e5f45c1181e93d5cad6ad7414036538c6c806140cb4bf7957d8ff350004"
         );
     }
 
     #[test]
     pub fn testnet_account_signing_key_matches_public_key() {
-        let public_key = create_wallet(Net::Testnet, TEST_SEED_1)
+        let pk = create_wallet(Net::Testnet, TEST_SEED_1)
             .get_account_public_key(0, 0)
             .unwrap();
         let signing_key = create_wallet(Net::Testnet, TEST_SEED_1)
             .get_account_signing_key(0, 0)
             .unwrap();
 
-        let sk = ed25519_dalek::SecretKey::from_bytes(&signing_key).unwrap();
+        let sk = ed25519_dalek::SecretKey::from(signing_key);
         let expanded_sk = ExpandedSecretKey::from(&sk);
-        let pk = ed25519_dalek::PublicKey::from_bytes(&public_key).unwrap();
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);
@@ -274,7 +300,7 @@ mod tests {
             .get_id_cred_sec(115)
             .unwrap();
         assert_eq!(
-            hex::encode(&id_cred_sec),
+            base16_encode_string(&id_cred_sec),
             "719130a7429a69d1f673a7d051043e63ab237098928ffa2066bdddbc3f93bdb1"
         );
     }
@@ -285,7 +311,7 @@ mod tests {
             .get_prf_key(35)
             .unwrap();
         assert_eq!(
-            hex::encode(&prf_key),
+            base16_encode_string(&prf_key),
             "623cc233afcdf8063800615d7b52aa535533f0ab054891b4f821e2912018a2fb"
         );
     }
@@ -296,7 +322,7 @@ mod tests {
             .get_blinding_randomness(5713)
             .unwrap();
         assert_eq!(
-            hex::encode(&blinding_randomness),
+            base16_encode_string(&blinding_randomness),
             "2d6093f16ce3cc2d1d7eca2c7c4c7a80449980b10baf0b3366dc70ba2564c7aa"
         );
     }
@@ -307,7 +333,7 @@ mod tests {
             .get_attribute_commitment_randomness(0, 4, AttributeTag(0))
             .unwrap();
         assert_eq!(
-            hex::encode(&attribute_commitment_randomness),
+            base16_encode_string(&attribute_commitment_randomness),
             "50cb39a9009b36c8ce21fdedab9db520de300a6405e5ffe4786c3c75b09f9ae0"
         );
     }

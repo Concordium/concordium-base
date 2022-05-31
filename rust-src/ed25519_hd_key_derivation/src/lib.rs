@@ -6,6 +6,18 @@ use thiserror::Error;
 const ED25519_CURVE: &[u8; 12] = b"ed25519 seed";
 const HARDENED_OFFSET: u32 = 0x80000000;
 
+/// Harden a u32 value such that it can appear in a hardened path.
+pub fn harden(index: u32) -> u32 { index | HARDENED_OFFSET }
+
+/// Check that the value is not yet hardened, and harden it.
+pub fn checked_harden(index: u32) -> Result<u32, DeriveError> {
+    if index & HARDENED_OFFSET == 0 {
+        Ok(index | HARDENED_OFFSET)
+    } else {
+        Err(DeriveError::InvalidPath)
+    }
+}
+
 #[derive(Debug, Error, PartialEq)]
 pub enum DeriveError {
     #[error("Invalid derivation path.")]
@@ -116,7 +128,7 @@ pub fn parse_path(path: &str) -> Result<Vec<u32>, DeriveError> {
 /// specification.
 ///
 /// # Arguments
-/// * `path` - A string slice thats holds the key derivation path
+/// * `path` - A string slice that holds the key derivation path
 /// * `seed` - A byte array slice of length between 16 and 64 bytes that holds
 ///   the seed to derive keys from
 ///
@@ -128,17 +140,34 @@ pub fn parse_path(path: &str) -> Result<Vec<u32>, DeriveError> {
 /// let keys = derive("m/44'/919'/0'/0'", &seed);
 /// ```
 pub fn derive(path: &str, seed: &[u8]) -> Result<HdKeys, DeriveError> {
+    let parsed_path = parse_path(path)?;
+    derive_from_parsed_path(&parsed_path, seed)
+}
+
+/// Derives hierarchical deterministic keys for ed25519 according to the SLIP0010 (https://github.com/satoshilabs/slips/blob/master/slip-0010.md)
+/// specification.
+///
+/// # Arguments
+/// * `path` - An array of indices. **They must all be hardened.** For example
+///   this path could be obtained using [`parse_path`].
+/// * `seed` - A byte array slice of length between 16 and 64 bytes that holds
+///   the seed to derive keys from
+///
+/// # Examples
+/// ```
+/// use ed25519_hd_key_derivation::{derive_from_parsed_path, harden};
+///
+/// let seed = [0u8; 64];
+/// let keys = derive_from_parsed_path(&[harden(44), harden(919), harden(0), harden(0)], &seed);
+/// ```
+pub fn derive_from_parsed_path(parsed_path: &[u32], seed: &[u8]) -> Result<HdKeys, DeriveError> {
     if seed.len() < 16 || seed.len() > 64 {
         return Err(DeriveError::InvalidSeed);
     }
-    let parsed_path = parse_path(path)?;
     let master_key = get_master_key_from_seed(&seed);
     let mut current_key = master_key;
-    for index in parsed_path {
-        current_key = match ckd_priv(current_key, index) {
-            Ok(k) => k,
-            Err(_) => return Err(DeriveError::InvalidPath),
-        };
+    for &index in parsed_path {
+        current_key = ckd_priv(current_key, index)?;
     }
     Ok(current_key)
 }

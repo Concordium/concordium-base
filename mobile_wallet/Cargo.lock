@@ -741,14 +741,14 @@ checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 name = "key_derivation"
 version = "1.0.0"
 dependencies = [
+ "dodis_yampolskiy_prf",
  "ed25519-dalek",
  "ed25519_hd_key_derivation",
- "hex",
  "hmac 0.12.1",
  "id",
  "keygen_bls",
  "pairing",
- "regex",
+ "ps_sig",
  "serde",
  "sha2 0.10.2",
 ]
