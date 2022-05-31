@@ -831,7 +831,7 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     }
 
     let response = json!({
-        "signingKey": account_signing_key_hex,
+        "signKey": account_signing_key_hex,
         "verifyKey": account_verify_key_hex,
         "attributeCommitmentRandomness": attribute_commitment_randomness
     });

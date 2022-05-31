@@ -485,7 +485,7 @@ must be a valid JSON object with fields
 
 The returned value is a JSON object with the following fields:
 
-- `"signingKey"` ... the account signing key as a hex encoded string.
+- `"signKey"` ... the account signing key as a hex encoded string.
 
 - `"verifyKey"` ... the account verification key as a hex encoded string.
 
