@@ -7,6 +7,9 @@ const ED25519_CURVE: &[u8; 12] = b"ed25519 seed";
 const HARDENED_OFFSET: u32 = 0x80000000;
 
 /// Harden a u32 value such that it can appear in a hardened path.
+/// Note that if the index is already hardened this function does nothing.
+/// See also [`checked_harden`] for a version which checks whether the value is
+/// not hardened.
 pub fn harden(index: u32) -> u32 { index | HARDENED_OFFSET }
 
 /// Check that the value is not yet hardened, and harden it.
@@ -76,9 +79,9 @@ fn ckd_priv(parent_keys: HdKeys, index: u32) -> Result<HdKeys, DeriveError> {
     })
 }
 
-/// Checks whether a given key derivation path is a valid key derivation
-/// path for the ed25519 SLIP0010 standard, and returns the path split
-/// into each index of the path with the hardening offset applied.
+/// Attempt to parse a given key derivation path as a path path for the ed25519
+/// SLIP0010 standard. If the path is valid return the indices on the path with
+/// with the hardening offset applied.
 ///
 /// A valid path is of the form
 ///
