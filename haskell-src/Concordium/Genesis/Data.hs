@@ -94,6 +94,10 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
 -- |Deserialize 'GenesisConfiguration' given the hash of the genesis. If
 -- 'GenesisData' is decodable (using its Serialize instance) from a given
 -- bytestring then 'getGenesisConfiguration' will also succeed parsing.
+--
+-- Note that this will not consume the entire genesis data, only the initial
+-- prefix. In particular, in case of initial genesis data it will not read the
+-- genesis state.
 getGenesisConfiguration :: SProtocolVersion pv -> BlockHash -> Get GenesisConfiguration
 getGenesisConfiguration spv genHash = case spv of
         SP1 -> P1.getGenesisConfigurationV3 genHash
@@ -141,7 +145,8 @@ genesisBlockHash = case protocolVersion @pv of
     SP4 -> P4.genesisBlockHash . unGDP4
 
 -- |Hash of the initial genesis of the chain to which the given genesis data belongs.
--- Genesis created as part of a protocol update records the
+-- Genesis created as part of a protocol update records the genesis
+-- hash of the initial genesis block.
 firstGenesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHash
 firstGenesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.firstGenesisBlockHash . unGDP1
@@ -149,8 +154,8 @@ firstGenesisBlockHash = case protocolVersion @pv of
     SP3 -> P3.firstGenesisBlockHash . unGDP3
     SP4 -> P4.firstGenesisBlockHash . unGDP4
 
--- |Hash of the initial genesis of the chain to which the given genesis data belongs.
--- Genesis created as part of a protocol update records the
+-- |Tag of the genesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis.
 genesisVariantTag :: forall pv. IsProtocolVersion pv => GenesisData pv -> Word8
 genesisVariantTag = case protocolVersion @pv of
     SP1 -> P1.genesisVariantTag . unGDP1
@@ -174,7 +179,10 @@ getPVGenesisData = do
     6 -> PVGenesisData . GDP4 <$> P4.getGenesisDataV6
     n -> fail $ "Unsupported genesis version: " ++ show n
 
--- |Assuming the same input as 'getPVGenesisData', return just the protocol version.
+-- |Deserialize a genesis data version tag and return the associated protocol
+-- version. When applied to a byte array (e.g., using 'runGet'), this consumes
+-- only the version prefix of the array so it may be applied to the same input
+-- as 'getPVGenesisData' to efficiently only parse the protocol version.
 getPVGenesisDataPV :: Get SomeProtocolVersion
 getPVGenesisDataPV = do
   getVersion >>= \case

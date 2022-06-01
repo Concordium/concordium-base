@@ -94,6 +94,10 @@ instance Serialize CoreGenesisParameters where
 -- The intention is that this structured can always be deserialized from a
 -- serialized @GenesisData@ provided the hash of the genesis data is known.
 data GenesisConfiguration = GenesisConfiguration {
+  -- |The tag used when deserializing genesis data. This determines the variant
+  -- of the genesis data that is to be deserialized. The allowed values depend
+  -- on the protocol version. For each protocol there is a function
+  -- 'genesisVariantTag' that determines the allowed values for this tag.
   _gcTag :: !Word8,
   -- |Genesis parameters.
   _gcCore :: !CoreGenesisParameters,
@@ -112,6 +116,8 @@ instance BasicGenesisData GenesisConfiguration where
   gdFinalizationParameters = gdFinalizationParameters . _gcCore
   gdEpochLength = gdEpochLength . _gcCore
 
+-- |Serialize genesis configuration. This is done in such a way that
+-- 'getGenesisConfiguration' can parse it.
 putGenesisConfiguration :: Putter GenesisConfiguration
 putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> put _gcFirstGenesis <> put _gcCurrentHash
 

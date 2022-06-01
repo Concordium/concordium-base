@@ -78,6 +78,13 @@ getGenesisDataV3 =
         _ -> fail "Unrecognised genesis data type"
 
 -- |Deserialize genesis configuration from the serialized genesis data.
+--
+-- Note that this will not consume the entire genesis data, only the initial
+-- prefix. In particular, in case of initial genesis data it will not read the
+-- genesis state.
+--
+-- The argument is the hash of the genesis data from which the configuration is
+-- to be read.
 getGenesisConfigurationV3 :: BlockHash -> Get GenesisConfiguration
 getGenesisConfigurationV3 genHash = do
     getWord8 >>= \case
