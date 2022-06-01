@@ -14,6 +14,8 @@ external fun combine_encrypted_amounts(input1: String, input2: String) : ReturnV
 external fun decrypt_encrypted_amount(input: String) : ReturnValue
 external fun check_account_address(input: String) : Boolean
 external fun link_check(input: String) : String
+external fun get_identity_keys_and_randomness(input: String) : ReturnValue
+external fun get_account_keys_and_randomness(input: String) : ReturnValue
 
 fun loadWalletLib() {
     System.loadLibrary("mobile_wallet")

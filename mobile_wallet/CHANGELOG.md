@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0
+- Added function `get_identity_keys_and_randomness` for deriving IdCredSec, PrfKey and blinding randomness from a seed.
+- Added function `get_account_keys_and_randomness` for deriving signing key, verification key and attribute randomness from a seed.
+
 ## 0.12.0
   - JSON serialization of the Rust type `DelegationTarget` has been updated to be consistent with the JSON serialization of the corresponding Haskell type, due to the renaming of L-Pool to passive delegation.
 
