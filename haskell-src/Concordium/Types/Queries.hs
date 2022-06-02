@@ -427,8 +427,11 @@ instance ToJSON BlockTransactionStatus where
 
 -- |A pending change (if any) to a baker pool.
 --
--- The JSON encoding uses a tag "pendingChangeType", which is "NoChange", "ReduceBakerCapital",
--- or "RemovePool". The contents is in an object under the field "pendingChangeDetails".
+-- The JSON encoding uses a tag "pendingChangeType", which is "NoChange",
+-- "ReduceBakerCapital", or "RemovePool". If the tag is "NoChange" there are no
+-- additional fields. If the tag is "ReduceBakerCapital" there are two
+-- additional fields "bakerEquityCapital" and "effectiveTime". if the tag is
+-- "RemovePool" there is an additional field "effectiveTime".
 data PoolPendingChange
     = -- |No change is pending.
       PPCNoChange
