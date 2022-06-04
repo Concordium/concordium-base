@@ -283,25 +283,42 @@ instance ToJSONKey IdentityProviderIdentity where
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
 
--- encryption key for accounts (Elgamal?)
+-- |An Elgamal encryption key. Note that this is a full key with a specific
+-- generator @g@ and the @g^s@ for a secret key @s@. In our use the generator is
+-- in fact always the same (it is part of the shared cryptographic parameters of
+-- the chain, set in genesis), so we could put it into a shared context instead
+-- to save some space.
 newtype AccountEncryptionKey = AccountEncryptionKey {_elgamalPublicKey :: ElgamalPublicKey}
     deriving (Eq, Show, Serialize, FromJSON, ToJSON) via ElgamalPublicKey
 
+-- |A marker type that has the 'FBS.FixedLength' instance to determine the size
+-- of the account encryption key in bytes.
 data AccountEncryptionKeySize
 
 instance FBS.FixedLength AccountEncryptionKeySize where
   fixedLength _ = 2 * 48
 
+-- |A byte representation of the account encryption key. This is both smaller
+-- (1/3 the size) of the 'AccountEncryptionKey' as well as much faster to load
+-- since it does not involve checking whether the key is a valid point on the
+-- relevant elliptic curve. As a result, this can only be used when the input is
+-- either trusted to be well-formed, or when checks will be done on it before
+-- the value is needed as an encryption key.
 newtype AccountEncryptionKeyRaw = AccountEncryptionKeyRaw (FBS.FixedByteString AccountEncryptionKeySize)
     deriving(Eq, Ord)
     deriving (Show, Serialize, FromJSON, ToJSON) via FBSHex AccountEncryptionKeySize
 
+-- |Reconstruct the account encryption key from the raw representation. This
+-- function is unsafe and will raise an exception if the input is not a valid
+-- account encryption key.
 unsafeEncryptionKeyFromRaw :: AccountEncryptionKeyRaw -> AccountEncryptionKey
 unsafeEncryptionKeyFromRaw (AccountEncryptionKeyRaw fbs) =
   case decode (FBS.toByteString fbs) of
     Left _ -> error "Precondition violation. Invalid encryption key."
     Right v -> v
 
+-- |Convert the encryption key to the raw one. This is relatively expensive
+-- since it involves constructing a canonical representation of the key.
 toRawEncryptionKey :: AccountEncryptionKey -> AccountEncryptionKeyRaw
 toRawEncryptionKey = AccountEncryptionKeyRaw . FBS.fromByteString . encode
 
