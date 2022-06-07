@@ -1,7 +1,10 @@
--- |This module defines the genesis data fromat for the 'P2' protocol version.
+{-# LANGUAGE DataKinds #-}
+
+-- |This module defines the genesis data format for the 'P2' protocol version.
 module Concordium.Genesis.Data.P2 where
 
 import Data.Serialize
+import Data.Word
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -17,7 +20,7 @@ data GenesisDataP2
       genesisCore :: !CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-      genesisInitialState :: !GenesisState
+      genesisInitialState :: !(GenesisState 'P2)
     }
     | GDP2Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
@@ -61,6 +64,35 @@ putGenesisDataV4 GDP2Regenesis{..} = do
   putWord8 1
   putRegenesisData genesisRegenesis
 
+-- |Deserialize genesis configuration from the serialized genesis data.
+--
+-- Note that this will not consume the entire genesis data, only the initial
+-- prefix. In particular, in case of initial genesis data it will not read the
+-- genesis state.
+--
+-- The argument is the hash of the genesis data from which the configuration is
+-- to be read.
+getGenesisConfigurationV4 :: BlockHash -> Get GenesisConfiguration
+getGenesisConfigurationV4 genHash = do
+    getWord8 >>= \case
+        0 -> do
+            _gcCore <- get
+            return GenesisConfiguration{
+                _gcTag = 0,
+                _gcCurrentHash = genHash,
+                _gcFirstGenesis = genHash,
+                ..
+                }
+        1 -> do
+          _gcCore <- get
+          _gcFirstGenesis <- get
+          return GenesisConfiguration{
+            _gcTag = 1,
+            _gcCurrentHash = genHash,
+            ..
+            }
+        _ -> fail "Unrecognised genesis data type"
+
 -- |Deserialize genesis data with a version tag. The expected version tag is 4
 -- and this must be distinct from version tags of other genesis data formats.
 getVersionedGenesisData :: Get GenesisDataP2
@@ -76,7 +108,7 @@ putVersionedGenesisData gd = do
     putVersion 4
     putGenesisDataV4 gd
 
-parametersToGenesisData :: GenesisParameters -> GenesisDataP2
+parametersToGenesisData :: GenesisParameters 'P2 -> GenesisDataP2
 parametersToGenesisData = uncurry GDP2Initial . parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
@@ -105,3 +137,13 @@ genesisBlockHash GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash .
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
+
+-- |The hash of the first genesis block in the chain.
+firstGenesisBlockHash :: GenesisDataP2 -> BlockHash
+firstGenesisBlockHash GDP2Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash other@GDP2Initial{} = genesisBlockHash other
+
+-- |Tag of the genesis data used for serialization.
+genesisVariantTag :: GenesisDataP2 -> Word8
+genesisVariantTag GDP2Initial{} = 0
+genesisVariantTag GDP2Regenesis{} = 1

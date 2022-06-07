@@ -1,6 +1,6 @@
 [package]
 name = "mobile_wallet"
-version = "0.11.0"
+version = "0.13.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -57,6 +57,10 @@ version = "0"
 [dependencies.pedersen_scheme]
 path = "../rust-src/pedersen_scheme"
 version = "0"
+
+[dependencies.key_derivation]
+path = "../rust-src/key_derivation"
+version = "1.0.0"
 
 [dependencies.ps_sig]
 path = "../rust-src/ps_sig"

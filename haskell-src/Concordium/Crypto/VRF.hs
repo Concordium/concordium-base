@@ -22,6 +22,7 @@ module Concordium.Crypto.VRF(
     verifyKey,
     hashToDouble,
     hashToInt,
+    publicKeySize,
 ) where
 
 import           Concordium.Crypto.ByteStringHelpers

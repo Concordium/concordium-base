@@ -75,8 +75,10 @@ library
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
       Concordium.Types.InvokeContract
+      Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
+      Concordium.Types.ProtocolVersion.JustForCPV1
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.SeedState
@@ -85,6 +87,7 @@ library
       Concordium.Types.UpdateQueues
       Concordium.Types.Updates
       Concordium.Utils
+      Concordium.Utils.BinarySearch
       Concordium.Utils.Encryption
       Concordium.Utils.Serialization
       Concordium.Utils.Serialization.Put
@@ -276,12 +279,14 @@ test-suite test
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
+      Generators
+      Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec
       Types.AddressesSpec
+      Types.AmountFraction
       Types.AmountSpec
+      Types.ParametersSpec
       Types.PayloadSerializationSpec
-      Types.RewardTypes
-      Types.TransactionGen
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec

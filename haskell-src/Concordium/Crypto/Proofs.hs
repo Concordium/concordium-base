@@ -7,7 +7,8 @@ module Concordium.Crypto.Proofs
    randomProof,
    proveDlog25519KP,
    proveDlog25519VRF,
-   proveDlog25519Block
+   proveDlog25519Block,
+   dlogProofSize
   )
   where
 

@@ -473,9 +473,9 @@ instance AE.ToJSON ContractState where
 
 instance AE.FromJSON ContractState where
   parseJSON = AE.withText "ContractState" $ \csText ->
-    let (contractState, rest) = BS16.decode (Text.encodeUtf8 csText)
-    in if BS.null rest then return ContractState{..}
-       else fail "Invalid hex string."
+    case BS16.decode (Text.encodeUtf8 csText) of
+      Right contractState -> return ContractState {..}
+      Left _ -> fail "Invalid hex string."
 
 -- The show instance just displays the bytes directly.
 instance Show ContractState where

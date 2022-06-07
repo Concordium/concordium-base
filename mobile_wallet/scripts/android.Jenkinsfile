@@ -3,8 +3,16 @@ pipeline {
     agent any
     environment {
         ecr_repo_domain = '192549843005.dkr.ecr.eu-west-1.amazonaws.com'
-        FILENAME_DEBUG = 'mobile_wallet_lib-debug.aar'
-        FILENAME_RELEASE = 'mobile_wallet_lib-release.aar'
+        VERSION = sh(
+            returnStdout: true,
+            script: '''\
+                # Extract version number if not set as parameter
+                [ -z "$VERSION" ] && VERSION=$(awk '/version = / { print substr($3, 2, length($3)-2); exit }' mobile_wallet/Cargo.toml)
+                echo -n "$VERSION"
+            '''.stripIndent()
+        )
+        FILENAME_DEBUG_ROOT = 'mobile_wallet_lib-debug'
+        FILENAME_RELEASE_ROOT = 'mobile_wallet_lib-release'
         S3_BUCKET = 's3://static-libraries.concordium.com/android'
     }
     stages {
@@ -57,7 +65,7 @@ pipeline {
 
                     # Build rust library
                     cd mobile_wallet_lib
-                    ./gradlew build
+                    ./gradlew build --info
 
                     # Prepate output
                     mkdir ../../../out/
@@ -72,8 +80,8 @@ pipeline {
                 unstash 'release'
                 sh '''\
                     # Push to s3
-                    aws s3 cp "out/${FILENAME_DEBUG}" "${S3_BUCKET}/${FILENAME}" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
-                    aws s3 cp "out/${FILENAME_RELEASE}" "${S3_BUCKET}/${FILENAME}" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+                    aws s3 cp "out/${FILENAME_DEBUG_ROOT}.aar" "${S3_BUCKET}/${FILENAME_DEBUG_ROOT}_${VERSION}.aar" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+                    aws s3 cp "out/${FILENAME_RELEASE_ROOT}.aar" "${S3_BUCKET}/${FILENAME_RELEASE_ROOT}_${VERSION}.aar" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
                 '''.stripIndent()
             }
         }

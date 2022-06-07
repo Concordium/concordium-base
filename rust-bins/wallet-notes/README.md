@@ -175,12 +175,12 @@ The following fields are optional:
 
 - `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
 
-- `"delegationTarget"` ... JSON indicating either delegation to the L-pool or to a baker pool.
+- `"delegationTarget"` ... JSON indicating either delegation a baker pool or passive delegation.
 
 The delegation target should either be of the form
 ```json
 {
-    "delegateType": "L-Pool"
+    "delegateType": "Passive"
 }
 ```
 or
@@ -201,8 +201,8 @@ The returned value is a JSON object with the following fields:
 
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
 
-Example input to this request are in the files [create_configure_delegation_transacion-input.json](files/create_configure_delegation_transacion-input.json) and [2-create_configure_delegation_transacion-input.json](2-files/create_configure_delegation_transacion-input.json).
-Example output to this request are in the files [2-files/create_configure_delegation_transacion-output.json](files/create_configure_delegation_transacion-output.json).
+Example input to this request are in the files [create_configure_delegation_transacion-input.json](./files/create_configure_delegation_transaction-input.json) and [2-create_configure_delegation_transaction-input.json](./files/2-create_configure_delegation_transaction-input.json).
+Example output to this request are in the files [create_configure_delegation_transacion-output.json](./files/create_configure_delegation_transaction-output.json) and [2-create_configure_delegation_transacion-output.json](./files/2-create_configure_delegation_transaction-output.json).
 
 ## create_configure_baker_transaction
 
@@ -248,8 +248,8 @@ The returned value is a JSON object with the following fields:
 
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
 
-An example input to this request is in the file [create_configure_baker-transaction-input.json](files/create_configure_baker-transaction-input.json).
-An example output to this request is in the file [create_configure_baker-transaction-output.json](files/create_configure_baker-transaction-output.json).
+An example input to this request is in the file [create_configure_baker_transaction-input.json](./files/create_configure_baker_transaction-input.json).
+An example output to this request is in the file [create_configure_baker_transaction-output.json](./files/create_configure_baker_transaction-output.json).
 
 ## generate_baker_keys
 
@@ -443,6 +443,57 @@ The return value is a a JSON array with JSON objects as entries. Each object has
 - `"encryptionPublicKey"`
 
 With meaning that can be discerned from their names.
+
+## get_identity_keys_and_randomness
+
+Semantics: Deterministically derives id_cred_sec, prf_key and blinding randomness for an identity.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
+
+- `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"idCredSec"` ... the id_cred_sec as a hex encoded string.
+
+- `"prfKey"` ... the prf_key as a hex encoded string.
+
+- `"blindingRandomness"` ... the blinding randomness as a hex encoded string.
+
+An example input to this request is in the file [get_identity_keys_and_randomness-input.json](files/get_identity_keys_and_randomness-input.json).
+An example output to this request is in the file [get_identity_keys_and_randomness-output.json](files/get_identity_keys_and_randomness-output.json).
+
+## get_account_keys_and_randomness
+
+Semantics: Deterministically derives signing key, verification key and attribute randomness for an account.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
+
+- `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
+
+- `"accountCredentialIndex"` ... the index of the account credential to derive keys and randomness for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"signKey"` ... the account signing key as a hex encoded string.
+
+- `"verifyKey"` ... the account verification key as a hex encoded string.
+
+- `"attributeCommitmentRandomness"` ... a map with attribute indices as keys and the corresponding attribute commitment randomness as values. 
+
+An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
+An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
+
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This

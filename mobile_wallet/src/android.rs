@@ -6,6 +6,7 @@ use crate::{
     create_configure_delegation_transaction, create_credential, create_encrypted_transfer,
     create_id_request_and_private_data, create_pub_to_sec_transfer, create_sec_to_pub_transfer,
     create_transfer, decrypt_encrypted_amount, generate_accounts, generate_baker_keys,
+    get_account_keys_and_randomness, get_identity_keys_and_randomness,
 };
 use jni::{
     objects::{JClass, JString, JValue},
@@ -125,6 +126,84 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_generate
     let mut success: u8 = 127;
     let cstr_res = unsafe {
         let unsafe_res_ptr = generate_accounts(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_get_1identity_1keys_1and_1randomness(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = get_identity_keys_and_randomness(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_get_1account_1keys_1and_1randomness(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = get_account_keys_and_randomness(input_str.as_ptr(), &mut success);
         if unsafe_res_ptr.is_null() {
             return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
         }

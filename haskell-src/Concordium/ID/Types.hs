@@ -709,12 +709,13 @@ instance FromJSON CredentialDeploymentInformation where
   parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
     cdiValues <- parseJSON (Object x)
     proofsText <- x .: "proofs"
-    let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
-    unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
-    return CredentialDeploymentInformation {
+    case BS16.decode (Text.encodeUtf8 proofsText) of
+      Right bs -> return CredentialDeploymentInformation {
         cdiProofs = Proofs (BSS.toShort bs),
         ..
       }
+      Left _ -> fail "\"proofs\" is not a valid base16 string."
+
 
 
 -- |Information about the account that should be created as part of the initial

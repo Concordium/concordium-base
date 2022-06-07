@@ -59,10 +59,10 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord, From)]
 /// Address of an account. Textual representation uses base58check encoding with
 /// version byte 1.
-pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
+pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl schemars::JsonSchema for AccountAddress {
     fn schema_name() -> String { "AccountAddress".into() }
@@ -182,7 +182,7 @@ impl AccountAddress {
             data[29..].copy_from_slice(&counter.to_be_bytes()[1..]);
             Some(Self(data))
         } else {
-            return None;
+            None
         }
     }
 }

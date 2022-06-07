@@ -103,8 +103,8 @@ impl Serial for OpenStatus {
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(tag = "delegateType")]
 pub enum DelegationTarget {
-    #[serde(rename = "L-Pool")]
-    DelegateToLPool,
+    #[serde(rename = "Passive")]
+    DelegatePassive,
     #[serde(rename = "Baker")]
     DelegateToBaker {
         #[serde(rename = "bakerId")]
@@ -115,7 +115,7 @@ pub enum DelegationTarget {
 impl Serial for DelegationTarget {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match *self {
-            DelegationTarget::DelegateToLPool => out
+            DelegationTarget::DelegatePassive => out
                 .write_u8(0)
                 .expect("Writing to a buffer should not fail."),
             DelegationTarget::DelegateToBaker { target_baker } => {
@@ -129,11 +129,25 @@ impl Serial for DelegationTarget {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-/// An amount of GTU. The lowest expressible amount is 1microGTU. The string
+/// An amount of CCD. The lowest expressible amount is 1microCCD. The string
 /// representation of this type uses a decimal separator with at most 6
 /// decimals.
 pub struct Amount {
-    pub microgtu: u64,
+    pub microccd: u64,
+}
+
+impl Amount {
+    pub fn from_micro_ccd(micro_ccd: u64) -> Self {
+        Self {
+            microccd: micro_ccd,
+        }
+    }
+
+    pub fn from_ccd(ccd: u64) -> Self {
+        Self {
+            microccd: ccd * 1_000_000,
+        }
+    }
 }
 
 impl schemars::JsonSchema for Amount {
@@ -157,21 +171,21 @@ impl schemars::JsonSchema for Amount {
 }
 
 impl From<Amount> for u64 {
-    fn from(x: Amount) -> Self { x.microgtu }
+    fn from(x: Amount) -> Self { x.microccd }
 }
 
 impl From<u64> for Amount {
-    fn from(microgtu: u64) -> Self { Amount { microgtu } }
+    fn from(microccd: u64) -> Self { Amount { microccd } }
 }
 
 impl Serial for Amount {
-    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.microgtu.serial(out) }
+    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.microccd.serial(out) }
 }
 
 impl Deserial for Amount {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let microgtu = source.get()?;
-        Ok(Amount { microgtu })
+        let microccd = source.get()?;
+        Ok(Amount { microccd })
     }
 }
 
@@ -180,8 +194,8 @@ impl Add for Amount {
     type Output = Option<Amount>;
 
     fn add(self, rhs: Self) -> Self::Output {
-        let microgtu = self.microgtu.checked_add(rhs.microgtu)?;
-        Some(Amount { microgtu })
+        let microgtu = self.microccd.checked_add(rhs.microccd)?;
+        Some(Amount { microccd: microgtu })
     }
 }
 
@@ -191,8 +205,8 @@ impl Add<Option<Amount>> for Amount {
 
     fn add(self, rhs: Option<Amount>) -> Self::Output {
         let rhs = rhs?;
-        let microgtu = self.microgtu.checked_add(rhs.microgtu)?;
-        Some(Amount { microgtu })
+        let microgtu = self.microccd.checked_add(rhs.microccd)?;
+        Some(Amount { microccd: microgtu })
     }
 }
 
@@ -288,14 +302,14 @@ impl std::str::FromStr for Amount {
         for _ in 0..6 - after_dot {
             microgtu = microgtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
         }
-        Ok(Amount { microgtu })
+        Ok(Amount { microccd: microgtu })
     }
 }
 
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let high = self.microgtu / 1_000_000;
-        let low = self.microgtu % 1_000_000;
+        let high = self.microccd / 1_000_000;
+        let low = self.microccd % 1_000_000;
         if low == 0 {
             write!(f, "{}", high)
         } else {
@@ -307,7 +321,7 @@ impl std::fmt::Display for Amount {
 /// JSON instance serializes and deserializes in microgtu units.
 impl SerdeSerialize for Amount {
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&self.microgtu.to_string())
+        ser.serialize_str(&self.microccd.to_string())
     }
 }
 
@@ -317,7 +331,7 @@ impl<'de> SerdeDeserialize<'de> for Amount {
         let microgtu = s
             .parse::<u64>()
             .map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
-        Ok(Amount { microgtu })
+        Ok(Amount { microccd: microgtu })
     }
 }
 

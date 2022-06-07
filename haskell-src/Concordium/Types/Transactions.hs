@@ -36,6 +36,56 @@ import Concordium.Types.Updates
 
 -- * Account transactions
 
+-- | Data common to all transaction types.
+--
+--  * @SPEC: <$DOCS/Transactions#transaction-header>
+data TransactionHeader = TransactionHeader
+  { -- | Sender account.
+    thSender :: AccountAddress,
+    -- | Account nonce.
+    thNonce :: !Nonce,
+    -- | Amount of energy dedicated for the execution of this transaction.
+    thEnergyAmount :: !Energy,
+    -- | Size of the payload in bytes.
+    thPayloadSize :: PayloadSize,
+    -- | Absolute expiration time after which transaction will not be executed
+    thExpiry :: TransactionExpiryTime
+  }
+  deriving (Show, Eq)
+
+-- | The size of a serialized transaction header in bytes.
+transactionHeaderSize :: Word64
+transactionHeaderSize =
+  32 -- AccountAddress (FBS 32)
+    + 8 -- Nonce (Word64)
+    + 8 -- Energy (Word64)
+    + 4 -- PayloadSize (Word32)
+    + 8 -- TransactionExpiryTime (Word64)
+
+-- | Get the size of serialized transactions header and payload in bytes.
+getTransactionHeaderPayloadSize :: TransactionHeader -> Word64
+getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
+
+$(deriveJSON defaultOptions {fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
+
+-- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
+
+instance S.Serialize TransactionHeader where
+  put TransactionHeader {..} =
+    S.put thSender
+      <> S.put thNonce
+      <> S.put thEnergyAmount
+      <> S.put thPayloadSize
+      <> S.put thExpiry
+
+  get = do
+    thSender <- S.get
+    thNonce <- S.get
+    thEnergyAmount <- S.get
+    thPayloadSize <- S.get
+    thExpiry <- S.get
+    return $! TransactionHeader {..}
+
 -- |Construct a 'TransactionSignHash' from the serialized bytes of
 -- an account transaction's header and payload.
 transactionSignHashFromBytes :: BS.ByteString -> TransactionSignHashV0
@@ -88,55 +138,6 @@ instance S.Serialize TransactionSignature where
               sigmap <- accumulateCredSigs Map.empty Nothing sigmaplen
               accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
     TransactionSignature <$> accumulateSigs Map.empty Nothing len
-
--- | Data common to all transaction types.
---
---  * @SPEC: <$DOCS/Transactions#transaction-header>
-data TransactionHeader = TransactionHeader {
-    -- |Sender account.
-    thSender :: AccountAddress,
-    -- |Account nonce.
-    thNonce :: !Nonce,
-    -- |Amount of energy dedicated for the execution of this transaction.
-    thEnergyAmount :: !Energy,
-    -- |Size of the payload in bytes.
-    thPayloadSize :: PayloadSize,
-    -- |Absolute expiration time after which transaction will not be executed
-    -- TODO In the future, transaction will not be executed but added to a block and charged NRG
-    thExpiry :: TransactionExpiryTime
-    } deriving (Show, Eq)
-
--- | The size of a serialized transaction header in bytes.
-transactionHeaderSize :: Word64
-transactionHeaderSize =
-  32 -- AccountAddress (FBS 32)
-  + 8 -- Nonce (Word64)
-  + 8 -- Energy (Word64)
-  + 4 -- PayloadSize (Word32)
-  + 8 -- TransactionExpiryTime (Word64)
-
--- | Get the size of serialized transactions header and payload in bytes.
-getTransactionHeaderPayloadSize :: TransactionHeader -> Word64
-getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
-
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
-
--- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
-instance S.Serialize TransactionHeader where
-  put TransactionHeader{..} =
-      S.put thSender <>
-      S.put thNonce <>
-      S.put thEnergyAmount <>
-      S.put thPayloadSize <>
-      S.put thExpiry
-
-  get = do
-    thSender <- S.get
-    thNonce <- S.get
-    thEnergyAmount <- S.get
-    thPayloadSize <- S.get
-    thExpiry <- S.get
-    return $! TransactionHeader{..}
 
 -- |An 'AccountTransaction' is a transaction that originates from
 -- a specific account (the sender), and is paid for by the sender.
@@ -260,7 +261,7 @@ addMetadata f time a = WithMetadata {
     wmdArrivalTime = time
   }
   where
-    bs = S.encode (f a)
+    bs = S.runPut $ putBareBlockItem (f a)
 
 fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
 fromAccountTransaction wmdArrivalTime wmdData =
@@ -330,16 +331,17 @@ instance HashableTo TransactionHash BareBlockItem where
 
 type BlockItem = WithMetadata BareBlockItem
 
-instance S.Serialize BareBlockItem  where
-  put NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
-  put CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
-  put ChainUpdate{..} = S.put UpdateInstructionKind <> S.put biUpdate
+putBareBlockItem :: S.Putter BareBlockItem
+putBareBlockItem NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
+putBareBlockItem CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
+putBareBlockItem ChainUpdate{..} = S.put UpdateInstructionKind <> putUpdateInstruction biUpdate
 
-  get = S.label "BareBlockItem" $
-    S.get >>= \case
-    AccountTransactionKind -> NormalTransaction <$> S.get
-    CredentialDeploymentKind -> CredentialDeployment <$> S.get
-    UpdateInstructionKind -> ChainUpdate <$> S.get
+getBareBlockItem :: SProtocolVersion pv -> S.Get BareBlockItem
+getBareBlockItem spv = S.label "BareBlockItem" $
+  S.get >>= \case
+  AccountTransactionKind -> NormalTransaction <$> S.get
+  CredentialDeploymentKind -> CredentialDeployment <$> S.get
+  UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
 
 -- |Datatypes which have an expiry, which here we set to mean the latest time
 -- the item can be included in a block.
@@ -416,7 +418,7 @@ putBlockItemV0 = putBareBlockItemV0 . wmdData
 
 -- |Serialize a bare block item according to the V0 format, without the metadata.
 putBareBlockItemV0 :: BareBlockItem -> S.Put
-putBareBlockItemV0 = S.put
+putBareBlockItemV0 = putBareBlockItem
 
 ---------------------------------
 -- * 'TransactionHash' functions
@@ -427,7 +429,7 @@ transactionHashFromBytes :: BS.ByteString -> TransactionHashV0
 transactionHashFromBytes = TransactionHashV0 . H.hash
 
 transactionHashFromBareBlockItem :: BareBlockItem -> TransactionHashV0
-transactionHashFromBareBlockItem = transactionHashFromBytes . S.encode
+transactionHashFromBareBlockItem = transactionHashFromBytes . S.runPut . putBareBlockItem
 
 -------------------
 -- * Serialization
@@ -435,30 +437,36 @@ transactionHashFromBareBlockItem = transactionHashFromBytes . S.encode
 
 -- |Try to parse a versioned block item, stripping the version, and
 -- reconstructing the block item metadata from the raw data.
--- The parsing format is determined by the version.
+-- The parsing format is determined by the version tag.
 --
 -- The only supported version at the moment is version 0.
 --
+-- Note, the deserialization is parametrised by the protocol version.
+-- For version 0 serialization, the protocol version will only determine __whether__ the block item
+-- can be deserialized, and not __how__ it is deserialized.
+--
 -- * @SPEC: <$DOCS/Versioning#binary-format>
 -- * @SPEC: <$DOCS/Versioning>
-getExactVersionedBlockItem :: TransactionTime
+getExactVersionedBlockItem :: SProtocolVersion spv
+                           -> TransactionTime
                            -- ^Timestamp for when the item is received, used to
                            -- construct the metadata.
                            -> S.Get BlockItem
-getExactVersionedBlockItem time = do
+getExactVersionedBlockItem spv time = do
     version <- S.get :: S.Get Version
     case version of
-      0 -> getBlockItemV0 time
+      0 -> getBlockItemV0 spv time
       _ -> fail $ "Unsupported block item version " ++ show version ++ "."
 
 -- |Get a block item according to V0 format, reconstructing metadata.
 --
 -- * @SPEC: <$DOCS/Transactions#v0-format>
 -- * @SPEC: <$DOCS/Versioning>
-getBlockItemV0 :: TransactionTime -- ^Timestamp of when the item arrived.
-             -> S.Get BlockItem
-getBlockItemV0 time = S.label "getBlockItemV0" $ do
-    (bbi, bytes) <- getWithBytes S.get
+getBlockItemV0 :: SProtocolVersion spv
+               -> TransactionTime -- ^Timestamp of when the item arrived.
+               -> S.Get BlockItem
+getBlockItemV0 spv time = S.label "getBlockItemV0" $ do
+    (bbi, bytes) <- getWithBytes $ getBareBlockItem spv
     return WithMetadata{
         wmdData = bbi,
         wmdSize = BS.length bytes,
@@ -650,6 +658,52 @@ data SpecialTransactionOutcome =
     -- |The foundation account.
     stoFoundationAccount :: !AccountAddress
   }
+  -- |Payment for a particular account.
+  | PaydayFoundationReward {
+    -- |The account that got rewarded.
+    stoFoundationAccount :: !AccountAddress,
+    -- |The transaction fee reward at payday to the account.
+    stoDevelopmentCharge :: !Amount
+  }
+  -- |Payment for a particular account.
+  | PaydayAccountReward {
+    -- |The account that got rewarded.
+    stoAccount :: !AccountAddress,
+    -- |The transaction fee reward at payday to the account.
+    stoTransactionFees :: !Amount,
+    -- |The baking reward at payday to the account.
+    stoBakerReward :: !Amount,
+    -- |The finalization reward at payday to the account.
+    stoFinalizationReward :: !Amount
+  }
+  -- |Amounts accrued to accounts for each baked block.
+  | BlockAccrueReward {
+    -- |The total fees paid for transactions in the block.
+    stoTransactionFees :: !Amount,
+    -- |The old balance of the GAS account.
+    stoOldGASAccount :: !Amount,
+    -- |The new balance of the GAS account.
+    stoNewGASAccount :: !Amount,
+    -- |The amount awarded to the baker.
+    stoBakerReward :: !Amount,
+    -- |The amount awarded to the passive delegators.
+    stoPassiveReward :: !Amount,
+    -- |The amount awarded to the foundation.
+    stoFoundationCharge :: !Amount,
+    -- |The baker of the block, who will receive the award.
+    stoBakerId :: !BakerId
+  }
+  -- |Payment distributed to a pool or passive delegators.
+  | PaydayPoolReward {
+    -- |The pool owner (passive delegators when 'Nothing').
+    stoPoolOwner :: !(Maybe BakerId),
+    -- |Accrued transaction fees for pool.
+    stoTransactionFees :: !Amount,
+    -- |Accrued baking rewards for pool.
+    stoBakerReward :: !Amount,
+    -- |Accrued finalization rewards for pool.
+    stoFinalizationReward :: !Amount
+  }
   deriving(Show, Eq)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
@@ -678,6 +732,31 @@ instance S.Serialize SpecialTransactionOutcome where
       S.put stoFoundationCharge
       S.put stoBaker
       S.put stoFoundationAccount
+    put PaydayFoundationReward{..} = do
+      S.putWord8 4
+      S.put stoFoundationAccount
+      S.put stoDevelopmentCharge
+    put PaydayAccountReward{..} = do
+      S.putWord8 5
+      S.put stoAccount
+      S.put stoTransactionFees
+      S.put stoBakerReward
+      S.put stoFinalizationReward
+    put BlockAccrueReward{..} = do
+      S.putWord8 6
+      S.put stoTransactionFees
+      S.put stoOldGASAccount
+      S.put stoNewGASAccount
+      S.put stoBakerReward
+      S.put stoPassiveReward
+      S.put stoFoundationCharge
+      S.put stoBakerId
+    put PaydayPoolReward{..} = do
+      S.putWord8 7
+      S.put stoPoolOwner
+      S.put stoTransactionFees
+      S.put stoBakerReward
+      S.put stoFinalizationReward
 
     get = S.getWord8 >>= \case
       0 -> do
@@ -703,6 +782,31 @@ instance S.Serialize SpecialTransactionOutcome where
         stoBaker <- S.get
         stoFoundationAccount <- S.get
         return BlockReward{..}
+      4 -> do
+        stoFoundationAccount <- S.get
+        stoDevelopmentCharge <- S.get
+        return PaydayFoundationReward{..}
+      5 -> do
+        stoAccount <- S.get
+        stoTransactionFees <- S.get
+        stoBakerReward <- S.get
+        stoFinalizationReward <- S.get
+        return PaydayAccountReward{..}
+      6 -> do
+        stoTransactionFees <- S.get
+        stoOldGASAccount <- S.get
+        stoNewGASAccount <- S.get
+        stoBakerReward <- S.get
+        stoPassiveReward <- S.get
+        stoFoundationCharge <- S.get
+        stoBakerId <- S.get
+        return BlockAccrueReward{..}
+      7 -> do
+        stoPoolOwner <- S.get
+        stoTransactionFees <- S.get
+        stoBakerReward <- S.get
+        stoFinalizationReward <- S.get
+        return PaydayPoolReward{..}
       _ -> fail "Invalid SpecialTransactionOutcome type"
 
 -- |Outcomes of transactions. The vector of outcomes must have the same size as the
@@ -718,16 +822,18 @@ instance Show TransactionOutcomes where
     show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
 
 -- FIXME: More consistent serialization.
-instance S.Serialize TransactionOutcomes where
-    put TransactionOutcomes{..} = do
-        S.put (Vec.toList outcomeValues)
-        S.put _outcomeSpecial
-    get = TransactionOutcomes <$> (Vec.fromList <$> S.get) <*> S.get
+putTransactionOutcomes :: S.Putter TransactionOutcomes
+putTransactionOutcomes TransactionOutcomes{..} = do
+    putListOf putTransactionSummary (Vec.toList outcomeValues)
+    S.put _outcomeSpecial
+
+getTransactionOutcomes :: SProtocolVersion pv -> S.Get TransactionOutcomes
+getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
 
 -- TODO: fix this to use an lfmb tree. Potentially change storage type to the tree in blockstate too.
 -- Does this need to be domain seperated? (Would require serialisation changes?)
 instance HashableTo TransactionOutcomesHashV0 TransactionOutcomes where
-    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.encode transactionoutcomes
+    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
 emptyTransactionOutcomes :: TransactionOutcomes
 emptyTransactionOutcomes = TransactionOutcomes Vec.empty Seq.empty
