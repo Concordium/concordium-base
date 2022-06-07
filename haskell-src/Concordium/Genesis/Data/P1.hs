@@ -4,6 +4,7 @@
 module Concordium.Genesis.Data.P1 where
 
 import Data.Serialize
+import Data.Word
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -76,6 +77,36 @@ getGenesisDataV3 =
         1 -> GDP1Regenesis <$> getRegenesisData
         _ -> fail "Unrecognised genesis data type"
 
+-- |Deserialize genesis configuration from the serialized genesis data.
+--
+-- Note that this will not consume the entire genesis data, only the initial
+-- prefix. In particular, in case of initial genesis data it will not read the
+-- genesis state.
+--
+-- The argument is the hash of the genesis data from which the configuration is
+-- to be read.
+getGenesisConfigurationV3 :: BlockHash -> Get GenesisConfiguration
+getGenesisConfigurationV3 genHash = do
+    getWord8 >>= \case
+        0 -> do
+            _gcCore <- get
+            return GenesisConfiguration{
+                _gcTag = 0,
+                _gcCurrentHash = genHash,
+                _gcFirstGenesis = genHash,
+                ..
+                }
+        1 -> do
+          _gcCore <- get
+          _gcFirstGenesis <- get
+          return GenesisConfiguration{
+            _gcTag = 1,
+            _gcCurrentHash = genHash,
+            ..
+            }
+        _ -> fail "Unrecognised genesis data type"
+
+
 -- |Serialize genesis data in the V3 format.
 putGenesisDataV3 :: Putter GenesisDataP1
 putGenesisDataV3 GDP1Initial{..} = do
@@ -127,3 +158,13 @@ genesisBlockHash GDP1Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash .
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
+
+-- |The hash of the first genesis block in the chain.
+firstGenesisBlockHash :: GenesisDataP1 -> BlockHash
+firstGenesisBlockHash GDP1Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash other@GDP1Initial{} = genesisBlockHash other
+
+-- |Tag of the genesis data used for serialization.
+genesisVariantTag :: GenesisDataP1 -> Word8
+genesisVariantTag GDP1Initial{} = 0
+genesisVariantTag GDP1Regenesis{} = 1
