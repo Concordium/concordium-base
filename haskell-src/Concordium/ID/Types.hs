@@ -296,7 +296,8 @@ instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
 
 newtype RawCredentialRegistrationID = RawCredRegId (FBS.FixedByteString RegIdSize)
-   deriving newtype (Eq, Ord, Show)
+   deriving newtype (Eq, Ord)
+   deriving Show via (FBSHex RegIdSize)
 
 toRawCredRegId :: CredentialRegistrationID -> RawCredentialRegistrationID
 toRawCredRegId = RawCredRegId . FBS.fromByteString . encode
