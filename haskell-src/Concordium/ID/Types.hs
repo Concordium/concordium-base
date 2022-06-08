@@ -298,6 +298,7 @@ instance FromJSON CredentialRegistrationID where
 newtype RawCredentialRegistrationID = RawCredRegId (FBS.FixedByteString RegIdSize)
    deriving newtype (Eq, Ord)
    deriving Show via (FBSHex RegIdSize)
+   deriving Serialize via (FBSHex RegIdSize)
 
 toRawCredRegId :: CredentialRegistrationID -> RawCredentialRegistrationID
 toRawCredRegId = RawCredRegId . FBS.fromByteString . encode
