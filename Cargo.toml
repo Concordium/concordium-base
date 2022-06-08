@@ -39,12 +39,20 @@ version = "0.4.19"
 optional = true
 version = "0.1"
 
+[dependencies.num-bigint]
+optional = true
+version = "0.4"
+
+[dependencies.num-traits]
+optional = true
+version = "0.2"
+
 [features]
 default = ["std"]
 
 std = ["fnv/std"]
 
-derive-serde = ["serde", "serde_json", "std", "base58check", "chrono"]
+derive-serde = ["serde", "serde_json", "std", "base58check", "chrono", "num-bigint", "num-traits"]
 
 fuzz = ["derive-serde", "arbitrary"]
 
