@@ -157,6 +157,10 @@ pub enum Type {
     String(SizeLength),
     ContractName(SizeLength),
     ReceiveName(SizeLength),
+    ULeb128(u32),
+    ILeb128(u32),
+    ByteList(SizeLength),
+    ByteArray(u32),
 }
 
 impl Type {
@@ -264,7 +268,7 @@ impl<K: SchemaType, V: SchemaType> SchemaType for HashMap<K, V> {
     }
 }
 impl SchemaType for [u8] {
-    fn get_type() -> Type { Type::List(SizeLength::U32, Box::new(Type::U8)) }
+    fn get_type() -> Type { Type::ByteList(SizeLength::U32) }
 }
 
 impl SchemaType for String {
@@ -520,6 +524,22 @@ impl Serial for Type {
                 out.write_u8(26)?;
                 len_size.serial(out)
             }
+            Type::ULeb128(constraint) => {
+                out.write_u8(27)?;
+                constraint.serial(out)
+            }
+            Type::ILeb128(constraint) => {
+                out.write_u8(28)?;
+                constraint.serial(out)
+            }
+            Type::ByteList(len_size) => {
+                out.write_u8(29)?;
+                len_size.serial(out)
+            }
+            Type::ByteArray(len) => {
+                out.write_u8(30)?;
+                len.serial(out)
+            }
         }
     }
 }
@@ -591,6 +611,23 @@ impl Deserial for Type {
                 let len_size = SizeLength::deserial(source)?;
                 Ok(Type::ReceiveName(len_size))
             }
+            27 => {
+                let constraint = u32::deserial(source)?;
+                Ok(Type::ULeb128(constraint))
+            }
+            28 => {
+                let constraint = u32::deserial(source)?;
+                Ok(Type::ILeb128(constraint))
+            }
+            29 => {
+                let len_size = SizeLength::deserial(source)?;
+                Ok(Type::ByteList(len_size))
+            }
+            30 => {
+                let len = u32::deserial(source)?;
+                Ok(Type::ByteArray(len))
+            }
+
             _ => Err(ParseError::default()),
         }
     }
@@ -631,6 +668,9 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
 mod impls {
     use super::*;
     use crate::constants::*;
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::Zero;
+
     impl Fields {
         pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
             use serde_json::*;
@@ -845,8 +885,67 @@ mod impls {
                     let func_name = receive_name.entrypoint_name();
                     Ok(json!({"contract": contract_name, "func": func_name}))
                 }
+                Type::ULeb128(constraint) => {
+                    let int = deserial_biguint(source, *constraint)?;
+                    Ok(Value::String(int.to_string()))
+                }
+                Type::ILeb128(constraint) => {
+                    let int = deserial_bigint(source, *constraint)?;
+                    Ok(Value::String(int.to_string()))
+                }
+                Type::ByteList(size_len) => {
+                    let len = deserial_length(source, *size_len)?;
+                    let mut string = String::new();
+                    for _ in 0..len {
+                        let byte = source.read_u8()?;
+                        string.push_str(&format!("{:02X?}", byte));
+                    }
+                    Ok(Value::String(string))
+                }
+                Type::ByteArray(len) => {
+                    let len = (*len).try_into()?;
+                    let mut string = String::new();
+
+                    for _ in 0..len {
+                        let byte = source.read_u8()?;
+                        string.push_str(&format!("{:02X?}", byte));
+                    }
+                    Ok(Value::String(string))
+                }
             }
         }
+    }
+
+    fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
+        let mut result = BigUint::zero();
+        for i in 0..constraint {
+            let byte = source.read_u8()?;
+            let value_byte = BigUint::from(byte & 0b0111_1111);
+            result += value_byte << (i * 7);
+
+            if byte & 0b1000_0000 == 0 {
+                return Ok(result);
+            }
+        }
+        Err(ParseError {})
+    }
+
+    fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
+        let mut result = BigInt::zero();
+        for i in 0..constraint {
+            let byte = source.read_u8()?;
+            let value_byte = BigInt::from(byte & 0b0111_1111);
+            let shift = i * 7;
+            result += value_byte << shift;
+
+            if byte & 0b1000_0000 == 0 {
+                if byte & 0b0100_0000 != 0 {
+                    result |= !BigInt::zero() << shift;
+                }
+                return Ok(result);
+            }
+        }
+        Err(ParseError {})
     }
 }
 
