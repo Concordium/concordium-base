@@ -20,6 +20,8 @@ import Data.Serialize
 import Data.Word
 import Data.Maybe
 import Lens.Micro.Platform
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Gen
 
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
@@ -100,6 +102,11 @@ instance IsChainParametersVersion cpv => Serialize (MintDistribution cpv) where
 
 instance IsChainParametersVersion cpv => HashableTo Hash.Hash (MintDistribution cpv) where
   getHash = Hash.hash . encode
+
+instance Arbitrary (MintDistribution 'ChainParametersV1) where
+  arbitrary = do
+    (x, y) <- arbitrary `suchThat` (\(x, y) -> isJust $ addAmountFraction x y)
+    return $ MintDistribution MintPerSlotForCPV0None x y
 
 instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
 

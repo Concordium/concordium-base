@@ -59,10 +59,10 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord, From)]
 /// Address of an account. Textual representation uses base58check encoding with
 /// version byte 1.
-pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
+pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl std::fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }

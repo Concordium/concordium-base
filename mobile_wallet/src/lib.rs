@@ -14,16 +14,18 @@ use ed25519_dalek::Signer;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use id::{account_holder, constants::AttributeKind, secret_sharing::Threshold, types::*};
+use key_derivation::{ConcordiumHdWallet, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
 use sha2::{Digest, Sha256};
 use std::{
     cmp::max,
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     convert::TryInto,
     ffi::{CStr, CString},
     io::Cursor,
+    str::FromStr,
 };
 
 use crypto_common::types::KeyPair;
@@ -766,6 +768,73 @@ fn decrypt_encrypted_amount_aux(input: &str) -> anyhow::Result<Amount> {
     )
 }
 
+fn parse_wallet_input(v: &Value) -> anyhow::Result<ConcordiumHdWallet> {
+    let seed_hex: String = try_get(v, "seed")?;
+    let seed_decoded = hex::decode(&seed_hex)?;
+    let seed: [u8; 64] = match seed_decoded.try_into() {
+        Ok(s) => s,
+        Err(_) => bail!("The provided seed {} was not 64 bytes", seed_hex),
+    };
+
+    let net: Net = try_get(v, "net")?;
+    let wallet = ConcordiumHdWallet { seed, net };
+    Ok(wallet)
+}
+
+fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(&input)?;
+    let wallet = parse_wallet_input(&v)?;
+    let identity_index = try_get(&v, "identityIndex")?;
+
+    let id_cred_sec = wallet.get_id_cred_sec(identity_index)?;
+
+    let prf_key = wallet.get_prf_key(identity_index)?;
+
+    let blinding_randomness = wallet.get_blinding_randomness(identity_index)?;
+
+    let response = json!({
+        "idCredSec": base16_encode_string(&id_cred_sec),
+        "prfKey": base16_encode_string(&prf_key),
+        "blindingRandomness": base16_encode_string(&blinding_randomness)
+    });
+    Ok(to_string(&response)?)
+}
+
+fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(&input)?;
+    let wallet = parse_wallet_input(&v)?;
+    let identity_index = try_get(&v, "identityIndex")?;
+    let account_credential_index = try_get(&v, "accountCredentialIndex")?;
+
+    let account_signing_key =
+        wallet.get_account_signing_key(identity_index, account_credential_index)?;
+    let account_signing_key_hex = hex::encode(account_signing_key);
+
+    let account_verify_key =
+        wallet.get_account_public_key(identity_index, account_credential_index)?;
+    let account_verify_key_hex = hex::encode(account_verify_key);
+
+    let mut attribute_commitment_randomness = HashMap::new();
+
+    for attribute_name in ATTRIBUTE_NAMES {
+        let attribute_tag = AttributeTag::from_str(attribute_name)?;
+        let commitment_randomness = wallet.get_attribute_commitment_randomness(
+            identity_index,
+            account_credential_index,
+            attribute_tag,
+        )?;
+        let commitment_randomness_hex = base16_encode_string(&commitment_randomness);
+        attribute_commitment_randomness.insert(attribute_tag.0, commitment_randomness_hex);
+    }
+
+    let response = json!({
+        "signKey": account_signing_key_hex,
+        "verifyKey": account_verify_key_hex,
+        "attributeCommitmentRandomness": attribute_commitment_randomness
+    });
+    Ok(to_string(&response)?)
+}
+
 /// Set the flag to 0, and return a newly allocated string containing
 /// the error message. The returned string is NUL terminated.
 ///
@@ -1014,6 +1083,34 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => generate_accounts -> generate_accounts_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => get_identity_keys_and_randomness -> get_identity_keys_and_randomness_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => get_account_keys_and_randomness -> get_account_keys_and_randomness_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///

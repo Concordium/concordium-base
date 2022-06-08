@@ -17,5 +17,7 @@ members=[
    "random_oracle",
    "bulletproofs",
    "encrypted_transfers",
-   "keygen_bls"
+   "keygen_bls",
+   "ed25519_hd_key_derivation",
+   "key_derivation"
 ]

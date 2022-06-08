@@ -225,6 +225,9 @@ import Lens.Micro.Platform
 
 import Text.Read (readMaybe)
 
+import Test.QuickCheck ( Arbitrary, choose )
+import Test.QuickCheck.Arbitrary (Arbitrary(arbitrary))
+
 -- |A value equipped with its hash.
 data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
 
@@ -303,6 +306,9 @@ instance FromJSON PartsPerHundredThousands where
     unless (v >= 0 && v <= fromIntegral hundredThousand) $ fail "Fraction out of bounds"
     return (PartsPerHundredThousands (fromIntegral v))
   parseJSON _ = fail "Expected number"
+
+instance Arbitrary PartsPerHundredThousands where
+  arbitrary = PartsPerHundredThousands <$> choose (0, hundredThousand)
 
 -- |Make a 'PartsPerHundredThousands'.
 makePartsPerHundredThousands
@@ -529,6 +535,16 @@ instance HashableTo Hash.Hash MintRate where
 
 instance Monad m => MHashableTo m Hash.Hash MintRate
 
+instance Arbitrary MintRate where
+  arbitrary = do
+    mrMantissa <- arbitrary
+    let mantissaDigits = ceiling . logBase (10 :: Double) . fromIntegral $ mrMantissa
+    -- By making the exponent no less than the number of decimal digits in the mantissa, we assure
+    -- that the mint rate value stays below 1. As per comment for the `MintRate` definition,
+    -- exponents above 29 aren't used in practice.
+    mrExponent <- choose (mantissaDigits, 29)
+    return MintRate{..}
+
 -- |Compute an amount minted at a given rate.
 -- The amount is rounded down to the nearest microGTU.
 mintAmount :: MintRate -> Amount -> Amount
@@ -537,7 +553,7 @@ mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrManti
 
 -- |A fraction in [0,1] of an 'Amount', represented as parts per 100000.
 newtype AmountFraction = AmountFraction { rfPartsPerHundredThousands :: PartsPerHundredThousands }
-  deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize)
+  deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize, Arbitrary)
 
 makeAmountFraction
    :: Word32

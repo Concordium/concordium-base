@@ -339,7 +339,11 @@ data Payload =
   }
   deriving(Eq, Show)
 
+-- Define `TransactionType`  and relevant conversion function to convert from/to `Payload`.
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
+
+-- Implement `FromJSON` and `ToJSON` instances for `TransactionType`.
+$(deriveJSON defaultOptions {AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
 
 -- NB: This serialization instance would ideally match the tags used when
 -- serializing the 'Payload'. Unfortunately in the past (at least for protocol
@@ -2144,9 +2148,7 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
-$(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
-
--- |Generate the challenge for adding a baker.
+-- | Generate the challenge for adding a baker.
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
 addBakerChallenge addr elec sign agg = "addBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
 

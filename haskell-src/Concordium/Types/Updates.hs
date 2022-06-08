@@ -46,6 +46,7 @@ module Concordium.Types.Updates where
 
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Types as AE
+import qualified Data.Aeson.Key as AE
 import Data.Aeson.Types
     ( (.:), FromJSON(..), ToJSON(..))
 import Data.Aeson.TH
@@ -57,7 +58,7 @@ import Data.Ix
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
-import Data.Text (Text, unpack)
+import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as Vec
 import Data.Word
@@ -230,7 +231,7 @@ parseAuthorizationsJSON :: forall cpv. IsChainParametersVersion cpv => AE.Value 
 parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
         asKeys <- Vec.fromList <$> v .: "keys"
         let
-            parseAS x = v .: x >>= AE.withObject (unpack x) (\o -> do
+            parseAS x = v .: x >>= AE.withObject (AE.toString x) (\o -> do
                 accessPublicKeys :: Set.Set UpdateKeyIndex <- o .: "authorizedKeys"
                 accessThreshold <- o .: "threshold"
                 when (accessThreshold > fromIntegral (Set.size accessPublicKeys) || accessThreshold < 1) $ fail "Invalid threshold"
@@ -536,9 +537,10 @@ instance AE.FromJSON ProtocolUpdate where
             puMessage <- v AE..: "message"
             puSpecificationURL <- v AE..: "specificationURL"
             puSpecificationHash <- v AE..: "specificationHash"
-            (puSpecificationAuxiliaryData, garbage) <- BS16.decode . encodeUtf8 <$> v AE..: "specificationAuxiliaryData"
-            unless (BS.null garbage) $ fail "Unable to parse \"specificationAuxiliaryData\" as Base-16"
-            return ProtocolUpdate{..}
+            res <- BS16.decode . encodeUtf8 <$> v AE..: "specificationAuxiliaryData"
+            case res of
+              Right puSpecificationAuxiliaryData -> return ProtocolUpdate {..}
+              Left _ -> fail "Unable to parse \"specificationAuxiliaryData\" as Base-16"
 
 -------------------------
 -- * Keys collection

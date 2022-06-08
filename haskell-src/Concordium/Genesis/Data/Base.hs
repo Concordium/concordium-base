@@ -5,6 +5,7 @@ module Concordium.Genesis.Data.Base where
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.Serialize
+import Data.Word
 import qualified Data.Vector as Vec
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
@@ -54,6 +55,23 @@ data CoreGenesisParameters = CoreGenesisParameters
     }
     deriving (Eq, Show)
 
+-- |Extract the core genesis parameters.
+coreGenesisParameters :: BasicGenesisData gd => gd -> CoreGenesisParameters
+coreGenesisParameters gd = CoreGenesisParameters{
+    genesisTime = gdGenesisTime gd,
+    genesisSlotDuration = gdSlotDuration gd,
+    genesisEpochLength = gdEpochLength gd,
+    genesisFinalizationParameters = gdFinalizationParameters gd,
+    genesisMaxBlockEnergy = gdMaxBlockEnergy gd
+    }
+
+instance BasicGenesisData CoreGenesisParameters where
+  gdGenesisTime = genesisTime
+  gdSlotDuration = genesisSlotDuration
+  gdMaxBlockEnergy = genesisMaxBlockEnergy
+  gdFinalizationParameters = genesisFinalizationParameters
+  gdEpochLength = genesisEpochLength
+
 instance Serialize CoreGenesisParameters where
     put CoreGenesisParameters{..} = do
         put genesisTime
@@ -68,6 +86,40 @@ instance Serialize CoreGenesisParameters where
         genesisMaxBlockEnergy <- get
         genesisFinalizationParameters <- getFinalizationParametersGD3
         return CoreGenesisParameters{..}
+
+-- |Information about the genesis block of the chain. This is not the full
+-- genesis block. It does not include the genesis state. Instead, it is the
+-- minimal information needed by a running consensus.
+--
+-- The intention is that this structured can always be deserialized from a
+-- serialized @GenesisData@ provided the hash of the genesis data is known.
+data GenesisConfiguration = GenesisConfiguration {
+  -- |The tag used when deserializing genesis data. This determines the variant
+  -- of the genesis data that is to be deserialized. The allowed values depend
+  -- on the protocol version. For each protocol there is a function
+  -- 'genesisVariantTag' that determines the allowed values for this tag.
+  _gcTag :: !Word8,
+  -- |Genesis parameters.
+  _gcCore :: !CoreGenesisParameters,
+  -- |Hash of the genesis block of the chain. This is carried over on protocol
+  -- updates.
+  _gcFirstGenesis :: !BlockHash,
+  -- |Hash of the current genesis block. Each protocol update introduces a new
+  -- genesis block.
+  _gcCurrentHash :: !BlockHash
+  } deriving (Eq, Show)
+
+instance BasicGenesisData GenesisConfiguration where
+  gdGenesisTime = gdGenesisTime . _gcCore
+  gdSlotDuration = gdSlotDuration . _gcCore
+  gdMaxBlockEnergy = gdMaxBlockEnergy . _gcCore
+  gdFinalizationParameters = gdFinalizationParameters . _gcCore
+  gdEpochLength = gdEpochLength . _gcCore
+
+-- |Serialize genesis configuration. This is done in such a way that
+-- 'getGenesisConfiguration' can parse it.
+putGenesisConfiguration :: Putter GenesisConfiguration
+putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> put _gcFirstGenesis <> put _gcCurrentHash
 
 -- | Data in the "regenesis" block, which is the first block of the chain after
 -- the protocol update takes effect.

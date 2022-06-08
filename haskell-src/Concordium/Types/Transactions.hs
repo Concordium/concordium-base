@@ -36,6 +36,56 @@ import Concordium.Types.Updates
 
 -- * Account transactions
 
+-- | Data common to all transaction types.
+--
+--  * @SPEC: <$DOCS/Transactions#transaction-header>
+data TransactionHeader = TransactionHeader
+  { -- | Sender account.
+    thSender :: AccountAddress,
+    -- | Account nonce.
+    thNonce :: !Nonce,
+    -- | Amount of energy dedicated for the execution of this transaction.
+    thEnergyAmount :: !Energy,
+    -- | Size of the payload in bytes.
+    thPayloadSize :: PayloadSize,
+    -- | Absolute expiration time after which transaction will not be executed
+    thExpiry :: TransactionExpiryTime
+  }
+  deriving (Show, Eq)
+
+-- | The size of a serialized transaction header in bytes.
+transactionHeaderSize :: Word64
+transactionHeaderSize =
+  32 -- AccountAddress (FBS 32)
+    + 8 -- Nonce (Word64)
+    + 8 -- Energy (Word64)
+    + 4 -- PayloadSize (Word32)
+    + 8 -- TransactionExpiryTime (Word64)
+
+-- | Get the size of serialized transactions header and payload in bytes.
+getTransactionHeaderPayloadSize :: TransactionHeader -> Word64
+getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
+
+$(deriveJSON defaultOptions {fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
+
+-- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
+
+instance S.Serialize TransactionHeader where
+  put TransactionHeader {..} =
+    S.put thSender
+      <> S.put thNonce
+      <> S.put thEnergyAmount
+      <> S.put thPayloadSize
+      <> S.put thExpiry
+
+  get = do
+    thSender <- S.get
+    thNonce <- S.get
+    thEnergyAmount <- S.get
+    thPayloadSize <- S.get
+    thExpiry <- S.get
+    return $! TransactionHeader {..}
+
 -- |Construct a 'TransactionSignHash' from the serialized bytes of
 -- an account transaction's header and payload.
 transactionSignHashFromBytes :: BS.ByteString -> TransactionSignHashV0
@@ -88,54 +138,6 @@ instance S.Serialize TransactionSignature where
               sigmap <- accumulateCredSigs Map.empty Nothing sigmaplen
               accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
     TransactionSignature <$> accumulateSigs Map.empty Nothing len
-
--- | Data common to all transaction types.
---
---  * @SPEC: <$DOCS/Transactions#transaction-header>
-data TransactionHeader = TransactionHeader {
-    -- |Sender account.
-    thSender :: AccountAddress,
-    -- |Account nonce.
-    thNonce :: !Nonce,
-    -- |Amount of energy dedicated for the execution of this transaction.
-    thEnergyAmount :: !Energy,
-    -- |Size of the payload in bytes.
-    thPayloadSize :: PayloadSize,
-    -- |Absolute expiration time after which transaction will not be executed
-    thExpiry :: TransactionExpiryTime
-    } deriving (Show, Eq)
-
--- | The size of a serialized transaction header in bytes.
-transactionHeaderSize :: Word64
-transactionHeaderSize =
-  32 -- AccountAddress (FBS 32)
-  + 8 -- Nonce (Word64)
-  + 8 -- Energy (Word64)
-  + 4 -- PayloadSize (Word32)
-  + 8 -- TransactionExpiryTime (Word64)
-
--- | Get the size of serialized transactions header and payload in bytes.
-getTransactionHeaderPayloadSize :: TransactionHeader -> Word64
-getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
-
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
-
--- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
-instance S.Serialize TransactionHeader where
-  put TransactionHeader{..} =
-      S.put thSender <>
-      S.put thNonce <>
-      S.put thEnergyAmount <>
-      S.put thPayloadSize <>
-      S.put thExpiry
-
-  get = do
-    thSender <- S.get
-    thNonce <- S.get
-    thEnergyAmount <- S.get
-    thPayloadSize <- S.get
-    thExpiry <- S.get
-    return $! TransactionHeader{..}
 
 -- |An 'AccountTransaction' is a transaction that originates from
 -- a specific account (the sender), and is paid for by the sender.

@@ -121,7 +121,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
 
     let (cmm_sc, cmm_sc_rand) = sc_ck.commit(&id_cred_sec, &mut csprng);
-    let cmm_sc_rand = cmm_sc_rand;
     // We now construct all the zero-knowledge proofs.
     // Since all proofs must be bound together, we
     // first construct inputs to all the proofs, and only at the end
@@ -159,7 +158,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         h: context.ip_info.ip_verify_key.g,
     };
     let (cmm_prf, rand_cmm_prf) = commitment_key_prf.commit(prf_key, &mut csprng);
-    let rand_cmm_prf = rand_cmm_prf;
     let snd_cmm_prf = cmm_prf_sharing_coeff.first()?;
     let rand_snd_cmm_prf = cmm_coeff_randomness.first()?.clone();
 

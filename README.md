@@ -11,6 +11,7 @@ and development.
 ### [haskell-src](./haskell-src)
 
 Contains the Haskell package `concordium-base` which contains
+
 - foreign imports of rust libraries that are needed in the rest of the project
 - basic type definitions, e.g., account address, block hash, with serializations
   and basic functionality. These are used consistently throughout the rest of
