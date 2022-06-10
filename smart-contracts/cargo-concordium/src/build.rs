@@ -25,7 +25,7 @@ fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", 
 
 pub enum ModuleSchema {
     V0(schema::ModuleV0),
-    V1(schema::ModuleV1),
+    Versioned(schema::VersionedModule),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,17 +82,18 @@ pub fn build_contract(
         }
         utils::WasmVersion::V1 => {
             if build_schema.build() {
-                let schema = build_contract_schema(cargo_args, utils::generate_contract_schema_v1)
-                    .context("Could not build module schema.")?;
+                let schema =
+                    build_contract_schema(cargo_args, utils::generate_contract_schema_versioned_v0)
+                        .context("Could not build module schema.")?;
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
-                        name:     "concordium-schema-v2".into(),
+                        name:     "concordium-schema".into(),
                         contents: &schema_bytes,
                     };
-                    Some((Some(custom_section), ModuleSchema::V1(schema)))
+                    Some((Some(custom_section), ModuleSchema::Versioned(schema)))
                 } else {
-                    Some((None, ModuleSchema::V1(schema)))
+                    Some((None, ModuleSchema::Versioned(schema)))
                 }
             } else {
                 None

@@ -1,5 +1,7 @@
-use anyhow::*;
+use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{schema::*, *};
+use num_bigint::{BigInt, BigUint};
+use num_traits::{ToPrimitive, Zero};
 use serde_json::Value;
 use std::convert::TryInto;
 
@@ -327,7 +329,84 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON String required")
             }
         }
+        Type::ULeb128(constraint) => {
+            if let Value::String(string) = json {
+                let biguint = string.parse().context("Could not parse integer.")?;
+                serial_biguint(biguint, *constraint, out).map_err(|_| anyhow!("Failed writing"))
+            } else {
+                bail!("JSON String required")
+            }
+        }
+        Type::ILeb128(constraint) => {
+            if let Value::String(string) = json {
+                let bigint = string.parse().context("Could not parse integer.")?;
+                serial_bigint(bigint, *constraint, out).map_err(|_| anyhow!("Failed writing"))
+            } else {
+                bail!("JSON String required")
+            }
+        }
+        Type::ByteList(size_len) => {
+            if let Value::String(string) = json {
+                let bytes = hex::decode(string).context("Failed to parse hex")?;
+                let len = bytes.len();
+                write_bytes_for_length_of_size(len, size_len, out)?;
+                for value in bytes {
+                    serial!(value, out)?
+                }
+                Ok(())
+            } else {
+                bail!("JSON String required")
+            }
+        }
+        Type::ByteArray(len) => {
+            if let Value::String(string) = json {
+                let bytes = hex::decode(string).context("Failed to parse hex")?;
+                ensure!(*len == bytes.len() as u32, "Mismatching number of bytes");
+                for value in bytes {
+                    serial!(value, out)?;
+                }
+                Ok(())
+            } else {
+                bail!("JSON String required")
+            }
+        }
     }
+}
+
+fn serial_biguint<W: Write>(bigint: BigUint, constraint: u32, out: &mut W) -> Result<(), W::Err> {
+    let mut value = bigint;
+    for _ in 0..constraint {
+        let mut byte = (value.clone() % BigUint::from(128u8)).to_u8().unwrap(); // Safe to unwrap since we have truncated
+        value >>= 7;
+        if !value.is_zero() {
+            byte |= 0b1000_0000;
+        }
+        out.write_u8(byte)?;
+
+        if value.is_zero() {
+            return Ok(());
+        }
+    }
+    Err(W::Err::default())
+}
+
+fn serial_bigint<W: Write>(bigint: BigInt, constraint: u32, out: &mut W) -> Result<(), W::Err> {
+    let mut value = bigint;
+    for _ in 0..constraint {
+        let mut byte = (value.clone() % BigInt::from(128u8)).to_u8().unwrap(); // Safe to unwrap since we have truncated
+        value >>= 7;
+
+        if (value.is_zero() && (byte & 0b0100_0000) == 0)
+            || (value == BigInt::from(-1) && (byte & 0b0100_0000) != 0)
+        {
+            out.write_u8(byte)?;
+            return Ok(());
+        }
+
+        byte |= 0b1000_0000;
+        out.write_u8(byte)?;
+    }
+    Err(W::Err::default())
 }
 
 fn write_bytes_from_json_schema_fields<W: Write>(

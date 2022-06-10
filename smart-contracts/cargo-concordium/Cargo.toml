@@ -18,6 +18,8 @@ anyhow = "1.0.33"
 ansi_term = "0.12"
 ptree = "0.4"
 strsim = "0.10"
+num-bigint = "0.4.3"
+num-traits = "0.2.15"
 
 [features]
 

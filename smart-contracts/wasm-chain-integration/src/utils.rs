@@ -2,7 +2,7 @@
 
 use crate::ExecResult;
 use anyhow::{anyhow, bail, ensure, Context};
-use concordium_contracts_common::{schema, Cursor, Deserial, Get};
+use concordium_contracts_common::{from_bytes, schema, Cursor, Deserial, Get};
 use std::{collections::BTreeMap, default::Default};
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
@@ -250,8 +250,10 @@ pub fn generate_contract_schema_v0(module_bytes: &[u8]) -> ExecResult<schema::Mo
 }
 
 /// Tries to generate schemas for parameters and return values of methods for a
-/// V1 contract.
-pub fn generate_contract_schema_v1(module_bytes: &[u8]) -> ExecResult<schema::ModuleV1> {
+/// versioned module v0.
+pub fn generate_contract_schema_versioned_v0(
+    module_bytes: &[u8],
+) -> ExecResult<schema::VersionedModule> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
@@ -285,9 +287,9 @@ pub fn generate_contract_schema_v1(module_bytes: &[u8]) -> ExecResult<schema::Mo
         }
     }
 
-    Ok(schema::ModuleV1 {
+    Ok(schema::VersionedModule::V0(schema::ModuleV1 {
         contracts: contract_schemas,
-    })
+    }))
 }
 
 /// Runs the given schema function and reads the resulting function schema from
@@ -367,17 +369,30 @@ pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::ModuleV0> {
 }
 
 /// Get the embedded schema if it exists
-pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::ModuleV1> {
+/// It will attempt to use the schema in the custom section "concordium-schema"
+/// and if this is not present it will try to use the custom section
+/// "concordium-schema-v2".
+pub fn get_embedded_schema_versioned(bytes: &[u8]) -> ExecResult<schema::VersionedModule> {
     let skeleton = parse_skeleton(bytes)?;
-    let mut schema_sections = Vec::new();
+    let mut schema_v2_section = None;
+    let mut schema_versioned_section = None;
     for ucs in skeleton.custom.iter() {
         let cs = parse_custom(ucs)?;
-        if cs.name.as_ref() == "concordium-schema-v2" {
-            schema_sections.push(cs)
+        if cs.name.as_ref() == "concordium-schema" && schema_versioned_section.is_none() {
+            schema_versioned_section = Some(cs)
+        } else if cs.name.as_ref() == "concordium-schema-v2" && schema_v2_section.is_none() {
+            schema_v2_section = Some(cs)
         }
     }
-    let section =
-        schema_sections.first().ok_or_else(|| anyhow!("No schema found in the module"))?;
-    let source = &mut Cursor::new(section.contents);
-    source.get().map_err(|_| anyhow!("Failed parsing schema"))
+
+    if let Some(cs) = schema_versioned_section {
+        let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+        return Ok(module);
+    }
+    if let Some(cs) = schema_v2_section {
+        let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+        Ok(schema::VersionedModule::V0(module))
+    } else {
+        bail!("No schema found in the module")
+    }
 }

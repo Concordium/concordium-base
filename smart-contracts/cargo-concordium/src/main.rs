@@ -7,7 +7,7 @@ use anyhow::{bail, ensure, Context};
 use clap::AppSettings;
 use concordium_contracts_common::{
     from_bytes,
-    schema::{Function, Type},
+    schema::{Function, Type, VersionedModule},
     to_bytes, Amount, OwnedReceiveName, Parameter, ReceiveName,
 };
 use ptree::{print_tree_with, PrintConfig, TreeBuilder};
@@ -134,10 +134,20 @@ struct Runner {
     #[structopt(
         name = "schema",
         long = "schema",
+        conflicts_with = "schema-v1",
         help = "Path to a file with a schema for parsing parameter or state (only for V0 \
                 contracts) in JSON."
     )]
     schema_path:         Option<PathBuf>,
+    #[structopt(
+        name = "schema-v1",
+        long = "schema-v1",
+        conflicts_with = "schema",
+        help = "Path to a file with a schema V1 file for parsing parameter or state (only for V0 \
+                contracts) in JSON. This is only needed if supplying an older version of the \
+                schema."
+    )]
+    schema_v1_path:      Option<PathBuf>,
     #[structopt(
         name = "parameter-bin",
         long = "parameter-bin",
@@ -334,12 +344,18 @@ pub fn main() -> anyhow::Result<()> {
                         }
                         to_bytes(module_schema)
                     }
-                    ModuleSchema::V1(module_schema) => {
+                    ModuleSchema::Versioned(versioned_module_schema) => {
                         eprintln!("\n   Module schema includes:");
-                        for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                            print_contract_schema_v1(contract_name, contract_schema);
+                        match versioned_module_schema {
+                            VersionedModule::V0(module_schema) => {
+                                for (contract_name, contract_schema) in
+                                    module_schema.contracts.iter()
+                                {
+                                    print_contract_schema_v1(contract_name, contract_schema);
+                                }
+                                to_bytes(module_schema)
+                            }
                         }
-                        to_bytes(module_schema)
                     }
                 };
                 eprintln!(
@@ -768,28 +784,39 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     };
 
     // get the module schema if available.
-    let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
-        let bytes = fs::read(schema_path).context("Could not read schema file.")?;
-        let schema = from_bytes(&bytes)
-            .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
-        Some(schema)
-    } else {
-        let res = utils::get_embedded_schema_v1(module);
-        if let Err(err) = &res {
-            eprintln!(
-                "{}",
-                WARNING_STYLE.paint(format!(
-                    "Could not use embedded schema: {}.\nPlease provide a path to a valid schema.",
-                    err
-                ))
-            );
+    let module_schema_opt = match (&runner.schema_path, &runner.schema_v1_path) {
+        (Some(schema_path), _) => {
+            let bytes = fs::read(schema_path).context("Could not read schema file.")?;
+            let schema = from_bytes(&bytes)
+                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
+            Some(schema)
         }
-        res.ok()
+        (_, Some(schema_v1_path)) => {
+            let bytes = fs::read(schema_v1_path).context("Could not read schema file.")?;
+            let schema = from_bytes(&bytes)
+                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
+            Some(VersionedModule::V0(schema))
+        }
+        _ => {
+            let res = utils::get_embedded_schema_versioned(module);
+            if let Err(err) = &res {
+                eprintln!(
+                    "{}",
+                    WARNING_STYLE.paint(format!(
+                        "Could not use embedded schema: {}.\nPlease provide a path to
+    a valid schema.",
+                        err
+                    ))
+                );
+            }
+            res.ok()
+        }
     };
 
-    let contract_schema_opt = module_schema_opt
-        .as_ref()
-        .and_then(|module_schema| module_schema.contracts.get(contract_name));
+    let contract_schema_opt = module_schema_opt.as_ref().and_then(|versioned_module| {
+        let VersionedModule::V0(module_schema) = versioned_module;
+        module_schema.contracts.get(contract_name)
+    });
     let contract_schema_func_opt = contract_schema_opt.and_then(|contract_schema| {
         if let Some(func) = is_receive {
             contract_schema.receive.get(func)
