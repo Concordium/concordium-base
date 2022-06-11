@@ -159,15 +159,6 @@ data AccountInformation = AccountInformation {
   aiThreshold :: !AccountThreshold 
 } deriving(Eq, Show, Ord)
 
--- |The information about an account's credentials necessary for verifying the signature(s) on
--- a transaction. Namely, the account threshold, and for each credential, its threshold and
--- public keys.
-data LoadedAccountInformation = LoadedAccountInformation {
-  laiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
-  laiThreshold :: !AccountThreshold,
-  laiCredIds :: ![RawCredentialRegistrationID]
-} deriving(Eq, Show, Ord)
-
 -- |SHA256 hashing instance for `AccountInformation`
 -- Security considerations: It is crucial to use a cryptographic secure hash instance for `AccountInformation`.
 -- The caller must be able to use the resulting hash in security critical application code.
@@ -920,7 +911,9 @@ instance Serialize AccountCredentialWithProofs where
     1 -> NormalACWP <$> get
     _ -> fail "Unsupported credential type."
 
--- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed and commitments kept.
+-- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed and
+-- commitments kept. The type parameter @credTy@ determines the representation
+-- of credential registration IDs.
 data AccountCredential' credTy =
   InitialAC (InitialCredentialDeploymentValues' credTy)
   | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
@@ -932,10 +925,16 @@ unsafeCredIdFromRaw (RawCredentialRegistrationID fbs) =
     Left _ -> error "Precondition violation. Invalid registration ID."
     Right v -> v
 
+-- |Account credentials with a fully deserialized and checked credential registration ID.
 type AccountCredential = AccountCredential' CredentialRegistrationID
 
+-- |Account credentials with a 'RawCredentialRegistrationID'. This has a
+-- slightly smaller memory footprint and is substantially quicker to
+-- deserialize.
 type AccountCredentialRaw = AccountCredential' RawCredentialRegistrationID
 
+-- |Convert an account credential to a raw one. This is a relatively expensive
+-- function so should be used with care.
 toRawAccountCredential :: AccountCredential -> AccountCredentialRaw
 toRawAccountCredential = fmap toRawCredRegId
 
