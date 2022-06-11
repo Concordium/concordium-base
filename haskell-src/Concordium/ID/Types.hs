@@ -119,7 +119,7 @@ addressFromRegId :: CredentialRegistrationID -> AccountAddress
 addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
   where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode fbs)
 
-addressFromRegIdRaw :: CredentialRegistrationIDRaw -> AccountAddress
+addressFromRegIdRaw :: RawCredentialRegistrationID -> AccountAddress
 addressFromRegIdRaw regIdRaw = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
   where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode regIdRaw)
 
@@ -165,7 +165,7 @@ data AccountInformation = AccountInformation {
 data LoadedAccountInformation = LoadedAccountInformation {
   laiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
   laiThreshold :: !AccountThreshold,
-  laiCredIds :: ![CredentialRegistrationIDRaw]
+  laiCredIds :: ![RawCredentialRegistrationID]
 } deriving(Eq, Show, Ord)
 
 -- |SHA256 hashing instance for `AccountInformation`
@@ -341,6 +341,13 @@ instance Ord CredentialRegistrationID where
 -- This is duplicated from ElgamalPublicKey for better error messages.
 instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
+
+newtype RawCredentialRegistrationID = RawCredentialRegistrationID (FBS.FixedByteString RegIdSize)
+   deriving newtype (Eq, Ord)
+   deriving (Show, Serialize, FromJSON, ToJSON) via (FBSHex RegIdSize)
+
+toRawCredRegId :: CredentialRegistrationID -> RawCredentialRegistrationID
+toRawCredRegId = RawCredentialRegistrationID . FBS.fromByteString . encode
 
 newtype Proofs = Proofs ShortByteString
     deriving(Eq)
@@ -668,7 +675,7 @@ data CredentialDeploymentValues' credTy = CredentialDeploymentValues {
 } deriving(Eq, Show, Functor)
 
 type CredentialDeploymentValues = CredentialDeploymentValues' CredentialRegistrationID
-type CredentialDeploymentValuesRaw = CredentialDeploymentValues' CredentialRegistrationIDRaw
+type CredentialDeploymentValuesRaw = CredentialDeploymentValues' RawCredentialRegistrationID
 
 credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
 credentialAccountAddress cdv = addressFromRegId (cdvCredId cdv)
@@ -919,25 +926,18 @@ data AccountCredential' credTy =
   | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
   deriving(Eq, Show, Functor)
 
-newtype CredentialRegistrationIDRaw = CredentialRegistrationIDRaw (FBS.FixedByteString RegIdSize)
-    deriving(Eq, Ord)
-    deriving (Show, Serialize, FromJSON, ToJSON) via FBSHex RegIdSize
-
-unsafeCredIdFromRaw :: CredentialRegistrationIDRaw -> CredentialRegistrationID
-unsafeCredIdFromRaw (CredentialRegistrationIDRaw fbs) =
+unsafeCredIdFromRaw :: RawCredentialRegistrationID -> CredentialRegistrationID
+unsafeCredIdFromRaw (RawCredentialRegistrationID fbs) =
   case decode (FBS.toByteString fbs) of
     Left _ -> error "Precondition violation. Invalid registration ID."
     Right v -> v
 
-toRawCredId :: CredentialRegistrationID -> CredentialRegistrationIDRaw
-toRawCredId = CredentialRegistrationIDRaw . FBS.fromByteString . encode
-
 type AccountCredential = AccountCredential' CredentialRegistrationID
 
-type AccountCredentialRaw = AccountCredential' CredentialRegistrationIDRaw
+type AccountCredentialRaw = AccountCredential' RawCredentialRegistrationID
 
 toRawAccountCredential :: AccountCredential -> AccountCredentialRaw
-toRawAccountCredential = fmap toRawCredId
+toRawAccountCredential = fmap toRawCredRegId
 
 data CredentialType = Initial | Normal
     deriving(Eq, Show)

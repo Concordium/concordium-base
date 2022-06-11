@@ -534,8 +534,13 @@ instance FromJSON LeverageFactor where
     return $ LeverageFactor r
 
 -- |Apply a leverage factor to a capital amount.
+-- If the computed amount would be larger than the maximum amount, this returns 'maxBound'.
 applyLeverageFactor :: LeverageFactor -> Amount -> Amount
-applyLeverageFactor leverage (Amount amt) = Amount (truncate (theLeverageFactor leverage * (amt % 1)))
+applyLeverageFactor (LeverageFactor leverage) (Amount amt)
+  | preAmount > toInteger (maxBound :: Amount) = maxBound
+  | otherwise = fromInteger preAmount
+  where
+    preAmount = (toInteger (numerator leverage) * toInteger amt) `div` toInteger (denominator leverage)
 
 -- |A bound on the relative share of the total staked capital that a baker can have as its stake.
 -- This is required to be greater than 0.

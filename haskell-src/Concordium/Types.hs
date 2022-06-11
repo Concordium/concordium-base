@@ -628,7 +628,7 @@ newtype VoterPower = VoterPower AmountUnit
 -- |The identifier associated with an account.
 data AccountIdentifier =
   -- |Given credential registration id as an identifier.
-  CredRegID !CredentialRegistrationIDRaw
+  CredRegID !RawCredentialRegistrationID
   -- |Given address as an identifier. Multiple addresses may refer to the same account.
   | AccAddress !AccountAddress
   -- |Given index as an identifier.
