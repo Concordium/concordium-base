@@ -304,23 +304,23 @@ instance FBS.FixedLength AccountEncryptionKeySize where
 -- relevant elliptic curve. As a result, this can only be used when the input is
 -- either trusted to be well-formed, or when checks will be done on it before
 -- the value is needed as an encryption key.
-newtype AccountEncryptionKeyRaw = AccountEncryptionKeyRaw (FBS.FixedByteString AccountEncryptionKeySize)
+newtype RawAccountEncryptionKey = RawAccountEncryptionKey (FBS.FixedByteString AccountEncryptionKeySize)
     deriving(Eq, Ord)
     deriving (Show, Serialize, FromJSON, ToJSON) via FBSHex AccountEncryptionKeySize
 
 -- |Reconstruct the account encryption key from the raw representation. This
 -- function is unsafe and will raise an exception if the input is not a valid
 -- account encryption key.
-unsafeEncryptionKeyFromRaw :: AccountEncryptionKeyRaw -> AccountEncryptionKey
-unsafeEncryptionKeyFromRaw (AccountEncryptionKeyRaw fbs) =
+unsafeEncryptionKeyFromRaw :: RawAccountEncryptionKey -> AccountEncryptionKey
+unsafeEncryptionKeyFromRaw (RawAccountEncryptionKey fbs) =
   case decode (FBS.toByteString fbs) of
     Left _ -> error "Precondition violation. Invalid encryption key."
     Right v -> v
 
 -- |Convert the encryption key to the raw one. This is relatively expensive
 -- since it involves constructing a canonical representation of the key.
-toRawEncryptionKey :: AccountEncryptionKey -> AccountEncryptionKeyRaw
-toRawEncryptionKey = AccountEncryptionKeyRaw . FBS.fromByteString . encode
+toRawEncryptionKey :: AccountEncryptionKey -> RawAccountEncryptionKey
+toRawEncryptionKey = RawAccountEncryptionKey . FBS.fromByteString . encode
 
 makeEncryptionKey :: GlobalContext -> CredentialRegistrationID -> AccountEncryptionKey
 makeEncryptionKey gc (RegIdCred ge) = AccountEncryptionKey (deriveElgamalPublicKey gc ge)
