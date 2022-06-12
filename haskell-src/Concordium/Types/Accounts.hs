@@ -597,7 +597,7 @@ data AccountInfo = AccountInfo
       aiAccountReleaseSchedule :: !AccountReleaseSummary,
       -- |The credentials on the account. This map must always contain a
       -- credential at credential index 0.
-      aiAccountCredentials :: !(Map.Map CredentialIndex (Versioned AccountCredentialRaw)),
+      aiAccountCredentials :: !(Map.Map CredentialIndex (Versioned RawAccountCredential)),
       -- |Number of credentials required to sign a valid transaction
       aiAccountThreshold :: !AccountThreshold,
       -- |The encrypted amount on the account

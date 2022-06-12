@@ -931,11 +931,11 @@ type AccountCredential = AccountCredential' CredentialRegistrationID
 -- |Account credentials with a 'RawCredentialRegistrationID'. This has a
 -- slightly smaller memory footprint and is substantially quicker to
 -- deserialize.
-type AccountCredentialRaw = AccountCredential' RawCredentialRegistrationID
+type RawAccountCredential = AccountCredential' RawCredentialRegistrationID
 
 -- |Convert an account credential to a raw one. This is a relatively expensive
 -- function so should be used with care.
-toRawAccountCredential :: AccountCredential -> AccountCredentialRaw
+toRawAccountCredential :: AccountCredential -> RawAccountCredential
 toRawAccountCredential = fmap toRawCredRegId
 
 data CredentialType = Initial | Normal
