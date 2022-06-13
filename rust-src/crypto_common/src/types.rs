@@ -151,7 +151,7 @@ impl Amount {
 }
 
 impl schemars::JsonSchema for Amount {
-    fn schema_name() -> String { "CCD Amount".into() }
+    fn schema_name() -> String { "CCDAmount".into() }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         use schemars::schema::*;
