@@ -650,6 +650,9 @@ instance Serialize CredentialAccount where
         return $! NewAccount keys threshold
       _ -> fail "Input must be either a new account with a list of keys and threshold."
 
+-- |Values, as opposed to proofs, contained in a credential deployment. The type
+-- parameter @credTy@ determines the representation of credential registration
+-- IDs.
 data CredentialDeploymentValues' credTy = CredentialDeploymentValues {
   -- |Either an address of an existing account, or the list of keys the newly
   -- created account should have, together with a threshold for how many are needed
