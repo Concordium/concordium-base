@@ -287,6 +287,8 @@ newtype AccountEncryptionKey = AccountEncryptionKey {_elgamalPublicKey :: Elgama
 data AccountEncryptionKeySize
 
 instance FBS.FixedLength AccountEncryptionKeySize where
+  -- a group element is encoded as 48 bytes (BLS-G1 element), and an encryption
+  -- key is a pair of two
   fixedLength _ = 2 * 48
 
 -- |A byte representation of the account encryption key. This is both smaller
@@ -301,7 +303,8 @@ newtype RawAccountEncryptionKey = RawAccountEncryptionKey (FBS.FixedByteString A
 
 -- |Reconstruct the account encryption key from the raw representation. This
 -- function is unsafe and will raise an exception if the input is not a valid
--- account encryption key.
+-- account encryption key. Hence it should only be used on inputs that are known
+-- to be well-formed because of their provenance.
 unsafeEncryptionKeyFromRaw :: RawAccountEncryptionKey -> AccountEncryptionKey
 unsafeEncryptionKeyFromRaw (RawAccountEncryptionKey fbs) =
   case decode (FBS.toByteString fbs) of
@@ -802,14 +805,15 @@ instance Serialize InitialCredentialAccount where
     return InitialCredentialAccount{..}
 
 -- |The data for the initial account creation. This is submitted by the identity
--- provider on behalf of the account holder.
-data InitialCredentialDeploymentValues' ty = InitialCredentialDeploymentValues {
+-- provider on behalf of the account holder. The type parameter @credTy@
+-- determines the representation of credential registration IDs.
+data InitialCredentialDeploymentValues' credTy = InitialCredentialDeploymentValues {
   -- |List of keys the new account should have, together with a threshold
   -- for how many are needed. Its address is derived from the registration
   -- id of this credential.
   icdvAccount :: !CredentialPublicKeys,
   -- |Registration id of __this__ credential.
-  icdvRegId :: !ty,
+  icdvRegId :: !credTy,
   -- |Identity of the identity provider who signed this account creation
   icdvIpId :: !IdentityProviderIdentity,
   -- |Policy.
