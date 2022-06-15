@@ -45,6 +45,13 @@ pub struct ModuleV1 {
     pub contracts: BTreeMap<String, ContractV1>,
 }
 
+/// Contains all the contract schemas for a module newer than V1 module.
+#[derive(Debug, Clone)]
+pub enum VersionedModule {
+    /// Schema module version 0
+    V0(ModuleV1),
+}
+
 /// Describes all the schemas of a V0 smart contract.
 /// The [Default] instance produces an empty schema.
 #[derive(Debug, Default, Clone)]
@@ -173,6 +180,7 @@ impl Type {
             Type::Set(_, ty) => Type::Set(size_len, ty),
             Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
             Type::String(_) => Type::String(size_len),
+            Type::ByteList(_) => Type::ByteList(size_len),
             t => t,
         }
     }
@@ -332,6 +340,18 @@ impl Serial for ModuleV1 {
     }
 }
 
+impl Serial for VersionedModule {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            VersionedModule::V0(module) => {
+                out.write_u8(0)?;
+                module.serial(out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Deserial for ModuleV0 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
@@ -349,6 +369,19 @@ impl Deserial for ModuleV1 {
         Ok(ModuleV1 {
             contracts,
         })
+    }
+}
+
+impl Deserial for VersionedModule {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let version: u8 = source.get()?;
+        match version {
+            0 => {
+                let module = source.get()?;
+                Ok(VersionedModule::V0(module))
+            }
+            _ => Err(ParseError {}),
+        }
     }
 }
 
