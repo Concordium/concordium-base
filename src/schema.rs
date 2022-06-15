@@ -48,7 +48,7 @@ pub struct ModuleV1 {
 /// Contains all the contract schemas for a module newer than V1 module.
 #[derive(Debug, Clone)]
 pub enum VersionedModule {
-    /// Schema module version 0
+    /// Versioned schema module version 0
     V0(ModuleV1),
 }
 
