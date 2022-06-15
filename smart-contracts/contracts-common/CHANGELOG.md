@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+- Extend schema type with ULeb128, ILeb128, ByteList and ByteArray.
+- Add new schema module which include the versioning in the serialization.
+- Change SchemaType implementation for byte arrays.
+
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 
 - Introduce Entrypoint and Parameter types, and their owned versions.
