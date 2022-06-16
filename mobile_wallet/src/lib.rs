@@ -11,9 +11,16 @@ use crypto_common::{
 use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Signer;
+use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
-use id::{account_holder, constants::AttributeKind, secret_sharing::Threshold, types::*};
+use id::{
+    account_holder,
+    constants::AttributeKind,
+    pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
+    secret_sharing::Threshold,
+    types::*,
+};
 use key_derivation::{ConcordiumHdWallet, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
@@ -47,6 +54,27 @@ pub struct BakerKeys {
     pub aggregation_verify_key: aggregate_sig::PublicKey<Bls12>,
     #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
     pub aggregation_sign_key:   aggregate_sig::SecretKey<Bls12>,
+}
+
+struct CredentialContext {
+    wallet:           ConcordiumHdWallet,
+    identity_index:   u32,
+    credential_index: u32,
+}
+
+impl HasAttributeRandomness<ExampleCurve> for CredentialContext {
+    type ErrorType = DeriveError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: AttributeTag,
+    ) -> Result<PedersenRandomness<ExampleCurve>, Self::ErrorType> {
+        Ok(self.wallet.get_attribute_commitment_randomness(
+            self.identity_index,
+            self.credential_index,
+            attribute_tag,
+        )?)
+    }
 }
 
 /// Context for a transaction to send.
@@ -567,6 +595,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
         cred_holder_info: chi,
         prf_key,
     };
+    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let id_use_data = IdObjectUseData { aci, randomness };
 
     // Choice of anonymity revokers, all of them in this implementation.
     let context = IpContext::new(&ip_info, &ars_infos, &global_context);
@@ -583,16 +613,14 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
         keys,
         threshold: SignatureThreshold(1),
     };
-    let (pio, randomness) = {
-        match account_holder::generate_pio(&context, threshold, &aci, &initial_acc_data) {
+    let (pio, _) = {
+        match account_holder::generate_pio(&context, threshold, &id_use_data, &initial_acc_data) {
             Some(x) => x,
             None => bail!("Generating the pre-identity object failed."),
         }
     };
 
     let acc_keys = AccountKeys::from(initial_acc_data);
-
-    let id_use_data = IdObjectUseData { aci, randomness };
 
     let reg_id = &pio.pub_info_for_ip.reg_id;
     let address = AccountAddress::new(reg_id);
@@ -612,6 +640,78 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
             "accountAddress": address,
         })
     });
+
+    Ok(to_string(&response)?)
+}
+
+/// This function creates the identity object request, version 1,
+/// i.e., no initial account creation involved.
+/// The prf key, id cred sec, and the blinding randomness are deterministiscally
+/// generated.
+fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
+
+    let wallet = parse_wallet_input(&v)?;
+    let identity_index: u8 = try_get(&v, "identityIndex")?;
+
+    let prf_key: prf::SecretKey<ExampleCurve> = wallet.get_prf_key(identity_index as u32)?;
+
+    let id_cred_sec: PedersenValue<ExampleCurve> =
+        PedersenValue::new(wallet.get_id_cred_sec(identity_index as u32)?);
+    let id_cred: IdCredentials<ExampleCurve> = IdCredentials { id_cred_sec };
+
+    let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
+        wallet.get_blinding_randomness(identity_index as u32)?;
+
+    let num_of_ars = ars_infos.len();
+    let threshold = match v.get("arThreshold") {
+        Some(v) => {
+            let threshold: u8 = from_value(v.clone())?;
+            ensure!(threshold > 0, "arThreshold must be at least 1.");
+            ensure!(
+                num_of_ars >= usize::from(threshold),
+                "Number of anonymity revokers in arsInfos should be at least arThreshold."
+            );
+            Threshold(threshold)
+        }
+        None => {
+            // arThreshold not specified, use `number of anonymity revokers` - 1 or 1 in the
+            // case of only a single anonymity revoker.
+            ensure!(
+                num_of_ars > 0,
+                "arsInfos should have at least 1 anonymity revoker."
+            );
+            Threshold(max((num_of_ars - 1).try_into().unwrap_or(255), 1))
+        }
+    };
+
+    let chi = CredentialHolderInfo::<ExampleCurve> { id_cred };
+
+    let aci = AccCredentialInfo {
+        cred_holder_info: chi,
+        prf_key,
+    };
+
+    // Choice of anonymity revokers, all of them in this implementation.
+    let context = IpContext::new(&ip_info, &ars_infos, &global_context);
+
+    let id_use_data = IdObjectUseData {
+        aci,
+        randomness: sig_retrievel_randomness,
+    };
+    let (pio, _) = {
+        match account_holder::generate_pio_v1(&context, threshold, &id_use_data) {
+            Some(x) => x,
+            None => bail!("Generating the pre-identity object failed."),
+        }
+    };
+
+    let response = json!({ "idObjectRequest": Versioned::new(VERSION_0, pio) });
 
     Ok(to_string(&response)?)
 }
@@ -679,6 +779,127 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
         acc_num,
         policy,
         &cred_data,
+        &SystemAttributeRandomness {},
+        &new_or_existing,
+    )?;
+
+    let address = match new_or_existing {
+        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Right(address) => address,
+    };
+
+    // unwrap is safe here since we've generated the credential already, and that
+    // does the same computation.
+    let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
+    let secret_key = elgamal::SecretKey {
+        generator: *global_context.elgamal_generator(),
+        scalar:    enc_key,
+    };
+
+    let credential_message = AccountCredentialMessage {
+        message_expiry: expiry,
+        credential:     AccountCredential::Normal { cdi },
+    };
+
+    let response = json!({
+        "credential": Versioned::new(VERSION_0, credential_message),
+        "commitmentsRandomness": randomness,
+        "accountKeys": AccountKeys::from(cred_data),
+        "encryptionSecretKey": secret_key,
+        "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+        "accountAddress": address,
+    });
+    Ok(to_string(&response)?)
+}
+
+/// For deterministic credential creation using an identity object containing a
+/// version 1 pre-identity object, i.e., no initial account involved.
+fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let expiry = try_get(&v, "expiry")?;
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
+
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+
+    let id_object: IdentityObjectV1<Bls12, ExampleCurve, AttributeKind> =
+        try_get(&v, "identityObject")?;
+
+    let tags: Vec<AttributeTag> = try_get(&v, "revealedAttributes")?;
+
+    let wallet = parse_wallet_input(&v)?;
+    let identity_index: u8 = try_get(&v, "identityIndex")?;
+    let acc_num: u8 = try_get(&v, "accountNumber")?;
+
+    let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
+        wallet.get_blinding_randomness(identity_index as u32)?;
+    let id_cred_sec: PedersenValue<ExampleCurve> =
+        PedersenValue::new(wallet.get_id_cred_sec(identity_index as u32)?);
+    let id_cred: IdCredentials<ExampleCurve> = IdCredentials { id_cred_sec };
+    let chi = CredentialHolderInfo::<ExampleCurve> { id_cred };
+    let prf_key: prf::SecretKey<ExampleCurve> = wallet.get_prf_key(identity_index as u32)?;
+    let aci = AccCredentialInfo {
+        cred_holder_info: chi,
+        prf_key,
+    };
+    let id_use_data = IdObjectUseData {
+        aci,
+        randomness: sig_retrievel_randomness,
+    };
+
+    // The mobile wallet for now only creates new accounts and does not support
+    // adding credentials onto existing ones. Once that is supported the address
+    // should be coming from the input data.
+    let new_or_existing = Left(expiry);
+
+    // The mobile wallet can only create new accounts, which means new credential
+    // data will be generated.
+    let cred_data = {
+        let mut keys = std::collections::BTreeMap::new();
+        let secret = wallet.get_account_signing_key(identity_index as u32, acc_num as u32)?;
+        let public = ed25519::PublicKey::from(&secret);
+        keys.insert(KeyIndex(0), KeyPair { secret, public });
+
+        CredentialData {
+            keys,
+            threshold: SignatureThreshold(1),
+        }
+    };
+
+    let mut policy_vec = std::collections::BTreeMap::new();
+    for tag in tags {
+        if let Some(att) = id_object.alist.alist.get(&tag) {
+            if policy_vec.insert(tag, att.clone()).is_some() {
+                bail!("Cannot reveal an attribute more than once.")
+            }
+        } else {
+            bail!("Cannot reveal an attribute which is not part of the attribute list.")
+        }
+    }
+
+    let policy = Policy {
+        valid_to: id_object.alist.valid_to,
+        created_at: id_object.alist.created_at,
+        policy_vec,
+        _phantom: Default::default(),
+    };
+
+    let context = IpContext::new(&ip_info, &ars_infos, &global_context);
+
+    let credential_context = CredentialContext {
+        wallet,
+        identity_index: identity_index as u32,
+        credential_index: acc_num as u32,
+    };
+    let (cdi, randomness) = account_holder::create_credential(
+        context,
+        &id_object,
+        &id_use_data,
+        acc_num,
+        policy,
+        &cred_data,
+        &credential_context,
         &new_or_existing,
     )?;
 
@@ -999,6 +1220,26 @@ make_wrapper!(
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The input string should contain the JSON payload of an
+    /// attribute list, name of id object, and the identity provider public
+    /// information.
+    ///
+    /// The return value contains a JSON object with two values, one is
+    /// the request for the identity object that is public, and the other is the
+    /// private keys and other secret values that must be kept by the user.
+    /// These secret values will be needed later to use the identity object.
+    ///
+    /// The returned string must be freed by the caller by calling the function
+    /// 'free_response_string'. In case of failure the function returns an error
+    /// message as the response, and sets the 'success' flag to 0.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_id_request_and_private_data_v1 -> create_id_request_and_private_data_v1_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
     /// UTF8-encoded string. The returned string must be freed by the caller by
     /// calling the function 'free_response_string'. In case of failure the function
     /// returns an error message as the response, and sets the 'success' flag to 0.
@@ -1010,6 +1251,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_credential -> create_credential_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_credential_v1 -> create_credential_v1_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

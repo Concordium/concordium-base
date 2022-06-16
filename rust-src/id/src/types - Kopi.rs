@@ -44,7 +44,6 @@ use std::{
     io::{Cursor, Read},
     str::FromStr,
 };
-use thiserror::Error;
 
 /// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
@@ -1041,6 +1040,52 @@ pub struct CommonPioFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     #[serde(rename = "prfKeySharingCoeffCommitments")]
     pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
 }
+
+// #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+// #[serde(bound(
+//     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
+//     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
+// ))]
+// pub struct PreIdentityObjectV1<P: Pairing, C: Curve<Scalar = P::ScalarField>>
+// {     // TODO: consider renaming this struct
+//     #[serde(
+//         rename = "idCredPub",
+//         serialize_with = "base16_encode",
+//         deserialize_with = "base16_decode"
+//     )]
+//     pub id_cred_pub: C,
+//     /// Anonymity revocation data for the chosen anonymity revokers.
+//     #[serde(rename = "ipArData")]
+//     #[map_size_length = 4]
+//     pub ip_ar_data:            BTreeMap<ArIdentity, IpArData<C>>,
+//     /// Choice of anonyimity revocation parameters.
+//     /// NB:IP needs to check that they make sense in the context of the
+// public     /// keys they are allowed to use.
+//     #[serde(rename = "choiceArData")]
+//     pub choice_ar_parameters:  ChoiceArParameters,
+//     /// Commitment to id cred sec using the commitment key of IP derived from
+//     /// the PS public key. This is used to compute the message that the IP
+//     /// signs.
+//     #[serde(rename = "idCredSecCommitment")]
+//     pub cmm_sc:                PedersenCommitment<P::G1>,
+//     /// Commitment to the prf key in group G1.
+//     #[serde(rename = "prfKeyCommitmentWithIP")]
+//     pub cmm_prf:               PedersenCommitment<P::G1>,
+//     /// commitments to the coefficients of the polynomial
+//     /// used to share the prf key
+//     /// K + b1 X + b2 X^2...
+//     /// where K is the prf key
+//     #[serde(rename = "prfKeySharingCoeffCommitments")]
+//     pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
+//     /// Proofs of knowledge. See the documentation of PreIdentityProof for
+//     /// details.
+//     #[serde(
+//         rename = "proofsOfKnowledge",
+//         serialize_with = "base16_encode",
+//         deserialize_with = "base16_decode"
+//     )]
+//     pub poks:                  PreIdentityProofV1<P, C>,
+// }
 
 /// The data we get back from the identity provider.
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -2428,30 +2473,13 @@ pub enum AccountCredentialValues<C: Curve, AttributeType: Attribute<C::Scalar>> 
     },
 }
 
-pub trait HasAttributeRandomness<C: Curve> {
+pub trait HasSecretInformation<C: Curve> {
     type ErrorType: 'static + Send + Sync + std::error::Error;
 
     fn get_attribute_commitment_randomness(
         &self,
         attribute_tag: AttributeTag,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
-}
-
-#[derive(Debug, Error)]
-pub enum ImpossibleError {}
-
-pub struct SystemAttributeRandomness {}
-
-impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
-    type ErrorType = ImpossibleError;
-
-    fn get_attribute_commitment_randomness(
-        &self,
-        _attribute_tag: AttributeTag,
-    ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
-        let mut csprng = rand::thread_rng();
-        Ok(PedersenRandomness::generate(&mut csprng))
-    }
 }
 
 #[cfg(test)]

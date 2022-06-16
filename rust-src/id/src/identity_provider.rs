@@ -51,8 +51,8 @@ impl std::fmt::Display for Reason {
 /// FIXME: This function does not check that the anonymity revocation
 /// parameters make sense.
 /// Validate all the proofs in an identity object request.
-pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    pre_id_obj: &PreIdentityObject<P, C>,
+pub fn validate_request_old<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    pre_id_obj: &PreIdentityObjectOld<P, C>,
     context: IpContext<P, C>,
 ) -> Result<(), Reason> {
     // Verify signature:
@@ -246,7 +246,480 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 }
 
+pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    pre_id_obj: &PreIdentityObject<P, C>,
+    context: IpContext<P, C>,
+) -> Result<(), Reason> {
+    let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
+    let id_cred_pub = &pre_id_obj.pub_info_for_ip.id_cred_pub;
+    let common_fields = &pre_id_obj.common_fields;
+    let poks_common = &pre_id_obj.poks.common_proof_fields;
+    let proof_acc_sk = &pre_id_obj.poks.proof_acc_sk;
+    // Verify signature:
+    let keys = &pub_info_for_ip.vk_acc.keys;
+    let threshold = pub_info_for_ip.vk_acc.threshold;
+
+    // message signed
+    let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
+
+    let reason = Reason::IncorrectProof; // TODO: introduce different reason
+
+    // Notice that here we provide all the verification keys, and the
+    // function `verify_accunt_ownership_proof` assumes that
+    // we have as many signatures as verification keys.
+    if !utils::verify_account_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
+        return Err(reason);
+    }
+
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
+    let (verifier, witness) = validate_request_common(
+        &mut transcript,
+        id_cred_pub,
+        common_fields,
+        poks_common,
+        context,
+    )?;
+    let verifier_prf_regid = com_eq::ComEq {
+        commitment: common_fields.cmm_prf,
+        y:          context.global_context.on_chain_commitment_key.g,
+        g:          pub_info_for_ip.reg_id.clone(),
+        cmm_key:    verifier.first.second.cmm_key_1,
+    };
+    let prf_regid_witness = pre_id_obj.poks.prf_regid_proof.clone();
+
+    let verifier = verifier.add_prover(verifier_prf_regid);
+    let witness = AndWitness {
+        w1: witness,
+        w2: prf_regid_witness,
+    };
+    let proof = SigmaProof {
+        challenge: poks_common.challenge,
+        witness,
+    };
+
+    if verify(&mut transcript, &verifier, &proof) {
+        Ok(())
+    } else {
+        Err(Reason::IncorrectProof)
+    }
+}
+
+pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    pre_id_obj: &PreIdentityObjectV1<P, C>,
+    context: IpContext<P, C>,
+) -> Result<(), Reason> {
+    let id_cred_pub = &pre_id_obj.id_cred_pub;
+    let common_fields = &pre_id_obj.common_fields;
+    let poks_common = &pre_id_obj.poks;
+
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
+    let (verifier, witness) = validate_request_common(
+        &mut transcript,
+        id_cred_pub,
+        common_fields,
+        poks_common,
+        context,
+    )?;
+    let proof = SigmaProof {
+        challenge: poks_common.challenge,
+        witness,
+    };
+
+    if verify(&mut transcript, &verifier, &proof) {
+        Ok(())
+    } else {
+        Err(Reason::IncorrectProof)
+    }
+}
+
+type CommonPioVerifierType<P, C> = AndAdapter<
+    AndAdapter<
+        AndAdapter<dlog::Dlog<C>, com_eq::ComEq<C, <P as Pairing>::G1>>,
+        com_eq_different_groups::ComEqDiffGroups<<P as Pairing>::G1, C>,
+    >,
+    ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
+>;
+
+fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    transcript: &mut RandomOracle,
+    id_cred_pub: &C,
+    common_fields: &CommonPioFields<P, C>,
+    poks_common: &CommonPioProofFields<P, C>,
+    context: IpContext<P, C>,
+) -> Result<
+    (
+        CommonPioVerifierType<P, C>,
+        <CommonPioVerifierType<P, C> as SigmaProtocol>::ProverWitness,
+    ),
+    Reason,
+> {
+    // if let Some((pub_info_for_ip, proof_acc_sk, _)) =
+    // initial_account_related.clone() {     // Verify signature:
+    //     let keys = &pub_info_for_ip.vk_acc.keys;
+    //     let threshold = pub_info_for_ip.vk_acc.threshold;
+
+    //     // message signed
+    //     let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
+
+    //     let reason = Reason::IncorrectProof; // TODO: introduce different reason
+
+    //     // Notice that here we provide all the verification keys, and the
+    //     // function `verify_accunt_ownership_proof` assumes that
+    //     // we have as many signatures as verification keys.
+    //     if !utils::verify_account_ownership_proof(&keys, threshold,
+    // &proof_acc_sk, signed.as_ref()) {         return Err(reason);
+    //     }
+    // }
+
+    // Verify proof:
+    let ip_info = &context.ip_info;
+    let commitment_key_sc = CommitmentKey {
+        g: ip_info.ip_verify_key.ys[0],
+        h: ip_info.ip_verify_key.g,
+    };
+    let commitment_key_prf = CommitmentKey {
+        g: ip_info.ip_verify_key.ys[1],
+        h: ip_info.ip_verify_key.g,
+    };
+    transcript.append_message(b"ctx", &context.global_context);
+    transcript.append_message(b"choice_ar_parameters", &common_fields.choice_ar_parameters);
+    transcript.append_message(b"cmm_sc", &common_fields.cmm_sc);
+    transcript.append_message(b"cmm_prf", &common_fields.cmm_prf);
+    transcript.append_message(
+        b"cmm_prf_sharing_coeff",
+        &common_fields.cmm_prf_sharing_coeff,
+    );
+
+    let id_cred_sec_verifier = dlog::Dlog {
+        public: *id_cred_pub,
+        coeff:  context.global_context.on_chain_commitment_key.g,
+    };
+    let id_cred_sec_witness = poks_common.id_cred_sec_witness;
+
+    // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
+    let id_cred_sec_eq_verifier = com_eq::ComEq {
+        commitment: common_fields.cmm_sc,
+        y:          *id_cred_pub,
+        cmm_key:    commitment_key_sc,
+        g:          context.global_context.on_chain_commitment_key.g,
+    };
+
+    // TODO: Figure out whether we can somehow get rid of this clone.
+    let id_cred_sec_eq_witness = poks_common.commitments_same_proof.clone();
+
+    let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
+    let revocation_threshold = common_fields.choice_ar_parameters.threshold;
+
+    let number_of_ars = choice_ar_handles.len();
+    // We have to have at least one anonymity revoker, and the threshold.
+    // Revocation threshold is always at least 1 by the data type definition and
+    // serialization implementation.
+    // Thus strictly speaking the first part of the check is redundant, but
+    // it does not hurt.
+    let rt_usize: usize = revocation_threshold.into();
+    if number_of_ars == 0 || rt_usize > number_of_ars {
+        return Err(Reason::WrongArParameters);
+    }
+
+    // Check that the set of ArIdentities and the encryptions in ip_ar_data are
+    // actually the same. This is awkward, and choice_ar_handles is no longer
+    // necessary, but removing it would break backwards compatibility. So we
+    // instead have to check that the set is equal to some other given set.
+    // Later on we check whether all the listed ARs actually exist in the context.
+    if number_of_ars != common_fields.ip_ar_data.len() {
+        return Err(Reason::WrongArParameters);
+    }
+    if common_fields
+        .ip_ar_data
+        .keys()
+        .zip(common_fields.choice_ar_parameters.ar_identities.iter())
+        .any(|(k1, k2)| k1 != k2)
+    {
+        return Err(Reason::WrongArParameters);
+    }
+
+    // We also need to check that the threshold is actually equal to
+    // the number of coefficients in the sharing polynomial
+    // (corresponding to the degree+1)
+    if rt_usize != common_fields.cmm_prf_sharing_coeff.len() {
+        return Err(Reason::WrongArParameters);
+    }
+
+    // ar commitment key
+    let ar_ck = &context.global_context.on_chain_commitment_key;
+
+    // The commitment to the PRF key to the identity providers
+    // must have at least one value.
+    // FIXME: Rework the choice of data-structure so that this is implicit.
+    if common_fields.cmm_prf_sharing_coeff.is_empty() {
+        return Err(Reason::WrongArParameters);
+    }
+
+    // Verify that the two commitments to the PRF key are the same.
+    let verifier_prf_same = com_eq_different_groups::ComEqDiffGroups {
+        commitment_1: common_fields.cmm_prf,
+        commitment_2: *common_fields
+            .cmm_prf_sharing_coeff
+            .first()
+            .expect("Precondition checked."),
+        cmm_key_1:    commitment_key_prf,
+        cmm_key_2:    *ar_ck,
+    };
+    let witness_prf_same = poks_common.commitments_prf_same;
+
+    let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
+    let prf_verification = compute_prf_sharing_verifier(
+        ar_ck,
+        &common_fields.cmm_prf_sharing_coeff,
+        &common_fields.ip_ar_data,
+        &context.ars_infos,
+        &h_in_exponent,
+    );
+    let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
+        Some(v) => v,
+        None => return Err(Reason::WrongArParameters),
+    };
+
+    let verifier = AndAdapter {
+        first:  id_cred_sec_verifier,
+        second: id_cred_sec_eq_verifier,
+    };
+    let verifier = verifier
+        .add_prover(verifier_prf_same)
+        .add_prover(prf_sharing_verifier);
+
+    for ((ar_identity, ar_data), proof) in common_fields.ip_ar_data
+    .iter()
+    // .zip(context.ars_infos.values())
+    .zip(poks_common.bulletproofs.iter())
+    {
+        let ciphers = ar_data.enc_prf_key_share;
+        let ar_info = match context.ars_infos.get(ar_identity) {
+            Some(x) => x,
+            None => return Err(Reason::IncorrectProof),
+        };
+        let pk: C = ar_info.ar_public_key.key;
+        let keys: CommitmentKey<C> = CommitmentKey {
+            g: h_in_exponent,
+            h: pk,
+        };
+        let gens = &context.global_context.bulletproof_generators().take(32 * 8);
+        let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
+        transcript.append_message(b"encrypted_share", &ciphers);
+        if verify_efficient(transcript, 32, &commitments, &proof, gens, &keys).is_err() {
+            return Err(Reason::IncorrectProof);
+        }
+    }
+
+    transcript.append_message(b"bulletproofs", &poks_common.bulletproofs);
+    let witness = AndWitness {
+        w1: AndWitness {
+            w1: AndWitness {
+                w1: id_cred_sec_witness,
+                w2: id_cred_sec_eq_witness,
+            },
+            w2: witness_prf_same,
+        },
+        w2: prf_sharing_witness,
+    };
+    Ok((verifier, witness))
+}
+
+// pub fn validate_request_old_v1<P: Pairing, C: Curve<Scalar =
+// P::ScalarField>>(     pre_id_obj: &PreIdentityObjectV1<P, C>,
+//     context: IpContext<P, C>,
+// ) -> Result<(), Reason> {
+//     // Verify proof:
+//     let ip_info = &context.ip_info;
+//     let commitment_key_sc = CommitmentKey {
+//         g: ip_info.ip_verify_key.ys[0],
+//         h: ip_info.ip_verify_key.g,
+//     };
+//     let commitment_key_prf = CommitmentKey {
+//         g: ip_info.ip_verify_key.ys[1],
+//         h: ip_info.ip_verify_key.g,
+//     };
+
+//     let mut transcript = RandomOracle::domain("PreIdentityProof");
+//     transcript.append_message(b"ctx", &context.global_context);
+//     transcript.append_message(b"choice_ar_parameters",
+// &pre_id_obj.choice_ar_parameters);     transcript.append_message(b"cmm_sc",
+// &pre_id_obj.cmm_sc);     transcript.append_message(b"cmm_prf",
+// &pre_id_obj.cmm_prf);     transcript.append_message(b"cmm_prf_sharing_coeff",
+// &pre_id_obj.cmm_prf_sharing_coeff);
+
+//     let id_cred_sec_verifier = dlog::Dlog {
+//         public: pre_id_obj.id_cred_pub,
+//         coeff:  context.global_context.on_chain_commitment_key.g,
+//     };
+//     let id_cred_sec_witness = pre_id_obj.poks.id_cred_sec_witness;
+
+//     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
+//     let id_cred_sec_eq_verifier = com_eq::ComEq {
+//         commitment: pre_id_obj.cmm_sc,
+//         y:          pre_id_obj.id_cred_pub,
+//         cmm_key:    commitment_key_sc,
+//         g:          context.global_context.on_chain_commitment_key.g,
+//     };
+
+//     // TODO: Figure out whether we can somehow get rid of this clone.
+//     let id_cred_sec_eq_witness =
+// pre_id_obj.poks.commitments_same_proof.clone();
+
+//     let choice_ar_handles =
+// pre_id_obj.choice_ar_parameters.ar_identities.clone();
+//     let revocation_threshold = pre_id_obj.choice_ar_parameters.threshold;
+
+//     let number_of_ars = choice_ar_handles.len();
+//     // We have to have at least one anonymity revoker, and the threshold.
+//     // Revocation threshold is always at least 1 by the data type definition
+// and     // serialization implementation.
+//     // Thus strictly speaking the first part of the check is redundant, but
+//     // it does not hurt.
+//     let rt_usize: usize = revocation_threshold.into();
+//     if number_of_ars == 0 || rt_usize > number_of_ars {
+//         return Err(Reason::WrongArParameters);
+//     }
+
+//     // Check that the set of ArIdentities and the encryptions in ip_ar_data
+// are     // actually the same. This is awkward, and choice_ar_handles is no
+// longer     // necessary, but removing it would break backwards compatibility.
+// So we     // instead have to check that the set is equal to some other given
+// set.     // Later on we check whether all the listed ARs actually exist in
+// the context.     if number_of_ars != pre_id_obj.ip_ar_data.len() {
+//         return Err(Reason::WrongArParameters);
+//     }
+//     if pre_id_obj
+//         .ip_ar_data
+//         .keys()
+//         .zip(pre_id_obj.choice_ar_parameters.ar_identities.iter())
+//         .any(|(k1, k2)| k1 != k2)
+//     {
+//         return Err(Reason::WrongArParameters);
+//     }
+
+//     // We also need to check that the threshold is actually equal to
+//     // the number of coefficients in the sharing polynomial
+//     // (corresponding to the degree+1)
+//     if rt_usize != pre_id_obj.cmm_prf_sharing_coeff.len() {
+//         return Err(Reason::WrongArParameters);
+//     }
+
+//     // ar commitment key
+//     let ar_ck = &context.global_context.on_chain_commitment_key;
+
+//     // The commitment to the PRF key to the identity providers
+//     // must have at least one value.
+//     // FIXME: Rework the choice of data-structure so that this is implicit.
+//     if pre_id_obj.cmm_prf_sharing_coeff.is_empty() {
+//         return Err(Reason::WrongArParameters);
+//     }
+
+//     // Verify that the two commitments to the PRF key are the same.
+//     let verifier_prf_same = com_eq_different_groups::ComEqDiffGroups {
+//         commitment_1: pre_id_obj.cmm_prf,
+//         commitment_2: *pre_id_obj
+//             .cmm_prf_sharing_coeff
+//             .first()
+//             .expect("Precondition checked."),
+//         cmm_key_1:    commitment_key_prf,
+//         cmm_key_2:    *ar_ck,
+//     };
+//     let witness_prf_same = pre_id_obj.poks.commitments_prf_same;
+
+//     let h_in_exponent =
+// *context.global_context.encryption_in_exponent_generator();
+//     let prf_verification = compute_prf_sharing_verifier(
+//         ar_ck,
+//         &pre_id_obj.cmm_prf_sharing_coeff,
+//         &pre_id_obj.ip_ar_data,
+//         &context.ars_infos,
+//         &h_in_exponent,
+//     );
+//     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification
+// {         Some(v) => v,
+//         None => return Err(Reason::WrongArParameters),
+//     };
+
+//     let verifier = AndAdapter {
+//         first:  id_cred_sec_verifier,
+//         second: id_cred_sec_eq_verifier,
+//     };
+//     let verifier = verifier
+//         .add_prover(verifier_prf_same)
+//         .add_prover(prf_sharing_verifier);
+//     let witness = AndWitness {
+//             w1: AndWitness {
+//                 w1: AndWitness {
+//                     w1: id_cred_sec_witness,
+//                     w2: id_cred_sec_eq_witness,
+//                 },
+//                 w2: witness_prf_same,
+//             },
+//             w2: prf_sharing_witness
+//     };
+//     let proof = SigmaProof {
+//         challenge: pre_id_obj.poks.challenge,
+//         witness,
+//     };
+//     let bulletproofs = &pre_id_obj.poks.bulletproofs;
+//     for ((ar_identity, ar_data), proof) in pre_id_obj
+//         .ip_ar_data
+//         .iter()
+//         // .zip(context.ars_infos.values())
+//         .zip(bulletproofs.iter())
+//     {
+//         let ciphers = ar_data.enc_prf_key_share;
+//         let ar_info = match context.ars_infos.get(ar_identity) {
+//             Some(x) => x,
+//             None => return Err(Reason::IncorrectProof),
+//         };
+//         let pk: C = ar_info.ar_public_key.key;
+//         let keys: CommitmentKey<C> = CommitmentKey {
+//             g: h_in_exponent,
+//             h: pk,
+//         };
+//         let gens = &context.global_context.bulletproof_generators().take(32 *
+// 8);         let commitments = ciphers.iter().map(|x|
+// Commitment(x.1)).collect::<Vec<_>>();         transcript.append_message(b"
+// encrypted_share", &ciphers);         if verify_efficient(&mut transcript, 32,
+// &commitments, &proof, gens, &keys).is_err() {             return
+// Err(Reason::IncorrectProof);         }
+//     }
+
+//     transcript.append_message(b"bulletproofs", &bulletproofs);
+//     if verify(&mut transcript, &verifier, &proof) {
+//         Ok(())
+//     } else {
+//         Err(Reason::IncorrectProof)
+//     }
+// }
+
 /// Sign the given pre-identity-object to produce an identity object.
+pub fn sign_identity_object_old<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObjectOld<P, C>,
+    ip_info: &IpInfo<P>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Reason> {
+    let choice_ar_handles = pre_id_obj.choice_ar_parameters.ar_identities.clone();
+    let message: ps_sig::UnknownMessage<P> = compute_message(
+        &pre_id_obj.cmm_prf,
+        &pre_id_obj.cmm_sc,
+        pre_id_obj.choice_ar_parameters.threshold,
+        &choice_ar_handles,
+        &alist,
+        &ip_info.ip_verify_key,
+    )?;
+    let mut csprng = thread_rng();
+    // FIXME: Pass in csprng here.
+    Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
+}
+
 pub fn sign_identity_object<
     P: Pairing,
     AttributeType: Attribute<P::ScalarField>,
@@ -257,11 +730,37 @@ pub fn sign_identity_object<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
-    let choice_ar_handles = pre_id_obj.choice_ar_parameters.ar_identities.clone();
+    sign_identity_object_common(&pre_id_obj.common_fields, ip_info, alist, ip_secret_key)
+}
+
+pub fn sign_identity_object_v1<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObjectV1<P, C>,
+    ip_info: &IpInfo<P>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Reason> {
+    sign_identity_object_common(&pre_id_obj.common_fields, ip_info, alist, ip_secret_key)
+}
+
+pub fn sign_identity_object_common<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    common_fields: &CommonPioFields<P, C>,
+    ip_info: &IpInfo<P>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Reason> {
+    let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
     let message: ps_sig::UnknownMessage<P> = compute_message(
-        &pre_id_obj.cmm_prf,
-        &pre_id_obj.cmm_sc,
-        pre_id_obj.choice_ar_parameters.threshold,
+        &common_fields.cmm_prf,
+        &common_fields.cmm_sc,
+        common_fields.choice_ar_parameters.threshold,
         &choice_ar_handles,
         &alist,
         &ip_info.ip_verify_key,
@@ -346,6 +845,21 @@ pub fn verify_credentials<
         &ip_cdi_secret_key,
     );
     Ok((sig, initial_cdi))
+}
+
+pub fn verify_credentials_v1<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObjectV1<P, C>,
+    context: IpContext<P, C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Reason> {
+    validate_request_v1(pre_id_obj, context)?;
+    let sig = sign_identity_object_v1(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
+    Ok(sig)
 }
 
 /// Produce a signature on the initial account data to make a message that is
@@ -551,7 +1065,7 @@ mod tests {
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
-        let aci = test_create_aci(&mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -562,8 +1076,14 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, _) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        let (context, pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
         let attrs = test_create_attributes();
 
         // Act
@@ -575,6 +1095,33 @@ mod tests {
             &ip_secret_key,
             &ip_cdi_secret_key,
         );
+
+        // Assert
+        assert!(ver_ok.is_ok());
+    }
+
+    #[test]
+    fn test_verify_credentials_success_v1() {
+        // Arrange (create identity provider and PreIdentityObject, and verify validity)
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+
+        let id_use_data = test_create_id_use_data(&mut csprng);
+        let (context, pio, _) =
+            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let attrs = test_create_attributes();
+
+        // Act
+        let ver_ok = verify_credentials_v1(&pio, context, &attrs, &ip_secret_key);
 
         // Assert
         assert!(ver_ok.is_ok());
@@ -639,7 +1186,7 @@ mod tests {
         let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let aci = test_create_aci(&mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -650,8 +1197,14 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (ctx, mut pio, _) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        let (ctx, mut pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
         // let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
@@ -659,9 +1212,9 @@ mod tests {
             g: ctx.ip_info.ip_verify_key.ys[0],
             h: ctx.ip_info.ip_verify_key.g,
         };
-        let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
+        let id_cred_sec = id_use_data.aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
-        pio.cmm_sc = cmm_sc;
+        pio.common_fields.cmm_sc = cmm_sc;
         let ver_ok = validate_request(&pio, ctx);
 
         // Assert
@@ -686,7 +1239,7 @@ mod tests {
         let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let aci = test_create_aci(&mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -697,8 +1250,14 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, mut pio, _) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        let (context, mut pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
         // let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
@@ -707,7 +1266,7 @@ mod tests {
             .global_context
             .on_chain_commitment_key
             .commit(&val, &mut csprng);
-        pio.cmm_prf = cmm_prf;
+        pio.common_fields.cmm_prf = cmm_prf;
         let ver_ok = validate_request(&pio, context);
 
         // Assert

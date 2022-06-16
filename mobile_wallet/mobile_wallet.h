@@ -40,7 +40,21 @@ char *generate_accounts(const char *input_ptr, uint8_t *success);
  * The input pointer must point to a null-terminated buffer, otherwise this
  * function will fail in unspecified ways.
  */
+char *generate_accounts_v1(const char *input_ptr, uint8_t *success);
+
+/**
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
 char *create_credential(const char *input_ptr, uint8_t *success);
+
+/**
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *create_credential_v1(const char *input_ptr, uint8_t *success);
 
 /**
  * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -63,6 +77,13 @@ char *create_encrypted_transfer(const char *input_ptr, uint8_t *success);
  * function will fail in unspecified ways.
  */
 char *create_id_request_and_private_data(const char *input_ptr, uint8_t *success);
+
+/**
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *create_id_request_and_private_data_v1(const char *input_ptr, uint8_t *success);
 
 /**
  * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

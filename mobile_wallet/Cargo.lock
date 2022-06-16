@@ -814,6 +814,7 @@ dependencies = [
  "dodis_yampolskiy_prf",
  "ecvrf",
  "ed25519-dalek",
+ "ed25519_hd_key_derivation",
  "eddsa_ed25519",
  "either",
  "elgamal",
@@ -833,6 +834,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.8",
+ "thiserror",
 ]
 
 [[package]]
