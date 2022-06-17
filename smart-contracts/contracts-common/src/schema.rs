@@ -951,10 +951,12 @@ mod impls {
 
     fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
         let mut result = BigUint::zero();
-        for i in 0..constraint {
+        let mut shift = 0;
+        for _ in 0..constraint {
             let byte = source.read_u8()?;
             let value_byte = BigUint::from(byte & 0b0111_1111);
-            result += value_byte << (i * 7);
+            result += value_byte << shift;
+            shift += 7;
 
             if byte & 0b1000_0000 == 0 {
                 return Ok(result);
@@ -965,20 +967,159 @@ mod impls {
 
     fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
         let mut result = BigInt::zero();
-        for i in 0..constraint {
+        let mut shift = 0;
+        for _ in 0..constraint {
             let byte = source.read_u8()?;
             let value_byte = BigInt::from(byte & 0b0111_1111);
-            let shift = i * 7;
             result += value_byte << shift;
+            shift += 7;
 
             if byte & 0b1000_0000 == 0 {
                 if byte & 0b0100_0000 != 0 {
-                    result |= !BigInt::zero() << shift;
+                    result -= BigInt::from(2).pow(shift)
                 }
                 return Ok(result);
             }
         }
         Err(ParseError {})
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_deserial_biguint_0() {
+            let mut cursor = Cursor::new([0]);
+            let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 0u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_10() {
+            let mut cursor = Cursor::new([10]);
+            let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 10u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_129() {
+            let mut cursor = Cursor::new([129, 1]);
+            let int = deserial_biguint(&mut cursor, 2).expect("Deserialising should not fail");
+            assert_eq!(int, 129u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_u64_max() {
+            let mut cursor = Cursor::new([255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+            let int = deserial_biguint(&mut cursor, 10).expect("Deserialising should not fail");
+            assert_eq!(int, u64::MAX.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_u256_max() {
+            let mut cursor = Cursor::new([
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                0b0000_1111,
+            ]);
+            let int = deserial_biguint(&mut cursor, 37).expect("Deserialising should not fail");
+            let u256_max = BigUint::from_bytes_le(&[
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            ]);
+            assert_eq!(int, u256_max)
+        }
+
+        #[test]
+        fn test_deserial_biguint_padding_allowed() {
+            let mut cursor = Cursor::new([129, 128, 128, 128, 128, 0]);
+            let int = deserial_biguint(&mut cursor, 6).expect("Deserialising should not fail");
+            assert_eq!(int, 1u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_contraint_fails() {
+            let mut cursor = Cursor::new([129, 1]);
+            deserial_biguint(&mut cursor, 1).expect_err("Deserialising should fail");
+        }
+
+        #[test]
+        fn test_deserial_bigint_0() {
+            let mut cursor = Cursor::new([0]);
+            let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 0u8.into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_10() {
+            let mut cursor = Cursor::new([10]);
+            let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 10u8.into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_neg_10() {
+            let mut cursor = Cursor::new([0b0111_0110]);
+            let int = deserial_bigint(&mut cursor, 2).expect("Deserialising should not fail");
+            assert_eq!(int, (-10).into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_neg_129() {
+            let mut cursor = Cursor::new([0b1111_1111, 0b0111_1110]);
+            let int = deserial_bigint(&mut cursor, 3).expect("Deserialising should not fail");
+            assert_eq!(int, (-129).into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_i64_min() {
+            let mut cursor =
+                Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+            let int = deserial_bigint(&mut cursor, 10).expect("Deserialising should not fail");
+            assert_eq!(int, BigInt::from(i64::MIN))
+        }
+
+        #[test]
+        fn test_deserial_bigint_constraint_fails() {
+            let mut cursor =
+                Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+            deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
+        }
     }
 }
 
