@@ -62,8 +62,6 @@ library
       Concordium.ID.Parameters
       Concordium.ID.Types
       Concordium.Logger
-      Concordium.SQL.AccountTransactionIndex
-      Concordium.SQL.Helpers
       Concordium.Types
       Concordium.Types.Accounts
       Concordium.Types.Accounts.Releases
@@ -136,8 +134,6 @@ library
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -194,8 +190,6 @@ executable generate-update-keys
     , mtl >=2.2
     , optparse-applicative >=0.15
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -248,8 +242,6 @@ executable genesis
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -326,8 +318,6 @@ test-suite test
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -380,8 +370,6 @@ benchmark bls-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -432,8 +420,6 @@ benchmark ed25519-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -484,8 +470,6 @@ benchmark ed25519dlog-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -536,8 +520,6 @@ benchmark sha256-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -588,8 +570,6 @@ benchmark verify-credential-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
