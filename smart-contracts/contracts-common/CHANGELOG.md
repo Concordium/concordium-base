@@ -2,9 +2,9 @@
 
 ## Unreleased changes
 
-- Extend schema type with ULeb128, ILeb128, ByteList and ByteArray.
-- Add new schema module which include the versioning in the serialization.
-- Change SchemaType implementation for byte arrays.
+- Extend schema type with `ULeb128`, `ILeb128`, `ByteList` and `ByteArray`.
+- Add new schema version which include the versioning in the serialization.
+- Use `schema::Type::ByteList` for `[u8]` implementation of `SchemaType`.
 
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 

@@ -45,11 +45,10 @@ pub struct ModuleV1 {
     pub contracts: BTreeMap<String, ContractV1>,
 }
 
-/// Contains all the contract schemas for a module newer than V1 module.
+/// Represents every schema module starting from V1.
 #[derive(Debug, Clone)]
-pub enum VersionedModule {
-    /// Versioned schema module version 0
-    V0(ModuleV1),
+pub enum VersionedModuleSchema {
+    V1(ModuleV1),
 }
 
 /// Describes all the schemas of a V0 smart contract.
@@ -164,9 +163,16 @@ pub enum Type {
     String(SizeLength),
     ContractName(SizeLength),
     ReceiveName(SizeLength),
+    /// An unsigned integer encoded using LEB128 with the addition of a
+    /// constraint on the maximum number of bytes to use for an encoding.
     ULeb128(u32),
+    /// A signed integer encoded using LEB128 with the addition of a constraint
+    /// on the maximum number of bytes to use for an encoding.
     ILeb128(u32),
+    /// A list of bytes. It is serialized with the length first followed by the
+    /// bytes.
     ByteList(SizeLength),
+    /// A fixed sized list of bytes.
     ByteArray(u32),
 }
 
@@ -340,11 +346,11 @@ impl Serial for ModuleV1 {
     }
 }
 
-impl Serial for VersionedModule {
+impl Serial for VersionedModuleSchema {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
-            VersionedModule::V0(module) => {
-                out.write_u8(0)?;
+            VersionedModuleSchema::V1(module) => {
+                out.write_u8(1)?;
                 module.serial(out)?;
             }
         }
@@ -372,13 +378,13 @@ impl Deserial for ModuleV1 {
     }
 }
 
-impl Deserial for VersionedModule {
+impl Deserial for VersionedModuleSchema {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let version: u8 = source.get()?;
         match version {
-            0 => {
+            1 => {
                 let module = source.get()?;
-                Ok(VersionedModule::V0(module))
+                Ok(VersionedModuleSchema::V1(module))
             }
             _ => Err(ParseError {}),
         }
@@ -928,20 +934,19 @@ mod impls {
                 }
                 Type::ByteList(size_len) => {
                     let len = deserial_length(source, *size_len)?;
-                    let mut string = String::new();
+                    let mut string = String::with_capacity(len);
                     for _ in 0..len {
                         let byte = source.read_u8()?;
-                        string.push_str(&format!("{:02X?}", byte));
+                        string.push_str(&format!("{:02x?}", byte));
                     }
                     Ok(Value::String(string))
                 }
                 Type::ByteArray(len) => {
-                    let len = (*len).try_into()?;
-                    let mut string = String::new();
-
+                    let len = usize::try_from(*len)?;
+                    let mut string = String::with_capacity(len);
                     for _ in 0..len {
                         let byte = source.read_u8()?;
-                        string.push_str(&format!("{:02X?}", byte));
+                        string.push_str(&format!("{:02x?}", byte));
                     }
                     Ok(Value::String(string))
                 }
