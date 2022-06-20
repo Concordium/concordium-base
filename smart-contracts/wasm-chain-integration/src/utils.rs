@@ -368,7 +368,7 @@ pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::ModuleV0> {
     source.get().map_err(|_| anyhow!("Failed parsing schema"))
 }
 
-/// Get the embedded schema if it exists
+/// Get the embedded schema if it exists.
 /// It will attempt to use the schema in the custom section "concordium-schema"
 /// and if this is not present it will try to use the custom section
 /// "concordium-schema-v2".
@@ -386,10 +386,10 @@ pub fn get_embedded_schema_versioned(bytes: &[u8]) -> ExecResult<schema::Version
     }
 
     if let Some(cs) = schema_versioned_section {
-        let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
-        return Ok(module);
-    }
-    if let Some(cs) = schema_v2_section {
+        let module: schema::VersionedModuleSchema =
+            from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+        Ok(module)
+    } else if let Some(cs) = schema_v2_section {
         let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
         Ok(schema::VersionedModuleSchema::V1(module))
     } else {

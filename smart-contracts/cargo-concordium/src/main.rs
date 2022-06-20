@@ -134,18 +134,18 @@ struct Runner {
     #[structopt(
         name = "schema",
         long = "schema",
-        conflicts_with = "schema-v1",
-        help = "Path to a file with a schema for parsing parameter or state (only for V0 \
+        conflicts_with = "schema-v2",
+        help = "Path to a file with a schema for parsing parameter (or state only for V0 \
                 contracts) in JSON."
     )]
     schema_path:         Option<PathBuf>,
     #[structopt(
-        name = "schema-v1",
-        long = "schema-v1",
+        name = "schema-v2",
+        long = "schema-v2",
         conflicts_with = "schema",
-        help = "Path to a file with a schema V1 file for parsing parameter or state (only for V0 \
-                contracts) in JSON. This is only needed if supplying an older version of the \
-                schema."
+        help = "Path to a file with a schema V2 file for parsing parameter in JSON. This is only \
+                needed if supplying an older version of the V2 schema, which does not contain \
+                version information."
     )]
     schema_v1_path:      Option<PathBuf>,
     #[structopt(
@@ -785,19 +785,23 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
 
     // get the module schema if available.
     let module_schema_opt = match (&runner.schema_path, &runner.schema_v1_path) {
-        (Some(schema_path), _) => {
+        (Some(schema_path), None) => {
             let bytes = fs::read(schema_path).context("Could not read schema file.")?;
             let schema = from_bytes(&bytes)
                 .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
             Some(schema)
         }
-        (_, Some(schema_v1_path)) => {
+        (None, Some(schema_v1_path)) => {
             let bytes = fs::read(schema_v1_path).context("Could not read schema file.")?;
             let schema = from_bytes(&bytes)
                 .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
             Some(VersionedModuleSchema::V1(schema))
         }
-        _ => {
+        (Some(_), Some(_)) => {
+            // Structopt will catch this case earlier in the execution.
+            bail!("Only one schema is allowed, use either --schema or --schema-v1")
+        }
+        (None, None) => {
             let res = utils::get_embedded_schema_versioned(module);
             if let Err(err) = &res {
                 eprintln!(
