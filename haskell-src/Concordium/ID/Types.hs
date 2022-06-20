@@ -1058,7 +1058,7 @@ values (NormalACWP cdi) = NormalAC (cdiValues cdi) <$> proofCommitments (cdiProo
 class HasCredentialType a where
   credentialType :: a -> CredentialType
 
-instance HasCredentialType AccountCredential where
+instance HasCredentialType (AccountCredential' credTy) where
   credentialType (InitialAC _) = Initial
   credentialType (NormalAC _ _) = Normal
 
