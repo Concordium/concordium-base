@@ -253,7 +253,7 @@ pub fn generate_contract_schema_v0(module_bytes: &[u8]) -> ExecResult<schema::Mo
 /// versioned module v0.
 pub fn generate_contract_schema_versioned_v0(
     module_bytes: &[u8],
-) -> ExecResult<schema::VersionedModule> {
+) -> ExecResult<schema::VersionedModuleSchema> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
@@ -287,7 +287,7 @@ pub fn generate_contract_schema_versioned_v0(
         }
     }
 
-    Ok(schema::VersionedModule::V0(schema::ModuleV1 {
+    Ok(schema::VersionedModuleSchema::V1(schema::ModuleV1 {
         contracts: contract_schemas,
     }))
 }
@@ -372,7 +372,7 @@ pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::ModuleV0> {
 /// It will attempt to use the schema in the custom section "concordium-schema"
 /// and if this is not present it will try to use the custom section
 /// "concordium-schema-v2".
-pub fn get_embedded_schema_versioned(bytes: &[u8]) -> ExecResult<schema::VersionedModule> {
+pub fn get_embedded_schema_versioned(bytes: &[u8]) -> ExecResult<schema::VersionedModuleSchema> {
     let skeleton = parse_skeleton(bytes)?;
     let mut schema_v2_section = None;
     let mut schema_versioned_section = None;
@@ -391,7 +391,7 @@ pub fn get_embedded_schema_versioned(bytes: &[u8]) -> ExecResult<schema::Version
     }
     if let Some(cs) = schema_v2_section {
         let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
-        Ok(schema::VersionedModule::V0(module))
+        Ok(schema::VersionedModuleSchema::V1(module))
     } else {
         bail!("No schema found in the module")
     }

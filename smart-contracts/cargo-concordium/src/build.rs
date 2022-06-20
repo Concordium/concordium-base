@@ -25,7 +25,7 @@ fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", 
 
 pub enum ModuleSchema {
     V0(schema::ModuleV0),
-    Versioned(schema::VersionedModule),
+    Versioned(schema::VersionedModuleSchema),
 }
 
 #[derive(Debug, Clone, Copy)]

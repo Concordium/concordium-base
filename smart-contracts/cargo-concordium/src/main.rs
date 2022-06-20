@@ -7,7 +7,7 @@ use anyhow::{bail, ensure, Context};
 use clap::AppSettings;
 use concordium_contracts_common::{
     from_bytes,
-    schema::{Function, Type, VersionedModule},
+    schema::{Function, Type, VersionedModuleSchema},
     to_bytes, Amount, OwnedReceiveName, Parameter, ReceiveName,
 };
 use ptree::{print_tree_with, PrintConfig, TreeBuilder};
@@ -347,7 +347,7 @@ pub fn main() -> anyhow::Result<()> {
                     ModuleSchema::Versioned(versioned_module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         match versioned_module_schema {
-                            VersionedModule::V0(module_schema) => {
+                            VersionedModuleSchema::V1(module_schema) => {
                                 for (contract_name, contract_schema) in
                                     module_schema.contracts.iter()
                                 {
@@ -795,7 +795,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             let bytes = fs::read(schema_v1_path).context("Could not read schema file.")?;
             let schema = from_bytes(&bytes)
                 .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
-            Some(VersionedModule::V0(schema))
+            Some(VersionedModuleSchema::V1(schema))
         }
         _ => {
             let res = utils::get_embedded_schema_versioned(module);
@@ -814,7 +814,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     };
 
     let contract_schema_opt = module_schema_opt.as_ref().and_then(|versioned_module| {
-        let VersionedModule::V0(module_schema) = versioned_module;
+        let VersionedModuleSchema::V1(module_schema) = versioned_module;
         module_schema.contracts.get(contract_name)
     });
     let contract_schema_func_opt = contract_schema_opt.and_then(|contract_schema| {

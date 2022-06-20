@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{schema::*, *};
 use num_bigint::{BigInt, BigUint};
-use num_traits::{ToPrimitive, Zero};
+use num_traits::Zero;
 use serde_json::Value;
 use std::convert::TryInto;
 
@@ -376,7 +376,9 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
 fn serial_biguint<W: Write>(bigint: BigUint, constraint: u32, out: &mut W) -> Result<(), W::Err> {
     let mut value = bigint;
     for _ in 0..constraint {
-        let mut byte = (value.clone() % BigUint::from(128u8)).to_u8().unwrap(); // Safe to unwrap since we have truncated
+        // Read the first byte of the value
+        let mut byte = value.iter_u32_digits().next().unwrap_or(0) as u8;
+        byte &= 0b0111_1111;
         value >>= 7;
         if !value.is_zero() {
             byte |= 0b1000_0000;
@@ -393,7 +395,10 @@ fn serial_biguint<W: Write>(bigint: BigUint, constraint: u32, out: &mut W) -> Re
 fn serial_bigint<W: Write>(bigint: BigInt, constraint: u32, out: &mut W) -> Result<(), W::Err> {
     let mut value = bigint;
     for _ in 0..constraint {
-        let mut byte = (value.clone() % BigInt::from(128u8)).to_u8().unwrap(); // Safe to unwrap since we have truncated
+        // Read the first byte of the value
+        // FIXME: This will allocate a vector where we only need the first byte and can
+        // hopefully be improved.
+        let mut byte = value.to_signed_bytes_le()[0] & 0b0111_1111;
         value >>= 7;
 
         if (value.is_zero() && (byte & 0b0100_0000) == 0)
@@ -470,5 +475,144 @@ fn write_bytes_for_length_of_size<W: Write>(
             let len: u64 = len.try_into()?;
             serial!(len, out)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serial_biguint_0() {
+        let mut bytes = Vec::new();
+        serial_biguint(0u8.into(), 1, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([0]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_biguint_10() {
+        let mut bytes = Vec::new();
+        serial_biguint(10u8.into(), 1, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([10]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_biguint_129() {
+        let mut bytes = Vec::new();
+        serial_biguint(129u8.into(), 2, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([129, 1]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_biguint_u64_max() {
+        let mut bytes = Vec::new();
+        serial_biguint(u64::MAX.into(), 10, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_biguint_u256_max() {
+        let u256_max = BigUint::from_bytes_le(&[
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        ]);
+        let mut bytes = Vec::new();
+        serial_biguint(u256_max, 37, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            0b0000_1111,
+        ]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_biguint_contraint_fails() {
+        let mut bytes = Vec::new();
+        serial_biguint(129u8.into(), 1, &mut bytes).expect_err("Serialization should have failed");
+    }
+
+    #[test]
+    fn test_serial_bigint_0() {
+        let mut bytes = Vec::new();
+        serial_bigint(0.into(), 1, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([0]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_bigint_10() {
+        let mut bytes = Vec::new();
+        serial_bigint(10.into(), 1, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([10]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_bigint_neg_10() {
+        let mut bytes = Vec::new();
+        serial_bigint((-10).into(), 1, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([0b0111_0110]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_bigint_neg_129() {
+        let mut bytes = Vec::new();
+        serial_bigint((-129).into(), 2, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([0b1111_1111, 0b0111_1110]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_bigint_i64_min() {
+        let mut bytes = Vec::new();
+        serial_bigint(i64::MIN.into(), 10, &mut bytes).expect("Serializing failed");
+        let expected = Vec::from([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_bigint_constraint_fails() {
+        let mut bytes = Vec::new();
+        serial_bigint(i64::MIN.into(), 2, &mut bytes).expect_err("Deserialising should fail");
     }
 }
