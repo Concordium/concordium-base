@@ -934,7 +934,8 @@ mod impls {
                 }
                 Type::ByteList(size_len) => {
                     let len = deserial_length(source, *size_len)?;
-                    let mut string = String::with_capacity(len);
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
                     for _ in 0..len {
                         let byte = source.read_u8()?;
                         string.push_str(&format!("{:02x?}", byte));
@@ -943,7 +944,8 @@ mod impls {
                 }
                 Type::ByteArray(len) => {
                     let len = usize::try_from(*len)?;
-                    let mut string = String::with_capacity(len);
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
                     for _ in 0..len {
                         let byte = source.read_u8()?;
                         string.push_str(&format!("{:02x?}", byte));
