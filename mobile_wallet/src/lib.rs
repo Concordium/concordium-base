@@ -646,7 +646,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
 
 /// This function creates the identity object request, version 1,
 /// i.e., no initial account creation involved.
-/// The prf key, id cred sec, and the blinding randomness are deterministiscally
+/// The prf key, id cred sec, and the blinding randomness are deterministically
 /// generated.
 fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
