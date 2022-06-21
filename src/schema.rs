@@ -33,19 +33,30 @@ pub trait SchemaType {
     fn get_type() -> crate::schema::Type;
 }
 
-/// Contains all the contract schemas for a V0 module
+/// Contains all the contract schemas for a smart contract module V0.
+///
+/// When embedded into a smart contract module, name the custom section
+/// `concordium-schema-v1`.
 #[derive(Debug, Clone)]
 pub struct ModuleV0 {
     pub contracts: BTreeMap<String, ContractV0>,
 }
 
-/// Contains all the contract schemas for a V1 module
+/// Contains all the contract schemas for a smart contract module V1.
+///
+/// When embedded into a smart contract module, name the custom section
+/// `concordium-schema-v2`.
 #[derive(Debug, Clone)]
 pub struct ModuleV1 {
     pub contracts: BTreeMap<String, ContractV1>,
 }
 
-/// Represents every schema module starting from V1.
+/// Represents every schema module starting from smart contract module V1.
+///
+/// The serialization of this type includes the versioning information.
+///
+/// When embedded into a smart contract module, name the custom section
+/// `concordium-schema`.
 #[derive(Debug, Clone)]
 pub enum VersionedModuleSchema {
     V1(ModuleV1),
