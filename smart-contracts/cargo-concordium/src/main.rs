@@ -134,17 +134,17 @@ struct Runner {
     #[structopt(
         name = "schema",
         long = "schema",
-        conflicts_with = "schema-v2",
+        conflicts_with = "schema-unversioned",
         help = "Path to a file with a schema for parsing parameter (or state only for V0 \
                 contracts) in JSON."
     )]
     schema_path:         Option<PathBuf>,
     #[structopt(
-        name = "schema-v2",
-        long = "schema-v2",
+        name = "schema-unversioned",
+        long = "schema-unversioned",
         conflicts_with = "schema",
-        help = "Path to a file with a schema V2 file for parsing parameter in JSON. This is only \
-                needed if supplying an older version of the V2 schema, which does not contain \
+        help = "Path to a file with an unversioned schema file for parsing parameter in JSON. \
+                This can only be used for an older version of the schema, which does not contain \
                 version information."
     )]
     schema_v1_path:      Option<PathBuf>,
@@ -799,7 +799,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         }
         (Some(_), Some(_)) => {
             // Structopt will catch this case earlier in the execution.
-            bail!("Only one schema is allowed, use either --schema or --schema-v1")
+            bail!("Only one schema is allowed, use either --schema or --schema-unversioned")
         }
         (None, None) => {
             let res = utils::get_embedded_schema(module);
