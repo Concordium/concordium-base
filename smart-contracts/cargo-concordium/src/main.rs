@@ -134,20 +134,10 @@ struct Runner {
     #[structopt(
         name = "schema",
         long = "schema",
-        conflicts_with = "schema-unversioned",
         help = "Path to a file with a schema for parsing parameter (or state only for V0 \
                 contracts) in JSON."
     )]
     schema_path:         Option<PathBuf>,
-    #[structopt(
-        name = "schema-unversioned",
-        long = "schema-unversioned",
-        conflicts_with = "schema",
-        help = "Path to a file with an unversioned schema file for parsing parameter in JSON. \
-                This can only be used for an older version of the schema, which does not contain \
-                version information."
-    )]
-    schema_v1_path:      Option<PathBuf>,
     #[structopt(
         name = "parameter-bin",
         long = "parameter-bin",
@@ -337,25 +327,19 @@ pub fn main() -> anyhow::Result<()> {
                 .context("Could not build smart contract.")?;
             if let Some(module_schema) = &schema {
                 let module_schema_bytes = match module_schema {
-                    ModuleSchema::V0(module_schema) => {
+                    VersionedModuleSchema::V0(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
                             print_contract_schema_v0(contract_name, contract_schema);
                         }
                         to_bytes(module_schema)
                     }
-                    ModuleSchema::Versioned(versioned_module_schema) => {
+                    VersionedModuleSchema::V1(module_schema) => {
                         eprintln!("\n   Module schema includes:");
-                        match versioned_module_schema {
-                            VersionedModuleSchema::V1(module_schema) => {
-                                for (contract_name, contract_schema) in
-                                    module_schema.contracts.iter()
-                                {
-                                    print_contract_schema_v1(contract_name, contract_schema);
-                                }
-                                to_bytes(module_schema)
-                            }
+                        for (contract_name, contract_schema) in module_schema.contracts.iter() {
+                            print_contract_schema_v1(contract_name, contract_schema);
                         }
+                        to_bytes(module_schema)
                     }
                 };
                 eprintln!(
@@ -500,8 +484,13 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     // get the module schema if available.
     let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
         let bytes = fs::read(schema_path).context("Could not read schema file.")?;
-        let schema = from_bytes(&bytes)
-            .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
+        let schema = if let Ok(schema) = from_bytes::<VersionedModuleSchema>(&bytes) {
+            schema
+        } else {
+            from_bytes(&bytes)
+                .map(VersionedModuleSchema::V0)
+                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?
+        };
         Some(schema)
     } else {
         let res = utils::get_embedded_schema_v0(module);
@@ -517,9 +506,13 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
         res.ok()
     };
 
-    let contract_schema_opt = module_schema_opt
-        .as_ref()
-        .and_then(|module_schema| module_schema.contracts.get(contract_name));
+    let contract_schema_opt = match module_schema_opt.as_ref() {
+        Some(VersionedModuleSchema::V0(module_schema)) => {
+            module_schema.contracts.get(contract_name)
+        }
+        Some(_) => bail!("Schema version mismatches the smart contract version"),
+        None => None,
+    };
     let contract_schema_state_opt =
         contract_schema_opt.and_then(|contract_schema| contract_schema.state.clone());
     let contract_schema_func_opt = contract_schema_opt.and_then(|contract_schema| {
@@ -784,43 +777,39 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     };
 
     // get the module schema if available.
-    let module_schema_opt = match (&runner.schema_path, &runner.schema_v1_path) {
-        (Some(schema_path), None) => {
-            let bytes = fs::read(schema_path).context("Could not read schema file.")?;
-            let schema = from_bytes(&bytes)
-                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
-            Some(schema)
-        }
-        (None, Some(schema_v1_path)) => {
-            let bytes = fs::read(schema_v1_path).context("Could not read schema file.")?;
-            let schema = from_bytes(&bytes)
-                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?;
-            Some(VersionedModuleSchema::V1(schema))
-        }
-        (Some(_), Some(_)) => {
-            // Structopt will catch this case earlier in the execution.
-            bail!("Only one schema is allowed, use either --schema or --schema-unversioned")
-        }
-        (None, None) => {
-            let res = utils::get_embedded_schema(module);
-            if let Err(err) = &res {
-                eprintln!(
-                    "{}",
-                    WARNING_STYLE.paint(format!(
-                        "Could not use embedded schema: {}.\nPlease provide a path to
+    let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
+        let bytes = fs::read(schema_path).context("Could not read schema file.")?;
+        let schema = if let Ok(schema) = from_bytes::<VersionedModuleSchema>(&bytes) {
+            schema
+        } else {
+            from_bytes(&bytes)
+                .map(VersionedModuleSchema::V1)
+                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?
+        };
+        Some(schema)
+    } else {
+        let res = utils::get_embedded_schema_v1(module);
+        if let Err(err) = &res {
+            eprintln!(
+                "{}",
+                WARNING_STYLE.paint(format!(
+                    "Could not use embedded schema: {}.\nPlease provide a path to
     a valid schema.",
-                        err
-                    ))
-                );
-            }
-            res.ok()
+                    err
+                ))
+            );
         }
+        res.ok()
     };
 
-    let contract_schema_opt = module_schema_opt.as_ref().and_then(|versioned_module| {
-        let VersionedModuleSchema::V1(module_schema) = versioned_module;
-        module_schema.contracts.get(contract_name)
-    });
+    let contract_schema_opt = match module_schema_opt.as_ref() {
+        Some(VersionedModuleSchema::V1(module_schema)) => {
+            module_schema.contracts.get(contract_name)
+        }
+        Some(_) => bail!("Schema version mismatches the smart contract version"),
+        None => None,
+    };
+
     let contract_schema_func_opt = contract_schema_opt.and_then(|contract_schema| {
         if let Some(func) = is_receive {
             contract_schema.receive.get(func)

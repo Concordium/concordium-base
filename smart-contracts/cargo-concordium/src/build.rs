@@ -23,11 +23,6 @@ use wasm_transform::{
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
-pub enum ModuleSchema {
-    V0(schema::ModuleV0),
-    Versioned(schema::VersionedModuleSchema),
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum SchemaBuildOptions {
     DoNotBuild,
@@ -53,7 +48,7 @@ pub fn build_contract(
     build_schema: SchemaBuildOptions,
     out: Option<PathBuf>,
     cargo_args: &[String],
-) -> anyhow::Result<(usize, Option<ModuleSchema>)> {
+) -> anyhow::Result<(usize, Option<schema::VersionedModuleSchema>)> {
     #[allow(unused_assignments)]
     // This assignment is not actually unused. It is used via the custom_section which retains a
     // reference to this vector, which is why it has to be here. This is a bit ugly, but not as
@@ -69,12 +64,12 @@ pub fn build_contract(
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
-                        name:     "concordium-schema-v1".into(),
+                        name:     "concordium-schema".into(),
                         contents: &schema_bytes,
                     };
-                    Some((Some(custom_section), ModuleSchema::V0(schema)))
+                    Some((Some(custom_section), schema))
                 } else {
-                    Some((None, ModuleSchema::V0(schema)))
+                    Some((None, schema))
                 }
             } else {
                 None
@@ -82,18 +77,17 @@ pub fn build_contract(
         }
         utils::WasmVersion::V1 => {
             if build_schema.build() {
-                let schema =
-                    build_contract_schema(cargo_args, utils::generate_contract_schema_versioned)
-                        .context("Could not build module schema.")?;
+                let schema = build_contract_schema(cargo_args, utils::generate_contract_schema_v1)
+                    .context("Could not build module schema.")?;
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
                         name:     "concordium-schema".into(),
                         contents: &schema_bytes,
                     };
-                    Some((Some(custom_section), ModuleSchema::Versioned(schema)))
+                    Some((Some(custom_section), schema))
                 } else {
-                    Some((None, ModuleSchema::Versioned(schema)))
+                    Some((None, schema))
                 }
             } else {
                 None
