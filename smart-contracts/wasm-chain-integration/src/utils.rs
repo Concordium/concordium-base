@@ -250,8 +250,8 @@ pub fn generate_contract_schema_v0(module_bytes: &[u8]) -> ExecResult<schema::Mo
 }
 
 /// Tries to generate schemas for parameters and return values of methods for a
-/// versioned module v0.
-pub fn generate_contract_schema_versioned_v0(
+/// versioned module.
+pub fn generate_contract_schema_versioned(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
@@ -372,7 +372,7 @@ pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::ModuleV0> {
 /// It will attempt to use the schema in the custom section "concordium-schema"
 /// and if this is not present it will try to use the custom section
 /// "concordium-schema-v2".
-pub fn get_embedded_schema_versioned(bytes: &[u8]) -> ExecResult<schema::VersionedModuleSchema> {
+pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::VersionedModuleSchema> {
     let skeleton = parse_skeleton(bytes)?;
     let mut schema_v2_section = None;
     let mut schema_versioned_section = None;

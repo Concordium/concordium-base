@@ -802,7 +802,7 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
             bail!("Only one schema is allowed, use either --schema or --schema-v1")
         }
         (None, None) => {
-            let res = utils::get_embedded_schema_versioned(module);
+            let res = utils::get_embedded_schema(module);
             if let Err(err) = &res {
                 eprintln!(
                     "{}",
