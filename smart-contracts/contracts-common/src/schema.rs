@@ -131,37 +131,72 @@ pub enum SizeLength {
     U64,
 }
 
-/// Schema type used to describe the different types in a rust smart
-/// contract.
+/// Schema type used to describe the different types in a smart contract, their
+/// serialization and how to represent the types in JSON.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum Type {
+    /// A type with no serialization.
     Unit,
+    /// Boolean. Serialized as a byte, where the value 0 is false and 1 is true.
     Bool,
+    /// Unsigned 8-bit integer.
     U8,
+    /// Unsigned 16-bit integer. Serialized as little endian.
     U16,
+    /// Unsigned 32-bit integer. Serialized as little endian.
     U32,
+    /// Unsigned 64-bit integer. Serialized as little endian.
     U64,
+    /// Unsigned 128-bit integer. Serialized as little endian.
     U128,
+    /// Signed 8-bit integer. Serialized as little endian.
     I8,
+    /// Signed 16-bit integer. Serialized as little endian.
     I16,
+    /// Signed 32-bit integer. Serialized as little endian.
     I32,
+    /// Signed 64-bit integer. Serialized as little endian.
     I64,
+    /// Signed 128-bit integer. Serialized as little endian.
     I128,
+    /// An amount of CCD. Serialized as 64-bit unsigned integer little endian.
     Amount,
+    /// An account address.
     AccountAddress,
+    /// A contract address.
     ContractAddress,
+    /// A timestamp. Represented as milliseconds since Unix epoch. Serialized as
+    /// a 64-bit unsigned integer little endian.
     Timestamp,
+    /// A duration of milliseconds, cannot be negative. Serialized as a 64-bit
+    /// unsigned integer little endian.
     Duration,
+    /// A pair.
     Pair(Box<Type>, Box<Type>),
+    /// A list. It is serialized with the length first followed by the list
+    /// items.
     List(SizeLength, Box<Type>),
+    /// A Set. It is serialized with the length first followed by the list
+    /// items.
     Set(SizeLength, Box<Type>),
+    /// A Map. It is serialized with the length first followed by key-value
+    /// pairs of the entries.
     Map(SizeLength, Box<Type>, Box<Type>),
+    /// A fixed sized list.
     Array(u32, Box<Type>),
+    /// A structure type with fields.
     Struct(Fields),
+    /// A sum type.
     Enum(Vec<(String, Fields)>),
+    /// A UTF8 String. It is serialized with the length first followed by the
+    /// encoding of the string.
     String(SizeLength),
+    /// A smart contract name. It is serialized with the length first followed
+    /// by the ASCII encoding of the name.
     ContractName(SizeLength),
+    /// A smart contract receive function name. It is serialized with the length
+    /// first followed by the ASCII encoding of the name.
     ReceiveName(SizeLength),
     /// An unsigned integer encoded using LEB128 with the addition of a
     /// constraint on the maximum number of bytes to use for an encoding.
