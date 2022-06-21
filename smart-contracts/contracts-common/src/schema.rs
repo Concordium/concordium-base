@@ -35,8 +35,8 @@ pub trait SchemaType {
 
 /// Contains all the contract schemas for a smart contract module V0.
 ///
-/// When embedded into a smart contract module, name the custom section
-/// `concordium-schema-v1`.
+/// Older versions of smart contracts might have this embedded in the custom
+/// section labelled `concordium-schema-v1`.
 #[derive(Debug, Clone)]
 pub struct ModuleV0 {
     pub contracts: BTreeMap<String, ContractV0>,
@@ -44,21 +44,26 @@ pub struct ModuleV0 {
 
 /// Contains all the contract schemas for a smart contract module V1.
 ///
-/// When embedded into a smart contract module, name the custom section
-/// `concordium-schema-v2`.
+/// Older versions of smart contracts might have this embedded in the custom
+/// section labelled `concordium-schema-v2`.
 #[derive(Debug, Clone)]
 pub struct ModuleV1 {
     pub contracts: BTreeMap<String, ContractV1>,
 }
 
-/// Represents every schema module starting from smart contract module V1.
+/// Represents the different schema versions.
 ///
-/// The serialization of this type includes the versioning information.
+/// The serialization of this type includes the versioning information. The
+/// serializtion of this is always prefixed with two 255u8 in order to
+/// distinquish this versioned schema from the unversioned.
 ///
 /// When embedded into a smart contract module, name the custom section
 /// `concordium-schema`.
 #[derive(Debug, Clone)]
 pub enum VersionedModuleSchema {
+    /// Version 0 schema, only supported by V0 smart contracts.
+    V0(ModuleV0),
+    /// Version 1 schema, only supported by V1 smart contracts.
     V1(ModuleV1),
 }
 
@@ -394,7 +399,13 @@ impl Serial for ModuleV1 {
 
 impl Serial for VersionedModuleSchema {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        // Prefix for versioned module schema, used to distinquish from the unversioned.
+        out.write_u16(u16::MAX)?;
         match self {
+            VersionedModuleSchema::V0(module) => {
+                out.write_u8(0)?;
+                module.serial(out)?;
+            }
             VersionedModuleSchema::V1(module) => {
                 out.write_u8(1)?;
                 module.serial(out)?;
@@ -426,8 +437,17 @@ impl Deserial for ModuleV1 {
 
 impl Deserial for VersionedModuleSchema {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let version: u8 = source.get()?;
+        // First we ensure the prefix is correct.
+        let prefix = source.read_u16()?;
+        if prefix != u16::MAX {
+            return Err(ParseError {});
+        }
+        let version = source.read_u8()?;
         match version {
+            0 => {
+                let module = source.get()?;
+                Ok(VersionedModuleSchema::V0(module))
+            }
             1 => {
                 let module = source.get()?;
                 Ok(VersionedModuleSchema::V1(module))
