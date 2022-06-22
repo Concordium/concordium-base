@@ -483,6 +483,8 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     // get the module schema if available.
     let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
         let bytes = fs::read(schema_path).context("Could not read schema file.")?;
+        // Attempt to parse a versioned schema otherwise fallback to a version 0 schema.
+        // This is safe since the versioned schema is prefixed with a unique value.
         let schema = if let Ok(schema) = from_bytes::<VersionedModuleSchema>(&bytes) {
             schema
         } else {
@@ -778,6 +780,8 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     // get the module schema if available.
     let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
         let bytes = fs::read(schema_path).context("Could not read schema file.")?;
+        // Attempt to parse a versioned schema otherwise fallback to a version 1 schema.
+        // This is safe since the versioned schema is prefixed with a unique value.
         let schema = if let Ok(schema) = from_bytes::<VersionedModuleSchema>(&bytes) {
             schema
         } else {
