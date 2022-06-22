@@ -326,22 +326,21 @@ pub fn main() -> anyhow::Result<()> {
             let (byte_len, schema) = build_contract(version, build_schema, out, &cargo_args)
                 .context("Could not build smart contract.")?;
             if let Some(module_schema) = &schema {
-                let module_schema_bytes = match module_schema {
+                match module_schema {
                     VersionedModuleSchema::V0(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
                             print_contract_schema_v0(contract_name, contract_schema);
                         }
-                        to_bytes(module_schema)
                     }
                     VersionedModuleSchema::V1(module_schema) => {
                         eprintln!("\n   Module schema includes:");
                         for (contract_name, contract_schema) in module_schema.contracts.iter() {
                             print_contract_schema_v1(contract_name, contract_schema);
                         }
-                        to_bytes(module_schema)
                     }
                 };
+                let module_schema_bytes = to_bytes(module_schema);
                 eprintln!(
                     "\n   Total size of the module schema is {} {}",
                     bold_style.paint(module_schema_bytes.len().to_string()),
