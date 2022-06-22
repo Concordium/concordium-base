@@ -54,8 +54,8 @@ pub struct ModuleV1 {
 /// Represents the different schema versions.
 ///
 /// The serialization of this type includes the versioning information. The
-/// serializtion of this is always prefixed with two 255u8 in order to
-/// distinquish this versioned schema from the unversioned.
+/// serialization of this is always prefixed with two 255u8 in order to
+/// distinguish this versioned schema from the unversioned.
 ///
 /// When embedded into a smart contract module, name the custom section
 /// `concordium-schema`.
