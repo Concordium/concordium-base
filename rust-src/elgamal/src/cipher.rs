@@ -27,7 +27,7 @@ where
                 StringValidation {
                     max_length: None,
                     min_length: Some(64), // TODO: Correct value here?
-                    pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                    pattern:    Some(crypto_common::REGEX_HEX.into()),
                 }
                 .into(),
             ),

@@ -351,6 +351,8 @@ impl fmt::Display for IpIdentity {
 /// evaluation point for secret sharing, and thus it cannot be 0.
 pub struct ArIdentity(u32);
 
+// Manual schema implementation needed because it is written as a string and
+// schemars doesn't support into/from.
 impl schemars::JsonSchema for ArIdentity {
     fn schema_name() -> String { "ArIdentity".into() }
 
@@ -822,29 +824,6 @@ pub struct ChainArData<C: Curve> {
     #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
 }
-
-// impl<C> schemars::JsonSchema for ChainArData<C>
-// where
-//     C: Curve,
-// {
-//     fn schema_name() -> String { "ChainArData".into() }
-
-//     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) ->
-// schemars::schema::Schema {         use schemars::schema::*;
-//         Schema::Object(SchemaObject {
-//             instance_type: Some(InstanceType::String.into()),
-//             string: Some(
-//                 StringValidation {
-//                     max_length: None,
-//                     min_length: Some(64),
-//                     pattern:    Some("^([0-9]?[a-f]?)*$".into()),
-//                 }
-//                 .into(),
-//             ),
-//             ..SchemaObject::default()
-//         })
-//     }
-// }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
 /// This is the decrypted counterpart of ChainArData.
@@ -1381,6 +1360,7 @@ pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
 }
 
+// Manual implementation needed to deal with schemeId.
 impl schemars::JsonSchema for VerifyKey {
     fn schema_name() -> String { "VerifyKey".into() }
 
@@ -1395,7 +1375,7 @@ impl schemars::JsonSchema for VerifyKey {
                     StringValidation {
                         max_length: Some(64),
                         min_length: Some(64),
-                        pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                        pattern:    Some(crypto_common::REGEX_HEX.into()),
                     }
                     .into(),
                 ),

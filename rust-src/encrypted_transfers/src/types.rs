@@ -42,6 +42,7 @@ pub struct EncryptedAmount<C: Curve> {
     pub encryptions: [Cipher<C>; 2],
 }
 
+// Manual implementation seems to be needed due to the generic parameter.
 impl<C> schemars::JsonSchema for EncryptedAmount<C>
 where
     C: Curve,
@@ -56,7 +57,7 @@ where
                 StringValidation {
                     max_length: Some(384),
                     min_length: Some(384),
-                    pattern:    Some("^([0-9]?[a-f]?)*$".into()),
+                    pattern:    Some(crypto_common::REGEX_HEX.into()),
                 }
                 .into(),
             ),
