@@ -150,6 +150,7 @@ impl Amount {
     }
 }
 
+// Manual implementation needed because it is represented as a string.
 impl schemars::JsonSchema for Amount {
     fn schema_name() -> String { "CCDAmount".into() }
 
