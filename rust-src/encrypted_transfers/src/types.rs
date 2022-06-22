@@ -54,8 +54,8 @@ where
             instance_type: Some(InstanceType::String.into()),
             string: Some(
                 StringValidation {
-                    max_length: None,
-                    min_length: None, // TODO
+                    max_length: Some(384),
+                    min_length: Some(384),
                     pattern:    Some("^([0-9]?[a-f]?)*$".into()),
                 }
                 .into(),

@@ -459,6 +459,7 @@ dependencies = [
  "pairing",
  "pbkdf2 0.9.0",
  "rand 0.7.3",
+ "schemars",
  "serde",
  "sha2 0.9.5",
  "thiserror",
@@ -562,6 +563,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21e50f3adc76d6a43f5ed73b698a87d0760ca74617f60f7c3b879003536fdd28"
+
+[[package]]
 name = "ecvrf"
 version = "0.0.1"
 dependencies = [
@@ -640,6 +647,7 @@ dependencies = [
  "pairing",
  "rand 0.7.3",
  "rand_core 0.5.1",
+ "schemars",
  "serde",
  "thiserror",
 ]
@@ -677,6 +685,7 @@ dependencies = [
  "pedersen_scheme",
  "rand 0.7.3",
  "random_oracle",
+ "schemars",
  "serde",
  "wasm-bindgen",
 ]
@@ -1028,6 +1037,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_core 0.5.1",
  "random_oracle",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.9.5",
@@ -1462,6 +1472,7 @@ dependencies = [
  "pairing",
  "rand 0.7.3",
  "rand_core 0.5.1",
+ "schemars",
  "serde",
  "thiserror",
 ]
@@ -1804,6 +1815,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1847b767a3d62d95cbf3d8a9f0e421cf57a0d8aa4f411d4b16525afb0284d4ed"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af4d7e1b012cb3d9129567661a63755ea4b8a7386d339dc945ae187e403c6743"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1864,6 +1899,17 @@ name = "serde_derive"
 version = "1.0.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "963a7dbc9895aeac7ac90e74f34a5d5261828f79df35cbed41e10189d3804d43"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
 dependencies = [
  "proc-macro2",
  "quote",
