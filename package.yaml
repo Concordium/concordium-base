@@ -61,8 +61,6 @@ dependencies:
 - microlens-platform >=0.3
 - mtl >= 2.2
 - persistent >= 2.10
-- persistent-postgresql >= 2.10
-- persistent-template >= 2.8
 - pqueue >= 1.4.1
 - prettyprinter >= 1.2
 - primitive >= 0.7
