@@ -91,8 +91,8 @@ fn main() -> anyhow::Result<()> {
         .wait_for_newline(true)
         .with_prompt(format!(
             "The user chose anonymity revocation threshold {} and anonymity revokers [{}]. Accept?",
-            pio.common_fields.choice_ar_parameters.threshold,
-            pio.common_fields.choice_ar_parameters
+            pio.choice_ar_parameters.threshold,
+            pio.choice_ar_parameters
                 .ar_identities
                 .iter()
                 .map(|ar| ar.to_string())
@@ -153,8 +153,8 @@ fn main() -> anyhow::Result<()> {
     let v = validate_request_v1(&pio, context).is_ok();
     print!("{:?}", v);
 
-    // let sig = sign_identity_object_v1(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
-    // let vf = verify_credentials_v1(
+    // let sig = sign_identity_object_v1(pre_id_obj, &context.ip_info, alist,
+    // ip_secret_key)?; let vf = verify_credentials_v1(
     //     &pio,
     //     context,
     //     &attributes,

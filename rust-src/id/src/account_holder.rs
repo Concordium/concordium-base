@@ -406,13 +406,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .collect::<BTreeMap<ArIdentity, _>>();
 
     // Returning the version 0 pre-identity object.
-    let common_fields = CommonPioFields {
-        ip_ar_data,
-        choice_ar_parameters,
-        cmm_sc: prover.first.first.first.second.commitment,
-        cmm_prf: prover.first.first.second.commitment_1,
-        cmm_prf_sharing_coeff,
-    };
     let poks_common = CommonPioProofFields {
         challenge: proof.challenge,
         id_cred_sec_witness: proof.witness.w1.w1.w1.w1,
@@ -427,7 +420,11 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let pio = PreIdentityObject {
         pub_info_for_ip,
-        common_fields,
+        ip_ar_data,
+        choice_ar_parameters,
+        cmm_sc: prover.first.first.first.second.commitment,
+        cmm_prf: prover.first.first.second.commitment_1,
+        cmm_prf_sharing_coeff,
         poks,
     };
     Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
@@ -477,13 +474,6 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .collect::<BTreeMap<ArIdentity, _>>();
 
     // Returning the version 1 pre-identity object.
-    let common_fields = CommonPioFields {
-        ip_ar_data,
-        choice_ar_parameters,
-        cmm_sc: prover.first.first.second.commitment,
-        cmm_prf: prover.first.second.commitment_1,
-        cmm_prf_sharing_coeff,
-    };
     let poks = CommonPioProofFields {
         challenge: proof.challenge,
         id_cred_sec_witness: proof.witness.w1.w1.w1,
@@ -493,7 +483,11 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let pio = PreIdentityObjectV1 {
         id_cred_pub,
-        common_fields,
+        ip_ar_data,
+        choice_ar_parameters,
+        cmm_sc: prover.first.first.second.commitment,
+        cmm_prf: prover.first.second.commitment_1,
+        cmm_prf_sharing_coeff,
         poks,
     };
     Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))

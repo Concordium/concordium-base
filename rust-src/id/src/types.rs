@@ -973,52 +973,7 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public credential of the account holder in the anonymity revoker's
     /// group.
     #[serde(rename = "pubInfoForIp")]
-    pub pub_info_for_ip: PublicInformationForIp<C>,
-    /// Common fields for pre identity objects.
-    #[serde(flatten)]
-    pub common_fields:   CommonPioFields<P, C>,
-    /// Proofs of knowledge. See the documentation of PreIdentityProof for
-    /// details.
-    #[serde(
-        rename = "proofsOfKnowledge",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub poks:            PreIdentityProof<P, C>,
-}
-
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
-    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
-))]
-pub struct PreIdentityObjectV1<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    // TODO: consider renaming this struct
-    #[serde(
-        rename = "idCredPub",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub id_cred_pub:   C,
-    /// Common fields for pre identity objects.
-    #[serde(flatten)]
-    pub common_fields: CommonPioFields<P, C>,
-    /// Proofs of knowledge. See the documentation of PreIdentityProof for
-    /// details.
-    #[serde(
-        rename = "proofsOfKnowledge",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub poks:          CommonPioProofFields<P, C>,
-}
-
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
-    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
-))]
-pub struct CommonPioFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    pub pub_info_for_ip:       PublicInformationForIp<C>,
     /// Anonymity revocation data for the chosen anonymity revokers.
     #[serde(rename = "ipArData")]
     #[map_size_length = 4]
@@ -1042,6 +997,104 @@ pub struct CommonPioFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// where K is the prf key
     #[serde(rename = "prfKeySharingCoeffCommitments")]
     pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
+    /// Proofs of knowledge. See the documentation of PreIdentityProof for
+    /// details.
+    #[serde(
+        rename = "proofsOfKnowledge",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub poks:                  PreIdentityProof<P, C>,
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObject<P, C> {
+    pub fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        CommonPioFields {
+            ip_ar_data:            &self.ip_ar_data,
+            choice_ar_parameters:  &self.choice_ar_parameters,
+            cmm_sc:                &self.cmm_sc,
+            cmm_prf:               &self.cmm_prf,
+            cmm_prf_sharing_coeff: &self.cmm_prf_sharing_coeff,
+        }
+    }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObjectV1<P, C> {
+    pub fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        CommonPioFields {
+            ip_ar_data:            &self.ip_ar_data,
+            choice_ar_parameters:  &self.choice_ar_parameters,
+            cmm_sc:                &self.cmm_sc,
+            cmm_prf:               &self.cmm_prf,
+            cmm_prf_sharing_coeff: &self.cmm_prf_sharing_coeff,
+        }
+    }
+}
+
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
+))]
+pub struct PreIdentityObjectV1<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    // TODO: consider renaming this struct
+    #[serde(
+        rename = "idCredPub",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub id_cred_pub:           C,
+    /// Anonymity revocation data for the chosen anonymity revokers.
+    #[serde(rename = "ipArData")]
+    #[map_size_length = 4]
+    pub ip_ar_data:            BTreeMap<ArIdentity, IpArData<C>>,
+    /// Choice of anonyimity revocation parameters.
+    /// NB:IP needs to check that they make sense in the context of the public
+    /// keys they are allowed to use.
+    #[serde(rename = "choiceArData")]
+    pub choice_ar_parameters:  ChoiceArParameters,
+    /// Commitment to id cred sec using the commitment key of IP derived from
+    /// the PS public key. This is used to compute the message that the IP
+    /// signs.
+    #[serde(rename = "idCredSecCommitment")]
+    pub cmm_sc:                PedersenCommitment<P::G1>,
+    /// Commitment to the prf key in group G1.
+    #[serde(rename = "prfKeyCommitmentWithIP")]
+    pub cmm_prf:               PedersenCommitment<P::G1>,
+    /// commitments to the coefficients of the polynomial
+    /// used to share the prf key
+    /// K + b1 X + b2 X^2...
+    /// where K is the prf key
+    #[serde(rename = "prfKeySharingCoeffCommitments")]
+    pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
+    /// Proofs of knowledge. See the documentation of PreIdentityProof for
+    /// details.
+    #[serde(
+        rename = "proofsOfKnowledge",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub poks:                  CommonPioProofFields<P, C>,
+}
+
+pub struct CommonPioFields<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Anonymity revocation data for the chosen anonymity revokers.
+    pub ip_ar_data:            &'a BTreeMap<ArIdentity, IpArData<C>>,
+    /// Choice of anonyimity revocation parameters.
+    /// NB:IP needs to check that they make sense in the context of the public
+    /// keys they are allowed to use.
+    pub choice_ar_parameters:  &'a ChoiceArParameters,
+    /// Commitment to id cred sec using the commitment key of IP derived from
+    /// the PS public key. This is used to compute the message that the IP
+    /// signs.
+    pub cmm_sc:                &'a PedersenCommitment<P::G1>,
+    /// Commitment to the prf key in group G1.
+    pub cmm_prf:               &'a PedersenCommitment<P::G1>,
+    /// commitments to the coefficients of the polynomial
+    /// used to share the prf key
+    /// K + b1 X + b2 X^2...
+    /// where K is the prf key
+    pub cmm_prf_sharing_coeff: &'a Vec<PedersenCommitment<C>>,
 }
 
 /// The data we get back from the identity provider.
@@ -1128,7 +1181,7 @@ pub trait HasIdentityObjectFields<
     AttributeType: Attribute<C::Scalar>,
 > {
     /// Get the common fields of the pre-identity object.
-    fn get_common_pio_fields(&self) -> &CommonPioFields<P, C>;
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C>;
 
     /// Get the attribute list
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType>;
@@ -1140,8 +1193,8 @@ pub trait HasIdentityObjectFields<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     HasIdentityObjectFields<P, C, AttributeType> for IdentityObject<P, C, AttributeType>
 {
-    fn get_common_pio_fields(&self) -> &CommonPioFields<P, C> {
-        &self.pre_identity_object.common_fields
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        self.pre_identity_object.get_common_pio_fields()
     }
 
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { &self.alist }
@@ -1152,8 +1205,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     HasIdentityObjectFields<P, C, AttributeType> for IdentityObjectV1<P, C, AttributeType>
 {
-    fn get_common_pio_fields(&self) -> &CommonPioFields<P, C> {
-        &self.pre_identity_object.common_fields
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        self.pre_identity_object.get_common_pio_fields()
     }
 
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { &self.alist }

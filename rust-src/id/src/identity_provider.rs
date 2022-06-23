@@ -259,7 +259,6 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 ) -> Result<(), Reason> {
     let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
     let id_cred_pub = &pre_id_obj.pub_info_for_ip.id_cred_pub;
-    let common_fields = &pre_id_obj.common_fields;
     let poks_common = &pre_id_obj.poks.common_proof_fields;
     let proof_acc_sk = &pre_id_obj.poks.proof_acc_sk;
     // Verify signature:
@@ -281,14 +280,14 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let (verifier, witness) = validate_request_common(
         &mut transcript,
         id_cred_pub,
-        common_fields,
+        pre_id_obj.get_common_pio_fields(),
         poks_common,
         context,
     )?;
 
     // Additionally verify that RegID = PRF(key_PRF, 0):
     let verifier_prf_regid = com_eq::ComEq {
-        commitment: common_fields.cmm_prf,
+        commitment: pre_id_obj.cmm_prf,
         y:          context.global_context.on_chain_commitment_key.g,
         g:          pub_info_for_ip.reg_id,
         cmm_key:    verifier.first.second.cmm_key_1,
@@ -322,7 +321,7 @@ pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: IpContext<P, C>,
 ) -> Result<(), Reason> {
     let id_cred_pub = &pre_id_obj.id_cred_pub;
-    let common_fields = &pre_id_obj.common_fields;
+    let common_fields = pre_id_obj.get_common_pio_fields();
     let poks_common = &pre_id_obj.poks;
 
     let mut transcript = RandomOracle::domain("PreIdentityProof");
@@ -373,7 +372,7 @@ type CommonVerifierWithWitness<P, C> = (
 fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     transcript: &mut RandomOracle,
     id_cred_pub: &C,
-    common_fields: &CommonPioFields<P, C>,
+    common_fields: CommonPioFields<P, C>,
     poks_common: &CommonPioProofFields<P, C>,
     context: IpContext<P, C>,
 ) -> Result<CommonVerifierWithWitness<P, C>, Reason> {
@@ -404,7 +403,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
     let id_cred_sec_eq_verifier = com_eq::ComEq {
-        commitment: common_fields.cmm_sc,
+        commitment: *common_fields.cmm_sc,
         y:          *id_cred_pub,
         cmm_key:    commitment_key_sc,
         g:          context.global_context.on_chain_commitment_key.g,
@@ -463,7 +462,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Verify that the two commitments to the PRF key are the same.
     let verifier_prf_same = com_eq_different_groups::ComEqDiffGroups {
-        commitment_1: common_fields.cmm_prf,
+        commitment_1: *common_fields.cmm_prf,
         commitment_2: *common_fields
             .cmm_prf_sharing_coeff
             .first()
@@ -573,7 +572,12 @@ pub fn sign_identity_object<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
-    sign_identity_object_common(&pre_id_obj.common_fields, ip_info, alist, ip_secret_key)
+    sign_identity_object_common(
+        &pre_id_obj.get_common_pio_fields(),
+        ip_info,
+        alist,
+        ip_secret_key,
+    )
 }
 
 /// Sign the given pre-identity-object to produce a version 1 identity object.
@@ -593,7 +597,12 @@ pub fn sign_identity_object_v1<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
-    sign_identity_object_common(&pre_id_obj.common_fields, ip_info, alist, ip_secret_key)
+    sign_identity_object_common(
+        &pre_id_obj.get_common_pio_fields(),
+        ip_info,
+        alist,
+        ip_secret_key,
+    )
 }
 
 /// Sign the message constructed from the common fields of a pre-identity object
@@ -1073,7 +1082,7 @@ mod tests {
         };
         let id_cred_sec = id_use_data.aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
-        pio.common_fields.cmm_sc = cmm_sc;
+        pio.cmm_sc = cmm_sc;
         let ver_ok = validate_request(&pio, ctx);
 
         // Assert
@@ -1125,7 +1134,7 @@ mod tests {
             .global_context
             .on_chain_commitment_key
             .commit(&val, &mut csprng);
-        pio.common_fields.cmm_prf = cmm_prf;
+        pio.cmm_prf = cmm_prf;
         let ver_ok = validate_request(&pio, context);
 
         // Assert

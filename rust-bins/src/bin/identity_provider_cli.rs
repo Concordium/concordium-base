@@ -102,8 +102,8 @@ fn main() -> anyhow::Result<()> {
         .wait_for_newline(true)
         .with_prompt(format!(
             "The user chose anonymity revocation threshold {} and anonymity revokers [{}]. Accept?",
-            pio.common_fields.choice_ar_parameters.threshold,
-            pio.common_fields.choice_ar_parameters
+            pio.choice_ar_parameters.threshold,
+            pio.choice_ar_parameters
                 .ar_identities
                 .iter()
                 .map(|ar| ar.to_string())
@@ -173,9 +173,9 @@ fn main() -> anyhow::Result<()> {
     );
     let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
         id_cred_pub:  pio.pub_info_for_ip.id_cred_pub,
-        ar_data:      pio.common_fields.ip_ar_data.clone(),
+        ar_data:      pio.ip_ar_data.clone(),
         max_accounts: attributes.max_accounts,
-        threshold:    pio.common_fields.choice_ar_parameters.threshold,
+        threshold:    pio.choice_ar_parameters.threshold,
     });
 
     let (signature, icdi) = vf.map_err(|e| {
