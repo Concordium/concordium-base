@@ -824,7 +824,9 @@ pub struct PreIdentityProofOld<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub bulletproofs:           Vec<RangeProof<C>>,
 }
 
-// We need to write the serialize instance manually for this one
+/// Proof that the data sent to the identity provider
+/// is well-formed. The serialize instance is implemented manually in order to
+/// be backwards-compatible.
 pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub common_proof_fields: CommonPioProofFields<P, C>,
     /// Witness to the proof that reg_id = PRF(prf_key, 0)
@@ -1118,20 +1120,25 @@ pub struct IdentityObjectV1<
     pub signature:           ps_sig::Signature<P>,
 }
 
-pub trait IsIdentityObject<
+/// Trait for extracting the relevants parts of an identity object needed for
+/// creating a credential
+pub trait HasIdentityObjectFields<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    /// Get the common fields of the pre-identity object.
     fn get_common_pio_fields(&self) -> &CommonPioFields<P, C>;
 
+    /// Get the attribute list
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType>;
 
+    /// Get the signature
     fn get_signature(&self) -> &ps_sig::Signature<P>;
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    IsIdentityObject<P, C, AttributeType> for IdentityObject<P, C, AttributeType>
+    HasIdentityObjectFields<P, C, AttributeType> for IdentityObject<P, C, AttributeType>
 {
     fn get_common_pio_fields(&self) -> &CommonPioFields<P, C> {
         &self.pre_identity_object.common_fields
@@ -1143,7 +1150,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    IsIdentityObject<P, C, AttributeType> for IdentityObjectV1<P, C, AttributeType>
+    HasIdentityObjectFields<P, C, AttributeType> for IdentityObjectV1<P, C, AttributeType>
 {
     fn get_common_pio_fields(&self) -> &CommonPioFields<P, C> {
         &self.pre_identity_object.common_fields
@@ -2437,10 +2444,14 @@ pub trait HasAttributeRandomness<C: Curve> {
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
 }
 
+/// The empty type, here used as an impossible error in the implemention of
+/// `HasAttributeRandomness` for `SystemAttributeRandomness`.
 #[derive(Debug, Error)]
 pub enum ImpossibleError {}
 
-pub struct SystemAttributeRandomness {}
+/// Struct implementing `HasAttributeRandomness` using system randomness, to be
+/// parsed to the `create_credential` function from account_holder.rs.
+pub struct SystemAttributeRandomness;
 
 impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     type ErrorType = ImpossibleError;

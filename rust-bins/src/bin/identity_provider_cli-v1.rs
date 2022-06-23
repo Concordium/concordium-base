@@ -40,23 +40,12 @@ struct IpClient {
     )]
     ar_record:          PathBuf,
     #[structopt(
-        long = "initial-account-out",
-        help = "File to output the payload of the initial account creation transaction."
-    )]
-    out_icdi:           PathBuf,
-    #[structopt(
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
     global:             PathBuf,
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
-    #[structopt(
-        long = "message-expiry",
-        help = "Expiry time of the initial credential transaction. In seconds from __now__.",
-        default_value = "900"
-    )]
-    expiry:             u64,
     #[structopt(
         long = "id-object-expiry",
         help = "Expiry time of the identity object. As YYYYMM."
@@ -77,7 +66,7 @@ fn main() -> anyhow::Result<()> {
     let matches = app.get_matches();
     let app = IpClient::from_clap(&matches);
 
-    let pio = read_pre_identity_object(&app.pio).context(format!(
+    let pio = read_pre_identity_object_v1(&app.pio).context(format!(
         "Could not read the identity object request from file {}.",
         app.pio.display()
     ))?;
@@ -160,77 +149,56 @@ fn main() -> anyhow::Result<()> {
         &ars.anonymity_revokers,
         &global_ctx,
     );
-    let message_expiry = TransactionTime {
-        seconds: chrono::Utc::now().timestamp() as u64 + app.expiry,
-    };
-    let vf = verify_credentials(
-        &pio,
-        context,
-        &attributes,
-        message_expiry,
-        &ip_data.ip_secret_key,
-        &ip_data.ip_cdi_secret_key,
-    );
-    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  pio.pub_info_for_ip.id_cred_pub,
-        ar_data:      pio.common_fields.ip_ar_data.clone(),
-        max_accounts: attributes.max_accounts,
-        threshold:    pio.common_fields.choice_ar_parameters.threshold,
-    });
 
-    let (signature, icdi) = vf.map_err(|e| {
-        anyhow::anyhow!(
-            "Could not verify the identity object request. The reason is {}.",
-            e
-        )
-    })?;
-    let account_address = AccountAddress::new(&pio.pub_info_for_ip.reg_id);
-    let id_object = IdentityObject {
-        pre_identity_object: pio,
-        alist: attributes,
-        signature,
-    };
-    let ver_id_object = Versioned::new(VERSION_0, id_object);
-    println!("Successfully checked pre-identity data.");
-    write_json_to_file(&app.out_file, &ver_id_object).context(format!(
-        "Could not write the identity object to file {}.",
-        app.out_file.display()
-    ))?;
-    println!(
-        "Wrote signed identity object to file {}. Return it to the user.",
-        &app.out_file.display()
-    );
+    let v = validate_request_v1(&pio, context).is_ok();
+    print!("{:?}", v);
 
-    let icdi_message = AccountCredentialMessage::<IpPairing, ArCurve, _> {
-        message_expiry,
-        credential: AccountCredential::Initial { icdi },
-    };
-    let versioned_icdi = Versioned::new(VERSION_0, icdi_message);
-    write_json_to_file(&app.out_icdi, &versioned_icdi).context(format!(
-        "Could not write the initial account transaction to file {}. Try again.",
-        app.out_icdi.display()
-    ))?;
-    println!(
-        "Wrote initial account transaction to file {}. Submit it before {}.",
-        &app.out_icdi.to_string_lossy(),
-        chrono::Local.timestamp(message_expiry.seconds as i64, 0),
-    );
-    println!(
-        "Address of the initial account will be {}.",
-        account_address
-    );
+    // let sig = sign_identity_object_v1(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
+    // let vf = verify_credentials_v1(
+    //     &pio,
+    //     context,
+    //     &attributes,
+    //     &ip_data.ip_secret_key,
+    // );
+    // let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
+    //     id_cred_pub:  pio.id_cred_pub,
+    //     ar_data:      pio.common_fields.ip_ar_data.clone(),
+    //     max_accounts: attributes.max_accounts,
+    //     threshold:    pio.common_fields.choice_ar_parameters.threshold,
+    // });
 
-    let to_store = serde_json::json!({
-        "arRecord": ar_record,
-        "accountAddress": account_address
-    });
-    write_json_to_file(&app.ar_record, &to_store).context(format!(
-        "Could not write the anonymity revocation record to file {}.",
-        app.ar_record.display()
-    ))?;
-    println!(
-        "Wrote anonymity revocation record to file {}. Store it.",
-        &app.ar_record.display()
-    );
+    // let signature = vf.map_err(|e| {
+    //     anyhow::anyhow!(
+    //         "Could not verify the identity object request. The reason is {}.",
+    //         e
+    //     )
+    // })?;
+    // let id_object = IdentityObjectV1 {
+    //     pre_identity_object: pio,
+    //     alist: attributes,
+    //     signature,
+    // };
+    // let ver_id_object = Versioned::new(VERSION_0, id_object);
+    // println!("Successfully checked pre-identity data.");
+    // write_json_to_file(&app.out_file, &ver_id_object).context(format!(
+    //     "Could not write the identity object to file {}.",
+    //     app.out_file.display()
+    // ))?;
+    // println!(
+    //     "Wrote signed identity object to file {}. Return it to the user.",
+    //     &app.out_file.display()
+    // );
+
+    // let to_store = serde_json::json!({
+    //     "arRecord": ar_record
+    // });
+    // write_json_to_file(&app.ar_record, &to_store).context(format!(
+    //     "Could not write the anonymity revocation record to file {}.",
+    //     app.ar_record.display()
+    // ))?;
+    // println!(
+    //     "Wrote anonymity revocation record to file {}. Store it.",
+    //     &app.ar_record.display()
+    // );
     Ok(())
 }

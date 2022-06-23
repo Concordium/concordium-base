@@ -259,7 +259,7 @@ mod test {
 
         let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);
-        let (pio, randomness) = generate_pio(&context, threshold, &id_use_data, &acc_data)
+        let (pio, _) = generate_pio(&context, threshold, &id_use_data, &acc_data)
             .expect("Creating the credential should succeed.");
 
         let ver_ok = verify_credentials(

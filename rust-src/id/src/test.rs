@@ -16,7 +16,6 @@ use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
-use pedersen_scheme::Randomness as PedersenRandomness;
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
 
@@ -201,6 +200,7 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     }
 }
 
+#[test]
 pub fn test_pipeline_old() {
     let mut csprng = thread_rng();
 
@@ -394,6 +394,7 @@ pub fn test_pipeline_old() {
     assert_ne!(cdi_check, Ok(()));
 }
 
+#[test]
 pub fn test_pipeline() {
     let mut csprng = thread_rng();
 
@@ -422,7 +423,7 @@ pub fn test_pipeline() {
         },
         threshold: SignatureThreshold(2),
     };
-    let (context, pio, randomness) = test_create_pio(
+    let (context, pio, _) = test_create_pio(
         &id_use_data,
         &ip_info,
         &ars_infos,
@@ -590,6 +591,7 @@ pub fn test_pipeline() {
     assert_ne!(cdi_check, Ok(()));
 }
 
+#[test]
 pub fn test_pipeline_v1() {
     let mut csprng = thread_rng();
 
@@ -599,7 +601,7 @@ pub fn test_pipeline_v1() {
     let IpData {
         public_ip_info: ip_info,
         ip_secret_key,
-        ip_cdi_secret_key,
+        ..
     } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
     let global_ctx = GlobalContext::generate(String::from("genesis_string"));
@@ -752,12 +754,3 @@ pub fn test_pipeline_v1() {
     let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
     assert_ne!(cdi_check, Ok(()));
 }
-
-#[test]
-pub fn run_pipeline_old() { test_pipeline_old(); }
-
-#[test]
-pub fn run_pipeline() { test_pipeline(); }
-
-#[test]
-pub fn run_pipeline_v1() { test_pipeline_v1(); }

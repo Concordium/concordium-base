@@ -388,7 +388,7 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, randomness) = test_create_pio(
+        let (context, pio, _) = test_create_pio(
             &id_use_data,
             &ip_info,
             &ars_infos,
@@ -484,6 +484,8 @@ mod tests {
         assert_eq!(cdi_check, Ok(()));
     }
 
+    /// This tests the credential creation flow, where no initial account was
+    /// involved in the identity creation process.
     #[test]
     fn test_verify_cdi_v1() {
         let mut csprng = thread_rng();

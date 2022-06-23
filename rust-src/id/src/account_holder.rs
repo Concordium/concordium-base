@@ -326,8 +326,23 @@ pub fn generate_pio_old<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ))
 }
 
+/// Two flows for creating identities are supported. The first flow involves the
+/// creation of an initial account, the second flow does not.
+/// The proofs used in the flows are very similar, and therefore factored out in
+/// the function `generate_pio_common` that constructs the common sigma protocol
+/// prover used in both flows:
+/// * In the version 0 flow, the common prover is AND'ed with a prover showing
+///   that RegID = PRF(key_PRF, 0)
+/// * In the version 1 flow, the sigma protocol prover is the common prover
+/// The `generate_pio_common` function also produces the bulletproofs rangeproof
+/// used in both flows. The version 0 flow is kept for backwards compatibility.
+
+/// Generate a version 0 PreIdentityObject out of the account holder
+/// information, the chosen anonymity revoker information, and the necessary
+/// contextual information (group generators, shared commitment keys, etc).
+/// NB: In this method we assume that all the anonymity revokers in context
+/// are to be used.
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    // TODO: consider renaming this function
     context: &IpContext<P, C>,
     threshold: Threshold,
     id_use_data: &IdObjectUseData<P, C>,
@@ -335,6 +350,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 ) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
     let mut transcript = RandomOracle::domain("PreIdentityProof");
+    // Prove ownership of the initial account
     let pub_info_for_ip = build_pub_info_for_ip(
         context.global_context,
         &id_use_data.aci.cred_holder_info.id_cred.id_cred_sec,
@@ -344,21 +360,22 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let proof_acc_sk = AccountOwnershipProof {
         sigs: initial_account.sign_public_information_for_ip(&pub_info_for_ip),
     };
-    let (
+    let CommonPioGenerationOutput{
         prover,
         secret,
         bulletproofs,
         ip_ar_data,
         choice_ar_parameters,
         cmm_prf_sharing_coeff,
-        _, // id_cred_pub already in pub_info_for_ip
-    ) = generate_pio_common(
+        .. // id_cred_pub already in pub_info_for_ip
+     } = generate_pio_common(
         &mut transcript,
         &mut csprng,
         context,
         threshold,
         id_use_data,
     )?;
+    // Additionally prove that RegID = PRF(key_PRF, 0):
     let prover_prf_regid = com_eq::ComEq {
         commitment: prover.first.second.commitment_1,
         y:          context.global_context.on_chain_commitment_key.g,
@@ -370,6 +387,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         r: secret.0 .1.rand_cmm_1.clone(),
         a: id_use_data.aci.prf_key.to_value(),
     };
+    // Add the prf_regid prover and secret
     let prover = prover.add_prover(prover_prf_regid);
     let secret = (secret, secret_prf_regid);
     transcript.append_message(b"bulletproofs", &bulletproofs);
@@ -387,6 +405,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
+    // Returning the version 0 pre-identity object.
     let common_fields = CommonPioFields {
         ip_ar_data,
         choice_ar_parameters,
@@ -414,6 +433,11 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
 }
 
+/// Generate a version 1 PreIdentityObject out of the account holder
+/// information, the chosen anonymity revoker information, and the necessary
+/// contextual information (group generators, shared commitment keys, etc).
+/// NB: In this method we assume that all the anonymity revokers in context
+/// are to be used.
 pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // TODO: consider renaming this function
     context: &IpContext<P, C>,
@@ -422,7 +446,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 ) -> Option<(PreIdentityObjectV1<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
     let mut transcript = RandomOracle::domain("PreIdentityProof");
-    let (
+    let CommonPioGenerationOutput {
         prover,
         secret,
         bulletproofs,
@@ -430,7 +454,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         choice_ar_parameters,
         cmm_prf_sharing_coeff,
         id_cred_pub,
-    ) = generate_pio_common(
+    } = generate_pio_common(
         &mut transcript,
         &mut csprng,
         context,
@@ -452,6 +476,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
+    // Returning the version 1 pre-identity object.
     let common_fields = CommonPioFields {
         ip_ar_data,
         choice_ar_parameters,
@@ -474,6 +499,8 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
 }
 
+/// Type alias for the sigma protocol prover that are used by both
+/// `generate_pio` and `generate_pio_v1`.
 type CommonPioProverType<P, C> = AndAdapter<
     AndAdapter<
         AndAdapter<dlog::Dlog<C>, com_eq::ComEq<C, <P as Pairing>::G1>>,
@@ -482,24 +509,35 @@ type CommonPioProverType<P, C> = AndAdapter<
     ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
 >;
 
+type IpArDataClosures<'a, C> = Vec<(
+    ArIdentity,
+    Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a>,
+)>;
+
+/// Various data returned by `generate_pio_common` needed by both
+/// `generate_pio` and `generate_pio_v1` in order to produce the relevant
+/// pre-identity object.
+struct CommonPioGenerationOutput<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    prover:                CommonPioProverType<P, C>,
+    secret:                <CommonPioProverType<P, C> as SigmaProtocol>::SecretData,
+    bulletproofs:          Vec<RangeProof<C>>,
+    ip_ar_data:            IpArDataClosures<'a, C>,
+    choice_ar_parameters:  ChoiceArParameters,
+    cmm_prf_sharing_coeff: Vec<Commitment<C>>,
+    id_cred_pub:           C,
+}
+
+/// Function for generating the common parts of a pre-identity object. This
+/// includes constructing the sigma protocol prover that are used by both
+/// `generate_pio` and `generate_pio_v1` to generate a version 0 and version 1
+/// pre-identity object, respectively.
 fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: rand::Rng>(
     transcript: &mut RandomOracle,
     csprng: &mut R,
     context: &IpContext<'a, P, C>,
     threshold: Threshold,
     id_use_data: &IdObjectUseData<P, C>,
-) -> Option<(
-    CommonPioProverType<P, C>,
-    <CommonPioProverType<P, C> as SigmaProtocol>::SecretData,
-    Vec<RangeProof<C>>,
-    Vec<(
-        ArIdentity,
-        Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a>,
-    )>,
-    ChoiceArParameters,
-    Vec<Commitment<C>>,
-    C,
-)> {
+) -> Option<CommonPioGenerationOutput<'a, P, C>> {
     let aci = &id_use_data.aci;
 
     // PRF related computation
@@ -586,7 +624,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
     });
     let secret = (secret, com_eq_different_groups::ComEqDiffGroupsSecret {
         value:      prf_key.to_value(),
-        rand_cmm_1: rand_cmm_prf.clone(),
+        rand_cmm_1: rand_cmm_prf,
         rand_cmm_2: rand_snd_cmm_prf,
     });
 
@@ -682,7 +720,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
     });
     let secret = (secret, replicated_secrets);
 
-    Some((
+    Some(CommonPioGenerationOutput {
         prover,
         secret,
         bulletproofs,
@@ -690,7 +728,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         choice_ar_parameters,
         cmm_prf_sharing_coeff,
         id_cred_pub,
-    ))
+    })
 }
 
 /// Convenient data structure to collect data related to a single AR
@@ -872,11 +910,6 @@ pub fn commitment_to_share_and_rand<C: Curve>(
     (cmm, rnd)
 }
 
-/// Generates a credential deployment info and outputs the randomness used in
-/// commitments. The randomness should be stored for later use, e.g. to open
-/// commitments later on. The information is meant to be valid in the context of
-/// a given identity provider, and global parameter.
-/// The 'cred_counter' is used to generate a new credential ID.
 pub fn create_credential_old<
     'a,
     P: Pairing,
@@ -925,6 +958,12 @@ where
     Ok((info, commitments_randomness))
 }
 
+/// Generates a credential deployment info and outputs the randomness used in
+/// commitments. The randomness should be stored for later use, e.g. to open
+/// commitments later on. The information is meant to be valid in the context of
+/// a given identity provider, and global parameter.
+/// The 'cred_counter' is used to generate a new credential ID.
+#[allow(clippy::too_many_arguments)]
 pub fn create_credential<
     'a,
     P: Pairing,
@@ -932,7 +971,7 @@ pub fn create_credential<
     AttributeType: Attribute<C::Scalar>,
 >(
     context: IpContext<'a, P, C>,
-    id_object: &impl IsIdentityObject<P, C, AttributeType>,
+    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
@@ -1231,6 +1270,7 @@ where
     Ok((info, commitment_rands))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_unsigned_credential<
     'a,
     P: Pairing,
@@ -1238,7 +1278,7 @@ pub fn create_unsigned_credential<
     AttributeType: Attribute<C::Scalar>,
 >(
     context: IpContext<'a, P, C>,
-    id_object: &impl IsIdentityObject<P, C, AttributeType>,
+    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
@@ -1899,7 +1939,7 @@ mod tests {
 
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let (context, pio, randomness) = test_create_pio(
+        let (context, pio, _) = test_create_pio(
             &id_use_data,
             &ip_info,
             &ars_infos,

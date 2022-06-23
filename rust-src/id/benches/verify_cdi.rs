@@ -98,6 +98,8 @@ fn bench_parts(c: &mut Criterion) {
         cred_holder_info: ah_info,
         prf_key,
     };
+    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let id_use_data = IdObjectUseData { aci, randomness };
 
     let alist = ExampleAttributeList {
         valid_to,
@@ -130,7 +132,7 @@ fn bench_parts(c: &mut Criterion) {
         threshold: SignatureThreshold(2),
     };
 
-    let (pio, randomness) = generate_pio(&context, Threshold(2), &aci, &initial_acc_data)
+    let (pio, _) = generate_pio(&context, Threshold(2), &id_use_data, &initial_acc_data)
         .expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
@@ -169,8 +171,6 @@ fn bench_parts(c: &mut Criterion) {
         threshold: SignatureThreshold(2),
     };
 
-    let id_use_data = IdObjectUseData { aci, randomness };
-
     let id_object = IdentityObject {
         pre_identity_object: pio,
         alist,
@@ -184,6 +184,7 @@ fn bench_parts(c: &mut Criterion) {
         0,
         policy.clone(),
         &acc_data,
+        &SystemAttributeRandomness,
         &Left(EXPIRY),
     )
     .expect("Should generate the credential successfully.");
@@ -207,7 +208,7 @@ fn bench_parts(c: &mut Criterion) {
         move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1, x.2));
     c.bench_with_input(
         BenchmarkId::new("Generate ID request", ""),
-        &(&context, &id_use_data.aci, &initial_acc_data),
+        &(&context, &id_use_data, &initial_acc_data),
         bench_pio,
     );
 
@@ -222,7 +223,17 @@ fn bench_parts(c: &mut Criterion) {
     let bench_create_credential =
         move |b: &mut Bencher, x: &(_, _, _, _, Policy<ArCurve, AttributeKind>, _)| {
             b.iter(|| {
-                create_credential(x.0, x.1, x.2, x.3, x.4.clone(), x.5, &Left(EXPIRY)).unwrap()
+                create_credential(
+                    x.0,
+                    x.1,
+                    x.2,
+                    x.3,
+                    x.4.clone(),
+                    x.5,
+                    &SystemAttributeRandomness,
+                    &Left(EXPIRY),
+                )
+                .unwrap()
             })
         };
     c.bench_with_input(

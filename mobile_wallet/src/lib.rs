@@ -16,13 +16,13 @@ use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use id::{
     account_holder,
-    constants::AttributeKind,
+    constants::{ArCurve, AttributeKind},
     pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
     secret_sharing::Threshold,
     types::*,
 };
 use key_derivation::{ConcordiumHdWallet, Net};
-use pairing::bls12_381::{Bls12, G1};
+use pairing::bls12_381::Bls12;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
 use sha2::{Digest, Sha256};
@@ -36,7 +36,6 @@ use std::{
 };
 
 use crypto_common::types::KeyPair;
-type ExampleCurve = G1;
 
 /// Baker keys
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -56,24 +55,28 @@ pub struct BakerKeys {
     pub aggregation_sign_key:   aggregate_sig::SecretKey<Bls12>,
 }
 
+/// A ConcordiumHdWallet together with an identity index and credential index
+/// for the credential to be created. A CredentialContext can then be parsed to
+/// the `create_credential` function due to the implementation of
+/// `HasAttributeRandomness` below.
 struct CredentialContext {
     wallet:           ConcordiumHdWallet,
     identity_index:   u32,
     credential_index: u32,
 }
 
-impl HasAttributeRandomness<ExampleCurve> for CredentialContext {
+impl HasAttributeRandomness<ArCurve> for CredentialContext {
     type ErrorType = DeriveError;
 
     fn get_attribute_commitment_randomness(
         &self,
         attribute_tag: AttributeTag,
-    ) -> Result<PedersenRandomness<ExampleCurve>, Self::ErrorType> {
-        Ok(self.wallet.get_attribute_commitment_randomness(
+    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
+        self.wallet.get_attribute_commitment_randomness(
             self.identity_index,
             self.credential_index,
             attribute_tag,
-        )?)
+        )
     }
 }
 
@@ -120,7 +123,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     };
 
     // context with parameters
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
     // plaintext amount to transfer
     let amount: Amount = try_get(&v, "amount")?;
@@ -130,7 +133,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
         None => None,
     };
 
-    let sender_sk: elgamal::SecretKey<ExampleCurve> = try_get(&v, "senderSecretKey")?;
+    let sender_sk: elgamal::SecretKey<ArCurve> = try_get(&v, "senderSecretKey")?;
 
     let receiver_pk = try_get(&v, "receiverPublicKey")?;
 
@@ -449,7 +452,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     let amount: Amount = try_get(&v, "amount")?;
 
     // context with parameters
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
     let (hash, body) = {
         let mut payload = Vec::new();
@@ -479,12 +482,12 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
     let ctx: TransferContext = from_value(v.clone())?;
 
     // context with parameters
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
     // plaintext amount to transfer
     let amount: Amount = try_get(&v, "amount")?;
 
-    let sender_sk: elgamal::SecretKey<ExampleCurve> = try_get(&v, "senderSecretKey")?;
+    let sender_sk: elgamal::SecretKey<ArCurve> = try_get(&v, "senderSecretKey")?;
 
     let input_amount = try_get(&v, "inputEncryptedAmount")?;
 
@@ -529,7 +532,7 @@ fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress
 fn combine_encrypted_amounts_aux(left: &str, right: &str) -> anyhow::Result<String> {
     let left = from_str(left)?;
     let right = from_str(right)?;
-    Ok(to_string(&encrypted_transfers::aggregate::<ExampleCurve>(
+    Ok(to_string(&encrypted_transfers::aggregate::<ArCurve>(
         &left, &right,
     ))?)
 }
@@ -555,9 +558,9 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let v: Value = from_str(input)?;
 
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
-    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
 
     let num_of_ars = ars_infos.len();
     let threshold = match v.get("arThreshold") {
@@ -587,7 +590,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let chi = CredentialHolderInfo::<ExampleCurve> {
+    let chi = CredentialHolderInfo::<ArCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
@@ -652,18 +655,18 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
     let v: Value = from_str(input)?;
 
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
-    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
 
     let wallet = parse_wallet_input(&v)?;
     let identity_index: u8 = try_get(&v, "identityIndex")?;
 
-    let prf_key: prf::SecretKey<ExampleCurve> = wallet.get_prf_key(identity_index as u32)?;
+    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index as u32)?;
 
-    let id_cred_sec: PedersenValue<ExampleCurve> =
+    let id_cred_sec: PedersenValue<ArCurve> =
         PedersenValue::new(wallet.get_id_cred_sec(identity_index as u32)?);
-    let id_cred: IdCredentials<ExampleCurve> = IdCredentials { id_cred_sec };
+    let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
 
     let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
         wallet.get_blinding_randomness(identity_index as u32)?;
@@ -690,7 +693,7 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
         }
     };
 
-    let chi = CredentialHolderInfo::<ExampleCurve> { id_cred };
+    let chi = CredentialHolderInfo::<ArCurve> { id_cred };
 
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
@@ -721,14 +724,13 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     let expiry = try_get(&v, "expiry")?;
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
 
-    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
 
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
-    let id_object: IdentityObject<Bls12, ExampleCurve, AttributeKind> =
-        try_get(&v, "identityObject")?;
+    let id_object: IdentityObject<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
 
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = try_get(&v, "privateIdObjectData")?;
+    let id_use_data: IdObjectUseData<Bls12, ArCurve> = try_get(&v, "privateIdObjectData")?;
 
     let tags: Vec<AttributeTag> = try_get(&v, "revealedAttributes")?;
 
@@ -819,12 +821,11 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     let expiry = try_get(&v, "expiry")?;
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
 
-    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
 
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
-    let id_object: IdentityObjectV1<Bls12, ExampleCurve, AttributeKind> =
-        try_get(&v, "identityObject")?;
+    let id_object: IdentityObjectV1<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
 
     let tags: Vec<AttributeTag> = try_get(&v, "revealedAttributes")?;
 
@@ -834,11 +835,11 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 
     let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
         wallet.get_blinding_randomness(identity_index as u32)?;
-    let id_cred_sec: PedersenValue<ExampleCurve> =
+    let id_cred_sec: PedersenValue<ArCurve> =
         PedersenValue::new(wallet.get_id_cred_sec(identity_index as u32)?);
-    let id_cred: IdCredentials<ExampleCurve> = IdCredentials { id_cred_sec };
-    let chi = CredentialHolderInfo::<ExampleCurve> { id_cred };
-    let prf_key: prf::SecretKey<ExampleCurve> = wallet.get_prf_key(identity_index as u32)?;
+    let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+    let chi = CredentialHolderInfo::<ArCurve> { id_cred };
+    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index as u32)?;
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
@@ -935,12 +936,11 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
-    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
-    let id_object: IdentityObject<Bls12, ExampleCurve, AttributeKind> =
-        try_get(&v, "identityObject")?;
+    let id_object: IdentityObject<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
 
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = try_get(&v, "privateIdObjectData")?;
+    let id_use_data: IdObjectUseData<Bls12, ArCurve> = try_get(&v, "privateIdObjectData")?;
 
     let start: u8 = try_get(&v, "start").unwrap_or(0);
 
