@@ -918,51 +918,8 @@ pub type IdCredPubVerifiers<C> = (
 
 /// Information sent from the account holder to the identity provider.
 /// This includes only the cryptographic parts, the attribute list is
-/// in a different object below.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
-    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
-))]
-pub struct PreIdentityObjectOld<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    // TODO: consider renaming this struct
-    /// Public credential of the account holder in the anonymity revoker's
-    /// group.
-    #[serde(rename = "pubInfoForIp")]
-    pub pub_info_for_ip:       PublicInformationForIp<C>,
-    /// Anonymity revocation data for the chosen anonymity revokers.
-    #[serde(rename = "ipArData")]
-    #[map_size_length = 4]
-    pub ip_ar_data:            BTreeMap<ArIdentity, IpArData<C>>,
-    /// Choice of anonyimity revocation parameters.
-    /// NB:IP needs to check that they make sense in the context of the public
-    /// keys they are allowed to use.
-    #[serde(rename = "choiceArData")]
-    pub choice_ar_parameters:  ChoiceArParameters,
-    /// Commitment to id cred sec using the commitment key of IP derived from
-    /// the PS public key. This is used to compute the message that the IP
-    /// signs.
-    #[serde(rename = "idCredSecCommitment")]
-    pub cmm_sc:                PedersenCommitment<P::G1>,
-    /// Commitment to the prf key in group G1.
-    #[serde(rename = "prfKeyCommitmentWithIP")]
-    pub cmm_prf:               PedersenCommitment<P::G1>,
-    /// commitments to the coefficients of the polynomial
-    /// used to share the prf key
-    /// K + b1 X + b2 X^2...
-    /// where K is the prf key
-    #[serde(rename = "prfKeySharingCoeffCommitments")]
-    pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
-    /// Proofs of knowledge. See the documentation of PreIdentityProof for
-    /// details.
-    #[serde(
-        rename = "proofsOfKnowledge",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub poks:                  PreIdentityProofOld<P, C>,
-}
-
+/// in a different object below. This is for the flow, where a initial account
+/// is to be created.
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
@@ -1031,6 +988,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObjectV1<P, C> {
     }
 }
 
+/// Information sent from the account holder to the identity provider.
+/// This includes only the cryptographic parts, the attribute list is
+/// in a different object below. This is for the flow, where no initial account
+/// is involved.
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
@@ -1097,32 +1058,7 @@ pub struct CommonPioFields<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub cmm_prf_sharing_coeff: &'a Vec<PedersenCommitment<C>>,
 }
 
-/// The data we get back from the identity provider.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
-                 + SerdeSerialize",
-    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
-                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
-))]
-pub struct IdentityObjectOld<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    #[serde(rename = "preIdentityObject")]
-    pub pre_identity_object: PreIdentityObjectOld<P, C>,
-    /// Chosen attribute list.
-    #[serde(rename = "attributeList")]
-    pub alist:               AttributeList<C::Scalar, AttributeType>,
-    #[serde(
-        rename = "signature",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub signature:           ps_sig::Signature<P>,
-}
-
+/// The data we get back from the identity provider in the version 0 flow.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
@@ -1148,6 +1084,7 @@ pub struct IdentityObject<
     pub signature:           ps_sig::Signature<P>,
 }
 
+/// The data we get back from the identity provider in the version 1 flow.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
