@@ -235,9 +235,10 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
         threshold: SignatureThreshold(1),
     };
 
-    let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
-        .context("Failed to generate the identity object request.")?;
+    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
     let id_use_data = IdObjectUseData { aci, randomness };
+    let (pio, _) = generate_pio(&context, threshold, &id_use_data, &initial_acc_data)
+        .context("Failed to generate the identity object request.")?;
 
     let enc_key = id_use_data.aci.prf_key.prf_exponent(0).unwrap();
 
@@ -439,6 +440,7 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
         x,
         policy,
         &acc_data,
+        &SystemAttributeRandomness,
         &new_or_existing,
     );
 

@@ -44,6 +44,7 @@ use std::{
     io::{Cursor, Read},
     str::FromStr,
 };
+use thiserror::Error;
 
 /// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
@@ -724,7 +725,7 @@ pub struct AccCredentialInfo<C: Curve> {
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider.
 /// Typically the account holder will send a vector of these.
-#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// Encryption in chunks (in little endian) of the PRF key share
@@ -789,7 +790,7 @@ pub struct ChainArDecryptedData<C: Curve> {
 // will keep it for now for compatibility.
 // We need to remove it in the future.
 /// Choice of anonymity revocation parameters
-#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
     #[serde(rename = "arIdentities")]
     #[set_size_length = 2]
@@ -799,13 +800,61 @@ pub struct ChoiceArParameters {
 }
 
 /// Proof that the data sent to the identity provider
-/// is well-formed.
-#[derive(Serialize)]
+/// is well-formed. The serialize instance is implemented manually in order to
+/// be backwards-compatible.
+#[derive(Debug, Clone)]
 pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    pub common_proof_fields: CommonPioProofFields<P, C>,
+    /// Witness to the proof that reg_id = PRF(prf_key, 0)
+    pub prf_regid_proof:     com_eq::Witness<C>,
+    /// Signature on the public information for the IP from the account holder
+    pub proof_acc_sk:        AccountOwnershipProof,
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for PreIdentityProof<P, C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.common_proof_fields.challenge);
+        out.put(&self.common_proof_fields.id_cred_sec_witness);
+        out.put(&self.common_proof_fields.commitments_same_proof);
+        out.put(&self.common_proof_fields.commitments_prf_same);
+        out.put(&self.prf_regid_proof);
+        out.put(&self.proof_acc_sk);
+        out.put(&self.common_proof_fields.bulletproofs);
+    }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProof<P, C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let challenge: Challenge = source.get()?;
+        let id_cred_sec_witness: dlog::Witness<C> = source.get()?;
+        let commitments_same_proof: com_eq::Witness<C> = source.get()?;
+        let commitments_prf_same: com_eq_different_groups::Witness<P::G1, C> = source.get()?;
+        let prf_regid_proof: com_eq::Witness<C> = source.get()?;
+        let proof_acc_sk: AccountOwnershipProof = source.get()?;
+        let bulletproofs: Vec<RangeProof<C>> = source.get()?;
+        let common_proof_fields = CommonPioProofFields {
+            challenge,
+            id_cred_sec_witness,
+            commitments_same_proof,
+            commitments_prf_same,
+            bulletproofs,
+        };
+        Ok(PreIdentityProof {
+            common_proof_fields,
+            prf_regid_proof,
+            proof_acc_sk,
+        })
+    }
+}
+
+/// Common proof for both identity creation flows that the data sent to the
+/// identity provider is well-formed.
+#[derive(Debug, Clone, Serialize)]
+pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
     /// and additionally also the proofs in IpArData.
     pub challenge:              Challenge,
-    /// Witness to the proof of konwledge of IdCredSec.
+    /// Witness to the proof of knowledge of IdCredSec.
     pub id_cred_sec_witness:    dlog::Witness<C>,
     /// Witness to the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
@@ -814,10 +863,6 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
     pub commitments_prf_same:   com_eq_different_groups::Witness<P::G1, C>,
-    /// Witness to the proof that reg_id = PRF(prf_key, 0)
-    pub prf_regid_proof:        com_eq::Witness<C>,
-    /// Signature on the public information for the IP from the account holder
-    pub proof_acc_sk:           AccountOwnershipProof,
     /// Bulletproofs for showing that chunks are small so that encryption
     /// of the prf key can be decrypted
     pub bulletproofs:           Vec<RangeProof<C>>,
@@ -832,8 +877,9 @@ pub type IdCredPubVerifiers<C> = (
 
 /// Information sent from the account holder to the identity provider.
 /// This includes only the cryptographic parts, the attribute list is
-/// in a different object below.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+/// in a different object below. This is for the flow, where a initial account
+/// is to be created.
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
@@ -877,7 +923,101 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub poks:                  PreIdentityProof<P, C>,
 }
 
-/// The data we get back from the identity provider.
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObject<P, C> {
+    pub fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        CommonPioFields {
+            ip_ar_data:            &self.ip_ar_data,
+            choice_ar_parameters:  &self.choice_ar_parameters,
+            cmm_sc:                &self.cmm_sc,
+            cmm_prf:               &self.cmm_prf,
+            cmm_prf_sharing_coeff: &self.cmm_prf_sharing_coeff,
+        }
+    }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObjectV1<P, C> {
+    pub fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        CommonPioFields {
+            ip_ar_data:            &self.ip_ar_data,
+            choice_ar_parameters:  &self.choice_ar_parameters,
+            cmm_sc:                &self.cmm_sc,
+            cmm_prf:               &self.cmm_prf,
+            cmm_prf_sharing_coeff: &self.cmm_prf_sharing_coeff,
+        }
+    }
+}
+
+/// Information sent from the account holder to the identity provider.
+/// This includes only the cryptographic parts, the attribute list is
+/// in a different object below. This is for the flow, where no initial account
+/// is involved.
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
+))]
+pub struct PreIdentityObjectV1<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    // TODO: consider renaming this struct
+    #[serde(
+        rename = "idCredPub",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub id_cred_pub:           C,
+    /// Anonymity revocation data for the chosen anonymity revokers.
+    #[serde(rename = "ipArData")]
+    #[map_size_length = 4]
+    pub ip_ar_data:            BTreeMap<ArIdentity, IpArData<C>>,
+    /// Choice of anonyimity revocation parameters.
+    /// NB:IP needs to check that they make sense in the context of the public
+    /// keys they are allowed to use.
+    #[serde(rename = "choiceArData")]
+    pub choice_ar_parameters:  ChoiceArParameters,
+    /// Commitment to id cred sec using the commitment key of IP derived from
+    /// the PS public key. This is used to compute the message that the IP
+    /// signs.
+    #[serde(rename = "idCredSecCommitment")]
+    pub cmm_sc:                PedersenCommitment<P::G1>,
+    /// Commitment to the prf key in group G1.
+    #[serde(rename = "prfKeyCommitmentWithIP")]
+    pub cmm_prf:               PedersenCommitment<P::G1>,
+    /// commitments to the coefficients of the polynomial
+    /// used to share the prf key
+    /// K + b1 X + b2 X^2...
+    /// where K is the prf key
+    #[serde(rename = "prfKeySharingCoeffCommitments")]
+    pub cmm_prf_sharing_coeff: Vec<PedersenCommitment<C>>,
+    /// Proofs of knowledge. See the documentation of PreIdentityProof for
+    /// details.
+    #[serde(
+        rename = "proofsOfKnowledge",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub poks:                  CommonPioProofFields<P, C>,
+}
+
+pub struct CommonPioFields<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Anonymity revocation data for the chosen anonymity revokers.
+    pub ip_ar_data:            &'a BTreeMap<ArIdentity, IpArData<C>>,
+    /// Choice of anonyimity revocation parameters.
+    /// NB:IP needs to check that they make sense in the context of the public
+    /// keys they are allowed to use.
+    pub choice_ar_parameters:  &'a ChoiceArParameters,
+    /// Commitment to id cred sec using the commitment key of IP derived from
+    /// the PS public key. This is used to compute the message that the IP
+    /// signs.
+    pub cmm_sc:                &'a PedersenCommitment<P::G1>,
+    /// Commitment to the prf key in group G1.
+    pub cmm_prf:               &'a PedersenCommitment<P::G1>,
+    /// commitments to the coefficients of the polynomial
+    /// used to share the prf key
+    /// K + b1 X + b2 X^2...
+    /// where K is the prf key
+    pub cmm_prf_sharing_coeff: &'a Vec<PedersenCommitment<C>>,
+}
+
+/// The data we get back from the identity provider in the version 0 flow.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
@@ -901,6 +1041,73 @@ pub struct IdentityObject<
         deserialize_with = "base16_decode"
     )]
     pub signature:           ps_sig::Signature<P>,
+}
+
+/// The data we get back from the identity provider in the version 1 flow.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
+                 + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct IdentityObjectV1<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "preIdentityObject")]
+    pub pre_identity_object: PreIdentityObjectV1<P, C>,
+    /// Chosen attribute list.
+    #[serde(rename = "attributeList")]
+    pub alist:               AttributeList<C::Scalar, AttributeType>,
+    #[serde(
+        rename = "signature",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub signature:           ps_sig::Signature<P>,
+}
+
+/// Trait for extracting the relevants parts of an identity object needed for
+/// creating a credential
+pub trait HasIdentityObjectFields<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// Get the common fields of the pre-identity object.
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C>;
+
+    /// Get the attribute list
+    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType>;
+
+    /// Get the signature
+    fn get_signature(&self) -> &ps_sig::Signature<P>;
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    HasIdentityObjectFields<P, C, AttributeType> for IdentityObject<P, C, AttributeType>
+{
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        self.pre_identity_object.get_common_pio_fields()
+    }
+
+    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { &self.alist }
+
+    fn get_signature(&self) -> &ps_sig::Signature<P> { &self.signature }
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    HasIdentityObjectFields<P, C, AttributeType> for IdentityObjectV1<P, C, AttributeType>
+{
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        self.pre_identity_object.get_common_pio_fields()
+    }
+
+    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { &self.alist }
+
+    fn get_signature(&self) -> &ps_sig::Signature<P> { &self.signature }
 }
 
 /// Anonymity revokers associated with a single identity provider
@@ -2175,6 +2382,36 @@ pub enum AccountCredentialValues<C: Curve, AttributeType: Attribute<C::Scalar>> 
         #[serde(flatten)]
         cdi: CredentialDeploymentValues<C, AttributeType>,
     },
+}
+
+pub trait HasAttributeRandomness<C: Curve> {
+    type ErrorType: 'static + Send + Sync + std::error::Error;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: AttributeTag,
+    ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
+}
+
+/// The empty type, here used as an impossible error in the implemention of
+/// `HasAttributeRandomness` for `SystemAttributeRandomness`.
+#[derive(Debug, Error)]
+pub enum ImpossibleError {}
+
+/// Struct implementing `HasAttributeRandomness` using system randomness, to be
+/// parsed to the `create_credential` function from account_holder.rs.
+pub struct SystemAttributeRandomness;
+
+impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
+    type ErrorType = ImpossibleError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        _attribute_tag: AttributeTag,
+    ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
+        let mut csprng = rand::thread_rng();
+        Ok(PedersenRandomness::generate(&mut csprng))
+    }
 }
 
 #[cfg(test)]

@@ -36,7 +36,7 @@ UTF8-string, and the returned string is likewise a NUL-terminated UTF8-encoded s
 
 ## create_id_request_and_private_data
 
-Semantics: Generates an IdentityObject request, used to request an indentity to a IdentityProvider.
+Semantics: Generates a version 0 IdentityObject request, used to request an identity to a IdentityProvider.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -47,7 +47,7 @@ must be a valid JSON object with fields
 - `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
   a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
 
-- `"global"` ... is a JSON object that can describes global cryptographic parameters.
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
    This data is obtained from the server by making a GET request to /global.
 
 In addition the field `"arThreshold"` can be added to specify an anonymity revocation threshold different from the default value, as a JSON encoded byte value.
@@ -57,9 +57,39 @@ The output of this function is a JSON object with two keys
   the identity provider
 - "privateIdObjectData" - this is the __private__ information that the user must
   keep in order to be able to use the returned identity object.
+- "initialAccountData" - various data about the initial account, including its __private__ keys.
 
 An example of input is in the file [create_id_request_and_private_data-input.json](files/create_id_request_and_private_data-input.json).
 An example of output is in the file [create_id_request_and_private_data-output.json](files/create_id_request_and_private_data-output.json).
+
+## create_id_request_and_private_data_v1
+
+Semantics: Generates a version 1 IdentityObject request, used to request an identity to a IdentityProvider. No initial account creation.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+
+- `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
+  a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
+
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+
+- `"seed"` ... is a hex encoded seed phrase used to generate the prf key and the signature blinding determinstically.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+
+In addition the field `"arThreshold"` can be added to specify an anonymity revocation threshold different from the default value, as a JSON encoded byte value.
+
+The output of this function is a JSON object with two keys
+- "idObjectRequest" - this is the identity object request that should be sent to
+  the identity provider
+
+An example of input is in the file [create_id_request_and_private_data-v1-input.json](files/create_id_request_and_private_data-v1-input.json).
+An example of output is in the file [create_id_request_and_private_data-v1-output.json](files/create_id_request_and_private_data-v1-output.json).
 
 ## check_account_address
 
@@ -119,8 +149,63 @@ The returned value is a JSON object with the following fields.
 
 - `"encryptionSecretKey"` - the account private key for encrypted transfers.
 
+- `"commitmentsRandomness"` - various randomness used in commitments. This is __private__ to the credential holder.
+
 An example input to this request is in the file [create_credential-input.json](files/create_credential-input.json).
 An example output to this request is in the file [create_credential-output.json](files/create_credential-output.json).
+## create_credential_v1
+
+Semantics: Using the identityObject provided by the IdentityProvider, create a credential and account.
+This creates a credentials where the keys and attribute randomnesses are deterministically genereated from a seed phrase.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... same as in the `create_id_request_and_private_data` call
+
+- `"arsInfos"` ... same as in the `create_id_request_and_private_data` call
+
+- `"global"` ... same as in the `create_id_request_and_private_data` call
+
+- `"identityObject"` ... this must contain the value returned by the identity provider.
+
+
+- `"revealedAttributes"` ... attributes which the user wishes to reveal. This is
+  an array of attribute names. The user should select these from among the
+  attributes in the identityObject field. The key "revealedAttributes" is
+  optional. If not present we take it as the empty set.
+
+- `"seed"` ... is a hex encoded seed phrase.
+
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+
+- `"identityIndex"` ... an integer indicating the index of the identity behind the credential.
+
+- `"accountNumber"` ... this must be a number between 0 and 255 (inclusive).
+  Multiple credentials can be generated from the same identity object, and this
+  number is essentially a nonce. It __must__ be different for different
+  credentials from the same id object, otherwise the credential will not be
+  accepted by the chain.
+
+The returned value is a JSON object with the following fields.
+
+- `"credential"` - this is the credential that is to be deployed on the chain. All
+  data here is public.
+
+- `"accountKeys"` - contains the public and __private__ keys of the account the
+  credential belongs to. This is very sensitive and must be kept protected.
+
+- `"accountAddress"` - the address of the account this credential belongs to. This
+  will either be a new account or existing account, depending on the input "accountData".
+
+- `"encryptionPublicKey"` - the account public key for encrypted transfers.
+
+- `"encryptionSecretKey"` - the account private key for encrypted transfers.
+
+- `"commitmentsRandomness"` - various randomness used in commitments. This is __private__ to the credential holder.
+
+An example input to this request is in the file [create_credential-v1-input.json](files/create_credential-v1-input.json).
+An example output to this request is in the file [create_credential-v1-output.json](files/create_credential-v1-output.json).
 
 ## create_transfer_ext
 

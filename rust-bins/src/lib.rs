@@ -135,6 +135,20 @@ pub fn read_pre_identity_object<P: AsRef<Path> + Debug>(
     }
 }
 
+/// Read pre-identity object, deciding on how to parse based on the version.
+pub fn read_pre_identity_object_v1<P: AsRef<Path> + Debug>(
+    filename: P,
+) -> io::Result<PreIdentityObjectV1<Bls12, ExampleCurve>> {
+    let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    match params.version {
+        Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid identity object use data object version {}.", other),
+        )),
+    }
+}
+
 /// Read identity providers versioned with a single version at the top-level.
 /// All values are parsed according to that version.
 pub fn read_identity_providers<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IpInfos<Bls12>> {

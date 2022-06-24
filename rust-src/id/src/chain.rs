@@ -377,7 +377,7 @@ mod tests {
         let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let aci = test_create_aci(&mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
         let initial_acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -388,8 +388,8 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, randomness) = test_create_pio(
-            &aci,
+        let (context, pio, _) = test_create_pio(
+            &id_use_data,
             &ip_info,
             &ars_infos,
             &global_ctx,
@@ -414,7 +414,6 @@ mod tests {
             alist,
             signature: ip_sig,
         };
-        let id_use_data = IdObjectUseData { aci, randomness };
         let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
         let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
         let policy = Policy {
@@ -445,6 +444,7 @@ mod tests {
             0,
             policy.clone(),
             &cred_data,
+            &SystemAttributeRandomness {},
             &Left(EXPIRY),
         )
         .expect("Should generate the credential successfully.");
@@ -470,6 +470,109 @@ mod tests {
             1,
             policy,
             &cred_data,
+            &SystemAttributeRandomness {},
+            &Right(existing_reg_id),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(
+            &global_ctx,
+            &ip_info,
+            &ars_infos,
+            &cdi,
+            &Right(existing_reg_id),
+        );
+        assert_eq!(cdi_check, Ok(()));
+    }
+
+    /// This tests the credential creation flow, where no initial account was
+    /// involved in the identity creation process.
+    #[test]
+    fn test_verify_cdi_v1() {
+        let mut csprng = thread_rng();
+
+        // Generate PIO
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            .. // ip_cdi_secret_key is not used since we are testing the flow without initial account creation
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
+        let (context, pio, randomness) =
+            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        assert_eq!(*randomness, *(id_use_data.randomness));
+        let alist = test_create_attributes();
+        let ver_ok = verify_credentials_v1(&pio, context, &alist, &ip_secret_key);
+        assert!(ver_ok.is_ok());
+
+        // Generate CDI
+        let ip_sig = ver_ok.unwrap();
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+        let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
+        let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
+        let policy = Policy {
+            valid_to,
+            created_at,
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+                tree
+            },
+            _phantom: Default::default(),
+        };
+        let cred_data = CredentialData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
+        let (cdi, _) = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy.clone(),
+            &cred_data,
+            &SystemAttributeRandomness {},
+            &Left(EXPIRY),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        assert_eq!(cdi_check, Ok(()));
+
+        // Testing with an existing RegId (i.e. an existing account)
+        let existing_reg_id = AccountAddress::new(&cdi.values.cred_id);
+        let cred_data = CredentialData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (cdi, _) = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            1,
+            policy,
+            &cred_data,
+            &SystemAttributeRandomness {},
             &Right(existing_reg_id),
         )
         .expect("Should generate the credential successfully.");
@@ -498,7 +601,7 @@ mod tests {
         let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let aci = test_create_aci(&mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -509,8 +612,14 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, _) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        let (context, pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
         let alist = test_create_attributes();
         let ver_ok = verify_credentials(
             &pio,
