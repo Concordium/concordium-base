@@ -660,16 +660,16 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
     let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
 
     let wallet = parse_wallet_input(&v)?;
-    let identity_index: u8 = try_get(&v, "identityIndex")?;
+    let identity_index: u32 = try_get(&v, "identityIndex")?;
 
-    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index as u32)?;
+    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index)?;
 
     let id_cred_sec: PedersenValue<ArCurve> =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_index as u32)?);
+        PedersenValue::new(wallet.get_id_cred_sec(identity_index)?);
     let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
 
     let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
-        wallet.get_blinding_randomness(identity_index as u32)?;
+        wallet.get_blinding_randomness(identity_index)?;
 
     let num_of_ars = ars_infos.len();
     let threshold = match v.get("arThreshold") {
@@ -830,16 +830,16 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     let tags: Vec<AttributeTag> = try_get(&v, "revealedAttributes")?;
 
     let wallet = parse_wallet_input(&v)?;
-    let identity_index: u8 = try_get(&v, "identityIndex")?;
+    let identity_index: u32 = try_get(&v, "identityIndex")?;
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
     let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
-        wallet.get_blinding_randomness(identity_index as u32)?;
+        wallet.get_blinding_randomness(identity_index)?;
     let id_cred_sec: PedersenValue<ArCurve> =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_index as u32)?);
+        PedersenValue::new(wallet.get_id_cred_sec(identity_index)?);
     let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
     let chi = CredentialHolderInfo::<ArCurve> { id_cred };
-    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index as u32)?;
+    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index)?;
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
@@ -854,11 +854,10 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     // should be coming from the input data.
     let new_or_existing = Left(expiry);
 
-    // The mobile wallet can only create new accounts, which means new credential
-    // data will be generated.
+    // Create the keys for the new credential.
     let cred_data = {
         let mut keys = std::collections::BTreeMap::new();
-        let secret = wallet.get_account_signing_key(identity_index as u32, acc_num as u32)?;
+        let secret = wallet.get_account_signing_key(identity_index, u32::from(acc_num))?;
         let public = ed25519::PublicKey::from(&secret);
         keys.insert(KeyIndex(0), KeyPair { secret, public });
 
@@ -868,6 +867,7 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
         }
     };
 
+    // And a policy.
     let mut policy_vec = std::collections::BTreeMap::new();
     for tag in tags {
         if let Some(att) = id_object.alist.alist.get(&tag) {
@@ -890,8 +890,8 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 
     let credential_context = CredentialContext {
         wallet,
-        identity_index: identity_index as u32,
-        credential_index: acc_num as u32,
+        identity_index,
+        credential_index: u32::from(acc_num),
     };
     let (cdi, randomness) = account_holder::create_credential(
         context,
@@ -1003,7 +1003,7 @@ fn parse_wallet_input(v: &Value) -> anyhow::Result<ConcordiumHdWallet> {
 }
 
 fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
-    let v: Value = from_str(&input)?;
+    let v: Value = from_str(input)?;
     let wallet = parse_wallet_input(&v)?;
     let identity_index = try_get(&v, "identityIndex")?;
 
@@ -1022,7 +1022,7 @@ fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
 }
 
 fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
-    let v: Value = from_str(&input)?;
+    let v: Value = from_str(input)?;
     let wallet = parse_wallet_input(&v)?;
     let identity_index = try_get(&v, "identityIndex")?;
     let account_credential_index = try_get(&v, "accountCredentialIndex")?;

@@ -1286,15 +1286,16 @@ fn handle_act_as_ip_v1(aai: IpSignPioV1) {
             let signature = &ver_id_object.value.signature;
             println!("Successfully checked pre-identity data.");
             if let Some(signed_out_path) = aai.out_file {
-                if write_json_to_file(signed_out_path.clone(), &ver_id_object).is_ok() {
+                if let Err(e) = write_json_to_file(signed_out_path.clone(), &ver_id_object) {
                     println!(
-                        "Wrote signed identity object to file {}",
-                        signed_out_path.display()
+                        "Could not write Identity object to file due to {}. The signature is: {}",
+                        e,
+                        base16_encode_string(signature)
                     );
                 } else {
                     println!(
-                        "Could not write Identity object to file. The signature is: {}",
-                        base16_encode_string(signature)
+                        "Wrote signed identity object to file {}",
+                        signed_out_path.display()
                     );
                 }
             } else {
