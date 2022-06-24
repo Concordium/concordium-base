@@ -17,7 +17,7 @@ use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
 use rand::*;
-use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
+use std::{collections::BTreeMap, convert::TryFrom};
 
 type ExampleAttribute = AttributeKind;
 

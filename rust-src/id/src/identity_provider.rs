@@ -194,12 +194,12 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         h: ip_info.ip_verify_key.g,
     };
     transcript.append_message(b"ctx", &context.global_context);
-    transcript.append_message(b"choice_ar_parameters", &common_fields.choice_ar_parameters);
-    transcript.append_message(b"cmm_sc", &common_fields.cmm_sc);
-    transcript.append_message(b"cmm_prf", &common_fields.cmm_prf);
+    transcript.append_message(b"choice_ar_parameters", common_fields.choice_ar_parameters);
+    transcript.append_message(b"cmm_sc", common_fields.cmm_sc);
+    transcript.append_message(b"cmm_prf", common_fields.cmm_prf);
     transcript.append_message(
         b"cmm_prf_sharing_coeff",
-        &common_fields.cmm_prf_sharing_coeff,
+        common_fields.cmm_prf_sharing_coeff,
     );
 
     let id_cred_sec_verifier = dlog::Dlog {
