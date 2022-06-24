@@ -88,7 +88,7 @@ impl Proof {
             .chain(p.compress().to_bytes())
             .chain(ZERO_STRING);
         let mut c_bytes: [u8; 64] = [0; 64];
-        c_bytes.copy_from_slice(&hash.finalize().as_slice());
+        c_bytes.copy_from_slice(hash.finalize().as_slice());
         c_bytes
     }
 }

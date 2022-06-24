@@ -2090,7 +2090,7 @@ impl CredentialDataWithSigning for CredentialData {
         let to_sign = crate::utils::credential_hash_to_sign(
             &unsigned_cred_info.values,
             &unsigned_cred_info.proofs,
-            &new_or_existing,
+            new_or_existing,
         );
         self.keys
             .iter()

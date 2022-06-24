@@ -443,7 +443,7 @@ fn main() {
         .expect("Generating the pre-identity object should succeed.");
 
         let icdi = create_initial_cdi(
-            &context.ip_info,
+            context.ip_info,
             pio.pub_info_for_ip,
             &attributes,
             EXPIRY,

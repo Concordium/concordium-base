@@ -194,18 +194,18 @@ pub struct TransferWithSchedule {
 #[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferToEncrypted {
-    transfer_source:           AccountAddress,
-    amount_subtracted:         Amount,
-    new_self_encrypted_amount: EncryptedAmount,
+    pub transfer_source:           AccountAddress,
+    pub amount_subtracted:         Amount,
+    pub new_self_encrypted_amount: EncryptedAmount,
 }
 
 #[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferToPublic {
-    transfer_source:           AccountAddress,
-    amount_added:              Amount,
-    input_encrypted_amount:    EncryptedAmount,
-    new_self_encrypted_amount: EncryptedAmount,
+    pub transfer_source:           AccountAddress,
+    pub amount_added:              Amount,
+    pub input_encrypted_amount:    EncryptedAmount,
+    pub new_self_encrypted_amount: EncryptedAmount,
 }
 
 /// A success response from accBalance endpoint
@@ -482,13 +482,13 @@ fn trace_single_account(
                             if tx.origin.origin_type == OriginType::Own {
                                 if let Some(sk) = &sk {
                                     let before = encrypted_transfers::decrypt_amount(
-                                        &table,
-                                        &sk,
+                                        table,
+                                        sk,
                                         &et.input_encrypted_amount,
                                     );
                                     let after = encrypted_transfers::decrypt_amount(
-                                        &table,
-                                        &sk,
+                                        table,
+                                        sk,
                                         &et.new_self_encrypted_amount,
                                     );
                                     assert!(before >= after);
@@ -523,8 +523,8 @@ fn trace_single_account(
                             } else if tx.origin.origin_type == OriginType::Account {
                                 if let Some(sk) = &sk {
                                     let amount = encrypted_transfers::decrypt_amount(
-                                        &table,
-                                        &sk,
+                                        table,
+                                        sk,
                                         &et.encrypted_amount,
                                     );
                                     writeln!(

@@ -234,7 +234,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
             a: Randomness::to_value(r_i),
         })
         .collect();
-    let protocol = gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
+    let protocol = gen_enc_trans_proof_info(pk_sender, pk_receiver, S, &A, &S_prime, generator);
     let secret = EncTransSecret {
         dlog_secret:     Rc::new(sk_sender.scalar),
         encexp1_secrets: a_secrets,
@@ -391,7 +391,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     let A = [A_dummy_encryption];
 
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
-    let protocol = gen_enc_trans_proof_info(&pk, &pk, &S, &A, &S_prime, &generator);
+    let protocol = gen_enc_trans_proof_info(pk, pk, S, &A, &S_prime, generator);
 
     let s_prime_secrets = izip!(s_prime_chunks.iter(), S_prime_rand.iter())
         .map(|(a_i, r_i)| ComEqSecret::<C> {
@@ -428,7 +428,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         u8::from(CHUNK_SIZE),
         s_prime_chunks.len() as u8,
         &s_prime_chunks_as_scalars,
-        &gens,
+        gens,
         &cmm_key_bulletproof_s_prime,
         &S_prime_rand_as_pedrand,
     )?;
@@ -499,12 +499,12 @@ pub fn verify_enc_trans<C: Curve>(
     let gens = context.bulletproof_generators();
 
     let protocol = gen_enc_trans_proof_info(
-        &pk_sender,
-        &pk_receiver,
-        &S,
-        &transaction.transfer_amount.as_ref(),
-        &transaction.remaining_amount.as_ref(),
-        &generator,
+        pk_sender,
+        pk_receiver,
+        S,
+        transaction.transfer_amount.as_ref(),
+        transaction.remaining_amount.as_ref(),
+        generator,
     );
     if !verify(ro, &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
@@ -542,7 +542,7 @@ pub fn verify_enc_trans<C: Curve>(
         u8::from(CHUNK_SIZE),
         &commitments_a,
         &transaction.proof.transfer_amount_correct_encryption,
-        &gens,
+        gens,
         &cmm_key_bulletproof_a,
     );
     if let Err(err) = first_bulletproof {
@@ -553,7 +553,7 @@ pub fn verify_enc_trans<C: Curve>(
         u8::from(CHUNK_SIZE),
         &commitments_s_prime,
         &transaction.proof.remaining_amount_correct_encryption,
-        &gens,
+        gens,
         &cmm_key_bulletproof_s_prime,
     );
     if let Err(err) = second_bulletproof {
@@ -601,12 +601,12 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     let A = [A_dummy_encryption];
 
     let protocol = gen_enc_trans_proof_info(
-        &pk,
-        &pk,
-        &S,
+        pk,
+        pk,
+        S,
         &A,
-        &transaction.remaining_amount.as_ref(),
-        &generator,
+        transaction.remaining_amount.as_ref(),
+        generator,
     );
     if !verify(ro, &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
@@ -636,7 +636,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
         num_bits_in_chunk,
         &commitments_s_prime,
         &transaction.proof.remaining_amount_correct_encryption,
-        &gens,
+        gens,
         &cmm_key_bulletproof_s_prime,
     );
     if let Err(err) = bulletproof {

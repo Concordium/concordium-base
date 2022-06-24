@@ -411,9 +411,9 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     let key_info = b"elgamal_keys".as_ref();
     let scalar = if kgar.v1 {
         println!("Using deprecated BLS keygen.");
-        succeed_or_die!(keygen_bls_deprecated(&random_bytes, &key_info), e => "Could not generate key because {}")
+        succeed_or_die!(keygen_bls_deprecated(random_bytes, key_info), e => "Could not generate key because {}")
     } else {
-        succeed_or_die!(keygen_bls(&random_bytes, &key_info), e => "Could not generate key because {}")
+        succeed_or_die!(keygen_bls(random_bytes, key_info), e => "Could not generate key because {}")
     };
     let ar_secret_key = SecretKey {
         generator: ar_base,
@@ -609,16 +609,16 @@ pub fn generate_ps_sk(
     let mut ys: Vec<Fr> = Vec::with_capacity(n as usize);
     let key = if legacy {
         for i in 0..n {
-            let key = keygen_bls_deprecated(&ikm, &i.to_be_bytes()[..])?;
+            let key = keygen_bls_deprecated(ikm, &i.to_be_bytes()[..])?;
             ys.push(key);
         }
-        keygen_bls_deprecated(&ikm, &[])?
+        keygen_bls_deprecated(ikm, &[])?
     } else {
         for i in 0..n {
-            let key = keygen_bls(&ikm, &i.to_be_bytes()[..])?;
+            let key = keygen_bls(ikm, &i.to_be_bytes()[..])?;
             ys.push(key);
         }
-        keygen_bls(&ikm, &[])?
+        keygen_bls(ikm, &[])?
     };
     Ok(ps_sig::SecretKey {
         g: G1::one_point(),
@@ -634,7 +634,7 @@ pub fn generate_ps_sk(
 pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
     let mut mac =
         Hmac::<Sha512>::new_from_slice(b"ed25519 seed").expect("HMAC can take key of any size");
-    mac.update(&seed);
+    mac.update(seed);
     let result = mac.finalize();
     let code_bytes = result.into_bytes();
     let mut il = [0u8; 32];
@@ -647,7 +647,7 @@ pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
 pub fn generate_ed_sk(
     seed: &[u8],
 ) -> Result<ed25519_dalek::SecretKey, ed25519_dalek::SignatureError> {
-    let sk = ed25519_dalek::SecretKey::from_bytes(&keygen_ed(&seed))?;
+    let sk = ed25519_dalek::SecretKey::from_bytes(&keygen_ed(seed))?;
     Ok(sk)
 }
 
@@ -688,7 +688,7 @@ pub fn read_words_from_file(
     let word_list: Vec<String> = word_string.split_whitespace().map(str::to_owned).collect();
 
     // verify whether input_words is a valid BIP39 sentence if check is enabled
-    if verify_bip && !verify_bip39(&word_list, &bip39_map) {
+    if verify_bip && !verify_bip39(&word_list, bip39_map) {
         return Err("The input does not constitute a valid BIP39 sentence.".to_string());
     }
 
@@ -720,14 +720,14 @@ pub fn read_words_from_terminal(
     for i in 1..=num {
         // read the ith word from stdin
         let word = succeed_or_die!(
-            read_bip39_word(i, verify_bip, &bip39_map),
+            read_bip39_word(i, verify_bip, bip39_map),
             e => "Could not read input from user because {}"
         );
         word_list.push(word);
     }
 
     // verify whether input_words is a valid BIP39 sentence if check is enabled
-    if verify_bip && !verify_bip39(&word_list, &bip39_map) {
+    if verify_bip && !verify_bip39(&word_list, bip39_map) {
         return Err("The input does not constitute a valid BIP39 sentence.".to_string());
     }
 
@@ -808,7 +808,7 @@ pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String
 
     // convert input bytes from byte vector to bit vector
     let mut random_bits = succeed_or_die!(
-        BitVec::<Msb0, u8>::from_slice(&bytes),
+        BitVec::<Msb0, u8>::from_slice(bytes),
         e => "Failed to convert hash to bit vector because {}"
     );
 
@@ -860,7 +860,7 @@ pub fn rerandomize_bip39(
     let (prk, _) = extract_ctx.finalize();
 
     // convert raw randomness to BIP39 word sentence
-    let output_words = bytes_to_bip39(&prk, &bip_word_list)?;
+    let output_words = bytes_to_bip39(&prk, bip_word_list)?;
 
     Ok(output_words)
 }

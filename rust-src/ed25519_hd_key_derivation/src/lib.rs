@@ -42,7 +42,7 @@ pub struct HdKeys {
 
 fn get_master_key_from_seed(seed: &[u8]) -> HdKeys {
     let mut mac = Hmac::<Sha512>::new_from_slice(ED25519_CURVE).unwrap();
-    mac.update(&seed);
+    mac.update(seed);
     let i = mac.finalize().into_bytes();
     let mut il = [0u8; 32];
     il.copy_from_slice(&i[0..32]);
@@ -113,7 +113,7 @@ pub fn parse_path(path: &str) -> Result<Vec<u32>, DeriveError> {
 
     let mut parsed_path = Vec::new();
     for segment in path.split('/').skip(1) {
-        let without_hardening_char = segment.replace("'", "");
+        let without_hardening_char = segment.replace('\'', "");
         match without_hardening_char.parse::<u32>() {
             Ok(s) => {
                 if s >= 2147483648 {
@@ -167,7 +167,7 @@ pub fn derive_from_parsed_path(parsed_path: &[u32], seed: &[u8]) -> Result<HdKey
     if seed.len() < 16 || seed.len() > 64 {
         return Err(DeriveError::InvalidSeed);
     }
-    let master_key = get_master_key_from_seed(&seed);
+    let master_key = get_master_key_from_seed(seed);
     let mut current_key = master_key;
     for &index in parsed_path {
         current_key = ckd_priv(current_key, index)?;
@@ -184,7 +184,7 @@ mod tests {
 
     fn assert_keys(seed: &str, path: &str, chain_code: &str, private_key: &str, public_key: &str) {
         let seed = hex::decode(seed).unwrap();
-        let keys = derive(&path, &seed).unwrap();
+        let keys = derive(path, &seed).unwrap();
         let secret_key = ed25519_dalek::SecretKey::from_bytes(&keys.private_key).unwrap();
         let public_key_derived = ed25519_dalek::PublicKey::from(&secret_key).to_bytes();
         assert_eq!(
@@ -246,7 +246,7 @@ mod tests {
     pub fn test_0_prefixed_path_is_invalid() {
         let valid_path = "m/44'/919'/0315'";
         assert!(
-            parse_path(&valid_path).is_err(),
+            parse_path(valid_path).is_err(),
             "Path {} should be invalid.",
             valid_path
         );
@@ -256,7 +256,7 @@ mod tests {
     pub fn test_non_hardened_path() {
         let non_hardened_path = "m/44'/919'/53100'/581";
         assert!(
-            parse_path(&non_hardened_path).is_err(),
+            parse_path(non_hardened_path).is_err(),
             "Path {} should be invalid as it contains an un-hardened index",
             non_hardened_path
         );
@@ -266,7 +266,7 @@ mod tests {
     pub fn test_out_of_bounds_path() {
         let out_of_bounds_index_path = "m/44'/919'/2147483648'";
         assert!(
-            parse_path(&out_of_bounds_index_path).is_err(),
+            parse_path(out_of_bounds_index_path).is_err(),
             "Path {} should be invalid as an index is out of bounds",
             out_of_bounds_index_path
         );
@@ -277,7 +277,7 @@ mod tests {
         let invalid_path = "m/4//146";
         let seed = hex::decode("123456").unwrap();
         assert!(
-            derive(&invalid_path, &seed).is_err(),
+            derive(invalid_path, &seed).is_err(),
             "Path {} should be invalid as it is malformed",
             invalid_path
         );

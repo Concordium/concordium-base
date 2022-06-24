@@ -91,7 +91,7 @@ extern "C" fn eddsa_sign(
     let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
     let expanded_sk = ExpandedSecretKey::from(sk);
-    let signature = expanded_sk.sign(data, &pk);
+    let signature = expanded_sk.sign(data, pk);
     signature_bytes.copy_from_slice(&signature.to_bytes());
 }
 // Error encoding

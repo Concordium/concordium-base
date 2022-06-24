@@ -717,9 +717,7 @@ async fn save_validated_request(
 
     let attribute_form_url = format!(
         "{}/{}/{}",
-        server_config.id_verification_url.to_string(),
-        base_16_encoded_id_cred_pub,
-        serialized_signature
+        server_config.id_verification_url, base_16_encoded_id_cred_pub, serialized_signature
     );
     Ok(warp::reply::with_status(
         warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),

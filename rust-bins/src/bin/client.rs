@@ -600,7 +600,6 @@ fn handle_make_account(macc: MakeAccount) {
     };
     if let Err(e) = write_json_to_file(&macc.out, &out) {
         eprintln!("Could not output credentials: {}", e);
-        return;
     }
 }
 

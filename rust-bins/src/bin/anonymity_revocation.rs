@@ -334,7 +334,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
     let m = decrypt_from_chunks_given_generator(
         &ar.ar_secret_key,
         &single_ar_data.enc_prf_key_share,
-        &global_context.encryption_in_exponent_generator(),
+        global_context.encryption_in_exponent_generator(),
         1 << 16,
         CHUNK_SIZE,
     );

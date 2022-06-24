@@ -57,7 +57,7 @@ impl<C: Pairing> PublicKey<C> {
             .iter()
             .zip(ms.iter())
             .fold(C::G2::zero_point(), |acc, (y, m)| {
-                let ym = y.mul_by_scalar(&m);
+                let ym = y.mul_by_scalar(m);
                 acc.plus_point(&ym)
             });
         let hx = h.plus_point(&x);
@@ -91,8 +91,8 @@ impl<C: Pairing> PublicKey<C> {
 impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(sk: &SecretKey<C>) -> PublicKey<C> {
-        let ys = sk.ys.iter().map(|r| sk.g.mul_by_scalar(&r)).collect();
-        let y_tildas = sk.ys.iter().map(|r| sk.g_tilda.mul_by_scalar(&r)).collect();
+        let ys = sk.ys.iter().map(|r| sk.g.mul_by_scalar(r)).collect();
+        let y_tildas = sk.ys.iter().map(|r| sk.g_tilda.mul_by_scalar(r)).collect();
         let x_tilda = sk.g_tilda.mul_by_scalar(&sk.x);
         PublicKey {
             g: sk.g,

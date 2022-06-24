@@ -80,7 +80,7 @@ impl<C: Curve> BabyStepGiantStep<C> {
         let mut base_j = C::zero_point();
         for j in 0..m {
             table.insert(to_bytes(&base_j), j);
-            base_j = base_j.plus_point(&base);
+            base_j = base_j.plus_point(base);
         }
         Self {
             table,

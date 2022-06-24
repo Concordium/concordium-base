@@ -45,7 +45,7 @@ pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
     let mut eval: F = F::zero();
     // Horner's scheme at point point
     for rand in coeffs.iter().rev() {
-        eval.mul_assign(&point);
+        eval.mul_assign(point);
         eval.add_assign(rand.as_ref());
     }
     eval
@@ -251,9 +251,9 @@ pub fn verify_account_ownership_proof(
         if !processed.insert(key) {
             return false;
         }
-        if let Some(sig) = proof_acc_sk.sigs.get(&idx) {
+        if let Some(sig) = proof_acc_sk.sigs.get(idx) {
             let VerifyKey::Ed25519VerifyKey(ref key) = key;
-            if key.verify(msg, &sig).is_err() {
+            if key.verify(msg, sig).is_err() {
                 return false;
             }
         } else {
