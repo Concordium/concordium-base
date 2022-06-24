@@ -725,7 +725,7 @@ pub struct AccCredentialInfo<C: Curve> {
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider.
 /// Typically the account holder will send a vector of these.
-#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// Encryption in chunks (in little endian) of the PRF key share
@@ -790,7 +790,7 @@ pub struct ChainArDecryptedData<C: Curve> {
 // will keep it for now for compatibility.
 // We need to remove it in the future.
 /// Choice of anonymity revocation parameters
-#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
     #[serde(rename = "arIdentities")]
     #[set_size_length = 2]
@@ -800,33 +800,9 @@ pub struct ChoiceArParameters {
 }
 
 /// Proof that the data sent to the identity provider
-/// is well-formed.
-#[derive(Serialize)]
-pub struct PreIdentityProofOld<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// Challenge for the combined proof. This includes the three proofs below,
-    /// and additionally also the proofs in IpArData.
-    pub challenge:              Challenge,
-    /// Witness to the proof of konwledge of IdCredSec.
-    pub id_cred_sec_witness:    dlog::Witness<C>,
-    /// Witness to the proof that cmm_sc and id_cred_pub
-    /// are hiding the same id_cred_sec.
-    pub commitments_same_proof: com_eq::Witness<C>,
-    /// Witness to the proof that cmm_prf and the
-    /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
-    /// are hiding the same value.
-    pub commitments_prf_same:   com_eq_different_groups::Witness<P::G1, C>,
-    /// Witness to the proof that reg_id = PRF(prf_key, 0)
-    pub prf_regid_proof:        com_eq::Witness<C>,
-    /// Signature on the public information for the IP from the account holder
-    pub proof_acc_sk:           AccountOwnershipProof,
-    /// Bulletproofs for showing that chunks are small so that encryption
-    /// of the prf key can be decrypted
-    pub bulletproofs:           Vec<RangeProof<C>>,
-}
-
-/// Proof that the data sent to the identity provider
 /// is well-formed. The serialize instance is implemented manually in order to
 /// be backwards-compatible.
+#[derive(Debug, Clone)]
 pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub common_proof_fields: CommonPioProofFields<P, C>,
     /// Witness to the proof that reg_id = PRF(prf_key, 0)
@@ -871,31 +847,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProo
     }
 }
 
-#[derive(Serialize)]
+/// Common proof for both identity creation flows that the data sent to the identity provider
+/// is well-formed.
+#[derive(Debug, Clone, Serialize)]
 pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
     /// and additionally also the proofs in IpArData.
     pub challenge:              Challenge,
     /// Witness to the proof of knowledge of IdCredSec.
-    pub id_cred_sec_witness:    dlog::Witness<C>,
-    /// Witness to the proof that cmm_sc and id_cred_pub
-    /// are hiding the same id_cred_sec.
-    pub commitments_same_proof: com_eq::Witness<C>,
-    /// Witness to the proof that cmm_prf and the
-    /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
-    /// are hiding the same value.
-    pub commitments_prf_same:   com_eq_different_groups::Witness<P::G1, C>,
-    /// Bulletproofs for showing that chunks are small so that encryption
-    /// of the prf key can be decrypted
-    pub bulletproofs:           Vec<RangeProof<C>>,
-}
-
-#[derive(Serialize)]
-pub struct PreIdentityProofV1<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// Challenge for the combined proof. This includes the three proofs below,
-    /// and additionally also the proofs in IpArData.
-    pub challenge:              Challenge,
-    /// Witness to the proof of konwledge of IdCredSec.
     pub id_cred_sec_witness:    dlog::Witness<C>,
     /// Witness to the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
@@ -920,7 +879,7 @@ pub type IdCredPubVerifiers<C> = (
 /// This includes only the cryptographic parts, the attribute list is
 /// in a different object below. This is for the flow, where a initial account
 /// is to be created.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
@@ -992,7 +951,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PreIdentityObjectV1<P, C> {
 /// This includes only the cryptographic parts, the attribute list is
 /// in a different object below. This is for the flow, where no initial account
 /// is involved.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
