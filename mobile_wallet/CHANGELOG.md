@@ -2,9 +2,9 @@
 
 
 ## 0.14.0
-- Added function `create_id_request_and_private_data_v1_aux` for creating an id request in the version 1 flow, where
+- Added function `create_id_request_and_private_data_v1` for creating an id request in the version 1 flow, where
   no initial account is created. Furthermore, IdCredSec, PrfKey and blinding randomness are determined determinstically from a seed.
-- Added function `create_credential_v1_aux` creating a credential where the signing key, verification key and attribute randomness
+- Added function `create_credential_v1` creating a credential where the signing key, verification key and attribute randomness
   are genereated deterministically from a seed.
 
 ## 0.13.0
