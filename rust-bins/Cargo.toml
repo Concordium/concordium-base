@@ -12,7 +12,7 @@ vendored-ssl = ["openssl-sys/vendored"]
 
 [dependencies]
 clap = "2.33"
-dialoguer = "0.8"
+dialoguer = "0.10"
 pairing = "0.15"
 rand = "=0.7"
 serde = "1.0"
@@ -22,7 +22,7 @@ curve25519-dalek = "3.0"
 structopt = "0.3"
 hex = "0.4"
 sha2 = "0.9"
-hkdf = "0.11.0"
+hkdf = "0.11"
 ff = "0.5"
 hmac = "0.11"
 reqwest = {version = "0.11", features = ["json", "blocking"]}
@@ -30,13 +30,13 @@ url = "2.1.1"
 chrono = "0.4.19"
 either = "1.6"
 openssl-sys = {version = "0.9", optional = true}
-block-modes = "0.8"
+block-modes = "0.7"
 aes = "0.7"
 base64 = "0.13"
 pbkdf2 = "0.8"
-rpassword = "5.0"
+rpassword = "6.0"
 bitvec = "0.22"
-crossterm = "0.20"
+crossterm = "0.22"
 anyhow = "1.0"
 
 [dependencies.keygen_bls]

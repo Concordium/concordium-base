@@ -58,7 +58,7 @@ async fn main() {
     let opt = Config::from_clap(&matches);
 
     let attribute_form = Asset::get("attribute_form.html").unwrap();
-    let attribute_form_html = std::str::from_utf8(attribute_form.as_ref())
+    let attribute_form_html = std::str::from_utf8(&attribute_form.data)
         .unwrap()
         .to_string();
 
