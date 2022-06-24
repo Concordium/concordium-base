@@ -47,7 +47,7 @@ impl Serial for Version {
         let buf = &mut buf[..len];
         buf[0] &= 0b0111_1111;
         buf.reverse();
-        out.write_all(&buf).expect("Writing to buffer is safe");
+        out.write_all(buf).expect("Writing to buffer is safe");
     }
 }
 

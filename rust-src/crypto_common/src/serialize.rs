@@ -388,7 +388,7 @@ impl<T: Serial> Serial for Box<T> {
 impl Serial for [u8] {
     #[inline]
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.write_all(&self).expect("Writing to buffer is safe.");
+        out.write_all(self).expect("Writing to buffer is safe.");
     }
 }
 

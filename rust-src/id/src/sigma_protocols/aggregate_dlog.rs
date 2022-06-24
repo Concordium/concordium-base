@@ -87,7 +87,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
             return None;
         }
         let mut point = self.public.mul_by_scalar(challenge);
-        for (ref w, ref g) in izip!(witness.witness.iter(), self.coeff.iter()) {
+        for (w, g) in izip!(witness.witness.iter(), self.coeff.iter()) {
             point = point.plus_point(&g.mul_by_scalar(w));
         }
         Some(point)

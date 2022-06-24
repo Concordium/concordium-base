@@ -49,7 +49,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::ProverWitness> {
-        let w1 = self.dlog1.generate_witness(secret, state, &challenge)?;
+        let w1 = self.dlog1.generate_witness(secret, state, challenge)?;
         Some(w1)
     }
 
@@ -58,8 +58,8 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         challenge: &Self::ProtocolChallenge,
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
-        let p1 = self.dlog1.extract_point(&challenge, &witness)?;
-        let p2 = self.dlog2.extract_point(&challenge, &witness)?;
+        let p1 = self.dlog1.extract_point(challenge, witness)?;
+        let p2 = self.dlog2.extract_point(challenge, witness)?;
         Some((p1, p2))
     }
 }

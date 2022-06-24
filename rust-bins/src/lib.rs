@@ -91,10 +91,10 @@ pub fn decrypt_input<P: AsRef<Path> + Debug, X: DeserializeOwned>(input: P) -> a
         Ok(data) => Ok(data),
         Err(_) => {
             let parsed_data = serde_json::from_slice(&data)?;
-            let pass = rpassword::read_password_from_tty(Some(&format!(
+            let pass = rpassword::prompt_password(&format!(
                 "Enter password to decrypt file {} with: ",
                 input.as_ref().to_string_lossy()
-            )))?;
+            ))?;
             let plaintext = crypto_common::encryption::decrypt(&pass.into(), &parsed_data)
                 .context("Could not decrypt data.")?;
             serde_json::from_slice(&plaintext).context("Could not parse decrypted data.")
@@ -238,9 +238,9 @@ pub fn ask_for_password_confirm(
     skip_if_empty: bool,
 ) -> Result<String, std::io::Error> {
     loop {
-        let pass = rpassword::read_password_from_tty(Some(prompt))?;
+        let pass = rpassword::prompt_password(prompt)?;
         if !(skip_if_empty && pass.is_empty()) {
-            let pass2 = rpassword::read_password_from_tty(Some("Re-enter password: "))?;
+            let pass2 = rpassword::prompt_password("Re-enter password: ")?;
             if pass != pass2 {
                 println!("Passwords were not equal. Try again.");
                 continue;

@@ -65,7 +65,7 @@ fn handle_encrypt(cfg: ConfigEncrypt) -> anyhow::Result<()> {
 fn handle_decrypt(cfg: ConfigDecrypt) -> anyhow::Result<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
     let parsed_data = serde_json::from_slice(&data)?;
-    let pass = rpassword::read_password_from_tty(Some("Enter password to decrypt with: "))?;
+    let pass = rpassword::prompt_password("Enter password to decrypt with: ")?;
     let plaintext = match crypto_common::encryption::decrypt(&pass.into(), &parsed_data) {
         Ok(pt) => pt,
         Err(_) => anyhow::bail!("Could not decrypt."),

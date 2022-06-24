@@ -40,7 +40,7 @@ pub fn prove_ownership_of_account(
         .iter()
         .map(|(&idx, kp)| {
             let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-            (idx, expanded_sk.sign(&to_sign, &kp.public).into())
+            (idx, expanded_sk.sign(to_sign, &kp.public).into())
         })
         .collect();
     AccountOwnershipProof { sigs }

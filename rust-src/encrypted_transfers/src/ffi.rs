@@ -118,10 +118,10 @@ unsafe extern "C" fn make_encrypted_transfer_data(
     let mut csprng = thread_rng();
 
     let data = match make_transfer_data(
-        &ctx,
-        &receiver_pk,
-        &sender_sk,
-        &input_amount,
+        ctx,
+        receiver_pk,
+        sender_sk,
+        input_amount,
         Amount { microccd },
         &mut csprng,
     ) {
@@ -202,7 +202,7 @@ unsafe extern "C" fn verify_encrypted_transfer(
         proof,
     };
 
-    if verify_transfer_data(ctx, &receiver_pk, &sender_pk, &initial, &transfer_data) {
+    if verify_transfer_data(ctx, receiver_pk, sender_pk, &initial, &transfer_data) {
         1
     } else {
         0
@@ -232,9 +232,9 @@ unsafe extern "C" fn make_sec_to_pub_data(
     let mut csprng = thread_rng();
 
     let data = match make_sec_to_pub_transfer_data(
-        &ctx,
-        &sender_sk,
-        &input_amount,
+        ctx,
+        sender_sk,
+        input_amount,
         Amount { microccd },
         &mut csprng,
     ) {
@@ -305,7 +305,7 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
         proof,
     };
 
-    if verify_sec_to_pub_transfer_data(ctx, &sender_pk, &initial, &transfer_data) {
+    if verify_sec_to_pub_transfer_data(ctx, sender_pk, &initial, &transfer_data) {
         1
     } else {
         0
@@ -365,7 +365,7 @@ unsafe extern "C" fn decrypt_amount(
     let amount = EncryptedAmount {
         encryptions: [*from_ptr!(low_ptr), *from_ptr!(high_ptr)],
     };
-    crate::decrypt_amount(from_ptr!(table_ptr), &sk, &amount).microccd
+    crate::decrypt_amount(from_ptr!(table_ptr), sk, &amount).microccd
 }
 
 /// # Safety
@@ -381,7 +381,7 @@ unsafe extern "C" fn encrypt_amount(
 ) {
     let gc = from_ptr!(ctx_ptr);
     let pk = from_ptr!(pk_ptr);
-    let encrypted = crate::encrypt_amount(gc, &pk, Amount { microccd }, &mut rand::thread_rng()).0;
+    let encrypted = crate::encrypt_amount(gc, pk, Amount { microccd }, &mut rand::thread_rng()).0;
     *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
     *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
 }
@@ -392,7 +392,6 @@ macro_derive_from_bytes!(
 );
 macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<Group>);
 macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<Group>);
-#[no_mangle]
 
 macro_derive_from_bytes!(
     Box elgamal_sec_key_from_bytes,

@@ -89,7 +89,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         let mut sum_ui_alphai = C::Scalar::zero();
         for (ualpha, alpha) in izip!(&self.us, &alphas) {
             let mut ualpha = *ualpha;
-            ualpha.mul_assign(&alpha);
+            ualpha.mul_assign(alpha);
             sum_ui_alphai.add_assign(&ualpha);
         }
         let sum_ui_alphai: Value<C> = Value::new(sum_ui_alphai);

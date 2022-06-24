@@ -283,10 +283,10 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
 
     let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data_prf(
         &prf_value,
-        &context.ars_infos,
+        context.ars_infos,
         threshold,
         ar_commitment_key,
-        &context.global_context,
+        context.global_context,
     );
     let number_of_ars = context.ars_infos.len();
     let mut ip_ar_data = Vec::with_capacity(number_of_ars);
@@ -497,7 +497,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -582,7 +582,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -682,7 +682,7 @@ where
     )?;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: cred_data.sign(&new_or_existing, &unsigned_credential_info),
+        sigs: cred_data.sign(new_or_existing, &unsigned_credential_info),
     };
 
     let cdp = CredDeploymentProofs {
@@ -791,7 +791,7 @@ where
     let ip_pub_key = &context.ip_info.ip_verify_key;
 
     // retrieve the signature on the underlying idcredsec + prf_key + attribute_list
-    let retrieved_sig = ip_sig.retrieve(&sig_retrieval_rand);
+    let retrieved_sig = ip_sig.retrieve(sig_retrieval_rand);
 
     // and then we blind the signature to disassociate it from the message.
     // only the second part is used (as per the protocol)
@@ -800,7 +800,7 @@ where
     // We use the on-chain pedersen commitment key.
     let (commitments, commitment_rands) = compute_commitments(
         &context.global_context.on_chain_commitment_key,
-        &alist,
+        alist,
         prf_key,
         cred_counter,
         &cmm_id_cred_sec_sharing_coeff,
@@ -880,12 +880,12 @@ where
         &context.global_context.on_chain_commitment_key,
         &commitments,
         &commitment_rands,
-        &id_cred_sec,
-        &prf_key,
-        &alist,
+        id_cred_sec,
+        prf_key,
+        alist,
         prio.choice_ar_parameters.threshold,
         &choice_ar_handles,
-        &ip_pub_key,
+        ip_pub_key,
         &blinded_sig,
         blind_rand,
     )?;
@@ -910,7 +910,7 @@ where
         8,
         u64::from(cred_counter),
         u64::from(alist.max_accounts),
-        &context.global_context.bulletproof_generators(),
+        context.global_context.bulletproof_generators(),
         &context.global_context.on_chain_commitment_key,
         &commitment_rands.cred_counter_rand,
         &commitment_rands.max_accounts_rand,
@@ -1056,7 +1056,7 @@ fn compute_pok_sig<
 
     // and all commitments to ARs with randomness 0
     for ar in ar_scalars.iter() {
-        comm_vec.push(commitment_key.hide_worker(&ar, &zero));
+        comm_vec.push(commitment_key.hide_worker(ar, &zero));
     }
 
     comm_vec.push(tags_cmm);
@@ -1183,7 +1183,7 @@ fn compute_pok_reg_id<C: Curve>(
 
     // commitments are the public values. They all have to
     let public = [
-        cmm_prf.combine(&cmm_cred_counter),
+        cmm_prf.combine(cmm_cred_counter),
         Commitment(reg_id),
         cmm_one,
     ];
@@ -1195,8 +1195,8 @@ fn compute_pok_reg_id<C: Curve>(
 
     // combine the two randomness witnesses
     let mut rand_1 = C::Scalar::zero();
-    rand_1.add_assign(&prf_rand);
-    rand_1.add_assign(&cred_counter_rand);
+    rand_1.add_assign(prf_rand);
+    rand_1.add_assign(cred_counter_rand);
     // reg_id is the commitment to reg_id_exponent with randomness 0
     // the right-hand side of the equation is commitment to 1 with randomness 0
     let values = [Value::new(k), Value::new(reg_id_exponent)];

@@ -78,7 +78,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that
     // we have as many signatures as verification keys.
-    if !utils::verify_account_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
+    if !utils::verify_account_ownership_proof(keys, threshold, proof_acc_sk, signed.as_ref()) {
         return Err(Reason::IncorrectProof);
     }
 
@@ -282,9 +282,9 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
     let prf_verification = compute_prf_sharing_verifier(
         ar_ck,
-        &common_fields.cmm_prf_sharing_coeff,
-        &common_fields.ip_ar_data,
-        &context.ars_infos,
+        common_fields.cmm_prf_sharing_coeff,
+        common_fields.ip_ar_data,
+        context.ars_infos,
         &h_in_exponent,
     );
     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
@@ -318,7 +318,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let gens = &context.global_context.bulletproof_generators().take(32 * 8);
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
         transcript.append_message(b"encrypted_share", &ciphers);
-        if verify_efficient(transcript, 32, &commitments, &proof, gens, &keys).is_err() {
+        if verify_efficient(transcript, 32, &commitments, proof, gens, &keys).is_err() {
             return Err(Reason::IncorrectProof);
         }
     }
@@ -407,11 +407,11 @@ fn sign_identity_object_common<
 ) -> Result<ps_sig::Signature<P>, Reason> {
     let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
     let message: ps_sig::UnknownMessage<P> = compute_message(
-        &common_fields.cmm_prf,
-        &common_fields.cmm_sc,
+        common_fields.cmm_prf,
+        common_fields.cmm_sc,
         common_fields.choice_ar_parameters.threshold,
         &choice_ar_handles,
-        &alist,
+        alist,
         &ip_info.ip_verify_key,
     )?;
     let mut csprng = thread_rng();
@@ -485,13 +485,13 @@ pub fn verify_credentials<
     Reason,
 > {
     validate_request(pre_id_obj, context)?;
-    let sig = sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
+    let sig = sign_identity_object(pre_id_obj, context.ip_info, alist, ip_secret_key)?;
     let initial_cdi = create_initial_cdi(
-        &context.ip_info,
+        context.ip_info,
         pre_id_obj.pub_info_for_ip.clone(),
         alist,
         expiry,
-        &ip_cdi_secret_key,
+        ip_cdi_secret_key,
     );
     Ok((sig, initial_cdi))
 }
@@ -508,7 +508,7 @@ pub fn verify_credentials_v1<
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
     validate_request_v1(pre_id_obj, context)?;
-    let sig = sign_identity_object_v1(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
+    let sig = sign_identity_object_v1(pre_id_obj, context.ip_info, alist, ip_secret_key)?;
     Ok(sig)
 }
 
@@ -539,7 +539,7 @@ pub fn create_initial_cdi<
         cred_account: pub_info_for_ip.vk_acc,
     };
 
-    let sig = sign_initial_cred_values(&cred_values, expiry, ip_info, &ip_cdi_secret_key);
+    let sig = sign_initial_cred_values(&cred_values, expiry, ip_info, ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
         sig,

@@ -111,7 +111,7 @@ pub fn prove_dlog_ed25519(
     let challenge_bytes = ro.split().result();
     // FIXME: Do the same as in other proofs in sigma_protocols in id.
     let mut array = [0u8; 32];
-    array.copy_from_slice(&challenge_bytes.as_ref());
+    array.copy_from_slice(challenge_bytes.as_ref());
     let challenge = Scalar::from_bytes_mod_order(array);
     Ed25519DlogProof {
         challenge,
@@ -136,7 +136,7 @@ pub fn verify_dlog_ed25519(
             let challenge_bytes = ro.split().result();
             // FIXME: Do the same as in other proofs in sigma_protocols in id.
             let mut array = [0u8; 32];
-            array.copy_from_slice(&challenge_bytes.as_ref());
+            array.copy_from_slice(challenge_bytes.as_ref());
             let challenge = Scalar::from_bytes_mod_order(array);
             challenge == proof.challenge
         }

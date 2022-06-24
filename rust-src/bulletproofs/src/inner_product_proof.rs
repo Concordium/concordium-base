@@ -298,7 +298,7 @@ pub fn verify_inner_product<C: Curve>(
     let mut ab = a;
     ab.mul_assign(&b);
 
-    let verification_scalars = match verify_scalars(transcript, n, &proof) {
+    let verification_scalars = match verify_scalars(transcript, n, proof) {
         None => return false,
         Some(scalars) => scalars,
     };
@@ -308,10 +308,10 @@ pub fn verify_inner_product<C: Curve>(
         verification_scalars.s,
     );
 
-    let G = multiexp(&G_vec, &s);
+    let G = multiexp(G_vec, &s);
     let mut s_inv = s;
     s_inv.reverse();
-    let H = multiexp(&H_vec, &s_inv);
+    let H = multiexp(H_vec, &s_inv);
 
     let mut sum = C::zero_point();
     for j in 0..L_R.len() {

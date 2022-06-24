@@ -111,8 +111,8 @@ pub fn verify_cdi<
             .copied()
             .collect::<BTreeSet<ArIdentity>>(),
         &cdi.values.policy,
-        &commitments,
-        &ip_verify_key,
+        commitments,
+        ip_verify_key,
         &cdi.proofs.id_proofs.sig,
     );
     let verifier_sig = if let Some(v) = verifier_sig {
@@ -158,12 +158,12 @@ pub fn verify_cdi<
         &cdi.proofs.id_proofs.commitments.cmm_cred_counter,
         &cdi.proofs.id_proofs.commitments.cmm_max_accounts,
         &cdi.proofs.id_proofs.cred_counter_less_than_max_accounts,
-        &gens,
+        gens,
         &on_chain_commitment_key,
     ) {
         return Err(CdiVerificationError::Proof);
     }
-    let signed = utils::credential_hash_to_sign(&cdv, &proofs.id_proofs, new_or_existing);
+    let signed = utils::credential_hash_to_sign(cdv, &proofs.id_proofs, new_or_existing);
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that
     // we have as many signatures as verification keys.
@@ -176,7 +176,7 @@ pub fn verify_cdi<
         return Err(CdiVerificationError::AccountOwnership);
     }
 
-    let check_policy = verify_policy(&on_chain_commitment_key, &commitments, &cdi.values.policy);
+    let check_policy = verify_policy(&on_chain_commitment_key, commitments, &cdi.values.policy);
 
     if !check_policy {
         return Err(CdiVerificationError::Policy);
