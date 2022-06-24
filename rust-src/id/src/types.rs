@@ -847,8 +847,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProo
     }
 }
 
-/// Common proof for both identity creation flows that the data sent to the identity provider
-/// is well-formed.
+/// Common proof for both identity creation flows that the data sent to the
+/// identity provider is well-formed.
 #[derive(Debug, Clone, Serialize)]
 pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
