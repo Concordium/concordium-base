@@ -27,6 +27,9 @@ pub use elgamal;
 /// Re-export of bulletproofs.
 pub use bulletproofs::range_proof;
 
+/// Re-export the PRF key generation functionality.
+pub use dodis_yampolskiy_prf;
+
 #[macro_use]
 extern crate crypto_common_derive;
 
