@@ -2,6 +2,12 @@
 
 ## Unreleased changes
 
+- Extend schema type with `ULeb128`, `ILeb128`, `ByteList` and `ByteArray`.
+  - `ULeb128` and `ILeb128` allow for integers of arbitrary size and are represented in JSON as a string containing the integer.
+  - `ByteList` and `ByteArray` are byte specialized versions of `List` and `Array` and are represented in JSON as lowercase hex encoded strings.  
+- Add new schema version which include the versioning in the serialization.
+- Use `schema::Type::ByteList` for `[u8]` implementation of `SchemaType`.
+
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 
 - Introduce Entrypoint and Parameter types, and their owned versions.
