@@ -355,9 +355,10 @@ pub fn get_receives(module: &Module) -> Vec<&Name> {
 }
 
 /// Get the embedded schema for smart contract modules version 0 if it exists.
-/// It will attempt to use the schema in the custom section "concordium-schema"
-/// and if this is not present it will try to use the custom section
-/// "concordium-schema-v2".
+///
+/// First attempt to use the schema in the custom section "concordium-schema"
+/// and if this is not present try to use the custom section
+/// "concordium-schema-v1".
 pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::VersionedModuleSchema> {
     let skeleton = parse_skeleton(bytes)?;
     let mut schema_v1_section = None;
@@ -386,8 +387,8 @@ pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::VersionedModul
 
 /// Get the embedded schema for smart contract modules version 1 if it exists.
 ///
-/// It will attempt to use the schema in the custom section "concordium-schema"
-/// and if this is not present it will try to use the custom section
+/// First attempt to use the schema in the custom section "concordium-schema"
+/// and if this is not present try to use the custom section
 /// "concordium-schema-v2".
 pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::VersionedModuleSchema> {
     let skeleton = parse_skeleton(bytes)?;

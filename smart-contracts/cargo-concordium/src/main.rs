@@ -26,6 +26,11 @@ mod build;
 mod context;
 mod schema_json;
 
+/// Versioned schemas always start with two fully set bytes.
+/// This is used to determine whether we are looking at a versioned or
+/// unversioned (old) schemas.
+const VERSIONED_SCHEMA_MAGIC_HASH: &[u8] = &[0xff, 0xff];
+
 #[derive(Debug, StructOpt)]
 #[structopt(bin_name = "cargo")]
 enum CargoCommand {
@@ -483,16 +488,12 @@ fn handle_run_v0(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     // get the module schema if available.
     let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
         let bytes = fs::read(schema_path).context("Could not read schema file.")?;
-        // Attempt to parse a versioned schema otherwise fallback to a version 0 schema.
-        // This is safe since the versioned schema is prefixed with a unique value.
-        let schema = if let Ok(schema) = from_bytes::<VersionedModuleSchema>(&bytes) {
-            schema
+        let schema = if bytes.starts_with(VERSIONED_SCHEMA_MAGIC_HASH) {
+            from_bytes::<VersionedModuleSchema>(&bytes)
         } else {
-            from_bytes(&bytes)
-                .map(VersionedModuleSchema::V0)
-                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?
+            from_bytes(&bytes).map(VersionedModuleSchema::V0)
         };
-        Some(schema)
+        Some(schema.map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?)
     } else {
         let res = utils::get_embedded_schema_v0(module);
         if let Err(err) = &res {
@@ -780,16 +781,12 @@ fn handle_run_v1(run_cmd: RunCommand, module: &[u8]) -> anyhow::Result<()> {
     // get the module schema if available.
     let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
         let bytes = fs::read(schema_path).context("Could not read schema file.")?;
-        // Attempt to parse a versioned schema otherwise fallback to a version 1 schema.
-        // This is safe since the versioned schema is prefixed with a unique value.
-        let schema = if let Ok(schema) = from_bytes::<VersionedModuleSchema>(&bytes) {
-            schema
+        let schema = if bytes.starts_with(VERSIONED_SCHEMA_MAGIC_HASH) {
+            from_bytes::<VersionedModuleSchema>(&bytes)
         } else {
-            from_bytes(&bytes)
-                .map(VersionedModuleSchema::V1)
-                .map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?
+            from_bytes(&bytes).map(VersionedModuleSchema::V1)
         };
-        Some(schema)
+        Some(schema.map_err(|_| anyhow::anyhow!("Could not deserialize schema file."))?)
     } else {
         let res = utils::get_embedded_schema_v1(module);
         if let Err(err) = &res {

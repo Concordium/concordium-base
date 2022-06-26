@@ -151,14 +151,13 @@ pub fn build_contract(
         utils::WasmVersion::V1 => vec![0, 0, 0, 1, 0, 0, 0, 0],
     };
     // Embed schema custom section
+    skeleton.output(&mut output_bytes)?;
     let return_schema = if let Some((custom_section, schema)) = schema {
-        skeleton.output(&mut output_bytes)?;
         if let Some(custom_section) = custom_section {
             write_custom_section(&mut output_bytes, &custom_section)?;
         }
         Some(schema)
     } else {
-        skeleton.output(&mut output_bytes)?;
         None
     };
     // write the size of the actual module to conform to serialization expected on
