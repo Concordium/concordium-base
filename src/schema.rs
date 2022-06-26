@@ -33,16 +33,38 @@ pub trait SchemaType {
     fn get_type() -> crate::schema::Type;
 }
 
-/// Contains all the contract schemas for a V0 module
+/// Contains all the contract schemas for a smart contract module V0.
+///
+/// Older versions of smart contracts might have this embedded in the custom
+/// section labelled `concordium-schema-v1`.
 #[derive(Debug, Clone)]
 pub struct ModuleV0 {
     pub contracts: BTreeMap<String, ContractV0>,
 }
 
-/// Contains all the contract schemas for a V1 module
+/// Contains all the contract schemas for a smart contract module V1.
+///
+/// Older versions of smart contracts might have this embedded in the custom
+/// section labelled `concordium-schema-v2`.
 #[derive(Debug, Clone)]
 pub struct ModuleV1 {
     pub contracts: BTreeMap<String, ContractV1>,
+}
+
+/// Represents the different schema versions.
+///
+/// The serialization of this type includes the versioning information. The
+/// serialization of this is always prefixed with two 255u8 in order to
+/// distinguish this versioned schema from the unversioned.
+///
+/// When embedded into a smart contract module, name the custom section
+/// `concordium-schema`.
+#[derive(Debug, Clone)]
+pub enum VersionedModuleSchema {
+    /// Version 0 schema, only supported by V0 smart contracts.
+    V0(ModuleV0),
+    /// Version 1 schema, only supported by V1 smart contracts.
+    V1(ModuleV1),
 }
 
 /// Describes all the schemas of a V0 smart contract.
@@ -125,38 +147,84 @@ pub enum SizeLength {
     U64,
 }
 
-/// Schema type used to describe the different types in a rust smart
-/// contract.
+/// Schema type used to describe the different types in a smart contract, their
+/// serialization and how to represent the types in JSON.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum Type {
+    /// A type with no serialization.
     Unit,
+    /// Boolean. Serialized as a byte, where the value 0 is false and 1 is true.
     Bool,
+    /// Unsigned 8-bit integer.
     U8,
+    /// Unsigned 16-bit integer. Serialized as little endian.
     U16,
+    /// Unsigned 32-bit integer. Serialized as little endian.
     U32,
+    /// Unsigned 64-bit integer. Serialized as little endian.
     U64,
+    /// Unsigned 128-bit integer. Serialized as little endian.
     U128,
+    /// Signed 8-bit integer. Serialized as little endian.
     I8,
+    /// Signed 16-bit integer. Serialized as little endian.
     I16,
+    /// Signed 32-bit integer. Serialized as little endian.
     I32,
+    /// Signed 64-bit integer. Serialized as little endian.
     I64,
+    /// Signed 128-bit integer. Serialized as little endian.
     I128,
+    /// An amount of CCD. Serialized as 64-bit unsigned integer little endian.
     Amount,
+    /// An account address.
     AccountAddress,
+    /// A contract address.
     ContractAddress,
+    /// A timestamp. Represented as milliseconds since Unix epoch. Serialized as
+    /// a 64-bit unsigned integer little endian.
     Timestamp,
+    /// A duration of milliseconds, cannot be negative. Serialized as a 64-bit
+    /// unsigned integer little endian.
     Duration,
+    /// A pair.
     Pair(Box<Type>, Box<Type>),
+    /// A list. It is serialized with the length first followed by the list
+    /// items.
     List(SizeLength, Box<Type>),
+    /// A Set. It is serialized with the length first followed by the list
+    /// items.
     Set(SizeLength, Box<Type>),
+    /// A Map. It is serialized with the length first followed by key-value
+    /// pairs of the entries.
     Map(SizeLength, Box<Type>, Box<Type>),
+    /// A fixed sized list.
     Array(u32, Box<Type>),
+    /// A structure type with fields.
     Struct(Fields),
+    /// A sum type.
     Enum(Vec<(String, Fields)>),
+    /// A UTF8 String. It is serialized with the length first followed by the
+    /// encoding of the string.
     String(SizeLength),
+    /// A smart contract name. It is serialized with the length first followed
+    /// by the ASCII encoding of the name.
     ContractName(SizeLength),
+    /// A smart contract receive function name. It is serialized with the length
+    /// first followed by the ASCII encoding of the name.
     ReceiveName(SizeLength),
+    /// An unsigned integer encoded using LEB128 with the addition of a
+    /// constraint on the maximum number of bytes to use for an encoding.
+    ULeb128(u32),
+    /// A signed integer encoded using LEB128 with the addition of a constraint
+    /// on the maximum number of bytes to use for an encoding.
+    ILeb128(u32),
+    /// A list of bytes. It is serialized with the length first followed by the
+    /// bytes.
+    ByteList(SizeLength),
+    /// A fixed sized list of bytes.
+    ByteArray(u32),
 }
 
 impl Type {
@@ -169,6 +237,7 @@ impl Type {
             Type::Set(_, ty) => Type::Set(size_len, ty),
             Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
             Type::String(_) => Type::String(size_len),
+            Type::ByteList(_) => Type::ByteList(size_len),
             t => t,
         }
     }
@@ -264,7 +333,7 @@ impl<K: SchemaType, V: SchemaType> SchemaType for HashMap<K, V> {
     }
 }
 impl SchemaType for [u8] {
-    fn get_type() -> Type { Type::List(SizeLength::U32, Box::new(Type::U8)) }
+    fn get_type() -> Type { Type::ByteList(SizeLength::U32) }
 }
 
 impl SchemaType for String {
@@ -328,6 +397,24 @@ impl Serial for ModuleV1 {
     }
 }
 
+impl Serial for VersionedModuleSchema {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        // Prefix for versioned module schema, used to distinquish from the unversioned.
+        out.write_u16(u16::MAX)?;
+        match self {
+            VersionedModuleSchema::V0(module) => {
+                out.write_u8(0)?;
+                module.serial(out)?;
+            }
+            VersionedModuleSchema::V1(module) => {
+                out.write_u8(1)?;
+                module.serial(out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Deserial for ModuleV0 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
@@ -345,6 +432,28 @@ impl Deserial for ModuleV1 {
         Ok(ModuleV1 {
             contracts,
         })
+    }
+}
+
+impl Deserial for VersionedModuleSchema {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        // First we ensure the prefix is correct.
+        let prefix = source.read_u16()?;
+        if prefix != u16::MAX {
+            return Err(ParseError {});
+        }
+        let version = source.read_u8()?;
+        match version {
+            0 => {
+                let module = source.get()?;
+                Ok(VersionedModuleSchema::V0(module))
+            }
+            1 => {
+                let module = source.get()?;
+                Ok(VersionedModuleSchema::V1(module))
+            }
+            _ => Err(ParseError {}),
+        }
     }
 }
 
@@ -520,6 +629,22 @@ impl Serial for Type {
                 out.write_u8(26)?;
                 len_size.serial(out)
             }
+            Type::ULeb128(constraint) => {
+                out.write_u8(27)?;
+                constraint.serial(out)
+            }
+            Type::ILeb128(constraint) => {
+                out.write_u8(28)?;
+                constraint.serial(out)
+            }
+            Type::ByteList(len_size) => {
+                out.write_u8(29)?;
+                len_size.serial(out)
+            }
+            Type::ByteArray(len) => {
+                out.write_u8(30)?;
+                len.serial(out)
+            }
         }
     }
 }
@@ -591,6 +716,23 @@ impl Deserial for Type {
                 let len_size = SizeLength::deserial(source)?;
                 Ok(Type::ReceiveName(len_size))
             }
+            27 => {
+                let constraint = u32::deserial(source)?;
+                Ok(Type::ULeb128(constraint))
+            }
+            28 => {
+                let constraint = u32::deserial(source)?;
+                Ok(Type::ILeb128(constraint))
+            }
+            29 => {
+                let len_size = SizeLength::deserial(source)?;
+                Ok(Type::ByteList(len_size))
+            }
+            30 => {
+                let len = u32::deserial(source)?;
+                Ok(Type::ByteArray(len))
+            }
+
             _ => Err(ParseError::default()),
         }
     }
@@ -631,6 +773,9 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
 mod impls {
     use super::*;
     use crate::constants::*;
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::Zero;
+
     impl Fields {
         pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
             use serde_json::*;
@@ -845,7 +990,208 @@ mod impls {
                     let func_name = receive_name.entrypoint_name();
                     Ok(json!({"contract": contract_name, "func": func_name}))
                 }
+                Type::ULeb128(constraint) => {
+                    let int = deserial_biguint(source, *constraint)?;
+                    Ok(Value::String(int.to_string()))
+                }
+                Type::ILeb128(constraint) => {
+                    let int = deserial_bigint(source, *constraint)?;
+                    Ok(Value::String(int.to_string()))
+                }
+                Type::ByteList(size_len) => {
+                    let len = deserial_length(source, *size_len)?;
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+                    for _ in 0..len {
+                        let byte = source.read_u8()?;
+                        string.push_str(&format!("{:02x?}", byte));
+                    }
+                    Ok(Value::String(string))
+                }
+                Type::ByteArray(len) => {
+                    let len = usize::try_from(*len)?;
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+                    for _ in 0..len {
+                        let byte = source.read_u8()?;
+                        string.push_str(&format!("{:02x?}", byte));
+                    }
+                    Ok(Value::String(string))
+                }
             }
+        }
+    }
+
+    fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
+        let mut result = BigUint::zero();
+        let mut shift = 0;
+        for _ in 0..constraint {
+            let byte = source.read_u8()?;
+            let value_byte = BigUint::from(byte & 0b0111_1111);
+            result += value_byte << shift;
+            shift += 7;
+
+            if byte & 0b1000_0000 == 0 {
+                return Ok(result);
+            }
+        }
+        Err(ParseError {})
+    }
+
+    fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
+        let mut result = BigInt::zero();
+        let mut shift = 0;
+        for _ in 0..constraint {
+            let byte = source.read_u8()?;
+            let value_byte = BigInt::from(byte & 0b0111_1111);
+            result += value_byte << shift;
+            shift += 7;
+
+            if byte & 0b1000_0000 == 0 {
+                if byte & 0b0100_0000 != 0 {
+                    result -= BigInt::from(2).pow(shift)
+                }
+                return Ok(result);
+            }
+        }
+        Err(ParseError {})
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_deserial_biguint_0() {
+            let mut cursor = Cursor::new([0]);
+            let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 0u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_10() {
+            let mut cursor = Cursor::new([10]);
+            let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 10u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_129() {
+            let mut cursor = Cursor::new([129, 1]);
+            let int = deserial_biguint(&mut cursor, 2).expect("Deserialising should not fail");
+            assert_eq!(int, 129u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_u64_max() {
+            let mut cursor = Cursor::new([255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+            let int = deserial_biguint(&mut cursor, 10).expect("Deserialising should not fail");
+            assert_eq!(int, u64::MAX.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_u256_max() {
+            let mut cursor = Cursor::new([
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                255,
+                0b0000_1111,
+            ]);
+            let int = deserial_biguint(&mut cursor, 37).expect("Deserialising should not fail");
+            let u256_max = BigUint::from_bytes_le(&[
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            ]);
+            assert_eq!(int, u256_max)
+        }
+
+        #[test]
+        fn test_deserial_biguint_padding_allowed() {
+            let mut cursor = Cursor::new([129, 128, 128, 128, 128, 0]);
+            let int = deserial_biguint(&mut cursor, 6).expect("Deserialising should not fail");
+            assert_eq!(int, 1u8.into())
+        }
+
+        #[test]
+        fn test_deserial_biguint_contraint_fails() {
+            let mut cursor = Cursor::new([129, 1]);
+            deserial_biguint(&mut cursor, 1).expect_err("Deserialising should fail");
+        }
+
+        #[test]
+        fn test_deserial_bigint_0() {
+            let mut cursor = Cursor::new([0]);
+            let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 0u8.into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_10() {
+            let mut cursor = Cursor::new([10]);
+            let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
+            assert_eq!(int, 10u8.into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_neg_10() {
+            let mut cursor = Cursor::new([0b0111_0110]);
+            let int = deserial_bigint(&mut cursor, 2).expect("Deserialising should not fail");
+            assert_eq!(int, (-10).into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_neg_129() {
+            let mut cursor = Cursor::new([0b1111_1111, 0b0111_1110]);
+            let int = deserial_bigint(&mut cursor, 3).expect("Deserialising should not fail");
+            assert_eq!(int, (-129).into())
+        }
+
+        #[test]
+        fn test_deserial_bigint_i64_min() {
+            let mut cursor =
+                Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+            let int = deserial_bigint(&mut cursor, 10).expect("Deserialising should not fail");
+            assert_eq!(int, BigInt::from(i64::MIN))
+        }
+
+        #[test]
+        fn test_deserial_bigint_constraint_fails() {
+            let mut cursor =
+                Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+            deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
         }
     }
 }
