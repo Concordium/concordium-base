@@ -617,7 +617,6 @@ instance Arbitrary RejectReason where
               return OutOfEnergy,
               RejectedInit <$> arbitrary,
               RejectedReceive <$> arbitrary <*> genCAddress <*> genReceiveName <*> genParameter,
-              NonExistentRewardAccount <$> genAccountAddress,
               return InvalidProof,
               AlreadyABaker <$> genBakerId,
               NotABaker <$> genAccountAddress,

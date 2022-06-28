@@ -1892,7 +1892,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                                       contractAddress :: !ContractAddress,
                                       receiveName :: !Wasm.ReceiveName,
                                       parameter :: !Wasm.Parameter}
-                  | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | AlreadyABaker !BakerId -- ^Tried to add baker/delegator for an account that already has a baker
                   | NotABaker !AccountAddress -- ^Account is not a baker account
@@ -1998,7 +1997,6 @@ instance S.Serialize RejectReason where
       S.put contractAddress <>
       S.put receiveName <>
       S.put parameter
-    NonExistentRewardAccount addr -> S.putWord8 13 <> S.put addr
     InvalidProof -> S.putWord8 14
     AlreadyABaker bid -> S.putWord8 15 <> S.put bid
     NotABaker addr -> S.putWord8 16 <> S.put addr
@@ -2062,7 +2060,6 @@ instance S.Serialize RejectReason where
       receiveName <- S.get
       parameter <- S.get
       return RejectedReceive {..}
-    13 -> NonExistentRewardAccount <$> S.get
     14 -> return InvalidProof
     15 -> AlreadyABaker <$> S.get
     16 -> NotABaker <$> S.get
