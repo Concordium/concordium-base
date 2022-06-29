@@ -1215,6 +1215,41 @@ fn compute_pok_reg_id<C: Curve>(
     (prover, secret)
 }
 
+/// Proof of knowledge of idCredSec. To be used for identity recovery.
+/// The prover (the account holder) first gets a challenge from the verifier
+/// (the IDP) and then calls this function.
+/// The arguments are
+/// - ip_info - Identity provider information containing their IR and
+///   verification key that goes in to the protocol context.
+/// - context - Global Context containing g such that `idCredPub = g^idCredSec`.
+///   Also goes into the protocol context.
+/// - id_cred_sec - The secret value idCredSec that only the account holder
+///   knows.
+/// - timestamp - seconds since the unix epoch. Goes into the protocol context.
+pub fn prove_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    ip_info: &IpInfo<P>,
+    context: &GlobalContext<C>,
+    id_cred_sec: &Value<C>,
+    timestamp: u64, // seconds the the unix epoch
+) -> Option<dlog::Proof<C>> {
+    let g = context.on_chain_commitment_key.g;
+    let prover = dlog::Dlog::<C> {
+        public: g.mul_by_scalar(id_cred_sec),
+        coeff:  g,
+    };
+    let secret = dlog::DlogSecret {
+        secret: id_cred_sec.clone(),
+    };
+
+    let mut csprng = thread_rng();
+    let mut transcript = RandomOracle::domain("IdRecoveryProof");
+    transcript.append_message(b"ctx", &context);
+    transcript.append_message(b"timestamp", &timestamp);
+    transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
+    transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
+    prove(&mut transcript, &prover, secret, &mut csprng)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
