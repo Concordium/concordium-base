@@ -414,3 +414,39 @@ pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::VersionedModul
         bail!("No schema found in the module")
     }
 }
+
+#[cfg(test)]
+/// Tests for schema parsing functions.
+mod tests {
+
+    #[test]
+    fn test_schema_embeddings() {
+        let data =
+            std::fs::read("../testdata/schemas/cis1-wccd-embedded-schema-v0-unversioned.wasm")
+                .expect("Could not read file.");
+        if let Err(e) = super::get_embedded_schema_v0(&data) {
+            panic!("Failed to parse unversioned v0 module schema: {}", e);
+        }
+
+        let data =
+            std::fs::read("../testdata/schemas/cis2-wccd-embedded-schema-v1-unversioned.wasm.v1")
+                .expect("Could not read file.");
+        if let Err(e) = super::get_embedded_schema_v1(&data[8..]) {
+            panic!("Failed to parse unversioned v1 module schema: {}", e);
+        }
+
+        let data =
+            std::fs::read("../testdata/schemas/cis1-wccd-embedded-schema-v0-versioned.wasm.v0")
+                .expect("Could not read file.");
+        if let Err(e) = super::get_embedded_schema_v0(&data[8..]) {
+            panic!("Failed to parse versioned v0 module schema: {}", e);
+        }
+
+        let data =
+            std::fs::read("../testdata/schemas/cis2-wccd-embedded-schema-v1-versioned.wasm.v1")
+                .expect("Could not read file.");
+        if let Err(e) = super::get_embedded_schema_v1(&data[8..]) {
+            panic!("Failed to parse versioned v1 module schema: {}", e);
+        }
+    }
+}
