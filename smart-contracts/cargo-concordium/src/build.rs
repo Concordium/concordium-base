@@ -23,11 +23,6 @@ use wasm_transform::{
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
-pub enum ModuleSchema {
-    V0(schema::ModuleV0),
-    V1(schema::ModuleV1),
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum SchemaBuildOptions {
     DoNotBuild,
@@ -53,7 +48,7 @@ pub fn build_contract(
     build_schema: SchemaBuildOptions,
     out: Option<PathBuf>,
     cargo_args: &[String],
-) -> anyhow::Result<(usize, Option<ModuleSchema>)> {
+) -> anyhow::Result<(usize, Option<schema::VersionedModuleSchema>)> {
     #[allow(unused_assignments)]
     // This assignment is not actually unused. It is used via the custom_section which retains a
     // reference to this vector, which is why it has to be here. This is a bit ugly, but not as
@@ -69,12 +64,12 @@ pub fn build_contract(
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
-                        name:     "concordium-schema-v1".into(),
+                        name:     "concordium-schema".into(),
                         contents: &schema_bytes,
                     };
-                    Some((Some(custom_section), ModuleSchema::V0(schema)))
+                    Some((Some(custom_section), schema))
                 } else {
-                    Some((None, ModuleSchema::V0(schema)))
+                    Some((None, schema))
                 }
             } else {
                 None
@@ -87,12 +82,12 @@ pub fn build_contract(
                 if build_schema.embed() {
                     schema_bytes = to_bytes(&schema);
                     let custom_section = CustomSection {
-                        name:     "concordium-schema-v2".into(),
+                        name:     "concordium-schema".into(),
                         contents: &schema_bytes,
                     };
-                    Some((Some(custom_section), ModuleSchema::V1(schema)))
+                    Some((Some(custom_section), schema))
                 } else {
-                    Some((None, ModuleSchema::V1(schema)))
+                    Some((None, schema))
                 }
             } else {
                 None
@@ -156,14 +151,13 @@ pub fn build_contract(
         utils::WasmVersion::V1 => vec![0, 0, 0, 1, 0, 0, 0, 0],
     };
     // Embed schema custom section
+    skeleton.output(&mut output_bytes)?;
     let return_schema = if let Some((custom_section, schema)) = schema {
-        skeleton.output(&mut output_bytes)?;
         if let Some(custom_section) = custom_section {
             write_custom_section(&mut output_bytes, &custom_section)?;
         }
         Some(schema)
     } else {
-        skeleton.output(&mut output_bytes)?;
         None
     };
     // write the size of the actual module to conform to serialization expected on

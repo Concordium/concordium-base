@@ -1,6 +1,13 @@
 # Changelog
 
+
+
 ## Unreleased changes
+
+- Support schema types for LEB128 and byte arrays.
+- Support schema modules which includes version information.
+
+## 2.0.0
 - Add support for V1 contract builds, testing, and execution.
 - The output of `cargo concordium build` is now versioned.
 - Support contracts written with Rust edition 2021.
