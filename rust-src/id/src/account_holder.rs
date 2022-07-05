@@ -1219,7 +1219,7 @@ fn compute_pok_reg_id<C: Curve>(
 /// The prover (the account holder) first gets a challenge from the verifier
 /// (the IDP) and then calls this function.
 /// The arguments are
-/// - ip_info - Identity provider information containing their IR and
+/// - ip_info - Identity provider information containing their ID and
 ///   verification key that goes in to the protocol context.
 /// - context - Global Context containing g such that `idCredPub = g^idCredSec`.
 ///   Also goes into the protocol context.
@@ -1231,10 +1231,11 @@ pub fn prove_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &GlobalContext<C>,
     id_cred_sec: &Value<C>,
     timestamp: u64, // seconds the the unix epoch
-) -> Option<dlog::Proof<C>> {
+) -> Option<IdRecoveryRequest<C>> {
     let g = context.on_chain_commitment_key.g;
+    let id_cred_pub = g.mul_by_scalar(id_cred_sec);
     let prover = dlog::Dlog::<C> {
-        public: g.mul_by_scalar(id_cred_sec),
+        public: id_cred_pub,
         coeff:  g,
     };
     let secret = dlog::DlogSecret {
@@ -1247,7 +1248,12 @@ pub fn prove_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     transcript.append_message(b"timestamp", &timestamp);
     transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
     transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
-    prove(&mut transcript, &prover, secret, &mut csprng)
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
+    Some(IdRecoveryRequest{
+        id_cred_pub,
+        timestamp,
+        proof
+    })
 }
 
 #[cfg(test)]

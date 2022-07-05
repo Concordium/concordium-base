@@ -2414,6 +2414,22 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
     }
 }
 
+/// A request for recovering an identity
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct IdRecoveryRequest<C: Curve> {
+    #[serde(
+        rename = "idCredPub",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub id_cred_pub: C,
+    #[serde(rename = "timestamp")]
+    pub timestamp: u64,
+    #[serde(rename = "proof")]
+    pub proof: dlog::Proof<C>
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

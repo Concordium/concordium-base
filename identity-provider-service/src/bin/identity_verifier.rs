@@ -77,8 +77,8 @@ async fn main() {
     // id_cred_pub value is a fairly sensitive value that should not be passed
     // around insecurely.
     let identity_verifier = warp::get()
-        .and(warp::path!("api" / "verify" / String / String))
-        .map(move |id_cred_pub: String, signed_id_cred_pub: String| {
+        .and(warp::path!("api" / "verify" / String / String / String))
+        .map(move |id_cred_pub: String, signed_id_cred_pub: String, endpoint_version: String| {
             info!(
                 "Received request to present attribute form for {}",
                 id_cred_pub
@@ -90,6 +90,11 @@ async fn main() {
                 id_cred_pub_attribute_form.as_str(),
                 "$id_cred_pub_signature$",
                 &signed_id_cred_pub,
+            );
+            id_cred_pub_attribute_form = str::replace(
+                id_cred_pub_attribute_form.as_str(),
+                "$endpoint_version$",
+                &endpoint_version,
             );
             Response::builder()
                 .header(CONTENT_TYPE, "text/html")
@@ -115,6 +120,19 @@ async fn main() {
 
                     let id_cred_pub_signature = input.get("id_cred_pub_signature").unwrap().clone();
                     input.remove("id_cred_pub_signature");
+
+                    let endpoint_version = input.get("endpoint_version").unwrap().clone();
+                    input.remove("endpoint_version");
+
+                    let identity_endpoint = if endpoint_version == String::from("v0") {
+                        "identity"
+                    } else if endpoint_version == String::from("v1") {
+                        "identityV1"
+                    } else {
+                        return Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body("Invalid endpoint version.".to_string());
+                    };
 
                     // Verify that the signature comes from the identity provider, otherwise reject
                     // the request. This prevents the submission of attributes for an
@@ -169,8 +187,8 @@ async fn main() {
                     };
 
                     let location = format!(
-                        "{}{}{}",
-                        id_provider_url, "api/identity/create/", id_cred_pub
+                        "{}api/{}/create/{}",
+                        id_provider_url, identity_endpoint, id_cred_pub
                     );
                     Response::builder()
                         .header(LOCATION, location)

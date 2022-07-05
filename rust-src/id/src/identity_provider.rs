@@ -657,20 +657,18 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 pub fn verify_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: &IpInfo<P>,
     context: &GlobalContext<C>,
-    id_cred_pub: &C,
-    timestamp: u64, // seconds since the unix epoch
-    proof: &dlog::Proof<C>,
+    request: &IdRecoveryRequest<C>
 ) -> bool {
     let verifier = dlog::Dlog::<C> {
-        public: *id_cred_pub,
+        public: request.id_cred_pub,
         coeff:  context.on_chain_commitment_key.g,
     };
     let mut transcript = RandomOracle::domain("IdRecoveryProof");
     transcript.append_message(b"ctx", &context);
-    transcript.append_message(b"timestamp", &timestamp);
+    transcript.append_message(b"timestamp", &request.timestamp);
     transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
     transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
-    verify(&mut transcript, &verifier, proof)
+    verify(&mut transcript, &verifier, &request.proof)
 }
 
 #[cfg(test)]
@@ -971,13 +969,9 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let id_cred_pub = global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(id_cred_sec);
-        let proof = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_pub, timestamp, &proof);
+        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert!(result);
     }
 
@@ -1000,10 +994,12 @@ mod tests {
             .g
             .mul_by_scalar(id_cred_sec);
         let id_cred_sec_wrong = PedersenValue::generate(&mut csprng);
-        let proof =
+        let mut request =
             prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec_wrong, timestamp).unwrap();
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_pub, timestamp, &proof);
+        request.id_cred_pub = id_cred_pub;
+
+        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong idCredSec"
@@ -1024,14 +1020,11 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let id_cred_pub = global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(id_cred_sec);
-        let proof = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let mut request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        request.timestamp += 1;
 
         let result =
-            verify_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_pub, timestamp + 1, &proof);
+            verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong timestamp"
@@ -1052,15 +1045,11 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let id_cred_pub = global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(id_cred_sec);
-        let proof = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_identity = IpIdentity(1);
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_pub, timestamp, &proof);
+        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong IDP ID"
@@ -1081,16 +1070,12 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let id_cred_pub = global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(id_cred_sec);
-        let proof = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_verify_key =
             ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_pub, timestamp, &proof);
+        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong IDP verify keys"
@@ -1111,15 +1096,11 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let id_cred_pub = global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(id_cred_sec);
-        let proof = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         global_ctx.genesis_string = String::from("another_string");
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_pub, timestamp, &proof);
+        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong global context"

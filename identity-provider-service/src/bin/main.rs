@@ -1,13 +1,15 @@
 use anyhow::{bail, ensure};
 use crypto_common::{
     base16_encode_string, types::TransactionTime, SerdeDeserialize, SerdeSerialize, Versioned,
-    VERSION_0,
+    VERSION_0, to_bytes
 };
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use id::{
     constants::{ArCurve, AttributeKind, IpPairing},
     identity_provider::{
-        create_initial_cdi, sign_identity_object, validate_request as ip_validate_request,
+        create_initial_cdi, sign_identity_object, sign_identity_object_v1,
+        validate_request as ip_validate_request, validate_request_v1 as ip_validate_request_v1,
+        verify_pok_id_cred_sec
     },
     types::*,
 };
@@ -24,6 +26,7 @@ use std::{
 use structopt::StructOpt;
 use url::Url;
 use warp::{http::StatusCode, hyper::header::LOCATION, Filter, Rejection, Reply};
+use sha2::{Digest, Sha256};
 
 type ExampleAttributeList = AttributeList<id::constants::BaseField, AttributeKind>;
 
@@ -97,6 +100,16 @@ struct IdentityProviderServiceConfiguration {
 struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
     id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
+    #[serde(rename = "redirectURI")]
+    redirect_uri:      String,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+/// The version 1 identity object request sent by the wallet. The 'Deserialize'
+/// instance is automatically derived to parse the expected format.
+struct IdentityObjectRequestV1 {
+    #[serde(rename = "idObjectRequest")]
+    id_object_request: Versioned<PreIdentityObjectV1<IpPairing, ArCurve>>,
     #[serde(rename = "redirectURI")]
     redirect_uri:      String,
 }
@@ -275,8 +288,33 @@ impl DB {
         Ok(())
     }
 
+    /// Write the validated version 1 request, so that it can be retrieved and
+    /// used to create the version 1 identity object when the identity
+    /// verifier calls with an attribute list and a verification result.
+    pub fn write_request_record_v1(
+        &self,
+        key: &str,
+        identity_object_request: &IdentityObjectRequestV1,
+    ) -> anyhow::Result<()> {
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        {
+            let file = std::fs::File::create(self.root.join("requests").join(key))?;
+            serde_json::to_writer(file, identity_object_request)?;
+        }
+        Ok(())
+    }
+
     /// Read a validated request under the given key.
     pub fn read_request_record(&self, key: &str) -> anyhow::Result<IdentityObjectRequest> {
+        // ensure the key is valid base16 characters, which also ensures we are only
+        // reading in the subdirectory FIXME: This is an inefficient way of
+        // doing it.
+        if hex::decode(key).is_err() {
+            bail!("Invalid key.")
+        }
         let contents = {
             let _lock = self
                 .pending
@@ -286,6 +324,25 @@ impl DB {
         }; // drop the lock at this point
            // It is more efficient to read the whole thing, and then deserialize
         Ok(from_str::<IdentityObjectRequest>(&contents)?)
+    }
+
+    /// Read a validated version 1 request under the given key.
+    pub fn read_request_record_v1(&self, key: &str) -> anyhow::Result<IdentityObjectRequestV1> {
+        // ensure the key is valid base16 characters, which also ensures we are only
+        // reading in the subdirectory FIXME: This is an inefficient way of
+        // doing it.
+        if hex::decode(key).is_err() {
+            bail!("Invalid key.")
+        }
+        let contents = {
+            let _lock = self
+                .pending
+                .lock()
+                .expect("Cannot acquire a lock, which means something is very wrong.");
+            fs::read_to_string(self.root.join("requests").join(key))?
+        }; // drop the lock at this point
+           // It is more efficient to read the whole thing, and then deserialize
+        Ok(from_str::<IdentityObjectRequestV1>(&contents)?)
     }
 
     /// Write the anonymity revocation record under the given key.
@@ -330,6 +387,25 @@ impl DB {
                 "accountAddress": AccountAddress::new(&obj.value.pre_identity_object.pub_info_for_ip.reg_id),
                 "credential": init_credential
             });
+            serde_json::to_writer(file, &stored_obj)?;
+        }
+        Ok(())
+    }
+
+    /// Write the version 1 identity object under the given key. The key should
+    /// be a valid filename.
+    pub fn write_identity_object_v1(
+        &self,
+        key: &str,
+        obj: &Versioned<IdentityObjectV1<IpPairing, ArCurve, AttributeKind>>,
+    ) -> anyhow::Result<()> {
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        {
+            let file = std::fs::File::create(self.root.join("identity").join(key))?;
+            let stored_obj = json!({ "identityObject": obj });
             serde_json::to_writer(file, &stored_obj)?;
         }
         Ok(())
@@ -454,6 +530,13 @@ struct GetParameters {
     redirect_uri: String,
 }
 
+/// Parameters of the get request.
+#[derive(SerdeDeserialize)]
+struct RecoveryGetParameters {
+    #[serde(rename = "state")]
+    state:        String,
+}
+
 /// Query the status of the transaction and update the status in the database if
 /// finalized, or if unable to submit the transaction successfully.
 async fn followup(
@@ -538,7 +621,7 @@ async fn get_identity_token(
     server_config: Arc<ServerConfig>,
     retrieval_db: DB,
     client: Client,
-    id_cred_pub: String,
+    id_cred_pub_hash: String,
 ) -> Result<impl Reply, Rejection> {
     // Check status of initial account creation transaction and update the file
     // database accordingly.
@@ -548,14 +631,14 @@ async fn get_identity_token(
         retrieval_db.clone(),
         server_config.submit_credential_url.clone(),
         query_url_base,
-        id_cred_pub.clone(),
+        id_cred_pub_hash.clone(),
     )
     .await;
 
     // If the initial account creation transaction is still not finalized, then we
     // return a pending object to the caller to indicate that the identity is
     // not ready yet.
-    if retrieval_db.is_pending(&id_cred_pub) {
+    if retrieval_db.is_pending(&id_cred_pub_hash) {
         info!("Identity object is pending.");
         let identity_token_container = IdentityTokenContainer {
             status: IdentityStatus::Pending,
@@ -564,7 +647,7 @@ async fn get_identity_token(
         };
         Ok(warp::reply::json(&identity_token_container))
     } else {
-        match retrieval_db.read_identity_object(&id_cred_pub) {
+        match retrieval_db.read_identity_object(&id_cred_pub_hash) {
             Ok(identity_object) => {
                 info!("Identity object found");
 
@@ -588,6 +671,35 @@ async fn get_identity_token(
     }
 }
 
+/// Returns the version 1 identity object in the version 1 flow. No initial
+/// account involved.
+async fn get_identity_token_v1(
+    retrieval_db: DB,
+    id_cred_pub_hash: String,
+) -> Result<impl Reply, Rejection> {
+    match retrieval_db.read_identity_object(&id_cred_pub_hash) {
+        Ok(identity_object) => {
+            info!("Identity object found");
+
+            let identity_token_container = IdentityTokenContainer {
+                status: IdentityStatus::Done,
+                token:  identity_object,
+                detail: "".to_string(),
+            };
+            Ok(warp::reply::json(&identity_token_container))
+        }
+        Err(_e) => {
+            info!("Identity object does not exist or the request is malformed.");
+            let error_identity_token_container = IdentityTokenContainer {
+                status: IdentityStatus::Error,
+                detail: "Identity object does not exist".to_string(),
+                token:  serde_json::Value::Null,
+            };
+            Ok(warp::reply::json(&error_identity_token_container))
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -606,6 +718,7 @@ async fn main() -> anyhow::Result<()> {
     // We reuse it between requests since it is expensive to create.
     let client = Client::new();
     let followup_client = client.clone();
+    let client_v1 = client.clone();
 
     // Create the 'database' directories for storing IdentityObjects and
     // AnonymityRevocationRecords.
@@ -616,6 +729,8 @@ async fn main() -> anyhow::Result<()> {
     info!("Configurations have been loaded successfully.");
 
     let retrieval_db = db.clone();
+    let retrieval_db_v1 = db.clone();
+    let recovery_db = db.clone();
     let server_config_retrieve = Arc::clone(&server_config);
 
     // The endpoint for querying the identity object.
@@ -630,13 +745,26 @@ async fn main() -> anyhow::Result<()> {
             )
         });
 
+    // The endpoint for querying the version 1 identity object.
+    let retrieve_identity_v1 = warp::get()
+        .and(warp::path!("api" / "identityV1" / String))
+        .and_then(move |id_cred_pub: String| {
+            get_identity_token_v1(retrieval_db_v1.clone(), id_cred_pub)
+        });
+
     let server_config_validate = Arc::clone(&server_config);
     let server_config_validate_query = Arc::clone(&server_config);
+    let server_config_validate_query_v1 = Arc::clone(&server_config);
     let server_config_forward = Arc::clone(&server_config);
+    let server_config_forward_v1 = Arc::clone(&server_config);
+    let server_config_create_v1 = Arc::clone(&server_config);
+    let server_config_validate_recovery = Arc::clone(&server_config);
 
     let db_arc = Arc::new(db);
     let verify_db = Arc::clone(&db_arc);
+    let verify_db_v1 = Arc::clone(&db_arc);
     let create_db = Arc::clone(&db_arc);
+    let create_db_v1 = Arc::clone(&db_arc);
 
     // Endpoint for starting the identity creation flow. It will validate the
     // request and forward the user to the identity verification service.
@@ -650,6 +778,22 @@ async fn main() -> anyhow::Result<()> {
         .unify()
         .and_then(move |idi| {
             save_validated_request(Arc::clone(&verify_db), idi, server_config_forward.clone())
+        });
+
+    // Endpoint for starting the version 1 identity creation flow, without the
+    // creation of an initial account. It will validate the request and forward
+    // the user to the identity verification service.
+    let verify_request_v1 = warp::get()
+        .and(warp::path!("api" / "identityV1"))
+        .and(extract_and_validate_request_query_v1(
+            server_config_validate_query_v1,
+        ))
+        .and_then(move |idi| {
+            save_validated_request_v1(
+                Arc::clone(&verify_db_v1),
+                idi,
+                server_config_forward_v1.clone(),
+            )
         });
 
     // Endpoint for creating identities. The identity verification service will
@@ -666,10 +810,32 @@ async fn main() -> anyhow::Result<()> {
             )
         });
 
+    // Endpoint for creating identities. The identity verification service will
+    // forward the user to this endpoint after they have created a list of
+    // verified attributes.
+    let create_identity_v1 = warp::get()
+    .and(warp::path!("api" / "identityV1" / "create" / String))
+    .and_then(move |id_cred_pub: String| {
+        create_signed_identity_object_v1(
+            Arc::clone(&server_config_create_v1),
+            Arc::clone(&create_db_v1),
+            client_v1.clone(),
+            id_cred_pub,
+        )
+    });
+
+    let recover_identity = warp::get()
+    .and(warp::path!("api" / "identityV1" / "recover"))
+    .and(validate_recovery_request_and_return_ido(server_config_validate_recovery, recovery_db));
+
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
     let server = verify_request
         .or(retrieve_identity)
         .or(create_identity)
+        .or(verify_request_v1)
+        .or(retrieve_identity_v1)
+        .or(create_identity_v1)
+        .or(recover_identity)
         .recover(handle_rejection);
     warp::serve(server).run(([0, 0, 0, 0], opt.port)).await;
     Ok(())
@@ -693,31 +859,73 @@ async fn save_validated_request(
     identity_object_request: IdentityObjectRequest,
     server_config: Arc<ServerConfig>,
 ) -> Result<impl Reply, Rejection> {
-    let base_16_encoded_id_cred_pub = base16_encode_string(
-        &identity_object_request
-            .id_object_request
-            .value
-            .pub_info_for_ip
-            .id_cred_pub,
-    );
+    let id_cred_pub = &identity_object_request
+    .id_object_request
+    .value
+    .pub_info_for_ip
+    .id_cred_pub;
+
+    let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+    let base_16_encoded_id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
     // Sign the id_cred_pub so that the identity verifier can verify that the given
     // id_cred_pub matches a valid identity creation request.
     let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
     let expanded_secret_key: ExpandedSecretKey =
         ExpandedSecretKey::from(&server_config.ip_data.ip_cdi_secret_key);
-    let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
+    // let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
+    let message = id_cred_pub_hash;
     let signature_on_id_cred_pub = expanded_secret_key.sign(message.as_slice(), &public_key);
     let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(
-        db.write_request_record(&base_16_encoded_id_cred_pub, &identity_object_request),
+        db.write_request_record(&base_16_encoded_id_cred_pub_hash, &identity_object_request),
         "Could not write the valid request to database."
     );
 
     let attribute_form_url = format!(
-        "{}/{}/{}",
-        server_config.id_verification_url, base_16_encoded_id_cred_pub, serialized_signature
+        "{}/{}/{}/v0",
+        server_config.id_verification_url, base_16_encoded_id_cred_pub_hash, serialized_signature
+    );
+    Ok(warp::reply::with_status(
+        warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),
+        StatusCode::FOUND,
+    ))
+}
+
+/// Save the validated version 1 request object to the database, and forward the calling
+/// user to the identity verification process.
+async fn save_validated_request_v1(
+    db: Arc<DB>,
+    identity_object_request: IdentityObjectRequestV1,
+    server_config: Arc<ServerConfig>,
+) -> Result<impl Reply, Rejection> {
+    let id_cred_pub = &identity_object_request
+        .id_object_request
+        .value
+        .id_cred_pub;
+
+    let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+    let base_16_encoded_id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+
+    // Sign the id_cred_pub so that the identity verifier can verify that the given
+    // id_cred_pub matches a valid identity creation request.
+    let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
+    let expanded_secret_key: ExpandedSecretKey =
+        ExpandedSecretKey::from(&server_config.ip_data.ip_cdi_secret_key);
+    // let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
+    let message = id_cred_pub_hash;
+    let signature_on_id_cred_pub = expanded_secret_key.sign(message.as_slice(), &public_key);
+    let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
+
+    ok_or_500!(
+        db.write_request_record_v1(&base_16_encoded_id_cred_pub_hash, &identity_object_request),
+        "Could not write the valid request to database."
+    );
+
+    let attribute_form_url = format!(
+        "{}/{}/{}/v1",
+        server_config.id_verification_url, base_16_encoded_id_cred_pub_hash, serialized_signature
     );
     Ok(warp::reply::with_status(
         warp::reply::with_header(warp::reply(), LOCATION, attribute_form_url),
@@ -792,7 +1000,21 @@ enum IdRequestRejection {
     NoValidRequest,
 }
 
+#[derive(Debug)]
+/// An internal error type used by this server to manage error handling.
+enum IdRecoveryRejection {
+    /// Recovery request was made with an unsupported version of the identity object.
+    UnsupportedVersion,
+    /// The recovery request proof was invalid.
+    InvalidProofs,
+    /// Malformed request.
+    Malformed,
+    /// The recovery request timestamp was invalid.
+    InvalidTimestamp,
+}
+
 impl warp::reject::Reject for IdRequestRejection {}
+impl warp::reject::Reject for IdRecoveryRejection {}
 
 #[derive(SerdeSerialize)]
 /// Response in case of an error. This is going to be encoded as a JSON body
@@ -867,27 +1089,20 @@ async fn create_signed_identity_object(
     server_config: Arc<ServerConfig>,
     db: Arc<DB>,
     client: Client,
-    id_cred_pub_input: String,
+    id_cred_pub_hash: String,
 ) -> Result<impl Reply, Rejection> {
     // Read the validated request from the database.
-    let identity_object_input = match db.read_request_record(&id_cred_pub_input) {
+    let identity_object_input = match db.read_request_record(&id_cred_pub_hash) {
         Ok(request) => request,
         Err(e) => {
             error!(
                 "Unable to read validated request for id_cred_pub {}, {}",
-                id_cred_pub_input, e
+                id_cred_pub_hash, e
             );
             return Err(warp::reject::custom(IdRequestRejection::NoValidRequest));
         }
     };
 
-    let base16_encoded_id_cred_pub = base16_encode_string(
-        &identity_object_input
-            .id_object_request
-            .value
-            .pub_info_for_ip
-            .id_cred_pub,
-    );
     let request = identity_object_input.id_object_request.value;
 
     // Identity verification process between the identity provider and the identity
@@ -899,7 +1114,7 @@ async fn create_signed_identity_object(
         "{}{}{}",
         server_config.id_verification_query_url.clone(),
         "/attributes/",
-        base16_encoded_id_cred_pub
+        id_cred_pub_hash
     );
     let attribute_list = match client
         .get(Url::parse(&attribute_list_url).unwrap())
@@ -957,8 +1172,6 @@ async fn create_signed_identity_object(
         }
     };
 
-    let base16_encoded_id_cred_pub = base16_encode_string(&request.pub_info_for_ip.id_cred_pub);
-
     ok_or_500!(
         save_revocation_record(&db, &request, &alist),
         "Could not write the revocation record to database."
@@ -1008,7 +1221,7 @@ async fn create_signed_identity_object(
     // This is stored so it can later be retrieved by querying via the idCredPub.
     ok_or_500!(
         db.write_identity_object(
-            &base16_encoded_id_cred_pub,
+            &id_cred_pub_hash, // TODO: should be hashed
             &versioned_id,
             &versioned_submission
         ),
@@ -1027,7 +1240,7 @@ async fn create_signed_identity_object(
     {
         Ok(status) => {
             ok_or_500!(
-                db.write_pending(&base16_encoded_id_cred_pub, status, submission_value),
+                db.write_pending(&id_cred_pub_hash, status, submission_value),
                 "Could not write submission status."
             );
         }
@@ -1039,7 +1252,141 @@ async fn create_signed_identity_object(
     // The callback_location has to point to the location where the wallet can
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
-    retrieve_url.set_path(&format!("api/identity/{}", base16_encoded_id_cred_pub));
+    retrieve_url.set_path(&format!("api/identity/{}", id_cred_pub_hash));
+    let callback_location =
+        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+
+    info!("Identity was successfully created. Returning URI where it can be retrieved.");
+
+    Ok(warp::reply::with_status(
+        warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+        StatusCode::FOUND,
+    ))
+}
+
+/// Checks for a validated request and checks with the identity verifier if
+/// there is a verified attribute list for this person. If there is an attribute
+/// list, then it is used to create the identity object that is then signed and
+/// saved. If successful a re-direct to the URL where the identity object is
+/// available is returned. This is for the version 1 flow, where no initial
+/// account is created.
+async fn create_signed_identity_object_v1(
+    server_config: Arc<ServerConfig>,
+    db: Arc<DB>,
+    client: Client,
+    id_cred_pub_hash: String,
+) -> Result<impl Reply, Rejection> {
+    // Read the validated request from the database.
+    let identity_object_input = match db.read_request_record_v1(&id_cred_pub_hash) {
+        Ok(request) => request,
+        Err(e) => {
+            error!(
+                "Unable to read validated request for id_cred_pub {}, {}",
+                id_cred_pub_hash, e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::NoValidRequest));
+        }
+    };
+
+    let request = identity_object_input.id_object_request.value;
+
+    // Identity verification process between the identity provider and the identity
+    // verifier. In this example the identity verifier is queried and will
+    // return the attribute list that the user submitted to the identity verifier.
+    // If there is no attribute list, then it corresponds to the user not having
+    // been verified, and the request will fail.
+    let attribute_list_url = format!(
+        "{}{}{}",
+        server_config.id_verification_query_url.clone(),
+        "/attributes/",
+        id_cred_pub_hash
+    );
+    let attribute_list = match client
+        .get(Url::parse(&attribute_list_url).unwrap())
+        .send()
+        .await
+    {
+        Ok(attribute_list) => match attribute_list.json().await {
+            Ok(attribute_list) => attribute_list,
+            Err(e) => {
+                error!("Could not deserialize response from the verifier {}.", e);
+                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure));
+            }
+        },
+        Err(e) => {
+            error!(
+                "Could not retrieve attribute list from the verifier: {}.",
+                e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+        }
+    };
+
+    // At this point the identity has been verified, and the identity provider
+    // constructs the identity object and signs it. An anonymity revocation
+    // record and the identity object are persisted, so that they can be
+    // retrieved when needed. The constructed response contains a redirect to a
+    // webservice that returns the identity object constructed here.
+
+    // This is hardcoded for the proof-of-concept.
+    // Expiry is a year from now.
+    let now = YearMonth::now();
+    let valid_to_next_year = YearMonth {
+        year:  now.year + 1,
+        month: now.month,
+    };
+
+    let alist = ExampleAttributeList {
+        valid_to:     valid_to_next_year,
+        created_at:   now,
+        alist:        attribute_list,
+        max_accounts: 200,
+        _phantom:     Default::default(),
+    };
+
+    let signature = match sign_identity_object_v1(
+        &request,
+        &server_config.ip_data.public_ip_info,
+        &alist,
+        &server_config.ip_data.ip_secret_key,
+    ) {
+        Ok(signature) => signature,
+        Err(e) => {
+            error!("Could not sign the identity object {}.", e);
+            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+        }
+    };
+
+    ok_or_500!(
+        save_revocation_record_v1(&db, &request, &alist),
+        "Could not write the revocation record to database."
+    );
+
+    let id = IdentityObjectV1 {
+        pre_identity_object: request,
+        alist,
+        signature,
+    };
+
+    let versioned_id = Versioned::new(VERSION_0, id);
+
+    // Store the created IdentityObject.
+    // This is stored so it can later be retrieved by querying via the idCredPub.
+    ok_or_500!(
+        db.write_identity_object_v1(
+            &id_cred_pub_hash,
+            &versioned_id
+        ),
+        "Could not write to database."
+    );
+
+    // If we reached here it means we at least have a pending request. We respond
+    // with a URL where they will be able to retrieve the ID object.
+
+    // The callback_location has to point to the location where the wallet can
+    // retrieve the identity object when it is available.
+    let mut retrieve_url = server_config.retrieve_url.clone();
+    retrieve_url.set_path(&format!("api/identityV1/{}", id_cred_pub_hash));
     let callback_location =
         identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
 
@@ -1066,6 +1413,33 @@ fn validate_worker(
         global_context: &server_config.global,
     };
     match ip_validate_request(request, context) {
+        Ok(()) => {
+            info!("Request is valid.");
+            Ok(input)
+        }
+        Err(e) => {
+            warn!("Request is invalid {}.", e);
+            Err(IdRequestRejection::InvalidProofs)
+        }
+    }
+}
+
+/// A common function that validates the cryptographic proofs in a version 1
+/// request.
+fn validate_worker_v1(
+    server_config: &Arc<ServerConfig>,
+    input: IdentityObjectRequestV1,
+) -> Result<IdentityObjectRequestV1, IdRequestRejection> {
+    if input.id_object_request.version != VERSION_0 {
+        return Err(IdRequestRejection::UnsupportedVersion);
+    }
+    let request = &input.id_object_request.value;
+    let context = IpContext {
+        ip_info:        &server_config.ip_data.public_ip_info,
+        ars_infos:      &server_config.ars.anonymity_revokers,
+        global_context: &server_config.global,
+    };
+    match ip_validate_request_v1(request, context) {
         Ok(()) => {
             info!("Request is valid.");
             Ok(input)
@@ -1154,6 +1528,110 @@ fn extract_and_validate_request_query(
     })
 }
 
+/// Validate that the received version 1 request is well-formed.
+/// This check that all the cryptographic values are valid, and that the zero
+/// knowledge proofs in the request are valid.
+///
+/// The return value is either
+///
+/// - Ok(ValidatedRequest) if the request is valid or
+/// - Err(msg) where `msg` is a string describing the error.
+fn extract_and_validate_request_query_v1(
+    server_config: Arc<ServerConfig>,
+) -> impl Filter<Extract = (IdentityObjectRequestV1,), Error = Rejection> + Clone {
+    warp::query().and_then(move |input: GetParameters| {
+        let server_config = server_config.clone();
+        async move {
+            info!("Queried for creating an identity");
+
+            let id_object_request = match from_str::<serde_json::Value>(&input.state)
+                .map_err(|e| format!("{:#?}", e))
+                .and_then(|mut v| match v.get_mut("idObjectRequest") {
+                    Some(v) => Ok(v.take()),
+                    None => Err(String::from("`idObjectRequest` field does not exist")),
+                })
+                .and_then(|v| {
+                    serde_json::from_value::<Versioned<_>>(v).map_err(|e| format!("{:#?}", e))
+                }) {
+                Ok(v) => v,
+                Err(e) => {
+                    return {
+                        warn!("`idObjectRequest` missing or malformed: {}", e);
+                        Err(warp::reject::custom(IdRequestRejection::Malformed))
+                    }
+                }
+            };
+            match validate_worker_v1(&server_config, IdentityObjectRequestV1 {
+                id_object_request,
+                redirect_uri: input.redirect_uri,
+            }) {
+                Ok(v) => {
+                    info!("Request is valid.");
+                    Ok(v)
+                }
+                Err(e) => {
+                    warn!("Request is invalid {:#?}.", e);
+                    Err(warp::reject::custom(e))
+                }
+            }
+        }
+    })
+}
+
+fn validate_recovery_request_and_return_ido(
+    server_config: Arc<ServerConfig>,
+    db: DB
+) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+    warp::query().and_then(move |input: RecoveryGetParameters| {
+        let server_config = server_config.clone();
+        let db = db.clone();
+        async move {
+            info!("Queried for identity recovery");
+            let id_recovery_request : Versioned<IdRecoveryRequest<ArCurve>> = match from_str::<serde_json::Value>(&input.state)
+                .map_err(|e| format!("{:#?}", e))
+                .and_then(|mut v| match v.get_mut("idRecoveryRequest") {
+                    Some(v) => Ok(v.take()),
+                    None => Err(String::from("`idRecoveryRequest` field does not exist")),
+                })
+                .and_then(|v| {
+                    serde_json::from_value::<Versioned<_>>(v).map_err(|e| format!("{:#?}", e))
+                }) {
+                Ok(v) => v,
+                Err(e) => {
+                    return {
+                        warn!("`idRecoveryRequest` missing or malformed: {}", e);
+                        Err(warp::reject::custom(IdRecoveryRejection::Malformed))
+                    }
+                }
+            };
+            if id_recovery_request.version != VERSION_0 {
+                return Err(warp::reject::custom(IdRecoveryRejection::UnsupportedVersion));
+            }
+
+            let timestamp = id_recovery_request.value.timestamp;
+
+            let now = chrono::offset::Utc::now().timestamp() as u64;
+            let delta = 60; // 1 min
+            if timestamp < now - delta || timestamp > now + delta {
+                warn!("Timestamp of id ownership proof out of sync.");
+                return Err(warp::reject::custom(IdRecoveryRejection::InvalidTimestamp));
+            }
+
+            let pok_result = verify_pok_id_cred_sec(&server_config.ip_data.public_ip_info, &server_config.global, &id_recovery_request.value);
+
+            let id_cred_pub_hash = Sha256::digest(&to_bytes(&id_recovery_request.value.id_cred_pub));
+            let base_16_encoded_id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+            if pok_result {
+                get_identity_token_v1(db, base_16_encoded_id_cred_pub_hash).await
+            } else {
+                warn!("Id ownership proof did not verify");
+                Err(warp::reject::custom(IdRecoveryRejection::InvalidProofs))
+            }
+
+        }
+    })
+}
+
 /// Creates and saves the revocation record to the file system (which should be
 /// a database, but for the proof-of-concept we use the file system).
 fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
@@ -1167,8 +1645,28 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
         max_accounts: alist.max_accounts,
         threshold:    pre_identity_object.choice_ar_parameters.threshold,
     };
-    let base16_id_cred_pub = base16_encode_string(&ar_record.id_cred_pub);
-    db.write_revocation_record(&base16_id_cred_pub, ar_record)
+    let id_cred_pub_hash = Sha256::digest(&to_bytes(&ar_record.id_cred_pub));
+    let base_16_encoded_id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+    db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
+}
+
+/// Given a version 1 pre-identity object, this function creates and saves the
+/// revocation record to the file system (which should be a database, but for
+/// the proof-of-concept we use the file system).
+fn save_revocation_record_v1<A: Attribute<id::constants::BaseField>>(
+    db: &DB,
+    pre_identity_object: &PreIdentityObjectV1<IpPairing, ArCurve>,
+    alist: &AttributeList<id::constants::BaseField, A>,
+) -> anyhow::Result<()> {
+    let ar_record = AnonymityRevocationRecord {
+        id_cred_pub:  pre_identity_object.id_cred_pub,
+        ar_data:      pre_identity_object.ip_ar_data.clone(),
+        max_accounts: alist.max_accounts,
+        threshold:    pre_identity_object.choice_ar_parameters.threshold,
+    };
+    let id_cred_pub_hash = Sha256::digest(&to_bytes(&ar_record.id_cred_pub));
+    let base_16_encoded_id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+    db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
 }
 
 #[cfg(test)]
