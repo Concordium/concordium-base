@@ -825,7 +825,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let recover_identity = warp::get()
-    .and(warp::path!("api" / "identityV1" / "recover"))
+    .and(warp::path!("api" / "recover"))
     .and(validate_recovery_request_and_return_ido(server_config_validate_recovery, recovery_db));
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
@@ -873,9 +873,7 @@ async fn save_validated_request(
     let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
     let expanded_secret_key: ExpandedSecretKey =
         ExpandedSecretKey::from(&server_config.ip_data.ip_cdi_secret_key);
-    // let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
-    let message = id_cred_pub_hash;
-    let signature_on_id_cred_pub = expanded_secret_key.sign(message.as_slice(), &public_key);
+    let signature_on_id_cred_pub = expanded_secret_key.sign(id_cred_pub_hash.as_slice(), &public_key);
     let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(
@@ -913,9 +911,7 @@ async fn save_validated_request_v1(
     let public_key: PublicKey = server_config.ip_data.public_ip_info.ip_cdi_verify_key;
     let expanded_secret_key: ExpandedSecretKey =
         ExpandedSecretKey::from(&server_config.ip_data.ip_cdi_secret_key);
-    // let message = hex::decode(&base_16_encoded_id_cred_pub).unwrap();
-    let message = id_cred_pub_hash;
-    let signature_on_id_cred_pub = expanded_secret_key.sign(message.as_slice(), &public_key);
+    let signature_on_id_cred_pub = expanded_secret_key.sign(id_cred_pub_hash.as_slice(), &public_key);
     let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(
@@ -1065,6 +1061,22 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
     } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "No validated request was found for the given id_cred_pub.";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Invalid ID recovery proof.";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRecoveryRejection::InvalidTimestamp) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Invalid timestamp.";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRecoveryRejection::Malformed) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Malformed ID recovery request.";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRecoveryRejection::UnsupportedVersion) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Unsupported version.";
         Ok(mk_reply(message, code))
     } else if err
         .find::<warp::filters::body::BodyDeserializeError>()
@@ -1578,6 +1590,7 @@ fn extract_and_validate_request_query_v1(
     })
 }
 
+/// Validate an ID recovery request and return the identity object, if the request is valid.
 fn validate_recovery_request_and_return_ido(
     server_config: Arc<ServerConfig>,
     db: DB
