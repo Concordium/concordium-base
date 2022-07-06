@@ -736,20 +736,20 @@ async fn main() -> anyhow::Result<()> {
     // The endpoint for querying the identity object.
     let retrieve_identity = warp::get()
         .and(warp::path!("api" / "identity" / String))
-        .and_then(move |id_cred_pub: String| {
+        .and_then(move |id_cred_pub_hash: String| {
             get_identity_token(
                 server_config_retrieve.clone(),
                 retrieval_db.clone(),
                 followup_client.clone(),
-                id_cred_pub,
+                id_cred_pub_hash,
             )
         });
 
     // The endpoint for querying the version 1 identity object.
     let retrieve_identity_v1 = warp::get()
         .and(warp::path!("api" / "identityV1" / String))
-        .and_then(move |id_cred_pub: String| {
-            get_identity_token_v1(retrieval_db_v1.clone(), id_cred_pub)
+        .and_then(move |id_cred_pub_hash: String| {
+            get_identity_token_v1(retrieval_db_v1.clone(), id_cred_pub_hash)
         });
 
     let server_config_validate = Arc::clone(&server_config);
@@ -801,12 +801,12 @@ async fn main() -> anyhow::Result<()> {
     // verified attributes.
     let create_identity = warp::get()
         .and(warp::path!("api" / "identity" / "create" / String))
-        .and_then(move |id_cred_pub: String| {
+        .and_then(move |id_cred_pub_hash: String| {
             create_signed_identity_object(
                 Arc::clone(&server_config),
                 Arc::clone(&create_db),
                 client.clone(),
-                id_cred_pub,
+                id_cred_pub_hash,
             )
         });
 
@@ -815,12 +815,12 @@ async fn main() -> anyhow::Result<()> {
     // verified attributes.
     let create_identity_v1 = warp::get()
         .and(warp::path!("api" / "identityV1" / "create" / String))
-        .and_then(move |id_cred_pub: String| {
+        .and_then(move |id_cred_pub_hash: String| {
             create_signed_identity_object_v1(
                 Arc::clone(&server_config_create_v1),
                 Arc::clone(&create_db_v1),
                 client_v1.clone(),
-                id_cred_pub,
+                id_cred_pub_hash,
             )
         });
 

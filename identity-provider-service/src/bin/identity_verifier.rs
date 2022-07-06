@@ -79,18 +79,23 @@ async fn main() {
     let identity_verifier = warp::get()
         .and(warp::path!("api" / "verify" / String / String / String))
         .map(
-            move |id_cred_pub: String, signed_id_cred_pub: String, endpoint_version: String| {
+            move |id_cred_pub_hash: String,
+                  signed_id_cred_pub_hash: String,
+                  endpoint_version: String| {
                 info!(
                     "Received request to present attribute form for {}",
-                    id_cred_pub
+                    id_cred_pub_hash
                 );
 
-                let mut id_cred_pub_attribute_form =
-                    str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
+                let mut id_cred_pub_attribute_form = str::replace(
+                    attribute_form_html.as_str(),
+                    "$id_cred_pub$",
+                    &id_cred_pub_hash,
+                );
                 id_cred_pub_attribute_form = str::replace(
                     id_cred_pub_attribute_form.as_str(),
                     "$id_cred_pub_signature$",
-                    &signed_id_cred_pub,
+                    &signed_id_cred_pub_hash,
                 );
                 id_cred_pub_attribute_form = str::replace(
                     id_cred_pub_attribute_form.as_str(),
@@ -116,8 +121,8 @@ async fn main() {
                     info!(
                         "Saving verified attributes and forwarding user back to identity provider."
                     );
-                    let id_cred_pub = input.get("id_cred_pub").unwrap().clone();
-                    let id_cred_pub_bytes = hex::decode(&id_cred_pub).unwrap();
+                    let id_cred_pub_hash = input.get("id_cred_pub").unwrap().clone();
+                    let id_cred_pub_hash_bytes = hex::decode(&id_cred_pub_hash).unwrap();
                     input.remove("id_cred_pub");
 
                     let id_cred_pub_signature = input.get("id_cred_pub_signature").unwrap().clone();
@@ -153,7 +158,7 @@ async fn main() {
                     match ip_data_arc
                         .clone()
                         .ip_cdi_verify_key
-                        .verify(&id_cred_pub_bytes, &signature)
+                        .verify(&id_cred_pub_hash_bytes, &signature)
                     {
                         Ok(_) => info!("Signature validated."),
                         Err(error) => {
@@ -170,7 +175,7 @@ async fn main() {
                     // database.
 
                     let file = match std::fs::File::create(
-                        root_clone.join("attributes").join(&id_cred_pub),
+                        root_clone.join("attributes").join(&id_cred_pub_hash),
                     ) {
                         Ok(file) => file,
                         Err(e) => {
@@ -190,7 +195,7 @@ async fn main() {
 
                     let location = format!(
                         "{}api/{}/create/{}",
-                        id_provider_url, identity_endpoint, id_cred_pub
+                        id_provider_url, identity_endpoint, id_cred_pub_hash
                     );
                     Response::builder()
                         .header(LOCATION, location)
@@ -203,9 +208,9 @@ async fn main() {
     // will access this endpoint when creating an identity.
     let read_attributes = warp::get()
         .and(warp::path!("api" / "verify" / "attributes" / String))
-        .map(move |id_cred_pub: String| {
+        .map(move |id_cred_pub_hash: String| {
             let attributes =
-                match fs::read_to_string(database_root.join("attributes").join(id_cred_pub)) {
+                match fs::read_to_string(database_root.join("attributes").join(id_cred_pub_hash)) {
                     Ok(attributes) => attributes,
                     Err(e) => {
                         return Response::builder()
