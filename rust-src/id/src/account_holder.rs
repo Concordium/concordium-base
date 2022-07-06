@@ -1249,10 +1249,10 @@ pub fn prove_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
     transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
     let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
-    Some(IdRecoveryRequest{
+    Some(IdRecoveryRequest {
         id_cred_pub,
         timestamp,
-        proof
+        proof,
     })
 }
 

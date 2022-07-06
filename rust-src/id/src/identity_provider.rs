@@ -657,7 +657,7 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 pub fn verify_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: &IpInfo<P>,
     context: &GlobalContext<C>,
-    request: &IdRecoveryRequest<C>
+    request: &IdRecoveryRequest<C>,
 ) -> bool {
     let verifier = dlog::Dlog::<C> {
         public: request.id_cred_pub,
@@ -969,7 +969,8 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request =
+            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert!(result);
@@ -1020,11 +1021,11 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let mut request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let mut request =
+            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
         request.timestamp += 1;
 
-        let result =
-            verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong timestamp"
@@ -1045,7 +1046,8 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request =
+            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_identity = IpIdentity(1);
 
@@ -1070,7 +1072,8 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request =
+            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_verify_key =
             ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
@@ -1096,7 +1099,8 @@ mod tests {
 
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-        let request = prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        let request =
+            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         global_ctx.genesis_string = String::from("another_string");
 

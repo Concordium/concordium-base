@@ -2425,9 +2425,9 @@ pub struct IdRecoveryRequest<C: Curve> {
     )]
     pub id_cred_pub: C,
     #[serde(rename = "timestamp")]
-    pub timestamp: u64,
+    pub timestamp:   u64,
     #[serde(rename = "proof")]
-    pub proof: dlog::Proof<C>
+    pub proof:       dlog::Proof<C>,
 }
 
 #[cfg(test)]
