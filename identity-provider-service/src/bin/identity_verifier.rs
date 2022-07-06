@@ -78,28 +78,30 @@ async fn main() {
     // around insecurely.
     let identity_verifier = warp::get()
         .and(warp::path!("api" / "verify" / String / String / String))
-        .map(move |id_cred_pub: String, signed_id_cred_pub: String, endpoint_version: String| {
-            info!(
-                "Received request to present attribute form for {}",
-                id_cred_pub
-            );
+        .map(
+            move |id_cred_pub: String, signed_id_cred_pub: String, endpoint_version: String| {
+                info!(
+                    "Received request to present attribute form for {}",
+                    id_cred_pub
+                );
 
-            let mut id_cred_pub_attribute_form =
-                str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
-            id_cred_pub_attribute_form = str::replace(
-                id_cred_pub_attribute_form.as_str(),
-                "$id_cred_pub_signature$",
-                &signed_id_cred_pub,
-            );
-            id_cred_pub_attribute_form = str::replace(
-                id_cred_pub_attribute_form.as_str(),
-                "$endpoint_version$",
-                &endpoint_version,
-            );
-            Response::builder()
-                .header(CONTENT_TYPE, "text/html")
-                .body(id_cred_pub_attribute_form)
-        });
+                let mut id_cred_pub_attribute_form =
+                    str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
+                id_cred_pub_attribute_form = str::replace(
+                    id_cred_pub_attribute_form.as_str(),
+                    "$id_cred_pub_signature$",
+                    &signed_id_cred_pub,
+                );
+                id_cred_pub_attribute_form = str::replace(
+                    id_cred_pub_attribute_form.as_str(),
+                    "$endpoint_version$",
+                    &endpoint_version,
+                );
+                Response::builder()
+                    .header(CONTENT_TYPE, "text/html")
+                    .body(id_cred_pub_attribute_form)
+            },
+        );
 
     // The path for submitting an attribute list. The attribute list is serialized
     // as JSON and saved to the file database. If successful, then forward the
@@ -124,14 +126,14 @@ async fn main() {
                     let endpoint_version = input.get("endpoint_version").unwrap().clone();
                     input.remove("endpoint_version");
 
-                    let identity_endpoint = if endpoint_version == String::from("v0") {
+                    let identity_endpoint = if endpoint_version.eq("v0") {
                         "identity"
-                    } else if endpoint_version == String::from("v1") {
+                    } else if endpoint_version.eq("v1") {
                         "identityV1"
                     } else {
                         return Response::builder()
-                                    .status(StatusCode::BAD_REQUEST)
-                                    .body("Invalid endpoint version.".to_string());
+                            .status(StatusCode::BAD_REQUEST)
+                            .body("Invalid endpoint version.".to_string());
                     };
 
                     // Verify that the signature comes from the identity provider, otherwise reject
