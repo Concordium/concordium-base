@@ -1215,9 +1215,7 @@ fn compute_pok_reg_id<C: Curve>(
     (prover, secret)
 }
 
-/// Proof of knowledge of idCredSec. To be used for identity recovery.
-/// The prover (the account holder) first gets a challenge from the verifier
-/// (the IDP) and then calls this function.
+/// Generate a ID recovery request, proving of knowledge of idCredSec.
 /// The arguments are
 /// - ip_info - Identity provider information containing their ID and
 ///   verification key that goes in to the protocol context.
@@ -1226,11 +1224,11 @@ fn compute_pok_reg_id<C: Curve>(
 /// - id_cred_sec - The secret value idCredSec that only the account holder
 ///   knows.
 /// - timestamp - seconds since the unix epoch. Goes into the protocol context.
-pub fn prove_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+pub fn generate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: &IpInfo<P>,
     context: &GlobalContext<C>,
     id_cred_sec: &Value<C>,
-    timestamp: u64, // seconds the the unix epoch
+    timestamp: u64, // seconds since the unix epoch
 ) -> Option<IdRecoveryRequest<C>> {
     let g = context.on_chain_commitment_key.g;
     let id_cred_pub = g.mul_by_scalar(id_cred_sec);

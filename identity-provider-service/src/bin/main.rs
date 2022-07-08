@@ -1,4 +1,4 @@
-use anyhow::{bail, ensure};
+use anyhow::ensure;
 use crypto_common::{
     base16_encode_string, to_bytes, types::TransactionTime, SerdeDeserialize, SerdeSerialize,
     Versioned, VERSION_0,
@@ -8,8 +8,8 @@ use id::{
     constants::{ArCurve, AttributeKind, IpPairing},
     identity_provider::{
         create_initial_cdi, sign_identity_object, sign_identity_object_v1,
-        validate_request as ip_validate_request, validate_request_v1 as ip_validate_request_v1,
-        verify_pok_id_cred_sec,
+        validate_id_recovery_request, validate_request as ip_validate_request,
+        validate_request_v1 as ip_validate_request_v1,
     },
     types::*,
 };
@@ -91,6 +91,15 @@ struct IdentityProviderServiceConfiguration {
         env = "WALLET_PROXY_BASE"
     )]
     wallet_proxy_base: url::Url,
+    #[structopt(
+        long = "recovery-timestamp-delta",
+        help = "Number of seconds that the recovery request timestamp should be close to the IDPs \
+                current time when requesting for recovery. Example: If delta is 60, the IDP will \
+                accept recovery request timestamps within [current_time - 60, current_time + 60]. ",
+        env = "RECOVERY-TIMESTAMP-DELTA",
+        default_value = "60"
+    )]
+    timestamp_delta: u64,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -149,6 +158,7 @@ struct ServerConfig {
     id_verification_query_url: url::Url,
     retrieve_url: url::Url,
     submit_credential_url: url::Url,
+    recovery_timestamp_delta: u64,
 }
 
 /// A mockup of a database to store all the data.
@@ -232,8 +242,18 @@ impl ServerConfig {
                 .unwrap_or_else(|| config.id_verification_url.clone()),
             retrieve_url: config.retrieve_url.clone(),
             submit_credential_url,
+            recovery_timestamp_delta: config.timestamp_delta,
         })
     }
+}
+
+/// Helper function for checking hex strings.
+fn ensure_safe_key(key: &str) -> anyhow::Result<()> {
+    ensure!(key.len() < 200, "Key too long.");
+    // ensure the key is valid base16 characters, which also ensures we are only
+    // reading in the subdirectory
+    ensure!(hex::decode(key).is_ok(), "Invalid hex string.");
+    Ok(())
 }
 
 impl DB {
@@ -309,12 +329,7 @@ impl DB {
 
     /// Read a validated request under the given key.
     pub fn read_request_record(&self, key: &str) -> anyhow::Result<IdentityObjectRequest> {
-        // ensure the key is valid base16 characters, which also ensures we are only
-        // reading in the subdirectory FIXME: This is an inefficient way of
-        // doing it.
-        if hex::decode(key).is_err() {
-            bail!("Invalid key.")
-        }
+        ensure_safe_key(key)?;
         let contents = {
             let _lock = self
                 .pending
@@ -328,12 +343,7 @@ impl DB {
 
     /// Read a validated version 1 request under the given key.
     pub fn read_request_record_v1(&self, key: &str) -> anyhow::Result<IdentityObjectRequestV1> {
-        // ensure the key is valid base16 characters, which also ensures we are only
-        // reading in the subdirectory FIXME: This is an inefficient way of
-        // doing it.
-        if hex::decode(key).is_err() {
-            bail!("Invalid key.")
-        }
+        ensure_safe_key(key)?;
         let contents = {
             let _lock = self
                 .pending
@@ -413,12 +423,7 @@ impl DB {
 
     /// Try to read the identity object under the given key, if it exists.
     pub fn read_identity_object(&self, key: &str) -> anyhow::Result<serde_json::Value> {
-        // ensure the key is valid base16 characters, which also ensures we are only
-        // reading in the subdirectory FIXME: This is an inefficient way of
-        // doing it.
-        if hex::decode(key).is_err() {
-            bail!("Invalid key.")
-        }
+        ensure_safe_key(key)?;
 
         let contents = {
             let _lock = self
@@ -735,7 +740,7 @@ async fn main() -> anyhow::Result<()> {
 
     // The endpoint for querying the identity object.
     let retrieve_identity = warp::get()
-        .and(warp::path!("api" / "identity" / String))
+        .and(warp::path!("api" / "v0" / "identity" / String))
         .and_then(move |id_cred_pub_hash: String| {
             get_identity_token(
                 server_config_retrieve.clone(),
@@ -747,7 +752,7 @@ async fn main() -> anyhow::Result<()> {
 
     // The endpoint for querying the version 1 identity object.
     let retrieve_identity_v1 = warp::get()
-        .and(warp::path!("api" / "identityV1" / String))
+        .and(warp::path!("api" / "v1" / "identity" / String))
         .and_then(move |id_cred_pub_hash: String| {
             get_identity_token_v1(retrieval_db_v1.clone(), id_cred_pub_hash)
         });
@@ -770,9 +775,9 @@ async fn main() -> anyhow::Result<()> {
     // request and forward the user to the identity verification service.
     let verify_request = warp::post()
         .and(warp::filters::body::content_length_limit(50 * 1024))
-        .and(warp::path!("api" / "identity"))
+        .and(warp::path!("api" / "v0" / "identity"))
         .and(extract_and_validate_request(server_config_validate))
-        .or(warp::get().and(warp::path!("api" / "identity")).and(
+        .or(warp::get().and(warp::path!("api" / "v0" / "identity")).and(
             extract_and_validate_request_query(server_config_validate_query),
         ))
         .unify()
@@ -784,7 +789,7 @@ async fn main() -> anyhow::Result<()> {
     // creation of an initial account. It will validate the request and forward
     // the user to the identity verification service.
     let verify_request_v1 = warp::get()
-        .and(warp::path!("api" / "identityV1"))
+        .and(warp::path!("api" / "v1" / "identity"))
         .and(extract_and_validate_request_query_v1(
             server_config_validate_query_v1,
         ))
@@ -800,7 +805,7 @@ async fn main() -> anyhow::Result<()> {
     // forward the user to this endpoint after they have created a list of
     // verified attributes.
     let create_identity = warp::get()
-        .and(warp::path!("api" / "identity" / "create" / String))
+        .and(warp::path!("api" / "v0" / "identity" / "create" / String))
         .and_then(move |id_cred_pub_hash: String| {
             create_signed_identity_object(
                 Arc::clone(&server_config),
@@ -814,7 +819,7 @@ async fn main() -> anyhow::Result<()> {
     // forward the user to this endpoint after they have created a list of
     // verified attributes.
     let create_identity_v1 = warp::get()
-        .and(warp::path!("api" / "identityV1" / "create" / String))
+        .and(warp::path!("api" / "v1" / "identity" / "create" / String))
         .and_then(move |id_cred_pub_hash: String| {
             create_signed_identity_object_v1(
                 Arc::clone(&server_config_create_v1),
@@ -824,7 +829,7 @@ async fn main() -> anyhow::Result<()> {
             )
         });
 
-    let recover_identity = warp::get().and(warp::path!("api" / "recover")).and(
+    let recover_identity = warp::get().and(warp::path!("api" / "v1" / "recover")).and(
         validate_recovery_request_and_return_ido(server_config_validate_recovery, recovery_db),
     );
 
@@ -884,7 +889,7 @@ async fn save_validated_request(
     );
 
     let attribute_form_url = format!(
-        "{}/{}/{}/v0",
+        "{}/v0/{}/{}",
         server_config.id_verification_url, base_16_encoded_id_cred_pub_hash, serialized_signature
     );
     Ok(warp::reply::with_status(
@@ -921,7 +926,7 @@ async fn save_validated_request_v1(
     );
 
     let attribute_form_url = format!(
-        "{}/{}/{}/v1",
+        "{}/v1/{}/{}",
         server_config.id_verification_url, base_16_encoded_id_cred_pub_hash, serialized_signature
     );
     Ok(warp::reply::with_status(
@@ -1266,7 +1271,7 @@ async fn create_signed_identity_object(
     // The callback_location has to point to the location where the wallet can
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
-    retrieve_url.set_path(&format!("api/identity/{}", id_cred_pub_hash));
+    retrieve_url.set_path(&format!("api/v0/identity/{}", id_cred_pub_hash));
     let callback_location =
         identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
 
@@ -1397,7 +1402,7 @@ async fn create_signed_identity_object_v1(
     // The callback_location has to point to the location where the wallet can
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
-    retrieve_url.set_path(&format!("api/identityV1/{}", id_cred_pub_hash));
+    retrieve_url.set_path(&format!("api/v1/identity/{}", id_cred_pub_hash));
     let callback_location =
         identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
 
@@ -1627,13 +1632,13 @@ fn validate_recovery_request_and_return_ido(
             let timestamp = id_recovery_request.value.timestamp;
 
             let now = chrono::offset::Utc::now().timestamp() as u64;
-            let delta = 60; // 1 min
+            let delta = server_config.recovery_timestamp_delta;
             if timestamp < now - delta || timestamp > now + delta {
                 warn!("Timestamp of id ownership proof out of sync.");
                 return Err(warp::reject::custom(IdRecoveryRejection::InvalidTimestamp));
             }
 
-            let pok_result = verify_pok_id_cred_sec(
+            let pok_result = validate_id_recovery_request(
                 &server_config.ip_data.public_ip_info,
                 &server_config.global,
                 &id_recovery_request.value,
@@ -1725,6 +1730,7 @@ mod tests {
             id_verification_query_url: id_url,
             retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
+            recovery_timestamp_delta: 60,
         });
 
         tokio_test::block_on(async {
@@ -1767,6 +1773,7 @@ mod tests {
             id_verification_query_url: id_url,
             retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
+            recovery_timestamp_delta: 60,
         });
 
         tokio_test::block_on(async {

@@ -2418,14 +2418,17 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IdRecoveryRequest<C: Curve> {
+    /// The idCredPub to recover the identity object for.
     #[serde(
         rename = "idCredPub",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
     pub id_cred_pub: C,
+    /// Seconds since the unix epoch.
     #[serde(rename = "timestamp")]
     pub timestamp:   u64,
+    /// The proof of knowledge of idCredSec corresponding to idCredPub.
     #[serde(rename = "proof")]
     pub proof:       dlog::Proof<C>,
 }

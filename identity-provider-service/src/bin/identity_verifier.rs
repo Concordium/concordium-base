@@ -79,9 +79,9 @@ async fn main() {
     let identity_verifier = warp::get()
         .and(warp::path!("api" / "verify" / String / String / String))
         .map(
-            move |id_cred_pub_hash: String,
-                  signed_id_cred_pub_hash: String,
-                  endpoint_version: String| {
+            move |endpoint_version: String,
+                  id_cred_pub_hash: String,
+                  signed_id_cred_pub_hash: String| {
                 info!(
                     "Received request to present attribute form for {}",
                     id_cred_pub_hash
@@ -121,20 +121,41 @@ async fn main() {
                     info!(
                         "Saving verified attributes and forwarding user back to identity provider."
                     );
-                    let id_cred_pub_hash = input.get("id_cred_pub").unwrap().clone();
+                    let id_cred_pub_hash = match input.get("id_cred_pub") {
+                        Some(hash) => hash.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("id_cred_pub not present.".to_string());
+                        }
+                    };
                     let id_cred_pub_hash_bytes = hex::decode(&id_cred_pub_hash).unwrap();
                     input.remove("id_cred_pub");
 
-                    let id_cred_pub_signature = input.get("id_cred_pub_signature").unwrap().clone();
+                    let id_cred_pub_signature = match input.get("id_cred_pub_signature") {
+                        Some(sig) => sig.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("id_cred_pub_signature not present.".to_string());
+                        }
+                    };
                     input.remove("id_cred_pub_signature");
 
-                    let endpoint_version = input.get("endpoint_version").unwrap().clone();
+                    let endpoint_version = match input.get("endpoint_version") {
+                        Some(version) => version.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("endpoint_version not present.".to_string());
+                        }
+                    };
                     input.remove("endpoint_version");
 
                     let identity_endpoint = if endpoint_version.eq("v0") {
-                        "identity"
+                        "v0/identity"
                     } else if endpoint_version.eq("v1") {
-                        "identityV1"
+                        "v1/identity"
                     } else {
                         return Response::builder()
                             .status(StatusCode::BAD_REQUEST)

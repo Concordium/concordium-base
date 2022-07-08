@@ -643,18 +643,16 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     Ok(msg)
 }
 
-/// Verify a proof of knowledge of idCredSec. If the proof verifies, the IDP
-/// sends the attribute list and the signature to the prover (the account
-/// holder). The argument are
+/// Verify a ID recovery quest containing proof of knowledge of idCredSec. If
+/// the proof verifies, the IDP sends the attribute list and the signature to
+/// the prover (the account holder). The argument are
 /// - ip_info - Identity provider information containing their IR and
 ///   verification key that goes in to the protocol context.
 /// - context - Global Context containing g such that `idCredPub = g^idCredSec`.
 ///   Also goes into the protocol context.
-/// - id_cred_pub - The idCredPub for which the account holder claims to know
-///   idCredSec.
-/// - timestamp - seconds since the unix epoch. Goes into the protocol context.
-/// - proof - The proof of knowledge to be verified.
-pub fn verify_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+/// - request - the ID recovery containing idCredPub, a timestamp and a proof of
+///   knowledge of idCredSec.
+pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: &IpInfo<P>,
     context: &GlobalContext<C>,
     request: &IdRecoveryRequest<C>,
@@ -674,7 +672,7 @@ pub fn verify_pok_id_cred_sec<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{account_holder::prove_pok_id_cred_sec, constants::ArCurve, test::*};
+    use crate::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
     use crypto_common::types::{KeyIndex, KeyPair};
     use ff::Field;
     use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
@@ -956,7 +954,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_pok_id_cred_sec() {
+    fn test_validate_id_recovery_request() {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
@@ -970,9 +968,9 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert!(result);
     }
 
@@ -996,11 +994,12 @@ mod tests {
             .mul_by_scalar(id_cred_sec);
         let id_cred_sec_wrong = PedersenValue::generate(&mut csprng);
         let mut request =
-            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec_wrong, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec_wrong, timestamp)
+                .unwrap();
 
         request.id_cred_pub = id_cred_pub;
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong idCredSec"
@@ -1022,10 +1021,10 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let mut request =
-            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
         request.timestamp += 1;
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong timestamp"
@@ -1047,11 +1046,11 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_identity = IpIdentity(1);
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong IDP ID"
@@ -1073,12 +1072,12 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_verify_key =
             ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong IDP verify keys"
@@ -1100,11 +1099,11 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            prove_pok_id_cred_sec(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
 
         global_ctx.genesis_string = String::from("another_string");
 
-        let result = verify_pok_id_cred_sec(&ip_info, &global_ctx, &request);
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert_eq!(
             result, false,
             "Verifying pok of idCredSec did not fail with wrong global context"
