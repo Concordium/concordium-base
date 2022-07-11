@@ -77,24 +77,36 @@ async fn main() {
     // id_cred_pub value is a fairly sensitive value that should not be passed
     // around insecurely.
     let identity_verifier = warp::get()
-        .and(warp::path!("api" / "verify" / String / String))
-        .map(move |id_cred_pub: String, signed_id_cred_pub: String| {
-            info!(
-                "Received request to present attribute form for {}",
-                id_cred_pub
-            );
+        .and(warp::path!("api" / "verify" / String / String / String))
+        .map(
+            move |endpoint_version: String,
+                  id_cred_pub_hash: String,
+                  signed_id_cred_pub_hash: String| {
+                info!(
+                    "Received request to present attribute form for {}",
+                    id_cred_pub_hash
+                );
 
-            let mut id_cred_pub_attribute_form =
-                str::replace(attribute_form_html.as_str(), "$id_cred_pub$", &id_cred_pub);
-            id_cred_pub_attribute_form = str::replace(
-                id_cred_pub_attribute_form.as_str(),
-                "$id_cred_pub_signature$",
-                &signed_id_cred_pub,
-            );
-            Response::builder()
-                .header(CONTENT_TYPE, "text/html")
-                .body(id_cred_pub_attribute_form)
-        });
+                let mut id_cred_pub_attribute_form = str::replace(
+                    attribute_form_html.as_str(),
+                    "$id_cred_pub$",
+                    &id_cred_pub_hash,
+                );
+                id_cred_pub_attribute_form = str::replace(
+                    id_cred_pub_attribute_form.as_str(),
+                    "$id_cred_pub_signature$",
+                    &signed_id_cred_pub_hash,
+                );
+                id_cred_pub_attribute_form = str::replace(
+                    id_cred_pub_attribute_form.as_str(),
+                    "$endpoint_version$",
+                    &endpoint_version,
+                );
+                Response::builder()
+                    .header(CONTENT_TYPE, "text/html")
+                    .body(id_cred_pub_attribute_form)
+            },
+        );
 
     // The path for submitting an attribute list. The attribute list is serialized
     // as JSON and saved to the file database. If successful, then forward the
@@ -109,12 +121,46 @@ async fn main() {
                     info!(
                         "Saving verified attributes and forwarding user back to identity provider."
                     );
-                    let id_cred_pub = input.get("id_cred_pub").unwrap().clone();
-                    let id_cred_pub_bytes = hex::decode(&id_cred_pub).unwrap();
+                    let id_cred_pub_hash = match input.get("id_cred_pub") {
+                        Some(hash) => hash.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("id_cred_pub not present.".to_string());
+                        }
+                    };
+                    let id_cred_pub_hash_bytes = hex::decode(&id_cred_pub_hash).unwrap();
                     input.remove("id_cred_pub");
 
-                    let id_cred_pub_signature = input.get("id_cred_pub_signature").unwrap().clone();
+                    let id_cred_pub_signature = match input.get("id_cred_pub_signature") {
+                        Some(sig) => sig.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("id_cred_pub_signature not present.".to_string());
+                        }
+                    };
                     input.remove("id_cred_pub_signature");
+
+                    let endpoint_version = match input.get("endpoint_version") {
+                        Some(version) => version.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("endpoint_version not present.".to_string());
+                        }
+                    };
+                    input.remove("endpoint_version");
+
+                    let identity_endpoint = if endpoint_version.eq("v0") {
+                        "v0/identity"
+                    } else if endpoint_version.eq("v1") {
+                        "v1/identity"
+                    } else {
+                        return Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body("Invalid endpoint version.".to_string());
+                    };
 
                     // Verify that the signature comes from the identity provider, otherwise reject
                     // the request. This prevents the submission of attributes for an
@@ -133,7 +179,7 @@ async fn main() {
                     match ip_data_arc
                         .clone()
                         .ip_cdi_verify_key
-                        .verify(&id_cred_pub_bytes, &signature)
+                        .verify(&id_cred_pub_hash_bytes, &signature)
                     {
                         Ok(_) => info!("Signature validated."),
                         Err(error) => {
@@ -150,7 +196,7 @@ async fn main() {
                     // database.
 
                     let file = match std::fs::File::create(
-                        root_clone.join("attributes").join(&id_cred_pub),
+                        root_clone.join("attributes").join(&id_cred_pub_hash),
                     ) {
                         Ok(file) => file,
                         Err(e) => {
@@ -169,8 +215,8 @@ async fn main() {
                     };
 
                     let location = format!(
-                        "{}{}{}",
-                        id_provider_url, "api/identity/create/", id_cred_pub
+                        "{}api/{}/create/{}",
+                        id_provider_url, identity_endpoint, id_cred_pub_hash
                     );
                     Response::builder()
                         .header(LOCATION, location)
@@ -183,9 +229,9 @@ async fn main() {
     // will access this endpoint when creating an identity.
     let read_attributes = warp::get()
         .and(warp::path!("api" / "verify" / "attributes" / String))
-        .map(move |id_cred_pub: String| {
+        .map(move |id_cred_pub_hash: String| {
             let attributes =
-                match fs::read_to_string(database_root.join("attributes").join(id_cred_pub)) {
+                match fs::read_to_string(database_root.join("attributes").join(id_cred_pub_hash)) {
                     Ok(attributes) => attributes,
                     Err(e) => {
                         return Response::builder()

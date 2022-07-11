@@ -643,10 +643,36 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     Ok(msg)
 }
 
+/// Verify a ID recovery quest containing proof of knowledge of idCredSec. If
+/// the proof verifies, the IDP sends the attribute list and the signature to
+/// the prover (the account holder). The argument are
+/// - ip_info - Identity provider information containing their IR and
+///   verification key that goes in to the protocol context.
+/// - context - Global Context containing g such that `idCredPub = g^idCredSec`.
+///   Also goes into the protocol context.
+/// - request - the ID recovery containing idCredPub, a timestamp and a proof of
+///   knowledge of idCredSec.
+pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    ip_info: &IpInfo<P>,
+    context: &GlobalContext<C>,
+    request: &IdRecoveryRequest<C>,
+) -> bool {
+    let verifier = dlog::Dlog::<C> {
+        public: request.id_cred_pub,
+        coeff:  context.on_chain_commitment_key.g,
+    };
+    let mut transcript = RandomOracle::domain("IdRecoveryProof");
+    transcript.append_message(b"ctx", &context);
+    transcript.append_message(b"timestamp", &request.timestamp);
+    transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
+    transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
+    verify(&mut transcript, &verifier, &request.proof)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{constants::ArCurve, test::*};
+    use crate::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
     use crypto_common::types::{KeyIndex, KeyPair};
     use ff::Field;
     use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
@@ -924,6 +950,163 @@ mod tests {
             ver_ok,
             Err(Reason::IncorrectProof),
             "Verify_credentials did not fail with invalid PRF commitment"
+        );
+    }
+
+    #[test]
+    fn test_validate_id_recovery_request() {
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: ip_info,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let aci = test_create_aci(&mut csprng);
+
+        let timestamp = 1000;
+        let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+        let request =
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_verify_pok_wrong_id_cred_sec() {
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: ip_info,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let aci = test_create_aci(&mut csprng);
+
+        let timestamp = 1000;
+        let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+        let id_cred_pub = global_ctx
+            .on_chain_commitment_key
+            .g
+            .mul_by_scalar(id_cred_sec);
+        let id_cred_sec_wrong = PedersenValue::generate(&mut csprng);
+        let mut request =
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec_wrong, timestamp)
+                .unwrap();
+
+        request.id_cred_pub = id_cred_pub;
+
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+        assert_eq!(
+            result, false,
+            "Verifying pok of idCredSec did not fail with wrong idCredSec"
+        );
+    }
+
+    #[test]
+    fn test_verify_pok_wrong_timestamp() {
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: ip_info,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let aci = test_create_aci(&mut csprng);
+
+        let timestamp = 1000;
+        let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+        let mut request =
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+        request.timestamp += 1;
+
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+        assert_eq!(
+            result, false,
+            "Verifying pok of idCredSec did not fail with wrong timestamp"
+        );
+    }
+
+    #[test]
+    fn test_verify_pok_wrong_idp_id() {
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: mut ip_info,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let aci = test_create_aci(&mut csprng);
+
+        let timestamp = 1000;
+        let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+        let request =
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+
+        ip_info.ip_identity = IpIdentity(1);
+
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+        assert_eq!(
+            result, false,
+            "Verifying pok of idCredSec did not fail with wrong IDP ID"
+        );
+    }
+
+    #[test]
+    fn test_verify_pok_wrong_idp_keys() {
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: mut ip_info,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let aci = test_create_aci(&mut csprng);
+
+        let timestamp = 1000;
+        let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+        let request =
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+
+        ip_info.ip_verify_key =
+            ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
+
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+        assert_eq!(
+            result, false,
+            "Verifying pok of idCredSec did not fail with wrong IDP verify keys"
+        );
+    }
+
+    #[test]
+    fn test_verify_pok_wrong_global_context() {
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let IpData {
+            public_ip_info: ip_info,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let mut global_ctx = GlobalContext::<ArCurve>::generate(String::from("genesis_string"));
+        let aci = test_create_aci(&mut csprng);
+
+        let timestamp = 1000;
+        let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+        let request =
+            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+
+        global_ctx.genesis_string = String::from("another_string");
+
+        let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+        assert_eq!(
+            result, false,
+            "Verifying pok of idCredSec did not fail with wrong global context"
         );
     }
 }

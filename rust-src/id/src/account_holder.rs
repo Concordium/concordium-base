@@ -1215,6 +1215,45 @@ fn compute_pok_reg_id<C: Curve>(
     (prover, secret)
 }
 
+/// Generate a ID recovery request, proving of knowledge of idCredSec.
+/// The arguments are
+/// - ip_info - Identity provider information containing their ID and
+///   verification key that goes in to the protocol context.
+/// - context - Global Context containing g such that `idCredPub = g^idCredSec`.
+///   Also goes into the protocol context.
+/// - id_cred_sec - The secret value idCredSec that only the account holder
+///   knows.
+/// - timestamp - seconds since the unix epoch. Goes into the protocol context.
+pub fn generate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    ip_info: &IpInfo<P>,
+    context: &GlobalContext<C>,
+    id_cred_sec: &Value<C>,
+    timestamp: u64, // seconds since the unix epoch
+) -> Option<IdRecoveryRequest<C>> {
+    let g = context.on_chain_commitment_key.g;
+    let id_cred_pub = g.mul_by_scalar(id_cred_sec);
+    let prover = dlog::Dlog::<C> {
+        public: id_cred_pub,
+        coeff:  g,
+    };
+    let secret = dlog::DlogSecret {
+        secret: id_cred_sec.clone(),
+    };
+
+    let mut csprng = thread_rng();
+    let mut transcript = RandomOracle::domain("IdRecoveryProof");
+    transcript.append_message(b"ctx", &context);
+    transcript.append_message(b"timestamp", &timestamp);
+    transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
+    transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
+    Some(IdRecoveryRequest {
+        id_cred_pub,
+        timestamp,
+        proof,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

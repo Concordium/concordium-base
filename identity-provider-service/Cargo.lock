@@ -876,6 +876,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "sha2 0.9.8",
  "structopt",
  "tokio",
  "tokio-test",

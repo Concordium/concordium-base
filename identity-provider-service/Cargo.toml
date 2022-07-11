@@ -29,6 +29,7 @@ hex = "0.4"
 rust-embed = "6"
 ed25519-dalek = "=1.0"
 chrono = "0.4.19"
+sha2 = "0.9"
 
 [dependencies.id]
 path = "../rust-src/id"
