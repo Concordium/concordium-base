@@ -30,6 +30,10 @@ pub use bulletproofs::range_proof;
 /// Re-export the PRF key generation functionality.
 pub use dodis_yampolskiy_prf;
 
+/// Re-export the Pointcheval-Sanders scheme for identity provider key
+/// generation.
+pub use ps_sig;
+
 #[macro_use]
 extern crate crypto_common_derive;
 
