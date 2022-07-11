@@ -735,7 +735,6 @@ async fn main() -> anyhow::Result<()> {
 
     let retrieval_db = db.clone();
     let retrieval_db_v1 = db.clone();
-    let recovery_db = db.clone();
     let server_config_retrieve = Arc::clone(&server_config);
 
     // The endpoint for querying the identity object.
@@ -829,9 +828,9 @@ async fn main() -> anyhow::Result<()> {
             )
         });
 
-    let recover_identity = warp::get().and(warp::path!("api" / "v1" / "recover")).and(
-        validate_recovery_request_and_return_ido(server_config_validate_recovery, recovery_db),
-    );
+    let recover_identity = warp::get()
+        .and(warp::path!("api" / "v1" / "recover"))
+        .and(validate_recovery_request(server_config_validate_recovery));
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
     let server = verify_request
@@ -1500,8 +1499,8 @@ fn extract_and_validate_request(
 ///
 /// The return value is either
 ///
-/// - Ok(ValidatedRequest) if the request is valid or
-/// - Err(msg) where `msg` is a string describing the error.
+/// - Ok(IdentityObjectRequest) if the request is valid or
+/// - Err(e) where `e` is a [Rejection] describing the error.
 fn extract_and_validate_request_query(
     server_config: Arc<ServerConfig>,
 ) -> impl Filter<Extract = (IdentityObjectRequest,), Error = Rejection> + Clone {
@@ -1550,8 +1549,8 @@ fn extract_and_validate_request_query(
 ///
 /// The return value is either
 ///
-/// - Ok(ValidatedRequest) if the request is valid or
-/// - Err(msg) where `msg` is a string describing the error.
+/// - Ok(IdentityObjectRequestV1) if the request is valid or
+/// - Err(e) where `e` is a [Rejection] describing the error.
 fn extract_and_validate_request_query_v1(
     server_config: Arc<ServerConfig>,
 ) -> impl Filter<Extract = (IdentityObjectRequestV1,), Error = Rejection> + Clone {
@@ -1596,13 +1595,11 @@ fn extract_and_validate_request_query_v1(
 
 /// Validate an ID recovery request and return the identity object, if the
 /// request is valid.
-fn validate_recovery_request_and_return_ido(
+fn validate_recovery_request(
     server_config: Arc<ServerConfig>,
-    db: DB,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::query().and_then(move |input: RecoveryGetParameters| {
         let server_config = server_config.clone();
-        let db = db.clone();
         async move {
             info!("Queried for identity recovery");
             let id_recovery_request: Versioned<IdRecoveryRequest<ArCurve>> =
@@ -1644,12 +1641,20 @@ fn validate_recovery_request_and_return_ido(
                 &id_recovery_request.value,
             );
 
-            let id_cred_pub_hash =
-                Sha256::digest(&to_bytes(&id_recovery_request.value.id_cred_pub));
-            let base_16_encoded_id_cred_pub_hash =
-                base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
             if pok_result {
-                get_identity_token_v1(db, base_16_encoded_id_cred_pub_hash).await
+                let id_cred_pub_hash =
+                    Sha256::digest(&to_bytes(&id_recovery_request.value.id_cred_pub));
+                let base_16_encoded_id_cred_pub_hash =
+                    base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+                let mut retrieve_url = server_config.retrieve_url.clone();
+                retrieve_url.set_path(&format!(
+                    "api/v1/identity/{}",
+                    base_16_encoded_id_cred_pub_hash
+                ));
+                let json = json!({
+                    "identityRetrievalUrl": retrieve_url.as_str()
+                });
+                Ok(warp::reply::json(&json))
             } else {
                 warn!("Id ownership proof did not verify");
                 Err(warp::reject::custom(IdRecoveryRejection::InvalidProofs))
