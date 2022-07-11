@@ -285,7 +285,6 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         &prf_value,
         context.ars_infos,
         threshold,
-        ar_commitment_key,
         context.global_context,
     );
     let number_of_ars = context.ars_infos.len();
@@ -413,7 +412,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         let item_prover = com_enc_eq::ComEncEq {
             cipher: combined_ciphers,
             commitment: item.cmm_to_share,
-            pub_key: item.ar_public_key,
+            pub_key: item.ar.ar_public_key,
             cmm_key: *ar_commitment_key,
             encryption_in_exponent_generator: h_in_exponent,
         };
@@ -429,7 +428,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         transcript.append_message(b"encrypted_share", &item.encrypted_share);
         let cmm_key_bulletproof = PedersenKey {
             g: h_in_exponent,
-            h: item.ar_public_key.key,
+            h: item.ar.ar_public_key.key,
         };
         let rand_bulletproof = item
             .encryption_randomness
@@ -467,13 +466,12 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
 
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<'a, C: Curve> {
-    ar: &'a ArInfo<C>,
+    pub ar: &'a ArInfo<C>,
     share: Value<C>,
-    encrypted_share: Cipher<C>,
+    pub encrypted_share: Cipher<C>,
     encryption_randomness: elgamal::Randomness<C>,
-    cmm_to_share: Commitment<C>,
+    pub cmm_to_share: Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
-    // ar_public_key: elgamal::PublicKey<C>,
 }
 
 type SharingData<'a, C> = (
@@ -532,7 +530,6 @@ pub fn compute_sharing_data<'a, C: Curve>(
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
             randomness_cmm_to_share: rnd,
-            // ar_public_key: pk,
         };
         ar_data.push(single_ar_data)
     }
@@ -556,8 +553,6 @@ pub struct SingleArDataPrf<'a, C: Curve> {
     cmm_to_share: Commitment<C>,
     /// Randomness used in commitment to share
     randomness_cmm_to_share: PedersenRandomness<C>,
-    /// AR's public key used to encrypt share
-    ar_public_key: elgamal::PublicKey<C>,
 }
 
 type SharingDataPrf<'a, C> = (
@@ -572,9 +567,9 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     shared_scalar: &Value<C>,                           // Value to be shared.
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
-    commitment_key: &PedersenKey<C>,
     global_context: &GlobalContext<C>, // commitment key
 ) -> SharingDataPrf<'a, C> {
+    let commitment_key = &global_context.on_chain_commitment_key;
     let n = ar_parameters.len() as u32;
     let mut csprng = thread_rng();
     // first commit to the scalar
@@ -620,7 +615,6 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
             randomness_cmm_to_share: rnd,
-            ar_public_key: pk,
         };
         ar_data.push(single_ar_data)
     }
