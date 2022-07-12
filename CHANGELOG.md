@@ -7,6 +7,7 @@
   - `ByteList` and `ByteArray` are byte specialized versions of `List` and `Array` and are represented in JSON as lowercase hex encoded strings.  
 - Add new schema version which include the versioning in the serialization.
 - Use `schema::Type::ByteList` for `[u8]` implementation of `SchemaType`.
+- Implement `Seek` for `Cursor<T>` when `T` implements `AsRef<[u8]>`.
 
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 

@@ -3,12 +3,12 @@ use crate::{constants::*, traits::*, types::*};
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
+use convert::TryFrom;
 #[cfg(not(feature = "std"))]
-use core::{hash, marker, mem::MaybeUninit, slice};
+use core::{convert, hash, marker, mem::MaybeUninit, slice};
 use hash::Hash;
 #[cfg(feature = "std")]
-use std::{collections, hash, marker, mem::MaybeUninit, slice};
-
+use std::{collections, convert, hash, marker, mem::MaybeUninit, slice};
 // Implementations of Serialize
 
 impl<X: Serial, Y: Serial> Serial for (X, Y) {
@@ -872,6 +872,54 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
             Ok(len)
         } else {
             Ok(0)
+        }
+    }
+}
+
+impl<T: AsRef<[u8]>> Seek for Cursor<T> {
+    type Err = ();
+
+    fn seek(&mut self, pos: SeekFrom) -> Result<u32, Self::Err> {
+        use SeekFrom::*;
+        let end = u32::try_from(self.data.as_ref().len()).map_err(|_| ())?;
+        match pos {
+            Start(offset) => {
+                if offset <= end {
+                    self.offset = offset as usize;
+                    Ok(offset)
+                } else {
+                    Err(())
+                }
+            }
+            End(delta) => {
+                if delta > 0 {
+                    Err(()) // cannot seek beyond the end
+                } else {
+                    // due to two's complement representation of values we do not have to
+                    // distinguish on whether we go forward or backwards. Reinterpreting the bits
+                    // and adding unsigned values is the same as subtracting the
+                    // absolute value.
+                    let new_offset = end.wrapping_add(delta as u32);
+                    if new_offset <= end {
+                        self.offset = new_offset as usize;
+                        Ok(new_offset)
+                    } else {
+                        Err(())
+                    }
+                }
+            }
+            Current(delta) => {
+                // due to two's complement representation of values we do not have to
+                // distinguish on whether we go forward or backwards.
+                let current_offset = u32::try_from(self.offset).map_err(|_| ())?;
+                let new_offset: u32 = current_offset.wrapping_add(delta as u32);
+                if new_offset <= end {
+                    self.offset = new_offset as usize;
+                    Ok(new_offset)
+                } else {
+                    Err(())
+                }
+            }
         }
     }
 }
