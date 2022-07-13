@@ -876,12 +876,20 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> Seek for Cursor<T> {
+impl<T: AsRef<[u8]>> HasSize for T {
+    fn size(&self) -> u32 { self.as_ref().len() as u32 }
+}
+
+impl<T: AsRef<[u8]>> AsRef<[u8]> for Cursor<T> {
+    fn as_ref(&self) -> &[u8] { self.data.as_ref() }
+}
+
+impl<T: HasSize> Seek for Cursor<T> {
     type Err = ();
 
     fn seek(&mut self, pos: SeekFrom) -> Result<u32, Self::Err> {
         use SeekFrom::*;
-        let end = u32::try_from(self.data.as_ref().len()).map_err(|_| ())?;
+        let end = self.data.size();
         match pos {
             Start(offset) => {
                 if offset <= end {
