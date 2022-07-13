@@ -28,6 +28,12 @@ pub trait Seek {
     fn seek(&mut self, pos: SeekFrom) -> Result<u32, Self::Err>;
 }
 
+/// The `HasSize` trait provides a function for getting the current byte size.
+pub trait HasSize {
+    /// Get the current byte size.
+    fn size(&self) -> u32;
+}
+
 /// Reads `n` bytes from a given `source` without initializing the byte array
 /// beforehand using MaybeUninit.
 macro_rules! read_n_bytes {
