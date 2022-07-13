@@ -993,4 +993,134 @@ mod test {
             "Serializing and then deserializing should return original value."
         );
     }
+
+    #[test]
+    fn test_cursor_seek_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Start(8));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 8, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_start_at_the_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Start(10));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 10, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_start_fails_beyond_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Start(11));
+        result.expect_err("Should have failed to seek beyond end of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(-8));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 2, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_at_the_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(-10));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 0, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_at_the_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(0));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 10, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_fails_before_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(-11));
+        result.expect_err("Should have failed to seek before start of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_fails_beyond_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(1));
+        result.expect_err("Should have failed to seek beyond end of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_twice() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Current(4));
+        let position = result.expect("Seek should succeed");
+        assert_eq!(position, 4, "Seek moved to the wrong position");
+
+        let result = cursor.seek(SeekFrom::Current(2));
+        let position = result.expect("Seek should succeed");
+        assert_eq!(position, 6, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_backward() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+
+        let result = cursor.seek(SeekFrom::Current(-2));
+        let position = result.expect("Seek should succeed");
+        assert_eq!(position, 2, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_backward_fail_before_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+
+        let result = cursor.seek(SeekFrom::Current(-5));
+        result.expect_err("Should have failed to seek before start of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_twice_fail_beyond_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+
+        let result = cursor.seek(SeekFrom::Current(7));
+        result.expect_err("Should have failed to seek beyond end of data");
+    }
 }
