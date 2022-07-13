@@ -327,8 +327,6 @@ unsafe extern "C" fn create_identity_object_v1_js(
                 .expect("JSON serialization of versioned identity objects should not fail.");
             let ar_record = to_string(&id_creation.ar_record)
                 .expect("JSON serialization of anonymity revocation records should not fail.");
-            let icdi = to_string(&response)
-                .expect("JSON serialization of initial credentials should not fail.");
             let mut ret_obj: napi_value = std::mem::zeroed();
             if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
                 return create_error(env, "Cannot make return object.");
