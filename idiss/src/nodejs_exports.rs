@@ -234,6 +234,162 @@ unsafe extern "C" fn create_identity_object_js(
 }
 
 #[no_mangle]
+unsafe extern "C" fn validate_request_v1_js(env: napi_env, info: napi_callback_info) -> napi_value {
+    let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 4usize;
+    let mut this: napi_value = std::mem::zeroed();
+    let ret = napi_get_cb_info(
+        env,
+        info,
+        &mut argc,
+        buffer.as_mut_ptr(),
+        &mut this,
+        std::ptr::null_mut(),
+    );
+    if ret != napi_status::napi_ok {
+        return create_error(env, "Cannot acquire context.");
+    }
+    if argc != 4 {
+        return create_error(
+            env,
+            &format!("Expected 4 arguments, but provided {}.", argc),
+        );
+    }
+    let global_context = match get_string_arg(env, buffer[0]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "GlobalContext must be given as a string."),
+    };
+    let ip_info = match get_string_arg(env, buffer[1]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "IpInfo must be given as a string."),
+    };
+    let ars_info = match get_string_arg(env, buffer[2]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "ArsInfo' must be given as a string."),
+    };
+    let request = match get_string_arg(env, buffer[3]) {
+        Some(arg) => arg,
+        None => return create_error(env, "Argument should be a string."),
+    };
+    if let Err(e) = validate_request_v1(&global_context, &ip_info, &ars_info, &request) {
+        return create_error(env, &format!("Validation failed: {}", e));
+    }
+    let mut ret_obj: napi_value = std::mem::zeroed();
+    ret_obj
+}
+
+#[no_mangle]
+unsafe extern "C" fn create_identity_object_v1_js(
+    env: napi_env,
+    info: napi_callback_info,
+) -> napi_value {
+    let mut buffer: [napi_value; 6] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 6usize;
+    let mut this: napi_value = std::mem::zeroed();
+    let ret = napi_get_cb_info(
+        env,
+        info,
+        &mut argc,
+        buffer.as_mut_ptr(),
+        &mut this,
+        std::ptr::null_mut(),
+    );
+    if ret != napi_status::napi_ok {
+        return create_error(env, "Cannot acquire context.");
+    }
+    if argc != 6 {
+        return create_error(
+            env,
+            &format!("Expected 6 arguments, but provided {}.", argc),
+        );
+    }
+    let ip_info = match get_string_arg(env, buffer[0]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "IpInfo must be given as a string."),
+    };
+    let request = match get_string_arg(env, buffer[1]) {
+        Some(arg) => arg,
+        None => return create_error(env, "Request must be given as a string."),
+    };
+    let alist = match get_string_arg(env, buffer[2]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "The attribute list must be given as a string."),
+    };
+    let ip_private_key = match get_string_arg(env, buffer[3]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "The private key must be given as a string."),
+    };
+
+    let e = create_identity_object_v1(&ip_info, &request, &alist, &ip_private_key);
+    match e {
+        Ok(id_creation) => {
+            let id_obj = to_string(&id_creation.id_obj)
+                .expect("JSON serialization of versioned identity objects should not fail.");
+            let ar_record = to_string(&id_creation.ar_record)
+                .expect("JSON serialization of anonymity revocation records should not fail.");
+            let icdi = to_string(&response)
+                .expect("JSON serialization of initial credentials should not fail.");
+            let mut ret_obj: napi_value = std::mem::zeroed();
+            if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
+                return create_error(env, "Cannot make return object.");
+            }
+            if set_string_property(env, ret_obj, "idObject", &id_obj).is_none() {
+                return create_error(env, "Cannot set 'idObject' property");
+            }
+            if set_string_property(env, ret_obj, "arRecord", &ar_record).is_none() {
+                return create_error(env, "Cannot set 'arRecord' property");
+            }
+            ret_obj
+        }
+        Err(err) => create_error(env, &format!("ERROR: {}", err)),
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn validate_recovery_request_js(
+    env: napi_env,
+    info: napi_callback_info,
+) -> napi_value {
+    let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 4usize;
+    let mut this: napi_value = std::mem::zeroed();
+    let ret = napi_get_cb_info(
+        env,
+        info,
+        &mut argc,
+        buffer.as_mut_ptr(),
+        &mut this,
+        std::ptr::null_mut(),
+    );
+    if ret != napi_status::napi_ok {
+        return create_error(env, "Cannot acquire context.");
+    }
+    if argc != 4 {
+        return create_error(
+            env,
+            &format!("Expected 4 arguments, but provided {}.", argc),
+        );
+    }
+    let global_context = match get_string_arg(env, buffer[0]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "GlobalContext must be given as a string."),
+    };
+    let ip_info = match get_string_arg(env, buffer[1]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "IpInfo must be given as a string."),
+    };
+    let request = match get_string_arg(env, buffer[2]) {
+        Some(arg) => arg,
+        None => return create_error(env, "Argument should be a string."),
+    };
+    if let Err(e) = validate_recovery_request(&global_context, &ip_info, &request) {
+        return create_error(env, &format!("Identity recovery validation failed: {}", e));
+    }
+    let mut ret_obj: napi_value = std::mem::zeroed();
+    ret_obj
+}
+
+#[no_mangle]
 unsafe extern "C" fn version_js(env: napi_env, _info: napi_callback_info) -> napi_value {
     make_string(env, env!("CARGO_PKG_VERSION"))
 }

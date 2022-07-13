@@ -42,6 +42,10 @@ namespace IdissLib
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length);
 
+        /// The delta determining the time interval in which identity recovery requests should be accepted.
+        /// Recovery request timestamps are accepted in the interval [currentTime - TimestampDelta, currentTime + TimestampDelta].
+        public const ulong TimestampDelta = 60; // 1 min
+
         /// A wrapper around the imported C function "validate_request_cs". The arguments are
         /// - global - the versioned global context
         /// - ipInfo - the versioned identity provider info
@@ -82,7 +86,7 @@ namespace IdissLib
         /// - arsInfo - the versioned map of ArInfos
         /// - request - the identity object request
         /// The function either
-        /// - returns the address of the initial account, if the request is valid, or
+        /// - does nothing, if the request is valid, or
         /// - throws an exception, if the request is invalid or the input is malformed.
         public static void ValidateRequestV1(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, Versioned<Dictionary<string, ArInfo>> arsInfos, IdObjectRequestV1 request)
         {
@@ -185,6 +189,37 @@ namespace IdissLib
             else
             {
                 throw new IdentityCreationException("Unkown error.");
+            }
+        }
+
+        /// A wrapper around the imported C function "validate_recovery_request_cs". The arguments are
+        /// - global - the versioned global context
+        /// - ipInfo - the versioned identity provider info
+        /// - request - the identity object request
+        /// - now - the current time of the identity provider.
+        /// The function either
+        /// - does nothing, if the request is valid, or
+        /// - throws an exception, if the request is invalid or the input is malformed.
+        public static void ValidateRecoveryRequest(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, IdRecoveryWrapper request, DateTimeOffset now)
+        {
+            long nowTimestampLong = now.ToUnixTimeSeconds();
+            ulong nowTimestamp = Convert.ToUInt64(nowTimestampLong);
+            ulong proofTimestamp = request.idRecoveryRequest.value.timestamp;
+            if (proofTimestamp < nowTimestamp - TimestampDelta || proofTimestamp > nowTimestamp + TimestampDelta)
+            {
+                throw new RequestValidationException("Invalid timestamp.");
+            }
+            byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
+            byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
+            byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
+            int outLength = 0;
+            var resultPtr = validate_recovery_request_cs(globalBytes, globalBytes.Length, ipInfoBytes, ipInfoBytes.Length, requestBytes, requestBytes.Length, out outLength);
+            if (resultPtr != IntPtr.Zero)
+            {
+                byte[] outBytes = new byte[outLength];
+                Marshal.Copy(resultPtr, outBytes, 0, outLength);
+                var errorString = Encoding.UTF8.GetString(outBytes);
+                throw new RequestValidationException(errorString);
             }
         }
     }

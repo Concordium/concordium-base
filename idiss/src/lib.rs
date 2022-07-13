@@ -294,6 +294,7 @@ fn create_identity_object_v1(
     Ok(response)
 }
 
+/// Validate an identity recovery request
 fn validate_recovery_request(
     global_context_bytes: &[u8],
     ip_info_bytes: &[u8],
@@ -306,7 +307,7 @@ fn validate_recovery_request(
         parse_exact_versioned_recovery_request(request_bytes)?;
 
     if !validate_id_recovery_request(&ip_info, &global_context, &recovery_request) {
-        anyhow::bail!("ID recovery request validation failed.");
+        anyhow::bail!("Invalid ID ownership proof.");
     }
     Ok(())
 }

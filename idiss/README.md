@@ -10,7 +10,9 @@ In such a case it is much better to use the [../rust-src/id](../rust-src/id) cra
 
 # Outline of the identity issuance process.
 
-The identity issuance consists of the following steps. The steps done by this library are marked with (*).
+Two identity issuance flows are supported. The version 0 flow involves the creation of an initial account, the version 1 flow does not.
+
+The version 0 identity issuance flow consists of the following steps. The steps done by this library are marked with (*).
 
 1. The wallet makes the request to the identity provider.
 2. (*) The identity provider validates the request.
@@ -21,13 +23,22 @@ The identity issuance consists of the following steps. The steps done by this li
 6. Try to create the initial account on the chain.
 7. If all the above are successful return the identity object to the user.
 
+The version 1 identity issuance flow consists of the following steps. The steps done by this library are marked with (*).
+
+1. The wallet makes the request to the identity provider.
+2. (*) The identity provider validates the request.
+3. The identity provider checks whether an account already exists on the chain.
+4. The identity provider does the identity verification process (e.g., taking photos, scans, etc). The output of this
+   process should be whatever the identity issuer needs, and a list of attributes that go to the identity object.
+5. (*) The identity object is returned to the user, and the anonymity revocation record is kept by the identity provider.
+
 # API
 
-The exposed API consists of two functions `validate_request` and `create_identity_object`.
+The exposed API consists of two functions `validate_request`, `create_identity_object`, `validate_request_v1`, `create_identity_object_v1` and `validate_recovery_request`.
 
 ## `validate_request`
 
-This function is designed to be used when the initial request is made by the user to the identity provider.
+This function is designed to be used in the version 0 flow when the initial request is made by the user to the identity provider.
 It will check cryptographic proofs in the request. All arguments are strings that contain JSON encodings of the relevant values.
 
 The arguments are
@@ -42,7 +53,7 @@ Otherwise, the return value is an error.
 
 ## `create_identity_object`
 
-This creates the identity object, the initial account data, and the anonymity revocation record.
+This creates the version 0 identity object, the initial account data, and the anonymity revocation record.
 
 The arguments are
 - `ip_info`, the public keys of the identity provider, same as for `validate_request`
@@ -58,6 +69,37 @@ The return value is either an error if some of the values are malformed, or a st
 - the anonymity revocation record
 - the initial account creation object that is sent to the chain
 - the address of the inital account
+
+Note that the anonymity revocation record only contains the cryptographic parts, the encryptions of data that the anonymity revoker decrypts.
+It does not contain contact information for the user. It is the responsibility of the identity provider to maintain that data in addition to the anonymity revocation record.
+## `validate_request_v1`
+
+This function is designed to be used for the version 1 when the initial request is made by the user to the identity provider.
+It will check cryptographic proofs in the request. All arguments are strings that contain JSON encodings of the relevant values.
+
+The arguments are
+- `global_context`, the context of (public) cryptographic parameters specific to the chain the identity object is destined for
+- `ip_info`, the public keys of the identity provider. This data is also available on the chain the identity object is destined for.
+- `ars_infos`, public keys of anonymity revokers the identity provider cooperates with.
+- `request`, this is the request that the wallet sends which contains cryptographic values and proofs.
+
+In case of success, the return value is the unit type
+Otherwise, the return value is an error.
+
+## `create_identity_object_v1`
+
+This creates the version 1 identity object and the anonymity revocation record.
+
+The arguments are
+- `ip_info`, the public keys of the identity provider, same as for `validate_request`
+- `request`, the same request as for `validate_request`
+- `alist`, the attribute list obtained in step (4) of the identity issuance process (see above)
+- `ip_private_key`, the first part of the private key, used to sign the identity object sent back to the user
+
+The return value is either an error if some of the values are malformed, or a struct containing
+
+- the identity object that is returned to the user
+- the anonymity revocation record
 
 Note that the anonymity revocation record only contains the cryptographic parts, the encryptions of data that the anonymity revoker decrypts.
 It does not contain contact information for the user. It is the responsibility of the identity provider to maintain that data in addition to the anonymity revocation record.

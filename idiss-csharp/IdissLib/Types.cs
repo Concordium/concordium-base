@@ -129,6 +129,20 @@ namespace IdissLib
         public string proofsOfKnowledge { get; set; }
     }
 
+    /// A request for recovering an identity. Contatins proof of knowledge of idCredSec for the given idCredPub.
+    public class IdRecoveryRequest
+    {
+        public string idCredPub { get; set; }
+        public UInt64 timestamp { get; set; }
+        public string proof { get; set; }
+    }
+
+    /// A wrapper to match the JSON serialization of the request expected by the imported C function "validate_recovery_request_cs".
+    public class IdRecoveryWrapper
+    {
+        public Versioned<IdRecoveryRequest> idRecoveryRequest { set; get; }
+    }
+
     /// The data the identity provider sends back to the user.
     public class IdentityObject
     {
@@ -333,7 +347,7 @@ namespace IdissLib
         public string ipCdiPrivateKey { get; set; }
     }
 
-    public class Versioned<T> 
+    public class Versioned<T>
     {
         public UInt32 v { get; set; }
         public T value { get; set; }
