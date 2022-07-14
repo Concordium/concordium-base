@@ -3,12 +3,12 @@ use crate::{constants::*, traits::*, types::*};
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
+use convert::TryFrom;
 #[cfg(not(feature = "std"))]
-use core::{hash, marker, mem::MaybeUninit, slice};
+use core::{convert, hash, marker, mem::MaybeUninit, slice};
 use hash::Hash;
 #[cfg(feature = "std")]
-use std::{collections, hash, marker, mem::MaybeUninit, slice};
-
+use std::{collections, convert, hash, marker, mem::MaybeUninit, slice};
 // Implementations of Serialize
 
 impl<X: Serial, Y: Serial> Serial for (X, Y) {
@@ -876,6 +876,62 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     }
 }
 
+impl<T: AsRef<[u8]>> HasSize for T {
+    fn size(&self) -> u32 { self.as_ref().len() as u32 }
+}
+
+impl<T: AsRef<[u8]>> AsRef<[u8]> for Cursor<T> {
+    fn as_ref(&self) -> &[u8] { self.data.as_ref() }
+}
+
+impl<T: HasSize> Seek for Cursor<T> {
+    type Err = ();
+
+    fn seek(&mut self, pos: SeekFrom) -> Result<u32, Self::Err> {
+        use SeekFrom::*;
+        let end = self.data.size();
+        match pos {
+            Start(offset) => {
+                if offset <= end {
+                    self.offset = offset as usize;
+                    Ok(offset)
+                } else {
+                    Err(())
+                }
+            }
+            End(delta) => {
+                if delta > 0 {
+                    Err(()) // cannot seek beyond the end
+                } else {
+                    // due to two's complement representation of values we do not have to
+                    // distinguish on whether we go forward or backwards. Reinterpreting the bits
+                    // and adding unsigned values is the same as subtracting the
+                    // absolute value.
+                    let new_offset = end.wrapping_add(delta as u32);
+                    if new_offset <= end {
+                        self.offset = new_offset as usize;
+                        Ok(new_offset)
+                    } else {
+                        Err(())
+                    }
+                }
+            }
+            Current(delta) => {
+                // due to two's complement representation of values we do not have to
+                // distinguish on whether we go forward or backwards.
+                let current_offset = u32::try_from(self.offset).map_err(|_| ())?;
+                let new_offset: u32 = current_offset.wrapping_add(delta as u32);
+                if new_offset <= end {
+                    self.offset = new_offset as usize;
+                    Ok(new_offset)
+                } else {
+                    Err(())
+                }
+            }
+        }
+    }
+}
+
 impl Write for Cursor<&mut Vec<u8>> {
     type Err = ();
 
@@ -944,5 +1000,135 @@ mod test {
             xs2.unwrap(),
             "Serializing and then deserializing should return original value."
         );
+    }
+
+    #[test]
+    fn test_cursor_seek_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Start(8));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 8, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_start_at_the_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Start(10));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 10, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_start_fails_beyond_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Start(11));
+        result.expect_err("Should have failed to seek beyond end of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(-8));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 2, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_at_the_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(-10));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 0, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_at_the_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(0));
+        let position = result.expect("Seek should succeed");
+
+        assert_eq!(position, 10, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_fails_before_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(-11));
+        result.expect_err("Should have failed to seek before start of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_end_fails_beyond_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::End(1));
+        result.expect_err("Should have failed to seek beyond end of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_twice() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        let result = cursor.seek(SeekFrom::Current(4));
+        let position = result.expect("Seek should succeed");
+        assert_eq!(position, 4, "Seek moved to the wrong position");
+
+        let result = cursor.seek(SeekFrom::Current(2));
+        let position = result.expect("Seek should succeed");
+        assert_eq!(position, 6, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_backward() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+
+        let result = cursor.seek(SeekFrom::Current(-2));
+        let position = result.expect("Seek should succeed");
+        assert_eq!(position, 2, "Seek moved to the wrong position");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_backward_fail_before_start() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+
+        let result = cursor.seek(SeekFrom::Current(-5));
+        result.expect_err("Should have failed to seek before start of data");
+    }
+
+    #[test]
+    fn test_cursor_seek_current_forward_twice_fail_beyond_end() {
+        let bytes = [0u8; 10];
+        let mut cursor = Cursor::new(&bytes);
+
+        cursor.seek(SeekFrom::Current(4)).expect("Seek should succeed");
+
+        let result = cursor.seek(SeekFrom::Current(7));
+        result.expect_err("Should have failed to seek beyond end of data");
     }
 }
