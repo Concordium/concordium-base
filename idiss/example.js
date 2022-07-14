@@ -52,5 +52,36 @@ if (res instanceof Error) {
 } else {
     console.log(res)
 }
+
+// V1 tests.
+const request_v1 = fs.readFileSync('../identity-provider-service/data/valid_request_v1.json', 'utf8')
+const validation_result_v1 = validator.validate_request_v1(global, ip_info, ars_infos, request_v1);
+
+if (validation_result_v1 instanceof Error) {
+    console.error("Request is not valid: " + validation_result_v1.message)
+    process.exit(1)
+} else {
+    console.log(validation_result_v1)
+}
+
+const res_v1 = validator.create_identity_object_v1(ip_info, request_v1, alist, private_key)
+
+if (res instanceof Error) {
+    console.error("Error creating id object for V1 version: " + res_v1.message)
+    process.exit(1)
+} else {
+    console.log(res_v1)
+}
+
+const recovery_request = fs.readFileSync('../identity-provider-service/data/id_recovery_request.json', 'utf8')
+const res_recovery = validator.validate_recovery_request(global, ip_info, recovery_request)
+
+if (res_recovery instanceof Error) {
+    console.error("Error creating id object for V1 version: " + res_recovery.message)
+    process.exit(1)
+} else {
+    console.log(res_recovery)
+}
+
 console.log(validator.version())
 console.log("DONE");

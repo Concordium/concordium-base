@@ -135,7 +135,7 @@ Both will build the library and produce artifacts in `./target/release/`.
 
 # Javascript API
 
-The library exposes two functions
+The library exposes the following functions
 ```javascript
   fn validate_request(global_context: string, ip_info: string, ars_infos: string, request: string): { accountAddress: string } | Error
 ```
@@ -149,6 +149,30 @@ which creates the identity object to be sent back to the user, as well as the
 anonymity revocation record, and information about the initial account that must
 be submitted to the chain. The Error case here can happen if the attribute
 list (the `alist` argument) or any other arguments are malformed.
+
+```javascript
+  fn validate_request_v1(global_context: string, ip_info: string, ars_infos: string, request: string): undefined | Error
+```
+which validates the given request and returns undefined when successful, or an
+error in case of an invalid request.
+
+```javascript
+  fn create_identity_object_v1(ip_info: string, alist: string, request: string, ip_private_key: string): {idObject: string; arRecord: string} | Error
+```
+which creates the identity object to be sent back to the user, as well as the
+anonymity revocation record. The Error case here can happen if the attribute
+list (the `alist` argument) or any other arguments are malformed.
+
+```javascript
+  fn validate_recovery_request(global_context: string, ip_info: string, request: string): undefined | Error
+```
+which validates a request for identity recovery, and returns `undefined` in case
+of success, or an an `Error` if the request is malformed.
+The recovery request has a property `timestamp` which is a unix timestamp in
+seconds. The caller of the `validate_recovery_request` **must make sure that the
+timestamp is withing 60 of the present**. This is not checked by the
+`validate_recovery_request` function, but what is checked is that the claimed
+timestamp matches the one in the provided proof.
   
 ## Example
   After following the build instructions you can try to run the script `example.js` as, e.g., 

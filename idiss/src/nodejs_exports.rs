@@ -274,8 +274,7 @@ unsafe extern "C" fn validate_request_v1_js(env: napi_env, info: napi_callback_i
     if let Err(e) = validate_request_v1(&global_context, &ip_info, &ars_info, &request) {
         return create_error(env, &format!("Validation failed: {}", e));
     }
-    let mut ret_obj: napi_value = std::mem::zeroed();
-    ret_obj
+    std::ptr::null_mut()
 }
 
 #[no_mangle]
@@ -283,8 +282,8 @@ unsafe extern "C" fn create_identity_object_v1_js(
     env: napi_env,
     info: napi_callback_info,
 ) -> napi_value {
-    let mut buffer: [napi_value; 6] = std::mem::MaybeUninit::zeroed().assume_init();
-    let mut argc = 6usize;
+    let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 4usize;
     let mut this: napi_value = std::mem::zeroed();
     let ret = napi_get_cb_info(
         env,
@@ -297,10 +296,10 @@ unsafe extern "C" fn create_identity_object_v1_js(
     if ret != napi_status::napi_ok {
         return create_error(env, "Cannot acquire context.");
     }
-    if argc != 6 {
+    if argc != 4 {
         return create_error(
             env,
-            &format!("Expected 6 arguments, but provided {}.", argc),
+            &format!("Expected 4 arguments, but provided {}.", argc),
         );
     }
     let ip_info = match get_string_arg(env, buffer[0]) {
@@ -348,8 +347,8 @@ unsafe extern "C" fn validate_recovery_request_js(
     env: napi_env,
     info: napi_callback_info,
 ) -> napi_value {
-    let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
-    let mut argc = 4usize;
+    let mut buffer: [napi_value; 3] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 3usize;
     let mut this: napi_value = std::mem::zeroed();
     let ret = napi_get_cb_info(
         env,
@@ -362,10 +361,10 @@ unsafe extern "C" fn validate_recovery_request_js(
     if ret != napi_status::napi_ok {
         return create_error(env, "Cannot acquire context.");
     }
-    if argc != 4 {
+    if argc != 3 {
         return create_error(
             env,
-            &format!("Expected 4 arguments, but provided {}.", argc),
+            &format!("Expected 3 arguments, but provided {}.", argc),
         );
     }
     let global_context = match get_string_arg(env, buffer[0]) {
@@ -383,8 +382,7 @@ unsafe extern "C" fn validate_recovery_request_js(
     if let Err(e) = validate_recovery_request(&global_context, &ip_info, &request) {
         return create_error(env, &format!("Identity recovery validation failed: {}", e));
     }
-    let mut ret_obj: napi_value = std::mem::zeroed();
-    ret_obj
+    std::ptr::null_mut()
 }
 
 #[no_mangle]
@@ -411,6 +409,23 @@ unsafe extern "C" fn napi_register_module_v1(env: napi_env, exports: napi_value)
         return create_error(env, "Could not assing 'validate_request' property.");
     }
 
+    let vr1 = std::ffi::CString::new("validate_request_v1").expect("CString::new failed");
+    let mut local: napi_value = std::mem::zeroed();
+    if napi_create_function(
+        env,
+        vr1.as_ptr(),
+        "validate_request_v1".len(),
+        Some(validate_request_v1_js),
+        std::ptr::null_mut(),
+        &mut local,
+    ) != napi_status::napi_ok
+    {
+        return create_error(env, "Cannot create function 'validate_request_v1'.");
+    };
+    if napi_set_named_property(env, exports, vr1.as_ptr(), local) != napi_status::napi_ok {
+        return create_error(env, "Could not assing 'validate_request_v1' property.");
+    }
+
     let create = std::ffi::CString::new("create_identity_object").expect("CString::new failed");
     let mut local_create: napi_value = std::mem::zeroed();
     if napi_create_function(
@@ -428,6 +443,54 @@ unsafe extern "C" fn napi_register_module_v1(env: napi_env, exports: napi_value)
     if napi_set_named_property(env, exports, create.as_ptr(), local_create) != napi_status::napi_ok
     {
         return create_error(env, "Could not assing 'create_identity_object' property.");
+    }
+
+    let create_v1 =
+        std::ffi::CString::new("create_identity_object_v1").expect("CString::new failed");
+    let mut local_create: napi_value = std::mem::zeroed();
+    if napi_create_function(
+        env,
+        create_v1.as_ptr(),
+        "create_identity_object_v1".len(),
+        Some(create_identity_object_v1_js),
+        std::ptr::null_mut(),
+        &mut local_create,
+    ) != napi_status::napi_ok
+    {
+        return create_error(env, "Cannot create 'create_identity_object_v1' function.");
+    }
+
+    if napi_set_named_property(env, exports, create_v1.as_ptr(), local_create)
+        != napi_status::napi_ok
+    {
+        return create_error(
+            env,
+            "Could not assing 'create_identity_object_v1' property.",
+        );
+    }
+
+    let recovery =
+        std::ffi::CString::new("validate_recovery_request").expect("CString::new failed");
+    let mut local_create: napi_value = std::mem::zeroed();
+    if napi_create_function(
+        env,
+        recovery.as_ptr(),
+        "validate_recovery_request".len(),
+        Some(validate_recovery_request_js),
+        std::ptr::null_mut(),
+        &mut local_create,
+    ) != napi_status::napi_ok
+    {
+        return create_error(env, "Cannot create 'validate_recovery_request' function.");
+    }
+
+    if napi_set_named_property(env, exports, recovery.as_ptr(), local_create)
+        != napi_status::napi_ok
+    {
+        return create_error(
+            env,
+            "Could not assing 'validate_recovery_request' property.",
+        );
     }
 
     let version = std::ffi::CString::new("version").expect("CString::new failed");
