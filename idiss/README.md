@@ -27,10 +27,9 @@ The version 1 identity issuance flow consists of the following steps. The steps 
 
 1. The wallet makes the request to the identity provider.
 2. (*) The identity provider validates the request.
-3. The identity provider checks whether an account already exists on the chain.
-4. The identity provider does the identity verification process (e.g., taking photos, scans, etc). The output of this
+3. The identity provider does the identity verification process (e.g., taking photos, scans, etc). The output of this
    process should be whatever the identity issuer needs, and a list of attributes that go to the identity object.
-5. (*) The identity object is returned to the user, and the anonymity revocation record is kept by the identity provider.
+4. (*) The identity object is returned to the user, and the anonymity revocation record is kept by the identity provider.
 
 # API
 
@@ -188,7 +187,7 @@ timestamp matches the one in the provided proof.
 
 # C# API
 
-The library exposes two functions `validate_request_cs` and `create_identity_object_cs` that can be imported in C# by
+The library exposes five functions `validate_request_cs`, `create_identity_object_cs`, `validate_request_v1_cs`, `create_identity_object_v1_cs` and `validate_recovery_request_cs` that can be imported in C# by
 
 ```csharp
 [DllImport("idiss.dll")]
@@ -198,7 +197,7 @@ private static extern IntPtr validate_request_cs(
 [MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len, 
 [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_success);
 ```
-which validates the given request and returns a pointer the account address of the initial account if the request is valid,
+which validates the given request and returns a pointer to the account address of the initial account if the request is valid,
 or a pointer to a bytearray describing an error. It writes to a variable `out_length` the length of the output. If the request is valid,
 `1` is written to out_success, otherwise `-1` is written to out_success.
 
@@ -219,3 +218,37 @@ anonymity revocation record, and information about the initial account that must
 be submitted to the chain, or a pointer to a bytearray describing an error.
 It writes to a variable `out_length` the length of the output. If identity creation went well,
 `1` is written to out_success, otherwise `-1` is written to out_success.
+
+```csharp
+[DllImport("idiss.dll")]
+private static extern IntPtr validate_request_v1_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length);
+```
+which validates the given request and returns a null pointer if the request is valid,
+or a pointer to a bytearray describing an error. It writes to a variable `out_length` the length of the output.
+
+```csharp
+[DllImport("idiss.dll")]
+private static extern IntPtr create_identity_object_v1_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] alist, int alist_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_private_key, int ip_private_key_ptr_len,
+out int out_length, out int out_success);
+```
+
+which returns a pointer to either the version 1 identity object to be sent back to the user, as well as the
+anonymity revocation record, or a pointer to a bytearray describing an error.
+It writes to a variable `out_length` the length of the output. If identity creation went well,
+`1` is written to out_success, otherwise `-1` is written to out_success.
+
+```csharp
+[DllImport("idiss.dll")]
+private static extern IntPtr validate_recovery_request_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
+[MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length);
+```
+
+which validates the given recovery request and returns a null pointer if the request is valid,
+or a pointer to a bytearray describing an error. It writes to a variable `out_length` the length of the output.
