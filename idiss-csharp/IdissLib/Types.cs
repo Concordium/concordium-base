@@ -115,6 +115,34 @@ namespace IdissLib
         public string proofsOfKnowledge { get; set; }
     }
 
+    /// Information sent from the account holder to the identity provider in the version 1 flow,
+    /// where no initial account is created.
+    /// This includes only cryptographic parts.
+    public class PreIdentityObjectV1
+    {
+        public string idCredPub { get; set; }
+        public Dictionary<string, IpArData> ipArData { get; set; }
+        public ChoiceArData choiceArData { get; set; }
+        public string idCredSecCommitment { get; set; }
+        public string prfKeyCommitmentWithIP { get; set; }
+        public List<string> prfKeySharingCoeffCommitments { get; set; }
+        public string proofsOfKnowledge { get; set; }
+    }
+
+    /// A request for recovering an identity. Contatins proof of knowledge of idCredSec for the given idCredPub.
+    public class IdRecoveryRequest
+    {
+        public string idCredPub { get; set; }
+        public UInt64 timestamp { get; set; }
+        public string proof { get; set; }
+    }
+
+    /// A wrapper to match the JSON serialization of the request expected by the imported C function "validate_recovery_request_cs".
+    public class IdRecoveryWrapper
+    {
+        public Versioned<IdRecoveryRequest> idRecoveryRequest { set; get; }
+    }
+
     /// The data the identity provider sends back to the user.
     public class IdentityObject
     {
@@ -123,10 +151,24 @@ namespace IdissLib
         public string signature { get; set; }
     }
 
-    /// A IdObjectRequest is a versioned pre-identity object.
+    /// The data the identity provider sends back to the user.
+    public class IdentityObjectV1
+    {
+        public PreIdentityObjectV1 preIdentityObject { get; set; }
+        public AttributeList attributeList { get; set; }
+        public string signature { get; set; }
+    }
+
+    /// An IdObjectRequest is a versioned PreIdentityObject.
     public class IdObjectRequest
     {
         public Versioned<PreIdentityObject> idObjectRequest { set; get; }
+    }
+
+    /// An IdObjectRequestV1 is a versioned PreIdentityObjectV1.
+    public class IdObjectRequestV1
+    {
+        public Versioned<PreIdentityObjectV1> idObjectRequest { set; get; }
     }
 
     /// Data that needs to be stored by the identity provider to support anonymity
@@ -201,6 +243,17 @@ namespace IdissLib
         public Versioned<AnonymityRevocationRecord> arRecord { get; set; }
         public Versioned<AccountCredentialMessage> request { get; set; }
         public AccountAddress accountAddress { get; set; }
+    }
+
+
+    /// IdentityCreationV1 is defined to match the JSON that is sent back (if nothing went wrong) from
+    /// the imported function "create_identity_object_v1_cs".
+    /// The identity provider is then meant to send the versioned identity object to back to the user,
+    /// to store the attribute list from the identity object together with the versioned anynomity revocation.
+    public class IdentityCreationV1
+    {
+        public Versioned<IdentityObjectV1> idObj { get; set; }
+        public Versioned<AnonymityRevocationRecord> arRecord { get; set; }
     }
 
     /// An account address represented as a string.
@@ -294,7 +347,7 @@ namespace IdissLib
         public string ipCdiPrivateKey { get; set; }
     }
 
-    public class Versioned<T> 
+    public class Versioned<T>
     {
         public UInt32 v { get; set; }
         public T value { get; set; }
