@@ -61,6 +61,27 @@ struct StartIp {
 }
 
 #[derive(StructOpt)]
+struct GenerateIdRecoveryRequest {
+    #[structopt(long = "chi", help = "File with input credential holder information.")]
+    chi:          PathBuf,
+    #[structopt(
+        long = "ip-info",
+        help = "File with information about the identity provider."
+    )]
+    ip_info:      PathBuf,
+    #[structopt(
+        long = "request-out",
+        help = "File to write the request to that is to be sent to the identity provider."
+    )]
+    request_file: PathBuf,
+    #[structopt(
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
+    global:       PathBuf,
+}
+
+#[derive(StructOpt)]
 struct CreateCredential {
     #[structopt(
         long = "id-object",
@@ -120,6 +141,12 @@ enum UserClient {
         version = "1.0.0"
     )]
     CreateCredential(CreateCredential),
+    #[structopt(
+        name = "recover-identity",
+        about = "Generate id recovery request.",
+        version = "1.0.0"
+    )]
+    GenerateIdRecoveryRequest(GenerateIdRecoveryRequest),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -132,6 +159,7 @@ fn main() -> anyhow::Result<()> {
     match client {
         StartIp(ip) => handle_start_ip(ip),
         CreateCredential(cc) => handle_create_credential(cc),
+        GenerateIdRecoveryRequest(girr) => handle_recovery(girr),
     }
 }
 
@@ -551,5 +579,34 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
             cc.out.display()
         );
     }
+    Ok(())
+}
+
+fn handle_recovery(girr: GenerateIdRecoveryRequest) -> anyhow::Result<()> {
+    let ip_info = read_ip_info(&girr.ip_info).context(format!(
+        "Could not read the identity provider information from {}.",
+        girr.ip_info.display()
+    ))?;
+
+    let global_ctx = read_global_context(&girr.global).context(format!(
+        "Could not read cryptographic parameters from {}.",
+        girr.global.display()
+    ))?;
+
+    let chi: CredentialHolderInfo<id::constants::ArCurve> =
+        decrypt_input(girr.chi).context("Could not read credential holder information")?;
+    let timestamp = chrono::Utc::now().timestamp() as u64 + 60; // 1 min in future
+    let request =
+        generate_id_recovery_request(&ip_info, &global_ctx, &chi.id_cred.id_cred_sec, timestamp);
+    let json = json!({
+        "idRecoveryRequest": Versioned {
+            version: Version::from(0),
+            value: request
+        }
+    });
+    write_json_to_file(&girr.request_file, &json).context(format!(
+        "Could not write id recovery request to to {}.",
+        girr.request_file.display()
+    ))?;
     Ok(())
 }

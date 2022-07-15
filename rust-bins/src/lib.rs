@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{bail, Context};
 use crypto_common::*;
 use curve_arithmetic::*;
 use id::{constants::*, types::*};
@@ -6,12 +6,15 @@ use pairing::bls12_381::Bls12;
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};
 use std::{
+    convert::TryInto,
     fmt::Debug,
     fs::File,
     io::{self, BufReader},
     path::Path,
     str::FromStr,
 };
+
+use key_derivation::{ConcordiumHdWallet, Net};
 
 pub type ExampleCurve = <Bls12 as Pairing>::G1;
 
