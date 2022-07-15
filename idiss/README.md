@@ -82,7 +82,7 @@ The arguments are
 - `ars_infos`, public keys of anonymity revokers the identity provider cooperates with.
 - `request`, this is the request that the wallet sends which contains cryptographic values and proofs.
 
-In case of success, the return value is the unit type
+In case of success, the return value is the unit type.
 Otherwise, the return value is an error.
 
 ## `create_identity_object_v1`
@@ -113,7 +113,7 @@ The arguments are
 - `ip_info`, the public keys of the identity provider. This data is also available on the chain the identity object is destined for.
 - `request`, this is the request that the wallet sends which contains cryptographic values and proofs.
 
-In case of success, the return value is the unit type
+In case of success, the return value is the unit type.
 Otherwise, the return value is an error.
 # Prerequisites
 
