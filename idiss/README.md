@@ -105,8 +105,8 @@ It does not contain contact information for the user. It is the responsibility o
 
 ## `validate_recovery_request`
 
-This function validates a recovery made by the user to the identity provider.
-It will check cryptographic proofs in the request. All arguments are strings that contain JSON encodings of the relevant values.
+This function validates a recovery request made by the user to the identity provider.
+It will check the proof of knowledge of idCredSec in the request. All arguments are strings that contain JSON encodings of the relevant values.
 
 The arguments are
 - `global_context`, the context of (public) cryptographic parameters specific to the chain the identity object is destined for
