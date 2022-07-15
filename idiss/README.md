@@ -1,7 +1,7 @@
 # Description
 
 This package provides a streamlined API for the identity provider usable from non-Rust languages.
-The core of the library is [src/lib.rs](src/lib.rs) file which defines two functions, `validate_request` and `create_identity_object`.
+The core of the library is [src/lib.rs](src/lib.rs) file which defines five functions, `validate_request`, `create_identity_object`, `validate_request_v1`, `create_identity_object_v1` and `validate_recovery_request`.
 In addition to this we provide `nodejs` and `C#` exports (optionally) via [src/nodejs_exports.rs](src/nodejs_exports.rs) and [src/csharp_exports.rs](src/csharp_exports.rs), respectively.
 These can be enabled/disabled via the features `nodejs` and `csharp`, respectively.
 
@@ -82,7 +82,7 @@ The arguments are
 - `ars_infos`, public keys of anonymity revokers the identity provider cooperates with.
 - `request`, this is the request that the wallet sends which contains cryptographic values and proofs.
 
-In case of success, the return value is the unit type
+In case of success, the return value is the unit type.
 Otherwise, the return value is an error.
 
 ## `create_identity_object_v1`
@@ -103,6 +103,18 @@ The return value is either an error if some of the values are malformed, or a st
 Note that the anonymity revocation record only contains the cryptographic parts, the encryptions of data that the anonymity revoker decrypts.
 It does not contain contact information for the user. It is the responsibility of the identity provider to maintain that data in addition to the anonymity revocation record.
 
+## `validate_recovery_request`
+
+This function validates a recovery request made by the user to the identity provider.
+It will check the proof of knowledge of idCredSec in the request. All arguments are strings that contain JSON encodings of the relevant values.
+
+The arguments are
+- `global_context`, the context of (public) cryptographic parameters specific to the chain the identity object is destined for
+- `ip_info`, the public keys of the identity provider. This data is also available on the chain the identity object is destined for.
+- `request`, this is the request that the wallet sends which contains cryptographic values and proofs.
+
+In case of success, the return value is the unit type.
+Otherwise, the return value is an error.
 # Prerequisites
 
 In order to build you need the following
