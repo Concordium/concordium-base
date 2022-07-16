@@ -7,12 +7,21 @@ use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};
 use std::{
     convert::TryInto,
+    collections::HashMap,
     fmt::Debug,
     fs::File,
     io::{self, BufReader},
     path::Path,
     str::FromStr,
 };
+use bitvec::prelude::*;
+use dialoguer::{Confirm, Input};
+use hkdf::HkdfExtract;
+use rand::Rng;
+use sha2::{Digest, Sha256, Sha512};
+use pedersen_scheme::{Randomness as PedersenRandomness, Value as PedersenValue};
+use hmac::{Hmac, Mac, NewMac};
+use ed25519_hd_key_derivation::DeriveError;
 
 use key_derivation::{ConcordiumHdWallet, Net};
 
@@ -49,10 +58,36 @@ pub fn read_ip_info<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IpInfo<Bl
     }
 }
 
+/// Read id recovery request.
+pub fn read_recovery_request<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IdRecoveryRequest<ExampleCurve>> {
+    let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    match params.version {
+        Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid recovery request version {}.", other),
+        )),
+    }
+}
+
 /// Read id_object, deciding on how to parse based on the version.
 pub fn read_id_object<P: AsRef<Path> + Debug>(
     filename: P,
 ) -> io::Result<IdentityObject<Bls12, ExampleCurve, ExampleAttribute>> {
+    let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    match params.version {
+        Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid identity object version {}.", other),
+        )),
+    }
+}
+
+/// Read version id_object, deciding on how to parse based on the version.
+pub fn read_id_object_v1<P: AsRef<Path> + Debug>(
+    filename: P,
+) -> io::Result<IdentityObjectV1<Bls12, ExampleCurve, ExampleAttribute>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -250,5 +285,253 @@ pub fn ask_for_password_confirm(
             }
         }
         return Ok(pass);
+    }
+}
+
+// BIP related stuff
+
+macro_rules! succeed_or_die {
+    ($e:expr, $match:ident => $s:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err($match) => return Err(format!($s, $match)),
+        }
+    };
+    ($e:expr, $s:expr) => {
+        match $e {
+            Some(x) => x,
+            None => return Err($s.to_owned()),
+        }
+    };
+}
+
+/// Asks user to input word with given number and reads it from stdin.
+/// Checks whether the word is in valid_words if verify is true.
+pub fn read_bip39_word(
+    number: u8,
+    verify: bool,
+    bip39_map: &HashMap<&str, usize>,
+) -> Result<String, std::io::Error> {
+    Input::new()
+        .with_prompt(format!("Word {}", number))
+        .validate_with(|input: &String| -> Result<(), String> {
+            // input is always valid if !verify. Otherwise must be in bip39_map
+            if !verify || bip39_map.contains_key(&*input.to_owned()) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "The word \"{}\" is not in the BIP39 word list. Please try again.",
+                    input
+                ))
+            }
+        })
+        .interact_text()
+}
+
+
+/// Ask user to input num words.
+/// If verify_bip39 is true, output is verified to be valid BIP39 sentence.
+pub fn read_words_from_terminal(
+    num: u8,
+    verify_bip: bool,
+    bip39_map: &HashMap<&str, usize>,
+) -> Result<Vec<String>, String> {
+    // Ensure that input length is in allowed set if verification is enabled.
+    if verify_bip {
+        match num {
+            12 | 15 | 18 | 21 | 24 => (),
+            _ => {
+                return Err(format!(
+                    "The input length was set to {}, but it must be in {{12, 15, 18, 21, 24}} for \
+                     a valid BIP39 sentence.",
+                    num
+                ))
+            }
+        };
+    }
+
+    let mut word_list = Vec::<String>::new();
+    for i in 1..=num {
+        // read the ith word from stdin
+        let word = succeed_or_die!(
+            read_bip39_word(i, verify_bip, bip39_map),
+            e => "Could not read input from user because {}"
+        );
+        word_list.push(word);
+    }
+
+    // verify whether input_words is a valid BIP39 sentence if check is enabled
+    if verify_bip && !verify_bip39(&word_list, bip39_map) {
+        return Err("The input does not constitute a valid BIP39 sentence.".to_string());
+    }
+
+    Ok(word_list)
+}
+
+/// Verify whether the given vector of words constitutes a valid BIP39 sentence.
+pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) -> bool {
+    // check that word_vec contains allowed number of words
+    match word_vec.len() {
+        12 | 15 | 18 | 21 | 24 => (),
+        _ => return false,
+    };
+
+    // convert word vector to bits
+    let mut bit_vec = BitVec::<Msb0, u8>::new();
+    for word in word_vec {
+        match bip_word_map.get(word.as_str()) {
+            Some(idx) => {
+                let word_bits = BitVec::<Msb0, u16>::from_element(*idx as u16);
+                // There are 2048 words in the BIP39 list, which can be represented using 11
+                // bits. Thus, the first 5 bits of word_bits are 0. Remove those leading zeros
+                // and add the remaining ones to bit_bec.
+                bit_vec.extend_from_bitslice(&word_bits[5..]);
+            }
+            None => return false, // not valid if it contains invalid word
+        };
+    }
+
+    // Valid sentence consists of initial entropy of length ent_len plus
+    // checksum of length ent_len/32. Hence, ent_len * 33/32 = bit_vec.len().
+    // Note that bit_vec.len() is always a multiple of 33 because 11 bits
+    // are added for each word and all allowed word counts are multiples of 3.
+    let ent_len = 32 * bit_vec.len() / 33;
+
+    // split bits after ent_len off. These correspond to the checksum.
+    let checksum = bit_vec.split_off(ent_len);
+
+    // checksum is supposed to be first cs_len bits of SHA256(entropy)
+    let hash = Sha256::digest(&bit_vec.into_vec());
+
+    // convert hash from byte vector to bit vector
+    let hash_bits = BitVec::<Msb0, u8>::from_slice(&hash).unwrap();
+
+    // sentence is valid if checksum equals fist ent_len/32 bits of hash
+    checksum == hash_bits[0..ent_len / 32]
+}
+
+/// Convert given byte array to valid BIP39 sentence.
+/// Bytes must contain {16, 20, 24, 28, 32} bytes corresponding to
+/// {128, 160, 192, 224, 256} bits.
+/// This uses the method described at https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String>, String> {
+    let ent_len = 8 * bytes.len(); // input is called entropy in BIP39
+    match ent_len {
+        128 | 160 | 192 | 224 | 256 => (),
+        _ => {
+            return Err(
+                "The number of bytes to be converted to a BIP39 sentence must be in {16, 20, 24, \
+                 28, 32}."
+                    .to_string(),
+            )
+        }
+    };
+
+    // checksum length is ent_len / 32
+    let cs_len = ent_len / 32;
+
+    // checksum is first cs_len bits of SHA256(bytes)
+    // first compute hash of bytes
+    let hash = Sha256::digest(bytes);
+
+    // convert hash from byte vector to bit vector
+    let hash_bits = succeed_or_die!(
+        BitVec::<Msb0, u8>::from_slice(&hash),
+        e => "Failed to convert hash to bit vector because {}"
+    );
+
+    // convert input bytes from byte vector to bit vector
+    let mut random_bits = succeed_or_die!(
+        BitVec::<Msb0, u8>::from_slice(bytes),
+        e => "Failed to convert hash to bit vector because {}"
+    );
+
+    // append the first cs_len bits of hash_bits to the end of random_bits
+    for i in 0..cs_len {
+        random_bits.push(hash_bits[i]);
+    }
+
+    // go over random_bits in chunks of 11 bits and convert those to words
+    let mut vec = Vec::<String>::new();
+    let random_iter = random_bits.chunks(11);
+    for chunk in random_iter {
+        let idx = chunk.iter().fold(0, |acc, b| acc << 1 | *b as usize); // convert chunk to integer
+        vec.push(bip_word_list[idx].to_string());
+    }
+
+    Ok(vec)
+}
+
+pub fn words_to_seed(words: &str) -> [u8; 64] {
+    // as described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+
+    let salt = b"mnemonic";
+
+    let mut seed = [0u8; 64];
+    pbkdf2::pbkdf2::<Hmac<Sha512>>(
+        words.as_bytes(),
+        &salt[..],
+        2048,
+        &mut seed,
+    );
+    seed
+}
+
+/// Rerandomize given list of words using system randomness and HKDF extractor.
+/// The input can be an arbitrary slice of strings.
+/// The output is a valid BIP39 sentence with 24 words.
+pub fn rerandomize_bip39(
+    input_words: &[String],
+    bip_word_list: &[&str],
+) -> Result<Vec<String>, String> {
+    // Get randomness from system.
+    // Fill array with 256 random bytes, corresponding to 2048 bits.
+    let mut system_randomness = [0u8; 256];
+    rand::thread_rng().fill(&mut system_randomness[..]);
+
+    // Combine both sources of randomness using HKDF extractor.
+    // For added security, use pseudorandom salt.
+    let salt = Sha256::digest(b"concordium-key-generation-tool-version-1");
+    let mut extract_ctx = HkdfExtract::<Sha256>::new(Some(&salt));
+
+    // First add all words separated by " " in input_words to key material.
+    // Separation ensures word boundaries are preserved
+    // to prevent different word lists from resulting in same string.
+    for word in input_words {
+        extract_ctx.input_ikm(word.as_bytes());
+        extract_ctx.input_ikm(b" ");
+    }
+
+    // Now add system randomness to key material
+    extract_ctx.input_ikm(&system_randomness);
+
+    // Finally extract random key
+    let (prk, _) = extract_ctx.finalize();
+
+    // convert raw randomness to BIP39 word sentence
+    let output_words = bytes_to_bip39(&prk, bip_word_list)?;
+
+    Ok(output_words)
+}
+
+
+pub struct CredentialContext {
+    pub wallet:           ConcordiumHdWallet,
+    pub identity_index:   u32,
+    pub credential_index: u32,
+}
+
+impl HasAttributeRandomness<ArCurve> for CredentialContext {
+    type ErrorType = DeriveError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: AttributeTag,
+    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
+        self.wallet.get_attribute_commitment_randomness(
+            self.identity_index,
+            self.credential_index,
+            attribute_tag,
+        )
     }
 }

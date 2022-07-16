@@ -7,10 +7,12 @@ use id::{
 use keygen_bls::keygen_bls;
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig::SigRetrievalRandomness;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Copy, Clone, Debug, Deserialize)]
+use crypto_common::{base16_encode, base16_decode};
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -40,15 +42,22 @@ fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <G1 as Curve>::Scalar {
 /// The wallet should be used as a single point for deriving all required keys
 /// and randomness when creating identities and accounts, as it will allow for
 /// recovering the key material and randomness from just the seed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConcordiumHdWallet {
     /// The seed used as the basis for deriving keys. As all private keys are
     /// derived from this seed it means that it should be considered private
     /// and kept secret. The size is 64 bytes which corresponds to the seed
     /// that is given by a 24-word BIP39 seed phrase.
+    #[serde(
+        rename = "seed",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
     pub seed: [u8; 64],
     /// The type of blockchain network to derive keys for. Different key
     /// derivation paths are used depending on the chosen network to avoid
     /// collisions between a Testnet and Mainnet.
+    #[serde(rename = "net")]
     pub net:  Net,
 }
 

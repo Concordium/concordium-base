@@ -39,6 +39,15 @@ bitvec = "0.22"
 crossterm = "0.22"
 anyhow = "1.0"
 
+
+[dependencies.ed25519_hd_key_derivation]
+path = "../rust-src/ed25519_hd_key_derivation"
+version = "1.0.0"
+
+[dependencies.key_derivation]
+path = "../rust-src/key_derivation"
+version = "1.0.0"
+
 [dependencies.keygen_bls]
 path = "../rust-src/keygen_bls"
 version = "2.0.0"

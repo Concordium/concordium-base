@@ -7,7 +7,6 @@ use crypto_common::{
 use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
-use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
 use elgamal::{PublicKey, SecretKey};
 use id::{
@@ -16,6 +15,7 @@ use id::{
     identity_provider::*,
     secret_sharing::*,
     types::*,
+    curve_arithmetic::*
 };
 use key_derivation::ConcordiumHdWallet;
 use pairing::bls12_381::{Bls12, G1};
@@ -836,24 +836,36 @@ fn handle_extend_ip_list(eil: ExtendIpList) {
     }
 }
 
-struct CredentialContext {
-    wallet:           ConcordiumHdWallet,
-    identity_index:   u32,
-    credential_index: u32,
+enum SomeIdentityObject<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>> {
+    IdoV0(IdentityObject<P, C, AttributeType>),
+    IdoV1(IdentityObjectV1<P, C, AttributeType>)
 }
 
-impl HasAttributeRandomness<ArCurve> for CredentialContext {
-    type ErrorType = DeriveError;
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    HasIdentityObjectFields<P, C, AttributeType> for SomeIdentityObject<P, C, AttributeType>
+{
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        match self {
+            SomeIdentityObject::IdoV0(ido) => ido.get_common_pio_fields(),
+            SomeIdentityObject::IdoV1(ido) => ido.get_common_pio_fields()
+        }
+    }
 
-    fn get_attribute_commitment_randomness(
-        &self,
-        attribute_tag: AttributeTag,
-    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
-        self.wallet.get_attribute_commitment_randomness(
-            self.identity_index,
-            self.credential_index,
-            attribute_tag,
-        )
+    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { 
+        match self {
+            SomeIdentityObject::IdoV0(ido) => ido.get_attribute_list(),
+            SomeIdentityObject::IdoV1(ido) => ido.get_attribute_list()
+        }
+     }
+
+    fn get_signature(&self) -> &ps_sig::Signature<P> {
+        match self {
+            SomeIdentityObject::IdoV0(ido) => ido.get_signature(),
+            SomeIdentityObject::IdoV1(ido) => ido.get_signature()
+        }
     }
 }
 
@@ -861,11 +873,16 @@ impl HasAttributeRandomness<ArCurve> for CredentialContext {
 /// transaction.
 fn handle_create_credential(cc: CreateCredential) {
     let id_object = {
-        match read_id_object(cc.id_object) {
-            Ok(v) => v,
-            Err(x) => {
-                eprintln!("Could not read identity object because {}", x);
-                return;
+        match read_id_object(cc.id_object.clone()) {
+            Ok(v) => SomeIdentityObject::IdoV0(v),
+            Err(_) => {
+                match read_id_object_v1(cc.id_object) {
+                    Ok(v) => SomeIdentityObject::IdoV1(v),
+                    Err(x) => {
+                        eprintln!("Could not read identity object because {}", x);
+                        return;
+                    }
+                }
             }
         }
     };
@@ -891,7 +908,7 @@ fn handle_create_credential(cc: CreateCredential) {
 
     // now we have all the data ready.
     // we first ask the user to select which attributes they wish to reveal
-    let alist = &id_object.alist.alist;
+    let alist = &id_object.get_attribute_list().alist;
 
     let alist_items = alist
         .keys()
@@ -932,8 +949,8 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     }
     let policy = Policy {
-        valid_to:   id_object.alist.valid_to,
-        created_at: id_object.alist.created_at,
+        valid_to:   id_object.get_attribute_list().valid_to,
+        created_at: id_object.get_attribute_list().created_at,
         policy_vec: revealed_attributes,
         _phantom:   Default::default(),
     };
