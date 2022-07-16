@@ -62,6 +62,10 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         let p2 = self.dlog2.extract_point(challenge, witness)?;
         Some((p1, p2))
     }
+
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        self.dlog1.emulate_witness(csprng)
+    }
 }
 
 #[cfg(test)]

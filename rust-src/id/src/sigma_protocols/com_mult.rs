@@ -138,6 +138,15 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         Some((points, Commitment(v)))
     }
 
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        let ss1 = C::generate_scalar(csprng);
+        let ss2 = C::generate_scalar(csprng);
+        let ts1 = C::generate_scalar(csprng);
+        let ts2 = C::generate_scalar(csprng);
+        let t = C::generate_scalar(csprng);
+        Some(Witness { ss:[ss1,ss2], ts:[ts1,ts2], t })
+    } 
+
     #[cfg(test)]
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,

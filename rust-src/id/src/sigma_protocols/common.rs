@@ -60,6 +60,8 @@ pub trait SigmaProtocol: Sized {
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage>;
 
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness>;
+
     #[cfg(test)]
     /// Function used for testing. Generated valid input for this sigma proof.
     /// The 'data_size' parameter can be used to adjust the size of generated
@@ -148,6 +150,12 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for AndAdapter<P1, P2> 
         Some((p1, p2))
     }
 
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        let w1 = self.first.emulate_witness(csprng)?;
+        let w2 = self.second.emulate_witness(csprng)?;
+        Some(AndWitness { w1, w2 })
+    }
+
     #[cfg(test)]
     fn with_valid_data<R: rand::Rng>(
         data_size: usize,
@@ -174,6 +182,148 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> AndAdapter<P1, P2> {
         }
     }
 }
+
+
+#[derive(Serialize)]
+pub struct OrWitness<W1: Serialize, W2: Serialize> {
+    pub c1: Challenge,
+    pub w1: W1,
+    pub w2: W2,
+}
+
+
+pub enum OrKnowledge {
+    P1,
+    P2,
+    Any
+}
+
+pub struct OrAdapter<P1, P2> {
+    pub first:  P1,
+    pub second: P2,    
+    pub knowledge: OrKnowledge,
+}
+
+pub enum KnowledgeContainer<T1,T2> {
+    KnowsP1(T1),
+    KnowsP2(T2)
+}
+
+impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for OrAdapter<P1, P2> {
+    type CommitMessage = (P1::CommitMessage, P2::CommitMessage);
+    type ProtocolChallenge = Challenge;
+    type ProverState = KnowledgeContainer<(P1::ProverState,Challenge,P2::ProverWitness),(P1::ProverWitness,Challenge,P2::ProverState)>;
+    type ProverWitness = OrWitness<P1::ProverWitness, P2::ProverWitness>;
+    type SecretData = KnowledgeContainer<P1::SecretData, P2::SecretData>;
+
+    fn public(&self, ro: &mut RandomOracle) {
+        self.first.public(ro);
+        self.second.public(ro)
+    }
+
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        *challenge
+    }
+
+    fn commit_point<R: rand::Rng>(
+        &self,
+        csprng: &mut R,
+    ) -> Option<(Self::CommitMessage, Self::ProverState)> {
+        match &self.knowledge {
+            OrKnowledge::P1 => {
+                // Commit normally for P1
+                let (m1, s1) = self.first.commit_point(csprng)?;
+                // Simulate transcript for P2
+                let c2 = Challenge::get_rnd_challenge(csprng);
+                let w2 = self.second.emulate_witness(csprng)?;
+                let m2 = self.second.extract_point(&self.second.get_challenge(&c2), &w2)?;
+                Some(((m1, m2), KnowledgeContainer::KnowsP1((s1,c2,w2))))
+            },
+            OrKnowledge::P2 => {
+                // Simulate transcript for P1
+                let c1 = Challenge::get_rnd_challenge(csprng);
+                let w1 = self.first.emulate_witness(csprng)?;
+                let m1 = self.first.extract_point(&self.first.get_challenge(&c1), &w1)?;
+                // Commit normally for P1
+                let (m2, s2) = self.second.commit_point(csprng)?;
+                Some(((m1, m2), KnowledgeContainer::KnowsP2((w1,c1,s2))))
+            },
+            OrKnowledge::Any => None,
+        }
+    }
+
+    fn generate_witness(
+        &self,
+        secret: Self::SecretData,
+        state: Self::ProverState,
+        challenge: &Self::ProtocolChallenge,
+    ) -> Option<Self::ProverWitness> {
+        match &self.knowledge {
+            OrKnowledge::P1 => {
+                if let KnowledgeContainer::KnowsP1(sec) = secret {
+                    if let KnowledgeContainer::KnowsP1((s1,c2,w2)) = state {
+                        let c1= Challenge::xor_challenge(challenge, &c2);
+                        let real_c1 = self.first.get_challenge(&c1);
+                        let w1 = self.first.generate_witness(sec, s1, &real_c1)?;
+                        return Some(OrWitness {c1, w1, w2 });
+                    }
+                }
+            },
+            OrKnowledge::P2 => {
+                if let KnowledgeContainer::KnowsP2(sec) = secret {
+                    if let KnowledgeContainer::KnowsP2((w1,c1,s2)) = state {
+                        let c2= Challenge::xor_challenge(challenge, &c1);
+                        let real_c2 = self.second.get_challenge(&c2);
+                        let w2 = self.second.generate_witness(sec, s2, &real_c2)?;
+                        return Some(OrWitness {c1, w1, w2 });
+                    }
+                }
+            },
+            _ => {},
+        };
+        None
+    }
+
+    fn extract_point(
+        &self,
+        challenge: &Self::ProtocolChallenge,
+        witness: &Self::ProverWitness,
+    ) -> Option<Self::CommitMessage> {
+        let w_c2= Challenge::xor_challenge(challenge, &witness.c1);
+        let c1 = self.first.get_challenge(&witness.c1);
+        let c2 = self.second.get_challenge(&w_c2);
+        let p1 = self.first.extract_point(&c1, &witness.w1)?;
+        let p2 = self.second.extract_point(&c2, &witness.w2)?;
+        Some((p1, p2))
+    }
+
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        let c1 = Challenge::get_rnd_challenge(csprng);
+        let w1 = self.first.emulate_witness(csprng)?;
+        let w2 = self.second.emulate_witness(csprng)?;
+        Some(OrWitness {c1, w1, w2 })
+    }    
+
+    #[cfg(test)]
+    fn with_valid_data<R: rand::Rng>(
+        data_size: usize,
+        csprng: &mut R,
+        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+    ) {
+        todo!()
+        /*  Maybe like so? 
+        P1::with_valid_data(data_size, csprng, |first, s1, csprng| {
+            P2::with_valid_data(data_size, csprng, |second, s2, csprng| {
+                f(OrAdapter { first, second, knowledge: OrKnowledge::P1 }, KnowledgeContainer::KnowsP1(s1), csprng)
+            })
+        })
+        */
+    }
+    
+}
+
+
+
 
 /// ## This section provides an and-like adapter, but where we combine
 /// multiple proofs of the same kind, only with different parameters.
@@ -267,6 +417,15 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
             points.push(p.extract_point(challenge, wit)?);
         }
         Some(ReplicatePoints { points })
+    }
+
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        let n = self.protocols.len();
+        let mut ws = Vec::with_capacity(n);
+        for p in self.protocols.iter() {
+            ws.push(p.emulate_witness(csprng)?);
+        }        
+        Some(ReplicateWitness { witnesses: ws })
     }
 
     #[cfg(test)]

@@ -161,6 +161,16 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         Some((ElGamalCipher(a_1, a_2), Commitment(a_3)))
     }
 
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        //Both groups have the same order -> C1 scalars are fine
+        let z_1 = C::generate_scalar(csprng);
+        let z_2 = C::generate_scalar(csprng);
+        let z_3 = C::generate_scalar(csprng);
+        Some(Witness {
+            witness: (z_1, z_2, z_3),
+        })
+    }
+
     #[cfg(test)]
     fn with_valid_data<R: Rng>(
         _data_size: usize,

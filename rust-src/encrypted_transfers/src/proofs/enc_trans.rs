@@ -347,6 +347,34 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             encexp2: commit_encexp2,
         })
     }
+
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        let witness_common = C::generate_scalar(csprng);
+        let mut witness_encexp1 = vec![];
+        for prot in &self.encexp1 {
+            match prot.emulate_witness(csprng) {
+                Some(w) => {
+                    witness_encexp1.push(w);
+                },
+                None => return None,
+            }
+        }
+        let mut witness_encexp2 = vec![];
+        for prot in &self.encexp2 {
+            match prot.emulate_witness(csprng) {
+                Some(w) => {
+                    witness_encexp2.push(w);
+                },
+                None => return None,
+            }
+        }
+        Some(EncTransWitness {
+            witness_common,
+            witness_encexp1,
+            witness_encexp2,
+        })    
+    }
+
 }
 
 #[cfg(test)]

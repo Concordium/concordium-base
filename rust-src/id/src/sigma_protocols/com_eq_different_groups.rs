@@ -130,6 +130,16 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
         Some((Commitment(u), Commitment(v)))
     }
 
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        //Both groups have the same order -> C1 scalars are fine
+        let s_2 = C1::generate_scalar(csprng);
+        let s_1 = C1::generate_scalar(csprng);
+        let t = C1::generate_scalar(csprng);
+        Some(Witness {
+            witness: (s_1, s_2, t),
+        })
+    }
+
     #[cfg(test)]
     #[allow(clippy::many_single_char_names)]
     fn with_valid_data<R: Rng>(

@@ -122,6 +122,12 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         })
     }
 
+    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+        let s = C::generate_scalar(csprng);
+        let t = C::generate_scalar(csprng);
+        Some(Witness { witness: (s, t) })
+    }
+
     #[cfg(test)]
     #[allow(clippy::many_single_char_names)]
     fn with_valid_data<R: rand::Rng>(
