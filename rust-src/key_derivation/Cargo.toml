@@ -32,13 +32,13 @@ version = "0"
 path = "../id"
 version = "0"
 
+[dependencies.crypto_common]
+path = "../crypto_common"
+version = "0"
+
 [lib]
 name = "key_derivation"
 crate-type = ["rlib"]
 
 [dev-dependencies]
 hex = "0.4.3"
-
-[dev-dependencies.crypto_common]
-path = "../crypto_common"
-version = "0"
