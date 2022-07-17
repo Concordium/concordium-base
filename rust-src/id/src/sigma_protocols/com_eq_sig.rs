@@ -73,6 +73,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
     #[inline]
     fn commit_point<R: Rng>(
         &self,
+        _secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let g_tilda = self.ps_pub_key.g_tilda;

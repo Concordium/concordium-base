@@ -55,6 +55,7 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
     #[inline]
     fn commit_point<R: rand::Rng>(
         &self,
+        _secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let alpha_1 = Value::generate_non_zero(csprng);

@@ -65,6 +65,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
 
     fn commit_point<R: rand::Rng>(
         &self,
+        _secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let mut u = C::zero_point();

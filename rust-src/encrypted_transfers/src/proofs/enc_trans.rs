@@ -191,6 +191,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 
     fn commit_point<R: rand::Rng>(
         &self,
+        secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         // For enc_exps:
@@ -200,8 +201,11 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut rands_encexp_2 = Vec::with_capacity(self.encexp2.len());
         let mut Rs_a = vec![];
         let mut Rs_s_prime = vec![];
-        for comeq in &self.encexp1 {
-            match comeq.commit_point(csprng) {
+        if secret.encexp1_secrets.len() != self.encexp1.len(){
+            return None
+        }
+        for (comeq,s) in izip!(&self.encexp1,&secret.encexp1_secrets) {
+            match comeq.commit_point(s,csprng) {
                 Some((comm_point, (alpha, R_i))) => {
                     rands_encexp_1.push((alpha, R_i.clone()));
                     commit_encexp_1.push(comm_point);
@@ -210,8 +214,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
                 None => return None,
             };
         }
-        for comeq in &self.encexp2 {
-            match comeq.commit_point(csprng) {
+        for (comeq,s) in izip!(&self.encexp2,&secret.encexp2_secrets) {
+            match comeq.commit_point(s,csprng) {
                 Some((comm_point, (alpha, R_s))) => {
                     rands_encexp_2.push((alpha, R_s.clone()));
                     commit_encexp_2.push(comm_point);

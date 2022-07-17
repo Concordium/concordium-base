@@ -45,6 +45,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
 
     fn commit_point<R: rand::Rng>(
         &self,
+        _secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let rand_scalar_common = C::generate_non_zero_scalar(csprng);

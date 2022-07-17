@@ -45,6 +45,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
 
     fn commit_point<R: rand::Rng>(
         &self,
+        _secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         // Make sure our data is consistent.

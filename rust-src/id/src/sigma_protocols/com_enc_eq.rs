@@ -73,6 +73,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     #[inline]
     fn commit_point<R: Rng>(
         &self,
+        _secret: &Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let beta = Value::generate_non_zero(csprng);
