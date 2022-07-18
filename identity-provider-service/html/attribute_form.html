@@ -8,8 +8,8 @@ world scenario the attributes will be derived from the identity verification pro
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style>
-    input[type=text], select {
-      width: 100%;
+   input[type=text], input[type=number], input[type=month], select {
+       width: 100%;
       padding: 12px 20px;
       margin: 8px 0;
       display: inline-block;
@@ -39,6 +39,14 @@ world scenario the attributes will be derived from the identity verification pro
       padding: 20px;
     }
   </style>
+  <script>
+   document.addEventListener('DOMContentLoaded', function() {
+       let date = new Date();
+       let month = `${date.getMonth() + 1}`.padStart(2, "0");
+       let year = date.getFullYear() + 1;
+       document.getElementById("expiry").value = `${year}-${month}`
+   });
+  </script>
 </head>
 <body>
   <div>
@@ -51,9 +59,12 @@ world scenario the attributes will be derived from the identity verification pro
 
         <label for="fail">Fail identity</label>
         <input type="checkbox" id="fail" name="fail" value="True">
+        <br/>
         <label for="fail_delay">Delay until fail</label>
         <input type="number" id="fail_delay" name="fail_delay" value="10">
-        <br/>
+
+        <label for="expiry">Identity expiry</label>
+        <input type="month" id="expiry" name="expiry" required="required">
 
         <label for="fname">First Name</label>
         <input type="text" id="fname" name="firstName" value="John">

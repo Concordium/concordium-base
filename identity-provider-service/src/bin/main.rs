@@ -177,7 +177,6 @@ struct DB {
     /// as well as to the filesystem, which is implicit. In a real database
     /// this would be done differently.
     pending:     Arc<Mutex<HashMap<String, PendingEntry>>>,
-
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
@@ -209,6 +208,12 @@ struct InitialAccountReponse {
 struct PendingEntry {
     pub status: PendingStatus,
     pub value:  serde_json::Value,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WithExpiry {
+    pub expiry: YearMonth,
 }
 
 impl ServerConfig {
@@ -808,12 +813,14 @@ async fn main() -> anyhow::Result<()> {
     // verified attributes.
     let create_identity = warp::get()
         .and(warp::path!("api" / "v0" / "identity" / "create" / String))
-        .and_then(move |id_cred_pub_hash: String| {
+        .and(warp::query::<WithExpiry>())
+        .and_then(move |id_cred_pub_hash: String, parameters: WithExpiry| {
             create_signed_identity_object(
                 Arc::clone(&server_config),
                 Arc::clone(&create_db),
                 client.clone(),
                 id_cred_pub_hash,
+                parameters.expiry,
             )
         });
 
@@ -822,32 +829,40 @@ async fn main() -> anyhow::Result<()> {
     // verified attributes.
     let create_identity_v1 = warp::get()
         .and(warp::path!("api" / "v1" / "identity" / "create" / String))
-        .and_then(move |id_cred_pub_hash: String| {
+        .and(warp::query::<WithExpiry>())
+        .and_then(move |id_cred_pub_hash: String, parameters: WithExpiry| {
             create_signed_identity_object_v1(
                 Arc::clone(&server_config_create_v1),
                 Arc::clone(&create_db_v1),
                 client_v1.clone(),
                 id_cred_pub_hash,
+                parameters.expiry,
             )
         });
 
     let fail_identity = warp::get()
         .and(warp::path!("api" / String / "identity" / "fail" / String))
         .and(warp::query())
-        .and_then(move |version: String, id_cred_pub_hash: String, query: HashMap<String, String>| {
-            let delay = query.get("delay").map(|d| match d.parse::<u64>() {
-                Ok(v) => Some(v),
-                _ => None
-            }).flatten().unwrap_or(10);
+        .and_then(
+            move |version: String, id_cred_pub_hash: String, query: HashMap<String, String>| {
+                let delay = query
+                    .get("delay")
+                    .map(|d| match d.parse::<u64>() {
+                        Ok(v) => Some(v),
+                        _ => None,
+                    })
+                    .flatten()
+                    .unwrap_or(10);
 
-            create_failed_identity(
-                Arc::clone(&server_config_fail),
-                Arc::clone(&fail_db),
-                version,
-                id_cred_pub_hash,
-                delay
-            )
-        });
+                create_failed_identity(
+                    Arc::clone(&server_config_fail),
+                    Arc::clone(&fail_db),
+                    version,
+                    id_cred_pub_hash,
+                    delay,
+                )
+            },
+        );
 
     let retrieve_failed_identity = warp::get()
         .and(warp::path!("api" / "identity" / "retrieve_failed" / u64))
@@ -1135,6 +1150,7 @@ async fn create_signed_identity_object(
     db: Arc<DB>,
     client: Client,
     id_cred_pub_hash: String,
+    expiry: YearMonth,
 ) -> Result<impl Reply, Rejection> {
     // Read the validated request from the database.
     let identity_object_input = match db.read_request_record(&id_cred_pub_hash) {
@@ -1191,13 +1207,9 @@ async fn create_signed_identity_object(
     // This is hardcoded for the proof-of-concept.
     // Expiry is a year from now.
     let now = YearMonth::now();
-    let valid_to_next_year = YearMonth {
-        year:  now.year + 1,
-        month: now.month,
-    };
 
     let alist = ExampleAttributeList {
-        valid_to:     valid_to_next_year,
+        valid_to:     expiry,
         created_at:   now,
         alist:        attribute_list,
         max_accounts: 200,
@@ -1314,13 +1326,14 @@ async fn create_failed_identity(
     db: Arc<DB>,
     id_cred_pub_hash: String,
     version: String,
-    delay: u64
+    delay: u64,
 ) -> Result<impl Reply, Rejection> {
-
     let redirect_uri = match if version.eq("v0") {
-        db.read_request_record(&id_cred_pub_hash).map(|r| r.redirect_uri)
+        db.read_request_record(&id_cred_pub_hash)
+            .map(|r| r.redirect_uri)
     } else if version.eq("v1") {
-        db.read_request_record_v1(&id_cred_pub_hash).map(|r| r.redirect_uri)
+        db.read_request_record_v1(&id_cred_pub_hash)
+            .map(|r| r.redirect_uri)
     } else {
         return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
     } {
@@ -1339,9 +1352,11 @@ async fn create_failed_identity(
     // The callback_location has to point to the location where the wallet can
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
-    retrieve_url.set_path(&format!("api/identity/retrieve_failed/{}", chrono::offset::Utc::now().timestamp() as u64 + delay));
-    let callback_location =
-        redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+    retrieve_url.set_path(&format!(
+        "api/identity/retrieve_failed/{}",
+        chrono::offset::Utc::now().timestamp() as u64 + delay
+    ));
+    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
@@ -1351,9 +1366,7 @@ async fn create_failed_identity(
     ))
 }
 
-async fn retrieve_failed_identity(
-    delay_until: u64
-) -> Result<impl Reply, Rejection> {
+async fn retrieve_failed_identity(delay_until: u64) -> Result<impl Reply, Rejection> {
     if (chrono::offset::Utc::now().timestamp() as u64) < delay_until {
         info!("Failed Identity object not resolved yet.");
         let identity_token_container = IdentityTokenContainer {
@@ -1384,6 +1397,7 @@ async fn create_signed_identity_object_v1(
     db: Arc<DB>,
     client: Client,
     id_cred_pub_hash: String,
+    expiry: YearMonth,
 ) -> Result<impl Reply, Rejection> {
     // Read the validated request from the database.
     let identity_object_input = match db.read_request_record_v1(&id_cred_pub_hash) {
@@ -1436,17 +1450,14 @@ async fn create_signed_identity_object_v1(
     // record and the identity object are persisted, so that they can be
     // retrieved when needed. The constructed response contains a redirect to a
     // webservice that returns the identity object constructed here.
-
     // This is hardcoded for the proof-of-concept.
+
     // Expiry is a year from now.
+
     let now = YearMonth::now();
-    let valid_to_next_year = YearMonth {
-        year:  now.year + 1,
-        month: now.month,
-    };
 
     let alist = ExampleAttributeList {
-        valid_to:     valid_to_next_year,
+        valid_to:     expiry,
         created_at:   now,
         alist:        attribute_list,
         max_accounts: 200,

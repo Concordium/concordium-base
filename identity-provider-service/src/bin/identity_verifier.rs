@@ -118,7 +118,6 @@ async fn main() {
             .and(warp::path!("api" / "submit"))
             .and(
                 warp::body::form().map(move |mut input: BTreeMap<String, String>| {
-
                     let id_cred_pub_hash = match input.get("id_cred_pub") {
                         Some(hash) => hash.clone(),
                         None => {
@@ -129,7 +128,10 @@ async fn main() {
                     };
 
                     if input.get("fail").is_some() {
-                        let delay = input.get("fail_delay").map(|delay| delay.clone()).unwrap_or("10".to_string());
+                        let delay = input
+                            .get("fail_delay")
+                            .cloned()
+                            .unwrap_or_else(|| "10".to_string());
                         let location = format!(
                             "{}api/identity/fail/{}?delay={}",
                             id_provider_url, id_cred_pub_hash, delay
@@ -208,6 +210,12 @@ async fn main() {
                         }
                     }
 
+                    let expiry = input
+                        .get("expiry")
+                        .map(|delay| delay.replace("-", ""))
+                        .unwrap();
+                    input.remove("expiry");
+
                     // The signature was valid, so save the received attributes to the file
                     // database.
 
@@ -231,8 +239,8 @@ async fn main() {
                     };
 
                     let location = format!(
-                        "{}api/{}/create/{}",
-                        id_provider_url, identity_endpoint, id_cred_pub_hash
+                        "{}api/{}/create/{}?expiry={}",
+                        id_provider_url, identity_endpoint, id_cred_pub_hash, expiry
                     );
                     Response::builder()
                         .header(LOCATION, location)
