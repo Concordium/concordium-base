@@ -27,7 +27,7 @@ pub fn test_or() {
             .expect("Proving should succeed.");
         assert!(verify(&mut RandomOracle::domain("test"), &prover, &proof))
     });
-    //Knowledge of of one
+    //Knowledge of one
     OrAdapter::<
         AndAdapter<dlog::Dlog<G1>, com_eq_sig::ComEqSig<Bls12, G1>>,
         com_enc_eq::ComEncEq<G2>,
