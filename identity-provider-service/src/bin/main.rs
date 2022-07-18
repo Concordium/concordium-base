@@ -177,6 +177,7 @@ struct DB {
     /// as well as to the filesystem, which is implicit. In a real database
     /// this would be done differently.
     pending:     Arc<Mutex<HashMap<String, PendingEntry>>>,
+
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
@@ -763,12 +764,14 @@ async fn main() -> anyhow::Result<()> {
     let server_config_forward_v1 = Arc::clone(&server_config);
     let server_config_create_v1 = Arc::clone(&server_config);
     let server_config_validate_recovery = Arc::clone(&server_config);
+    let server_config_fail = Arc::clone(&server_config);
 
     let db_arc = Arc::new(db);
     let verify_db = Arc::clone(&db_arc);
     let verify_db_v1 = Arc::clone(&db_arc);
     let create_db = Arc::clone(&db_arc);
     let create_db_v1 = Arc::clone(&db_arc);
+    let fail_db = Arc::clone(&db_arc);
 
     // Endpoint for starting the identity creation flow. It will validate the
     // request and forward the user to the identity verification service.
@@ -828,6 +831,28 @@ async fn main() -> anyhow::Result<()> {
             )
         });
 
+    let fail_identity = warp::get()
+        .and(warp::path!("api" / String / "identity" / "fail" / String))
+        .and(warp::query())
+        .and_then(move |version: String, id_cred_pub_hash: String, query: HashMap<String, String>| {
+            let delay = query.get("delay").map(|d| match d.parse::<u64>() {
+                Ok(v) => Some(v),
+                _ => None
+            }).flatten().unwrap_or(10);
+
+            create_failed_identity(
+                Arc::clone(&server_config_fail),
+                Arc::clone(&fail_db),
+                version,
+                id_cred_pub_hash,
+                delay
+            )
+        });
+
+    let retrieve_failed_identity = warp::get()
+        .and(warp::path!("api" / "identity" / "retrieve_failed" / u64))
+        .and_then(retrieve_failed_identity);
+
     let recover_identity = warp::get()
         .and(warp::path!("api" / "v1" / "recover"))
         .and(validate_recovery_request(server_config_validate_recovery));
@@ -835,7 +860,9 @@ async fn main() -> anyhow::Result<()> {
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
     let server = verify_request
         .or(retrieve_identity)
+        .or(retrieve_failed_identity)
         .or(create_identity)
+        .or(fail_identity)
         .or(verify_request_v1)
         .or(retrieve_identity_v1)
         .or(create_identity_v1)
@@ -1280,6 +1307,70 @@ async fn create_signed_identity_object(
         warp::reply::with_header(warp::reply(), LOCATION, callback_location),
         StatusCode::FOUND,
     ))
+}
+
+async fn create_failed_identity(
+    server_config: Arc<ServerConfig>,
+    db: Arc<DB>,
+    id_cred_pub_hash: String,
+    version: String,
+    delay: u64
+) -> Result<impl Reply, Rejection> {
+
+    let redirect_uri = match if version.eq("v0") {
+        db.read_request_record(&id_cred_pub_hash).map(|r| r.redirect_uri)
+    } else if version.eq("v1") {
+        db.read_request_record_v1(&id_cred_pub_hash).map(|r| r.redirect_uri)
+    } else {
+        return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
+    } {
+        Ok(request) => request,
+        Err(e) => {
+            error!(
+                "Unable to read validated request for id_cred_pub {}, {}",
+                id_cred_pub_hash, e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::NoValidRequest));
+        }
+    };
+
+    // Read the validated request from the database.
+
+    // The callback_location has to point to the location where the wallet can
+    // retrieve the identity object when it is available.
+    let mut retrieve_url = server_config.retrieve_url.clone();
+    retrieve_url.set_path(&format!("api/identity/retrieve_failed/{}", chrono::offset::Utc::now().timestamp() as u64 + delay));
+    let callback_location =
+        redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+
+    info!("Identity was successfully created. Returning URI where it can be retrieved.");
+
+    Ok(warp::reply::with_status(
+        warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+        StatusCode::FOUND,
+    ))
+}
+
+async fn retrieve_failed_identity(
+    delay_until: u64
+) -> Result<impl Reply, Rejection> {
+    if (chrono::offset::Utc::now().timestamp() as u64) < delay_until {
+        info!("Failed Identity object not resolved yet.");
+        let identity_token_container = IdentityTokenContainer {
+            status: IdentityStatus::Pending,
+            detail: "Pending resolution.".to_string(),
+            token:  serde_json::Value::Null,
+        };
+        Ok(warp::reply::json(&identity_token_container))
+    } else {
+        let error_identity_token_container = IdentityTokenContainer {
+            status: IdentityStatus::Error,
+            detail: "Identity object has failed".to_string(),
+            token:  serde_json::Value::Null,
+        };
+        info!("Failed Identity object returned.");
+        Ok(warp::reply::json(&error_identity_token_container))
+    }
 }
 
 /// Checks for a validated request and checks with the identity verifier if

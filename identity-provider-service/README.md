@@ -59,17 +59,25 @@ the Android emulator calls the host machine.
 
 |Method|URL|Description|
 |---|---|---|
-|GET (+POST)|`http://[hostname]:[provider_port]/v0/api/identity`|The endpoint the wallet calls to initiate the version 0 identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
+|GET (+POST)|`http://[hostname]:[provider_port]/api/v0/identity`|The endpoint the wallet calls to initiate the version 0 identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
 |GET|`http://[hostname]:[provider_port]/api/v1/identity`|The endpoint the wallet calls to initiate the version 1 identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
 |GET|`http://[hostname]:[provider_port]/api/v0/identity/create/{base_16_encoded_id_cred_pub_hash}`|Endpoint that the identity verifier forwards the user to after having validated their attributes. If the user has created a valid set of attributes, then this endpoint will ensure that an identity is created.|
 |GET|`http://[hostname]:[provider_port]/api/v1/identity/create/{base_16_encoded_id_cred_pub_hash}`|Endpoint that the identity verifier forwards the user to after having validated their attributes in the version 1 flow. If the user has created a valid set of attributes, then this endpoint will ensure that an identity is created.|
 |GET|`http://[hostname]:[provider_port]/api/v0/identity/{base_16_encoded_id_cred_pub_hash}`|The endpoint that exposes access to created identity objects. The caller will be redirected to this URL after creation of an identity object, so that they can retrieve it.|
 |GET|`http://[hostname]:[provider_port]/api/v1/identity/{base_16_encoded_id_cred_pub_hash}`|The endpoint that exposes access to created identity objects. The caller will be redirected to this URL after creation of an identity object, so that they can retrieve it.|
-|GET|`http://[hostname]:[verifier_port]/api/{v0|v1}/verify/{base_16_encoded_id_cred_pub_hash}/{signature}`|An endpoint that simulates an identity verifier. The endpoint presents an HTML form where the user can submit their attributes which will always be accepted. In a real world application the attributes would have to be verified.|
+|GET|`http://[hostname]:[verifier_port]/api/{v0\|v1}/verify/{base_16_encoded_id_cred_pub_hash}/{signature}`|An endpoint that simulates an identity verifier. The endpoint presents an HTML form where the user can submit their attributes which will always be accepted. In a real world application the attributes would have to be verified.|
 |POST|`http://[hostname]:[verifier_port]/api/submit/`|Accepts submissions from the HTML for served by the verifier. The attributes are saved to a file database. No verification of the attributes are performed for the POC.|
 |GET|`http://[hostname]:[verifier_port]/api/verify/attributes/{id_cred_pub}`|Provides read access to saved attributes. The identity provider accesses this endpoint to get attributes, and assumes that if an attribute list exists, then the user has been verified successfully.|
 
 The POST method is only there for historical reasons. The GET method is the one in use.
+
+The following are endpoints added for testing purposes, and are not necessarily part of the reference implementation.
+
+|Method|URL|Description|
+|---|---|---|
+|GET|`http://[hostname]:[provider_port]/api/{v0\|v1}/identity/fail/{base_16_encoded_id_cred_pub_hash}?delay={seconds_delay}`|Endpoint that the identity verifier forwards the user to for a failed identity. The delay parameter specifies how many seconds until the request should fail.|
+|GET|`http://[hostname]:[provider_port]/api/identity/retrieve_failed/{delay_until}`| Endpoint that the identity verifier forwards the user to for a failed identity.|
+
 
 The `state` field of the initial `GET` request should be urlencoded string
 containing valid JSON of the form

@@ -118,9 +118,7 @@ async fn main() {
             .and(warp::path!("api" / "submit"))
             .and(
                 warp::body::form().map(move |mut input: BTreeMap<String, String>| {
-                    info!(
-                        "Saving verified attributes and forwarding user back to identity provider."
-                    );
+
                     let id_cred_pub_hash = match input.get("id_cred_pub") {
                         Some(hash) => hash.clone(),
                         None => {
@@ -129,6 +127,24 @@ async fn main() {
                                 .body("id_cred_pub not present.".to_string());
                         }
                     };
+
+                    if input.get("fail").is_some() {
+                        let delay = input.get("fail_delay").map(|delay| delay.clone()).unwrap_or("10".to_string());
+                        let location = format!(
+                            "{}api/identity/fail/{}?delay={}",
+                            id_provider_url, id_cred_pub_hash, delay
+                        );
+                        return Response::builder()
+                            .header(LOCATION, location)
+                            .status(StatusCode::FOUND)
+                            .body("Ok".to_string());
+                    }
+                    input.remove("fail_delay");
+
+                    info!(
+                        "Saving verified attributes and forwarding user back to identity provider."
+                    );
+
                     let id_cred_pub_hash_bytes = hex::decode(&id_cred_pub_hash).unwrap();
                     input.remove("id_cred_pub");
 
