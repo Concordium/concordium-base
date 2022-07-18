@@ -242,16 +242,19 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         paired.map(|paired| (paired, cmms))
     }
 
-    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
-        //TODO: Check if we use the right scalars
+    fn emulate_witness<R: rand::Rng>(&self, csprng: &mut R) -> Option<Self::ProverWitness> {
+        // TODO: Check if we use the right scalars
         let witness_rho = C::generate_scalar(csprng);
         let mut witness_commit = vec![];
         for _ in self.commitments.iter() {
             let c1 = C::generate_scalar(csprng);
             let c2 = C::generate_scalar(csprng);
-            witness_commit.push((c1,c2));
+            witness_commit.push((c1, c2));
         }
-        Some(Witness {witness_rho,witness_commit,})
+        Some(Witness {
+            witness_rho,
+            witness_commit,
+        })
     }
 
     #[cfg(test)]

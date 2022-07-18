@@ -134,7 +134,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         Some((dlog_point, agg_points))
     }
 
-    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+    fn emulate_witness<R: rand::Rng>(&self, csprng: &mut R) -> Option<Self::ProverWitness> {
         let mut witnesses = vec![];
         for aggregate_dlog in &self.aggregate_dlogs {
             let mut witness = vec![];
@@ -143,13 +143,12 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             }
             witnesses.push(witness);
         }
-        let witness_common  = C::generate_scalar(csprng);
+        let witness_common = C::generate_scalar(csprng);
         Some(Witness {
             witnesses,
             witness_common,
         })
     }
-
 }
 
 #[cfg(test)]

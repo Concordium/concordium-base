@@ -94,7 +94,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         Some(point)
     }
 
-    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+    fn emulate_witness<R: rand::Rng>(&self, csprng: &mut R) -> Option<Self::ProverWitness> {
         let mut witness = vec![];
         for _ in self.coeff.iter() {
             witness.push(C::generate_scalar(csprng));

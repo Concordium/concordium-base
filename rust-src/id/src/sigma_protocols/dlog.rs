@@ -81,10 +81,10 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         Some(randomised_point)
     }
 
-    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+    fn emulate_witness<R: rand::Rng>(&self, csprng: &mut R) -> Option<Self::ProverWitness> {
         let witness = C::generate_scalar(csprng);
         Some(Witness { witness })
-    } 
+    }
 
     #[cfg(test)]
     fn with_valid_data<R: rand::Rng>(

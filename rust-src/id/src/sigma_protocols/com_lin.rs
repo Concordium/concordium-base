@@ -174,11 +174,11 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         Some(cm)
     }
 
-    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+    fn emulate_witness<R: rand::Rng>(&self, csprng: &mut R) -> Option<Self::ProverWitness> {
         let n = self.cmms.len();
         let mut zs = Vec::with_capacity(n);
         let mut ss = Vec::with_capacity(n);
-        for i in 0..n{
+        for i in 0..n {
             zs[i] = C::generate_scalar(csprng);
             ss[i] = C::generate_scalar(csprng);
         }

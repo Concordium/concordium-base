@@ -201,11 +201,11 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut rands_encexp_2 = Vec::with_capacity(self.encexp2.len());
         let mut Rs_a = vec![];
         let mut Rs_s_prime = vec![];
-        if secret.encexp1_secrets.len() != self.encexp1.len(){
-            return None
+        if secret.encexp1_secrets.len() != self.encexp1.len() {
+            return None;
         }
-        for (comeq,s) in izip!(&self.encexp1,&secret.encexp1_secrets) {
-            match comeq.commit_point(s,csprng) {
+        for (comeq, s) in izip!(&self.encexp1, &secret.encexp1_secrets) {
+            match comeq.commit_point(s, csprng) {
                 Some((comm_point, (alpha, R_i))) => {
                     rands_encexp_1.push((alpha, R_i.clone()));
                     commit_encexp_1.push(comm_point);
@@ -214,8 +214,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
                 None => return None,
             };
         }
-        for (comeq,s) in izip!(&self.encexp2,&secret.encexp2_secrets) {
-            match comeq.commit_point(s,csprng) {
+        for (comeq, s) in izip!(&self.encexp2, &secret.encexp2_secrets) {
+            match comeq.commit_point(s, csprng) {
                 Some((comm_point, (alpha, R_s))) => {
                     rands_encexp_2.push((alpha, R_s.clone()));
                     commit_encexp_2.push(comm_point);
@@ -352,14 +352,14 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         })
     }
 
-    fn emulate_witness<R: rand::Rng>(&self,csprng: &mut R) -> Option<Self::ProverWitness> {
+    fn emulate_witness<R: rand::Rng>(&self, csprng: &mut R) -> Option<Self::ProverWitness> {
         let witness_common = C::generate_scalar(csprng);
         let mut witness_encexp1 = vec![];
         for prot in &self.encexp1 {
             match prot.emulate_witness(csprng) {
                 Some(w) => {
                     witness_encexp1.push(w);
-                },
+                }
                 None => return None,
             }
         }
@@ -368,7 +368,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             match prot.emulate_witness(csprng) {
                 Some(w) => {
                     witness_encexp2.push(w);
-                },
+                }
                 None => return None,
             }
         }
@@ -376,9 +376,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             witness_common,
             witness_encexp1,
             witness_encexp2,
-        })    
+        })
     }
-
 }
 
 #[cfg(test)]

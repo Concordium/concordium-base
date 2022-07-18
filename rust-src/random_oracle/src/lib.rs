@@ -19,26 +19,24 @@ pub struct Challenge {
     challenge: [u8; 32],
 }
 
-impl Challenge{
-
+impl Challenge {
     pub fn xor_challenge(c1: &Challenge, c2: &Challenge) -> Challenge {
         let c1_bytes = c1.as_ref();
         let c2_bytes = c2.as_ref();
-        let mut challenge = [0;32];
+        let mut challenge = [0; 32];
         for ((z, &x_i), &y_i) in challenge.iter_mut().zip(c1_bytes).zip(c2_bytes) {
             *z = x_i ^ y_i;
         }
-        Challenge{challenge}
-    }
-    
-    pub fn get_rnd_challenge<R: rand::Rng>(csprng: &mut R) -> Challenge {
-        let mut challenge = [0;32];
-        for i in 0..challenge.len(){
-            challenge[i] = csprng.gen::<u8>();
-        }
-        Challenge{challenge}
+        Challenge { challenge }
     }
 
+    pub fn get_rnd_challenge<R: rand::Rng>(csprng: &mut R) -> Challenge {
+        let mut challenge = [0; 32];
+        for i in 0..challenge.len() {
+            challenge[i] = csprng.gen::<u8>();
+        }
+        Challenge { challenge }
+    }
 }
 
 impl AsRef<[u8]> for Challenge {
