@@ -866,7 +866,7 @@ async fn main() -> anyhow::Result<()> {
 
     let retrieve_failed_identity = warp::get()
         .and(warp::path!("api" / "identity" / "retrieve_failed" / u64))
-        .and_then(retrieve_failed_identity);
+        .and_then(retrieve_failed_identity_token);
 
     let recover_identity = warp::get()
         .and(warp::path!("api" / "v1" / "recover"))
@@ -1321,71 +1321,6 @@ async fn create_signed_identity_object(
     ))
 }
 
-async fn create_failed_identity(
-    server_config: Arc<ServerConfig>,
-    db: Arc<DB>,
-    id_cred_pub_hash: String,
-    version: String,
-    delay: u64,
-) -> Result<impl Reply, Rejection> {
-    let redirect_uri = match if version.eq("v0") {
-        db.read_request_record(&id_cred_pub_hash)
-            .map(|r| r.redirect_uri)
-    } else if version.eq("v1") {
-        db.read_request_record_v1(&id_cred_pub_hash)
-            .map(|r| r.redirect_uri)
-    } else {
-        return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
-    } {
-        Ok(request) => request,
-        Err(e) => {
-            error!(
-                "Unable to read validated request for id_cred_pub {}, {}",
-                id_cred_pub_hash, e
-            );
-            return Err(warp::reject::custom(IdRequestRejection::NoValidRequest));
-        }
-    };
-
-    // Read the validated request from the database.
-
-    // The callback_location has to point to the location where the wallet can
-    // retrieve the identity object when it is available.
-    let mut retrieve_url = server_config.retrieve_url.clone();
-    retrieve_url.set_path(&format!(
-        "api/identity/retrieve_failed/{}",
-        chrono::offset::Utc::now().timestamp() as u64 + delay
-    ));
-    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
-
-    info!("Identity was successfully created. Returning URI where it can be retrieved.");
-
-    Ok(warp::reply::with_status(
-        warp::reply::with_header(warp::reply(), LOCATION, callback_location),
-        StatusCode::FOUND,
-    ))
-}
-
-async fn retrieve_failed_identity(delay_until: u64) -> Result<impl Reply, Rejection> {
-    if (chrono::offset::Utc::now().timestamp() as u64) < delay_until {
-        info!("Failed Identity object not resolved yet.");
-        let identity_token_container = IdentityTokenContainer {
-            status: IdentityStatus::Pending,
-            detail: "Pending resolution.".to_string(),
-            token:  serde_json::Value::Null,
-        };
-        Ok(warp::reply::json(&identity_token_container))
-    } else {
-        let error_identity_token_container = IdentityTokenContainer {
-            status: IdentityStatus::Error,
-            detail: "Identity object has failed".to_string(),
-            token:  serde_json::Value::Null,
-        };
-        info!("Failed Identity object returned.");
-        Ok(warp::reply::json(&error_identity_token_container))
-    }
-}
-
 /// Checks for a validated request and checks with the identity verifier if
 /// there is a verified attribute list for this person. If there is an attribute
 /// list, then it is used to create the identity object that is then signed and
@@ -1802,6 +1737,76 @@ fn save_revocation_record_v1<A: Attribute<id::constants::BaseField>>(
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
     db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
+}
+
+/// Checks for a validated request.
+// If successful a re-direct to the URL, where the failed identity object will
+/// available, is returned.
+async fn create_failed_identity(
+    server_config: Arc<ServerConfig>,
+    db: Arc<DB>,
+    id_cred_pub_hash: String,
+    version: String,
+    delay: u64,
+) -> Result<impl Reply, Rejection> {
+    // Read the validated request from the database to get the redirect URI.
+    let redirect_uri = match if version.eq("v0") {
+        db.read_request_record(&id_cred_pub_hash)
+            .map(|r| r.redirect_uri)
+    } else if version.eq("v1") {
+        db.read_request_record_v1(&id_cred_pub_hash)
+            .map(|r| r.redirect_uri)
+    } else {
+        return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
+    } {
+        Ok(request) => request,
+        Err(e) => {
+            error!(
+                "Unable to read validated request for id_cred_pub {}, {}",
+                id_cred_pub_hash, e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::NoValidRequest));
+        }
+    };
+
+    // The callback_location has to point to the location where the wallet can
+    // retrieve the identity object when it is available.
+    let mut retrieve_url = server_config.retrieve_url.clone();
+    retrieve_url.set_path(&format!(
+        "api/identity/retrieve_failed/{}",
+        chrono::offset::Utc::now().timestamp() as u64 + delay
+    ));
+    let call
+        back_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
+
+    info!("Identity was successfully created. Returning URI where it can be retrieved.");
+
+    Ok(warp::reply::with_status(
+        warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+        StatusCode::FOUND,
+    ))
+}
+
+/// A pending token is returned if the delay_until timestamp is still in the future.
+/// Otherwise a failed identity object is returned.
+async fn retrieve_failed_identity_token(delay_until: u64) -> Result<impl Reply, Rejection> {
+    if (chrono::offset::Utc::now().timestamp() as u64) < delay_until {
+        info!("Failed Identity object not resolved yet.");
+        let identity_token_container = IdentityTokenContainer {
+            status: IdentityStatus::Pending,
+            detail: "Pending resolution.".to_string(),
+            token:  serde_json::Value::Null,
+        };
+        Ok(warp::reply::json(&identity_token_container))
+    } else {
+        let error_identity_token_container = IdentityTokenContainer {
+            status: IdentityStatus::Error,
+            detail: "Identity object has failed".to_string(),
+            token:  serde_json::Value::Null,
+        };
+        info!("Failed Identity object returned.");
+        Ok(warp::reply::json(&error_identity_token_container))
+    }
 }
 
 #[cfg(test)]
