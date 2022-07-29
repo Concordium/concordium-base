@@ -78,6 +78,9 @@ impl fmt::Display for AmountParseError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for AmountParseError {}
+
 /// Parse from string in CCD units. The input string must be of the form
 /// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
 /// that that part is optional.
@@ -394,6 +397,9 @@ impl fmt::Display for ParseTimestampError {
 }
 
 #[cfg(feature = "derive-serde")]
+impl std::error::Error for ParseTimestampError {}
+
+#[cfg(feature = "derive-serde")]
 /// The FromStr parses the time according to RFC3339.
 impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
@@ -525,6 +531,9 @@ impl fmt::Display for ParseDurationError {
         }
     }
 }
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseDurationError {}
 
 /// Parse a string containing a list of duration measures separated by
 /// whitespaces. A measure is a number followed by the unit (no whitespace
@@ -770,6 +779,9 @@ impl fmt::Display for NewContractNameError {
         }
     }
 }
+
+#[cfg(feature = "std")]
+impl std::error::Error for NewContractNameError {}
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
@@ -1044,6 +1056,9 @@ impl fmt::Display for NewReceiveNameError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for NewReceiveNameError {}
+
 /// Time at the beginning of the current slot, in miliseconds since unix epoch.
 pub type SlotTime = Timestamp;
 
@@ -1309,6 +1324,13 @@ pub struct ParseError {}
 /// A type alias used to indicate that the value is a result
 /// of parsing from binary via the `Serial` instance.
 pub type ParseResult<A> = Result<A, ParseError>;
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "Parsing failed") }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseError {}
 
 #[cfg(feature = "derive-serde")]
 mod serde_impl {

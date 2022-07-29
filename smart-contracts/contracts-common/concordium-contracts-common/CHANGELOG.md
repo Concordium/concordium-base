@@ -11,6 +11,7 @@
 - Implement `Seek` for `Cursor<T>` when `T` implements `HasSize`.
 - Add traits `Serial`, `Deserial`, `SerialCtx` and `DeserialCtx`.
 - Add procedural macros for deriving `Serial` and `Deserial`.
+- Implement `std::error:Error` for error types, when `std` feature is enabled.
 
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 
