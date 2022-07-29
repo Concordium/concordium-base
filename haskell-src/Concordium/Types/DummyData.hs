@@ -75,7 +75,7 @@ makeTransferTransaction (fromKP, fromAddress) toAddress amount n =
             thNonce = n,
             thSender = fromAddress,
             -- The cost needs to be in-line with that in the scheduler
-            thEnergyAmount = Cost.baseCost (fromIntegral $ payloadSize payload) 1 + Cost.simpleTransferCost,
+            thEnergyAmount = Cost.baseCost (transactionHeaderSize + fromIntegral (payloadSize payload)) 1 + Cost.simpleTransferCost,
             thExpiry = dummyMaxTransactionExpiryTime,
             thPayloadSize = payloadSize payload
         }
