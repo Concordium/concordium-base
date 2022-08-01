@@ -49,14 +49,12 @@ version = "0.2"
 
 [dependencies.concordium-contracts-common-derive]
 path = "../concordium-contracts-common-derive"
-optional = true
 version = "*"
 
 [features]
 default = ["std"]
 
 std = ["fnv/std"]
-derive = ["concordium-contracts-common-derive"]
 derive-serde = ["serde", "serde_json", "std", "base58check", "chrono", "num-bigint", "num-traits"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
