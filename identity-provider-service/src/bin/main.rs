@@ -840,6 +840,10 @@ async fn main() -> anyhow::Result<()> {
             )
         });
 
+    // Endpoint for creating failed identities. The identity verification service
+    // will forward the user to this endpoint after they have created a list of
+    // verified attributes, and chosen to fail the identity.
+    // N.B. This is used for testing
     let fail_identity = warp::get()
         .and(warp::path!("api" / String / "identity" / "fail" / String))
         .and(warp::query())
@@ -861,6 +865,8 @@ async fn main() -> anyhow::Result<()> {
             },
         );
 
+    // The endpoint for querying a intentionly failed identity object.
+    // N.B. This is used for testing
     let retrieve_failed_identity = warp::get()
         .and(warp::path!("api" / "identity" / "retrieve_failed" / u64))
         .and_then(retrieve_failed_identity_token);
@@ -868,6 +874,13 @@ async fn main() -> anyhow::Result<()> {
     let recover_identity = warp::get()
         .and(warp::path!("api" / "v1" / "recover"))
         .and(validate_recovery_request(server_config_validate_recovery));
+
+    // A broken Endpoint for starting the identity creation flow
+    // It will always return an error.
+    // N.B. This is used for testing
+    let broken_endpoint = warp::get()
+        .and(warp::path!("api" / "broken" / "identity"))
+        .and_then(get_broken_reply);
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
     let server = verify_request
@@ -879,6 +892,7 @@ async fn main() -> anyhow::Result<()> {
         .or(retrieve_identity_v1)
         .or(create_identity_v1)
         .or(recover_identity)
+        .or(broken_endpoint)
         .recover(handle_rejection);
     warp::serve(server).run(([0, 0, 0, 0], opt.port)).await;
     Ok(())
@@ -1775,7 +1789,7 @@ async fn create_failed_identity(
     ));
     let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
-    info!("Identity was successfully created. Returning URI where it can be retrieved.");
+    info!("Successfully created a failed identity. Returning URI where it can be retrieved.");
 
     Ok(warp::reply::with_status(
         warp::reply::with_header(warp::reply(), LOCATION, callback_location),
@@ -1783,11 +1797,11 @@ async fn create_failed_identity(
     ))
 }
 
-/// A pending token is returned if the delay_until timestamp is still in the future.
-/// Otherwise a failed identity object is returned.
+/// A pending token is returned if the delay_until timestamp is still in the
+/// future. Otherwise a failed identity object is returned.
 async fn retrieve_failed_identity_token(delay_until: u64) -> Result<impl Reply, Rejection> {
     if (chrono::offset::Utc::now().timestamp() as u64) < delay_until {
-        info!("Failed Identity object not resolved yet.");
+        info!("Failed Identity object is not past delay yet.");
         let identity_token_container = IdentityTokenContainer {
             status: IdentityStatus::Pending,
             detail: "Pending resolution.".to_string(),
@@ -1803,6 +1817,15 @@ async fn retrieve_failed_identity_token(delay_until: u64) -> Result<impl Reply, 
         info!("Failed Identity object returned.");
         Ok(warp::reply::json(&error_identity_token_container))
     }
+}
+
+/// Builds the reply for the broken response.
+async fn get_broken_reply() -> Result<impl Reply, Rejection> {
+    log::info!("Broken Endpoint was triggered.");
+    Ok(mk_reply(
+        "Broken Endpoint was used",
+        StatusCode::BAD_REQUEST,
+    ))
 }
 
 #[cfg(test)]

@@ -77,6 +77,7 @@ The following are endpoints added for testing purposes, and are not necessarily 
 |---|---|---|
 |GET|`http://[hostname]:[provider_port]/api/{v0\|v1}/identity/fail/{base_16_encoded_id_cred_pub_hash}?delay={seconds_delay}`|Endpoint that the identity verifier forwards the user to for a failed identity. The delay parameter specifies how many seconds until the request should fail.|
 |GET|`http://[hostname]:[provider_port]/api/identity/retrieve_failed/{delay_until}`| Endpoint that the identity verifier forwards the user to for a failed identity.|
+|GET|`http://[hostname]:[provider_port]/api/broken/identity`| Endpoint that a user can use to simulate a bad request. Returns a status code 400.|
 
 
 The `state` field of the initial `GET` request should be urlencoded string
