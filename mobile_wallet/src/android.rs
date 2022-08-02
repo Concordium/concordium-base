@@ -149,7 +149,7 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 /// The JNI wrapper for the `create_credential_v1` method.
 /// The `input` parameter must be a properly initalized `java.lang.String` that
 /// is non-null. The input must be valid JSON according to specified format
-pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1credential_v1(
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1credential_1v1(
     env: JNIEnv,
     _: JClass,
     input: JString,
