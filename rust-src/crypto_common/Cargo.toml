@@ -33,6 +33,11 @@ derive_more = "0.99"
 path = "../crypto_common_derive"
 version = "0"
 
+[dependencies.concordium-contracts-common]
+path = "../../concordium-contracts-common/concordium-contracts-common"
+version = "*"
+features = ["derive-serde"]
+
 [dev-dependencies]
 serde_json = "1.0"
 
