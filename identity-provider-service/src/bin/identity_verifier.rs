@@ -138,10 +138,14 @@ async fn main() {
                     input.remove("endpoint_version");
 
                     if input.get("fail").is_some() {
-                        let delay = input
-                            .get("fail_delay")
-                            .cloned()
-                            .unwrap_or_else(|| "10".to_string());
+                        let delay = match input.get("fail_delay") {
+                            Some(d) => d,
+                            None => {
+                                return Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body("expiry not present.".to_string());
+                            }
+                        };
                         let location = format!(
                             "{}api/{}/identity/fail/{}?delay={}",
                             id_provider_url, endpoint_version, id_cred_pub_hash, delay
@@ -210,15 +214,18 @@ async fn main() {
                         }
                     }
 
-                    let expiry = input
-                        .get("expiry")
-                        .map(|delay| delay.replace("-", ""))
-                        .unwrap();
+                    let expiry = match input.get("expiry") {
+                        Some(i) => i.replace("-", ""),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("expiry not present.".to_string());
+                        }
+                    };
                     input.remove("expiry");
 
                     // The signature was valid, so save the received attributes to the file
                     // database.
-
                     let file = match std::fs::File::create(
                         root_clone.join("attributes").join(&id_cred_pub_hash),
                     ) {

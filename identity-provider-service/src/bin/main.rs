@@ -137,7 +137,7 @@ enum IdentityStatus {
 
 /// The object that the wallet expects to be returned when polling for the
 /// identity object.
-#[derive(SerdeSerialize)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 struct IdentityTokenContainer {
     /// The status of the submission.
     status: IdentityStatus,
@@ -849,26 +849,28 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::query())
         .and_then(
             move |version: String, id_cred_pub_hash: String, query: HashMap<String, String>| {
-                let delay = query
-                    .get("delay")
-                    .map(|d| d.parse::<u64>().ok())
-                    .flatten()
-                    .unwrap_or(10);
+                let delay = match query.get("delay").map(|d| d.parse::<i64>().ok()).flatten() {
+                    Some(d) => d,
+                    None => {
+                        warn!("No delay query parameter present at identity/fail");
+                        10
+                    }
+                };
 
                 create_failed_identity(
                     Arc::clone(&server_config_fail),
                     Arc::clone(&fail_db),
-                    version,
                     id_cred_pub_hash,
+                    version,
                     delay,
                 )
             },
         );
 
-    // The endpoint for querying a intentionly failed identity object.
+    // The endpoint for querying a intentionally failed identity object.
     // N.B. This is used for testing
     let retrieve_failed_identity = warp::get()
-        .and(warp::path!("api" / "identity" / "retrieve_failed" / u64))
+        .and(warp::path!("api" / "identity" / "retrieve_failed" / i64))
         .and_then(retrieve_failed_identity_token);
 
     let recover_identity = warp::get()
@@ -1751,14 +1753,14 @@ fn save_revocation_record_v1<A: Attribute<id::constants::BaseField>>(
 }
 
 /// Checks for a validated request.
-// If successful a re-direct to the URL, where the failed identity object will
+/// If successful a re-direct to the URL, where the failed identity object will
 /// available, is returned.
 async fn create_failed_identity(
     server_config: Arc<ServerConfig>,
     db: Arc<DB>,
     id_cred_pub_hash: String,
     version: String,
-    delay: u64,
+    delay: i64,
 ) -> Result<impl Reply, Rejection> {
     // Read the validated request from the database to get the redirect URI.
     let redirect_uri = match if version.eq("v0") {
@@ -1785,7 +1787,7 @@ async fn create_failed_identity(
     let mut retrieve_url = server_config.retrieve_url.clone();
     retrieve_url.set_path(&format!(
         "api/identity/retrieve_failed/{}",
-        chrono::offset::Utc::now().timestamp() as u64 + delay
+        chrono::offset::Utc::now().timestamp() + delay
     ));
     let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
@@ -1799,8 +1801,8 @@ async fn create_failed_identity(
 
 /// A pending token is returned if the delay_until timestamp is still in the
 /// future. Otherwise a failed identity object is returned.
-async fn retrieve_failed_identity_token(delay_until: u64) -> Result<impl Reply, Rejection> {
-    if (chrono::offset::Utc::now().timestamp() as u64) < delay_until {
+async fn retrieve_failed_identity_token(delay_until: i64) -> Result<impl Reply, Rejection> {
+    if chrono::offset::Utc::now().timestamp() < delay_until {
         info!("Failed Identity object is not past delay yet.");
         let identity_token_container = IdentityTokenContainer {
             status: IdentityStatus::Pending,
@@ -1922,6 +1924,57 @@ mod tests {
             } else {
                 assert!(false, "Invalid request should not pass the filter.")
             }
+        });
+    }
+
+    #[test]
+    fn test_broken_endpoint() {
+        tokio_test::block_on(async {
+            let response = test::request()
+                .method("GET")
+                .reply(&warp::get().and_then(get_broken_reply))
+                .await;
+            // Then
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        });
+    }
+
+    #[test]
+    fn test_retrieve_failed_identity_token_before_delay_until() {
+        tokio_test::block_on(async {
+            let response = test::request()
+                .method("GET")
+                .path(&format!(
+                    "/{}",
+                    chrono::offset::Utc::now().timestamp() + 100
+                ))
+                .reply(
+                    &warp::get()
+                        .and(warp::path!(i64))
+                        .and_then(retrieve_failed_identity_token),
+                )
+                .await;
+            // Then
+            let body2: IdentityTokenContainer = serde_json::from_slice(response.body()).unwrap();
+            assert!(matches!(body2.status, IdentityStatus::Pending));
+        });
+    }
+
+    #[test]
+    fn test_retrieve_failed_identity_token_after_delay_until() {
+        tokio_test::block_on(async {
+            let response = test::request()
+                .method("GET")
+                .path(&format!("/{}", chrono::offset::Utc::now().timestamp() - 1))
+                .reply(
+                    &warp::get()
+                        .and(warp::path!(i64))
+                        .and_then(retrieve_failed_identity_token),
+                )
+                .await;
+            // Then
+            let body2: IdentityTokenContainer = serde_json::from_slice(response.body()).unwrap();
+            assert!(matches!(body2.status, IdentityStatus::Error));
         });
     }
 }
