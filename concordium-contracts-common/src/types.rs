@@ -32,6 +32,18 @@ pub struct Amount {
     pub micro_ccd: u64,
 }
 
+impl From<Amount> for u64 {
+    fn from(x: Amount) -> Self { x.micro_ccd }
+}
+
+impl From<u64> for Amount {
+    fn from(micro_ccd: u64) -> Self {
+        Amount {
+            micro_ccd,
+        }
+    }
+}
+
 #[cfg(feature = "derive-serde")]
 impl SerdeSerialize for Amount {
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
@@ -1421,6 +1433,74 @@ mod serde_impl {
 
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
             v.parse::<AccountAddress>().map_err(|_| de::Error::custom("Wrong Base58 version."))
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+        use rand::{
+            distributions::{Distribution, Uniform},
+            Rng,
+        };
+
+        #[test]
+        // test amount serialization is correct
+        fn amount_serialization() {
+            let mut rng = rand::thread_rng();
+            for _ in 0..1000 {
+                let micro_ccd = Amount::from(rng.gen::<u64>());
+                let s = micro_ccd.to_string();
+                let parsed = s.parse::<Amount>();
+                assert_eq!(Ok(micro_ccd), parsed, "Parsed amount differs from expected amount.");
+            }
+
+            assert_eq!(
+                "0.".parse::<Amount>(),
+                Err(AmountParseError::ExpectedMore),
+                "There must be at least one digit after dot."
+            );
+            assert_eq!(
+                "0.1234567".parse::<Amount>(),
+                Err(AmountParseError::AtMostSixDecimals),
+                "There can be at most 6 digits after dot."
+            );
+            assert_eq!(
+                "0.000000000".parse::<Amount>(),
+                Err(AmountParseError::AtMostSixDecimals),
+                "There can be at most 6 digits after dot."
+            );
+            assert_eq!(
+                "00.1234".parse::<Amount>(),
+                Err(AmountParseError::ExpectedDot),
+                "There can be at most one leading 0."
+            );
+            assert_eq!(
+                "01.1234".parse::<Amount>(),
+                Err(AmountParseError::ExpectedDot),
+                "Leading zero must be followed by a dot."
+            );
+            assert_eq!(
+                "0.1234".parse::<Amount>(),
+                Ok(Amount::from(123400u64)),
+                "Leading zero is OK."
+            );
+            assert_eq!(
+                "0.0".parse::<Amount>(),
+                Ok(Amount::from(0)),
+                "Leading zero and zero after dot is OK."
+            );
+            assert_eq!(
+                ".0".parse::<Amount>(),
+                Err(AmountParseError::ExpectedDigit),
+                "There should be at least one digit before a dot."
+            );
+            assert_eq!("13".parse::<Amount>(), Ok(Amount::from(13000000)), "No dot is needed.");
+            assert_eq!(
+                "".parse::<Amount>(),
+                Err(AmountParseError::ExpectedMore),
+                "Empty string is not a valid amount."
+            );
         }
     }
 }
