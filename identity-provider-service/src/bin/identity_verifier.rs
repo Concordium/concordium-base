@@ -127,14 +127,24 @@ async fn main() {
                         }
                     };
 
+                    let endpoint_version = match input.get("endpoint_version") {
+                        Some(version) => version.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("endpoint_version not present.".to_string());
+                        }
+                    };
+                    input.remove("endpoint_version");
+
                     if input.get("fail").is_some() {
                         let delay = input
                             .get("fail_delay")
                             .cloned()
                             .unwrap_or_else(|| "10".to_string());
                         let location = format!(
-                            "{}api/identity/fail/{}?delay={}",
-                            id_provider_url, id_cred_pub_hash, delay
+                            "{}api/{}/identity/fail/{}?delay={}",
+                            id_provider_url, endpoint_version, id_cred_pub_hash, delay
                         );
                         return Response::builder()
                             .header(LOCATION, location)
@@ -159,16 +169,6 @@ async fn main() {
                         }
                     };
                     input.remove("id_cred_pub_signature");
-
-                    let endpoint_version = match input.get("endpoint_version") {
-                        Some(version) => version.clone(),
-                        None => {
-                            return Response::builder()
-                                .status(StatusCode::BAD_REQUEST)
-                                .body("endpoint_version not present.".to_string());
-                        }
-                    };
-                    input.remove("endpoint_version");
 
                     let identity_endpoint = if endpoint_version.eq("v0") {
                         "v0/identity"

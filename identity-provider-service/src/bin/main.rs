@@ -847,10 +847,7 @@ async fn main() -> anyhow::Result<()> {
             move |version: String, id_cred_pub_hash: String, query: HashMap<String, String>| {
                 let delay = query
                     .get("delay")
-                    .map(|d| match d.parse::<u64>() {
-                        Ok(v) => Some(v),
-                        _ => None,
-                    })
+                    .map(|d| d.parse::<u64>().ok())
                     .flatten()
                     .unwrap_or(10);
 
@@ -1776,8 +1773,7 @@ async fn create_failed_identity(
         "api/identity/retrieve_failed/{}",
         chrono::offset::Utc::now().timestamp() as u64 + delay
     ));
-    let call
-        back_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
+    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
