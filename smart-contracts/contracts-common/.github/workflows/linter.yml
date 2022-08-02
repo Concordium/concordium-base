@@ -33,10 +33,16 @@ jobs:
           args: --all -- --check
 
   clippy:
-    name: Clippy
+    name: Clippy on concordium-contracts-common
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        features:
+          - ""
+          - "std"
+          - "derive-serde"
+          - "fuzz"
+          - "sdk"
         target:
           - wasm32-unknown-unknown
           - x86_64-unknown-linux-gnu
@@ -53,26 +59,44 @@ jobs:
           override: true
           components: clippy
 
-      - name: Run cargo clippy with no features enabled
+      - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --no-default-features --target=${{ matrix.target }} -- -D warnings
+          args: --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
 
-      - name: Run cargo clippy with default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --target=${{ matrix.target }} -- -D warnings
+  clippy-on-derive:
+    name: Clippy on concordium-contracts-common-derive
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features:
+          - ""
+          - "sdk"
+        target:
+          - wasm32-unknown-unknown
+          - x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
 
-      - name: Run cargo clippy with derive-serde
+      - name: Install nightly toolchain with clippy available
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.53
+          target: ${{ matrix.target }}
+          override: true
+          components: clippy
+
+      - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --target=${{ matrix.target }} --all-features -- -D warnings
+          args: --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
 
   test:
-    name: x86_64 tests
+    name: x86_64 tests on concordium-contracts-common
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -89,4 +113,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features
+          args: --manifest-path=concordium-contracts-common/Cargo.toml
