@@ -2,11 +2,10 @@
 
 use crate::{Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial};
 use byteorder::ReadBytesExt;
-pub use concordium_contracts_common::Amount;
+pub use concordium_contracts_common::{AccountAddress, Amount, ACCOUNT_ADDRESS_SIZE};
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
-
 /// Index of an account key that is to be used.
 #[derive(
     Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Display, From, Into,
@@ -46,6 +45,23 @@ impl Deserial for Amount {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let micro_ccd = source.get()?;
         Ok(Amount { micro_ccd })
+    }
+}
+
+impl Serial for AccountAddress {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        x.write_all(&self.0)
+            .expect("Writing to buffer should succeed.")
+    }
+}
+
+impl Deserial for AccountAddress {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
+        source.read_exact(&mut buf)?;
+        Ok(AccountAddress(buf))
     }
 }
 

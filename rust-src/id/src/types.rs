@@ -9,9 +9,9 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail};
-use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
+pub use crypto_common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crypto_common::{
     types::{CredentialIndex, KeyIndex, KeyPair},
     *,
@@ -49,9 +49,6 @@ use std::{
 /// this could be what is desired, but it is important to be aware of it.
 pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.dat");
 
-/// Size in bytes of an account address in binary encoding.
-pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
-
 /// This is currently the number required, since the only
 /// place these are used is for encrypted amounts.
 pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
@@ -59,90 +56,12 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
-/// Address of an account. Textual representation uses base58check encoding with
-/// version byte 1.
-pub struct AccountAddress(pub(crate) [u8; ACCOUNT_ADDRESS_SIZE]);
-
-impl std::fmt::Display for AccountAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
-}
-
-// Parse from string assuming base58 check encoding.
-impl std::str::FromStr for AccountAddress {
-    type Err = &'static str;
-
-    fn from_str(v: &str) -> Result<Self, Self::Err> {
-        let (version, body) = v
-            .from_base58check()
-            .map_err(|_| "The string is not valid base 58 check v1.")?;
-        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
-            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-            buf.copy_from_slice(&body);
-            Ok(AccountAddress(buf))
-        } else {
-            Err("The string does not represent a valid Concordium address.")
-        }
-    }
-}
-
-impl AsRef<[u8; 32]> for AccountAddress {
-    fn as_ref(&self) -> &[u8; 32] { &self.0 }
-}
-
-impl SerdeSerialize for AccountAddress {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let b58_str = self.to_string();
-        ser.serialize_str(&b58_str)
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for AccountAddress {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        des.deserialize_str(Base58Visitor)
-    }
-}
-
-struct Base58Visitor;
-
-impl<'de> Visitor<'de> for Base58Visitor {
-    type Value = AccountAddress;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "A base58 string, version 1.")
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        v.parse::<AccountAddress>()
-            .map_err(|_| de::Error::custom("Wrong Base58 version."))
-    }
-}
-
-impl Serial for AccountAddress {
-    #[inline]
-    fn serial<B: Buffer>(&self, x: &mut B) {
-        x.write_all(&self.0)
-            .expect("Writing to buffer should succeed.")
-    }
-}
-
-impl Deserial for AccountAddress {
-    #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-        source.read_exact(&mut buf)?;
-        Ok(AccountAddress(buf))
-    }
-}
-
-impl AccountAddress {
-    /// Construct account address from the registration id.
-    pub fn new<C: Curve>(reg_id: &C) -> Self {
-        let mut out = [0; ACCOUNT_ADDRESS_SIZE];
-        let hasher = Sha256::new().chain(&to_bytes(reg_id));
-        out.copy_from_slice(&hasher.finalize());
-        AccountAddress(out)
-    }
+/// Construct account address from the registration id.
+pub fn account_address_from_registration_id<C: Curve>(reg_id: C) -> AccountAddress {
+    let mut out = [0; ACCOUNT_ADDRESS_SIZE];
+    let hasher = Sha256::new().chain(&to_bytes(&reg_id));
+    out.copy_from_slice(&hasher.finalize());
+    AccountAddress(out)
 }
 
 /// Threshold for the number of signatures required.
