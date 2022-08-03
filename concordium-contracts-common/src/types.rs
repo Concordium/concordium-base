@@ -1326,7 +1326,7 @@ pub struct ParseError {}
 pub type ParseResult<A> = Result<A, ParseError>;
 
 impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "Parsing failed") }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("Parsing failed") }
 }
 
 #[cfg(feature = "std")]
