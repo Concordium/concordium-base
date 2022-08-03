@@ -1835,10 +1835,7 @@ mod tests {
     use super::*;
     use warp::test;
 
-    #[test]
-    fn test_successful_validation_and_response() {
-        // Given
-        let request = include_str!("../../data/valid_request.json");
+    fn get_server_config() -> ServerConfig {
         let ip_data_contents = include_str!("../../data/identity_provider.json");
         let ar_info_contents = include_str!("../../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../../data/global.json");
@@ -1855,7 +1852,7 @@ mod tests {
         let global = global_context.value;
 
         let id_url = url::Url::parse("http://localhost/verify").unwrap();
-        let server_config = Arc::new(ServerConfig {
+        ServerConfig {
             ip_data,
             global,
             ars,
@@ -1864,7 +1861,14 @@ mod tests {
             retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
             recovery_timestamp_delta: 60,
-        });
+        }
+    }
+
+    #[test]
+    fn test_successful_validation_and_response() {
+        // Given
+        let request = include_str!("../../data/valid_request.json");
+        let server_config = Arc::new(get_server_config());
 
         tokio_test::block_on(async {
             let v = serde_json::from_str::<serde_json::Value>(request).unwrap();
@@ -1873,7 +1877,6 @@ mod tests {
                 .json(&v)
                 .matches(&extract_and_validate_request(server_config.clone()))
                 .await;
-            // Then
             assert!(matches, "The filter does not match the example request.");
         });
     }
@@ -1882,32 +1885,7 @@ mod tests {
     fn test_verify_failed_validation() {
         // Given
         let request = include_str!("../../data/fail_validation_request.json");
-        let ip_data_contents = include_str!("../../data/identity_provider.json");
-        let ar_info_contents = include_str!("../../data/anonymity_revokers.json");
-        let global_context_contents = include_str!("../../data/global.json");
-
-        let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
-            .expect("File did not contain a valid IpData object as JSON.");
-        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
-            .expect("File did not contain a valid ArInfos object as JSON");
-        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
-        let ars = ar_info.value;
-        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
-            .expect("File did not contain a valid GlobalContext object as JSON");
-        assert_eq!(global_context.version, VERSION_0);
-        let global = global_context.value;
-
-        let id_url = url::Url::parse("http://localhost/verify").unwrap();
-        let server_config = Arc::new(ServerConfig {
-            ip_data,
-            global,
-            ars,
-            id_verification_url: id_url.clone(),
-            id_verification_query_url: id_url,
-            retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
-            submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
-            recovery_timestamp_delta: 60,
-        });
+        let server_config = Arc::new(get_server_config());
 
         tokio_test::block_on(async {
             let v = serde_json::from_str::<serde_json::Value>(request).unwrap();
@@ -1934,7 +1912,6 @@ mod tests {
                 .method("GET")
                 .reply(&warp::get().and_then(get_broken_reply))
                 .await;
-            // Then
             assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         });
     }
@@ -1954,7 +1931,6 @@ mod tests {
                         .and_then(retrieve_failed_identity_token),
                 )
                 .await;
-            // Then
             let body2: IdentityTokenContainer = serde_json::from_slice(response.body()).unwrap();
             assert!(matches!(body2.status, IdentityStatus::Pending));
         });
@@ -1972,9 +1948,64 @@ mod tests {
                         .and_then(retrieve_failed_identity_token),
                 )
                 .await;
-            // Then
             let body2: IdentityTokenContainer = serde_json::from_slice(response.body()).unwrap();
             assert!(matches!(body2.status, IdentityStatus::Error));
+        });
+    }
+
+    // Destroy DB generated folders after test
+    impl Drop for DB {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.root);
+            fs::remove_dir_all(&self.backup_root);
+        }
+    }
+
+    #[test]
+    fn test_create_failed_identity() {
+        // Given
+        let request = include_str!("../../data/valid_request_v1.json");
+        let server_config = Arc::new(get_server_config());
+
+        let idi = serde_json::from_str::<IdentityObjectRequestV1>(request).unwrap();
+        // This is the uri that should the callback from create_failed_identity:
+        let callback_uri = format!(
+            "{}#code_uri=http://localhost/api/identity/retrieve_failed/",
+            &idi.redirect_uri
+        );
+
+        let id_cred_pub_hash_digest =
+            Sha256::digest(&to_bytes(&idi.id_object_request.value.id_cred_pub));
+        let id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash_digest.into());
+
+        let root = std::path::Path::new("test-database").to_path_buf();
+        let backup_root = std::path::Path::new("test-database-deleted").to_path_buf();
+        let db = Arc::new(DB::new(root, backup_root).unwrap());
+
+        tokio_test::block_on(async {
+            let save = save_validated_request_v1(Arc::clone(&db), idi, server_config.clone()).await;
+            assert!(save.is_ok());
+
+            let response = test::request()
+                .method("GET")
+                .reply(&warp::get().and_then(move || {
+                    create_failed_identity(
+                        server_config.clone(),
+                        Arc::clone(&db),
+                        id_cred_pub_hash.to_string(),
+                        "v1".to_string(),
+                        10,
+                    )
+                }))
+                .await;
+            assert_eq!(response.status(), StatusCode::FOUND);
+            let location: &str = response
+                .headers()
+                .get("location")
+                .unwrap()
+                .to_str()
+                .unwrap();
+            assert!(location.contains(&callback_uri));
         });
     }
 }
