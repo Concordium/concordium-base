@@ -1,8 +1,6 @@
 # Changelog
 
-
-
-## Unreleased changes
+## 2.0.2
 
 - Support schema types for LEB128 and byte arrays.
 - Support schema modules which includes version information.
