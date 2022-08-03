@@ -78,4 +78,4 @@ cd ios
 ./build-ios.sh
 ```
 
-It will proceed to build the xcframework which can then be found as `ios/build/MobileWallet.xcframework`
+It will proceed to build the xcframework which can then be found as `ios/build/libmobile_wallet.xcframework`
