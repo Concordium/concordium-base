@@ -24,12 +24,11 @@ pipeline {
                     cbindgen src/lib.rs -l c > mobile_wallet.h
 
                     # Build
-                    cd ios
-                    ./build-ios.sh
+                    ./scripts/build-ios.sh
 
                     # Prepate output
-                    mkdir ../../out
-                    cp build/${FILENAME_ROOT}.xcframework ../../out/
+                    mkdir ../out
+                    cp ./ios/build/${FILENAME_ROOT}.xcframework ../out/
                 '''.stripIndent()
                 stash includes: 'out/**/*', name: 'release'
             }
