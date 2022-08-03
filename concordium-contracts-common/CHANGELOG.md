@@ -9,6 +9,8 @@
 - Use `schema::Type::ByteList` for `[u8]` implementation of `SchemaType`.
 - Introduce `HasSize` trait.
 - Implement `Seek` for `Cursor<T>` when `T` implements `HasSize`.
+- Add traits `Serial`, `Deserial`, `SerialCtx` and `DeserialCtx`.
+- Add procedural macros for deriving `Serial` and `Deserial`.
 
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 
