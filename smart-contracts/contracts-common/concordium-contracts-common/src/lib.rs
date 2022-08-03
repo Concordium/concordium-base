@@ -90,6 +90,8 @@ mod impls;
 pub mod constants;
 pub mod schema;
 mod types;
+
+pub use concordium_contracts_common_derive::*;
 pub use impls::*;
 pub use traits::*;
 pub use types::*;
