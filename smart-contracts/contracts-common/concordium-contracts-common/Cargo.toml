@@ -59,7 +59,6 @@ version = "*"
 default = ["std"]
 
 std = ["fnv/std"]
-
 derive-serde = ["serde", "serde_json", "std", "base58check", "chrono", "num-bigint", "num-traits", "thiserror"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]

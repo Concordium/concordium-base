@@ -1341,16 +1341,16 @@ mod serde_impl {
     use std::fmt;
 
     /// Error type for when parsing an account address.
-    #[derive(thiserror::Error)]
-    enum AccountAddressParseError {
+    #[derive(Debug, thiserror::Error)]
+    pub enum AccountAddressParseError {
         /// Failed parsing the Base58Check encoding.
-        #[error("Invalid Base58Check encoding: {0}")]
-        InvalidBase58Check(#[from] FromBase58CheckError),
+        #[error("Invalid Base58Check encoding.")]
+        InvalidBase58Check(FromBase58CheckError),
         /// Base58Check version byte is not 1.
-        #[error("Invalid version byte, expected 1, but got {0}")]
+        #[error("Invalid version byte, expected 1, but got {0}.")]
         InvalidBase58CheckVersion(u8),
         /// The decoded bytes are not of length 32.
-        #[error("Invalid number of bytes, expected 32, but got {}")]
+        #[error("Invalid number of bytes, expected 32, but got {0}.")]
         InvalidByteLength(usize),
     }
 
@@ -1359,9 +1359,10 @@ mod serde_impl {
         type Err = AccountAddressParseError;
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {
-            let (version, body) = v.from_base58check()?;
+            let (version, body) =
+                v.from_base58check().map_err(AccountAddressParseError::InvalidBase58Check)?;
             if version != 1 {
-                return Err(AccountAddressParseError::InvalindBase58CheckVersion(version));
+                return Err(AccountAddressParseError::InvalidBase58CheckVersion(version));
             }
             if body.len() != ACCOUNT_ADDRESS_SIZE {
                 return Err(AccountAddressParseError::InvalidByteLength(body.len()));
