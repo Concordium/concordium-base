@@ -327,7 +327,7 @@ impl DB {
             let file = std::fs::File::create(self.root.join("identity").join(key))?;
             let stored_obj = json!({
                 "identityObject": obj,
-                "accountAddress": AccountAddress::new(&obj.value.pre_identity_object.pub_info_for_ip.reg_id),
+                "accountAddress": account_address_from_registration_id(&obj.value.pre_identity_object.pub_info_for_ip.reg_id),
                 "credential": init_credential
             });
             serde_json::to_writer(file, &stored_obj)?;

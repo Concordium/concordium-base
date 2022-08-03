@@ -57,9 +57,9 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 /// Construct account address from the registration id.
-pub fn account_address_from_registration_id<C: Curve>(reg_id: C) -> AccountAddress {
+pub fn account_address_from_registration_id(reg_id: &impl Curve) -> AccountAddress {
     let mut out = [0; ACCOUNT_ADDRESS_SIZE];
-    let hasher = Sha256::new().chain(&to_bytes(&reg_id));
+    let hasher = Sha256::new().chain(&to_bytes(reg_id));
     out.copy_from_slice(&hasher.finalize());
     AccountAddress(out)
 }
