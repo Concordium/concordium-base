@@ -193,7 +193,7 @@ pub fn prove<C: Curve, T: Rng>(
 
         let v_scalar = C::scalar_from_u64(v_vec[j]);
         let v_value = Value::<C>::new(v_scalar);
-        let V_j = v_keys.hide(&v_value, &v_j_tilde);
+        let V_j = v_keys.hide(&v_value, v_j_tilde);
         transcript.append_message(b"Vj", &V_j.0);
         V_vec.push(V_j);
     }
@@ -540,7 +540,7 @@ pub fn verify_efficient<C: Curve>(
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
     let mut y_i = C::Scalar::one();
     let z_2_m = z_vec(z, 2, m);
-    let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
+    let verification_scalars = verify_scalars(transcript, G.len(), ip_proof);
     if verification_scalars.is_none() {
         return Err(VerificationError::DivisionError);
     }
@@ -634,7 +634,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
     randomness_b: &Randomness<C>,
 ) -> Option<RangeProof<C>> {
     let mut randomness = **randomness_b;
-    randomness.sub_assign(&randomness_a);
+    randomness.sub_assign(randomness_a);
     prove(transcript, csprng, n, 2, &[b - a, a], gens, key, &[
         Randomness::new(randomness),
         Randomness::new(**randomness_a),

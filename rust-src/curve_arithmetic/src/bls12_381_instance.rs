@@ -23,7 +23,7 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
     let mut fr = [0u64; 4];
     for (i, chunk) in bytes.as_ref().chunks(8).take(4).enumerate() {
         let mut v = [0u8; 8];
-        v[..chunk.len()].copy_from_slice(&chunk);
+        v[..chunk.len()].copy_from_slice(chunk);
         fr[i] = u64::from_le_bytes(v);
     }
     // unset two topmost bits in the last read u64.
@@ -65,7 +65,7 @@ impl Curve for G2 {
 
     fn minus_point(&self, other: &Self) -> Self {
         let mut x = *self;
-        x.sub_assign(&other);
+        x.sub_assign(other);
         x
     }
 
@@ -149,7 +149,7 @@ impl Curve for G1 {
 
     fn minus_point(&self, other: &Self) -> Self {
         let mut x = *self;
-        x.sub_assign(&other);
+        x.sub_assign(other);
         x
     }
 

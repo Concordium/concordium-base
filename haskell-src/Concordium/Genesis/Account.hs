@@ -91,7 +91,7 @@ data GenesisAccount = GenesisAccount
 -- The legacy issues are that the commitments are part of the "proofs" object
 -- in the credential, which, in JSON, is represented just as a hex-string.
 -- This should be reworked at some point, so that it is more principled than
--- the current, slighly hacky, solution.
+-- the current, slightly hacky, solution.
 instance FromJSON GenesisAccount where
     parseJSON = withObject "GenesisAccount" $ \obj -> do
         gaAddress <- obj .: "address"

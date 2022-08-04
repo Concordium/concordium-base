@@ -55,7 +55,7 @@ impl<C: Curve> PublicKey<C> {
 
     pub fn hide(&self, k: &C::Scalar, message: &Message<C>) -> Cipher<C> {
         let t = self.generator.mul_by_scalar(k);
-        let s = self.key.mul_by_scalar(&k).plus_point(&message.value);
+        let s = self.key.mul_by_scalar(k).plus_point(&message.value);
         Cipher(t, s)
     }
 

@@ -244,6 +244,44 @@ struct IpSignPio {
 }
 
 #[derive(StructOpt)]
+struct IpSignPioV1 {
+    #[structopt(
+        long = "pio",
+        help = "File with input pre-identity object information."
+    )]
+    pio:                PathBuf,
+    #[structopt(
+        long = "ip-data",
+        help = "File with all information about the identity provider (public and private)."
+    )]
+    ip_data:            PathBuf,
+    #[structopt(long = "out", help = "File to write the signed identity object to.")]
+    out_file:           Option<PathBuf>,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global:             PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+    #[structopt(
+        long = "id-object-expiry",
+        help = "Expiry time of the identity object message. As YYYYMM."
+    )]
+    id_expiry:          Option<YearMonth>,
+    #[structopt(
+        long = "no-attributes",
+        help = "Do not select any attributes to reveal."
+    )]
+    no_attributes:      bool,
+}
+
+#[derive(StructOpt)]
 struct CreateCredential {
     #[structopt(
         long = "id-object",
@@ -452,9 +490,16 @@ enum IdClient {
     GenerateGlobal(GenerateGlobal),
     #[structopt(
         name = "ip-sign-pio",
-        about = "Act as the identity provider, checking and signing a pre-identity object."
+        about = "Act as the identity provider, checking and signing a version 0 pre-identity \
+                 object."
     )]
     IpSignPio(IpSignPio),
+    #[structopt(
+        name = "ip-sign-pio-v1",
+        about = "Act as the identity provider, checking and signing a version 1 pre-identity \
+                 object."
+    )]
+    IpSignPioV1(IpSignPioV1),
     #[structopt(
         name = "create-credential",
         about = "Take the identity object, select attributes to reveal and create a credential \
@@ -488,6 +533,7 @@ fn main() {
         GenerateIps(ips) => handle_generate_ips(ips),
         GenerateGlobal(gl) => handle_generate_global(gl),
         IpSignPio(isp) => handle_act_as_ip(isp),
+        IpSignPioV1(isp) => handle_act_as_ip_v1(isp),
         CreateCredential(cc) => handle_create_credential(cc),
         ExtendIpList(eil) => handle_extend_ip_list(eil),
         VerifyCredential(vcred) => handle_verify_credential(vcred),
@@ -554,7 +600,6 @@ fn handle_make_account(macc: MakeAccount) {
     };
     if let Err(e) = write_json_to_file(&macc.out, &out) {
         eprintln!("Could not output credentials: {}", e);
-        return;
     }
 }
 
@@ -777,10 +822,10 @@ fn handle_create_credential(cc: CreateCredential) {
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
     // signed the object.
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_id_use_data(&cc.private) {
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_id_use_data(cc.private) {
         Ok(v) => v,
         Err(x) => {
-            eprintln!("Could not read CHI object because {}", x);
+            eprintln!("Could not read CHI object because: {}", x);
             return;
         }
     };
@@ -842,6 +887,7 @@ fn handle_create_credential(cc: CreateCredential) {
         x,
         policy,
         &acc_data,
+        &SystemAttributeRandomness,
         &new_or_existing,
     );
 
@@ -855,15 +901,19 @@ fn handle_create_credential(cc: CreateCredential) {
 
     let address = account_address_from_registration_id(&cdi.values.cred_id);
 
+    let cdi_no_proofs = AccountCredentialWithoutProofs::Normal {
+        cdv:         cdi.values.clone(),
+        commitments: cdi.proofs.id_proofs.commitments.clone(),
+    };
     let cdi = AccountCredential::Normal { cdi };
 
     let (versioned_credentials, randomness_map) = {
         let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
         let mut randomness = BTreeMap::new();
-        // NB: We insert the reference to the credential here so as to avoid cloning
-        // (which is not implemented for the type)
-        credentials.insert(ki, &cdi);
+        // we insert a credential without proofs, to be compatible with the genesis
+        // tool, and concordium-client import.
+        credentials.insert(ki, cdi_no_proofs);
         randomness.insert(ki, &commitments_randomness);
         (Versioned::new(VERSION_0, credentials), randomness)
     };
@@ -876,14 +926,17 @@ fn handle_create_credential(cc: CreateCredential) {
     };
 
     if let Some(addr) = cc.account {
-        println!("Generated additional keys for the account.");
+        println!(
+            "Generated additional keys for the account to be encrypted and written to file {}.",
+            cc.keys_out.to_string_lossy()
+        );
         let js = json!({
             "address": addr,
             "accountKeys": AccountKeys::from((CredentialIndex{index: cc.key_index.unwrap()}, acc_data)),
             "credentials": versioned_credentials,
             "commitmentsRandomness": randomness_map,
         });
-        write_json_to_file(&cc.keys_out, &js).ok();
+        output_possibly_encrypted(&cc.keys_out, &js).ok();
     } else {
         let account_data_json = json!({
             "address": address,
@@ -895,10 +948,11 @@ fn handle_create_credential(cc: CreateCredential) {
             "aci": id_use_data.aci,
         });
         println!(
-            "Generated fresh verification and signature key of the account to file {}.",
+            "Generated fresh verification and signature key of the account to be encrypted and \
+             written to file {}.",
             cc.keys_out.to_string_lossy()
         );
-        write_json_to_file(&cc.keys_out, &account_data_json).ok();
+        output_possibly_encrypted(&cc.keys_out, &account_data_json).ok();
     }
 
     // Double check that the generated CDI is going to be successfully validated.
@@ -942,8 +996,8 @@ fn handle_create_chi(cc: CreateChi) {
         id_cred: IdCredentials::generate(&mut csprng),
     };
     if let Some(filepath) = cc.out {
-        match write_json_to_file(filepath, &ah_info) {
-            Ok(()) => println!("Wrote CHI to file."),
+        match output_possibly_encrypted(&filepath, &ah_info) {
+            Ok(_) => println!("Wrote CHI to file."),
             Err(_) => {
                 eprintln!("Could not write to file. The generated information is");
                 output_json(&ah_info);
@@ -955,8 +1009,8 @@ fn handle_create_chi(cc: CreateChi) {
     }
 }
 
-/// Act as the identity provider. Read the pre-identity object and load the
-/// private information of the identity provider, check and sign the
+/// Act as the identity provider. Read the version 0 pre-identity object and
+/// load the private information of the identity provider, check and sign the
 /// pre-identity object to generate the identity object to send back to the
 /// account holder.
 fn handle_act_as_ip(aai: IpSignPio) {
@@ -968,14 +1022,14 @@ fn handle_act_as_ip(aai: IpSignPio) {
         }
     };
     let (ip_info, ip_sec_key, ip_cdi_secret_key) =
-        match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
+        match decrypt_input::<_, IpData<Bls12>>(&aai.ip_data) {
             Ok(ip_data) => (
                 ip_data.public_ip_info,
                 ip_data.ip_secret_key,
                 ip_data.ip_cdi_secret_key,
             ),
             Err(x) => {
-                eprintln!("Could not read identity issuer information because {}", x);
+                eprintln!("Could not read identity issuer information because: {}", x);
                 return;
             }
         };
@@ -985,7 +1039,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
         None => match read_validto() {
             Ok(ym) => ym,
             Err(e) => {
-                eprintln!("Could not read credential expiry because {}", e);
+                eprintln!("Could not read credential expiry because: {}", e);
                 return;
             }
         },
@@ -1124,13 +1178,141 @@ fn handle_act_as_ip(aai: IpSignPio) {
     }
 }
 
+/// Act as the identity provider. Read the version 0 pre-identity object and
+/// load the private information of the identity provider, check and sign the
+/// pre-identity object to generate the identity object to send back to the
+/// account holder.
+fn handle_act_as_ip_v1(aai: IpSignPioV1) {
+    let pio = match read_pre_identity_object_v1(&aai.pio) {
+        Ok(pio) => pio,
+        Err(e) => {
+            eprintln!("Could not read file because {}", e);
+            return;
+        }
+    };
+    let (ip_info, ip_sec_key) = match decrypt_input::<_, IpData<Bls12>>(&aai.ip_data) {
+        Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
+        Err(x) => {
+            eprintln!("Could not read identity issuer information because: {}", x);
+            return;
+        }
+    };
+
+    let valid_to = match aai.id_expiry {
+        Some(exp) => exp,
+        None => match read_validto() {
+            Ok(ym) => ym,
+            Err(e) => {
+                eprintln!("Could not read credential expiry because: {}", e);
+                return;
+            }
+        },
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(aai.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    // all known anonymity revokers.
+    let ars = {
+        if let Ok(ars) = read_anonymity_revokers(aai.anonymity_revokers) {
+            ars.anonymity_revokers
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
+            return;
+        }
+    };
+
+    let created_at = YearMonth::now();
+
+    let tags = {
+        if !aai.no_attributes {
+            match MultiSelect::new()
+                .with_prompt("Select attributes:")
+                .items(&ATTRIBUTE_NAMES)
+                .interact()
+            {
+                Ok(idxs) => idxs,
+                Err(x) => {
+                    eprintln!("You have to choose some attributes. Terminating. {}", x);
+                    return;
+                }
+            }
+        } else {
+            Vec::new()
+        }
+    };
+
+    let alist = {
+        let mut alist: BTreeMap<AttributeTag, ExampleAttribute> = BTreeMap::new();
+        for idx in tags {
+            match Input::new().with_prompt(ATTRIBUTE_NAMES[idx]).interact() {
+                Err(e) => {
+                    eprintln!("You need to provide integer input: {}", e);
+                    return;
+                }
+                Ok(s) => {
+                    let _ = alist.insert(AttributeTag(idx as u8), s);
+                }
+            }
+        }
+        alist
+    };
+
+    let attributes = AttributeList {
+        valid_to,
+        created_at,
+        max_accounts: 238,
+        alist,
+        _phantom: Default::default(),
+    };
+    let context = IpContext::new(&ip_info, &ars, &global_ctx);
+    let vf = verify_credentials_v1(&pio, context, &attributes, &ip_sec_key);
+
+    match vf {
+        Ok(signature) => {
+            let id_object = IdentityObjectV1 {
+                pre_identity_object: pio,
+                alist: attributes,
+                signature,
+            };
+            let ver_id_object = Versioned::new(VERSION_0, id_object);
+            let signature = &ver_id_object.value.signature;
+            println!("Successfully checked pre-identity data.");
+            if let Some(signed_out_path) = aai.out_file {
+                if let Err(e) = write_json_to_file(signed_out_path.clone(), &ver_id_object) {
+                    println!(
+                        "Could not write Identity object to file due to {}. The signature is: {}",
+                        e,
+                        base16_encode_string(signature)
+                    );
+                } else {
+                    println!(
+                        "Wrote signed identity object to file {}",
+                        signed_out_path.display()
+                    );
+                }
+            } else {
+                println!("The signature is: {}", base16_encode_string(signature));
+            }
+        }
+        Err(r) => eprintln!("Could not verify pre-identity object {:?}", r),
+    }
+}
+
 fn handle_start_ip(sip: StartIp) {
     let chi = {
-        if let Ok(chi) = read_json_from_file(&sip.chi) {
-            chi
-        } else {
-            eprintln!("Could not read credential holder information.");
-            return;
+        match decrypt_input(sip.chi) {
+            Ok(chi) => chi,
+            Err(e) => {
+                eprintln!("Could not read credential holder information: {}", e);
+                return;
+            }
         }
     };
     let mut csprng = thread_rng();
@@ -1286,15 +1468,16 @@ fn handle_start_ip(sip: StartIp) {
         },
         threshold: SignatureThreshold(2),
     };
-    let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
+    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let id_use_data = IdObjectUseData { aci, randomness };
+    let (pio, _) = generate_pio(&context, threshold, &id_use_data, &initial_acc_data)
         .expect("Generating the pre-identity object should succeed.");
 
     // the only thing left is to output all the information
 
-    let id_use_data = IdObjectUseData { aci, randomness };
     let ver_id_use_data = Versioned::new(VERSION_0, id_use_data);
     if let Some(aci_out_path) = sip.private {
-        if write_json_to_file(aci_out_path, &ver_id_use_data).is_ok() {
+        if output_possibly_encrypted(&aci_out_path, &ver_id_use_data).is_ok() {
             println!("Wrote ACI and randomness to file.");
         } else {
             println!("Could not write ACI data to file. Outputting to standard output.");

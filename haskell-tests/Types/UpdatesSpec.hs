@@ -1,228 +1,45 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
 -- |Tests for the functionality implemented in Concordium.Types.Updates.
 module Types.UpdatesSpec where
 
 import qualified Data.Aeson as AE
-import qualified Data.ByteString as BS
 import qualified Data.Map as Map
-import Data.Ratio
 import Data.Serialize hiding (label)
 import qualified Data.Set as Set
-import qualified Data.Text as Text
-import qualified Data.Vector as Vec
-import Data.Word
 import Test.Hspec
 import Test.QuickCheck as QC
 
 import Concordium.Crypto.DummyData ( genSigSchemeKeyPair )
 import qualified Concordium.Crypto.SignatureScheme as Sig
-import qualified Concordium.Crypto.SHA256 as Hash
-
 import Concordium.Types.Updates
-import Concordium.Types
+import Concordium.Types.ProtocolVersion
 
-import Types.PayloadSerializationSpec (genAddress)
+import Generators
 
-genElectionDifficulty :: Gen ElectionDifficulty
-genElectionDifficulty = makeElectionDifficulty <$> arbitrary `suchThat` (< 100000)
 
-genAuthorizations :: Gen Authorizations
-genAuthorizations = do
-    size <- getSize
-    nKeys <- choose (1, min 65535 (1 + size))
-    asKeys <- Vec.fromList . fmap Sig.correspondingVerifyKey <$> vectorOf nKeys genSigSchemeKeyPair
-    let genAccessStructure = do
-            asnKeys <- choose (1, nKeys)
-            accessPublicKeys <- Set.fromList . take asnKeys <$> shuffle [0..fromIntegral nKeys - 1]
-            accessThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral asnKeys)
-            return AccessStructure {..}
-    asEmergency <- genAccessStructure
-    asProtocol <- genAccessStructure
-    asParamElectionDifficulty <- genAccessStructure
-    asParamEuroPerEnergy <- genAccessStructure
-    asParamMicroGTUPerEuro <- genAccessStructure
-    asParamFoundationAccount <- genAccessStructure
-    asParamMintDistribution <- genAccessStructure
-    asParamTransactionFeeDistribution <- genAccessStructure
-    asParamGASRewards <- genAccessStructure
-    asBakerStakeThreshold <- genAccessStructure
-    asAddAnonymityRevoker <- genAccessStructure
-    asAddIdentityProvider <- genAccessStructure
-    return Authorizations{..}
-
-genProtocolUpdate :: Gen ProtocolUpdate
-genProtocolUpdate = do
-        puMessage <- Text.pack <$> arbitrary
-        puSpecificationURL <- Text.pack <$> arbitrary
-        puSpecificationHash <- Hash.hash . BS.pack <$> arbitrary
-        puSpecificationAuxiliaryData <- BS.pack <$> arbitrary
-        return ProtocolUpdate{..}
-
-genMintRate :: Gen MintRate
-genMintRate = do
-  mrExponent <- arbitrary
-  mrMantissa <- choose (0, fromIntegral (min (toInteger (maxBound :: Word32)) (10^mrExponent)))
-  return MintRate{..}
-
-genExchangeRate :: Gen ExchangeRate
-genExchangeRate = do
-        num <- choose (1, maxBound)
-        den <- choose (1, maxBound)
-        return $ ExchangeRate (num % den)
-
-genMintDistribution :: Gen MintDistribution
-genMintDistribution = do
-        _mdMintPerSlot <- genMintRate
-        bf <- choose (0,100000)
-        ff <- choose (0,100000-bf)
-        let _mdBakingReward = makeRewardFraction bf
-            _mdFinalizationReward = makeRewardFraction ff
-        return MintDistribution{..}
-
-genTransactionFeeDistribution :: Gen TransactionFeeDistribution
-genTransactionFeeDistribution = do
-        bf <- choose (0,100000)
-        gf <- choose (0,100000-bf)
-        let _tfdBaker = makeRewardFraction bf
-            _tfdGASAccount = makeRewardFraction gf
-        return TransactionFeeDistribution{..}
-
-genGASRewards :: Gen GASRewards
-genGASRewards = do
-        _gasBaker <- makeRewardFraction <$> choose (0,100000)
-        _gasFinalizationProof <- makeRewardFraction <$> choose (0,100000)
-        _gasAccountCreation <- makeRewardFraction <$> choose (0,100000)
-        _gasChainUpdate <- makeRewardFraction <$> choose (0,100000)
-        return GASRewards{..}
-
-genHigherLevelKeys :: Gen (HigherLevelKeys a)
-genHigherLevelKeys = do
-  size <- getSize
-  nKeys <- choose (1, min 65535 (1 + size))
-  hlkKeys <- Vec.fromList . fmap Sig.correspondingVerifyKey <$> vectorOf nKeys genSigSchemeKeyPair
-  hlkThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral nKeys)
-  return HigherLevelKeys {..}
-
-genRootUpdate :: Gen RootUpdate
-genRootUpdate = oneof [
-       RootKeysRootUpdate <$> genHigherLevelKeys,
-       Level1KeysRootUpdate <$> genHigherLevelKeys,
-       Level2KeysRootUpdate <$> genAuthorizations
-       ]
-
-genLevel1Update :: Gen Level1Update
-genLevel1Update = oneof [
-  Level1KeysLevel1Update <$> genHigherLevelKeys,
-  Level2KeysLevel1Update <$> genAuthorizations
-  ]
-
-genLevel2UpdatePayload :: Gen UpdatePayload
-genLevel2UpdatePayload = oneof [
-        ProtocolUpdatePayload <$> genProtocolUpdate,
-        ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
-        EuroPerEnergyUpdatePayload <$> genExchangeRate,
-        MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
-        FoundationAccountUpdatePayload <$> genAddress,
-        MintDistributionUpdatePayload <$> genMintDistribution,
-        TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
-        GASRewardsUpdatePayload <$> genGASRewards,
-        BakerStakeThresholdUpdatePayload <$> arbitrary]
-
-genUpdatePayload :: Gen UpdatePayload
-genUpdatePayload = oneof [
-        genLevel2UpdatePayload,
-        RootUpdatePayload <$> genRootUpdate,
-        Level1UpdatePayload <$> genLevel1Update
-        ]
-
-genRawUpdateInstruction :: Gen RawUpdateInstruction
-genRawUpdateInstruction = do
-        ruiSeqNumber <- Nonce <$> arbitrary
-        ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
-        ruiTimeout <- TransactionTime <$> arbitrary
-        ruiPayload <- genUpdatePayload
-        return RawUpdateInstruction{..}
-
-genLevel2RawUpdateInstruction :: Gen RawUpdateInstruction
-genLevel2RawUpdateInstruction = do
-        ruiSeqNumber <- Nonce <$> arbitrary
-        ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
-        ruiTimeout <- TransactionTime <$> arbitrary
-        ruiPayload <- genLevel2UpdatePayload
-        return RawUpdateInstruction{..}
-
--- |Generate an 'Authorizations' structure and the list of key pairs.
--- The threshold for each access structure is specified.
-genAuthorizationsAndKeys :: 
-    UpdateKeysThreshold -- ^Threshold for each access structure
-    -> Gen (Authorizations, [Sig.KeyPair])
-genAuthorizationsAndKeys thr = do
-        let nKeys = fromIntegral thr * 12
-        kps <- vectorOf nKeys genSigSchemeKeyPair
-        let asKeys = Vec.fromList $ Sig.correspondingVerifyKey <$> kps
-        let genAccessStructure = do
-                asnKeys <- choose (fromIntegral thr, nKeys)
-                accessPublicKeys <- Set.fromList . take asnKeys <$> shuffle [0..fromIntegral nKeys - 1]
-                return AccessStructure {accessThreshold = thr, ..}
-        asEmergency <- genAccessStructure
-        asProtocol <- genAccessStructure
-        asParamElectionDifficulty <- genAccessStructure
-        asParamEuroPerEnergy <- genAccessStructure
-        asParamMicroGTUPerEuro <- genAccessStructure
-        asParamFoundationAccount <- genAccessStructure
-        asParamMintDistribution <- genAccessStructure
-        asParamTransactionFeeDistribution <- genAccessStructure
-        asParamGASRewards <- genAccessStructure
-        asBakerStakeThreshold <- genAccessStructure
-        asAddAnonymityRevoker <- genAccessStructure
-        asAddIdentityProvider <- genAccessStructure
-        return (Authorizations{..}, kps)
-
-genLevel1Keys ::
-  UpdateKeysThreshold
-  -> Gen (HigherLevelKeys Level1KeysKind, [Sig.KeyPair])
-genLevel1Keys thr = do
-  kps <- vectorOf (fromIntegral thr * 2) genSigSchemeKeyPair
-  let hlkKeys = Vec.fromList $ Sig.correspondingVerifyKey <$> kps
-  return (HigherLevelKeys{hlkThreshold = thr,..}, kps)
-
-genRootKeys ::
-  UpdateKeysThreshold
-  -> Gen (HigherLevelKeys RootKeysKind, [Sig.KeyPair])
-genRootKeys thr = do
-  kps <- vectorOf (fromIntegral thr * 2) genSigSchemeKeyPair
-  let hlkKeys = Vec.fromList $ Sig.correspondingVerifyKey <$> kps
-  return (HigherLevelKeys{hlkThreshold = thr,..}, kps)
-
-genKeyCollection :: UpdateKeysThreshold -> Gen (UpdateKeysCollection, [Sig.KeyPair], [Sig.KeyPair], [Sig.KeyPair])
-genKeyCollection thr = do
-  (rootKeys, a) <- genRootKeys thr
-  (level1Keys, b) <- genLevel1Keys thr
-  (level2Keys, c) <- genAuthorizationsAndKeys thr
-  return (UpdateKeysCollection{..}, a, b, c)
-
-{-
-genUpdateInstruction :: Gen UpdateInstruction
-genUpdateInstruction = do
-        uiPayload <- genUpdatePayload
-        return UpdateInstruction{..}
--}
-
-checkSerialization :: (Serialize a, Eq a, Show a) => a -> Property
-checkSerialization v = case decode (encode v) of
+checkSerialization :: (Eq a, Show a) => Get a -> Putter a -> a -> Property
+checkSerialization g p v = case runGet g (runPut $ p v) of
         Left err -> counterexample err False
         Right v' -> v' === v
 
+checkUpdatePayloadSerialization :: SProtocolVersion pv -> UpdatePayload -> Property
+checkUpdatePayloadSerialization spv = checkSerialization (getUpdatePayload spv) putUpdatePayload
+
+checkUpdateInstructionSerialization :: SProtocolVersion pv -> UpdateInstruction -> Property
+checkUpdateInstructionSerialization spv = checkSerialization (getUpdateInstruction spv) putUpdateInstruction
+
 -- |Test that if we serialize then deserialize an 'UpdatePayload',
 -- we get back the value we started with.
-testSerializeUpdatePayload :: Property
-testSerializeUpdatePayload = forAll (resize 50 genUpdatePayload) checkSerialization
+testSerializeUpdatePayload :: IsProtocolVersion pv => SProtocolVersion pv -> Property
+testSerializeUpdatePayload spv = 
+        forAll (resize 50 $ genUpdatePayload $ chainParametersVersionFor spv) $ checkUpdatePayloadSerialization $ spv
 
 -- |Test that if we JSON-encode and decode an 'UpdatePayload',
 -- we get back the value we started with.
-testJSONUpdatePayload :: Property
-testJSONUpdatePayload = forAll (resize 50 genUpdatePayload) chk
+testJSONUpdatePayload :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Property
+testJSONUpdatePayload scpv = forAll (resize 50 $ genUpdatePayload scpv) chk
     where
         chk up = case AE.eitherDecode (AE.encode up) of
                 Left err -> counterexample err False
@@ -241,10 +58,10 @@ type SignKeyGen =
 
 -- |Generate an update instruction signed using the keys generated by the parameter.
 -- The second argument indicates whether the signature should be valid.
-testUpdateInstruction :: SignKeyGen -> Bool -> Property
-testUpdateInstruction keyGen isValid =
-  forAll (genKeyCollection 3) $ \(kc, rootK, level1K, level2K) ->
-  forAll genRawUpdateInstruction $ \rui -> do
+testUpdateInstruction :: forall pv. IsProtocolVersion pv => SProtocolVersion pv -> SignKeyGen -> Bool -> Property
+testUpdateInstruction spv keyGen isValid =
+  forAll (genKeyCollection @(ChainParametersVersionFor pv) 3) $ \(kc, rootK, level1K, level2K) ->
+  forAll (genRawUpdateInstruction scpv) $ \rui -> do
   let p = ruiPayload rui
   keysToSign <- case p of
              RootUpdatePayload{} -> f p kc rootK
@@ -252,9 +69,10 @@ testUpdateInstruction keyGen isValid =
              _ -> f p kc level2K
   let ui = makeUpdateInstruction rui keysToSign
   return $ label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate kc ui)
-           .&&. label "Serialization check" (checkSerialization ui)
+           .&&. label "Serialization check" (checkUpdateInstructionSerialization spv ui)
   where
-    f :: UpdatePayload -> UpdateKeysCollection -> [Sig.KeyPair] -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
+    scpv = chainParametersVersionFor spv
+    f :: UpdatePayload -> UpdateKeysCollection cpv -> [Sig.KeyPair] -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
     f pld ukc availableKeys = do
           let (keyIndices, thr) = extractKeysIndices pld ukc
           keyGen availableKeys keyIndices (fromIntegral thr)
@@ -314,11 +132,18 @@ combineKeys kg1 kg2 keys authIxs threshold = do
 
 tests :: Spec
 tests = parallel $ do
-    specify "UpdatePayload serialization" $ withMaxSuccess 1000 testSerializeUpdatePayload
-    specify "UpdatePayload JSON" $ withMaxSuccess 1000 testJSONUpdatePayload
-    specify "Valid update instructions" $ withMaxSuccess 1000 (testUpdateInstruction makeKeysGood True)
-    specify "Valid update instructions, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeysOther makeKeysGood) False)
-    specify "Update instructions, too few good" $ withMaxSuccess 1000 (testUpdateInstruction makeKeysFewGood False)
-    specify "Update instructions, too few good, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeysOther makeKeysFewGood) False)
-    specify "Update instructions, enough good, one bad" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeyInvalid makeKeysGood) False)
-    specify "Update instructions, enough good, one bad (bad index)" $ withMaxSuccess 1000 (testUpdateInstruction (combineKeys makeKeyBadIndex makeKeysGood) False)
+    specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV0
+    specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV1
+    versionedTests SP1
+    versionedTests SP2
+    versionedTests SP3
+    versionedTests SP4
+  where
+    versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
+        specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv
+        specify "Valid update instructions" $ withMaxSuccess 1000 (testUpdateInstruction spv makeKeysGood True)
+        specify "Valid update instructions, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction spv (combineKeys makeKeysOther makeKeysGood) False)
+        specify "Update instructions, too few good" $ withMaxSuccess 1000 (testUpdateInstruction spv makeKeysFewGood False)
+        specify "Update instructions, too few good, extraneous signatures" $ withMaxSuccess 1000 (testUpdateInstruction spv (combineKeys makeKeysOther makeKeysFewGood) False)
+        specify "Update instructions, enough good, one bad" $ withMaxSuccess 1000 (testUpdateInstruction spv (combineKeys makeKeyInvalid makeKeysGood) False)
+        specify "Update instructions, enough good, one bad (bad index)" $ withMaxSuccess 1000 (testUpdateInstruction spv (combineKeys makeKeyBadIndex makeKeysGood) False)

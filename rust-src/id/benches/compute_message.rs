@@ -88,7 +88,7 @@ fn bench_validate_request(c: &mut Criterion) {
     let (ars_infos, _) =
         test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
-    let aci = test_create_aci(&mut csprng);
+    let id_use_data = test_create_id_use_data(&mut csprng);
     let acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
@@ -99,8 +99,14 @@ fn bench_validate_request(c: &mut Criterion) {
         },
         threshold: SignatureThreshold(2),
     };
-    let (context, pio, _) =
-        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+    let (context, pio, _) = test_create_pio(
+        &id_use_data,
+        &ip_info,
+        &ars_infos,
+        &global_ctx,
+        num_ars,
+        &acc_data,
+    );
 
     // Act
     c.bench_function("Validate request", move |b| {
@@ -122,7 +128,7 @@ fn bench_sign_identity_object(c: &mut Criterion) {
     let (ars_infos, _) =
         test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
-    let aci = test_create_aci(&mut csprng);
+    let id_use_data = test_create_id_use_data(&mut csprng);
     let acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
@@ -133,8 +139,14 @@ fn bench_sign_identity_object(c: &mut Criterion) {
         },
         threshold: SignatureThreshold(2),
     };
-    let (context, pio, _) =
-        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+    let (context, pio, _) = test_create_pio(
+        &id_use_data,
+        &ip_info,
+        &ars_infos,
+        &global_ctx,
+        num_ars,
+        &acc_data,
+    );
     let attrs = test_create_attributes();
 
     // Act

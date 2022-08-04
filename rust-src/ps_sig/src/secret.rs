@@ -94,7 +94,7 @@ impl<C: Pairing> SecretKey<C> {
         let sk = self.g.mul_by_scalar(&self.x);
         let r = C::generate_non_zero_scalar(csprng);
         let a = self.g.mul_by_scalar(&r);
-        let xmr = sk.plus_point(&message).mul_by_scalar(&r);
+        let xmr = sk.plus_point(message).mul_by_scalar(&r);
         Signature(a, xmr)
     }
 }

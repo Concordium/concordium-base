@@ -36,7 +36,7 @@ UTF8-string, and the returned string is likewise a NUL-terminated UTF8-encoded s
 
 ## create_id_request_and_private_data
 
-Semantics: Generates an IdentityObject request, used to request an indentity to a IdentityProvider.
+Semantics: Generates a version 0 IdentityObject request, used to request an identity to a IdentityProvider.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -47,7 +47,7 @@ must be a valid JSON object with fields
 - `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
   a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
 
-- `"global"` ... is a JSON object that can describes global cryptographic parameters.
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
    This data is obtained from the server by making a GET request to /global.
 
 In addition the field `"arThreshold"` can be added to specify an anonymity revocation threshold different from the default value, as a JSON encoded byte value.
@@ -57,9 +57,39 @@ The output of this function is a JSON object with two keys
   the identity provider
 - "privateIdObjectData" - this is the __private__ information that the user must
   keep in order to be able to use the returned identity object.
+- "initialAccountData" - various data about the initial account, including its __private__ keys.
 
 An example of input is in the file [create_id_request_and_private_data-input.json](files/create_id_request_and_private_data-input.json).
 An example of output is in the file [create_id_request_and_private_data-output.json](files/create_id_request_and_private_data-output.json).
+
+## create_id_request_and_private_data_v1
+
+Semantics: Generates a version 1 IdentityObject request, used to request an identity to a IdentityProvider. No initial account creation.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+
+- `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
+  a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
+
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+
+- `"seed"` ... is a hex encoded seed phrase used to generate the prf key and the signature blinding determinstically.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+
+In addition the field `"arThreshold"` can be added to specify an anonymity revocation threshold different from the default value, as a JSON encoded byte value.
+
+The output of this function is a JSON object with two keys
+- "idObjectRequest" - this is the identity object request that should be sent to
+  the identity provider
+
+An example of input is in the file [create_id_request_and_private_data-v1-input.json](files/create_id_request_and_private_data-v1-input.json).
+An example of output is in the file [create_id_request_and_private_data-v1-output.json](files/create_id_request_and_private_data-v1-output.json).
 
 ## check_account_address
 
@@ -119,8 +149,63 @@ The returned value is a JSON object with the following fields.
 
 - `"encryptionSecretKey"` - the account private key for encrypted transfers.
 
+- `"commitmentsRandomness"` - various randomness used in commitments. This is __private__ to the credential holder.
+
 An example input to this request is in the file [create_credential-input.json](files/create_credential-input.json).
 An example output to this request is in the file [create_credential-output.json](files/create_credential-output.json).
+## create_credential_v1
+
+Semantics: Using the identityObject provided by the IdentityProvider, create a credential and account.
+This creates a credentials where the keys and attribute randomnesses are deterministically genereated from a seed phrase.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... same as in the `create_id_request_and_private_data` call
+
+- `"arsInfos"` ... same as in the `create_id_request_and_private_data` call
+
+- `"global"` ... same as in the `create_id_request_and_private_data` call
+
+- `"identityObject"` ... this must contain the value returned by the identity provider.
+
+
+- `"revealedAttributes"` ... attributes which the user wishes to reveal. This is
+  an array of attribute names. The user should select these from among the
+  attributes in the identityObject field. The key "revealedAttributes" is
+  optional. If not present we take it as the empty set.
+
+- `"seed"` ... is a hex encoded seed phrase.
+
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+
+- `"identityIndex"` ... an integer indicating the index of the identity behind the credential.
+
+- `"accountNumber"` ... this must be a number between 0 and 255 (inclusive).
+  Multiple credentials can be generated from the same identity object, and this
+  number is essentially a nonce. It __must__ be different for different
+  credentials from the same id object, otherwise the credential will not be
+  accepted by the chain.
+
+The returned value is a JSON object with the following fields.
+
+- `"credential"` - this is the credential that is to be deployed on the chain. All
+  data here is public.
+
+- `"accountKeys"` - contains the public and __private__ keys of the account the
+  credential belongs to. This is very sensitive and must be kept protected.
+
+- `"accountAddress"` - the address of the account this credential belongs to. This
+  will either be a new account or existing account, depending on the input "accountData".
+
+- `"encryptionPublicKey"` - the account public key for encrypted transfers.
+
+- `"encryptionSecretKey"` - the account private key for encrypted transfers.
+
+- `"commitmentsRandomness"` - various randomness used in commitments. This is __private__ to the credential holder.
+
+An example input to this request is in the file [create_credential-v1-input.json](files/create_credential-v1-input.json).
+An example output to this request is in the file [create_credential-v1-output.json](files/create_credential-v1-output.json).
 
 ## create_transfer_ext
 
@@ -151,6 +236,123 @@ The returned value is a JSON object with the following fields:
 
 An example input to this request is in the file [create_transfer-input.json](files/create_transfer-input.json).
 An example output to this request is in the file [create_transfer-output.json](files/create_transfer-output.json).
+
+## create_configure_delegation_transaction
+
+Semantics: Creates a `configure delegation`-transaction with the provided values.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+The following fields are optional:
+
+- `"capital"` ... string containing the amount to be staked.
+
+- `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
+
+- `"delegationTarget"` ... JSON indicating either delegation a baker pool or passive delegation.
+
+The delegation target should either be of the form
+```json
+{
+    "delegateType": "Passive"
+}
+```
+or
+
+```json
+{
+    "delegateType": "bakerId",
+    "bakerId": 100
+}
+```
+where `100` should be replaced with the relevant baker id.
+
+To add a delegator, all of the optional fields must be present. For an existing delegator the fields that are present will be updated on chain. A delegator is removed if the `capital` is set to `"0"`.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+Example input to this request are in the files [create_configure_delegation_transacion-input.json](./files/create_configure_delegation_transaction-input.json) and [2-create_configure_delegation_transaction-input.json](./files/2-create_configure_delegation_transaction-input.json).
+Example output to this request are in the files [create_configure_delegation_transacion-output.json](./files/create_configure_delegation_transaction-output.json) and [2-create_configure_delegation_transacion-output.json](./files/2-create_configure_delegation_transaction-output.json).
+
+## create_configure_baker_transaction
+
+Semantics: Creates a transfer transaction with the provided values.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+The following fields are optional:
+
+- `"capital"` ... string containing the amount to be staked.
+
+- `"restakeEarnings"` ... bool indicating whether earnings should be restaked.
+
+- `"metadataUrl"` ... string containing a metadata URL. Max size is 2048 bytes.
+
+- `"openStatus"` ... whether the pool is closed, open for delegation or closed for new delegators.
+  This is indicated with one of the strings `"openForAll"`, `"closedForNew"`, or `"closedForAll"`.
+
+- `"transactionFeeCommission"` ... number indicating the transaction fee commission, e.g. `0.05` or `5e-2`.
+
+- `"bakingRewardCommission"` ... number indicating the baking reward commission, e.g. `0.05` or `5e-2`.
+
+- `"finalizationRewardCommission"` ... number indicating the finalization reward commission, e.g. `0.05` or `5e-2`.
+
+- `"bakerKeys"` ... the baker keys. These are generated using the function `generate_baker_keys` documented below.
+
+To add a baker, all of the optional fields must be present. For an existing baker the fields that are present will be updated on chain. A baker is removed if the `capital` is set to `"0"`.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+An example input to this request is in the file [create_configure_baker_transaction-input.json](./files/create_configure_baker_transaction-input.json).
+An example output to this request is in the file [create_configure_baker_transaction-output.json](./files/create_configure_baker_transaction-output.json).
+
+## generate_baker_keys
+
+Semantics: Generates baker keys.
+
+This functiones takes no input. An output of the function could look like
+```json
+{
+    "electionVerifyKey": "7c6804c3a3460c0a90a4d7bf6e2787c70a32a8d35faf8725862d73172f1c5383",
+    "electionPrivateKey": "69e736da67e493bc1a781d835f6877e4aa2102fe4c118de9d4435b6a4b5cba4a",
+    "signatureVerifyKey": "c1a11131f42df6328a8e111524b1e45c9b537c8f60d442540d8001756c82c20b",
+    "signatureSignKey": "44da32121d641e0e1be49900164a5c6eca2a594f1676cb7d744b171e74676b18",
+    "aggregationVerifyKey": "922668fdbdcf66a1dec7d5d284e9c3dba2f4fc10856face74db06189691e9609b5cc78fc77398af7bae2f2ee6e0361f1057e2627f1988d15bb16a6096382a1220f8e8c820e1a38df0c6357b6639241ea97e12c4f33365241b7186a98d6161b85",
+    "aggregationSignKey": "48a3748a9ecf98fbccac29b7ccd0e1074f2bca73655154242c3c2835945601e9"
+}
+```
+
+Note: In order for a node to use the baker credentials to bake, the field `"bakerId"` with the ID of the baker needs to be added to the above JSON.
 
 ## create_encrypted_transfer_ext
 
@@ -327,6 +529,57 @@ The return value is a a JSON array with JSON objects as entries. Each object has
 
 With meaning that can be discerned from their names.
 
+## get_identity_keys_and_randomness
+
+Semantics: Deterministically derives id_cred_sec, prf_key and blinding randomness for an identity.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
+
+- `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"idCredSec"` ... the id_cred_sec as a hex encoded string.
+
+- `"prfKey"` ... the prf_key as a hex encoded string.
+
+- `"blindingRandomness"` ... the blinding randomness as a hex encoded string.
+
+An example input to this request is in the file [get_identity_keys_and_randomness-input.json](files/get_identity_keys_and_randomness-input.json).
+An example output to this request is in the file [get_identity_keys_and_randomness-output.json](files/get_identity_keys_and_randomness-output.json).
+
+## get_account_keys_and_randomness
+
+Semantics: Deterministically derives signing key, verification key and attribute randomness for an account.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
+
+- `"identityIndex"` ... the index of the identity to derive keys and randomness for, a u32 value
+
+- `"accountCredentialIndex"` ... the index of the account credential to derive keys and randomness for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"signKey"` ... the account signing key as a hex encoded string.
+
+- `"verifyKey"` ... the account verification key as a hex encoded string.
+
+- `"attributeCommitmentRandomness"` ... a map with attribute indices as keys and the corresponding attribute commitment randomness as values. 
+
+An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
+An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
+
+
 ## Example
 The [Example C program](example.c) that uses the library is available. This
 program reads a JSON file and passes it to the library, retrieving and printing
@@ -334,9 +587,9 @@ the result. On a linux system the program can be compiled and run like so.
   - First compile the libraries in [../mobile_wallet](../mobile-wallet) by running
     ```cargo build --release```.
   - Next from this directory run
-    ```gcc example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
+    ```gcc example.c -lmobile_wallet -L ../../mobile_wallet/target/release/ -o example```
     or
-    ```clang example.c -lwallet -L ../../mobile_wallet/target/release/ -o example```
+    ```clang example.c -lmobile_wallet -L ../../mobile_wallet/target/release/ -o example```
     depending on what C compiler is preffered.
 
 The binary can then be run with the following inputs:
@@ -372,6 +625,8 @@ The binary can then be run with the following inputs:
 |                                      | input                                                                                                  | output                                                                                                   |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
 | `create_id_request_and_private_data` | [`create_id_request_and_private_data-input.json`](files/create_id_request_and_private_data-input.json) | [`create_id_request_and_private_data-output.json`](files/create_id_request_and_private_data-output.json) |
+| `create_configure_baker_transaction` | [`create_configure_baker_transaction-input.json`](files/create_configure_baker_transaction-input.json) | [`create_configure_baker_transaction-output.json`](files/create_configure_baker_transaction-output.json) |
+| `create_configure_delegation_transaction` | [`create_configure_delegation_transaction-input.json`](files/create_configure_delegation_transaction-input.json) | [`create_configure_delegation_transaction-output.json`](files/create_configure_delegation_transaction-output.json) |
 | `create_credential`                  | [`create_credential-input.json`](files/create_credential-input.json)                                   | [`create_credential-output.json`](files/create_credential-output.json)                                   |
 | `create_transfer_ext`                | [`create_transfer-input.json`](files/create_transfer-input.json)                                       | [`create_transfer-output.json`](files/create_transfer-output.json)                                       |
 | `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](files/create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](files/create_encrypted_transfer-output.json)                   |

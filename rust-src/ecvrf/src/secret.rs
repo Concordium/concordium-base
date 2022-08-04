@@ -78,7 +78,7 @@ impl SecretKey {
 
     /// Construct a VRF proof seeded by the given message.
     pub fn prove(&self, public_key: &PublicKey, message: &[u8]) -> Proof {
-        ExpandedSecretKey::from(self).prove(&public_key, &message)
+        ExpandedSecretKey::from(self).prove(public_key, message)
     }
 
     /// Generate a `SecretKey` from a `csprng`.

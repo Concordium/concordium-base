@@ -94,6 +94,14 @@ scheduledTransferCost n = fromIntegral n * (300 + 64)
 addBakerCost :: Energy
 addBakerCost = 4050
 
+-- |C_t for configure baker when keys are not present
+configureBakerCostWithoutKeys :: Energy
+configureBakerCostWithoutKeys = 300
+
+-- |C_t for configure baker when keys are present
+configureBakerCostWithKeys :: Energy
+configureBakerCostWithKeys = 4050
+
 -- |C_t for updating baker keys
 updateBakerKeysCost :: Energy
 updateBakerKeysCost = 4050
@@ -109,6 +117,10 @@ updateBakerRestakeCost = 300
 -- |C_t for removing a baker
 removeBakerCost :: Energy
 removeBakerCost = 300
+
+-- |C_t for configure delegation
+configureDelegationCost :: Energy
+configureDelegationCost = 300
 
 -- |C_t for updating account credentials
 updateCredentialsCost ::

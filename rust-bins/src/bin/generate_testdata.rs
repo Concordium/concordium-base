@@ -137,10 +137,13 @@ fn main() {
         threshold: SignatureThreshold(2),
     };
     // Threshold is all anonymity revokers.
-    let (pio, randomness) = generate_pio(
+
+    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let id_use_data = IdObjectUseData { aci, randomness };
+    let (pio, _) = generate_pio(
         &context,
         Threshold(ars_infos.anonymity_revokers.len() as u8),
-        &aci,
+        &id_use_data,
         &initial_acc_data,
     )
     .expect("Generating the pre-identity object should succeed.");
@@ -166,7 +169,6 @@ fn main() {
         alist:               attributes.clone(),
         signature:           ip_sig,
     };
-    let id_object_use_data = IdObjectUseData { aci, randomness };
 
     let policy = Policy {
         valid_to,
@@ -193,10 +195,11 @@ fn main() {
         let (cdi_1, _) = create_credential(
             context,
             &id_object,
-            &id_object_use_data,
+            &id_use_data,
             53,
             policy.clone(),
             &acc_data,
+            &SystemAttributeRandomness,
             &Left(EXPIRY),
         )
         .expect("We should have generated valid data.");
@@ -217,10 +220,11 @@ fn main() {
         let (cdi_2, _) = create_credential(
             context,
             &id_object,
-            &id_object_use_data,
+            &id_use_data,
             53,
             policy.clone(),
             &acc_data_2,
+            &SystemAttributeRandomness,
             &Right(addr),
         )
         .expect("We should have generated valid data.");
@@ -342,10 +346,11 @@ fn main() {
         let (cdi, _) = create_credential(
             context,
             &id_object,
-            &id_object_use_data,
+            &id_use_data,
             acc_num,
             policy.clone(),
             &acc_data,
+            &SystemAttributeRandomness,
             maybe_addr,
         )
         .expect("We should have generated valid data.");
@@ -424,16 +429,21 @@ fn main() {
             cred_holder_info: ah_info,
             prf_key:          prf,
         };
+
+        let id_use_data = IdObjectUseData {
+            aci,
+            randomness: ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng),
+        };
         let (pio, _) = generate_pio(
             &context,
             Threshold(ars_infos.anonymity_revokers.len() as u8),
-            &aci,
+            &id_use_data,
             &initial_acc_data,
         )
         .expect("Generating the pre-identity object should succeed.");
 
         let icdi = create_initial_cdi(
-            &context.ip_info,
+            context.ip_info,
             pio.pub_info_for_ip,
             &attributes,
             EXPIRY,

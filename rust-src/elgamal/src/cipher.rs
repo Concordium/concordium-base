@@ -106,10 +106,7 @@ pub fn multicombine<C: Curve>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> C
         "multicombine precondition violation: input slices have different length."
     );
     let (ciphers_0, ciphers_1): (Vec<_>, Vec<_>) = ciphers.iter().map(|x| (x.0, x.1)).unzip();
-    Cipher(
-        multiexp(&ciphers_0, &scalars),
-        multiexp(&ciphers_1, &scalars),
-    )
+    Cipher(multiexp(&ciphers_0, scalars), multiexp(&ciphers_1, scalars))
 }
 
 #[cfg(test)]

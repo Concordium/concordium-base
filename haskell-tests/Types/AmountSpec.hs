@@ -10,14 +10,13 @@ import Test.QuickCheck as QC
 
 import Concordium.Types
 
+import Generators (genAmount)
+
 checkAmountString :: Amount -> Property
 checkAmountString s = let ma = amountFromString (amountToString s)
                       in case ma of
                         Just a -> a === s
                         Nothing -> QC.property False
-
-genAmount :: Gen Amount
-genAmount = Amount <$> arbitrary
 
 testAmountString :: Property
 testAmountString = forAll genAmount checkAmountString

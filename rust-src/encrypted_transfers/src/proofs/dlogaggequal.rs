@@ -58,12 +58,11 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             let mut point = C::zero_point();
             let mut first = true;
             for g in aggregate_dlog.coeff.iter() {
-                let rand;
-                if first {
-                    rand = rand_scalar_common;
+                let rand = if first {
+                    rand_scalar_common
                 } else {
-                    rand = C::generate_non_zero_scalar(csprng);
-                }
+                    C::generate_non_zero_scalar(csprng)
+                };
                 // FIXME: Multiexponentiation would be useful in this case.
                 point = point.plus_point(&g.mul_by_scalar(&rand));
 
@@ -126,7 +125,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             }
             let mut point = aggregate_dlog.public.mul_by_scalar(challenge);
             let mut exps = vec![witness.witness_common];
-            exps.extend_from_slice(&w);
+            exps.extend_from_slice(w);
             let product = multiexp(&aggregate_dlog.coeff, &exps);
             point = point.plus_point(&product);
             agg_points.push(point);

@@ -23,7 +23,7 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
     c: &Commitment<C>,
 ) -> bool {
     let s = Value::new(attribute.to_field_element());
-    keys.open(&s, &r, &c)
+    keys.open(&s, r, c)
 }
 
 /// Function for verifying a range proof about an attribute inside a commitment.
@@ -93,7 +93,7 @@ pub fn verify_account_ownership(
     hasher.update(b"account_ownership_proof");
     hasher.update(&challenge);
     let to_sign = &hasher.finalize();
-    utils::verify_account_ownership_proof(&public_data.keys, public_data.threshold, &proof, to_sign)
+    utils::verify_account_ownership_proof(&public_data.keys, public_data.threshold, proof, to_sign)
 }
 
 #[cfg(test)]

@@ -251,6 +251,7 @@ fn main() -> std::io::Result<()> {
             &cmm_id_cred_sec_sharing_coeff,
             cmm_coeff_randomness,
             &policy,
+            &SystemAttributeRandomness,
             csprng,
         )
         .expect("Could not compute commitments.");

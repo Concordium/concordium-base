@@ -1,7 +1,8 @@
 module Concordium.Crypto.BlsSignature
   (PublicKey, SecretKey(..), Signature, Proof,
   generateSecretKey, derivePublicKey, sign, verify, aggregate, aggregateMany, verifyAggregate, emptySignature,
-  freeSecretKey, proveKnowledgeOfSK, checkProofOfKnowledgeSK)
+  freeSecretKey, proveKnowledgeOfSK, checkProofOfKnowledgeSK,
+  publicKeySize, proofSize)
   where
 
 import Concordium.Crypto.FFIHelpers

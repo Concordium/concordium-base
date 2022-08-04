@@ -261,7 +261,7 @@ fn decrypt_ar_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
         Err(_) => {
             // try to decrypt
             let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
-            let pass = succeed_or_die!(rpassword::read_password_from_tty(Some("Enter password to decrypt AR credentials: ")), e => "Could not read password {}.");
+            let pass = succeed_or_die!(rpassword::prompt_password("Enter password to decrypt AR credentials: "), e => "Could not read password {}.");
             let decrypted = succeed_or_die!(crypto_common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt AR credentials. Most likely the password you provided is incorrect {}.");
             serde_json::from_slice(&decrypted).map_err(|_| {
                 "Could not decrypt AR credentials. Most likely the password you provided is \
@@ -334,7 +334,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
     let m = decrypt_from_chunks_given_generator(
         &ar.ar_secret_key,
         &single_ar_data.enc_prf_key_share,
-        &global_context.encryption_in_exponent_generator(),
+        global_context.encryption_in_exponent_generator(),
         1 << 16,
         CHUNK_SIZE,
     );

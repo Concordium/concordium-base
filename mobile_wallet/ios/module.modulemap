@@ -1,0 +1,4 @@
+module MobileWallet {
+	header "mobile_wallet.h"
+	export *
+}

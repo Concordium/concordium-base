@@ -177,7 +177,7 @@ pub fn reveal<P: Into<u64> + Copy, C: Curve>(shares: &[(P, PedersenValue<C>)]) -
     let kxs = shares.iter().map(|(fst, _)| *fst).collect::<Vec<_>>();
     shares.iter().fold(C::Scalar::zero(), |accum, (i, v)| {
         let mut s = lagrange::<P, C>(&kxs, *i);
-        s.mul_assign(&v);
+        s.mul_assign(v);
         s.add_assign(&accum);
         s
     })

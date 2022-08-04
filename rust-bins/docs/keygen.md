@@ -1,10 +1,11 @@
 # Key generation tool
-The key generation tool can generate encryption keys for anonymity revokers and signature keys for identity providers. The tool can be found in [../src/bin/keygen.rs](../src/bin/keygen.rs).
+The key generation tool can generate encryption keys for anonymity revokers, signature keys for identity providers, and update keys. The tool can be found in [../src/bin/keygen.rs](../src/bin/keygen.rs).
 
 The keygen tool can
 - generate keys for anonymity revokers via the subcommand `keygen-ar`
 - generate keys for identity providers via the subcommand `keygen-ip`
 - generate a randomness file via the subcommand `gen-rand`
+- generate update keys via the subcommand `keygen-governance`
 
 Generated keys are in a format that can be used to include the public keys in genesis, and used by other tools.
 Private keys can be emitted either as plaintext or password encrypted.
@@ -12,7 +13,8 @@ The user is asked for a password before emitting private keys. If the empty pass
 
 To see all the options use the `--help` option at different levels.
 
-The keygen-ip tool generates keys deterministically from the given randomness file. The keygen-ar tool uses the same method as gen-rand to generate randomness.
+The keygen-ip tool generates keys deterministically from the given randomness file. The keygen-ar tool uses the same method as gen-rand to generate randomness. The keygen-governance currently generates keys using the system randomness.
+
 
 ## keygen-ar
 
@@ -57,6 +59,27 @@ Generates random words that can be used as a randomness file for keygen-ip. The 
 - `--in` a filename from which inputs words are read. If not provided, words are read from stdin.
 - `--out`, a filename where the private keys will be emitted
 - `--no-verification` if set, do not verify the validity of the input. Otherwise the input is verified to be a valid BIP39 sentence.
+
+## keygen-governance
+
+Generates keys suitable for using as governance keys. The following options are supported
+
+- `--level` Governance key level, one of `root`, `1` or `2`.
+- `--out`, a filename where the private keys will be emitted. This is potentially encrypted.
+- `--out-pub` a filename where the public data will be emitted.
+
+The public keys are in a format suitable for inclusion in the desktop wallet update transaction.
+The private keys format is a JSON file with the following structure
+```json
+{
+  "keyPair": {
+    "signKey": "5e152fc71f8ca92d9ea1196893b7f7df1a3aa8ff61ef3878950465dde056202e",
+    "verifyKey": "667470661d0fde4a7a94351334e8f88da5527fc35bece8e1a15f71c9bb210faf"
+  },
+  "type": "level2"
+}
+```
+If encrypted, there is the usual Concordium format for encryption on top of this file.
 
 # Examples
 As mentioned above, one has to provide a file containing at least 64 random bytes to keygen-ip. In the following it is assumed that this file is called bytes.txt and has the content `12345678901234567890123456789012345678904989849123456789012345678901231`.

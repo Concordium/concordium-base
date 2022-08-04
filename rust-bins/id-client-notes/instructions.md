@@ -81,8 +81,28 @@ where `credential.json` is the file from the previous step.
 
 # Import the account into concordium-client
 
-To import the account to use with concordium-client run
+To import the account to use with concordium-client, you need to add the commitments to the credential's contents.
+They are contained within the proofs blob, so you can deserialize that to get them.
+But concordium-client doesn't save these values anyway, so you can just insert random values:
+
+```JSON
+"contents": {
+    "commitments": {
+        "cmmAttributes": {},
+        "cmmCredCounter": "a4f6a0d5712aa784d5dbc8d7c410711d9422ce397653a377bc85a6dac04707860ace8f51d9b48060184942367bc5e517",
+        "cmmIdCredSecSharingCoeff": [
+            "b588968126fe9cba61e7036a540f9a6f85995a3b220a6c1170b474296496f3d0d933885421b97f574e7dc0b5f01430a9"
+        ],
+        "cmmMaxAccounts": "b77ded7505f79e3af65ab4770b3ad5eadb569ac9849b3d0e5202c1248e26426a1e188794debad3faf633bb3e905ed750",
+        "cmmPrf": "aebb98086e061229ecad0e31620d294329917484c5b353dcb95f72a3047efca8ba29fb8bbaabf0ecb8837d2feb266aea"
+    },
+    ...
+},
+```
+
+Then run:
+
 ```console
 concordium-client config account import --format=genesis account-keys.json
 ```
-where `account-keys.json` is the file with account keys generated in the step `create-credential` above.
+where `account-keys.json` is the file with account keys generated in the step `create-credential` above, with the commitments added.

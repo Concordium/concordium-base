@@ -132,7 +132,7 @@ pub extern "C" fn bls_verify_aggregate(
     // It might be desirable to make it take references instead.
     let pks: Vec<PublicKey<Bls12>> = pks_.iter().map(|pk| *from_ptr!(*pk)).collect();
     let sig = from_ptr!(sig_ptr);
-    u8::from(verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig))
+    u8::from(verify_aggregate_sig_trusted_keys(m_bytes, &pks, *sig))
 }
 
 // Only used for adding a dummy proof to the genesis block
@@ -187,7 +187,7 @@ pub extern "C" fn bls_check_proof(
     let pk = from_ptr!(pk_ptr);
 
     let mut ro = RandomOracle::domain(ro_bytes);
-    let check = pk.check_proof(&mut ro, &proof);
+    let check = pk.check_proof(&mut ro, proof);
     u8::from(check)
 }
 

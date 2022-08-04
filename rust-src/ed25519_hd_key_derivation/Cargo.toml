@@ -1,0 +1,18 @@
+[package]
+name = "ed25519_hd_key_derivation"
+version = "1.0.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE"
+
+[dependencies]
+hex = "0.4.3"
+hmac = "0.12.1"
+sha2 = "0.10.2"
+regex = "1.5.5"
+ed25519-dalek = "=1.0"
+thiserror = "1.0"
+
+[lib]
+name = "ed25519_hd_key_derivation"
+crate-type = ["rlib"]

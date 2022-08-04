@@ -32,7 +32,7 @@ A pre-identity object is a public object (to be sent to the identity provider) a
 The command-line tool can be invoked as follows.
 
 ```console
-$./client start-ip --chi bob-chi.json --private bob-aci.json --public bob-pio.json
+$ ./client start-ip --chi bob-chi.json --private bob-aci.json --public bob-pio.json
 Choose identity provider: Identity provider 1, identity_provider-1
 Choose anonymity revokers: AR-2, AR-4, AR-5
 Revocation threshold: 2
@@ -129,7 +129,7 @@ This is the last step that is done by the account holder given the private data,
 
 An example interaction looks as follows.
 ```console
-$> ./client create-credential --id-object bob-identity-object.json --private bob-aci.json --out credential.json --ip-info database/identity_provider-1.pub.json --keys-out account-keys.json --expiry 300
+$ ./client create-credential --id-object bob-identity-object.json --private bob-aci.json --out credential.json --ip-info database/identity_provider-1.pub.json --keys-out account-keys.json --expiry 300
 Select which attributes you wish to reveal: nationality
 Generated fresh verification and signature key of the account to file account_keys.json
 Index: 3
@@ -239,7 +239,7 @@ The identity provider verifies that all the data it is sent (the pre-identity ob
 
 The command-line tool allows one to act as the identity provider (provided the user has relevant keys) as follows.
 ```console
-$./client ip-sign-pio --pio bob-pio.json --ip-data database/identity_provider-1.json --out bob-identity-object.json --initial-cdi-out initial-account.json
+$ ./client ip-sign-pio --pio bob-pio.json --ip-data database/identity_provider-1.json --out bob-identity-object.json --initial-cdi-out initial-account.json --expiry 300
 ...
 ```
 This will output two files, the `bob-identity-object.json` file which contains the identity object that is sent back to the user, and `initial-account.json` which must be sent to the chain to create the initial account.

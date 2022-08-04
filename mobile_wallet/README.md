@@ -51,14 +51,13 @@ To build for iOS, XCode must be installed and the license must have been accepte
 
 First time compiling the code you'll need to install the standard library for the two iOS architectures. This can be done using
 ```
-rustup target add aarch64-apple-ios x86_64-apple-ios
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 ```
 
 This should be sufficient for modern devices, but others might be worth installing depending on min target device.
 
-You'll also need an extension for the cargo tool to build universal libraries for iOS and generate C headers.
+You'll also need an extension for the cargo tool to generate C headers.
 ```
-cargo install cargo-lipo
 cargo install cbindgen
 ```
 
@@ -75,7 +74,7 @@ Now you have the header file required for use from Swift/ObjC.
 
 You can now execute
 ```
-cargo lipo --release
+./scripts/build-ios.sh
 ```
 
-It will proceed to build the static library which can then be found as `target/universal/release/libmobile_wallet.a`
+It will proceed to build the xcframework which can then be found as `ios/build/libmobile_wallet.xcframework`

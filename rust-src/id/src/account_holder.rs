@@ -11,7 +11,7 @@ use crate::{
 use anyhow::{bail, ensure};
 use bulletproofs::{
     inner_product_proof::inner_product,
-    range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
+    range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal, RangeProof},
 };
 use crypto_common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
@@ -66,38 +66,216 @@ pub fn build_pub_info_for_ip<C: Curve>(
     Some(pub_info_for_ip)
 }
 
-/// Generate PreIdentityObject out of the account holder information,
-/// the chosen anonymity revoker information, and the necessary contextual
-/// information (group generators, shared commitment keys, etc).
+/// Two flows for creating identities are supported. The first flow involves the
+/// creation of an initial account, the second flow does not.
+/// The proofs used in the flows are very similar, and therefore factored out in
+/// the function `generate_pio_common` that constructs the common sigma protocol
+/// prover used in both flows:
+/// * In the version 0 flow, the common prover is AND'ed with a prover showing
+///   that RegID = PRF(key_PRF, 0)
+/// * In the version 1 flow, the sigma protocol prover is the common prover
+/// The `generate_pio_common` function also produces the bulletproofs rangeproof
+/// used in both flows. The version 0 flow is kept for backwards compatibility.
+
+/// Generate a version 0 PreIdentityObject out of the account holder
+/// information, the chosen anonymity revoker information, and the necessary
+/// contextual information (group generators, shared commitment keys, etc).
 /// NB: In this method we assume that all the anonymity revokers in context
 /// are to be used.
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    // TODO: consider renaming this function
     context: &IpContext<P, C>,
     threshold: Threshold,
-    aci: &AccCredentialInfo<C>,
+    id_use_data: &IdObjectUseData<P, C>,
     initial_account: &impl InitialAccountDataWithSigning,
 ) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
-
-    // PRF related computation
-    let prf_key = &aci.prf_key;
-
-    // Step 3: We should sign IDcred_PUB ,policy_ACC ,RegID_ACC ,vk_ACC ,pk_ACC
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
+    // Prove ownership of the initial account
     let pub_info_for_ip = build_pub_info_for_ip(
         context.global_context,
-        &aci.cred_holder_info.id_cred.id_cred_sec,
-        prf_key,
+        &id_use_data.aci.cred_holder_info.id_cred.id_cred_sec,
+        &id_use_data.aci.prf_key,
         initial_account,
     )?;
-
-    let id_cred_pub = pub_info_for_ip.id_cred_pub;
-    let reg_id = pub_info_for_ip.reg_id;
-
     let proof_acc_sk = AccountOwnershipProof {
         sigs: initial_account.sign_public_information_for_ip(&pub_info_for_ip),
     };
-    // --
+    let CommonPioGenerationOutput{
+        prover,
+        secret,
+        bulletproofs,
+        ip_ar_data,
+        choice_ar_parameters,
+        cmm_prf_sharing_coeff,
+        .. // id_cred_pub already in pub_info_for_ip
+     } = generate_pio_common(
+        &mut transcript,
+        &mut csprng,
+        context,
+        threshold,
+        id_use_data,
+    )?;
+    // Additionally prove that RegID = PRF(key_PRF, 0):
+    let prover_prf_regid = com_eq::ComEq {
+        commitment: prover.first.second.commitment_1,
+        y:          context.global_context.on_chain_commitment_key.g,
+        g:          pub_info_for_ip.reg_id,
+        cmm_key:    prover.first.second.cmm_key_1,
+    };
+
+    let secret_prf_regid = com_eq::ComEqSecret {
+        r: secret.0 .1.rand_cmm_1.clone(),
+        a: id_use_data.aci.prf_key.to_value(),
+    };
+    // Add the prf_regid prover and secret
+    let prover = prover.add_prover(prover_prf_regid);
+    let secret = (secret, secret_prf_regid);
+    transcript.append_message(b"bulletproofs", &bulletproofs);
+    // Randomness to retrieve the signature
+    // We add randomness from both of the commitments.
+    // See specification of ps_sig and id layer for why this is so.
+    let mut sig_retrieval_rand = P::ScalarField::zero();
+    sig_retrieval_rand.add_assign(&secret.0 .0 .0 .1.r);
+    sig_retrieval_rand.add_assign(&secret.0 .0 .1.rand_cmm_1);
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
+
+    let ip_ar_data = ip_ar_data
+        .iter()
+        .zip(proof.witness.w1.w2.witnesses.into_iter())
+        .map(|((ar_id, f), w)| (*ar_id, f(w)))
+        .collect::<BTreeMap<ArIdentity, _>>();
+
+    // Returning the version 0 pre-identity object.
+    let poks_common = CommonPioProofFields {
+        challenge: proof.challenge,
+        id_cred_sec_witness: proof.witness.w1.w1.w1.w1,
+        commitments_same_proof: proof.witness.w1.w1.w1.w2,
+        commitments_prf_same: proof.witness.w1.w1.w2,
+        bulletproofs,
+    };
+    let poks = PreIdentityProof {
+        common_proof_fields: poks_common,
+        prf_regid_proof: proof.witness.w2,
+        proof_acc_sk,
+    };
+    let pio = PreIdentityObject {
+        pub_info_for_ip,
+        ip_ar_data,
+        choice_ar_parameters,
+        cmm_sc: prover.first.first.first.second.commitment,
+        cmm_prf: prover.first.first.second.commitment_1,
+        cmm_prf_sharing_coeff,
+        poks,
+    };
+    Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
+}
+
+/// Generate a version 1 PreIdentityObject out of the account holder
+/// information, the chosen anonymity revoker information, and the necessary
+/// contextual information (group generators, shared commitment keys, etc).
+/// NB: In this method we assume that all the anonymity revokers in context
+/// are to be used.
+pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    // TODO: consider renaming this function
+    context: &IpContext<P, C>,
+    threshold: Threshold,
+    id_use_data: &IdObjectUseData<P, C>,
+) -> Option<(PreIdentityObjectV1<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
+    let mut csprng = thread_rng();
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
+    let CommonPioGenerationOutput {
+        prover,
+        secret,
+        bulletproofs,
+        ip_ar_data,
+        choice_ar_parameters,
+        cmm_prf_sharing_coeff,
+        id_cred_pub,
+    } = generate_pio_common(
+        &mut transcript,
+        &mut csprng,
+        context,
+        threshold,
+        id_use_data,
+    )?;
+    transcript.append_message(b"bulletproofs", &bulletproofs);
+    // Randomness to retrieve the signature
+    // We add randomness from both of the commitments.
+    // See specification of ps_sig and id layer for why this is so.
+    let mut sig_retrieval_rand = P::ScalarField::zero();
+    sig_retrieval_rand.add_assign(&secret.0 .0 .1.r);
+    sig_retrieval_rand.add_assign(&secret.0 .1.rand_cmm_1);
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
+
+    let ip_ar_data = ip_ar_data
+        .iter()
+        .zip(proof.witness.w2.witnesses.into_iter())
+        .map(|((ar_id, f), w)| (*ar_id, f(w)))
+        .collect::<BTreeMap<ArIdentity, _>>();
+
+    // Returning the version 1 pre-identity object.
+    let poks = CommonPioProofFields {
+        challenge: proof.challenge,
+        id_cred_sec_witness: proof.witness.w1.w1.w1,
+        commitments_same_proof: proof.witness.w1.w1.w2,
+        commitments_prf_same: proof.witness.w1.w2,
+        bulletproofs,
+    };
+    let pio = PreIdentityObjectV1 {
+        id_cred_pub,
+        ip_ar_data,
+        choice_ar_parameters,
+        cmm_sc: prover.first.first.second.commitment,
+        cmm_prf: prover.first.second.commitment_1,
+        cmm_prf_sharing_coeff,
+        poks,
+    };
+    Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
+}
+
+/// Type alias for the sigma protocol prover that are used by both
+/// `generate_pio` and `generate_pio_v1`.
+type CommonPioProverType<P, C> = AndAdapter<
+    AndAdapter<
+        AndAdapter<dlog::Dlog<C>, com_eq::ComEq<C, <P as Pairing>::G1>>,
+        com_eq_different_groups::ComEqDiffGroups<<P as Pairing>::G1, C>,
+    >,
+    ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
+>;
+
+type IpArDataClosures<'a, C> = Vec<(
+    ArIdentity,
+    Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a>,
+)>;
+
+/// Various data returned by `generate_pio_common` needed by both
+/// `generate_pio` and `generate_pio_v1` in order to produce the relevant
+/// pre-identity object.
+struct CommonPioGenerationOutput<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    prover:                CommonPioProverType<P, C>,
+    secret:                <CommonPioProverType<P, C> as SigmaProtocol>::SecretData,
+    bulletproofs:          Vec<RangeProof<C>>,
+    ip_ar_data:            IpArDataClosures<'a, C>,
+    choice_ar_parameters:  ChoiceArParameters,
+    cmm_prf_sharing_coeff: Vec<Commitment<C>>,
+    id_cred_pub:           C,
+}
+
+/// Function for generating the common parts of a pre-identity object. This
+/// includes constructing the sigma protocol prover that are used by both
+/// `generate_pio` and `generate_pio_v1` to generate a version 0 and version 1
+/// pre-identity object, respectively.
+fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: rand::Rng>(
+    transcript: &mut RandomOracle,
+    csprng: &mut R,
+    context: &IpContext<'a, P, C>,
+    threshold: Threshold,
+    id_use_data: &IdObjectUseData<P, C>,
+) -> Option<CommonPioGenerationOutput<'a, P, C>> {
+    let aci = &id_use_data.aci;
+
+    // PRF related computation
+    let prf_key = &aci.prf_key;
 
     let prf_value = aci.prf_key.to_value();
 
@@ -105,10 +283,10 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data_prf(
         &prf_value,
-        &context.ars_infos,
+        context.ars_infos,
         threshold,
         ar_commitment_key,
-        &context.global_context,
+        context.global_context,
     );
     let number_of_ars = context.ars_infos.len();
     let mut ip_ar_data = Vec::with_capacity(number_of_ars);
@@ -120,14 +298,18 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         h: context.ip_info.ip_verify_key.g,
     };
 
-    let (cmm_sc, cmm_sc_rand) = sc_ck.commit(&id_cred_sec, &mut csprng);
-    let cmm_sc_rand = cmm_sc_rand;
+    let (cmm_sc, cmm_sc_rand) = sc_ck.commit(&id_cred_sec, csprng);
     // We now construct all the zero-knowledge proofs.
     // Since all proofs must be bound together, we
     // first construct inputs to all the proofs, and only at the end
     // do we produce all the different witnesses.
 
     // First the proof that we know id_cred_sec.
+    let id_cred_pub = context
+        .global_context
+        .on_chain_commitment_key
+        .g
+        .mul_by_scalar(id_cred_sec);
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
         coeff:  context.global_context.on_chain_commitment_key.g,
@@ -158,8 +340,12 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         g: context.ip_info.ip_verify_key.ys[1],
         h: context.ip_info.ip_verify_key.g,
     };
-    let (cmm_prf, rand_cmm_prf) = commitment_key_prf.commit(prf_key, &mut csprng);
-    let rand_cmm_prf = rand_cmm_prf;
+    // let (cmm_prf, rand_cmm_prf) = commitment_key_prf.commit(prf_key, &mut
+    // csprng);
+    let mut rand_cmm_prf_scalar = *id_use_data.randomness; // m_0 from the bluepaper
+    rand_cmm_prf_scalar.sub_assign(&cmm_sc_rand);
+    let rand_cmm_prf = PedersenRandomness::new(rand_cmm_prf_scalar);
+    let cmm_prf = commitment_key_prf.hide(prf_key, &rand_cmm_prf);
     let snd_cmm_prf = cmm_prf_sharing_coeff.first()?;
     let rand_snd_cmm_prf = cmm_coeff_randomness.first()?.clone();
 
@@ -172,7 +358,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     });
     let secret = (secret, com_eq_different_groups::ComEqDiffGroupsSecret {
         value:      prf_key.to_value(),
-        rand_cmm_1: rand_cmm_prf.clone(),
+        rand_cmm_1: rand_cmm_prf,
         rand_cmm_2: rand_snd_cmm_prf,
     });
 
@@ -193,14 +379,14 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         ar_identities,
         threshold,
     };
-    let mut transcript = RandomOracle::domain("PreIdentityProof");
+
     transcript.append_message(b"ctx", &context.global_context);
     transcript.append_message(b"choice_ar_parameters", &choice_ar_parameters);
     transcript.append_message(b"cmm_sc", &cmm_sc);
     transcript.append_message(b"cmm_prf", &cmm_prf);
     transcript.append_message(b"cmm_prf_sharing_coeff", &cmm_prf_sharing_coeff);
 
-    for item in prf_key_data.iter() {
+    for item in prf_key_data {
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
         let mut power_of_two = C::Scalar::one();
@@ -233,12 +419,14 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         };
         replicated_provers.push(item_prover);
         replicated_secrets.push(secret);
-        ip_ar_data.push((item.ar.ar_identity, move |proof_com_enc_eq| IpArData {
-            enc_prf_key_share: item.encrypted_share,
-            proof_com_enc_eq,
-        }));
+        let encrypted_share = item.encrypted_share;
+        let closure: Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a> =
+            Box::new(move |proof_com_enc_eq| IpArData {
+                enc_prf_key_share: encrypted_share,
+                proof_com_enc_eq,
+            });
+        ip_ar_data.push((item.ar.ar_identity, closure));
         transcript.append_message(b"encrypted_share", &item.encrypted_share);
-
         let cmm_key_bulletproof = PedersenKey {
             g: h_in_exponent,
             h: item.ar_public_key.key,
@@ -249,8 +437,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             .map(|x| PedersenRandomness::new(*x.as_ref()))
             .collect::<Vec<_>>();
         let bulletproof = bulletprove(
-            &mut transcript,
-            &mut csprng,
+            transcript,
+            csprng,
             u8::from(CHUNK_SIZE),
             item.share_in_chunks.len() as u8,
             &item.share_in_chunks,
@@ -261,68 +449,20 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         bulletproofs.push(bulletproof);
     }
 
-    // Proof that RegID_ACC = PRF(AHI.key_PRF ,0):
-    let prover_prf_regid = com_eq::ComEq {
-        commitment: cmm_prf,
-        y:          context.global_context.on_chain_commitment_key.g,
-        g:          reg_id,
-        cmm_key:    commitment_key_prf,
-    };
-
-    let secret_prf_regid = com_eq::ComEqSecret {
-        r: rand_cmm_prf.clone(),
-        a: prf_key.to_value(),
-    };
-
     let prover = prover.add_prover(ReplicateAdapter {
         protocols: replicated_provers,
     });
-
     let secret = (secret, replicated_secrets);
 
-    let prover = prover.add_prover(prover_prf_regid);
-    let secret = (secret, secret_prf_regid);
-    transcript.append_message(b"bulletproofs", &bulletproofs);
-    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
-
-    let ip_ar_data = ip_ar_data
-        .iter()
-        .zip(proof.witness.w1.w2.witnesses.into_iter())
-        .map(|(&(ar_id, f), w)| (ar_id, f(w)))
-        .collect::<BTreeMap<ArIdentity, _>>();
-    let poks = PreIdentityProof {
-        challenge: proof.challenge,
-        id_cred_sec_witness: proof.witness.w1.w1.w1.w1,
-        commitments_same_proof: proof.witness.w1.w1.w1.w2,
-        commitments_prf_same: proof.witness.w1.w1.w2,
-        prf_regid_proof: proof.witness.w2,
-        proof_acc_sk,
+    Some(CommonPioGenerationOutput {
+        prover,
+        secret,
         bulletproofs,
-    };
-    // attribute list
-    let prio = PreIdentityObject {
-        pub_info_for_ip,
         ip_ar_data,
         choice_ar_parameters,
-        cmm_sc,
-        cmm_prf,
         cmm_prf_sharing_coeff,
-        poks,
-    };
-
-    // Step 9:  Somewhere here we should also send the credential stuff for the
-    // initial account (the ACI in the bluepaper)
-
-    // Randomness to retrieve the signature
-    // We add randomness from both of the commitments.
-    // See specification of ps_sig and id layer for why this is so.
-    let mut sig_retrieval_rand = P::ScalarField::zero();
-    sig_retrieval_rand.add_assign(&cmm_sc_rand);
-    sig_retrieval_rand.add_assign(&rand_cmm_prf);
-    Some((
-        prio,
-        ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand),
-    ))
+        id_cred_pub,
+    })
 }
 
 /// Convenient data structure to collect data related to a single AR
@@ -357,7 +497,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -442,7 +582,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     // We evaluate the polynomial at ar_identities.
     let share_points = ar_parameters.keys().copied();
     // share the scalar on ar_identity points.
-    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, threshold, &mut csprng);
+    let sharing_data = share::<C, _, _, _>(shared_scalar, share_points, threshold, &mut csprng);
     // commitments to the sharing coefficients
     let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
     // first coefficient is the shared scalar
@@ -509,6 +649,7 @@ pub fn commitment_to_share_and_rand<C: Curve>(
 /// commitments later on. The information is meant to be valid in the context of
 /// a given identity provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
+#[allow(clippy::too_many_arguments)]
 pub fn create_credential<
     'a,
     P: Pairing,
@@ -516,11 +657,12 @@ pub fn create_credential<
     AttributeType: Attribute<C::Scalar>,
 >(
     context: IpContext<'a, P, C>,
-    id_object: &IdentityObject<P, C, AttributeType>,
+    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_data: &impl CredentialDataWithSigning,
+    secret_data: &impl HasAttributeRandomness<C>,
     new_or_existing: &either::Either<TransactionTime, AccountAddress>,
 ) -> anyhow::Result<(
     CredentialDeploymentInfo<P, C, AttributeType>,
@@ -536,10 +678,11 @@ where
         policy,
         cred_data.get_cred_key_info(),
         new_or_existing.as_ref().right(),
+        secret_data,
     )?;
 
     let proof_acc_sk = AccountOwnershipProof {
-        sigs: cred_data.sign(&new_or_existing, &unsigned_credential_info),
+        sigs: cred_data.sign(new_or_existing, &unsigned_credential_info),
     };
 
     let cdp = CredDeploymentProofs {
@@ -555,12 +698,7 @@ where
     Ok((info, commitments_randomness))
 }
 
-/// Generates an unsigned credential deployment info and outputs the randomness
-/// used in commitments. The information is meant to be valid in the context of
-/// a given identity provider, and global parameter.
-/// The 'cred_counter' is used to generate a new credential ID.
-/// It should be the case that using the output, one can construct an actual
-/// credential deployment info, by signing the unsigned challenge.
+#[allow(clippy::too_many_arguments)]
 pub fn create_unsigned_credential<
     'a,
     P: Pairing,
@@ -568,12 +706,13 @@ pub fn create_unsigned_credential<
     AttributeType: Attribute<C::Scalar>,
 >(
     context: IpContext<'a, P, C>,
-    id_object: &IdentityObject<P, C, AttributeType>,
+    id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     cred_key_info: CredentialPublicKeys,
     addr: Option<&AccountAddress>,
+    secret_data: &impl HasAttributeRandomness<C>,
 ) -> anyhow::Result<(
     UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     CommitmentsRandomness<C>,
@@ -582,11 +721,13 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
 
-    let ip_sig = &id_object.signature;
+    let (ip_sig, prio, alist) = (
+        id_object.get_signature(),
+        id_object.get_common_pio_fields(),
+        id_object.get_attribute_list(),
+    );
     let sig_retrieval_rand = &id_object_use_data.randomness;
     let aci = &id_object_use_data.aci;
-    let prio = &id_object.pre_identity_object;
-    let alist = &id_object.alist;
 
     let prf_key = &aci.prf_key;
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
@@ -613,12 +754,7 @@ where
     // available in the given context, and remove the ones that are not.
     let chosen_ars = {
         let mut chosen_ars = BTreeMap::new();
-        for ar_id in id_object
-            .pre_identity_object
-            .choice_ar_parameters
-            .ar_identities
-            .iter()
-        {
+        for ar_id in prio.choice_ar_parameters.ar_identities.iter() {
             if let Some(info) = context.ars_infos.get(ar_id) {
                 // FIXME: We could get rid of this clone if we passed in a map of references.
                 let _ = chosen_ars.insert(*ar_id, info.clone()); // since we are
@@ -655,7 +791,7 @@ where
     let ip_pub_key = &context.ip_info.ip_verify_key;
 
     // retrieve the signature on the underlying idcredsec + prf_key + attribute_list
-    let retrieved_sig = ip_sig.retrieve(&sig_retrieval_rand);
+    let retrieved_sig = ip_sig.retrieve(sig_retrieval_rand);
 
     // and then we blind the signature to disassociate it from the message.
     // only the second part is used (as per the protocol)
@@ -664,12 +800,13 @@ where
     // We use the on-chain pedersen commitment key.
     let (commitments, commitment_rands) = compute_commitments(
         &context.global_context.on_chain_commitment_key,
-        &alist,
+        alist,
         prf_key,
         cred_counter,
         &cmm_id_cred_sec_sharing_coeff,
         cmm_coeff_randomness,
         &policy,
+        secret_data,
         &mut csprng,
     )?;
 
@@ -743,12 +880,12 @@ where
         &context.global_context.on_chain_commitment_key,
         &commitments,
         &commitment_rands,
-        &id_cred_sec,
-        &prf_key,
-        &alist,
-        id_object.pre_identity_object.choice_ar_parameters.threshold,
+        id_cred_sec,
+        prf_key,
+        alist,
+        prio.choice_ar_parameters.threshold,
         &choice_ar_handles,
-        &ip_pub_key,
+        ip_pub_key,
         &blinded_sig,
         blind_rand,
     )?;
@@ -773,7 +910,7 @@ where
         8,
         u64::from(cred_counter),
         u64::from(alist.max_accounts),
-        &context.global_context.bulletproof_generators(),
+        context.global_context.bulletproof_generators(),
         &context.global_context.on_chain_commitment_key,
         &commitment_rands.cred_counter_rand,
         &commitment_rands.max_accounts_rand,
@@ -919,7 +1056,7 @@ fn compute_pok_sig<
 
     // and all commitments to ARs with randomness 0
     for ar in ar_scalars.iter() {
-        comm_vec.push(commitment_key.hide_worker(&ar, &zero));
+        comm_vec.push(commitment_key.hide_worker(ar, &zero));
     }
 
     comm_vec.push(tags_cmm);
@@ -964,6 +1101,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     cmm_id_cred_sec_sharing_coeff: &[Commitment<C>],
     cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
     policy: &Policy<C, AttributeType>,
+    secret_data: &impl HasAttributeRandomness<C>,
     csprng: &mut R,
 ) -> anyhow::Result<(CredentialDeploymentCommitments<C>, CommitmentsRandomness<C>)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
@@ -993,9 +1131,10 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
         // We can just commit with randomness 0.
         if !policy.policy_vec.contains_key(&i) {
             let value = Value::<C>::new(val.to_field_element());
-            let (cmm, rand) = commitment_key.commit(&value, csprng);
+            let attr_rand = secret_data.get_attribute_commitment_randomness(i)?;
+            let cmm = commitment_key.hide(&value, &attr_rand);
             cmm_attributes.insert(i, cmm);
-            attributes_rand.insert(i, rand);
+            attributes_rand.insert(i, attr_rand);
         }
     }
     let cdc = CredentialDeploymentCommitments {
@@ -1044,7 +1183,7 @@ fn compute_pok_reg_id<C: Curve>(
 
     // commitments are the public values. They all have to
     let public = [
-        cmm_prf.combine(&cmm_cred_counter),
+        cmm_prf.combine(cmm_cred_counter),
         Commitment(reg_id),
         cmm_one,
     ];
@@ -1056,8 +1195,8 @@ fn compute_pok_reg_id<C: Curve>(
 
     // combine the two randomness witnesses
     let mut rand_1 = C::Scalar::zero();
-    rand_1.add_assign(&prf_rand);
-    rand_1.add_assign(&cred_counter_rand);
+    rand_1.add_assign(prf_rand);
+    rand_1.add_assign(cred_counter_rand);
     // reg_id is the commitment to reg_id_exponent with randomness 0
     // the right-hand side of the equation is commitment to 1 with randomness 0
     let values = [Value::new(k), Value::new(reg_id_exponent)];
@@ -1074,6 +1213,45 @@ fn compute_pok_reg_id<C: Curve>(
         cmm_key: *on_chain_commitment_key,
     };
     (prover, secret)
+}
+
+/// Generate a ID recovery request, proving of knowledge of idCredSec.
+/// The arguments are
+/// - ip_info - Identity provider information containing their ID and
+///   verification key that goes in to the protocol context.
+/// - context - Global Context containing g such that `idCredPub = g^idCredSec`.
+///   Also goes into the protocol context.
+/// - id_cred_sec - The secret value idCredSec that only the account holder
+///   knows.
+/// - timestamp - seconds since the unix epoch. Goes into the protocol context.
+pub fn generate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    ip_info: &IpInfo<P>,
+    context: &GlobalContext<C>,
+    id_cred_sec: &Value<C>,
+    timestamp: u64, // seconds since the unix epoch
+) -> Option<IdRecoveryRequest<C>> {
+    let g = context.on_chain_commitment_key.g;
+    let id_cred_pub = g.mul_by_scalar(id_cred_sec);
+    let prover = dlog::Dlog::<C> {
+        public: id_cred_pub,
+        coeff:  g,
+    };
+    let secret = dlog::DlogSecret {
+        secret: id_cred_sec.clone(),
+    };
+
+    let mut csprng = thread_rng();
+    let mut transcript = RandomOracle::domain("IdRecoveryProof");
+    transcript.append_message(b"ctx", &context);
+    transcript.append_message(b"timestamp", &timestamp);
+    transcript.append_message(b"ipIdentity", &ip_info.ip_identity);
+    transcript.append_message(b"ipVerifyKey", &ip_info.ip_verify_key);
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
+    Some(IdRecoveryRequest {
+        id_cred_pub,
+        timestamp,
+        proof,
+    })
 }
 
 #[cfg(test)]
@@ -1213,7 +1391,7 @@ mod tests {
             ip_secret_key,
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let aci = test_create_aci(&mut csprng);
+        let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -1228,8 +1406,14 @@ mod tests {
 
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-        let (context, pio, randomness) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        let (context, pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
         let alist = test_create_attributes();
         let ver_ok = verify_credentials(
             &pio,
@@ -1247,7 +1431,6 @@ mod tests {
             alist,
             signature: ip_sig,
         };
-        let id_use_data = IdObjectUseData { aci, randomness };
         let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
         let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
         let policy = Policy {
@@ -1278,6 +1461,7 @@ mod tests {
             cred_ctr,
             policy.clone(),
             &acc_data,
+            &SystemAttributeRandomness {},
             &Left(EXPIRY),
         )
         .expect("Could not generate CDI");

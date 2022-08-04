@@ -1,0 +1,44 @@
+[package]
+name = "key_derivation"
+version = "1.0.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE"
+
+[dependencies]
+hmac = "0.12.1"
+sha2 = "0.10.2"
+pairing = "0.15"
+ed25519-dalek = "1.0.0"
+serde = "1.0"
+
+[dependencies.ed25519_hd_key_derivation]
+path = "../ed25519_hd_key_derivation"
+version = "1.0.0"
+
+[dependencies.keygen_bls]
+path = "../keygen_bls"
+version = "2.0.0"
+
+[dependencies.dodis_yampolskiy_prf]
+path = "../dodis_yampolskiy_prf"
+version = "0"
+
+[dependencies.ps_sig]
+path = "../ps_sig"
+version = "0"
+
+[dependencies.id]
+path = "../id"
+version = "0"
+
+[lib]
+name = "key_derivation"
+crate-type = ["rlib"]
+
+[dev-dependencies]
+hex = "0.4.3"
+
+[dev-dependencies.crypto_common]
+path = "../crypto_common"
+version = "0"

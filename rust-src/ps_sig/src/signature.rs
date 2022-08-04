@@ -44,7 +44,7 @@ impl<C: Pairing> Signature<C> {
     /// commitment, and the randomness used in the commitment.
     pub fn retrieve(&self, r: &SigRetrievalRandomness<C>) -> Self {
         let h = self.0;
-        let hr = h.mul_by_scalar(&r);
+        let hr = h.mul_by_scalar(r);
         let b = self.1;
         Signature(h, b.minus_point(&hr))
     }

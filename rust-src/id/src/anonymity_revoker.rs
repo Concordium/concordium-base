@@ -22,4 +22,4 @@ pub fn reveal_id_cred_pub<C: Curve>(shares: &[(ArIdentity, Message<C>)]) -> C {
 /// something. It simply does polynomial interpolation. Whether the resulting
 /// value is meaningful must be ensured by the caller, e.g., by making sure that
 /// the threshold is compatible with the number of shares.
-pub fn reveal_prf_key<C: Curve>(shares: &[(ArIdentity, Value<C>)]) -> C::Scalar { reveal(&shares) }
+pub fn reveal_prf_key<C: Curve>(shares: &[(ArIdentity, Value<C>)]) -> C::Scalar { reveal(shares) }

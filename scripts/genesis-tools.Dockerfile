@@ -37,11 +37,6 @@ FROM debian:buster
 
 WORKDIR /
 
-# Install the necessary dependencies for running binaries.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        libpq-dev
-
 # Copy shared libraries to a location in the library path.
 COPY --from=builder /build/libs/ /usr/local/lib/
 

@@ -4,7 +4,7 @@ use rand::*;
 use crate::dlog_ed25519::*;
 use crypto_common::*;
 use ffi_helpers::*;
-use std::io::Cursor;
+use std::{convert::TryFrom, io::Cursor};
 
 use random_oracle::RandomOracle;
 
@@ -91,7 +91,7 @@ extern "C" fn eddsa_sign(
     let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
     let expanded_sk = ExpandedSecretKey::from(sk);
-    let signature = expanded_sk.sign(data, &pk);
+    let signature = expanded_sk.sign(data, pk);
     signature_bytes.copy_from_slice(&signature.to_bytes());
 }
 // Error encoding
@@ -105,7 +105,10 @@ extern "C" fn eddsa_verify(
     pk_ptr: *mut PublicKey,
     signature_bytes: &[u8; SIGNATURE_LENGTH],
 ) -> i32 {
-    let sig = Signature::new(*signature_bytes);
+    let sig = match Signature::try_from(&signature_bytes[..]) {
+        Ok(sig) => sig,
+        Err(_) => return 0,
+    };
     let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
     match pk.verify(data, &sig) {

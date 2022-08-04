@@ -53,6 +53,7 @@ library
       Concordium.Genesis.Data.P1
       Concordium.Genesis.Data.P2
       Concordium.Genesis.Data.P3
+      Concordium.Genesis.Data.P4
       Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker
@@ -61,8 +62,6 @@ library
       Concordium.ID.Parameters
       Concordium.ID.Types
       Concordium.Logger
-      Concordium.SQL.AccountTransactionIndex
-      Concordium.SQL.Helpers
       Concordium.Types
       Concordium.Types.Accounts
       Concordium.Types.Accounts.Releases
@@ -73,9 +72,11 @@ library
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
-      Concordium.Types.Instance
+      Concordium.Types.InvokeContract
+      Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
+      Concordium.Types.ProtocolVersion.JustForCPV1
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.SeedState
@@ -84,6 +85,7 @@ library
       Concordium.Types.UpdateQueues
       Concordium.Types.Updates
       Concordium.Utils
+      Concordium.Utils.BinarySearch
       Concordium.Utils.Encryption
       Concordium.Utils.Serialization
       Concordium.Utils.Serialization.Put
@@ -132,8 +134,6 @@ library
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -190,8 +190,6 @@ executable generate-update-keys
     , mtl >=2.2
     , optparse-applicative >=0.15
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -244,8 +242,6 @@ executable genesis
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -275,12 +271,14 @@ test-suite test
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
+      Generators
+      Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec
       Types.AddressesSpec
+      Types.AmountFraction
       Types.AmountSpec
+      Types.ParametersSpec
       Types.PayloadSerializationSpec
-      Types.RewardTypes
-      Types.TransactionGen
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec
@@ -320,8 +318,6 @@ test-suite test
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -374,8 +370,6 @@ benchmark bls-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -426,8 +420,6 @@ benchmark ed25519-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -478,8 +470,6 @@ benchmark ed25519dlog-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -530,8 +520,6 @@ benchmark sha256-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7
@@ -582,8 +570,6 @@ benchmark verify-credential-perf
     , microlens-platform >=0.3
     , mtl >=2.2
     , persistent >=2.10
-    , persistent-postgresql >=2.10
-    , persistent-template >=2.8
     , pqueue >=1.4.1
     , prettyprinter >=1.2
     , primitive >=0.7

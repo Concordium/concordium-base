@@ -32,7 +32,7 @@ impl Keypair {
     pub fn prove(&self, message: &[u8]) -> Proof {
         let expanded: ExpandedSecretKey = (&self.secret).into();
 
-        expanded.prove(&self.public, &message)
+        expanded.prove(&self.public, message)
     }
 }
 
@@ -80,7 +80,7 @@ extern "C" fn ecvrf_prove(
     let sk = from_ptr!(secret);
     let pk = from_ptr!(public);
     let data: &[u8] = slice_from_c_bytes!(message, len);
-    let proof = sk.prove(&pk, data);
+    let proof = sk.prove(pk, data);
     Arc::into_raw(Arc::new(proof))
 }
 

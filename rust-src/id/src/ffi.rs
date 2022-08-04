@@ -226,6 +226,8 @@ mod test {
             cred_holder_info: ah_info,
             prf_key,
         };
+        let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+        let id_use_data = IdObjectUseData { aci, randomness };
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -257,7 +259,7 @@ mod test {
 
         let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);
-        let (pio, randomness) = generate_pio(&context, threshold, &aci, &acc_data)
+        let (pio, _) = generate_pio(&context, threshold, &id_use_data, &acc_data)
             .expect("Creating the credential should succeed.");
 
         let ver_ok = verify_credentials(
@@ -317,8 +319,6 @@ mod test {
             threshold: SignatureThreshold(2),
         };
 
-        let id_use_data = IdObjectUseData { aci, randomness };
-
         let id_object = IdentityObject {
             pre_identity_object: pio,
             alist,
@@ -332,6 +332,7 @@ mod test {
             0,
             policy,
             &acc_data,
+            &SystemAttributeRandomness {},
             &Left(EXPIRY),
         )
         .expect("Should generate the credential successfully.");
@@ -343,6 +344,7 @@ mod test {
             0,
             wrong_policy,
             &acc_data,
+            &SystemAttributeRandomness {},
             &Left(EXPIRY),
         )
         .expect("Should generate the credential successfully.");
