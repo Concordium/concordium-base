@@ -20,6 +20,12 @@ pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
 /// the `fnv` hash function.
 pub type HashSet<K, S = fnv::FnvBuildHasher> = hashbrown::HashSet<K, S>;
 
+/// Contract index.
+pub type ContractIndex = u64;
+
+/// Contract subindex.
+pub type ContractSubIndex = u64;
+
 /// Size of an account address when serialized in binary.
 /// NB: This is different from the Base58 representation.
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
@@ -618,20 +624,32 @@ impl AccountAddress {
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct ContractAddress {
-    pub index:    u64,
-    pub subindex: u64,
+    pub index:    ContractIndex,
+    pub subindex: ContractSubIndex,
+}
+
+impl ContractAddress {
+    /// Construct a new contract address from index and subindex.
+    pub fn new(index: ContractIndex, subindex: ContractSubIndex) -> Self {
+        Self {
+            index,
+            subindex,
+        }
+    }
 }
 
 /// Either an address of an account, or contract.
 #[cfg_attr(
     feature = "derive-serde",
     derive(SerdeSerialize, SerdeDeserialize),
-    serde(tag = "type", content = "address", rename_all = "lowercase")
+    serde(tag = "type", content = "address")
 )]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[derive(Eq, Copy, Clone, Debug)]
 pub enum Address {
+    #[serde(rename = "AddressAccount")]
     Account(AccountAddress),
+    #[serde(rename = "AddressContract")]
     Contract(ContractAddress),
 }
 
