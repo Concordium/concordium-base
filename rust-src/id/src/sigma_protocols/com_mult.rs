@@ -33,7 +33,7 @@ pub struct Witness<C: Curve> {
 }
 
 #[allow(non_snake_case)]
-impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
+impl<C: Curve> SigmaProtocol for ComMult<C> {
     type CommitMessage = ([Commitment<C>; 2], Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     // alpha's, R_i's, R's
@@ -86,13 +86,11 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let cR = state.2;
         for i in 0..2 {
             ss[i].mul_assign(&secret.values[i]); // c * x_i
-            ss[i].negate(); // 
-                            // - c * x_i
+            ss[i].negate(); // - c * x_i
             ss[i].add_assign(&alphas[i]); // alpha - c * x_i
 
             ts[i].mul_assign(&secret.rands[i]); // c * r_i
-            ts[i].negate(); // 
-                            // - c * r_i
+            ts[i].negate(); // - c * r_i
             ts[i].add_assign(&rands[i]); // rTilde_i - c * r_i
         }
 
@@ -142,7 +140,7 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         let cmm_key = CommitmentKey::generate(csprng);
         let a_1 = Value::<C>::generate_non_zero(csprng);

@@ -1287,7 +1287,7 @@ mod tests {
     #[test]
     fn test_sswu_3mod4() {
         let msg = "".as_bytes();
-        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(msg);
         assert_eq!(q0xiso.into_repr().0, [
             15322189115692639998,
             15797359889106953011,
@@ -1321,7 +1321,7 @@ mod tests {
             976070356284526495
         ]);
         let msg = "abc".as_bytes();
-        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(msg);
         assert_eq!(q0xiso.into_repr().0, [
             12430049376656784768,
             16784989396329743852,
@@ -1355,7 +1355,7 @@ mod tests {
             2192215483010290
         ]);
         let msg = "abcdef0123456789".as_bytes();
-        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(msg);
         assert_eq!(q0xiso.into_repr().0, [
             9041900009822400511,
             18050568042394074917,
@@ -1389,7 +1389,7 @@ mod tests {
             1763448765852971514
         ]);
         let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
-        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(msg);
         assert_eq!(q0xiso.into_repr().0, [
             10708545032665212688,
             17591047437115732803,
@@ -1423,7 +1423,7 @@ mod tests {
             209856280269423280
         ]);
         let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
-        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(&msg);
+        let (q0xiso, q0yiso, q1xiso, q1yiso) = test_sswu_3mod4_helper(msg);
         assert_eq!(q0xiso.into_repr().0, [
             8748476113528902904,
             7472129550841271360,
@@ -1466,7 +1466,7 @@ mod tests {
     fn test_hash_to_curve() {
         let msg = "".as_bytes();
         let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
-        let p = hash_to_curve(&msg, &dst[..]);
+        let p = hash_to_curve(msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
             133, 41, 38, 173, 210, 32, 123, 118, 202, 79, 165, 122, 135, 52, 65, 108, 141, 201, 94,
             36, 80, 23, 114, 200, 20, 39, 135, 0, 238, 214, 209, 228, 232, 207, 98, 217, 192, 157,
@@ -1482,7 +1482,7 @@ mod tests {
             Fq::from_str("1343412193624222137939591894701031123123641958980729764240763391191550653712890272928110356903136085217047453540965").unwrap(), 
             Fq::one()));
         let msg = "abc".as_bytes();
-        let p = hash_to_curve(&msg, &dst[..]);
+        let p = hash_to_curve(msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
             131, 86, 123, 197, 239, 156, 105, 12, 42, 178, 236, 223, 106, 150, 239, 28, 19, 156,
             192, 178, 242, 132, 220, 160, 169, 167, 148, 51, 136, 164, 154, 58, 238, 102, 75, 165,
@@ -1498,7 +1498,7 @@ mod tests {
             Fq::from_str("1786897908129645780825838873875416513994655004408749907941296449131605892957529391590865627492442562626458913769565").unwrap(), 
             Fq::one()));
         let msg = "abcdef0123456789".as_bytes();
-        let p = hash_to_curve(&msg, &dst[..]);
+        let p = hash_to_curve(msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
             145, 224, 176, 121, 222, 162, 154, 104, 240, 56, 62, 233, 79, 237, 27, 148, 9, 149, 39,
             36, 7, 227, 187, 145, 107, 191, 38, 140, 38, 61, 221, 87, 166, 162, 114, 0, 167, 132,
@@ -1514,7 +1514,7 @@ mod tests {
             Fq::from_str("563036982304416203921640398061260377444881693369806087719971277317609936727208012968659302318886963927918562170633").unwrap(), 
             Fq::one()));
         let msg = "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq".as_bytes();
-        let p = hash_to_curve(&msg, &dst[..]);
+        let p = hash_to_curve(msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
             181, 246, 142, 170, 105, 59, 149, 204, 184, 82, 21, 220, 101, 250, 129, 3, 141, 105,
             98, 159, 112, 174, 238, 13, 15, 103, 124, 242, 34, 133, 231, 191, 88, 215, 203, 134,
@@ -1530,7 +1530,7 @@ mod tests {
             Fq::from_str("3698526739072864408749571082270628561764415577445404115596990919801523793138348254443092179877354467167123794222392").unwrap(), 
             Fq::one()));
         let msg = "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".as_bytes();
-        let p = hash_to_curve(&msg, &dst[..]);
+        let p = hash_to_curve(msg, &dst[..]);
         assert_eq!(to_bytes(&p), vec![
             136, 42, 171, 174, 139, 125, 237, 176, 231, 138, 235, 97, 154, 211, 191, 217, 39, 122,
             47, 119, 186, 127, 173, 32, 239, 106, 171, 220, 108, 49, 209, 155, 165, 166, 209, 34,

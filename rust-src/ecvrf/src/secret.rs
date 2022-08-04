@@ -108,10 +108,10 @@ impl Drop for ExpandedSecretKey {
     }
 }
 
-impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
+impl From<&SecretKey> for ExpandedSecretKey {
     /// Construct an `ExpandedSecretKey` from a `SecretKey`.
     /// Implements <https://tools.ietf.org/html/rfc8032#section-5.1.5>
-    fn from(secret_key: &'a SecretKey) -> ExpandedSecretKey {
+    fn from(secret_key: &SecretKey) -> ExpandedSecretKey {
         let mut h: Sha512 = Sha512::new();
         let mut hash: [u8; 64] = [0u8; 64];
         let mut lower: [u8; 32] = [0u8; 32];

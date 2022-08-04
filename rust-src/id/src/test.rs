@@ -128,7 +128,7 @@ pub fn test_create_pio<'a>(
     let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
 
     // Create and return PIO
-    let (pio, randomness) = generate_pio(&context, threshold, &id_use_data, initial_account_data)
+    let (pio, randomness) = generate_pio(&context, threshold, id_use_data, initial_account_data)
         .expect("Generating the pre-identity object should succeed.");
     (context, pio, randomness)
 }
@@ -151,7 +151,7 @@ pub fn test_create_pio_v1<'a>(
     let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
 
     // Create and return PIO
-    let (pio, randomness) = generate_pio_v1(&context, threshold, &id_use_data)
+    let (pio, randomness) = generate_pio_v1(&context, threshold, id_use_data)
         .expect("Generating the pre-identity object should succeed.");
     (context, pio, randomness)
 }
@@ -318,7 +318,7 @@ pub fn test_pipeline() {
             .values
             .ar_data
             .get(ar_id)
-            .expect(&format!("Anonymity revoker {} is not present.", ar_id));
+            .unwrap_or_else(|| panic!("Anonymity revoker {} is not present.", ar_id));
         let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
         shares.push(decrypted_share);
     }
@@ -482,7 +482,7 @@ pub fn test_pipeline_v1() {
             .values
             .ar_data
             .get(ar_id)
-            .expect(&format!("Anonymity revoker {} is not present.", ar_id));
+            .unwrap_or_else(|| panic!("Anonymity revoker {} is not present.", ar_id));
         let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
         shares.push(decrypted_share);
     }

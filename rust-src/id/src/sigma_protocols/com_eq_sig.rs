@@ -49,7 +49,7 @@ pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 #[allow(non_snake_case)]
-impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P, C> {
     type CommitMessage = (P::TargetField, Vec<Commitment<C>>);
     type ProtocolChallenge = C::Scalar;
     // Triple (rho', [mu_i], [R_i])
@@ -245,7 +245,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
     fn with_valid_data<R: Rng>(
         data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         use ps_sig::{SecretKey as PsSigSecretKey, SigRetrievalRandomness, UnknownMessage};
         let ps_sk: PsSigSecretKey<P> = PsSigSecretKey::generate(data_size, csprng);
@@ -337,7 +337,7 @@ mod tests {
                 }
 
                 {
-                    if wrong_ces.commitments.len() > 0 {
+                    if !wrong_ces.commitments.is_empty() {
                         let idx = csprng.gen_range(0, wrong_ces.commitments.len());
                         let tmp = wrong_ces.commitments[idx];
                         wrong_ces.commitments[idx] = wrong_ces

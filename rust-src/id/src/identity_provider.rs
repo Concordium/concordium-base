@@ -968,7 +968,7 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, id_cred_sec, timestamp).unwrap();
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert!(result);
@@ -1000,8 +1000,8 @@ mod tests {
         request.id_cred_pub = id_cred_pub;
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
-        assert_eq!(
-            result, false,
+        assert!(
+            !result,
             "Verifying pok of idCredSec did not fail with wrong idCredSec"
         );
     }
@@ -1021,12 +1021,12 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let mut request =
-            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, id_cred_sec, timestamp).unwrap();
         request.timestamp += 1;
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
-        assert_eq!(
-            result, false,
+        assert!(
+            !result,
             "Verifying pok of idCredSec did not fail with wrong timestamp"
         );
     }
@@ -1046,13 +1046,13 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_identity = IpIdentity(1);
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
-        assert_eq!(
-            result, false,
+        assert!(
+            !result,
             "Verifying pok of idCredSec did not fail with wrong IDP ID"
         );
     }
@@ -1072,14 +1072,14 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_verify_key =
             ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
-        assert_eq!(
-            result, false,
+        assert!(
+            !result,
             "Verifying pok of idCredSec did not fail with wrong IDP verify keys"
         );
     }
@@ -1099,13 +1099,13 @@ mod tests {
         let timestamp = 1000;
         let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
         let request =
-            generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp).unwrap();
+            generate_id_recovery_request(&ip_info, &global_ctx, id_cred_sec, timestamp).unwrap();
 
         global_ctx.genesis_string = String::from("another_string");
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
-        assert_eq!(
-            result, false,
+        assert!(
+            !result,
             "Verifying pok of idCredSec did not fail with wrong global context"
         );
     }

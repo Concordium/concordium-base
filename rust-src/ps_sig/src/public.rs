@@ -88,7 +88,7 @@ impl<C: Pairing> PublicKey<C> {
     }
 }
 
-impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
+impl<C: Pairing> From<&SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(sk: &SecretKey<C>) -> PublicKey<C> {
         let ys = sk.ys.iter().map(|r| sk.g.mul_by_scalar(r)).collect();

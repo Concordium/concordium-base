@@ -789,6 +789,7 @@ mod tests {
             &vec![C::Scalar::zero(); nm],
         );
 
+        #[allow(clippy::manual_map)]
         let rangeproof = match proof {
             Some(ip_proof) => Some(RangeProof {
                 A,
@@ -829,7 +830,7 @@ mod tests {
         let B = v_keys.g;
         let B_tilde = v_keys.h;
         let m = commitments.len();
-        for V in commitments.clone() {
+        for V in commitments {
             transcript.append_message(b"Vj", &V.0);
         }
         let A = proof.A;
@@ -955,7 +956,7 @@ mod tests {
         }
 
         // println!("Verifier's P' = {:?}", P_prime);
-        let second: bool = verify_inner_product(transcript, &G, &H_prime, &P_prime, &Q, &ip_proof); // Very expensive
+        let second: bool = verify_inner_product(transcript, &G, &H_prime, &P_prime, &Q, ip_proof); // Very expensive
         second
     }
 
@@ -1035,7 +1036,7 @@ mod tests {
         let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
         let mut y_i = C::Scalar::one();
         let z_2_m = z_vec(z, 2, m);
-        let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
+        let verification_scalars = verify_scalars(transcript, G.len(), ip_proof);
         if verification_scalars.is_none() {
             return false;
         }
@@ -1146,7 +1147,7 @@ mod tests {
         // Test for nm = 512
         let rng = &mut thread_rng();
         let n = 32;
-        let m = 16;
+        let m = 16u8;
         let nm = (usize::from(n)) * (usize::from(m));
         let mut G = Vec::with_capacity(nm);
         let mut H = Vec::with_capacity(nm);
@@ -1179,9 +1180,9 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
 
-        for j in 0..usize::from(m) {
+        for &v in v_vec.iter().take(m.into()) {
             let r = Randomness::generate(rng);
-            let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
+            let v_scalar = SomeCurve::scalar_from_u64(v);
             let v_value = Value::<SomeCurve>::new(v_scalar);
             let com = keys.hide(&v_value, &r);
             randomness.push(r);
@@ -1253,9 +1254,9 @@ mod tests {
                         * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
 
-        for j in 0..usize::from(m) {
+        for &v in v_vec.iter().take(m.into()) {
             let r = Randomness::generate(rng);
-            let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
+            let v_scalar = SomeCurve::scalar_from_u64(v);
             let v_value = Value::<SomeCurve>::new(v_scalar);
             let com = keys.hide(&v_value, &r);
             randomness.push(r);

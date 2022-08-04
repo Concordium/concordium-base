@@ -8,29 +8,36 @@ use proc_macro::TokenStream;
 
 #[proc_macro_derive(SerdeBase16Serialize)]
 pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
-    let mut ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
+    let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
     let name = &ast.ident;
     let span = ast.span();
     let ast_cloned = ast.clone();
     let (_, ty_generics, where_clauses) = ast_cloned.generics.split_for_impl();
 
+    let serial_generics = ast.generics.clone();
+    let (serial_impl_generics, _, _) = serial_generics.split_for_impl();
+
+    // There is an additional lifetime parameter for deserialization.
+    let mut deserial_generics = ast.generics;
     let lifetime = syn::LifetimeDef::new(syn::Lifetime::new("'de", span));
-    ast.generics
+    deserial_generics
         .params
         .push(syn::GenericParam::Lifetime(lifetime.clone()));
-    let (impl_generics, _, _) = ast.generics.split_for_impl();
+    let (deserial_impl_generics, _, _) = deserial_generics.split_for_impl();
 
     let ident = format_ident!("GenericSerializerType", span = span);
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
-        impl #impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
+        #[automatically_derived]
+        impl #serial_impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
             fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 crypto_common::base16_encode(self, #ident_serializer)
             }
         }
 
-        impl #impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+        #[automatically_derived]
+        impl #deserial_impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
             fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
                 crypto_common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
@@ -41,29 +48,36 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(SerdeBase16IgnoreLengthSerialize)]
 pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenStream {
-    let mut ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
+    let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
     let name = &ast.ident;
     let span = ast.span();
     let ast_cloned = ast.clone();
     let (_, ty_generics, where_clauses) = ast_cloned.generics.split_for_impl();
 
+    let serial_generics = ast.generics.clone();
+    let (serial_impl_generics, _, _) = serial_generics.split_for_impl();
+
+    // There is an additional lifetime parameter for deserialization.
+    let mut deserial_generics = ast.generics;
     let lifetime = syn::LifetimeDef::new(syn::Lifetime::new("'de", span));
-    ast.generics
+    deserial_generics
         .params
         .push(syn::GenericParam::Lifetime(lifetime.clone()));
-    let (impl_generics, _, _) = ast.generics.split_for_impl();
+    let (deserial_impl_generics, _, _) = deserial_generics.split_for_impl();
 
     let ident = format_ident!("GenericSerializerType", span = span);
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
-        impl #impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
+        #[automatically_derived]
+        impl #serial_impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
             fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 base16_ignore_length_encode(self, #ident_serializer)
             }
         }
 
-        impl #impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+        #[automatically_derived]
+        impl #deserial_impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
             fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
                 base16_ignore_length_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
@@ -166,6 +180,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                     pusher(f, ident);
                 }
                 quote! {
+                    #[automatically_derived]
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
                         #[allow(non_snake_case)]
                         fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
@@ -182,6 +197,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                     pusher(f, ident);
                 }
                 quote! {
+                    #[automatically_derived]
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
                         fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
                             use std::convert::TryFrom;
@@ -259,6 +275,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                     }
                 }
                 quote! {
+                    #[automatically_derived]
                     impl #impl_generics Serial for #name #ty_generics #where_clauses {
                         fn serial<#ident: Buffer>(&self, #out: &mut #ident) {
                             #body
@@ -313,6 +330,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                     names.extend(quote!(ref #ident,))
                 }
                 quote! {
+                    #[automatically_derived]
                     impl #impl_generics Serial for #name #ty_generics #where_clauses {
                         fn serial<#ident: Buffer>(&self, #out: &mut #ident) {
                             let #name( #names ) = self;
