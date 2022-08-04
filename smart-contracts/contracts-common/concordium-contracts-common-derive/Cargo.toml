@@ -1,11 +1,13 @@
 [package]
 name = "concordium-contracts-common-derive"
 authors = ["Concordium <developers@concordium.com>"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2018"
 license = "MPL-2.0"
 description = "Procedural macros to ease writing for smart contracts on the Concordium blockchain."
-readme = "./README.md"
+homepage = "https://github.com/Concordium/concordium-contracts-common"
+repository = "https://github.com/Concordium/concordium-contracts-common"
+readme = "README.md"
 
 [features]
 sdk = []
