@@ -32,18 +32,6 @@ pub struct Amount {
     pub micro_ccd: u64,
 }
 
-impl From<Amount> for u64 {
-    fn from(x: Amount) -> Self { x.micro_ccd }
-}
-
-impl From<u64> for Amount {
-    fn from(micro_ccd: u64) -> Self {
-        Amount {
-            micro_ccd,
-        }
-    }
-}
-
 #[cfg(feature = "derive-serde")]
 impl SerdeSerialize for Amount {
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
@@ -182,6 +170,10 @@ impl Amount {
             micro_ccd,
         }
     }
+
+    /// Get the amount in microCCD
+    #[inline(always)]
+    pub const fn micro_ccd(&self) -> u64 { self.micro_ccd }
 
     /// Create amount from a number of CCD
     #[inline(always)]
@@ -1449,7 +1441,7 @@ mod serde_impl {
         fn amount_serialization() {
             let mut rng = rand::thread_rng();
             for _ in 0..1000 {
-                let micro_ccd = Amount::from(rng.gen::<u64>());
+                let micro_ccd = Amount::from_micro_ccd(rng.gen::<u64>());
                 let s = micro_ccd.to_string();
                 let parsed = s.parse::<Amount>();
                 assert_eq!(Ok(micro_ccd), parsed, "Parsed amount differs from expected amount.");
@@ -1482,12 +1474,12 @@ mod serde_impl {
             );
             assert_eq!(
                 "0.1234".parse::<Amount>(),
-                Ok(Amount::from(123400u64)),
+                Ok(Amount::from_micro_ccd(123400u64)),
                 "Leading zero is OK."
             );
             assert_eq!(
                 "0.0".parse::<Amount>(),
-                Ok(Amount::from(0)),
+                Ok(Amount::from_micro_ccd(0)),
                 "Leading zero and zero after dot is OK."
             );
             assert_eq!(
@@ -1495,7 +1487,11 @@ mod serde_impl {
                 Err(AmountParseError::ExpectedDigit),
                 "There should be at least one digit before a dot."
             );
-            assert_eq!("13".parse::<Amount>(), Ok(Amount::from(13000000)), "No dot is needed.");
+            assert_eq!(
+                "13".parse::<Amount>(),
+                Ok(Amount::from_micro_ccd(13000000)),
+                "No dot is needed."
+            );
             assert_eq!(
                 "".parse::<Amount>(),
                 Err(AmountParseError::ExpectedMore),
