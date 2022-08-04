@@ -7,7 +7,7 @@ license = "MPL-2.0"
 description = "Common functionality used by smart contracts and the host environment on the Concordium blockchain."
 homepage = "https://github.com/Concordium/concordium-contracts-common"
 repository = "https://github.com/Concordium/concordium-contracts-common"
-readme = "README.md"
+readme = "../README.md"
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
