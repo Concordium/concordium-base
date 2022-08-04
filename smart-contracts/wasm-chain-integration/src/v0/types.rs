@@ -339,7 +339,7 @@ impl ReceiveResult {
                 let mut out = vec![2];
                 let state = &state.state;
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
-                out.extend_from_slice(&state);
+                out.extend_from_slice(state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&(actions.len() as u32).to_be_bytes());
                 for a in actions.iter() {

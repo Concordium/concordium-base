@@ -94,7 +94,7 @@ impl<'a, A: Output> Output for &'a [A] {
 }
 
 /// This implem
-impl<'a, A: Output> Output for Vec<A> {
+impl<A: Output> Output for Vec<A> {
     fn output(&self, out: &mut impl Write) -> OutResult<()> { self.as_slice().output(out) }
 }
 

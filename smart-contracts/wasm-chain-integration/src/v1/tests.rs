@@ -407,7 +407,7 @@ fn prop_iterators() {
         let mut removed_prefixes: Vec<&[u8]> = Vec::new();
         for (k, v) in &inputs {
             // make sure we don't try delete in suffixes of an already deleted prefix key.
-            if !removed_prefixes.iter().cloned().any(|x| k.starts_with(&x.to_vec())) {
+            if !removed_prefixes.iter().cloned().any(|x| k.starts_with(x)) {
                 let _entry = state
                     .lookup_entry(k)
                     .convert()

@@ -63,7 +63,7 @@ fn make_mut_trie(words: &[Vec<u8>]) -> (MutableTrie, VecLoader) {
         inner: Vec::<u8>::new(),
     };
     for w in words {
-        node.insert(&mut loader, &w, (w.len() as u64).to_ne_bytes().into())
+        node.insert(&mut loader, w, (w.len() as u64).to_ne_bytes().into())
             .expect("No locks, so cannot fail.");
     }
     (node, loader)

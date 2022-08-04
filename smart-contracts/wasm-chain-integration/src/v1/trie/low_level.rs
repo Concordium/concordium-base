@@ -1500,7 +1500,7 @@ impl Hashed<Node> {
         backing_store: &mut S,
         buf: &mut W,
     ) -> StoreResult<()> {
-        buf.write_all(&self.hash.as_ref())?;
+        buf.write_all(self.hash.as_ref())?;
         self.data.store_update_buf(backing_store, buf)
     }
 }
