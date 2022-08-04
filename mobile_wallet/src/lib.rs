@@ -763,7 +763,7 @@ pub unsafe fn decrypt_encrypted_amount(input_ptr: *const c_char, success: *mut u
     };
     if let Ok(v) = decrypt_encrypted_amount_aux(input_str) {
         *success = 1;
-        u64::from(v)
+        v.micro_ccd()
     } else {
         *success = 0;
         0

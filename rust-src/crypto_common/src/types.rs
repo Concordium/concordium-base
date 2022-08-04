@@ -38,13 +38,13 @@ pub struct CredentialIndex {
 }
 
 impl Serial for Amount {
-    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.micro_ccd.serial(out) }
+    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.micro_ccd().serial(out) }
 }
 
 impl Deserial for Amount {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let micro_ccd = source.get()?;
-        Ok(Amount { micro_ccd })
+        Ok(Amount::from_micro_ccd(micro_ccd))
     }
 }
 
@@ -376,7 +376,7 @@ mod tests {
     fn amount_json_serialization() {
         let mut rng = rand::thread_rng();
         for _ in 0..1000 {
-            let amount = Amount::from(rng.gen::<u64>());
+            let amount = Amount::from_micro_ccd(rng.gen::<u64>());
             let s = serde_json::to_string(&amount).expect("Could not serialize");
             assert_eq!(
                 amount,
@@ -385,7 +385,7 @@ mod tests {
             );
         }
 
-        let amount = Amount::from(12345);
+        let amount = Amount::from_micro_ccd(12345);
         let s = serde_json::to_string(&amount).expect("Could not serialize");
         assert_eq!(s, r#""12345""#, "Could not deserialize amount.");
 

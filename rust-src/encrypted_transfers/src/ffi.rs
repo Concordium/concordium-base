@@ -366,7 +366,7 @@ unsafe extern "C" fn decrypt_amount(
     let amount = EncryptedAmount {
         encryptions: [*from_ptr!(low_ptr), *from_ptr!(high_ptr)],
     };
-    crate::decrypt_amount(from_ptr!(table_ptr), &sk, &amount).micro_ccd
+    crate::decrypt_amount(from_ptr!(table_ptr), &sk, &amount).micro_ccd()
 }
 
 /// # Safety

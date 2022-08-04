@@ -32,7 +32,7 @@ fn encrypt_amount<C: Curve, R: Rng>(
     let h = context.encryption_in_exponent_generator();
     let mut ciphers = encrypt_u64_in_chunks_given_generator(
         pk,
-        u64::from(amount),
+        amount.micro_ccd(),
         CHUNK_SIZE_ENC_TRANS,
         h,
         csprng,
@@ -64,7 +64,7 @@ pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     // The generator for encryption in the exponent is the second component of the
     // commitment key, the 'h'.
     let h = context.encryption_in_exponent_generator();
-    let val = u64::from(amount);
+    let val = amount.micro_ccd();
     let chunks = CHUNK_SIZE_ENC_TRANS
         .u64_to_chunks(val)
         .into_iter()
@@ -113,7 +113,9 @@ pub fn decrypt_amount<C: Curve>(
 ) -> Amount {
     let low_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
     let hi_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
-    Amount::from(CHUNK_SIZE_ENC_TRANS.chunks_to_u64([low_chunk, hi_chunk].iter().copied()))
+    Amount::from_micro_ccd(
+        CHUNK_SIZE_ENC_TRANS.chunks_to_u64([low_chunk, hi_chunk].iter().copied()),
+    )
 }
 
 impl<C: Curve> EncryptedAmount<C> {
@@ -296,7 +298,7 @@ mod tests {
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
 
-        let amount = Amount::from(csprng.gen::<u64>());
+        let amount = Amount::from_micro_ccd(csprng.gen::<u64>());
 
         let (enc_amount, _) = encrypt_amount(&context, &pk, amount, &mut csprng);
 
@@ -320,7 +322,7 @@ mod tests {
 
         // we divide here by 3 to avoid overflow when summing them together.
         let amount_1 = u64::from(csprng.gen::<u32>());
-        let amount_1 = Amount::from(amount_1 << 2);
+        let amount_1 = Amount::from_micro_ccd(amount_1 << 2);
 
         let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut csprng);
 
@@ -330,7 +332,7 @@ mod tests {
         let decrypted_1 = sk.decrypt_exponent(&enc_amount_1.join(), &table);
         assert_eq!(
             amount_1,
-            Amount::from(decrypted_1),
+            Amount::from_micro_ccd(decrypted_1),
             "Decrypted combined encrypted amount differs from expected."
         );
     }
@@ -341,7 +343,7 @@ mod tests {
         let mut csprng = thread_rng();
         let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
-        let amount = Amount::from(csprng.gen::<u64>());
+        let amount = Amount::from_micro_ccd(csprng.gen::<u64>());
         let dummy_encryption = encrypt_amount_with_fixed_randomness(&context, amount);
         let m = 1 << 16;
         let table = BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
@@ -370,11 +372,12 @@ mod tests {
         let nm = n * m;
 
         let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
-        let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
+        let S_in_chunks =
+            encrypt_amount(&context, &pk_sender, Amount::from_micro_ccd(s), &mut csprng);
 
         let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let input_amount = AggregatedDecryptedAmount {
-            agg_amount:           Amount::from(s),
+            agg_amount:           Amount::from_micro_ccd(s),
             agg_encrypted_amount: S_in_chunks.0.clone(),
             agg_index:            index,
         };
@@ -383,7 +386,7 @@ mod tests {
             &pk_receiver,
             &sk_sender,
             &input_amount,
-            Amount::from(a),
+            Amount::from_micro_ccd(a),
             &mut csprng,
         )
         .unwrap();
@@ -415,11 +418,12 @@ mod tests {
         let nm = n * m;
 
         let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
-        let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
+        let S_in_chunks =
+            encrypt_amount(&context, &pk_sender, Amount::from_micro_ccd(s), &mut csprng);
 
         let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let input_amount = AggregatedDecryptedAmount {
-            agg_amount:           Amount::from(s),
+            agg_amount:           Amount::from_micro_ccd(s),
             agg_encrypted_amount: S_in_chunks.0.clone(),
             agg_index:            index,
         };
@@ -428,7 +432,7 @@ mod tests {
             &context,
             &sk_sender,
             &input_amount,
-            Amount::from(a),
+            Amount::from_micro_ccd(a),
             &mut csprng,
         )
         .unwrap();

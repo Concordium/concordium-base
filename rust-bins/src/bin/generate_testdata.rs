@@ -212,7 +212,7 @@ fn main() {
             threshold: SignatureThreshold(1),
         };
 
-        let addr = AccountAddress::new(&cdi_1.values.cred_id);
+        let addr = account_address_from_registration_id(&cdi_1.values.cred_id);
 
         let (cdi_2, _) = create_credential(
             context,
@@ -252,7 +252,7 @@ fn main() {
 
         // output another random address
         {
-            let other_addr = AccountAddress::new(&G1::generate(&mut csprng));
+            let other_addr = account_address_from_registration_id(&G1::generate(&mut csprng));
             out.put(&other_addr)
         }
 
@@ -349,7 +349,7 @@ fn main() {
             maybe_addr,
         )
         .expect("We should have generated valid data.");
-        let acc_addr = AccountAddress::new(&cdi.values.cred_id);
+        let acc_addr = account_address_from_registration_id(&cdi.values.cred_id);
         let js = match maybe_addr {
             Left(message_expiry) => {
                 // if it is a new account we output a full message
