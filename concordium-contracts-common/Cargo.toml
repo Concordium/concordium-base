@@ -53,7 +53,7 @@ version = "1.0"
 
 [dependencies.concordium-contracts-common-derive]
 path = "../concordium-contracts-common-derive"
-version = "*"
+version = "1"
 
 [features]
 default = ["std"]

@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 3.1.0 (2022-08-04)
+
 - Extend schema type with `ULeb128`, `ILeb128`, `ByteList` and `ByteArray`.
   - `ULeb128` and `ILeb128` allow for integers of arbitrary size and are represented in JSON as a string containing the integer.
   - `ByteList` and `ByteArray` are byte specialized versions of `List` and `Array` and are represented in JSON as lowercase hex encoded strings.  
