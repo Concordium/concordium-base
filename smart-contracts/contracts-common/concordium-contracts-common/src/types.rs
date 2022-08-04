@@ -78,6 +78,9 @@ impl fmt::Display for AmountParseError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for AmountParseError {}
+
 /// Parse from string in CCD units. The input string must be of the form
 /// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
 /// that that part is optional.
@@ -394,6 +397,9 @@ impl fmt::Display for ParseTimestampError {
 }
 
 #[cfg(feature = "derive-serde")]
+impl std::error::Error for ParseTimestampError {}
+
+#[cfg(feature = "derive-serde")]
 /// The FromStr parses the time according to RFC3339.
 impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
@@ -525,6 +531,9 @@ impl fmt::Display for ParseDurationError {
         }
     }
 }
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseDurationError {}
 
 /// Parse a string containing a list of duration measures separated by
 /// whitespaces. A measure is a number followed by the unit (no whitespace
@@ -770,6 +779,9 @@ impl fmt::Display for NewContractNameError {
         }
     }
 }
+
+#[cfg(feature = "std")]
+impl std::error::Error for NewContractNameError {}
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
@@ -1044,6 +1056,9 @@ impl fmt::Display for NewReceiveNameError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for NewReceiveNameError {}
+
 /// Time at the beginning of the current slot, in miliseconds since unix epoch.
 pub type SlotTime = Timestamp;
 
@@ -1310,6 +1325,13 @@ pub struct ParseError {}
 /// of parsing from binary via the `Serial` instance.
 pub type ParseResult<A> = Result<A, ParseError>;
 
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("Parsing failed") }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseError {}
+
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
     // FIXME: This is duplicated from crypto/id/types.
@@ -1318,19 +1340,36 @@ mod serde_impl {
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::fmt;
 
+    /// Error type for when parsing an account address.
+    #[derive(Debug, thiserror::Error)]
+    pub enum AccountAddressParseError {
+        /// Failed parsing the Base58Check encoding.
+        #[error("Invalid Base58Check encoding.")]
+        InvalidBase58Check(FromBase58CheckError),
+        /// Base58Check version byte is not 1.
+        #[error("Invalid version byte, expected 1, but got {0}.")]
+        InvalidBase58CheckVersion(u8),
+        /// The decoded bytes are not of length 32.
+        #[error("Invalid number of bytes, expected 32, but got {0}.")]
+        InvalidByteLength(usize),
+    }
+
     // Parse from string assuming base58 check encoding.
     impl str::FromStr for AccountAddress {
-        type Err = ();
+        type Err = AccountAddressParseError;
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {
-            let (version, body) = v.from_base58check().map_err(|_| ())?;
-            if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
-                let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-                buf.copy_from_slice(&body);
-                Ok(AccountAddress(buf))
-            } else {
-                Err(())
+            let (version, body) =
+                v.from_base58check().map_err(AccountAddressParseError::InvalidBase58Check)?;
+            if version != 1 {
+                return Err(AccountAddressParseError::InvalidBase58CheckVersion(version));
             }
+            if body.len() != ACCOUNT_ADDRESS_SIZE {
+                return Err(AccountAddressParseError::InvalidByteLength(body.len()));
+            }
+            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
+            buf.copy_from_slice(&body);
+            Ok(AccountAddress(buf))
         }
     }
 
