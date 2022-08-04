@@ -1180,6 +1180,7 @@ dependencies = [
  "id",
  "keygen_bls",
  "pairing",
+ "pbkdf2 0.10.1",
  "ps_sig",
  "serde",
  "sha2 0.10.2",
@@ -1535,6 +1536,18 @@ dependencies = [
  "hmac 0.11.0",
  "password-hash 0.3.2",
  "sha2 0.9.5",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "271779f35b581956db91a3e55737327a03aa051e90b1c47aeb189508533adfd7"
+dependencies = [
+ "digest 0.10.3",
+ "hmac 0.12.1",
+ "password-hash 0.3.2",
+ "sha2 0.10.2",
 ]
 
 [[package]]

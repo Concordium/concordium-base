@@ -11,6 +11,7 @@ sha2 = "0.10.2"
 pairing = "0.15"
 ed25519-dalek = "1.0.0"
 serde = "1.0"
+pbkdf2 = "0.10"
 
 [dependencies.ed25519_hd_key_derivation]
 path = "../ed25519_hd_key_derivation"

@@ -3,7 +3,11 @@ use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
 use sha2::Digest;
-use std::{collections::btree_map::BTreeMap, convert::{TryFrom, TryInto}, marker::PhantomData};
+use std::{
+    collections::btree_map::BTreeMap,
+    convert::{TryFrom, TryInto},
+    marker::PhantomData,
+};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
@@ -443,8 +447,6 @@ pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A
 
 // Some more generic implementations
 
-
-
 impl<T: Serial, const N: usize> Serial for [T; N] {
     fn serial<B: Buffer>(&self, out: &mut B) {
         for x in self.iter() {
@@ -453,13 +455,13 @@ impl<T: Serial, const N: usize> Serial for [T; N] {
     }
 }
 
-impl<T: Deserial, const N:usize> Deserial for [T; N] {
+impl<T: Deserial, const N: usize> Deserial for [T; N] {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut out_vec = Vec::with_capacity(N);
         for _ in 0..N {
             out_vec.push(T::deserial(source)?);
         }
-        let out_array : [T; N] = out_vec.try_into().map_err(|_| ()).unwrap();
+        let out_array: [T; N] = out_vec.try_into().map_err(|_| ()).unwrap();
         Ok(out_array)
     }
 }

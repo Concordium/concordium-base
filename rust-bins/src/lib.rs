@@ -1,12 +1,18 @@
-use anyhow::{bail, Context};
+use anyhow::Context;
+use bitvec::prelude::*;
 use crypto_common::*;
 use curve_arithmetic::*;
+use dialoguer::Input;
+use ed25519_hd_key_derivation::DeriveError;
+use hkdf::HkdfExtract;
 use id::{constants::*, types::*};
 use pairing::bls12_381::Bls12;
+use pedersen_scheme::Randomness as PedersenRandomness;
+use rand::Rng;
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};
+use sha2::{Digest, Sha256};
 use std::{
-    convert::TryInto,
     collections::HashMap,
     fmt::Debug,
     fs::File,
@@ -14,16 +20,8 @@ use std::{
     path::Path,
     str::FromStr,
 };
-use bitvec::prelude::*;
-use dialoguer::{Confirm, Input};
-use hkdf::HkdfExtract;
-use rand::Rng;
-use sha2::{Digest, Sha256, Sha512};
-use pedersen_scheme::{Randomness as PedersenRandomness, Value as PedersenValue};
-use hmac::{Hmac, Mac, NewMac};
-use ed25519_hd_key_derivation::DeriveError;
 
-use key_derivation::{ConcordiumHdWallet, Net};
+use key_derivation::ConcordiumHdWallet;
 
 pub type ExampleCurve = <Bls12 as Pairing>::G1;
 
@@ -59,7 +57,9 @@ pub fn read_ip_info<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IpInfo<Bl
 }
 
 /// Read id recovery request.
-pub fn read_recovery_request<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IdRecoveryRequest<ExampleCurve>> {
+pub fn read_recovery_request<P: AsRef<Path> + Debug>(
+    filename: P,
+) -> io::Result<IdRecoveryRequest<ExampleCurve>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -328,7 +328,6 @@ pub fn read_bip39_word(
         .interact_text()
 }
 
-
 /// Ask user to input num words.
 /// If verify_bip39 is true, output is verified to be valid BIP39 sentence.
 pub fn read_words_from_terminal(
@@ -462,21 +461,6 @@ pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String
     Ok(vec)
 }
 
-pub fn words_to_seed(words: &str) -> [u8; 64] {
-    // as described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
-
-    let salt = b"mnemonic";
-
-    let mut seed = [0u8; 64];
-    pbkdf2::pbkdf2::<Hmac<Sha512>>(
-        words.as_bytes(),
-        &salt[..],
-        2048,
-        &mut seed,
-    );
-    seed
-}
-
 /// Rerandomize given list of words using system randomness and HKDF extractor.
 /// The input can be an arbitrary slice of strings.
 /// The output is a valid BIP39 sentence with 24 words.
@@ -513,7 +497,6 @@ pub fn rerandomize_bip39(
 
     Ok(output_words)
 }
-
 
 pub struct CredentialContext {
     pub wallet:           ConcordiumHdWallet,

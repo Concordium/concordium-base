@@ -144,21 +144,20 @@ enum IpClient {
     ValidateIdRecoveryRequest(ValidateIdRecoveryRequest),
 }
 
-
 #[derive(StructOpt)]
 struct ValidateIdRecoveryRequest {
     #[structopt(long = "request", help = "File with id recovery request.")]
-    request:          PathBuf,
+    request: PathBuf,
     #[structopt(
         long = "ip-info",
         help = "File with information about the identity provider."
     )]
-    ip_info:      PathBuf,
+    ip_info: PathBuf,
     #[structopt(
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:       PathBuf,
+    global:  PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -171,11 +170,11 @@ fn main() -> anyhow::Result<()> {
     match client {
         SignPioV0(sip) => handle_sign_pio(sip),
         SignPioV1(sip) => handle_sign_pio_v1(sip),
-        ValidateIdRecoveryRequest(vir) => handle_validate_recovery(vir)
+        ValidateIdRecoveryRequest(vir) => handle_validate_recovery(vir),
     }
 }
 
-fn handle_sign_pio(app: IpV0) -> anyhow::Result<()>{
+fn handle_sign_pio(app: IpV0) -> anyhow::Result<()> {
     let pio = read_pre_identity_object(&app.pio).context(format!(
         "Could not read the identity object request from file {}.",
         app.pio.display()
@@ -334,8 +333,7 @@ fn handle_sign_pio(app: IpV0) -> anyhow::Result<()>{
     Ok(())
 }
 
-
-fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()>{
+fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()> {
     let pio = read_pre_identity_object_v1(&app.pio).context(format!(
         "Could not read the identity object request from file {}.",
         app.pio.display()
@@ -419,12 +417,7 @@ fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()>{
         &ars.anonymity_revokers,
         &global_ctx,
     );
-    let vf = verify_credentials_v1(
-        &pio,
-        context,
-        &attributes,
-        &ip_data.ip_secret_key,
-    );
+    let vf = verify_credentials_v1(&pio, context, &attributes, &ip_data.ip_secret_key);
     let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
         id_cred_pub:  pio.id_cred_pub,
         ar_data:      pio.ip_ar_data.clone(),
@@ -454,9 +447,7 @@ fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()>{
         &app.out_file.display()
     );
 
-    let to_store = serde_json::json!({
-        "arRecord": ar_record
-    });
+    let to_store = serde_json::json!({ "arRecord": ar_record });
     write_json_to_file(&app.ar_record, &to_store).context(format!(
         "Could not write the anonymity revocation record to file {}.",
         app.ar_record.display()

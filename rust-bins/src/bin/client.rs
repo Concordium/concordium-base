@@ -12,18 +12,18 @@ use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*,
     constants::{ArCurve, IpPairing},
+    curve_arithmetic::*,
     identity_provider::*,
     secret_sharing::*,
     types::*,
-    curve_arithmetic::*
 };
-use key_derivation::ConcordiumHdWallet;
+use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::{json, to_value};
 use std::{
     cmp::max,
-    collections::btree_map::BTreeMap,
+    collections::{btree_map::BTreeMap, HashMap},
     convert::TryFrom,
     fs::File,
     io::{self, Write},
@@ -31,10 +31,21 @@ use std::{
 };
 use structopt::StructOpt;
 
-use pedersen_scheme::{Randomness as PedersenRandomness, Value as PedersenValue};
+use pedersen_scheme::Value as PedersenValue;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
+
+const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
+
+/// List of BIP39 words. There is a test that checks that this list has correct
+/// length, so there is no need to check when using this in the tool.
+fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
+
+/// Inverse mapping to the implicit mapping in bip39_words. Maps word to its
+/// index in the list. This allows to quickly test membership and convert words
+/// to their index.
+fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
 
 fn mk_ip_filename(path: &Path, n: usize) -> (PathBuf, PathBuf) {
     let mut public = path.to_path_buf();
@@ -78,11 +89,66 @@ fn read_validto() -> io::Result<YearMonth> {
 }
 
 #[derive(StructOpt)]
+struct CreateHdWallet {
+    #[structopt(long = "out", help = "File to write the hd wallet to.")]
+    out:     Option<PathBuf>,
+    #[structopt(long = "testnet")]
+    testnet: bool,
+}
+
+#[derive(StructOpt)]
+struct GenerateIdRecoveryRequest {
+    #[structopt(
+        long = "ip-info",
+        help = "File with information about the identity provider."
+    )]
+    ip_info:      PathBuf,
+    #[structopt(
+        long = "request-out",
+        help = "File to write the request to that is to be sent to the identity provider."
+    )]
+    request_file: PathBuf,
+    #[structopt(
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
+    global:       PathBuf,
+    #[structopt(long = "chi", help = "File with input credential holder information.")]
+    chi:          PathBuf,
+}
+
+#[derive(StructOpt)]
+struct ValidateIdRecoveryRequest {
+    #[structopt(long = "request", help = "File with id recovery request.")]
+    request: PathBuf,
+    #[structopt(
+        long = "ip-info",
+        help = "File with information about the identity provider."
+    )]
+    ip_info: PathBuf,
+    #[structopt(
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
+    global:  PathBuf,
+}
+
+#[derive(StructOpt)]
 struct CreateChi {
     #[structopt(long = "out")]
-    out:       Option<PathBuf>,
-    #[structopt(long = "hd-wallet", help = "File with hd wallet.")]
-    hd_wallet: Option<PathBuf>,
+    out:            Option<PathBuf>,
+    #[structopt(
+        long = "hd-wallet",
+        help = "File with hd wallet.",
+        requires = "identity-index"
+    )]
+    hd_wallet:      Option<PathBuf>,
+    #[structopt(
+        long = "identity-index",
+        help = "Identity index.",
+        requires = "hd-wallet"
+    )]
+    identity_index: Option<u32>,
 }
 
 #[derive(StructOpt)]
@@ -557,6 +623,11 @@ struct GenesisCredentialInput {
 )]
 enum IdClient {
     #[structopt(
+        name = "create-hd-wallet",
+        about = "Create hd-wallet from a list of 24 BIP39 words."
+    )]
+    CreateHdWallet(CreateHdWallet),
+    #[structopt(
         name = "create-chi",
         about = "Create new credential holder information."
     )]
@@ -615,6 +686,13 @@ enum IdClient {
         about = "Create a genesis account from credentials and possibly baker information."
     )]
     MakeAccount(MakeAccount),
+    #[structopt(name = "recover-identity", about = "Generate id recovery request.")]
+    GenerateIdRecoveryRequest(GenerateIdRecoveryRequest),
+    #[structopt(
+        name = "validate-recovery-request",
+        about = "Validate id recovery request."
+    )]
+    ValidateIdRecoveryRequest(ValidateIdRecoveryRequest),
 }
 
 fn main() {
@@ -626,6 +704,7 @@ fn main() {
     use IdClient::*;
     match client {
         CreateChi(chi) => handle_create_chi(chi),
+        CreateHdWallet(chw) => handle_create_hd_wallet(chw),
         CreateIdUseData(iud) => handle_create_id_use_data(iud),
         StartIp(ip) => handle_start_ip(ip),
         StartIpV1(ip) => handle_start_ip_v1(ip),
@@ -637,6 +716,8 @@ fn main() {
         ExtendIpList(eil) => handle_extend_ip_list(eil),
         VerifyCredential(vcred) => handle_verify_credential(vcred),
         MakeAccount(macc) => handle_make_account(macc),
+        GenerateIdRecoveryRequest(girr) => handle_recovery(girr),
+        ValidateIdRecoveryRequest(vir) => handle_validate_recovery(vir),
     }
 }
 
@@ -839,9 +920,10 @@ fn handle_extend_ip_list(eil: ExtendIpList) {
 enum SomeIdentityObject<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>> {
+    AttributeType: Attribute<C::Scalar>,
+> {
     IdoV0(IdentityObject<P, C, AttributeType>),
-    IdoV1(IdentityObjectV1<P, C, AttributeType>)
+    IdoV1(IdentityObjectV1<P, C, AttributeType>),
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -850,21 +932,21 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
     fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
         match self {
             SomeIdentityObject::IdoV0(ido) => ido.get_common_pio_fields(),
-            SomeIdentityObject::IdoV1(ido) => ido.get_common_pio_fields()
+            SomeIdentityObject::IdoV1(ido) => ido.get_common_pio_fields(),
         }
     }
 
-    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { 
+    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> {
         match self {
             SomeIdentityObject::IdoV0(ido) => ido.get_attribute_list(),
-            SomeIdentityObject::IdoV1(ido) => ido.get_attribute_list()
+            SomeIdentityObject::IdoV1(ido) => ido.get_attribute_list(),
         }
-     }
+    }
 
     fn get_signature(&self) -> &ps_sig::Signature<P> {
         match self {
             SomeIdentityObject::IdoV0(ido) => ido.get_signature(),
-            SomeIdentityObject::IdoV1(ido) => ido.get_signature()
+            SomeIdentityObject::IdoV1(ido) => ido.get_signature(),
         }
     }
 }
@@ -875,15 +957,13 @@ fn handle_create_credential(cc: CreateCredential) {
     let id_object = {
         match read_id_object(cc.id_object.clone()) {
             Ok(v) => SomeIdentityObject::IdoV0(v),
-            Err(_) => {
-                match read_id_object_v1(cc.id_object) {
-                    Ok(v) => SomeIdentityObject::IdoV1(v),
-                    Err(x) => {
-                        eprintln!("Could not read identity object because {}", x);
-                        return;
-                    }
+            Err(_) => match read_id_object_v1(cc.id_object) {
+                Ok(v) => SomeIdentityObject::IdoV1(v),
+                Err(x) => {
+                    eprintln!("Could not read identity object because {}", x);
+                    return;
                 }
-            }
+            },
         }
     };
 
@@ -1220,11 +1300,71 @@ fn handle_create_credential(cc: CreateCredential) {
     }
 }
 
+fn handle_create_hd_wallet(chw: CreateHdWallet) {
+    let bip39_map = bip39_map();
+
+    let words_str = {
+        println!("Please enter existing phrase below.");
+        let input_words = match read_words_from_terminal(24, true, &bip39_map) {
+            Ok(words) => words,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                return;
+            }
+        };
+
+        input_words.join(" ")
+    };
+    let net = if chw.testnet {
+        Net::Testnet
+    } else {
+        Net::Mainnet
+    };
+    let wallet = ConcordiumHdWallet {
+        seed: words_to_seed(&words_str),
+        net,
+    };
+
+    if let Some(filepath) = chw.out {
+        match output_possibly_encrypted(&filepath, &wallet) {
+            Ok(_) => println!("Wrote hd wallet to file."),
+            Err(_) => {
+                eprintln!("Could not write to file. The generated wallet is");
+                output_json(&wallet);
+            }
+        }
+    } else {
+        println!("Generated hd wallet.");
+        output_json(&wallet)
+    }
+}
+
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_chi(cc: CreateChi) {
     let mut csprng = thread_rng();
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials::generate(&mut csprng),
+    let ah_info = if let (Some(path), Some(identity_index)) = (cc.hd_wallet, cc.identity_index) {
+        let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Could not read file because {}", e);
+                return;
+            }
+        };
+        let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+            Ok(scalar) => scalar,
+            Err(e) => {
+                eprintln!("Could not get idCredSec because {}", e);
+                return;
+            }
+        };
+
+        let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
+        let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+        CredentialHolderInfo::<ExampleCurve> { id_cred }
+    } else {
+        CredentialHolderInfo::<ExampleCurve> {
+            id_cred: IdCredentials::generate(&mut csprng),
+        }
     };
     if let Some(filepath) = cc.out {
         match output_possibly_encrypted(&filepath, &ah_info) {
@@ -2117,4 +2257,73 @@ fn handle_generate_global(gl: GenerateGlobal) {
     if let Err(err) = write_json_to_file(&gl.output_file, &vgc) {
         eprintln!("Could not write global parameters because {}.", err);
     }
+}
+
+fn handle_recovery(girr: GenerateIdRecoveryRequest) {
+    let ip_info = match read_ip_info(girr.ip_info) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read identity provider info because {}", err);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(girr.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context from database. Terminating.");
+            return;
+        }
+    };
+
+    let chi: CredentialHolderInfo<ExampleCurve> = {
+        match decrypt_input(girr.chi) {
+            Ok(chi) => chi,
+            Err(e) => {
+                eprintln!("Could not read credential holder information: {}", e);
+                return;
+            }
+        }
+    };
+    let timestamp = chrono::Utc::now().timestamp() as u64;
+    let request =
+        generate_id_recovery_request(&ip_info, &global_ctx, &chi.id_cred.id_cred_sec, timestamp);
+    let json = Versioned {
+        version: Version::from(0),
+        value:   request,
+    };
+    if let Err(err) = write_json_to_file(&girr.request_file, &json) {
+        eprintln!("Could not write id recovery request to to {}.", err);
+    }
+}
+
+fn handle_validate_recovery(vir: ValidateIdRecoveryRequest) {
+    let ip_info = match read_ip_info(vir.ip_info) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read identity provider info because {}", err);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(vir.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context from database. Terminating.");
+            return;
+        }
+    };
+
+    let request = match read_recovery_request(&vir.request) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read recovery request because {}", err);
+            return;
+        }
+    };
+
+    let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+    println!("ID recovery validation result: {}", result);
 }

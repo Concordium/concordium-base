@@ -1,4 +1,3 @@
-use bitvec::prelude::*;
 use clap::AppSettings;
 use client_server_helpers::*;
 use crossterm::{
@@ -9,13 +8,11 @@ use crypto_common::*;
 use curve_arithmetic::Curve;
 use dialoguer::{Confirm, Input};
 use elgamal::{PublicKey, SecretKey};
-use hkdf::HkdfExtract;
 use hmac::{Hmac, Mac, NewMac};
 use id::types::*;
 use keygen_bls::{keygen_bls, keygen_bls_deprecated};
 use pairing::bls12_381::{Bls12, Fr, G1, G2};
-use rand::Rng;
-use sha2::{Digest, Sha256, Sha512};
+use sha2::Sha512;
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -671,7 +668,6 @@ pub fn generate_ed_sk(
     let sk = ed25519_dalek::SecretKey::from_bytes(&keygen_ed(seed))?;
     Ok(sk)
 }
-
 
 #[cfg(test)]
 mod tests {
