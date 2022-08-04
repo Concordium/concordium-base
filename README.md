@@ -19,6 +19,10 @@ The functionality in this library is re-exported via the [concordium-std](https:
 - `fuzz`: Enable fuzzing via `arbitrary`. Enables `derive-serde` as well.
 - `sdk`: Enable functionality only meant for `concordium-rust-sdk`. Enabling will change procedural macros to assume the context of the `concordium-rust-sdk` and enable functionality only meant for off-chain development.
 
+## MSRV
+
+The minimum supported rust version is 1.56
+
 ## Links
 
 - [Crates.io](https://crates.io/crates/concordium-contracts-common)
