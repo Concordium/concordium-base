@@ -9,9 +9,10 @@ use core::{cmp, convert, fmt, hash, iter, ops, str};
 use hash::Hash;
 #[cfg(feature = "derive-serde")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
+#[cfg(feature = "derive-serde")]
+pub use serde_impl::*;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
-
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
 pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
@@ -610,6 +611,10 @@ impl convert::AsRef<[u8; 32]> for AccountAddress {
 
 impl convert::AsRef<[u8]> for AccountAddress {
     fn as_ref(&self) -> &[u8] { &self.0 }
+}
+
+impl convert::AsMut<[u8; 32]> for AccountAddress {
+    fn as_mut(&mut self) -> &mut [u8; 32] { &mut self.0 }
 }
 
 impl AccountAddress {
