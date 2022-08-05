@@ -849,7 +849,7 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::query())
         .and_then(
             move |version: String, id_cred_pub_hash: String, query: HashMap<String, String>| {
-                let delay = match query.get("delay").map(|d| d.parse::<i64>().ok()).flatten() {
+                let delay = match query.get("delay").and_then(|d| d.parse::<i64>().ok()) {
                     Some(d) => d,
                     None => {
                         warn!("No delay query parameter present at identity/fail");
@@ -1956,8 +1956,9 @@ mod tests {
     // Destroy DB generated folders after test
     impl Drop for DB {
         fn drop(&mut self) {
-            fs::remove_dir_all(&self.root);
-            fs::remove_dir_all(&self.backup_root);
+            // ignore errors for drop
+            let _ = fs::remove_dir_all(&self.root);
+            let _ = fs::remove_dir_all(&self.backup_root);
         }
     }
 

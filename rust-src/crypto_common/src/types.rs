@@ -597,7 +597,7 @@ mod tests {
             let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");
             match serde_json::from_str::<TransactionSignature>(&js) {
                 Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
-                Err(e) => assert!(false, "{}", e),
+                Err(e) => panic!("{}", e),
             }
 
             let binary_result = crate::serialize_deserialize(&signatures)

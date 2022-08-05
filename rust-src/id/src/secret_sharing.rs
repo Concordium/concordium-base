@@ -212,9 +212,7 @@ mod test {
         let r = lagrange::<u32, G1>(&kxs, p);
         assert_eq!(r, G1::scalar_from_u64(1));
 
-        let mut kxs = Vec::new();
-        kxs.push(1);
-        kxs.push(2);
+        let kxs = vec![1, 2];
         let p = 1;
         let r = lagrange::<u32, G1>(&kxs, p);
         assert_eq!(r, G1::scalar_from_u64(2));
@@ -277,9 +275,9 @@ mod test {
             let sufficient_sample = &shares[0..(threshold as usize)];
             let sufficient_sample_points = sufficient_sample
                 .iter()
-                .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
+                .map(|(n, s)| (*n, generator.mul_by_scalar(s)))
                 .collect::<Vec<(u8, G1)>>();
-            let revealed_data: Fr = reveal::<_, G1>(&sufficient_sample);
+            let revealed_data: Fr = reveal::<_, G1>(sufficient_sample);
             assert_eq!(revealed_data, secret);
             let revealed_data_point: G1 = reveal_in_group::<_, G1>(&sufficient_sample_points);
             assert_eq!(revealed_data_point, secret_point);
@@ -305,7 +303,7 @@ mod test {
             assert_ne!(revealed_data, secret);
             let sufficient_points_err = shares
                 .iter()
-                .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
+                .map(|(n, s)| (*n, generator.mul_by_scalar(s)))
                 .collect::<Vec<(u8, G1)>>();
             let revealed_data_point: G1 = reveal_in_group::<_, G1>(&sufficient_points_err);
             assert_ne!(revealed_data_point, secret_point);
@@ -326,9 +324,9 @@ mod test {
             let insufficient_sample = &insufficient_shares[0..((threshold - 1) as usize)];
             let insufficient_sample_points = insufficient_sample
                 .iter()
-                .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
+                .map(|(n, s)| (*n, generator.mul_by_scalar(s)))
                 .collect::<Vec<(u8, G1)>>();
-            let revealed_data: Fr = reveal::<_, G1>(&insufficient_sample);
+            let revealed_data: Fr = reveal::<_, G1>(insufficient_sample);
             assert_ne!(revealed_data, secret);
             let revealed_data_point: G1 = reveal_in_group::<_, G1>(&insufficient_sample_points);
             assert_ne!(revealed_data_point, secret_point);

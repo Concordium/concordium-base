@@ -58,7 +58,7 @@ impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] { self.as_bytes() }
 }
 
-impl<'a> From<&'a SecretKey> for PublicKey {
+impl From<&SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
     /// Implements <https://tools.ietf.org/html/rfc8032#section-5.1.5>
     fn from(secret_key: &SecretKey) -> PublicKey {
@@ -75,7 +75,7 @@ impl<'a> From<&'a SecretKey> for PublicKey {
     }
 }
 
-impl<'a> From<&'a ExpandedSecretKey> for PublicKey {
+impl From<&ExpandedSecretKey> for PublicKey {
     /// Derive this public key from its corresponding `ExpandedSecretKey`.
     fn from(expanded_secret_key: &ExpandedSecretKey) -> PublicKey {
         let mut bits: [u8; 32] = expanded_secret_key.key.to_bytes();
