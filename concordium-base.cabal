@@ -149,6 +149,7 @@ library
     extra-libraries:
         userenv
         ws2_32
+        bcrypt
   default-language: Haskell2010
 
 executable generate-update-keys
