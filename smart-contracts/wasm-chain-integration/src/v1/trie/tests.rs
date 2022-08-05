@@ -520,7 +520,7 @@ fn prop_iterator_locked_for_modification_generations() {
             }
             let mut locked_prefixes = Vec::new();
             for prefix in prefixes_to_lock {
-                if let Ok(Some(iterator)) = trie.iter(&mut loader, &prefix) {
+                if let Ok(Some(iterator)) = trie.iter(&mut loader, prefix) {
                     locked_prefixes.push(iterator);
                 }
             }

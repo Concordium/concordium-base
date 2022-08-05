@@ -163,7 +163,7 @@ unsafe extern "C" fn call_init_v1(
     // do not drop the pointer, we are not the owner
     let _ = Arc::into_raw(artifact);
     // and return the value
-    res.unwrap_or_else(|_| std::ptr::null_mut())
+    res.unwrap_or(std::ptr::null_mut())
 }
 
 /// Invoke a receive function, updating the contract instance.
@@ -302,7 +302,7 @@ unsafe extern "C" fn call_receive_v1(
     // do not drop the pointer, we are not the owner
     let _ = Arc::into_raw(artifact);
     // and return the value
-    res.unwrap_or_else(|_| std::ptr::null_mut())
+    res.unwrap_or(std::ptr::null_mut())
 }
 
 #[no_mangle]
@@ -558,7 +558,7 @@ unsafe extern "C" fn artifact_v1_from_bytes(
     input_len: size_t,
 ) -> *const ArtifactV1 {
     let bytes = slice_from_c_bytes!(bytes_ptr, input_len as usize);
-    if let Ok(borrowed_artifact) = parse_artifact(&bytes) {
+    if let Ok(borrowed_artifact) = parse_artifact(bytes) {
         Arc::into_raw(Arc::new(borrowed_artifact.into()))
     } else {
         std::ptr::null()

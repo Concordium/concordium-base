@@ -21,7 +21,7 @@ use wasm_transform::{
     validate::validate_module,
 };
 
-fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
+fn to_snake_case(string: String) -> String { string.to_lowercase().replace('-', "_") }
 
 #[derive(Debug, Clone, Copy)]
 pub enum SchemaBuildOptions {

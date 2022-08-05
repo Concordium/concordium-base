@@ -375,10 +375,10 @@ pub fn get_embedded_schema_v0(bytes: &[u8]) -> ExecResult<schema::VersionedModul
 
     if let Some(cs) = schema_versioned_section {
         let module: schema::VersionedModuleSchema =
-            from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+            from_bytes(cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
         Ok(module)
     } else if let Some(cs) = schema_v1_section {
-        let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+        let module = from_bytes(cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
         Ok(schema::VersionedModuleSchema::V0(module))
     } else {
         bail!("No schema found in the module")
@@ -405,10 +405,10 @@ pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::VersionedModul
 
     if let Some(cs) = schema_versioned_section {
         let module: schema::VersionedModuleSchema =
-            from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+            from_bytes(cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
         Ok(module)
     } else if let Some(cs) = schema_v2_section {
-        let module = from_bytes(&cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
+        let module = from_bytes(cs.contents).map_err(|_| anyhow!("Failed parsing schema"))?;
         Ok(schema::VersionedModuleSchema::V1(module))
     } else {
         bail!("No schema found in the module")

@@ -224,7 +224,7 @@ impl<S> Loader<S> {
     }
 }
 
-impl<'a, A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
+impl<A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
     // with 28 the size of the type is 32 bytes, with 29 it is 40.
     // Since a normal vector takes 24 bytes always this seems a good compromise.
     type R = tinyvec::TinyVec<[u8; 28]>;

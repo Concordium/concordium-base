@@ -344,7 +344,7 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     fn return_type(&self) -> BlockType { self.return_type }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn params(&self) -> &[ValueType] { &self.params }
+    fn params(&self) -> &[ValueType] { self.params }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_locals(&self) -> u32 { self.num_locals }
