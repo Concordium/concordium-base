@@ -1,11 +1,14 @@
 //! Common types needed in concordium.
 
 use crate::{
-    serial_string, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial,
+    deserial_string, serial_string, Buffer, Deserial, Get, ParseResult, SerdeDeserialize,
+    SerdeSerialize, Serial,
 };
 use byteorder::{BigEndian, ReadBytesExt};
-use concordium_contracts_common::ContractAddress;
 pub use concordium_contracts_common::{AccountAddress, Amount, ACCOUNT_ADDRESS_SIZE};
+use concordium_contracts_common::{
+    ContractAddress, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
+};
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
@@ -158,6 +161,51 @@ impl Deserial for ContractAddress {
         let index = source.read_u64::<BigEndian>()?;
         let subindex = source.read_u64::<BigEndian>()?;
         Ok(ContractAddress::new(index, subindex))
+    }
+}
+
+impl Serial for ReceiveName<'_> {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let string = self.get_chain_name();
+        (string.len() as u16).serial(out);
+        serial_string(string, out)
+    }
+}
+
+impl Serial for OwnedReceiveName {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) { self.as_receive_name().serial(x) }
+}
+
+impl Deserial for OwnedReceiveName {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let name = deserial_string(source, len.into())?;
+        Ok(OwnedReceiveName::new(name)?)
+    }
+}
+
+impl Serial for ContractName<'_> {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let string = self.get_chain_name();
+        (string.len() as u16).serial(out);
+        serial_string(string, out)
+    }
+}
+
+impl Serial for OwnedContractName {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) { self.as_contract_name().serial(x) }
+}
+
+impl Deserial for OwnedContractName {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let name = deserial_string(source, len.into())?;
+        Ok(OwnedContractName::new(name)?)
     }
 }
 
