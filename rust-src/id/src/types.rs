@@ -2390,7 +2390,7 @@ mod tests {
                 .get_alias(i)
                 .expect("Counter < 2^24, so alias should exist.");
             anyhow::ensure!(
-                alias.is_alias_of(&base),
+                alias.is_alias(&base),
                 "Generated alias {:?} is not an alias of the base address {:?}.",
                 alias,
                 base
