@@ -622,6 +622,18 @@ impl AccountAddress {
     /// if they identify the same account. This is defined to be when the
     /// addresses agree on the first 29 bytes.
     pub fn is_alias(&self, other: &AccountAddress) -> bool { self.0[0..29] == other.0[0..29] }
+
+    /// Get the `n-th` alias of an address. There are 2^24 possible aliases.
+    /// If the counter is `>= 2^24` then this function will return [`None`].
+    pub fn get_alias(&self, counter: u32) -> Option<Self> {
+        if counter < (1 << 24) {
+            let mut data = self.0;
+            data[29..].copy_from_slice(&counter.to_be_bytes()[1..]);
+            Some(Self(data))
+        } else {
+            None
+        }
+    }
 }
 
 /// Address of a contract.
