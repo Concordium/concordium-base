@@ -16,16 +16,10 @@ pub fn bench_from_bytes(c: &mut Criterion) {
     }
     let ca = a.clone();
     c.bench_function("PublicKey::from_bytes {}", move |b| {
-        b.iter(|| match PublicKey::from_bytes(&a) {
-            Ok(_) => true,
-            Err(_) => false,
-        });
+        b.iter(|| PublicKey::from_bytes(&a).is_ok())
     });
     c.bench_function("SecretKey::from_bytes {}", move |b| {
-        b.iter(|| match SecretKey::from_bytes(&ca) {
-            Ok(_) => true,
-            Err(_) => false,
-        });
+        b.iter(|| SecretKey::from_bytes(&ca).is_ok())
     });
 }
 

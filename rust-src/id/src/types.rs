@@ -328,14 +328,14 @@ pub const ATTRIBUTE_TAG_LEI: AttributeTag = AttributeTag(13);
 /// are internal tags, values at those indices are string tags).
 pub struct AttributeStringTag(String);
 
-impl<'a> fmt::Display for AttributeStringTag {
+impl fmt::Display for AttributeStringTag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 // NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
 // FIXME: This method's complexity is linear in the size of the set of
 // attributes.
-impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
+impl TryFrom<AttributeStringTag> for AttributeTag {
     type Error = anyhow::Error;
 
     fn try_from(v: AttributeStringTag) -> Result<Self, Self::Error> {
@@ -351,7 +351,7 @@ impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
     }
 }
 
-impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
+impl std::convert::From<AttributeTag> for AttributeStringTag {
     fn from(v: AttributeTag) -> Self {
         let v_usize: usize = v.into();
         if v_usize < ATTRIBUTE_NAMES.len() {
@@ -2356,8 +2356,8 @@ mod tests {
     #[test]
     fn test_yearmonth_serialization() {
         // Test equality
-        let ym1 = YearMonth::new(2020, 02).unwrap();
-        let ym2 = YearMonth::new(2020, 02).unwrap();
+        let ym1 = YearMonth::new(2020, 2).unwrap();
+        let ym2 = YearMonth::new(2020, 2).unwrap();
         assert_eq!(ym1, ym2);
 
         // Test serialization

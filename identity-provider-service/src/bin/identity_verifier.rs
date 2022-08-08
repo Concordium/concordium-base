@@ -215,7 +215,7 @@ async fn main() {
                     }
 
                     let expiry = match input.get("expiry") {
-                        Some(i) => i.replace("-", ""),
+                        Some(i) => i.replace('-', ""),
                         None => {
                             return Response::builder()
                                 .status(StatusCode::BAD_REQUEST)

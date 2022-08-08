@@ -284,10 +284,7 @@ pub fn serial_vector_no_length<B: Buffer, T: Serial>(xs: &[T], out: &mut B) {
 }
 
 /// Serialize an ordered map. Serialization is by increasing order of keys.
-pub fn serial_map_no_length<'a, B: Buffer, K: Serial + 'a, V: Serial + 'a>(
-    map: &BTreeMap<K, V>,
-    out: &mut B,
-) {
+pub fn serial_map_no_length<B: Buffer, K: Serial, V: Serial>(map: &BTreeMap<K, V>, out: &mut B) {
     for (k, v) in map.iter() {
         // iterator over ordered pairs.
         out.put(k);
@@ -324,7 +321,7 @@ pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Dese
 }
 
 /// Analogous to [serial_map_no_length], but for sets.
-pub fn serial_set_no_length<'a, B: Buffer, K: Serial + 'a>(map: &BTreeSet<K>, out: &mut B) {
+pub fn serial_set_no_length<B: Buffer, K: Serial>(map: &BTreeSet<K>, out: &mut B) {
     for k in map.iter() {
         out.put(k);
     }
@@ -601,7 +598,7 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
     }
 }
 
-impl<'a, T: Serial> Serial for &'a T {
+impl<T: Serial> Serial for &T {
     fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { (*self).serial(target) }
 }
 

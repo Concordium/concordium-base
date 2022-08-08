@@ -185,10 +185,10 @@ mod tests {
                 if let Ok(sk) = keygen_bls(&seed, b"") {
                     assert_eq!(sk.into_repr(), FrRepr(expected_outputs[i]))
                 } else {
-                    assert!(false);
+                    panic!("Could not generate key from seed.")
                 }
             } else {
-                assert!(false);
+                panic!("Could not hex decode.")
             }
         }
     }

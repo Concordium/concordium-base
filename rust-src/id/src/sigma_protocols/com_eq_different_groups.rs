@@ -135,7 +135,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     fn with_valid_data<R: Rng>(
         _data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         let a_1: Value<C2> = Value::generate_non_zero(csprng);
         let cmm_key_1: CommitmentKey<C1> = CommitmentKey::generate(csprng);

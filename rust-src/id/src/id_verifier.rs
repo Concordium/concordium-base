@@ -162,15 +162,15 @@ mod tests {
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let maybe_proof =
-            prove_attribute_in_range(&gens, &keys, &attribute, &lower, &upper, &randomness);
+            prove_attribute_in_range(gens, &keys, &attribute, &lower, &upper, &randomness);
         if let Some(proof) = maybe_proof {
             assert_eq!(
-                verify_attribute_range(&keys, &gens, &lower, &upper, &commitment, &proof),
+                verify_attribute_range(&keys, gens, &lower, &upper, &commitment, &proof),
                 Ok(()),
                 "Incorrect range proof."
             );
         } else {
-            assert!(false, "Failed to produce proof.");
+            panic!("Failed to produce proof.");
         };
     }
 }

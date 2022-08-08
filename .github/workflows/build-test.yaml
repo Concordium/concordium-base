@@ -50,7 +50,7 @@ jobs:
       matrix:
         plan:
         - ghc: 9.0.2 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.53
+          rust: 1.62
 
     steps:
     - name: Checkout

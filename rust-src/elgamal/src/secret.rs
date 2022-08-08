@@ -171,7 +171,6 @@ mod tests {
     macro_rules! macro_test_secret_key_to_byte_conversion {
         ($function_name:ident, $curve_type:path) => {
             #[test]
-            #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
