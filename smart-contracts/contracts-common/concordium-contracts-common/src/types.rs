@@ -652,9 +652,9 @@ impl ContractAddress {
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[derive(Eq, Copy, Clone, Debug)]
 pub enum Address {
-    #[serde(rename = "AddressAccount")]
+    #[cfg_attr(feature = "derive-serde", serde(rename = "AddressAccount"))]
     Account(AccountAddress),
-    #[serde(rename = "AddressContract")]
+    #[cfg_attr(feature = "derive-serde", serde(rename = "AddressContract"))]
     Contract(ContractAddress),
 }
 
@@ -759,8 +759,17 @@ impl<'a> ContractName<'a> {
     }
 }
 
+impl<'a> From<ContractName<'a>> for &'a str {
+    fn from(n: ContractName<'a>) -> Self { n.0 }
+}
+
 /// A contract name (owned version). Expected format: "init_<contract_name>".
-#[derive(Eq, PartialEq, Debug, Hash)]
+#[derive(Eq, PartialEq, Debug, Hash, Clone, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(SerdeSerialize, SerdeDeserialize),
+    serde(into = "String", try_from = "String")
+)]
 pub struct OwnedContractName(String);
 
 impl OwnedContractName {
@@ -780,6 +789,10 @@ impl OwnedContractName {
     /// Convert to ContractName by reference.
     #[inline(always)]
     pub fn as_contract_name(&self) -> ContractName { ContractName(self.0.as_str()) }
+}
+
+impl From<OwnedContractName> for String {
+    fn from(n: OwnedContractName) -> Self { n.0 }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -809,6 +822,12 @@ impl fmt::Display for NewContractNameError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for NewContractNameError {}
+
+impl convert::TryFrom<String> for OwnedContractName {
+    type Error = NewContractNameError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> { OwnedContractName::new(value) }
+}
 
 /// A receive name. Expected format: "<contract_name>.<func_name>".
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
@@ -874,7 +893,7 @@ impl<'a> ReceiveName<'a> {
 /// "<contract_name>.<func_name>". Most methods are available only on the
 /// [`ReceiveName`] type, the intention is to access those via the
 /// [`as_receive_name`](OwnedReceiveName::as_receive_name) method.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "derive-serde", serde(try_from = "String"))]
 pub struct OwnedReceiveName(String);
