@@ -168,13 +168,13 @@ fn main() -> anyhow::Result<()> {
     let client = IpClient::from_clap(&matches);
     use IpClient::*;
     match client {
-        SignPioV0(sip) => handle_sign_pio(sip),
+        SignPioV0(sip) => handle_sign_pio_v0(sip),
         SignPioV1(sip) => handle_sign_pio_v1(sip),
         ValidateIdRecoveryRequest(vir) => handle_validate_recovery(vir),
     }
 }
 
-fn handle_sign_pio(app: IpV0) -> anyhow::Result<()> {
+fn handle_sign_pio_v0(app: IpV0) -> anyhow::Result<()> {
     let pio = read_pre_identity_object(&app.pio).context(format!(
         "Could not read the identity object request from file {}.",
         app.pio.display()

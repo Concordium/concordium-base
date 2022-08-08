@@ -23,7 +23,7 @@ use rand::*;
 use serde_json::{json, to_value};
 use std::{
     cmp::max,
-    collections::{btree_map::BTreeMap, HashMap},
+    collections::btree_map::BTreeMap,
     convert::TryFrom,
     fs::File,
     io::{self, Write},
@@ -35,17 +35,6 @@ use pedersen_scheme::Value as PedersenValue;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
-
-const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
-
-/// List of BIP39 words. There is a test that checks that this list has correct
-/// length, so there is no need to check when using this in the tool.
-fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
-
-/// Inverse mapping to the implicit mapping in bip39_words. Maps word to its
-/// index in the list. This allows to quickly test membership and convert words
-/// to their index.
-fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
 
 fn mk_ip_filename(path: &Path, n: usize) -> (PathBuf, PathBuf) {
     let mut public = path.to_path_buf();
@@ -90,7 +79,11 @@ fn read_validto() -> io::Result<YearMonth> {
 
 #[derive(StructOpt)]
 struct CreateHdWallet {
-    #[structopt(long = "out", help = "File to write the hd wallet to.")]
+    #[structopt(
+        long = "out",
+        help = "Optional file to write the hd wallet to. If not provided, the hd wallet json will \
+                be written to standard output."
+    )]
     out:     Option<PathBuf>,
     #[structopt(long = "testnet")]
     testnet: bool,
@@ -168,8 +161,6 @@ struct CreateIdUseData {
     )]
     identity_index: Option<u32>,
 }
-
-// requires = "selected-ars"
 
 #[derive(StructOpt)]
 struct StartIp {
@@ -1441,17 +1432,19 @@ fn handle_create_id_use_data(iud: CreateIdUseData) {
         }
     };
 
+    let ver_id_use_data = Versioned::new(VERSION_0, id_use_data);
+
     if let Some(filepath) = iud.out {
-        match output_possibly_encrypted(&filepath, &id_use_data) {
+        match output_possibly_encrypted(&filepath, &ver_id_use_data) {
             Ok(_) => println!("Wrote ID use data to file."),
             Err(_) => {
                 eprintln!("Could not write to file. The generated ID use data is");
-                output_json(&id_use_data);
+                output_json(&ver_id_use_data);
             }
         }
     } else {
         println!("Generated ID use data.");
-        output_json(&id_use_data)
+        output_json(&ver_id_use_data)
     }
 }
 
@@ -1947,13 +1940,11 @@ fn handle_start_ip(sip: StartIp) {
 }
 
 fn handle_start_ip_v1(sip: StartIpV1) {
-    let id_use_data = {
-        match decrypt_input(sip.id_use_data) {
-            Ok(iud) => iud,
-            Err(e) => {
-                eprintln!("Could not read credential holder information: {}", e);
-                return;
-            }
+    let id_use_data = match read_id_use_data(sip.id_use_data) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not read ID use data object because: {}", x);
+            return;
         }
     };
 

@@ -19,23 +19,8 @@ use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
 use pedersen_scheme::Value as PedersenValue;
 use rand::*;
 use serde_json::{json, to_value};
-use std::{
-    collections::{btree_map::BTreeMap, HashMap},
-    convert::TryFrom,
-    path::PathBuf,
-};
+use std::{collections::btree_map::BTreeMap, convert::TryFrom, path::PathBuf};
 use structopt::StructOpt;
-
-const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
-
-/// List of BIP39 words. There is a test that checks that this list has correct
-/// length, so there is no need to check when using this in the tool.
-fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
-
-/// Inverse mapping to the implicit mapping in bip39_words. Maps word to its
-/// index in the list. This allows to quickly test membership and convert words
-/// to their index.
-fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
 
 #[derive(StructOpt)]
 struct StartIp {

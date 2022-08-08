@@ -32,6 +32,17 @@ pub type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, E
 pub static GLOBAL_CONTEXT: &str = "database/global.json";
 pub static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
+const BIP39_ENGLISH: &str = include_str!("bin/data/BIP39English.txt");
+
+/// List of BIP39 words. There is a test that checks that this list has correct
+/// length, so there is no need to check when using this in the tool.
+pub fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
+
+/// Inverse mapping to the implicit mapping in bip39_words. Maps word to its
+/// index in the list. This allows to quickly test membership and convert words
+/// to their index.
+pub fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
+
 /// Read an object containing a versioned global context from the given file.
 /// Currently only version 0 is supported.
 pub fn read_global_context<P: AsRef<Path> + Debug>(
