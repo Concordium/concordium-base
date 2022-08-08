@@ -196,16 +196,27 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "base58check",
  "chrono",
+ "concordium-contracts-common-derive",
  "fnv",
  "hashbrown",
  "num-bigint",
  "num-traits 0.2.15",
  "serde 1.0.137",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "concordium-contracts-common-derive"
+version = "1.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

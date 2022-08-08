@@ -51,6 +51,28 @@ impl v0::HasInitContext for InitContextOpt {
     }
 }
 
+/// Serde deserializer for Option<Address>.
+/// Introduced to avoid breaking changes when the serde implementation for
+/// Address was changed to match the node.
+fn deserialize_optional_address<'de, D: serde::de::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Address>, D::Error> {
+    /// Newtype for address for deriving a differen serde implementation.
+    #[derive(serde::Deserialize)]
+    #[serde(tag = "type", content = "address", rename_all = "lowercase")]
+    enum AddressWrapper {
+        Account(AccountAddress),
+        Contract(ContractAddress),
+    }
+
+    let option =
+        Option::<AddressWrapper>::deserialize(deserializer)?.map(|wrapped| match wrapped {
+            AddressWrapper::Account(address) => Address::Account(address),
+            AddressWrapper::Contract(address) => Address::Contract(address),
+        });
+    Ok(option)
+}
+
 /// A receive context with optional fields.
 /// Used when simulating contracts to allow the user to only specify the
 /// context fields used by the contract.
@@ -65,6 +87,7 @@ pub(crate) struct ReceiveContextOpt {
     self_address:            Option<ContractAddress>,
     // This is pub(crate) because it is overwritten when `--balance` is used.
     pub(crate) self_balance: Option<Amount>,
+    #[serde(deserialize_with = "deserialize_optional_address")]
     sender:                  Option<Address>,
     owner:                   Option<AccountAddress>,
     #[serde(default, deserialize_with = "deserialize_policy_bytes_from_json")]
