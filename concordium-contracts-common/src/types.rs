@@ -1512,12 +1512,12 @@ mod serde_impl {
         }
     }
 
-    /// Error that can occur when parsing a [`ContractAddress`] from a string.
+    /// Error that can occur when parsing an [`Address`] from a string.
     #[derive(Debug, thiserror::Error)]
     pub enum AddressParseError {
         #[error("Failed parsing a contract address: {0}")]
         ContractAddressError(#[from] ContractAddressParseError),
-        #[error("Failed parsing a account address: {0}")]
+        #[error("Failed parsing an account address: {0}")]
         AccountAddressError(#[from] AccountAddressParseError),
     }
 
