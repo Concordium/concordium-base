@@ -45,6 +45,7 @@ struct IpV0 {
     )]
     out_icdi:           PathBuf,
     #[structopt(
+        name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
@@ -97,6 +98,7 @@ struct IpV1 {
     )]
     ar_record:          PathBuf,
     #[structopt(
+        name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
@@ -154,6 +156,7 @@ struct ValidateIdRecoveryRequest {
     )]
     ip_info: PathBuf,
     #[structopt(
+        name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]

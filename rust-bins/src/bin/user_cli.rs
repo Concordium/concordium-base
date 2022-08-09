@@ -47,6 +47,7 @@ struct StartIp {
     )]
     public:             PathBuf,
     #[structopt(
+        name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
@@ -82,17 +83,12 @@ struct StartIpV1 {
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
     #[structopt(
-        long = "chain-data-out",
-        help = "File to write the global context, identity provider info and anonymity revoker \
-                data to, to be used to create future credentials from this identity."
-    )]
-    data:               PathBuf,
-    #[structopt(
         long = "request-out",
         help = "File to write the request to that is to be sent to the identity provider."
     )]
     public:             PathBuf,
     #[structopt(
+        name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
@@ -126,6 +122,7 @@ struct GenerateIdRecoveryRequest {
     )]
     request_file: PathBuf,
     #[structopt(
+        name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
@@ -177,19 +174,26 @@ struct CreateCredentialV1 {
         long = "id-object",
         help = "File with the JSON encoded identity object."
     )]
-    id_object: PathBuf,
+    id_object:          PathBuf,
     #[structopt(
-        long = "chain-data",
-        help = "File with global context, identity provider info and anonymity revoker data to, \
-                to be used to create future credentials from this identity."
+        long = "ip-info",
+        help = "File with information about the identity provider."
     )]
-    data:      PathBuf,
+    ip_info:            PathBuf,
+    #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
+    anonymity_revokers: PathBuf,
+    #[structopt(
+        name = "cryptographic-parameters",
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
+    global:             PathBuf,
     #[structopt(
         long = "account",
         help = "Account address onto which the credential should be deployed.",
         requires = "key-index"
     )]
-    account:   Option<AccountAddress>,
+    account:            Option<AccountAddress>,
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
@@ -197,7 +201,7 @@ struct CreateCredentialV1 {
         conflicts_with = "account",
         default_value = "900"
     )]
-    expiry:    u64,
+    expiry:             u64,
     #[structopt(
         name = "key-index",
         long = "key-index",
@@ -205,16 +209,16 @@ struct CreateCredentialV1 {
         requires = "account",
         conflicts_with = "expiry"
     )]
-    key_index: Option<u8>,
+    key_index:          Option<u8>,
     #[structopt(long = "credential-out", help = "File to output the credential to.")]
-    out:       PathBuf,
+    out:                PathBuf,
     #[structopt(long = "keys-out", help = "File to output account keys to.")]
-    keys_out:  PathBuf,
+    keys_out:           PathBuf,
     #[structopt(
         long = "index",
         help = "Index of the account/credential to be created."
     )]
-    index:     Option<u8>,
+    index:              Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -654,23 +658,6 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
 
     // the only thing left is to output all the information
 
-    let data = StoredDataV1 {
-        ars,
-        ip_info,
-        global_ctx,
-    };
-
-    let ver_data = Versioned::new(VERSION_0, data);
-    println!(
-        "Generated the request and data. Writing them to {}.",
-        sip.data.display()
-    );
-    write_json_to_file(&sip.data, &ver_data).context(format!(
-        "Could not write the data to {}",
-        sip.public.display()
-    ))?;
-    println!("Wrote data to {}.", &sip.data.display());
-
     let ver_pio = Versioned::new(VERSION_0, pio);
     write_json_to_file(&sip.public, &ver_pio).context(format!(
         "Could not write the request to {}",
@@ -694,72 +681,23 @@ struct StoredData {
     id_use_data: IdObjectUseData<id::constants::IpPairing, id::constants::ArCurve>,
 }
 
-#[derive(SerdeDeserialize, SerdeSerialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredDataV1 {
-    ars:        ArInfos<id::constants::ArCurve>,
-    ip_info:    IpInfo<id::constants::IpPairing>,
-    global_ctx: GlobalContext<id::constants::ArCurve>,
-}
-
 fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
     let id_object = read_id_object_v1(&cc.id_object).context(format!(
         "Could not read the identity object from {}.",
         &cc.id_object.display()
     ))?;
-
-    let data: Versioned<StoredDataV1> = decrypt_input(&cc.data)
-        .context(format!("Could not read data from {}.", cc.data.display()))?;
-    anyhow::ensure!(
-        data.version == VERSION_0,
-        "Only version 0 of id use data is supported."
-    );
-    let data = data.value;
-
-    let ip_info = data.ip_info;
-    let ars = data.ars;
-    let global_ctx = data.global_ctx;
-
-    // now we have all the data ready.
-    // we first ask the user to select which attributes they wish to reveal
-    let alist = &id_object.alist.alist;
-
-    let alist_items = alist
-        .keys()
-        .map(|&x| AttributeStringTag::from(x))
-        .collect::<Vec<_>>();
-    let atts = if alist_items.is_empty() {
-        eprintln!("No attributes on the identity object, so none will be on the credential.");
-        Vec::new()
-    } else {
-        MultiSelect::new()
-            .with_prompt("Select which attributes you wish to reveal")
-            .items(&alist_items)
-            .interact()
-            .context("You must select which attributes you wish to reveal on the chain.")?
-    };
-
-    // from the above and the pre-identity object we make a policy
-    let mut revealed_attributes: BTreeMap<AttributeTag, ExampleAttribute> = BTreeMap::new();
-    for idx in atts {
-        let tag = alist.keys().collect::<Vec<_>>()[idx];
-        let elem = alist.get(tag).context(format!(
-            "You selected an attribute ({}) which does not exist.",
-            tag
-        ))?;
-        if revealed_attributes.insert(*tag, elem.clone()).is_some() {
-            anyhow::bail!(
-                "Attempt to reveal the same attribute ({}) more than once.",
-                tag
-            );
-        }
-    }
-    let policy = Policy {
-        valid_to:   id_object.alist.valid_to,
-        created_at: id_object.alist.created_at,
-        policy_vec: revealed_attributes,
-        _phantom:   Default::default(),
-    };
+    let ip_info = read_ip_info(&cc.ip_info).context(format!(
+        "Could not read the identity provider information from {}.",
+        cc.ip_info.display()
+    ))?;
+    let ars = read_anonymity_revokers(&cc.anonymity_revokers).context(format!(
+        "Could not read anonymity revokers from {}.",
+        cc.anonymity_revokers.display()
+    ))?;
+    let global_ctx = read_global_context(&cc.global).context(format!(
+        "Could not read cryptographic parameters from {}.",
+        cc.global.display()
+    ))?;
 
     let use_mainnet = Confirm::new()
         .with_prompt("Do you want to create the account on Mainnet? (If not, Testnet will be used)")
@@ -791,17 +729,10 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         .with_prompt("Identity index")
         .interact()
         .unwrap_or(0);
-    let x = match cc.index {
-        Some(x) => x,
-        None => Input::new()
-            .with_prompt(format!(
-                "Credential number (between 1 and {})",
-                id_object.alist.max_accounts
-            ))
-            .default(1)
-            .interact()
-            .context("You must select which index to use.")?,
-    };
+
+    // now we have all the data ready.
+    let (policy, x, new_or_existing) =
+        prepare_credential_input(&id_object, cc.index, cc.account, cc.expiry)?;
 
     // Now we have have everything we need to generate the proofs
     // we have
@@ -866,13 +797,6 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         credential_index: u32::from(x),
     };
 
-    let new_or_existing = match cc.account {
-        Some(addr) => Right(addr),
-        None => Left(TransactionTime {
-            seconds: chrono::Utc::now().timestamp() as u64 + cc.expiry,
-        }),
-    };
-
     let cdi = create_credential(
         context,
         &id_object,
@@ -885,113 +809,19 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
     );
 
     let (cdi, commitments_randomness) = cdi.context("Could not generate the credential.")?;
-
-    let address = AccountAddress::new(&cdi.values.cred_id);
-
-    // Output in the format accepted by concordium-client.
-    let (versioned_credentials, randomness_map) = {
-        let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
-        let mut credentials = BTreeMap::new();
-        let mut randomness = BTreeMap::new();
-        let cdvp = AccountCredentialWithoutProofs::Normal {
-            cdv:         cdi.values.clone(),
-            commitments: cdi.proofs.id_proofs.commitments.clone(),
-        };
-        credentials.insert(ki, cdvp);
-        randomness.insert(ki, &commitments_randomness);
-        (Versioned::new(VERSION_0, credentials), randomness)
-    };
-
-    let cdi = AccountCredential::Normal { cdi };
-
-    let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
-
-    let secret_key = elgamal::SecretKey {
-        generator: *global_ctx.elgamal_generator(),
-        scalar:    enc_key,
-    };
-
-    if let Some(addr) = cc.account {
-        let js = json!({
-            "address": addr,
-            "accountKeys": AccountKeys::from((CredentialIndex{index: cc.key_index.unwrap()}, acc_data)),
-            "credentials": versioned_credentials,
-            "commitmentsRandomness": randomness_map,
-        });
-        let was_encrypted = output_possibly_encrypted(&cc.keys_out, &js).context(format!(
-            "Could not output account keys to {}.",
-            cc.keys_out.display()
-        ))?;
-        println!(
-            "Generated additional keys for the account. They are written to {}. {}",
-            cc.keys_out.display(),
-            if was_encrypted {
-                "Keys are encrypted."
-            } else {
-                "Keys are in plaintext."
-            }
-        );
-    } else {
-        let account_data_json = json!({
-            "address": address,
-            "encryptionSecretKey": secret_key,
-            "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-            "accountKeys": AccountKeys::from(acc_data),
-            "credentials": versioned_credentials,
-            "commitmentsRandomness": randomness_map,
-            "aci": id_use_data.aci,
-        });
-        let was_encrypted =
-            output_possibly_encrypted(&cc.keys_out, &account_data_json).context(format!(
-                "Could not output account keys to {}.",
-                cc.keys_out.display()
-            ))?;
-        println!(
-            "Generated fresh keys of the account and wrote them to {}. {} DO NOT LOSE THIS FILE.",
-            cc.keys_out.display(),
-            if was_encrypted {
-                "Keys are encrypted."
-            } else {
-                "Keys are in plaintext."
-            }
-        );
-    }
-
-    let (expiry, cdi_json_value) = match new_or_existing {
-        Left(tt) => (
-            Some(tt),
-            to_value(&Versioned::new(VERSION_0, AccountCredentialMessage {
-                message_expiry: tt,
-                credential:     cdi,
-            }))
-            .expect("Cannot fail."),
-        ),
-        Right(_) => (
-            None,
-            to_value(&Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
-        ),
-    };
-    write_json_to_file(&cc.out, &cdi_json_value).context(format!(
-        "Could not write credential to {}.",
-        cc.out.display()
-    ))?;
-    if let Some(expiry) = expiry {
-        println!(
-            "Wrote the account creation transaction to {}. Submit it before {}.",
-            cc.out.display(),
-            chrono::Local.timestamp(expiry.seconds as i64, 0)
-        );
-        println!(
-            "This transaction will create an account with address {}.",
-            address
-        );
-    } else {
-        println!(
-            "Wrote the credential to {}. Add it to a transaction and send it.",
-            cc.out.display()
-        );
-    }
-    Ok(())
+    output_credential_helper(CredentialHelperArguments {
+        cdi,
+        commitments_randomness,
+        id_use_data,
+        global_ctx,
+        maybe_key_index: cc.key_index,
+        keys_out: cc.keys_out,
+        out: cc.out,
+        account: cc.account,
+        acc_data,
+        cred_counter: x,
+        new_or_existing,
+    })
 }
 
 fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
@@ -1015,9 +845,79 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
     let global_ctx = data.global_ctx;
     let id_use_data = data.id_use_data;
 
+    // Now we have have everything we need to generate the proofs
+    // we have
+    // - chi
+    // - pio
+    // - ip_info
+    // - signature of the identity provider
+    // - acc_data of the account onto which we are deploying this credential
+    //   (private and public)
+
+    let context = IpContext::new(&ip_info, &ars.anonymity_revokers, &global_ctx);
+
+    // We now generate or read account verification/signature key pair.
+    let acc_data = {
+        let mut csprng = thread_rng();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+        CredentialData {
+            keys,
+            threshold: SignatureThreshold(1),
+        }
+    };
+
     // now we have all the data ready.
+    let (policy, x, new_or_existing) =
+        prepare_credential_input(&id_object, cc.index, cc.account, cc.expiry)?;
+
+    let cdi = create_credential(
+        context,
+        &id_object,
+        &id_use_data,
+        x,
+        policy,
+        &acc_data,
+        &SystemAttributeRandomness,
+        &new_or_existing,
+    );
+
+    let (cdi, commitments_randomness) = cdi.context("Could not generate the credential.")?;
+
+    output_credential_helper(CredentialHelperArguments {
+        cdi,
+        commitments_randomness,
+        id_use_data,
+        global_ctx,
+        maybe_key_index: cc.key_index,
+        keys_out: cc.keys_out,
+        out: cc.out,
+        account: cc.account,
+        acc_data,
+        cred_counter: x,
+        new_or_existing,
+    })
+}
+
+type PreparedCredentialInput = (
+    Policy<id::constants::ArCurve, ExampleAttribute>,
+    u8,
+    either::Either<TransactionTime, AccountAddress>,
+);
+
+fn prepare_credential_input(
+    id_object: &impl HasIdentityObjectFields<
+        id::constants::IpPairing,
+        id::constants::ArCurve,
+        ExampleAttribute,
+    >,
+    index: Option<u8>,
+    account: Option<AccountAddress>,
+    expiry: u64,
+) -> anyhow::Result<PreparedCredentialInput> {
     // we first ask the user to select which attributes they wish to reveal
-    let alist = &id_object.alist.alist;
+    let alist = &id_object.get_attribute_list().alist;
+    // let alist = &id_object.alist.alist;
 
     let alist_items = alist
         .keys()
@@ -1049,107 +949,97 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
             );
         }
     }
-    let policy = Policy {
-        valid_to:   id_object.alist.valid_to,
-        created_at: id_object.alist.created_at,
+    let policy: Policy<id::constants::ArCurve, ExampleAttribute> = Policy {
+        valid_to:   id_object.get_attribute_list().valid_to,
+        created_at: id_object.get_attribute_list().created_at,
         policy_vec: revealed_attributes,
         _phantom:   Default::default(),
     };
 
     // We ask what regid index they would like to use.
-    let x = match cc.index {
+    let x = match index {
         Some(x) => x,
         None => Input::new()
             .with_prompt(format!(
                 "Credential number (between 1 and {})",
-                id_object.alist.max_accounts
+                id_object.get_attribute_list().max_accounts
             ))
             .default(1)
             .interact()
             .context("You must select which index to use.")?,
     };
-
-    // Now we have have everything we need to generate the proofs
-    // we have
-    // - chi
-    // - pio
-    // - ip_info
-    // - signature of the identity provider
-    // - acc_data of the account onto which we are deploying this credential
-    //   (private and public)
-
-    let context = IpContext::new(&ip_info, &ars.anonymity_revokers, &global_ctx);
-
-    // We now generate or read account verification/signature key pair.
-    let acc_data = {
-        let mut csprng = thread_rng();
-        let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-        CredentialData {
-            keys,
-            threshold: SignatureThreshold(1),
-        }
-    };
-
-    let new_or_existing = match cc.account {
+    let new_or_existing = match account {
         Some(addr) => Right(addr),
         None => Left(TransactionTime {
-            seconds: chrono::Utc::now().timestamp() as u64 + cc.expiry,
+            seconds: chrono::Utc::now().timestamp() as u64 + expiry,
         }),
     };
+    Ok((policy, x, new_or_existing))
+}
 
-    let cdi = create_credential(
-        context,
-        &id_object,
-        &id_use_data,
-        x,
-        policy,
-        &acc_data,
-        &SystemAttributeRandomness,
-        &new_or_existing,
-    );
+struct CredentialHelperArguments {
+    cdi: CredentialDeploymentInfo<
+        id::constants::IpPairing,
+        id::constants::ArCurve,
+        ExampleAttribute,
+    >,
+    commitments_randomness: CommitmentsRandomness<id::constants::ArCurve>,
+    id_use_data:            IdObjectUseData<id::constants::IpPairing, id::constants::ArCurve>,
+    global_ctx:             GlobalContext<id::constants::ArCurve>,
+    maybe_key_index:        Option<u8>,
+    keys_out:               PathBuf,
+    out:                    PathBuf,
+    account:                Option<AccountAddress>,
+    acc_data:               CredentialData,
+    cred_counter:           u8,
+    new_or_existing:        either::Either<TransactionTime, AccountAddress>,
+}
 
-    let (cdi, commitments_randomness) = cdi.context("Could not generate the credential.")?;
-
-    let address = AccountAddress::new(&cdi.values.cred_id);
+fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<()> {
+    let address = AccountAddress::new(&args.cdi.values.cred_id);
 
     // Output in the format accepted by concordium-client.
     let (versioned_credentials, randomness_map) = {
-        let ki = cc.key_index.map_or(KeyIndex(0), KeyIndex);
+        let ki = args.maybe_key_index.map_or(KeyIndex(0), KeyIndex);
         let mut credentials = BTreeMap::new();
         let mut randomness = BTreeMap::new();
         let cdvp = AccountCredentialWithoutProofs::Normal {
-            cdv:         cdi.values.clone(),
-            commitments: cdi.proofs.id_proofs.commitments.clone(),
+            cdv:         args.cdi.values.clone(),
+            commitments: args.cdi.proofs.id_proofs.commitments.clone(),
         };
         credentials.insert(ki, cdvp);
-        randomness.insert(ki, &commitments_randomness);
+        randomness.insert(ki, &args.commitments_randomness);
         (Versioned::new(VERSION_0, credentials), randomness)
     };
 
-    let cdi = AccountCredential::Normal { cdi };
+    let cdi = AccountCredential::Normal { cdi: args.cdi };
 
-    let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
+    let enc_key = args
+        .id_use_data
+        .aci
+        .prf_key
+        .prf_exponent(args.cred_counter)
+        .unwrap();
 
     let secret_key = elgamal::SecretKey {
-        generator: *global_ctx.elgamal_generator(),
+        generator: *args.global_ctx.elgamal_generator(),
         scalar:    enc_key,
     };
 
-    if let Some(addr) = cc.account {
+    if let Some(addr) = args.account {
         let js = json!({
             "address": addr,
-            "accountKeys": AccountKeys::from((CredentialIndex{index: cc.key_index.unwrap()}, acc_data)),
+            "accountKeys": AccountKeys::from((CredentialIndex{index: args.maybe_key_index.unwrap()}, args.acc_data)),
             "credentials": versioned_credentials,
             "commitmentsRandomness": randomness_map,
         });
-        let was_encrypted = output_possibly_encrypted(&cc.keys_out, &js).context(format!(
+        let was_encrypted = output_possibly_encrypted(&args.keys_out, &js).context(format!(
             "Could not output account keys to {}.",
-            cc.keys_out.display()
+            args.keys_out.display()
         ))?;
         println!(
             "Generated additional keys for the account. They are written to {}. {}",
-            cc.keys_out.display(),
+            args.keys_out.display(),
             if was_encrypted {
                 "Keys are encrypted."
             } else {
@@ -1161,19 +1051,19 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
             "address": address,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
-            "accountKeys": AccountKeys::from(acc_data),
+            "accountKeys": AccountKeys::from(args.acc_data),
             "credentials": versioned_credentials,
             "commitmentsRandomness": randomness_map,
-            "aci": id_use_data.aci,
+            "aci": args.id_use_data.aci,
         });
         let was_encrypted =
-            output_possibly_encrypted(&cc.keys_out, &account_data_json).context(format!(
+            output_possibly_encrypted(&args.keys_out, &account_data_json).context(format!(
                 "Could not output account keys to {}.",
-                cc.keys_out.display()
+                args.keys_out.display()
             ))?;
         println!(
             "Generated fresh keys of the account and wrote them to {}. {} DO NOT LOSE THIS FILE.",
-            cc.keys_out.display(),
+            args.keys_out.display(),
             if was_encrypted {
                 "Keys are encrypted."
             } else {
@@ -1182,7 +1072,7 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
         );
     }
 
-    let (expiry, cdi_json_value) = match new_or_existing {
+    let (expiry, cdi_json_value) = match args.new_or_existing {
         Left(tt) => (
             Some(tt),
             to_value(&Versioned::new(VERSION_0, AccountCredentialMessage {
@@ -1196,14 +1086,14 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
             to_value(&Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
         ),
     };
-    write_json_to_file(&cc.out, &cdi_json_value).context(format!(
+    write_json_to_file(&args.out, &cdi_json_value).context(format!(
         "Could not write credential to {}.",
-        cc.out.display()
+        args.out.display()
     ))?;
     if let Some(expiry) = expiry {
         println!(
             "Wrote the account creation transaction to {}. Submit it before {}.",
-            cc.out.display(),
+            args.out.display(),
             chrono::Local.timestamp(expiry.seconds as i64, 0)
         );
         println!(
@@ -1213,7 +1103,7 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
     } else {
         println!(
             "Wrote the credential to {}. Add it to a transaction and send it.",
-            cc.out.display()
+            args.out.display()
         );
     }
     Ok(())
