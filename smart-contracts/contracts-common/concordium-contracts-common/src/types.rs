@@ -21,10 +21,12 @@ pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
 /// the `fnv` hash function.
 pub type HashSet<K, S = fnv::FnvBuildHasher> = hashbrown::HashSet<K, S>;
 
-/// Contract index.
+/// Contract address index. A contract address consists of an index and a
+/// subindex. This type is for the index.
 pub type ContractIndex = u64;
 
-/// Contract subindex.
+/// Contract address subindex. A contract address consists of an index and a
+/// subindex. This type is for the subindex.
 pub type ContractSubIndex = u64;
 
 /// Size of an account address when serialized in binary.
@@ -668,6 +670,14 @@ pub enum Address {
     Account(AccountAddress),
     #[cfg_attr(feature = "derive-serde", serde(rename = "AddressContract"))]
     Contract(ContractAddress),
+}
+
+impl From<AccountAddress> for Address {
+    fn from(address: AccountAddress) -> Address { Address::Account(address) }
+}
+
+impl From<ContractAddress> for Address {
+    fn from(address: ContractAddress) -> Address { Address::Contract(address) }
 }
 
 // This trait is implemented manually to produce fewer bytes in the generated
