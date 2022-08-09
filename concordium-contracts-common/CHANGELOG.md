@@ -9,6 +9,9 @@
 - Implement `Ord` for `OwnedReceiveName`.
 - Change the `serde` implementation for `Address` to use `AddressAccount` and `AddressContract` for the tag, matching the one used by Concordium Node.
 - Make `AccountAddressParseError` public when `derive-serde` is enabled.
+- Implement `Display` and `FromStr` for `ContractAddress` formatted as `<index, subindex>`, E.g `<145,0>`.
+- Implement `Display` and `FromStr` for `Address`. The latter attempts to parse a contract address. If this fails it will attempt to parse an `AccountAddress`.
+- Implement `FromStr` for `OwnedReceiveName`.
 
 ## concordium-contracts-common 3.1.0 (2022-08-04)
 

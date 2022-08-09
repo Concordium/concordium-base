@@ -5,14 +5,14 @@ use alloc::{string::String, string::ToString, vec::Vec};
 use arbitrary::Arbitrary;
 use cmp::Ordering;
 #[cfg(not(feature = "std"))]
-use core::{cmp, convert, fmt, hash, iter, ops, str};
+use core::{cmp, convert, fmt, hash, iter, num, ops, str};
 use hash::Hash;
 #[cfg(feature = "derive-serde")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
 #[cfg(feature = "std")]
-use std::{cmp, convert, fmt, hash, iter, ops, str};
+use std::{cmp, convert, fmt, hash, iter, num, ops, str};
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
 pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
@@ -657,6 +657,56 @@ impl ContractAddress {
     }
 }
 
+/// Error from parsing Contract address from a string.
+#[derive(Debug)]
+pub enum ContractAddressParseError {
+    MissingStartBracket,
+    MissingEndBracket,
+    ParseIndexIntError(num::ParseIntError),
+    ParseSubIndexIntError(num::ParseIntError),
+    NoComma,
+}
+
+impl fmt::Display for ContractAddressParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ContractAddressParseError::*;
+        match self {
+            MissingStartBracket => f.write_str("A contract address must start with '<'"),
+            MissingEndBracket => f.write_str("A contract address must end with '>'"),
+            ParseIndexIntError(err) => write!(f, "Failed to parse the index integer: {0}", err),
+            ParseSubIndexIntError(err) => {
+                write!(f, "Failed to parse the subindex integer: {0}", err)
+            }
+            NoComma => f.write_str(" Missing comma separater between index and subindex"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ContractAddressParseError {}
+
+/// Parse a ContractAddressWrapper from a string of "<index,subindex>" where
+/// index and subindex are replaced with an u64.
+impl str::FromStr for ContractAddress {
+    type Err = ContractAddressParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.starts_with('<') {
+            return Err(ContractAddressParseError::MissingStartBracket);
+        }
+        if !s.ends_with('>') {
+            return Err(ContractAddressParseError::MissingEndBracket);
+        }
+        let trimmed = &s[1..s.len() - 1];
+        let (index, sub_index) =
+            trimmed.split_once(',').ok_or(ContractAddressParseError::NoComma)?;
+        let index = u64::from_str(index).map_err(ContractAddressParseError::ParseIndexIntError)?;
+        let sub_index =
+            u64::from_str(sub_index).map_err(ContractAddressParseError::ParseSubIndexIntError)?;
+        Ok(ContractAddress::new(index, sub_index))
+    }
+}
+
 /// Either an address of an account, or contract.
 #[cfg_attr(
     feature = "derive-serde",
@@ -678,6 +728,64 @@ impl From<AccountAddress> for Address {
 
 impl From<ContractAddress> for Address {
     fn from(address: ContractAddress) -> Address { Address::Contract(address) }
+}
+
+/// Error from parsing Contract address from a string.
+#[derive(Debug)]
+pub enum AddressParseError {
+    ContractAddressError(ContractAddressParseError),
+    AccountAddressError(AccountAddressParseError),
+}
+
+impl fmt::Display for AddressParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use AddressParseError::*;
+        match self {
+            ContractAddressError(err) => write!(f, "Failed parsing a contract address: {}", err),
+            AccountAddressError(err) => write!(f, "Failed parsing an account address: {}", err),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for AddressParseError {}
+
+impl convert::From<ContractAddressParseError> for AddressParseError {
+    fn from(err: ContractAddressParseError) -> Self { AddressParseError::ContractAddressError(err) }
+}
+
+impl convert::From<AccountAddressParseError> for AddressParseError {
+    fn from(err: AccountAddressParseError) -> Self { AddressParseError::AccountAddressError(err) }
+}
+
+/// Parse a string into an address, by first trying to parse the string as a
+/// contract address string. If this fails, because of missing bracket, it will
+/// try parsing it as an account address string.
+impl str::FromStr for Address {
+    type Err = AddressParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let contract_result = ContractAddress::from_str(s);
+        let address = match contract_result {
+            Ok(contract) => contract.into(),
+            Err(ContractAddressParseError::MissingStartBracket) => {
+                AccountAddress::from_str(s)?.into()
+            }
+            Err(err) => return Err(err.into()),
+        };
+        Ok(address)
+    }
+}
+
+/// Display the Address using contract notation <index,subindex> for contract
+/// addresses and display for account addresses.
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            Address::Account(a) => a.fmt(f),
+            Address::Contract(c) => c.fmt(f),
+        }
+    }
 }
 
 // This trait is implemented manually to produce fewer bytes in the generated
@@ -925,6 +1033,13 @@ impl convert::TryFrom<String> for OwnedReceiveName {
 
     #[inline(always)]
     fn try_from(value: String) -> Result<Self, Self::Error> { OwnedReceiveName::new(value) }
+}
+
+impl str::FromStr for OwnedReceiveName {
+    type Err = NewReceiveNameError;
+
+    #[inline(always)]
+    fn from_str(s: &str) -> Result<Self, Self::Err> { OwnedReceiveName::new(s.to_string()) }
 }
 
 impl OwnedReceiveName {
