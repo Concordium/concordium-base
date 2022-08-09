@@ -1466,7 +1466,8 @@ mod serde_impl {
             des.deserialize_str(Base58Visitor)
         }
     }
-    /// Error from parsing a `ContractAddress` from a string.
+
+    /// Error that can occur when parsing a [`ContractAddress`] from a string.
     #[derive(Debug, thiserror::Error)]
     pub enum ContractAddressParseError {
         #[error("A contract address must start with '<'")]
@@ -1481,8 +1482,9 @@ mod serde_impl {
         NoComma,
     }
 
-    /// Parse a ContractAddressWrapper from a string of "<index,subindex>" where
-    /// index and subindex are replaced with an u64.
+    /// Parse a [`ContractAddress`] from a string of the format
+    /// "<index,subindex>" where index and subindex are [`ContractIndex`]
+    /// and [`ContractSubIndex`], respectively.
     impl str::FromStr for ContractAddress {
         type Err = ContractAddressParseError;
 
@@ -1510,7 +1512,7 @@ mod serde_impl {
         }
     }
 
-    /// Error from parsing Contract address from a string.
+    /// Error that can occur when parsing a [`ContractAddress`] from a string.
     #[derive(Debug, thiserror::Error)]
     pub enum AddressParseError {
         #[error("Failed parsing a contract address: {0}")]
@@ -1519,9 +1521,9 @@ mod serde_impl {
         AccountAddressError(#[from] AccountAddressParseError),
     }
 
-    /// Parse a string into an address, by first trying to parse the string as a
-    /// contract address string. If this fails, because of missing bracket, it
-    /// will try parsing it as an account address string.
+    /// Parse a string into an [`Address`], by first trying to parse the string
+    /// as a contract address string. If this fails, because of missing
+    /// bracket, it will try parsing it as an account address string.
     impl str::FromStr for Address {
         type Err = AddressParseError;
 
@@ -1538,7 +1540,7 @@ mod serde_impl {
         }
     }
 
-    /// Display the Address using contract notation <index,subindex> for
+    /// Display the [`Address`] using contract notation <index,subindex> for
     /// contract addresses and display for account addresses.
     impl fmt::Display for Address {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
