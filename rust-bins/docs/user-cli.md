@@ -90,7 +90,10 @@ The `user_cli` tool can only be used to create credentials. To deploy them to th
 
 To create a credential use the following command.
 ```console
-user_cli create-credential-v1 --id-object id-object.json \
+user_cli create-credential-v1 --cryptographic-parameters cryptographic-parameters.json \
+                           --ars ars.json \
+                           --ip-info ip-info.json \
+                           --id-object id-object.json \
                            --keys-out account-keys.json \
                            --credential-out credential.json
 ```
