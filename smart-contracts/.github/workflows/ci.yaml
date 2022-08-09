@@ -29,7 +29,6 @@ jobs:
       matrix:
         build-dir:
           - 'wasm-transform'
-          - 'cargo-concordium'
           - 'wasm-chain-integration'
     steps:
       - name: Checkout
@@ -86,7 +85,6 @@ jobs:
       matrix:
         build-dir:
           - 'wasm-transform'
-          - 'cargo-concordium'
           - 'wasm-chain-integration'
     steps:
       - name: Checkout
@@ -139,31 +137,6 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           cargo clippy --color=always --tests -- -Dclippy::all
 
-  "cargo-concordium_cargo_build-bench":
-    name: cargo-concordium cargo:build-bench
-    runs-on: ubuntu-latest
-    needs:
-      - lint_clippy_example_contracts
-      - lint_clippy
-      - lint_fmt_example_contracts
-      - lint_fmt
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
-          target: ${{ env.TARGET }}
-          components: clippy
-      - name: Cargo check
-        working-directory: cargo-concordium
-        run: cargo check --benches --tests
-
   "cargo_test":
     name: ${{ matrix.build-dir }} cargo:test
     runs-on: ubuntu-latest
@@ -172,7 +145,6 @@ jobs:
     strategy:
       matrix:
         build-dir:
-          - 'cargo-concordium'
           - 'wasm-transform'
           - 'wasm-chain-integration'
     steps:
@@ -193,8 +165,6 @@ jobs:
   "cargo_test_example_contracts":
     name: ${{ matrix.example-contract }} cargo:test
     runs-on: ubuntu-latest
-    needs:
-      - cargo-concordium_cargo_build-bench
     strategy:
       matrix:
         example-contract:
@@ -226,8 +196,6 @@ jobs:
   "wasm-core-spec_cargo_test":
     name: wasm-core-spec cargo:test
     runs-on: ubuntu-latest
-    needs:
-      - cargo-concordium_cargo_build-bench
     steps:
       - name: Checkout
         uses: actions/checkout@v2
