@@ -2,7 +2,7 @@
 
 ## Unreleased changes
 
-- Add type for `ContractIndex` and `ContractSubIndex`.
+- Add type aliases for `ContractIndex` and `ContractSubIndex`.
 - Add `micro_ccd` getter for `Amount`.
 - Add `AccountAddress::get_alias` function for finding account aliases.
 - Implement converters to string for `ContractName`, `OwnedContractName` and a `serde` implementation when `derive-serde` is enabled.
