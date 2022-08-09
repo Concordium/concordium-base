@@ -59,10 +59,9 @@ pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 /// Construct account address from the registration id.
 pub fn account_address_from_registration_id(reg_id: &impl Curve) -> AccountAddress {
-    let mut out = [0; ACCOUNT_ADDRESS_SIZE];
-    let hasher = Sha256::new().chain(&to_bytes(reg_id));
-    out.copy_from_slice(&hasher.finalize());
-    AccountAddress(out)
+    let mut hasher = Sha256::new();
+    reg_id.serial(&mut hasher);
+    AccountAddress(hasher.finalize().into())
 }
 
 /// Threshold for the number of signatures required.
