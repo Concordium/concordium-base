@@ -86,6 +86,13 @@ char *create_id_request_and_private_data(const char *input_ptr, uint8_t *success
 char *create_id_request_and_private_data_v1(const char *input_ptr, uint8_t *success);
 
 /**
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *generate_recovery_request(const char *input_ptr, uint8_t *success);
+
+/**
  * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
  * UTF8-encoded string. The returned string must be freed by the caller by
  * calling the function 'free_response_string'. In case of failure the function

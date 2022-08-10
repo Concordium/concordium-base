@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.15.0
+- Added function `generate_recovery_request` for creating identity recovery requests.
 
 ## 0.14.0
 - Added function `create_id_request_and_private_data_v1` for creating an id request in the version 1 flow, where

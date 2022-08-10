@@ -933,6 +933,33 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
+/// For generating identity recovery requests
+fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
+
+    let wallet = parse_wallet_input(&v)?;
+    let identity_index: u32 = try_get(&v, "identityIndex")?;
+    let id_cred_sec: PedersenValue<ArCurve> =
+        PedersenValue::new(wallet.get_id_cred_sec(identity_index)?);
+
+    let timestamp: u64 = try_get(&v, "timestamp")?;
+
+    let request = account_holder::generate_id_recovery_request(
+        &ip_info,
+        &global_context,
+        &id_cred_sec,
+        timestamp,
+    );
+
+    let response = json!({
+        "idRecoveryRequest": Versioned::new(VERSION_0, request),
+    });
+    Ok(to_string(&response)?)
+}
+
 fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
@@ -1265,6 +1292,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_credential_v1 -> create_credential_v1_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => generate_recovery_request -> generate_recovery_request_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
