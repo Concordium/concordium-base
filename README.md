@@ -42,7 +42,7 @@ the node.
 
 Contains auxiliary data files used by Haskell tests.
 
-### Rust modules
+## Rust modules
 
 ### [rust-src](./rust-src)
 
@@ -86,6 +86,10 @@ See documentation for
   key generation procedure that allows key recovery from a seed phrase)
 - [genesis tool](./rust-bins/docs/genesis-tool.md) tool to generate data for
   test genesis blocks, allows creation of accounts and bakers
+
+### [smart-contracts](./smart-contracts/)
+
+Contains libraries for interpreting WASM smart-contracts and integration for concordium-node.
 
 # Build requirements.
 
