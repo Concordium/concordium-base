@@ -83,7 +83,7 @@ which results in the following content in `bob-id-use-data.json`.
 
 This file contains **private** information, namely the values `idCredSecret`, `prfKey` and `randomness`.
 
-The data can be generated deterministacally from a hd-wallet if the flags `--hd-wallet` and `identity-index` are provided. For example, using the hd-wallet above, the command
+The data can be generated deterministically from a hd-wallet if the flags `--hd-wallet` and `identity-index` are provided. For example, using the hd-wallet above, the command
 ```console
 $ ./client create-id-use-data --out bob-id-use-data.json --hd-wallet hd-wallet.json --identity-index 0
 Wrote ID use data to file.
