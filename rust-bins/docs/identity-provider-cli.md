@@ -95,5 +95,5 @@ Upon receiving recovery request from the user, run
 ```console
 identity_provider_cli validate-recovery-request --cryptographic-parameters cryptographic-parameters.json \
                       --ip-info ip-info.json \
-                      --request request.json \
+                      --request request.json
 ```
