@@ -11,7 +11,6 @@ use ps_sig::SigRetrievalRandomness;
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use std::fmt;
-
 use crypto_common::{base16_decode, base16_encode};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
