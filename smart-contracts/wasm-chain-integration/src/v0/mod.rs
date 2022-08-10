@@ -69,13 +69,8 @@ impl Outcome {
         let response = self.cur_state.len();
         let addr: [u8; 32] = bytes.try_into()?;
         let to_addr = AccountAddress(addr);
-        let data = std::rc::Rc::new(SimpleTransferAction {
-            to_addr,
-            amount,
-        });
-        self.cur_state.push(Action::SimpleTransfer {
-            data,
-        });
+        let data = std::rc::Rc::new(SimpleTransferAction { to_addr, amount });
+        self.cur_state.push(Action::SimpleTransfer { data });
         Ok(response as u32)
     }
 
@@ -90,7 +85,10 @@ impl Outcome {
         let response = self.cur_state.len();
 
         let name_str = std::str::from_utf8(receive_name_bytes)?;
-        ensure!(ReceiveName::is_valid_receive_name(name_str).is_ok(), "Not a valid receive name.");
+        ensure!(
+            ReceiveName::is_valid_receive_name(name_str).is_ok(),
+            "Not a valid receive name."
+        );
         let name = receive_name_bytes.to_vec();
 
         ensure!(
@@ -110,29 +108,21 @@ impl Outcome {
             amount,
             parameter,
         });
-        self.cur_state.push(Action::Send {
-            data,
-        });
+        self.cur_state.push(Action::Send { data });
         Ok(response as u32)
     }
 
     pub fn combine_and(&mut self, l: u32, r: u32) -> ExecResult<u32> {
         let response = self.cur_state.len() as u32;
         ensure!(l < response && r < response, "Combining unknown actions.");
-        self.cur_state.push(Action::And {
-            l,
-            r,
-        });
+        self.cur_state.push(Action::And { l, r });
         Ok(response)
     }
 
     pub fn combine_or(&mut self, l: u32, r: u32) -> ExecResult<u32> {
         let response = self.cur_state.len() as u32;
         ensure!(l < response && r < response, "Combining unknown actions.");
-        self.cur_state.push(Action::Or {
-            l,
-            r,
-        });
+        self.cur_state.push(Action::Or { l, r });
         Ok(response)
     }
 }
@@ -145,9 +135,7 @@ impl State {
     // and in the long term we need to keep track of which parts were written.
     pub fn new(st: Option<&[u8]>) -> Self {
         match st {
-            None => Self {
-                state: Vec::new(),
-            },
+            None => Self { state: Vec::new() },
             Some(bytes) => Self {
                 state: Vec::from(bytes),
             },
@@ -504,7 +492,10 @@ pub(crate) mod host {
         init_origin: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 32 <= memory.len(), "Illegal memory access for init origin.");
+        ensure!(
+            start + 32 <= memory.len(),
+            "Illegal memory access for init origin."
+        );
         (&mut memory[start..start + 32]).write_all(init_origin?.as_ref())?;
         Ok(())
     }
@@ -604,7 +595,10 @@ pub(crate) mod host {
         invoker: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 32 <= memory.len(), "Illegal memory access for receive invoker.");
+        ensure!(
+            start + 32 <= memory.len(),
+            "Illegal memory access for receive invoker."
+        );
         (&mut memory[start..start + 32]).write_all(invoker?.as_ref())?;
         Ok(())
     }
@@ -616,7 +610,10 @@ pub(crate) mod host {
         self_address: ExecResult<&ContractAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 16 <= memory.len(), "Illegal memory access for receive owner.");
+        ensure!(
+            start + 16 <= memory.len(),
+            "Illegal memory access for receive owner."
+        );
         let self_address = self_address?;
         (&mut memory[start..start + 8]).write_all(&self_address.index.to_le_bytes())?;
         (&mut memory[start + 8..start + 16]).write_all(&self_address.subindex.to_le_bytes())?;
@@ -639,7 +636,10 @@ pub(crate) mod host {
         sender: ExecResult<&Address>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start < memory.len(), "Illegal memory access for receive sender.");
+        ensure!(
+            start < memory.len(),
+            "Illegal memory access for receive sender."
+        );
         sender?
             .serial::<&mut [u8]>(&mut &mut memory[start..])
             .map_err(|_| anyhow!("Memory out of bounds."))?;
@@ -653,7 +653,10 @@ pub(crate) mod host {
         owner: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
         let start = unsafe { stack.pop_u32() } as usize;
-        ensure!(start + 32 <= memory.len(), "Illegal memory access for receive owner.");
+        ensure!(
+            start + 32 <= memory.len(),
+            "Illegal memory access for receive owner."
+        );
         (&mut memory[start..start + 32]).write_all(owner?.as_ref())?;
         Ok(())
     }
@@ -856,14 +859,10 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     };
 
     let res = match artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]) {
-        Ok(ExecutionOutcome::Success {
-            result,
-            ..
-        }) => result,
-        Ok(ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        }) => match reason {}, // impossible case, InitHost has no interrupts
+        Ok(ExecutionOutcome::Success { result, .. }) => result,
+        Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case,
+        // InitHost has no
+        // interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(InitResult::OutOfEnergy);
@@ -959,14 +958,10 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     };
 
     let res = match artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]) {
-        Ok(ExecutionOutcome::Success {
-            result,
-            ..
-        }) => result,
-        Ok(ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        }) => match reason {}, // impossible case, ReceiveHost has no interrupts
+        Ok(ExecutionOutcome::Success { result, .. }) => result,
+        Ok(ExecutionOutcome::Interrupted { reason, .. }) => match reason {}, // impossible case,
+        // ReceiveHost has
+        // no interrupts
         Err(e) => {
             if e.downcast_ref::<OutOfEnergy>().is_some() {
                 return Ok(ReceiveResult::OutOfEnergy);
@@ -1028,7 +1023,15 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(
+        &artifact,
+        amount,
+        receive_ctx,
+        current_state,
+        receive_name,
+        parameter,
+        energy,
+    )
 }
 
 /// Invokes an receive-function from Wasm module bytes
@@ -1043,7 +1046,15 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(
+        &artifact,
+        amount,
+        receive_ctx,
+        current_state,
+        receive_name,
+        parameter,
+        energy,
+    )
 }
 
 /// Invokes an receive-function from Wasm module bytes, injects the module with
@@ -1059,5 +1070,13 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(
+        &artifact,
+        amount,
+        receive_ctx,
+        current_state,
+        receive_name,
+        parameter,
+        energy,
+    )
 }

@@ -31,9 +31,7 @@ fn mk_state<A: AsRef<[u8]>, B: Copy>(inputs: &[(A, B)]) -> (MutableState, Loader
 where
     Vec<u8>: From<B>, {
     let mut node = MutableTrie::empty();
-    let mut loader = Loader {
-        inner: Vec::new(),
-    };
+    let mut loader = Loader { inner: Vec::new() };
     for (k, v) in inputs {
         node.insert(&mut loader, k.as_ref(), trie::Value::from(*v))
             .expect("No locks, so cannot fail.");
@@ -49,14 +47,14 @@ where
 fn test_crypto_prims() -> anyhow::Result<()> {
     let nrg = 1_000_000_000;
 
-    let start_energy = InterpreterEnergy {
-        energy: nrg * 1000,
-    };
+    let start_energy = InterpreterEnergy { energy: nrg * 1000 };
 
     let skeleton = parse::parse_skeleton(CONTRACT_BYTES).unwrap();
     let module = {
         let mut module = validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
-        module.inject_metering().expect("Metering injection should succeed.");
+        module
+            .inject_metering()
+            .expect("Metering injection should succeed.");
         module
     };
 
@@ -100,9 +98,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
         };
         let receive_ctx = &receive_ctx;
         let args = &args[..];
-        let mut backing_store = Loader {
-            inner: Vec::new(),
-        };
+        let mut backing_store = Loader { inner: Vec::new() };
         let inner = mutable_state.get_inner(&mut backing_store);
         let state = InstanceState::new(0, backing_store, inner);
         let mut host = ReceiveHost::<_, Vec<u8>, _> {
@@ -119,12 +115,8 @@ fn test_crypto_prims() -> anyhow::Result<()> {
         let r = artifact.run(&mut host, name, args);
         match r {
             Ok(res) => match res {
-                machine::ExecutionOutcome::Success {
-                    ..
-                } => host.stateless.return_value,
-                machine::ExecutionOutcome::Interrupted {
-                    ..
-                } => {
+                machine::ExecutionOutcome::Success { .. } => host.stateless.return_value,
+                machine::ExecutionOutcome::Interrupted { .. } => {
                     panic!(
                         "Execution terminated with an interruption, but was expected to succeed \
                          for {}..",
@@ -132,7 +124,10 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                     );
                 }
             },
-            Err(e) => panic!("Execution failed, but was expected to succeed for {}: {}.", name, e),
+            Err(e) => panic!(
+                "Execution failed, but was expected to succeed for {}: {}.",
+                name, e
+            ),
         }
     };
 

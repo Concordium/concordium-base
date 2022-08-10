@@ -10,9 +10,7 @@ pub struct State {
 #[init(contract = "fib")]
 #[inline(always)]
 fn contract_init(_ctx: &impl HasInitContext<()>) -> InitResult<State> {
-    let state = State {
-        result: 0,
-    };
+    let state = State { result: 0 };
     Ok(state)
 }
 

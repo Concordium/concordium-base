@@ -122,7 +122,10 @@ impl PrefixesMap {
         };
         for k in key {
             let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-            match node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+            match node
+                .children
+                .binary_search_by_key(&Chunk::new(*k), |x| x.key())
+            {
                 Ok(idx) => {
                     let c = unsafe { node.children.get_unchecked(idx) };
                     node_idx = c.index();
@@ -132,7 +135,8 @@ impl PrefixesMap {
                     // look up again to not have issues with double mutable borrow.
                     // This could be improved.
                     let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
-                    node.children.insert(idx, KeyIndexPair::new(Chunk::new(*k), new_node));
+                    node.children
+                        .insert(idx, KeyIndexPair::new(Chunk::new(*k), new_node));
                     node_idx = new_node;
                 }
             }
@@ -162,7 +166,10 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return Err(AttemptToModifyLockedArea);
             }
-            if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+            if let Ok(idx) = node
+                .children
+                .binary_search_by_key(&Chunk::new(*k), |x| x.key())
+            {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -195,7 +202,10 @@ impl PrefixesMap {
             if node.value.is_some() {
                 return true;
             }
-            if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+            if let Ok(idx) = node
+                .children
+                .binary_search_by_key(&Chunk::new(*k), |x| x.key())
+            {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -221,7 +231,10 @@ impl PrefixesMap {
         let mut stack = Vec::new();
         for k in key {
             let node = unsafe { self.nodes.get_unchecked(node_idx) };
-            if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+            if let Ok(idx) = node
+                .children
+                .binary_search_by_key(&Chunk::new(*k), |x| x.key())
+            {
                 let c = unsafe { node.children.get_unchecked(idx) };
                 stack.push((node_idx, idx));
                 node_idx = c.index();
@@ -328,9 +341,7 @@ impl<V> Link<V> {
     /// this will return Ok(_), otherwise it will return an error.
     pub fn try_unwrap(self) -> Result<V, Self> {
         Arc::try_unwrap(self.link)
-            .map_err(|link| Link {
-                link,
-            })
+            .map_err(|link| Link { link })
             .map(|rc| rc.into_inner().expect("Thread panicked."))
     }
 }
@@ -339,16 +350,9 @@ impl<V> Link<V> {
 /// A potentially cached value V. This is a value that can either be purely in
 /// memory, purely in backing storage, or both in memory and in backing storage.
 pub enum CachedRef<V> {
-    Disk {
-        reference: Reference,
-    },
-    Memory {
-        value: V,
-    },
-    Cached {
-        reference: Reference,
-        value:     V,
-    },
+    Disk { reference: Reference },
+    Memory { value: V },
+    Cached { reference: Reference, value: V },
 }
 
 pub enum MaybeOwned<'a, V, R: ?Sized = V> {
@@ -396,20 +400,12 @@ impl<V: Loadable> CachedRef<V> {
     #[inline]
     pub fn get<L: BackingStoreLoad>(&self, loader: &mut L) -> MaybeOwned<V> {
         match self {
-            CachedRef::Disk {
-                reference,
-            } => {
+            CachedRef::Disk { reference } => {
                 let loaded = V::load_from_location(loader, *reference).unwrap();
                 MaybeOwned::Owned(loaded)
             }
-            CachedRef::Memory {
-                value,
-                ..
-            } => MaybeOwned::Borrowed(value),
-            CachedRef::Cached {
-                value,
-                ..
-            } => MaybeOwned::Borrowed(value),
+            CachedRef::Memory { value, .. } => MaybeOwned::Borrowed(value),
+            CachedRef::Cached { value, .. } => MaybeOwned::Borrowed(value),
         }
     }
 }
@@ -422,31 +418,20 @@ impl<V> CachedRef<V> {
     where
         V: Loadable, {
         match self {
-            CachedRef::Disk {
-                reference,
-            } => {
+            CachedRef::Disk { reference } => {
                 let value = V::load_from_location(loader, *reference).unwrap();
                 *self = CachedRef::Cached {
                     reference: *reference,
                     value,
                 };
-                if let CachedRef::Cached {
-                    value,
-                    ..
-                } = self
-                {
+                if let CachedRef::Cached { value, .. } = self {
                     value
                 } else {
                     unsafe { std::hint::unreachable_unchecked() }
                 }
             }
-            CachedRef::Memory {
-                value,
-            } => value,
-            CachedRef::Cached {
-                value,
-                ..
-            } => value,
+            CachedRef::Memory { value } => value,
+            CachedRef::Cached { value, .. } => value,
         }
     }
 
@@ -454,21 +439,10 @@ impl<V> CachedRef<V> {
     /// Otherwise do nothing. This of course has the precondition that the key
     /// stores the value in the relevant backing store. Internal use only.
     fn cache_with(&mut self, reference: Reference) {
-        if let CachedRef::Memory {
-            ..
-        } = self
-        {
-            let value = std::mem::replace(self, CachedRef::Disk {
-                reference,
-            });
-            if let CachedRef::Memory {
-                value,
-            } = value
-            {
-                *self = CachedRef::Cached {
-                    value,
-                    reference,
-                };
+        if let CachedRef::Memory { .. } = self {
+            let value = std::mem::replace(self, CachedRef::Disk { reference });
+            if let CachedRef::Memory { value } = value {
+                *self = CachedRef::Cached { value, reference };
             } else {
                 // this is unreachable since we hold a mutable reference to the cached value
                 // and we know the value was a purely in-memory one
@@ -487,27 +461,15 @@ impl<V> CachedRef<V> {
     where
         V: AsRef<[u8]>, {
         match self {
-            CachedRef::Disk {
-                reference,
-            } => reference.store(buf),
-            CachedRef::Memory {
-                value,
-            } => {
+            CachedRef::Disk { reference } => reference.store(buf),
+            CachedRef::Memory { value } => {
                 let reference = backing_store.store_raw(value.as_ref())?;
                 // Take the value out of the cachedref and temporarily replace it with
                 // a dummy value.
-                let value = std::mem::replace(self, CachedRef::Disk {
-                    reference,
-                });
-                if let CachedRef::Memory {
-                    value,
-                } = value
-                {
+                let value = std::mem::replace(self, CachedRef::Disk { reference });
+                if let CachedRef::Memory { value } = value {
                     // and now write the cached value back in.
-                    *self = CachedRef::Cached {
-                        value,
-                        reference,
-                    };
+                    *self = CachedRef::Cached { value, reference };
                 } else {
                     // this is unreachable since we hold a mutable reference to the cached value
                     // and we know the value was a purely in-memory one
@@ -515,10 +477,7 @@ impl<V> CachedRef<V> {
                 }
                 reference.store(buf)
             }
-            CachedRef::Cached {
-                reference,
-                ..
-            } => reference.store(buf),
+            CachedRef::Cached { reference, .. } => reference.store(buf),
         }
     }
 
@@ -527,16 +486,9 @@ impl<V> CachedRef<V> {
     #[inline]
     pub(crate) fn get_mut_or_reference(&mut self) -> Result<&mut V, Reference> {
         match self {
-            CachedRef::Disk {
-                reference,
-            } => Err(*reference),
-            CachedRef::Memory {
-                value,
-            } => Ok(value),
-            CachedRef::Cached {
-                reference,
-                ..
-            } => Err(*reference),
+            CachedRef::Disk { reference } => Err(*reference),
+            CachedRef::Memory { value } => Ok(value),
+            CachedRef::Cached { reference, .. } => Err(*reference),
         }
     }
 
@@ -545,16 +497,9 @@ impl<V> CachedRef<V> {
     #[inline]
     pub(crate) fn get_value(self) -> Option<V> {
         match self {
-            CachedRef::Disk {
-                ..
-            } => None,
-            CachedRef::Memory {
-                value,
-            } => Some(value),
-            CachedRef::Cached {
-                value,
-                ..
-            } => Some(value),
+            CachedRef::Disk { .. } => None,
+            CachedRef::Memory { value } => Some(value),
+            CachedRef::Cached { value, .. } => Some(value),
         }
     }
 }
@@ -588,7 +533,10 @@ impl MutStem {
     pub fn push(&mut self, elem: Chunk<4>) {
         if self.last_partial {
             self.last_partial = false;
-            *self.data.last_mut().expect("Odd implies at least one element") |= elem.value;
+            *self
+                .data
+                .last_mut()
+                .expect("Odd implies at least one element") |= elem.value;
         } else {
             self.last_partial = true;
             self.data.push(elem.value << 4);
@@ -604,7 +552,10 @@ impl MutStem {
             self.last_partial = false;
         } else {
             self.data.truncate(len / 2 + 1);
-            *self.data.last_mut().expect("Odd implies at least one element.") &= 0xf0;
+            *self
+                .data
+                .last_mut()
+                .expect("Odd implies at least one element.") &= 0xf0;
             self.last_partial = true;
         }
     }
@@ -878,11 +829,7 @@ impl LowerHex for Chunk<4> {
 
 impl<const N: usize> Chunk<N> {
     #[inline(always)]
-    pub fn new(value: u8) -> Self {
-        Chunk {
-            value,
-        }
-    }
+    pub fn new(value: u8) -> Self { Chunk { value } }
 }
 
 /// Recursive link to a child node.
@@ -912,10 +859,7 @@ pub enum InlineOrHashed {
 fn read_buf(source: &mut impl std::io::Read, len: u8) -> LoadResult<InlineOrHashed> {
     let mut data = [0u8; INLINE_VALUE_LEN];
     source.read_exact(&mut data[0..usize::from(len)])?;
-    Ok(InlineOrHashed::Inline {
-        len,
-        data,
-    })
+    Ok(InlineOrHashed::Inline { len, data })
 }
 
 /// A slice of bytes, either owned or borrowed.
@@ -945,10 +889,9 @@ impl InlineOrHashed {
     /// disk it is loaded using the provided loader.
     pub(crate) fn get(&self, loader: &mut impl BackingStoreLoad) -> ByteSlice {
         match self {
-            InlineOrHashed::Inline {
-                len,
-                data,
-            } => MaybeOwned::Borrowed(&data[0..usize::from(*len)]),
+            InlineOrHashed::Inline { len, data } => {
+                MaybeOwned::Borrowed(&data[0..usize::from(*len)])
+            }
             InlineOrHashed::Indirect(indirect) => {
                 let b = indirect.data.get(loader);
                 match b {
@@ -968,10 +911,9 @@ impl InlineOrHashed {
         loader: &mut impl BackingStoreLoad,
     ) -> (Option<&Hash>, ByteSlice) {
         match self {
-            InlineOrHashed::Inline {
-                len,
-                data,
-            } => (None, MaybeOwned::Borrowed(&data[0..usize::from(*len)])),
+            InlineOrHashed::Inline { len, data } => {
+                (None, MaybeOwned::Borrowed(&data[0..usize::from(*len)]))
+            }
             InlineOrHashed::Indirect(indirect) => {
                 let b = indirect.data.get(loader);
                 let hash = Some(&indirect.hash);
@@ -985,9 +927,7 @@ impl InlineOrHashed {
 
     pub(crate) fn load_and_cache<F: BackingStoreLoad>(&mut self, loader: &mut F) {
         match self {
-            InlineOrHashed::Inline {
-                ..
-            } => (), // already loaded
+            InlineOrHashed::Inline { .. } => (), // already loaded
             InlineOrHashed::Indirect(indirect) => {
                 indirect.data.load_and_cache(loader);
             }
@@ -998,10 +938,7 @@ impl InlineOrHashed {
     /// structure, e.g., it does not cache the value.**
     pub fn get_copy(&self, loader: &mut impl BackingStoreLoad) -> Vec<u8> {
         match self {
-            InlineOrHashed::Inline {
-                len,
-                data,
-            } => data[0..usize::from(*len)].to_vec(),
+            InlineOrHashed::Inline { len, data } => data[0..usize::from(*len)].to_vec(),
             InlineOrHashed::Indirect(indirect) => Vec::from(indirect.data.get(loader).make_owned()),
         }
     }
@@ -1011,10 +948,7 @@ impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed {
     #[inline(always)]
     fn hash(&self, ctx: &mut Ctx) -> Hash {
         match self {
-            InlineOrHashed::Inline {
-                len,
-                data,
-            } => (&data[0..usize::from(*len)]).hash(ctx),
+            InlineOrHashed::Inline { len, data } => (&data[0..usize::from(*len)]).hash(ctx),
             InlineOrHashed::Indirect(indirect) => indirect.hash(ctx),
         }
     }
@@ -1129,10 +1063,7 @@ impl ChildrenCow {
     fn len(&self) -> usize {
         match self {
             ChildrenCow::Borrowed(b) => b.len(),
-            ChildrenCow::Owned {
-                value,
-                ..
-            } => value.len(),
+            ChildrenCow::Owned { value, .. } => value.len(),
         }
     }
 }
@@ -1157,10 +1088,7 @@ impl MutableNode {
         let value = if let Some(idx) = self.value {
             let new_entry_idx = entries.len();
             let entry = entries[idx];
-            let new_entry = if let Entry::Mutable {
-                entry_idx,
-            } = entry
-            {
+            let new_entry = if let Entry::Mutable { entry_idx } = entry {
                 Entry::ReadOnly {
                     entry_idx,
                     borrowed: false,
@@ -1282,11 +1210,7 @@ impl ChildrenCow {
     /// Otherwise return [None].
     #[inline]
     pub fn get_owned(&self) -> Option<(u32, &[KeyIndexPair<4>])> {
-        if let ChildrenCow::Owned {
-            generation,
-            value,
-        } = self
-        {
+        if let ChildrenCow::Owned { generation, value } = self {
             Some((*generation, value))
         } else {
             None
@@ -1297,11 +1221,7 @@ impl ChildrenCow {
     /// variant. Otherwise return [None].
     #[inline]
     pub fn get_owned_mut(&mut self) -> Option<(u32, &mut [KeyIndexPair<4>])> {
-        if let ChildrenCow::Owned {
-            generation,
-            value,
-        } = self
-        {
+        if let ChildrenCow::Owned { generation, value } = self {
             Some((*generation, value))
         } else {
             None
@@ -1336,10 +1256,7 @@ fn freeze_value<Ctx, C: Collector<Vec<u8>>>(
                 (true, Some(Link::new(InlineOrHashed::new(loader, value))))
             }
         }
-        Entry::Mutable {
-            entry_idx,
-            ..
-        } => {
+        Entry::Mutable { entry_idx, .. } => {
             let value = std::mem::take(&mut owned_values[entry_idx]);
             collector.add_value(&value);
             (true, Some(Link::new(InlineOrHashed::new(loader, value))))
@@ -1375,9 +1292,7 @@ impl<const N: usize> KeyIndexPair<N> {
     #[inline(always)]
     pub fn new(key: Chunk<N>, index: usize) -> Self {
         let pair = usize::from(key.value) << (64 - N) | index;
-        Self {
-            pair,
-        }
+        Self { pair }
     }
 }
 
@@ -1385,10 +1300,7 @@ impl Clone for ChildrenCow {
     fn clone(&self) -> Self {
         match self {
             ChildrenCow::Borrowed(rc) => ChildrenCow::Borrowed(rc.clone()),
-            ChildrenCow::Owned {
-                generation,
-                value,
-            } => ChildrenCow::Owned {
+            ChildrenCow::Owned { generation, value } => ChildrenCow::Owned {
                 generation: *generation,
                 value:      value.clone(),
             },
@@ -1403,9 +1315,7 @@ impl<V> Loadable for CachedRef<V> {
         source: &mut S,
     ) -> LoadResult<Self> {
         let reference = Reference::load(loader, source)?;
-        Ok(CachedRef::Disk {
-            reference,
-        })
+        Ok(CachedRef::Disk { reference })
     }
 }
 
@@ -1556,10 +1466,7 @@ impl Node {
             if let Some(v) = &mut node.value {
                 let mut borrowed = v.borrow_mut();
                 match &mut *borrowed {
-                    InlineOrHashed::Inline {
-                        len,
-                        data,
-                    } => {
+                    InlineOrHashed::Inline { len, data } => {
                         // write length as a single byte.
                         buf.write_u8(*len)?;
                         buf.write_all(&data[0..usize::from(*len)])?;
@@ -1645,7 +1552,11 @@ fn make_owned<'a, 'b>(
     owned_nodes: &'a mut Vec<MutableNode>,
     entries: &'a mut Vec<Entry>,
     loader: &'b mut impl BackingStoreLoad,
-) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>) {
+) -> (
+    bool,
+    usize,
+    &'a mut tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>,
+) {
     let owned_nodes_len = owned_nodes.len();
     let node = unsafe { owned_nodes.get_unchecked(idx) };
     let node_generation = node.generation;
@@ -1670,10 +1581,7 @@ fn make_owned<'a, 'b>(
                     .collect();
                 Some((new_nodes, c))
             }
-            ChildrenCow::Owned {
-                generation,
-                value,
-            } => {
+            ChildrenCow::Owned { generation, value } => {
                 if *generation == node_generation {
                     None
                 } else {
@@ -1737,10 +1645,7 @@ impl Entry {
     /// value it points to.
     #[inline]
     pub fn is_owned(self) -> Option<usize> {
-        if let Self::Mutable {
-            entry_idx,
-        } = self
-        {
+        if let Self::Mutable { entry_idx } = self {
             Some(entry_idx)
         } else {
             None
@@ -1800,22 +1705,17 @@ impl CachedRef<Hashed<Node>> {
         loader: &mut impl BackingStoreLoad,
     ) -> MutableNode {
         match self {
-            CachedRef::Disk {
-                reference,
-                ..
-            } => {
+            CachedRef::Disk { reference, .. } => {
                 let node: Hashed<Node> = Hashed::<Node>::load_from_location(loader, *reference)
                     .expect("Failed to read.");
                 node.data.thaw(self, borrowed_values, entries, generation)
             }
-            CachedRef::Memory {
-                value,
-                ..
-            } => value.data.thaw(self, borrowed_values, entries, generation),
-            CachedRef::Cached {
-                value,
-                ..
-            } => value.data.thaw(self, borrowed_values, entries, generation),
+            CachedRef::Memory { value, .. } => {
+                value.data.thaw(self, borrowed_values, entries, generation)
+            }
+            CachedRef::Cached { value, .. } => {
+                value.data.thaw(self, borrowed_values, entries, generation)
+            }
         }
     }
 
@@ -1961,7 +1861,8 @@ impl MutableTrie {
         if let Some(generation) = generation {
             self.nodes.truncate(generation.checkpoint.num_nodes);
             self.values.truncate(generation.checkpoint.num_values);
-            self.borrowed_values.truncate(generation.checkpoint.num_borrowed_nodes);
+            self.borrowed_values
+                .truncate(generation.checkpoint.num_borrowed_nodes);
             self.entries.truncate(generation.checkpoint.num_entries);
         }
         self.generations.truncate(new_len);
@@ -2004,9 +1905,7 @@ impl MutableTrie {
                 };
                 Ok(values.last_mut())
             }
-            Entry::Mutable {
-                entry_idx,
-            } => Ok(values.get_mut(entry_idx)),
+            Entry::Mutable { entry_idx } => Ok(values.get_mut(entry_idx)),
             Entry::Deleted => Ok(None),
         }
     }
@@ -2060,7 +1959,9 @@ impl MutableTrie {
             };
             if usize::from(next_child) < node.children.len() {
                 // we have to visit this child.
-                iterator.stack.push((node_idx, next_child + 1, iterator.key.len()));
+                iterator
+                    .stack
+                    .push((node_idx, next_child + 1, iterator.key.len()));
                 iterator.next_child = None;
                 let (_, _, children) =
                     make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
@@ -2132,9 +2033,7 @@ impl MutableTrie {
                         started:      false,
                     }));
                 }
-                FollowStem::KeyIsPrefix {
-                    stem_step,
-                } => {
+                FollowStem::KeyIsPrefix { stem_step } => {
                     generation.iterator_roots.insert(key)?;
                     let root: Box<[u8]> = key.into();
                     let mut key: MutStem = key.into();
@@ -2151,9 +2050,7 @@ impl MutableTrie {
                         started: false,
                     }));
                 }
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
+                FollowStem::StemIsPrefix { key_step } => {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let key_usize = usize::from(key_step.value) << 60;
@@ -2166,9 +2063,7 @@ impl MutableTrie {
                     };
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
-                FollowStem::Diff {
-                    ..
-                } => {
+                FollowStem::Diff { .. } => {
                     return Ok(None);
                 }
             }
@@ -2183,9 +2078,7 @@ impl MutableTrie {
         let values = &mut self.values;
         let entries = &mut self.entries;
         match entries[entry] {
-            Entry::ReadOnly {
-                ..
-            } => {
+            Entry::ReadOnly { .. } => {
                 let value_idx = values.len();
                 values.push(new_value);
                 entries[entry] = Entry::Mutable {
@@ -2193,9 +2086,7 @@ impl MutableTrie {
                 };
                 values.last_mut()
             }
-            Entry::Mutable {
-                entry_idx,
-            } => {
+            Entry::Mutable { entry_idx } => {
                 values[entry_idx] = new_value;
                 values.get_mut(entry_idx)
             }
@@ -2233,15 +2124,12 @@ impl MutableTrie {
                     values.get(entry_idx).map(|b| f(&b[..]))
                 }
             }
-            Entry::Mutable {
-                entry_idx,
-            } => return values.get(entry_idx).map(|b| f(&b[..])),
+            Entry::Mutable { entry_idx } => return values.get(entry_idx).map(|b| f(&b[..])),
             Entry::Deleted => None,
         }
     }
 
     /// Freeze the current generation. Returns None if the tree was empty.
-    //
     // Note that as an optimization opportunity it might be useful to return a
     // list of new nodes so that they may be persisted quicker than
     // traversing the tree again. At the moment it is not always true that once
@@ -2307,10 +2195,7 @@ impl MutableTrie {
                         }),
                     );
                 }
-                ChildrenCow::Owned {
-                    value: owned,
-                    ..
-                } => {
+                ChildrenCow::Owned { value: owned, .. } => {
                     let mut children = Vec::with_capacity(owned.len());
                     let mut changed = false;
                     for child in owned {
@@ -2370,14 +2255,10 @@ impl MutableTrie {
                 FollowStem::Equal => {
                     return node.value;
                 }
-                FollowStem::KeyIsPrefix {
-                    ..
-                } => {
+                FollowStem::KeyIsPrefix { .. } => {
                     return None;
                 }
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
+                FollowStem::StemIsPrefix { key_step } => {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     let key_usize = usize::from(key_step.value) << 60;
@@ -2386,9 +2267,7 @@ impl MutableTrie {
                         .ok()?;
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
-                FollowStem::Diff {
-                    ..
-                } => {
+                FollowStem::Diff { .. } => {
                     return None;
                 }
             };
@@ -2547,14 +2426,10 @@ impl MutableTrie {
                     }
                     return Ok(rv);
                 }
-                FollowStem::KeyIsPrefix {
-                    ..
-                } => {
+                FollowStem::KeyIsPrefix { .. } => {
                     return Ok(false);
                 }
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
+                FollowStem::StemIsPrefix { key_step } => {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
@@ -2565,9 +2440,7 @@ impl MutableTrie {
                         return Ok(false);
                     }
                 }
-                FollowStem::Diff {
-                    ..
-                } => {
+                FollowStem::Diff { .. } => {
                     return Ok(false);
                 }
             };
@@ -2608,9 +2481,7 @@ impl MutableTrie {
         loop {
             let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
             match follow_stem(&mut key_iter, &mut node.path.iter()) {
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
+                FollowStem::StemIsPrefix { key_step } => {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
@@ -2622,9 +2493,7 @@ impl MutableTrie {
                         return Ok(Ok(false));
                     }
                 }
-                FollowStem::Diff {
-                    ..
-                } => {
+                FollowStem::Diff { .. } => {
                     return Ok(Ok(false));
                 }
                 _ => {
@@ -2796,9 +2665,7 @@ impl MutableTrie {
                     node.value = Some(entry_idx);
                     return Ok((entry_idx, false));
                 }
-                FollowStem::KeyIsPrefix {
-                    stem_step,
-                } => {
+                FollowStem::KeyIsPrefix { stem_step } => {
                     // create a new branch with the value being the new_value since the key ends
                     // here.
                     let remaining_stem: Stem = stem_iter.to_stem();
@@ -2838,9 +2705,7 @@ impl MutableTrie {
                     owned_nodes.push(new_node);
                     return Ok((entry_idx, false));
                 }
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
+                FollowStem::StemIsPrefix { key_step } => {
                     // make_owned may insert additional nodes. Hence we have to update our
                     // owned_nodes_len to make sure we have the up-to-date
                     // value.
@@ -2974,11 +2839,7 @@ fn write_node_path_and_value_tag(
     out: &mut impl Write,
 ) -> Result<(), std::io::Error> {
     // the second bit of the u8 encodes whether the node has a value (1) or not (0)
-    let value_mask: u8 = if no_value {
-        0
-    } else {
-        0b0100_0000
-    };
+    let value_mask: u8 = if no_value { 0 } else { 0b0100_0000 };
     // The first bit encodes whether there the length is encoded explicitly (1) or
     // in the first byte (0).
     if stem_len <= INLINE_STEM_LENGTH {
@@ -3020,9 +2881,7 @@ fn read_node_path_and_value_tag(source: &mut impl Read) -> Result<(Stem, bool), 
 /// have to "consume" nodes from a vector without changing indices. We do this
 /// by replacing nodes with a (cheap) value.
 const INVALID_NODE_CACHED_REF: CachedRef<Hashed<Node>> = CachedRef::Disk {
-    reference: Reference {
-        reference: 0,
-    },
+    reference: Reference { reference: 0 },
 };
 
 impl Hashed<Node> {
@@ -3091,9 +2950,7 @@ impl Hashed<Node> {
                     source.read_exact(&mut val)?;
                     Some(Link::new(InlineOrHashed::Indirect(Hashed::new(
                         value_hash,
-                        CachedRef::Memory {
-                            value: val.into(),
-                        },
+                        CachedRef::Memory { value: val.into() },
                     ))))
                 }
             } else {
@@ -3109,11 +2966,11 @@ impl Hashed<Node> {
             });
             if idx > 0 {
                 let mut parent = parents[parents.len() - idx as usize].borrow_mut();
-                if let CachedRef::Memory {
-                    value,
-                } = &mut *parent
-                {
-                    value.data.children.push((Chunk::new(key), new_node.clone()));
+                if let CachedRef::Memory { value } = &mut *parent {
+                    value
+                        .data
+                        .children
+                        .push((Chunk::new(key), new_node.clone()));
                 } else {
                     // all values are allocated in this function, so in-memory.
                     unsafe { std::hint::unreachable_unchecked() };
@@ -3127,10 +2984,7 @@ impl Hashed<Node> {
         }
         if let Some(root) = parents.into_iter().next() {
             let rw = std::mem::replace(&mut *root.borrow_mut(), INVALID_NODE_CACHED_REF);
-            if let CachedRef::Memory {
-                value,
-            } = rw
-            {
+            if let CachedRef::Memory { value } = rw {
                 Ok(value)
             } else {
                 // all values are allocated in this function, so in-memory.
@@ -3150,14 +3004,10 @@ enum FollowStem {
     Equal,
     /// The key iterator is a strict prefix of the stem iterator.
     /// The first item of the stem past the key is returned.
-    KeyIsPrefix {
-        stem_step: Chunk<4>,
-    },
+    KeyIsPrefix { stem_step: Chunk<4> },
     /// The stem iterator is a strict prefix of the key iterator.
     /// The first item of the key past the stem is returned.
-    StemIsPrefix {
-        key_step: Chunk<4>,
-    },
+    StemIsPrefix { key_step: Chunk<4> },
     /// The stem and key iterators differ. The items where they differ are
     /// returned.
     Diff {
@@ -3181,15 +3031,11 @@ fn follow_stem(key_iter: &mut StemIter, stem_iter: &mut StemIter) -> FollowStem 
             }
         } else {
             // key is a prefix of stem
-            return FollowStem::KeyIsPrefix {
-                stem_step,
-            };
+            return FollowStem::KeyIsPrefix { stem_step };
         }
     }
     if let Some(key_step) = key_iter.next() {
-        FollowStem::StemIsPrefix {
-            key_step,
-        }
+        FollowStem::StemIsPrefix { key_step }
     } else {
         FollowStem::Equal
     }
@@ -3210,14 +3056,10 @@ impl Node {
                 FollowStem::Equal => {
                     return value;
                 }
-                FollowStem::KeyIsPrefix {
-                    ..
-                } => {
+                FollowStem::KeyIsPrefix { .. } => {
                     return None;
                 }
-                FollowStem::StemIsPrefix {
-                    key_step,
-                } => {
+                FollowStem::StemIsPrefix { key_step } => {
                     let (_, c) = children.iter().find(|&&(ck, _)| ck == key_step)?;
                     {
                         let node_ref = c.borrow();
@@ -3230,9 +3072,7 @@ impl Node {
                     children.clear();
                     children.append(&mut tmp);
                 }
-                FollowStem::Diff {
-                    ..
-                } => {
+                FollowStem::Diff { .. } => {
                     return None;
                 }
             }
@@ -3245,19 +3085,13 @@ impl Node {
     pub fn is_stored(&self) -> bool {
         if let Some(value) = &self.value {
             if let InlineOrHashed::Indirect(value) = &*value.borrow() {
-                if let CachedRef::Memory {
-                    ..
-                } = value.data
-                {
+                if let CachedRef::Memory { .. } = value.data {
                     return false;
                 }
             }
         }
         for child in self.children.iter() {
-            if let CachedRef::Memory {
-                ..
-            } = &*child.1.borrow()
-            {
+            if let CachedRef::Memory { .. } = &*child.1.borrow() {
                 return false;
             }
         }
@@ -3271,24 +3105,17 @@ impl Node {
     pub fn is_cached(&self) -> bool {
         if let Some(value) = &self.value {
             if let InlineOrHashed::Indirect(value) = &*value.borrow() {
-                if let CachedRef::Disk {
-                    ..
-                } = value.data
-                {
+                if let CachedRef::Disk { .. } = value.data {
                     return false;
                 }
             }
         }
         for child in self.children.iter() {
             match &*child.1.borrow() {
-                CachedRef::Disk {
-                    reference: _,
-                } => {
+                CachedRef::Disk { reference: _ } => {
                     return false;
                 }
-                CachedRef::Memory {
-                    value,
-                } => {
+                CachedRef::Memory { value } => {
                     if !value.data.is_cached() {
                         return false;
                     }
@@ -3325,7 +3152,10 @@ mod prefix_map_tests {
             for key in keys.iter() {
                 anyhow::ensure!(map.delete(key), "Every inserted key should be deleted.");
             }
-            anyhow::ensure!(map.is_empty(), "Deleting everything should leave the map empty.");
+            anyhow::ensure!(
+                map.is_empty(),
+                "Deleting everything should leave the map empty."
+            );
             anyhow::ensure!(map.nodes.is_empty(), "Slab should be empty.");
             Ok(())
         };
@@ -3372,8 +3202,9 @@ mod prefix_map_tests {
                 }
             }
             for prefix in prefixes.iter() {
-                let has_any_as_prefix =
-                    keys.iter().any(|key| key.starts_with(prefix) || prefix.starts_with(key));
+                let has_any_as_prefix = keys
+                    .iter()
+                    .any(|key| key.starts_with(prefix) || prefix.starts_with(key));
                 let res = map.is_or_has_prefix(prefix);
                 anyhow::ensure!(
                     has_any_as_prefix == res,

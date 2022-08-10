@@ -15,10 +15,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ArtifactLocal {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let multiplicity = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
-        Ok(ArtifactLocal {
-            multiplicity,
-            ty,
-        })
+        Ok(ArtifactLocal { multiplicity, ty })
     }
 }
 
@@ -50,9 +47,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for InstantiatedGlobals {
                 _ => bail!("Unsupported global init tag."),
             }
         }
-        Ok(InstantiatedGlobals {
-            inits,
-        })
+        Ok(InstantiatedGlobals { inits })
     }
 }
 
@@ -78,9 +73,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CompiledFunctionBytes<'a> {
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for InstantiatedTable {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let functions = cursor.next(ctx)?;
-        Ok(InstantiatedTable {
-            functions,
-        })
+        Ok(InstantiatedTable { functions })
     }
 }
 
@@ -101,10 +94,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ArtifactData {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let offset = cursor.next(ctx)?;
         let init = cursor.next(ctx)?;
-        Ok(Self {
-            offset,
-            init,
-        })
+        Ok(Self { offset, init })
     }
 }
 

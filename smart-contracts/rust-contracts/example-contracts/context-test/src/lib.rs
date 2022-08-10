@@ -88,7 +88,10 @@ fn contract_init_3(ctx: &impl HasInitContext) -> InitResult<u8> {
         if policy.identity_provider() != 25 {
             return Ok(10);
         }
-        if policy.created_at().checked_add(Duration::from_millis(10)).unwrap_abort()
+        if policy
+            .created_at()
+            .checked_add(Duration::from_millis(10))
+            .unwrap_abort()
             != policy.valid_to()
         {
             return Ok(11);

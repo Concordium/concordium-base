@@ -33,8 +33,10 @@ fn prop_create_write_read_delete() {
                 .context(format!("The entry should've been created {:?}.", k))?;
             let entry = entry.convert().context("Entry should be valid.")?;
 
-            let lookup_entry =
-                state.lookup_entry(k).convert().context("Lookup entry should be valid.")?;
+            let lookup_entry = state
+                .lookup_entry(k)
+                .convert()
+                .context("Lookup entry should be valid.")?;
 
             let write_res = state
                 .entry_write(&mut energy, entry, v, 0)
@@ -62,8 +64,14 @@ fn prop_create_write_read_delete() {
                 read1,
                 v.len()
             );
-            ensure!(state.delete_entry(k).unwrap() == 2, "Entry should be deleted.");
-            ensure!(state.delete_entry(k).unwrap() == 1, "Entry was already deleted.");
+            ensure!(
+                state.delete_entry(k).unwrap() == 2,
+                "Entry should be deleted."
+            );
+            ensure!(
+                state.delete_entry(k).unwrap() == 1,
+                "Entry was already deleted."
+            );
             let mut buff0 = vec![0; v.len()];
             ensure!(
                 state.entry_read(entry, &mut buff0, 0) == u32::MAX,
@@ -74,8 +82,14 @@ fn prop_create_write_read_delete() {
                 .entry_write(&mut energy, entry, v, 0)
                 .context(format!("Failed writing {:?} to key {:?}.", v, k))?;
 
-            ensure!(write_res == u32::MAX, "Entry write on deleted entry should return u32::MAX.");
-            ensure!(state.delete_entry(k).unwrap() == 1, "Entry should already have been deleted.");
+            ensure!(
+                write_res == u32::MAX,
+                "Entry write on deleted entry should return u32::MAX."
+            );
+            ensure!(
+                state.delete_entry(k).unwrap() == 1,
+                "Entry should already have been deleted."
+            );
 
             ensure!(
                 state.entry_read(entry, &mut buff0, 0) == u32::MAX,
@@ -84,7 +98,9 @@ fn prop_create_write_read_delete() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -116,13 +132,23 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
 
     let mut non_overflowing_buffer = vec![0; crate::constants::MAX_ENTRY_SIZE];
     let write_past = state
-        .entry_write(&mut energy, entry, &[0], crate::constants::MAX_ENTRY_SIZE as u32)
+        .entry_write(
+            &mut energy,
+            entry,
+            &[0],
+            crate::constants::MAX_ENTRY_SIZE as u32,
+        )
         .context("Writing past MAX_ENTRY_SIZE should return Ok")?;
 
-    ensure!(write_past == 0, "Writing past MAX_ENTRY_SIZE should return 0.");
+    ensure!(
+        write_past == 0,
+        "Writing past MAX_ENTRY_SIZE should return 0."
+    );
 
     ensure!(
-        state.entry_write(&mut energy, entry, &non_overflowing_buffer, 0).is_ok(),
+        state
+            .entry_write(&mut energy, entry, &non_overflowing_buffer, 0)
+            .is_ok(),
         "The data should be written"
     );
     ensure!(
@@ -145,26 +171,35 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
             == overflowing_buffer.len() - 1,
         "Only 2^31 bytes should be read."
     );
-    let mut energy_supplied = crate::InterpreterEnergy {
-        energy: u64::MAX,
-    };
+    let mut energy_supplied = crate::InterpreterEnergy { energy: u64::MAX };
 
     let resize_status = state
         .entry_resize(&mut energy_supplied, entry, 0)
         .context("Resizing to empty should not have returned an Err.")?;
-    ensure!(resize_status == 1, "Resizing to 0 should have been completed successfully.");
+    ensure!(
+        resize_status == 1,
+        "Resizing to 0 should have been completed successfully."
+    );
 
     energy_supplied.energy = 0;
     ensure!(
         state
-            .entry_resize(&mut energy_supplied, entry, (crate::constants::MAX_ENTRY_SIZE) as u32)
+            .entry_resize(
+                &mut energy_supplied,
+                entry,
+                (crate::constants::MAX_ENTRY_SIZE) as u32
+            )
             .is_err(),
         "Resizing without sufficient energy should return an Err."
     );
 
     energy_supplied.energy = u64::MAX;
     let resize_status = state
-        .entry_resize(&mut energy_supplied, entry, crate::constants::MAX_ENTRY_SIZE as u32)
+        .entry_resize(
+            &mut energy_supplied,
+            entry,
+            crate::constants::MAX_ENTRY_SIZE as u32,
+        )
         .context("Resizing max should not have returned an Err.")?;
 
     ensure!(
@@ -173,7 +208,11 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
     );
 
     let resize_status = state
-        .entry_resize(&mut energy_supplied, entry, (crate::constants::MAX_ENTRY_SIZE + 1) as u32)
+        .entry_resize(
+            &mut energy_supplied,
+            entry,
+            (crate::constants::MAX_ENTRY_SIZE + 1) as u32,
+        )
         .context("Resizing MAX_ENTRY_SIZE + 1 should not have returned an Err.")?;
 
     ensure!(
@@ -181,11 +220,18 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
         "Resizing to MAX_ENTRY_SIZE + 1 should have been completed successfully."
     );
 
-    ensure!(state.delete_entry(k).unwrap() == 2, "Deletion of entry {:?} should return 2", k);
+    ensure!(
+        state.delete_entry(k).unwrap() == 2,
+        "Deletion of entry {:?} should return 2",
+        k
+    );
     let resize_status = state
         .entry_resize(&mut energy_supplied, entry, 0)
         .context("Resizing of invalidated entry should not have returned an Err.")?;
-    ensure!(resize_status == u32::MAX, "Resizing invalidated entry should return u32::MAX.");
+    ensure!(
+        resize_status == u32::MAX,
+        "Resizing invalidated entry should return u32::MAX."
+    );
     Ok(())
 }
 
@@ -208,7 +254,10 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         .convert()
         .context("Entry should be some.")?;
 
-    ensure!(state.delete_entry(&[0]).unwrap() == 2, "Deleting an entry should return 1.");
+    ensure!(
+        state.delete_entry(&[0]).unwrap() == 2,
+        "Deleting an entry should return 1."
+    );
     ensure!(
         state.entry_size(entry) == u32::MAX,
         "Entry size of invalidated entry should return u32::MAX."
@@ -217,13 +266,14 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         state.lookup_entry(&[42]) == InstanceStateEntryOption::NEW_NONE,
         "Lookup on non existent entry should return None."
     );
-    let mut energy_supplied = crate::InterpreterEnergy {
-        energy: u64::MAX,
-    };
+    let mut energy_supplied = crate::InterpreterEnergy { energy: u64::MAX };
     let res = state
         .delete_prefix(&mut energy_supplied, &[42])
         .context("Delete prefix on non existent part of state should not return None.")?;
-    ensure!(res == 1, "Deleting prefix on non existent part of state should return Ok(1).");
+    ensure!(
+        res == 1,
+        "Deleting prefix on non existent part of state should return Ok(1)."
+    );
     ensure!(
         state.entry_size(42.into()) == u32::MAX,
         "Entry size of non existent entry should return u32::MAX."
@@ -258,7 +308,10 @@ fn prop_entry_write_resizing() {
             let written = state
                 .entry_write(&mut energy, entry, v, 0)
                 .context(format!("Writing to entry failed {:?}", k))?;
-            ensure!(written as usize == v.len(), "Write should return the correct length written");
+            ensure!(
+                written as usize == v.len(),
+                "Write should return the correct length written"
+            );
 
             let entry_size = state.entry_size(entry);
             ensure!(
@@ -268,9 +321,7 @@ fn prop_entry_write_resizing() {
                 k,
                 v.len()
             );
-            let mut energy_supplied = crate::InterpreterEnergy {
-                energy: u64::MAX,
-            };
+            let mut energy_supplied = crate::InterpreterEnergy { energy: u64::MAX };
             let resize_status = state
                 .entry_resize(&mut energy_supplied, entry, (v.len() * k.len()) as u32)
                 .context("Rezising failed")?;
@@ -278,7 +329,9 @@ fn prop_entry_write_resizing() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -302,7 +355,9 @@ fn test_prefix_removal_fails_if_out_of_energy() -> anyhow::Result<()> {
         energy: crate::constants::TREE_TRAVERSAL_STEP_COST * 2 - 1,
     };
     ensure!(
-        state.delete_prefix(&mut energy_supplied, &[key[0]]).is_err(),
+        state
+            .delete_prefix(&mut energy_supplied, &[key[0]])
+            .is_err(),
         "Should run out of energy when deleting prefix."
     );
     Ok(())
@@ -392,9 +447,7 @@ fn prop_iterators() {
                     "Creating a new entry in a locked part of the tree should return none."
                 );
 
-                let mut energy_supplied = crate::InterpreterEnergy {
-                    energy: u64::MAX,
-                };
+                let mut energy_supplied = crate::InterpreterEnergy { energy: u64::MAX };
                 let res = state
                     .delete_prefix(&mut energy_supplied, k)
                     .context("Deleting prefix of locked subtree should not return Err")?;
@@ -421,9 +474,7 @@ fn prop_iterators() {
                             k
                         );
                     } else {
-                        let mut energy_supplied = crate::InterpreterEnergy {
-                            energy: u64::MAX,
-                        };
+                        let mut energy_supplied = crate::InterpreterEnergy { energy: u64::MAX };
                         ensure!(
                             state.delete_prefix(&mut energy_supplied, k).is_ok(),
                             "The entry {:?} should have been prefix deleted.",
@@ -442,7 +493,9 @@ fn prop_iterators() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -468,8 +521,9 @@ fn prop_iterator_traversing() {
                 .convert()
                 .context("Entry should be Some.")?;
 
-            let write_result =
-                state.entry_write(&mut energy, entry, v, 0).context("Write should be ok.")?;
+            let write_result = state
+                .entry_write(&mut energy, entry, v, 0)
+                .context("Write should be ok.")?;
             ensure!(
                 write_result as usize == v.len(),
                 "Incorrect amount of bytes written {:?} expected {:?}",
@@ -481,10 +535,11 @@ fn prop_iterator_traversing() {
 
         for (k, _) in &inputs {
             if prefixes.is_or_has_prefix(k) {
-                let mut energy_supplied = crate::InterpreterEnergy {
-                    energy: u64::MAX,
-                };
-                let iter = state.iterator(k).convert().context("Cannot create iterator.")?;
+                let mut energy_supplied = crate::InterpreterEnergy { energy: u64::MAX };
+                let iter = state
+                    .iterator(k)
+                    .convert()
+                    .context("Cannot create iterator.")?;
                 ensure!(
                     state.iterator_next(&mut energy_supplied, iter).is_ok(),
                     "Traversing with energy and children should be ok."
@@ -504,7 +559,9 @@ fn prop_iterator_traversing() {
         Ok(())
     };
 
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -522,14 +579,21 @@ fn test_iterator_errors() -> anyhow::Result<()> {
     let inner = m_state.get_inner(&mut loader);
     let mut state = InstanceState::new(0, loader, inner);
 
-    ensure!(state.create_entry(&[0, 1]).is_ok(), "Entry should have been created");
-    ensure!(state.create_entry(&[0, 2]).is_ok(), "Entry should have been created");
+    ensure!(
+        state.create_entry(&[0, 1]).is_ok(),
+        "Entry should have been created"
+    );
+    ensure!(
+        state.create_entry(&[0, 2]).is_ok(),
+        "Entry should have been created"
+    );
 
-    let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
+    let iter = state
+        .iterator(&[0])
+        .convert()
+        .context("Iterator should have been created.")?;
 
-    let mut energy_supplied = crate::InterpreterEnergy {
-        energy: 0,
-    };
+    let mut energy_supplied = crate::InterpreterEnergy { energy: 0 };
     ensure!(
         state.iterator_next(&mut energy_supplied, iter).is_err(),
         "Traversing with zero energy should yield an Err"
@@ -572,9 +636,15 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
     let mut state = InstanceState::new(0, loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let key = &[0];
-    ensure!(state.create_entry(key).is_ok(), "Entry should have been created.");
+    ensure!(
+        state.create_entry(key).is_ok(),
+        "Entry should have been created."
+    );
 
-    let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
+    let iter = state
+        .iterator(&[0])
+        .convert()
+        .context("Iterator should have been created.")?;
     ensure!(
         state.iterator_delete(&mut energy, iter).unwrap() == 1,
         "Iterator should have been deleted."
@@ -588,7 +658,10 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
         "Iterator should never have existed.."
     );
 
-    let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
+    let iter = state
+        .iterator(&[0])
+        .convert()
+        .context("Iterator should have been created.")?;
     // consume the whole contents of the iterator and it should return NEW_OK_NONE
     ensure!(
         state.iterator_next(&mut energy, iter).is_ok(),
@@ -684,13 +757,19 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
         "Resizing entry with invalid generation should return u32::MAX"
     );
 
-    let iter = state.iterator(&[0]).convert().context("Creating iterator should not fail.")?;
+    let iter = state
+        .iterator(&[0])
+        .convert()
+        .context("Creating iterator should not fail.")?;
     let (gen, iter_idx) = iter.split();
     let iter_invalid_gen = InstanceStateIteratorResultOption::new_ok_some(gen + 1, iter_idx)
         .convert()
         .context("Creating iter with new generation should not fail.")?;
     ensure!(
-        state.iterator_delete(&mut energy, iter_invalid_gen).unwrap() == u32::MAX,
+        state
+            .iterator_delete(&mut energy, iter_invalid_gen)
+            .unwrap()
+            == u32::MAX,
         "Deleting iterator with invalid generation should return u32::MAX."
     );
 

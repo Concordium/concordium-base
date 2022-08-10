@@ -55,9 +55,7 @@ impl Loadable for PersistentState {
         match source.read_u8()? {
             0 => Ok(Self::Empty),
             1 => Ok(Self::Root(CachedRef::load(loader, source)?)),
-            tag => Err(LoadError::IncorrectTag {
-                tag,
-            }),
+            tag => Err(LoadError::IncorrectTag { tag }),
         }
     }
 }
@@ -123,9 +121,7 @@ impl PersistentState {
             0 => Ok(Self::Empty),
             1 => {
                 let node = Hashed::<Node>::deserialize(source)?;
-                Ok(PersistentState::Root(CachedRef::Memory {
-                    value: node,
-                }))
+                Ok(PersistentState::Root(CachedRef::Memory { value: node }))
             }
             tag => anyhow::bail!("Invalid persistent tree tag: {}", tag),
         }
@@ -162,7 +158,9 @@ impl PersistentState {
             PersistentState::Empty => {
                 // hash of the node starts with either a 0 or 1 byte. This makes it distinct,
                 // but is otherwise an arbitrary choice.
-                super::Hash::from(<[u8; 32]>::from(sha2::Sha256::digest(b"empty contract state")))
+                super::Hash::from(<[u8; 32]>::from(sha2::Sha256::digest(
+                    b"empty contract state",
+                )))
             }
             PersistentState::Root(root) => root.hash(loader),
         }
@@ -266,21 +264,17 @@ impl MutableState {
             match &self.persistent {
                 PersistentState::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
                 PersistentState::Root(root_node) => {
                     let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
             }
         }
-        self.inner.as_mut().expect("This cannot fail since we just set self.inner to Some.")
+        self.inner
+            .as_mut()
+            .expect("This cannot fail since we just set self.inner to Some.")
     }
 
     /// Get a fresh mutable state generation. Modifications on this generation
@@ -307,17 +301,11 @@ impl MutableState {
             match &self.persistent {
                 PersistentState::Empty => {
                     let state = Arc::new(Mutex::new(MutableTrie::empty()));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
                 PersistentState::Root(root_node) => {
                     let state = Arc::new(Mutex::new(root_node.make_mutable(0, loader)));
-                    self.inner = Some(MutableStateInner {
-                        root,
-                        state,
-                    });
+                    self.inner = Some(MutableStateInner { root, state });
                 }
             }
             self.clone()

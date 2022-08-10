@@ -43,9 +43,7 @@ impl std::borrow::Borrow<str> for Name {
 pub enum ImportDescription {
     /// Import a function with the given type. The other import types, Table,
     /// Memory, Global, are not supported by Concordium.
-    Func {
-        type_idx: TypeIndex,
-    },
+    Func { type_idx: TypeIndex },
 }
 
 #[derive(Debug)]
@@ -63,9 +61,7 @@ impl Import {
     /// Return whether the import is a function.
     pub fn is_func(&self) -> bool {
         match self.description {
-            ImportDescription::Func {
-                ..
-            } => true,
+            ImportDescription::Func { .. } => true,
         }
     }
 }
@@ -102,9 +98,7 @@ pub struct TableSection {
 /// the external tooling.
 pub enum ExportDescription {
     /// An exported function with the given type.
-    Func {
-        index: FuncIndex,
-    },
+    Func { index: FuncIndex },
     /// An exported table. Since only table with index 0 is currently supported
     /// there is no explicit index.
     Table,
@@ -112,9 +106,7 @@ pub enum ExportDescription {
     /// there is no explicit index.
     Memory,
     /// An exported global.
-    Global {
-        index: GlobalIndex,
-    },
+    Global { index: GlobalIndex },
 }
 
 #[derive(Debug)]

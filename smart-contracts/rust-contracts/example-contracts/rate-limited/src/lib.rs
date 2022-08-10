@@ -1,25 +1,24 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_std::*;
 
-/* A contract that acts like an account (can send, store and accept CCD),
- * but requires that no more than x CCD be withdrawn every y time-units.
- *
- * The idea being that perhaps it can act as something like an annuity,
- * or it can be a form of security in that it gives observers time to react
- * to odd movements of CCD before too much damage is inflicted (e.g. by
- * enacting Concordium’s ability to unmask actors on the chain).
- *
- * Implementation:
- *  - The contract is initiated with a timed_withdraw_limit (corresponding to
- *    x in the above) and a time_limit (corresponding to y).
- *  - When a transfer request is received, it is checked whether the contract
- *    has sufficient funds to process it and whether the accepted recent
- *    transfers within the y last time-units, including the new request, is
- *    below the x withdraw limit. If both terms are met, the transfer is
- *    accepted and put into state.recent_transfers for future reference.
- *  - With every request the outdated requests, i.e. those older than
- *    current_time minus y, are pruned from state.recent_transfers.
- */
+// A contract that acts like an account (can send, store and accept CCD),
+// but requires that no more than x CCD be withdrawn every y time-units.
+//
+// The idea being that perhaps it can act as something like an annuity,
+// or it can be a form of security in that it gives observers time to react
+// to odd movements of CCD before too much damage is inflicted (e.g. by
+// enacting Concordium’s ability to unmask actors on the chain).
+//
+// Implementation:
+//  - The contract is initiated with a timed_withdraw_limit (corresponding to x
+//    in the above) and a time_limit (corresponding to y).
+//  - When a transfer request is received, it is checked whether the contract
+//    has sufficient funds to process it and whether the accepted recent
+//    transfers within the y last time-units, including the new request, is
+//    below the x withdraw limit. If both terms are met, the transfer is
+//    accepted and put into state.recent_transfers for future reference.
+//  - With every request the outdated requests, i.e. those older than
+//    current_time minus y, are pruned from state.recent_transfers.
 
 // Transfer Requests
 
@@ -85,7 +84,12 @@ fn contract_receive_deposit<A: HasActions>(
     Ok(A::accept())
 }
 
-#[receive(contract = "rate-limited", name = "receive", payable, parameter = "TransferRequest")]
+#[receive(
+    contract = "rate-limited",
+    name = "receive",
+    payable,
+    parameter = "TransferRequest"
+)]
 /// Allows the owner of the contract to transfer CCD from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<A: HasActions>(
@@ -109,11 +113,16 @@ fn contract_receive_transfer<A: HasActions>(
     };
 
     // Remove requests before the time_window_start
-    state.recent_transfers.retain(|r| r.time_of_transfer >= time_window_start);
+    state
+        .recent_transfers
+        .retain(|r| r.time_of_transfer >= time_window_start);
 
     // Calculate sum of recent_transfers within time limit
-    let amount_transferred_in_window: Amount =
-        state.recent_transfers.iter().map(|r| r.transfer_request.amount).sum();
+    let amount_transferred_in_window: Amount = state
+        .recent_transfers
+        .iter()
+        .map(|r| r.transfer_request.amount)
+        .sum();
 
     ensure!(
         transfer.transfer_request.amount <= ctx.self_balance()
@@ -286,15 +295,21 @@ mod tests {
             contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
-        claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
+        claim!(
+            res.is_err(),
+            "Contract receive transfer succeeded, but it should not have."
+        );
         claim_eq!(
             state.recent_transfers.len(),
             3,
             "No recent transfers should have been removed, and the new one should not be added."
         );
 
-        let recent_transfers_amounts: Vec<u64> =
-            state.recent_transfers.iter().map(|t| t.transfer_request.amount.micro_ccd).collect();
+        let recent_transfers_amounts: Vec<u64> = state
+            .recent_transfers
+            .iter()
+            .map(|t| t.transfer_request.amount.micro_ccd)
+            .collect();
         claim_eq!(
             recent_transfers_amounts,
             vec![6, 2, 3],
@@ -367,6 +382,9 @@ mod tests {
             contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
-        claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");
+        claim!(
+            res.is_ok(),
+            "Contract receive transfer failed, but it should not have."
+        );
     }
 }

@@ -69,7 +69,13 @@ struct InitParameter(Timestamp, Prefix);
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the
 /// prefix.
-#[init(contract = "simple_game", low_level, parameter = "InitParameter", payable, enable_logger)]
+#[init(
+    contract = "simple_game",
+    low_level,
+    parameter = "InitParameter",
+    payable,
+    enable_logger
+)]
 #[inline(always)]
 fn contract_init(
     ctx: &impl HasInitContext<()>,
@@ -220,7 +226,12 @@ fn contribute<A: HasActions>(
 
 /// This entry point finalizes the contract instance and sends out rewards to
 /// all the contributors.
-#[receive(contract = "simple_game", name = "receive_finalize", low_level, enable_logger)]
+#[receive(
+    contract = "simple_game",
+    name = "receive_finalize",
+    low_level,
+    enable_logger
+)]
 #[inline(always)]
 fn finalize<A: HasActions>(
     ctx: &impl HasReceiveContext<()>,

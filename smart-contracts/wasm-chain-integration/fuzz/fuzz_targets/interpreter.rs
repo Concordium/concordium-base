@@ -71,7 +71,9 @@ fuzz_target!(|input: RandomizedInterpreterInput<InterpreterConfig>| {
             module.inject_metering().unwrap();
             let init_names: Vec<Name> = get_inits(&module).into_iter().cloned().collect();
             let receive_names: Vec<Name> = get_receives(&module).into_iter().cloned().collect();
-            let artifact = module.compile().expect("Compilation of validated module failed.");
+            let artifact = module
+                .compile()
+                .expect("Compilation of validated module failed.");
             // Ensuring that artifact can be serialized and deserialized
             let mut out_buf = Vec::new();
             artifact.output(&mut out_buf).unwrap();

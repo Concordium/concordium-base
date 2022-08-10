@@ -191,15 +191,10 @@ pub mod cost {
             Unreachable => 0,
             Block(_) => 0,
             Loop(_) => 0,
-            If {
-                ..
-            } => IF_STATEMENT,
+            If { .. } => IF_STATEMENT,
             Br(idx) => branch(lookup_label(labels, *idx)?),
             BrIf(_) => BR_IF,
-            BrTable {
-                default,
-                ..
-            } => br_table(lookup_label(labels, *default)?),
+            BrTable { default, .. } => br_table(lookup_label(labels, *default)?),
             Return => {
                 // Return has the same cost as Br to the outermost branch.
                 let return_ty = labels
@@ -228,7 +223,7 @@ pub mod cost {
             Drop => DROP,
             Select => SELECT,
 
-            //Variable instructions
+            // Variable instructions
             LocalGet(_) => GET_LOCAL,
             LocalSet(_) => SET_LOCAL,
             LocalTee(_) => TEE_LOCAL,
@@ -338,7 +333,7 @@ use cost::Energy;
 //     exp.push(OpCode::Call(FN_IDX_ACCOUNT_STACK_SIZE));
 // }
 
-///Metadata needed for transformation.
+/// Metadata needed for transformation.
 struct InstrSeqTransformer<'a, C> {
     /// Reference to the original module to get the right context.
     module:               &'a C,
@@ -438,9 +433,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                     self.labels.push(BlockType::EmptyType);
                     self.add_to_new(instr);
                 }
-                If {
-                    ty,
-                } => {
+                If { ty } => {
                     // Since there are two branches we need to charge for all the instructions
                     // before we enter either of them, and start afresh.
                     self.account_energy_push_pending();
@@ -568,9 +561,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                         ),
                     }
                 }
-                BrTable {
-                    ..
-                } => self.add_instr_account_energy(instr),
+                BrTable { .. } => self.add_instr_account_energy(instr),
                 // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
                 // functions at the beginning of the module, for cost accounting.
                 Call(idx) => {
@@ -614,22 +605,15 @@ impl HasTransformationContext for Module {
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
         self.ty
             .get(idx)
-            .map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+            .map(|ty| (ty.parameters.len(), if ty.result.is_some() { 1 } else { 0 }))
             .ok_or_else(|| anyhow!("Type with index {} not found.", idx))
     }
 
     fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
-        let ty_idx =
-            self.func.get(idx).ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
+        let ty_idx = self
+            .func
+            .get(idx)
+            .ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
         self.get_type_len(ty_idx)
     }
 }
@@ -681,16 +665,7 @@ impl<'a> HasTransformationContext for ModuleContext<'a> {
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
         self.types
             .get(idx as usize)
-            .map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+            .map(|ty| (ty.parameters.len(), if ty.result.is_some() { 1 } else { 0 }))
             .ok_or_else(|| anyhow!("Type with index {} not found.", idx))
     }
 
@@ -699,9 +674,7 @@ impl<'a> HasTransformationContext for ModuleContext<'a> {
             .imported
             .get(idx as usize)
             .map(|i| match i.description {
-                ImportDescription::Func {
-                    type_idx,
-                } => type_idx,
+                ImportDescription::Func { type_idx } => type_idx,
             })
             .or_else(|| self.funcs.get(idx as usize - self.imported.len()).copied())
             .ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
@@ -799,10 +772,7 @@ impl Module {
         new_imports.append(&mut self.import.imports);
         self.import.imports = new_imports;
         for export in self.export.exports.iter_mut() {
-            if let ExportDescription::Func {
-                ref mut index,
-            } = export.description
-            {
+            if let ExportDescription::Func { ref mut index } = export.description {
                 *index += NUM_ADDED_FUNCTIONS;
             }
         }

@@ -1,16 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_std::{collections::*, *};
 
-/*
- * An implementation of ERC-20 Token Standard used on the Ethereum network.
- * It provides standard functionality for transfering tokens and allowing
- * other accounts to transfer a certain amount from ones account.
- *
- * https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
- *
- * Instead of getter functions the information can be read directly from the
- * state. Events can be tracked in the log.
- */
+// An implementation of ERC-20 Token Standard used on the Ethereum network.
+// It provides standard functionality for transfering tokens and allowing
+// other accounts to transfer a certain amount from ones account.
+//
+// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
+//
+// Instead of getter functions the information can be read directly from the
+// state. Events can be tracked in the log.
 
 // Types
 type U999 = u64; // spec says u256 but we only have u64 at most
@@ -73,7 +71,11 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     // Let the creator have all the tokens
     let creator = ctx.init_origin();
-    logger.log(&Event::Transfer(AccountAddress([0u8; 32]), creator, init_params.total_supply))?;
+    logger.log(&Event::Transfer(
+        AccountAddress([0u8; 32]),
+        creator,
+        init_params.total_supply,
+    ))?;
     let mut balances = BTreeMap::new();
     balances.insert(creator, init_params.total_supply);
 
@@ -131,25 +133,38 @@ fn contract_receive<A: HasActions>(
             ensure!(sender_balance >= amount, ReceiveError::InsufficientFunds);
 
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
-            state.balances.insert(sender_address, sender_balance - amount);
-            state.balances.insert(receiver_address, receiver_balance + amount);
+            state
+                .balances
+                .insert(sender_address, sender_balance - amount);
+            state
+                .balances
+                .insert(receiver_address, receiver_balance + amount);
             logger.log(&Event::Transfer(sender_address, receiver_address, amount))?;
         }
         Request::TransferFromTo(owner_address, receiver_address, amount) => {
-            let allowed_amount = *state.allowed.get(&(owner_address, sender_address)).unwrap_or(&0);
+            let allowed_amount = *state
+                .allowed
+                .get(&(owner_address, sender_address))
+                .unwrap_or(&0);
             ensure!(allowed_amount >= amount, ReceiveError::MoreThanAllowed);
 
             let owner_balance = *state.balances.get(&owner_address).unwrap_or(&0);
             ensure!(owner_balance >= amount, ReceiveError::InsufficientFunds);
 
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
-            state.allowed.insert((owner_address, sender_address), allowed_amount - amount);
+            state
+                .allowed
+                .insert((owner_address, sender_address), allowed_amount - amount);
             state.balances.insert(owner_address, owner_balance - amount);
-            state.balances.insert(receiver_address, receiver_balance + amount);
+            state
+                .balances
+                .insert(receiver_address, receiver_balance + amount);
             logger.log(&Event::Transfer(owner_address, receiver_address, amount))?;
         }
         Request::AllowTransfer(spender_address, amount) => {
-            state.allowed.insert((sender_address, spender_address), amount);
+            state
+                .allowed
+                .insert((sender_address, spender_address), amount);
             logger.log(&Event::Approval(sender_address, spender_address, amount))?;
         }
     }
@@ -207,7 +222,11 @@ pub mod tests {
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         claim_eq!(
             logger.logs[0],
-            to_bytes(&Event::Transfer(AccountAddress([0u8; 32]), init_origin, 100)),
+            to_bytes(&Event::Transfer(
+                AccountAddress([0u8; 32]),
+                init_origin,
+                100
+            )),
             "Should log an initial transfer, when creating the token"
         );
     }
@@ -253,7 +272,11 @@ pub mod tests {
             Err(_) => fail!("Contract receive support failed, but it should not have."),
             Ok(actions) => actions,
         };
-        claim_eq!(actions, ActionsTree::accept(), "Transferring should result in an Accept action");
+        claim_eq!(
+            actions,
+            ActionsTree::accept(),
+            "Transferring should result in an Accept action"
+        );
         let from_balance = *state.balances.get(&from_account).unwrap();
         let to_balance = *state.balances.get(&to_account).unwrap();
         claim_eq!(
@@ -261,7 +284,11 @@ pub mod tests {
             30,
             "The transferred amount should be subtracted from sender balance"
         );
-        claim_eq!(to_balance, 70, "The transferred amount should be added to receiver balance");
+        claim_eq!(
+            to_balance,
+            70,
+            "The transferred amount should be added to receiver balance"
+        );
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         claim_eq!(
             logger.logs[0],
@@ -315,7 +342,11 @@ pub mod tests {
             Err(_) => fail!("Contract receive support failed, but it should not have."),
             Ok(actions) => actions,
         };
-        claim_eq!(actions, ActionsTree::accept(), "Transferring should result in an Accept action");
+        claim_eq!(
+            actions,
+            ActionsTree::accept(),
+            "Transferring should result in an Accept action"
+        );
         let from_balance = *state.balances.get(&from_account).unwrap();
         let to_balance = *state.balances.get(&to_account).unwrap();
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
@@ -324,7 +355,11 @@ pub mod tests {
             140,
             "The transferred amount should be subtracted from sender balance"
         );
-        claim_eq!(to_balance, 60, "The transferred amount should be added to receiver balance");
+        claim_eq!(
+            to_balance,
+            60,
+            "The transferred amount should be added to receiver balance"
+        );
         claim_eq!(
             from_spender_allowed,
             40,
@@ -380,9 +415,15 @@ pub mod tests {
             Err(_) => fail!("The message is not expected to fail"),
         };
         claim_eq!(actions, ActionsTree::accept(), "Should accept the message");
-        let owner_spender_allowed =
-            *state.allowed.get(&(owner_account, spender_account)).unwrap_or(&0);
-        claim_eq!(owner_spender_allowed, 100, "The allowed amount is not changed correctly");
+        let owner_spender_allowed = *state
+            .allowed
+            .get(&(owner_account, spender_account))
+            .unwrap_or(&0);
+        claim_eq!(
+            owner_spender_allowed,
+            100,
+            "The allowed amount is not changed correctly"
+        );
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         claim_eq!(
             logger.logs[0],
@@ -438,8 +479,16 @@ pub mod tests {
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
-        claim_eq!(from_balance, 200, "The balance of the owner account should be unchanged");
-        claim_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        claim_eq!(
+            from_balance,
+            200,
+            "The balance of the owner account should be unchanged"
+        );
+        claim_eq!(
+            to_balance,
+            0,
+            "The balance of the receiving account should be unchanged"
+        );
         claim_eq!(
             from_spender_allowed,
             100,
@@ -490,8 +539,16 @@ pub mod tests {
         }
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
-        claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
-        claim_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        claim_eq!(
+            from_balance,
+            100,
+            "The balance of the owner account should be unchanged"
+        );
+        claim_eq!(
+            to_balance,
+            0,
+            "The balance of the receiving account should be unchanged"
+        );
         claim_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
     }
 
@@ -540,10 +597,20 @@ pub mod tests {
 
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
-        let from_spender_allowed =
-            *state.allowed.get(&(from_account, spender_account)).unwrap_or(&0);
-        claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
-        claim_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        let from_spender_allowed = *state
+            .allowed
+            .get(&(from_account, spender_account))
+            .unwrap_or(&0);
+        claim_eq!(
+            from_balance,
+            100,
+            "The balance of the owner account should be unchanged"
+        );
+        claim_eq!(
+            to_balance,
+            0,
+            "The balance of the receiving account should be unchanged"
+        );
         claim_eq!(
             from_spender_allowed,
             110,

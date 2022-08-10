@@ -52,7 +52,7 @@ impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
     pub metadata:        ChainMetadata,
-    pub invoker:         AccountAddress,  //32 bytes
+    pub invoker:         AccountAddress,  // 32 bytes
     pub self_address:    ContractAddress, // 16 bytes
     pub self_balance:    Amount,          // 8 bytes
     pub sender:          Address,         // 9 or 33 bytes
@@ -250,9 +250,7 @@ impl Action {
     pub fn to_bytes(&self) -> Vec<u8> {
         use Action::*;
         match self {
-            Send {
-                data,
-            } => {
+            Send { data } => {
                 let name_len = data.name.len();
                 let param_len = data.parameter.len();
                 let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
@@ -266,29 +264,21 @@ impl Action {
                 out.extend_from_slice(&data.parameter);
                 out
             }
-            SimpleTransfer {
-                data,
-            } => {
+            SimpleTransfer { data } => {
                 let mut out = Vec::with_capacity(1 + 32 + 8);
                 out.push(1);
                 out.extend_from_slice(&data.to_addr.0);
                 out.extend_from_slice(&data.amount.to_be_bytes());
                 out
             }
-            Or {
-                l,
-                r,
-            } => {
+            Or { l, r } => {
                 let mut out = Vec::with_capacity(9);
                 out.push(2);
                 out.extend_from_slice(&l.to_be_bytes());
                 out.extend_from_slice(&r.to_be_bytes());
                 out
             }
-            And {
-                l,
-                r,
-            } => {
+            And { l, r } => {
                 let mut out = Vec::with_capacity(9);
                 out.push(3);
                 out.extend_from_slice(&l.to_be_bytes());
@@ -433,8 +423,12 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             17 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd)),
             18 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr)),
             19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
-            20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
-            21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
+            20 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfAddress,
+            )),
+            21 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfBalance,
+            )),
             22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
@@ -493,10 +487,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
     ) -> wasm_transform::parse::ParseResult<Self> {
         let tag = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 }
 
@@ -624,17 +615,12 @@ impl TryFromImport for ProcessedImports {
             bail!("Unsupported import module {}.", m)
         };
         let ty = match import.description {
-            wasm_transform::types::ImportDescription::Func {
-                type_idx,
-            } => ctx
+            wasm_transform::types::ImportDescription::Func { type_idx } => ctx
                 .get(type_idx as usize)
                 .ok_or_else(|| anyhow::anyhow!("Unknown type, this should not happen."))?
                 .clone(),
         };
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 
     fn ty(&self) -> &FunctionType { &self.ty }

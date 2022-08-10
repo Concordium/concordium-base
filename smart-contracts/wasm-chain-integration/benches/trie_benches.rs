@@ -34,11 +34,7 @@ impl std::iter::Iterator for GenData {
 fn get_data() -> Vec<Vec<u8>> {
     let mut hasher = sha2::Sha512::new();
     hasher.update(&SEED.to_be_bytes());
-    GenData {
-        hasher,
-        count: 0,
-    }
-    .collect::<Vec<_>>()
+    GenData { hasher, count: 0 }.collect::<Vec<_>>()
 }
 
 type VecLoader = Loader<Vec<u8>>;
@@ -120,8 +116,11 @@ fn trie_deserialize(b: &mut Criterion) {
     let mut trie = trie.unwrap();
     let mut backing_store = Vec::new();
     let mut buf = Vec::new();
-    trie.store_update_buf(&mut backing_store, &mut buf).expect("Storing should succeed.");
-    let root = backing_store.store_raw(&buf).expect("Storing should succeed.");
+    trie.store_update_buf(&mut backing_store, &mut buf)
+        .expect("Storing should succeed.");
+    let root = backing_store
+        .store_raw(&buf)
+        .expect("Storing should succeed.");
     b.bench_function("trie deserialize", |b| {
         b.iter(|| {
             let mut loader = Loader {
@@ -139,8 +138,11 @@ fn trie_cache(b: &mut Criterion) {
     let mut trie = trie.unwrap();
     let mut backing_store = Vec::new();
     let mut buf = Vec::new();
-    trie.store_update_buf(&mut backing_store, &mut buf).expect("Storing should succeed.");
-    let root = backing_store.store_raw(&buf).expect("Storing should succeed.");
+    trie.store_update_buf(&mut backing_store, &mut buf)
+        .expect("Storing should succeed.");
+    let root = backing_store
+        .store_raw(&buf)
+        .expect("Storing should succeed.");
     b.bench_function("trie cache", |b| {
         b.iter(|| {
             let mut loader = Loader {
@@ -220,9 +222,13 @@ fn mut_trie_delete(b: &mut Criterion) {
     b.bench_function("trie mut delete", |b| {
         b.iter(|| {
             for w in words.iter() {
-                trie.delete(&mut loader, w.as_ref()).expect("No locks, so cannot fail.");
+                trie.delete(&mut loader, w.as_ref())
+                    .expect("No locks, so cannot fail.");
             }
-            assert!(trie.is_empty(), "After deleting everything the tree should be empty.");
+            assert!(
+                trie.is_empty(),
+                "After deleting everything the tree should be empty."
+            );
         })
     });
 }
@@ -234,9 +240,13 @@ fn trie_thaw_delete(b: &mut Criterion) {
     b.bench_function("trie thaw delete", |b| {
         b.iter(|| {
             for w in words.iter() {
-                trie.delete(&mut loader, &w[..]).expect("No locks, so cannot fail.");
+                trie.delete(&mut loader, &w[..])
+                    .expect("No locks, so cannot fail.");
             }
-            assert!(trie.is_empty(), "After deleting everything the tree should be empty.");
+            assert!(
+                trie.is_empty(),
+                "After deleting everything the tree should be empty."
+            );
         })
     });
 }
@@ -249,7 +259,8 @@ fn mut_trie_freeze(b: &mut Criterion) {
         b.iter_batched(
             || trie.clone(),
             |trie| {
-                trie.freeze(&mut loader, &mut EmptyCollector).expect("Freezing succeeds");
+                trie.freeze(&mut loader, &mut EmptyCollector)
+                    .expect("Freezing succeeds");
             },
             BatchSize::LargeInput,
         );
@@ -260,8 +271,12 @@ fn mut_trie_freeze(b: &mut Criterion) {
 fn mut_trie_freeze_get(b: &mut Criterion) {
     let words = get_data();
     let (trie, mut loader) = make_mut_trie(&words);
-    let frozen =
-        trie.freeze(&mut loader, &mut EmptyCollector).unwrap().get(&mut loader).to_owned().data;
+    let frozen = trie
+        .freeze(&mut loader, &mut EmptyCollector)
+        .unwrap()
+        .get(&mut loader)
+        .to_owned()
+        .data;
     b.bench_function("trie mut freeze get", |b| {
         b.iter(|| {
             for w in words.iter() {

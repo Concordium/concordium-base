@@ -217,11 +217,7 @@ pub struct Loader<S> {
 
 impl<S> Loader<S> {
     /// Construct a new loader from the given data.
-    pub fn new(file: S) -> Self {
-        Self {
-            inner: file,
-        }
-    }
+    pub fn new(file: S) -> Self { Self { inner: file } }
 }
 
 impl<A: AsRef<[u8]>> BackingStoreLoad for Loader<A> {
@@ -330,10 +326,7 @@ impl<V: Loadable> Loadable for Hashed<V> {
     ) -> LoadResult<Self> {
         let hash = Hash::read(source)?;
         let data = V::load(loader, source)?;
-        Ok(Hashed {
-            hash,
-            data,
-        })
+        Ok(Hashed { hash, data })
     }
 }
 
@@ -352,20 +345,14 @@ impl AsRef<[u8]> for Hash {
 impl Hash {
     #[inline(always)]
     /// A hash value that consists of 32 `0` bytes.
-    pub fn zero() -> Self {
-        Self {
-            hash: [0u8; 32],
-        }
-    }
+    pub fn zero() -> Self { Self { hash: [0u8; 32] } }
 
     /// Read a hash value from the provided source, failing if not enough data
     /// is available.
     pub fn read(source: &mut impl Read) -> LoadResult<Self> {
         let mut hash = [0u8; 32];
         source.read_exact(&mut hash)?;
-        Ok(Self {
-            hash,
-        })
+        Ok(Self { hash })
     }
 }
 
@@ -435,12 +422,7 @@ pub struct Hashed<V> {
 
 impl<V> Hashed<V> {
     #[inline(always)]
-    pub fn new(hash: Hash, data: V) -> Self {
-        Self {
-            hash,
-            data,
-        }
-    }
+    pub fn new(hash: Hash, data: V) -> Self { Self { hash, data } }
 }
 
 impl<V, Ctx> ToSHA256<Ctx> for Hashed<V> {

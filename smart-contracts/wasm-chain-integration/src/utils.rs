@@ -25,7 +25,10 @@ impl std::str::FromStr for WasmVersion {
         match s {
             "V0" | "v0" => Ok(WasmVersion::V0),
             "V1" | "v1" => Ok(WasmVersion::V1),
-            _ => anyhow::bail!("Unsupported version: '{}'. Only 'V0' and 'V1' are supported.", s),
+            _ => anyhow::bail!(
+                "Unsupported version: '{}'. Only 'V0' and 'V1' are supported.",
+                s
+            ),
         }
     }
 }
@@ -36,7 +39,9 @@ impl WasmVersion {
     pub fn read(source: &mut std::io::Cursor<&[u8]>) -> anyhow::Result<WasmVersion> {
         let mut data = [0u8; 4];
         use std::io::Read;
-        source.read_exact(&mut data).context("Not enough data to read WasmVersion.")?;
+        source
+            .read_exact(&mut data)
+            .context("Not enough data to read WasmVersion.")?;
         match u32::from_be_bytes(data) {
             0 => Ok(WasmVersion::V0),
             1 => Ok(WasmVersion::V1),
@@ -104,9 +109,7 @@ pub enum ReportError {
     },
     /// Some other source of error. We only have the description, and no
     /// location.
-    Other {
-        msg: String,
-    },
+    Other { msg: String },
 }
 
 impl std::fmt::Display for ReportError {
@@ -118,9 +121,7 @@ impl std::fmt::Display for ReportError {
                 column,
                 msg,
             } => write!(f, "{}, {}:{}:{}", msg, filename, line, column),
-            ReportError::Other {
-                msg,
-            } => msg.fmt(f),
+            ReportError::Other { msg } => msg.fmt(f),
         }
     }
 }
@@ -146,8 +147,14 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
             let filename_start = unsafe { stack.pop_u32() } as usize;
             let msg_length = unsafe { stack.pop_u32() } as usize;
             let msg_start = unsafe { stack.pop_u32() } as usize;
-            ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
-            ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
+            ensure!(
+                filename_start + filename_length <= memory.len(),
+                "Illegal memory access."
+            );
+            ensure!(
+                msg_start + msg_length <= memory.len(),
+                "Illegal memory access."
+            );
             let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
             let filename =
                 std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
@@ -238,7 +245,9 @@ pub fn generate_contract_schema_v0(
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV0::default);
 
-                contract_schema.receive.insert(function_name.to_owned(), schema_type);
+                contract_schema
+                    .receive
+                    .insert(function_name.to_owned(), schema_type);
             } else {
                 // do nothing, some other function that is neither init nor
                 // receive.
@@ -281,7 +290,9 @@ pub fn generate_contract_schema_v1(
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV1::default);
 
-                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+                contract_schema
+                    .receive
+                    .insert(function_name.to_owned(), function_schema);
             } else {
                 // do nothing, some other function that is neither init nor
                 // receive.
@@ -316,7 +327,10 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode, SchemaType: Deserial>(
         .map_err(|_| anyhow!("Cannot read schema length."))?;
 
     // Read the schema with offset of the u32
-    ensure!(ptr + 4 + len as usize <= memory.len(), "Illegal memory access when reading schema.");
+    ensure!(
+        ptr + 4 + len as usize <= memory.len(),
+        "Illegal memory access when reading schema."
+    );
     let schema_bytes = &memory[ptr + 4..ptr + 4 + len as usize];
     SchemaType::deserial(&mut Cursor::new(schema_bytes))
         .map_err(|_| anyhow!("Failed deserialising the schema."))
@@ -327,10 +341,7 @@ pub fn get_inits(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
     for export in module.export.exports.iter() {
         if export.name.as_ref().starts_with("init_") && !export.name.as_ref().contains('.') {
-            if let ExportDescription::Func {
-                ..
-            } = export.description
-            {
+            if let ExportDescription::Func { .. } = export.description {
                 out.push(&export.name);
             }
         }
@@ -343,10 +354,7 @@ pub fn get_receives(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
     for export in module.export.exports.iter() {
         if export.name.as_ref().contains('.') {
-            if let ExportDescription::Func {
-                ..
-            } = export.description
-            {
+            if let ExportDescription::Func { .. } = export.description {
                 out.push(&export.name);
             }
         }

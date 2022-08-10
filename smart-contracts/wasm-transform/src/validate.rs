@@ -22,19 +22,17 @@ use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
 #[derive(Debug)]
 pub enum ValidationError {
-    TooManyLocals {
-        actual: u32,
-        max:    u32,
-    },
+    TooManyLocals { actual: u32, max: u32 },
 }
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValidationError::TooManyLocals {
-                actual,
-                max,
-            } => write!(f, "The number of locals ({}) is more than allowed ({}).", actual, max),
+            ValidationError::TooManyLocals { actual, max } => write!(
+                f,
+                "The number of locals ({}) is more than allowed ({}).",
+                actual, max
+            ),
         }
     }
 }
@@ -232,13 +230,21 @@ impl ValidationState {
         // We first check for the last element, and use it without removing it.
         // This is so that pop_expect_opd, which pops elements from the stack, can see
         // whether we are in the unreachable state for the stack or not.
-        match self.ctrls.stack.last().map(|frame| (frame.end_type, frame.height, frame.is_if)) {
+        match self
+            .ctrls
+            .stack
+            .last()
+            .map(|frame| (frame.end_type, frame.height, frame.is_if))
+        {
             None => bail!("Control stack exhausted."),
             Some((end_type, height, opcode)) => {
                 if let BlockType::ValueType(ty) = end_type {
                     self.pop_expect_opd(Known(ty))?;
                 }
-                ensure!(self.opds.stack.len() == height, "Operand stack not exhausted.");
+                ensure!(
+                    self.opds.stack.len() == height,
+                    "Operand stack not exhausted."
+                );
                 // Finally pop after we've made sure the stack is properly cleared.
                 self.ctrls.stack.pop();
                 Ok((end_type, opcode))
@@ -287,16 +293,13 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
     let mut start = 0;
     for &ty in ty.parameters.iter() {
         let end = start + 1;
-        out.push(LocalsRange {
-            start,
-            end,
-            ty,
-        });
+        out.push(LocalsRange { start, end, ty });
         start = end;
     }
     for local in locals.iter() {
-        let end =
-            start.checked_add(local.multiplicity).ok_or_else(|| anyhow!("Too many locals"))?;
+        let end = start
+            .checked_add(local.multiplicity)
+            .ok_or_else(|| anyhow!("Too many locals"))?;
         out.push(LocalsRange {
             start,
             end,
@@ -305,10 +308,13 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
         start = end;
     }
     let num_locals = start;
-    ensure!(num_locals <= ALLOWED_LOCALS, ValidationError::TooManyLocals {
-        actual: num_locals,
-        max:    ALLOWED_LOCALS,
-    });
+    ensure!(
+        num_locals <= ALLOWED_LOCALS,
+        ValidationError::TooManyLocals {
+            actual: num_locals,
+            max:    ALLOWED_LOCALS,
+        }
+    );
     Ok((out, num_locals))
 }
 
@@ -380,7 +386,9 @@ impl<'a> HasValidationContext for FunctionContext<'a> {
     }
 
     fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>> {
-        self.types.get(idx as usize).ok_or_else(|| anyhow!("Type index out of range."))
+        self.types
+            .get(idx as usize)
+            .ok_or_else(|| anyhow!("Type index out of range."))
     }
 
     fn return_type(&self) -> BlockType { self.return_type }
@@ -398,16 +406,32 @@ enum Type {
 fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     match align {
         Type::I8 => {
-            ensure!(num == 0, "Type I8 alignment must be less than 0, but is {}.", num);
+            ensure!(
+                num == 0,
+                "Type I8 alignment must be less than 0, but is {}.",
+                num
+            );
         }
         Type::I16 => {
-            ensure!(num <= 1, "Type I16 alignment must be less than 1, but is {}.", num);
+            ensure!(
+                num <= 1,
+                "Type I16 alignment must be less than 1, but is {}.",
+                num
+            );
         }
         Type::I32 => {
-            ensure!(num <= 2, "Type I32 alignment must be less than 2, but is {}", num);
+            ensure!(
+                num <= 2,
+                "Type I32 alignment must be less than 2, but is {}",
+                num
+            );
         }
         Type::I64 => {
-            ensure!(num <= 3, "Type I64 alignment must be less than 3, but is {}.", num);
+            ensure!(
+                num <= 3,
+                "Type I64 alignment must be less than 3, but is {}.",
+                num
+            );
         }
     }
     Ok(())
@@ -499,9 +523,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
             OpCode::Loop(ty) => {
                 state.push_ctrl(false, BlockType::EmptyType, *ty);
             }
-            OpCode::If {
-                ty,
-            } => {
+            OpCode::If { ty } => {
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_ctrl(true, *ty, *ty);
             }
@@ -527,10 +549,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                     bail!("Conditional jump to non-existent label.")
                 }
             }
-            OpCode::BrTable {
-                labels,
-                default,
-            } => {
+            OpCode::BrTable { labels, default } => {
                 ensure!(
                     labels.len() <= MAX_SWITCH_SIZE,
                     "Size of switch statement exceeds maximum."
@@ -879,9 +898,7 @@ pub fn validate_module<'a>(
         let mut seen_imports = BTreeSet::new();
         for i in import.imports.iter() {
             match i.description {
-                ImportDescription::Func {
-                    type_idx,
-                } => {
+                ImportDescription::Func { type_idx } => {
                     if let Some(ty) = ty.get(type_idx) {
                         let is_new = seen_imports.insert((&i.mod_name, &i.item_name));
                         ensure!(
@@ -922,15 +939,22 @@ pub fn validate_module<'a>(
     // The code section then needs to match.
     let func: FunctionSection = parse_sec_with_default(EMPTY_CTX, &skeleton.func)?;
     for &type_idx in func.types.iter() {
-        ensure!(ty.get(type_idx).is_some(), "Function refers to a type that does not exist.")
+        ensure!(
+            ty.get(type_idx).is_some(),
+            "Function refers to a type that does not exist."
+        )
     }
 
     // Number of functions that can be referred to.
     // Since all imports must be functions we could just use length, but
     // in the interest of being more robust to changes we count imported functions
     // instead.
-    let total_funcs =
-        import.imports.iter().filter(|&x| Import::is_func(x)).count() + func.types.len();
+    let total_funcs = import
+        .imports
+        .iter()
+        .filter(|&x| Import::is_func(x))
+        .count()
+        + func.types.len();
 
     let code: CodeSkeletonSection = parse_sec_with_default(EMPTY_CTX, &skeleton.code)?;
     ensure!(
@@ -942,9 +966,7 @@ pub fn validate_module<'a>(
         .imports
         .iter()
         .map(|i| match i.description {
-            ImportDescription::Func {
-                type_idx,
-            } => type_idx,
+            ImportDescription::Func { type_idx } => type_idx,
         })
         .chain(func.types.iter().copied())
         .collect::<Vec<TypeIndex>>();
@@ -975,9 +997,7 @@ pub fn validate_module<'a>(
                     ty_idx: f,
                     num_locals,
                     locals: c.locals,
-                    expr: Expression {
-                        instrs: opcodes,
-                    },
+                    expr: Expression { instrs: opcodes },
                 };
                 parsed_code.push(code)
             }
@@ -988,17 +1008,25 @@ pub fn validate_module<'a>(
     // they are all distinct.
     let export: ExportSection = parse_sec_with_default(EMPTY_CTX, &skeleton.export)?;
     let mut export_names = BTreeSet::new();
-    ensure!(export.exports.len() <= MAX_NUM_EXPORTS, "Module exceeds maximum number of exports.");
+    ensure!(
+        export.exports.len() <= MAX_NUM_EXPORTS,
+        "Module exceeds maximum number of exports."
+    );
     for e in export.exports.iter() {
         // ensure the name is unique.
-        ensure!(export_names.insert(&e.name), "Duplicate exports {}.", e.name);
+        ensure!(
+            export_names.insert(&e.name),
+            "Duplicate exports {}.",
+            e.name
+        );
 
         match e.description {
-            ExportDescription::Func {
-                index,
-            } => {
+            ExportDescription::Func { index } => {
                 if let Some(ty) = funcs.get(index as usize).and_then(|ty_idx| ty.get(*ty_idx)) {
-                    ensure!(imp.validate_export_function(&e.name, ty), "Export function not valid.")
+                    ensure!(
+                        imp.validate_export_function(&e.name, ty),
+                        "Export function not valid."
+                    )
                 } else {
                     bail!("Trying to export a function that does not exist.")
                 }
@@ -1015,9 +1043,7 @@ pub fn validate_module<'a>(
                     "Trying to export a memory, but no memory is declared."
                 );
             }
-            ExportDescription::Global {
-                index,
-            } => {
+            ExportDescription::Global { index } => {
                 ensure!(
                     global.get(index).is_some(),
                     "Trying to export a global that does not exist."
@@ -1091,7 +1117,11 @@ pub fn validate_module<'a>(
             ensure!(
                 // by validation we have that memory_type.limits.min <= MAX_INIT_MEMORY_SIZE <
                 // 2^16, so this cannot overflow but we're still being safe
-                memory_type.limits.min.checked_mul(PAGE_SIZE).map_or(false, |l| end <= l),
+                memory_type
+                    .limits
+                    .min
+                    .checked_mul(PAGE_SIZE)
+                    .map_or(false, |l| end <= l),
                 "Initialization expression for the data segment exceeds initial memory size {} > \
                  {}.",
                 end,
@@ -1100,7 +1130,10 @@ pub fn validate_module<'a>(
         }
     } else {
         // There is no memory, so there should be no data section.
-        ensure!(data.sections.is_empty(), "There are data sections, but no declared memory.");
+        ensure!(
+            data.sections.is_empty(),
+            "There are data sections, but no declared memory."
+        );
     }
     Ok(Module {
         ty,
@@ -1112,9 +1145,7 @@ pub fn validate_module<'a>(
         export,
         start,
         element,
-        code: CodeSection {
-            impls: parsed_code,
-        },
+        code: CodeSection { impls: parsed_code },
         data,
     })
 }

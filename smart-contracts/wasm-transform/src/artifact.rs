@@ -34,11 +34,7 @@ impl std::fmt::Debug for StackValue {
 
 impl From<i32> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn from(short: i32) -> Self {
-        Self {
-            short,
-        }
-    }
+    fn from(short: i32) -> Self { Self { short } }
 }
 
 impl From<u32> for StackValue {
@@ -52,32 +48,20 @@ impl From<u32> for StackValue {
 
 impl From<i64> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn from(long: i64) -> Self {
-        Self {
-            long,
-        }
-    }
+    fn from(long: i64) -> Self { Self { long } }
 }
 
 impl From<u64> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn from(long: u64) -> Self {
-        Self {
-            long: long as i64,
-        }
-    }
+    fn from(long: u64) -> Self { Self { long: long as i64 } }
 }
 
 impl From<GlobalInit> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(g: GlobalInit) -> Self {
         match g {
-            GlobalInit::I32(short) => Self {
-                short,
-            },
-            GlobalInit::I64(long) => Self {
-                long,
-            },
+            GlobalInit::I32(short) => Self { short },
+            GlobalInit::I64(long) => Self { long },
         }
     }
 }
@@ -232,9 +216,7 @@ impl ArtifactNamedImport {
 impl TryFromImport for ArtifactNamedImport {
     fn try_from_import(ty: &[FunctionType], import: Import) -> CompileResult<Self> {
         match import.description {
-            ImportDescription::Func {
-                type_idx,
-            } => {
+            ImportDescription::Func { type_idx } => {
                 let ty = ty
                     .get(type_idx as usize)
                     .ok_or_else(|| anyhow!("Unknown type index."))?
@@ -289,7 +271,10 @@ impl<'a> Iterator for LocalsIterator<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remaining_items as usize, Some(self.remaining_items as usize))
+        (
+            self.remaining_items as usize,
+            Some(self.remaining_items as usize),
+        )
     }
 }
 
@@ -414,7 +399,10 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<Im
             memory,
             global,
             export,
-            code: code.into_iter().map(CompiledFunction::from).collect::<Vec<_>>(),
+            code: code
+                .into_iter()
+                .map(CompiledFunction::from)
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -574,15 +562,11 @@ impl Instructions {
 enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
     /// resolve to. This is used in the case of loops.
-    Known {
-        pos: usize,
-    },
+    Known { pos: usize },
     /// We do not yet know where in the instruction sequence we will jump to.
     /// We record the list of places at which we need to back-patch the location
     /// when we get to it.
-    Unknown {
-        backpatch_locations: Vec<usize>,
-    },
+    Unknown { backpatch_locations: Vec<usize> },
 }
 
 impl JumpTarget {
@@ -598,11 +582,7 @@ impl JumpTarget {
         }
     }
 
-    pub fn new_known(pos: usize) -> Self {
-        JumpTarget::Known {
-            pos,
-        }
-    }
+    pub fn new_known(pos: usize) -> Self { JumpTarget::Known { pos } }
 }
 
 #[derive(Default)]
@@ -615,7 +595,9 @@ impl BackPatchStack {
     pub fn push(&mut self, target: JumpTarget) { self.stack.push(target) }
 
     pub fn pop(&mut self) -> CompileResult<JumpTarget> {
-        self.stack.pop().ok_or_else(|| anyhow!("Attempt to pop from an empty stack."))
+        self.stack
+            .pop()
+            .ok_or_else(|| anyhow!("Attempt to pop from an empty stack."))
     }
 
     pub fn get_mut(&mut self, n: LabelIndex) -> CompileResult<&mut JumpTarget> {
@@ -624,7 +606,9 @@ impl BackPatchStack {
             "Attempt to access label beyond the size of the stack."
         );
         let lookup_idx = self.stack.len() - n as usize - 1;
-        self.stack.get_mut(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
+        self.stack
+            .get_mut(lookup_idx)
+            .ok_or_else(|| anyhow!("Attempt to access unknown label."))
     }
 }
 /// An intermediate structure of the instruction sequence plus any pending
@@ -677,9 +661,7 @@ impl BackPatch {
         self.out.push_u32(diff);
         let target = self.backpatch.get_mut(label_idx)?;
         match target {
-            JumpTarget::Known {
-                pos,
-            } => {
+            JumpTarget::Known { pos } => {
                 self.out.push_u32(*pos as u32);
             }
             JumpTarget::Unknown {
@@ -724,14 +706,13 @@ impl Handler<&OpCode> for BackPatch {
             OpCode::Block(_) => {
                 self.backpatch.push(JumpTarget::new_unknown());
             }
-            OpCode::Loop(_) => {
-                self.backpatch.push(JumpTarget::new_known(self.out.current_offset()))
-            }
-            OpCode::If {
-                ..
-            } => {
+            OpCode::Loop(_) => self
+                .backpatch
+                .push(JumpTarget::new_known(self.out.current_offset())),
+            OpCode::If { .. } => {
                 self.out.push(If);
-                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.bytes.len()));
+                self.backpatch
+                    .push(JumpTarget::new_unknown_loc(self.out.bytes.len()));
                 self.out.push_u32(0);
             }
             OpCode::Else => {
@@ -765,10 +746,7 @@ impl Handler<&OpCode> for BackPatch {
             OpCode::BrIf(label_idx) => {
                 self.push_jump(*label_idx, state, stack_height, Some((BrIf, BrIfCarry)))?;
             }
-            OpCode::BrTable {
-                labels,
-                default,
-            } => {
+            OpCode::BrTable { labels, default } => {
                 let target_frame = state
                     .ctrls
                     .get(*default)
@@ -1115,7 +1093,10 @@ impl Handler<&OpCode> for BackPatch {
     }
 
     fn finish(self, _state: &ValidationState) -> CompileResult<Self::Outcome> {
-        ensure!(self.backpatch.stack.is_empty(), "There are still jumps to backpatch.");
+        ensure!(
+            self.backpatch.stack.is_empty(),
+            "There are still jumps to backpatch."
+        );
         Ok(self.out)
     }
 }
@@ -1157,9 +1138,7 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
     fn get_func(&self, idx: FuncIndex) -> CompileResult<&std::rc::Rc<FunctionType>> {
         if (idx as usize) < self.module.import.imports.len() {
             match self.module.import.imports[idx as usize].description {
-                ImportDescription::Func {
-                    type_idx,
-                } => self
+                ImportDescription::Func { type_idx } => self
                     .module
                     .ty
                     .get(type_idx)
@@ -1223,8 +1202,11 @@ impl Module {
                 code,
             };
 
-            let mut exec_code =
-                validate(&context, code.expr.instrs.iter().map(Result::Ok), BackPatch::new())?;
+            let mut exec_code = validate(
+                &context,
+                code.expr.instrs.iter().map(Result::Ok),
+                BackPatch::new(),
+            )?;
             // We add a return instruction at the end so we have an easier time in the
             // interpreter since there is no implicit return.
             exec_code.push(InternalOpcode::Return);
@@ -1242,21 +1224,25 @@ impl Module {
             code_out.push(result)
         }
 
-        let ty = self.ty.types.into_iter().map(|x| (*x).clone()).collect::<Vec<FunctionType>>();
+        let ty = self
+            .ty
+            .types
+            .into_iter()
+            .map(|x| (*x).clone())
+            .collect::<Vec<FunctionType>>();
         let table = {
             if let Some(tt) = self.table.table_type {
                 let mut functions = vec![None; tt.limits.min as usize];
                 for init in self.element.elements.iter() {
                     // validation has already ensured that inits are within bounds.
-                    for (place, value) in
-                        functions[init.offset as usize..].iter_mut().zip(init.inits.iter())
+                    for (place, value) in functions[init.offset as usize..]
+                        .iter_mut()
+                        .zip(init.inits.iter())
                     {
                         *place = Some(*value)
                     }
                 }
-                InstantiatedTable {
-                    functions,
-                }
+                InstantiatedTable { functions }
             } else {
                 InstantiatedTable {
                     functions: Vec::new(),
@@ -1284,17 +1270,19 @@ impl Module {
             }
         };
         let global = InstantiatedGlobals {
-            inits: self.global.globals.iter().map(|x| x.init).collect::<Vec<_>>(),
+            inits: self
+                .global
+                .globals
+                .iter()
+                .map(|x| x.init)
+                .collect::<Vec<_>>(),
         };
         let export = self
             .export
             .exports
             .into_iter()
             .filter_map(|export| {
-                if let ExportDescription::Func {
-                    index,
-                } = export.description
-                {
+                if let ExportDescription::Func { index } = export.description {
                     Some((export.name, index))
                 } else {
                     None

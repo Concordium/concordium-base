@@ -86,10 +86,10 @@ impl std::str::FromStr for InterpreterEnergy {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let energy = s.parse::<u64>().context("Could not parse interpreter energy.")?;
-        Ok(Self {
-            energy,
-        })
+        let energy = s
+            .parse::<u64>()
+            .context("Could not parse interpreter energy.")?;
+        Ok(Self { energy })
     }
 }
 

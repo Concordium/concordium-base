@@ -1,18 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_std::*;
 
-/* This Escrow contract is more a code sample than a real-world contract that
- * someone might want to use in production.
- *
- * The semantics of this contract have been chosen somewhat arbitrarily.
- * The contract utilises an arbitrator account to resolve disputes between
- * a buyer and seller, and that arbitrator gets paid when the contract is
- * completed (either in favour of the buyer or the seller).
- *
- * More advanced, real-world contracts may want to consider the parties
- * requesting to withdraw funds rather than having them pushed to their
- * accounts and so on, in light of best practises from other chains.
- */
+// This Escrow contract is more a code sample than a real-world contract that
+// someone might want to use in production.
+//
+// The semantics of this contract have been chosen somewhat arbitrarily.
+// The contract utilises an arbitrator account to resolve disputes between
+// a buyer and seller, and that arbitrator gets paid when the contract is
+// completed (either in favour of the buyer or the seller).
+//
+// More advanced, real-world contracts may want to consider the parties
+// requesting to withdraw funds rather than having them pushed to their
+// accounts and so on, in light of best practises from other chains.
 
 // Types
 #[derive(Copy, Clone, Serialize, SchemaType)]
@@ -72,7 +71,10 @@ impl From<ParseError> for InitError {
 #[inline(always)]
 fn contract_init(ctx: &impl HasInitContext<()>) -> Result<State, InitError> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
-    ensure!(init_params.buyer != init_params.seller, InitError::SameBuyerSeller);
+    ensure!(
+        init_params.buyer != init_params.seller,
+        InitError::SameBuyerSeller
+    );
     let state = State {
         mode: Mode::AwaitingDeposit,
         init_params,
@@ -131,8 +133,10 @@ fn contract_receive<A: HasActions>(
                 ReceiveError::AcceptDeliveryNotByBuyer
             );
             state.mode = Mode::Done;
-            let release_payment_to_seller =
-                A::simple_transfer(&state.init_params.seller, state.init_params.required_deposit);
+            let release_payment_to_seller = A::simple_transfer(
+                &state.init_params.seller,
+                state.init_params.required_deposit,
+            );
             let pay_arbiter =
                 A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))
@@ -159,8 +163,10 @@ fn contract_receive<A: HasActions>(
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReleaseFundsToSeller)) => {
             state.mode = Mode::Done;
-            let release_payment_to_seller =
-                A::simple_transfer(&state.init_params.seller, state.init_params.required_deposit);
+            let release_payment_to_seller = A::simple_transfer(
+                &state.init_params.seller,
+                state.init_params.required_deposit,
+            );
             let pay_arbiter =
                 A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))

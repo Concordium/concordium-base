@@ -44,10 +44,7 @@ pub enum Interrupt {
 impl Interrupt {
     pub fn to_bytes(&self, out: &mut Vec<u8>) -> anyhow::Result<()> {
         match self {
-            Interrupt::Transfer {
-                to,
-                amount,
-            } => {
+            Interrupt::Transfer { to, amount } => {
                 out.push(0u8);
                 out.write_all(to.as_ref())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
@@ -200,7 +197,10 @@ mod host {
         if usize::from(parameter_len) > constants::MAX_PARAMETER_SIZE {
             return Err(ParseError {});
         }
-        if energy.tick_energy(constants::copy_to_host_cost(parameter_len.into())).is_err() {
+        if energy
+            .tick_energy(constants::copy_to_host_cost(parameter_len.into()))
+            .is_err()
+        {
             return Ok(Err(OutOfEnergy));
         }
         let start = cursor.offset;
@@ -294,11 +294,7 @@ mod host {
                 let amount = Amount {
                     micro_ccd: u64::from_le_bytes(amount_bytes),
                 };
-                Ok(Interrupt::Transfer {
-                    to,
-                    amount,
-                }
-                .into())
+                Ok(Interrupt::Transfer { to, amount }.into())
             }
             CALL_TAG => {
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
@@ -562,8 +558,12 @@ mod host {
         let source_end = source_start + length as usize;
         ensure!(source_end <= memory.len(), "Illegal memory access.");
         let source = &memory[source_start..source_end];
-        let result =
-            state.entry_write(energy, InstanceStateEntry::from(entry_index), source, offset)?;
+        let result = state.entry_write(
+            energy,
+            InstanceStateEntry::from(entry_index),
+            source,
+            offset,
+        )?;
         stack.push_value(result);
         Ok(())
     }
@@ -690,7 +690,10 @@ mod host {
         match (signature, message, public_key) {
             (Ok(signature), Ok(message), Ok(public_key)) => {
                 let verifier = secp256k1::Secp256k1::verification_only();
-                if verifier.verify_ecdsa(&message, &signature, &public_key).is_ok() {
+                if verifier
+                    .verify_ecdsa(&message, &signature, &public_key)
+                    .is_ok()
+                {
                     stack.push_value(1u32);
                 } else {
                     stack.push_value(0u32);
@@ -1081,17 +1084,16 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
         parameter,
         init_ctx,
     };
-    let result = artifact.borrow().run(&mut host, init_name, &[Value::I64(amount as i64)]);
+    let result = artifact
+        .borrow()
+        .run(&mut host, init_name, &[Value::I64(amount as i64)]);
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
     let logs = std::mem::take(&mut host.logs);
     // release lock on the state
     drop(host);
     match result {
-        Ok(ExecutionOutcome::Success {
-            result,
-            ..
-        }) => {
+        Ok(ExecutionOutcome::Success { result, .. }) => {
             // process the return value.
             // - 0 indicates success
             // - positive values are a protocol violation, so they lead to a runtime error
@@ -1115,10 +1117,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
                 bail!("Wasm module should return a value.")
             }
         }
-        Ok(ExecutionOutcome::Interrupted {
-            reason,
-            config: _,
-        }) => match reason {},
+        Ok(ExecutionOutcome::Interrupted { reason, config: _ }) => match reason {},
         Err(error) => {
             if error.downcast_ref::<OutOfEnergy>().is_some() {
                 Ok(InitResult::OutOfEnergy)
@@ -1163,7 +1162,9 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    invoke_init(
+        artifact, amount, init_ctx, init_name, parameter, energy, loader,
+    )
 }
 
 /// Invokes an init-function from Wasm module bytes
@@ -1178,7 +1179,9 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    invoke_init(
+        artifact, amount, init_ctx, init_name, parameter, energy, loader,
+    )
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
@@ -1194,7 +1197,9 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    invoke_init(
+        artifact, amount, init_ctx, init_name, parameter, energy, loader,
+    )
 }
 
 fn process_receive_result<BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(
@@ -1206,10 +1211,7 @@ where
     StateLessReceiveHost<ParameterVec, Ctx2>: From<StateLessReceiveHost<Param, Ctx1>>, {
     let mut stateless = host.stateless;
     match result {
-        Ok(ExecutionOutcome::Success {
-            result,
-            ..
-        }) => {
+        Ok(ExecutionOutcome::Success { result, .. }) => {
             let remaining_energy = host.energy.energy;
             if let Some(Value::I32(n)) = result {
                 if n >= 0 {
@@ -1233,10 +1235,7 @@ where
                 );
             }
         }
-        Ok(ExecutionOutcome::Interrupted {
-            reason,
-            config,
-        }) => {
+        Ok(ExecutionOutcome::Interrupted { reason, config }) => {
             let remaining_energy = host.energy.energy;
             // Logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
@@ -1301,8 +1300,9 @@ pub fn invoke_receive<
         state: instance_state,
     };
 
-    let result =
-        artifact.run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
+    let result = artifact.run(&mut host, receive_name.get_chain_name(), &[Value::I64(
+        amount as i64,
+    )]);
     process_receive_result(artifact, host, result)
 }
 
@@ -1359,10 +1359,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
                 tag << 40
             }
         }
-        InvokeResponse::Failure {
-            code,
-            data,
-        } => {
+        InvokeResponse::Failure { code, data } => {
             // state did not change
             if let Some(data) = data {
                 let len = host.stateless.parameters.len();

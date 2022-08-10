@@ -60,10 +60,7 @@ impl TryFromImport for MeteringImport {
                         parameters: vec![ValueType::I64],
                         result:     None,
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 "track_call" => {
                     let tag = MeteringFunc::TrackCall;
@@ -71,10 +68,7 @@ impl TryFromImport for MeteringImport {
                         parameters: vec![],
                         result:     None,
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 "track_return" => {
                     let tag = MeteringFunc::TrackReturn;
@@ -82,10 +76,7 @@ impl TryFromImport for MeteringImport {
                         parameters: vec![],
                         result:     None,
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 "account_memory" => {
                     let tag = MeteringFunc::ChargeMemoryAlloc;
@@ -93,10 +84,7 @@ impl TryFromImport for MeteringImport {
                         parameters: vec![ValueType::I32],
                         result:     Some(ValueType::I32),
                     };
-                    Ok(MeteringImport {
-                        tag,
-                        ty,
-                    })
+                    Ok(MeteringImport { tag, ty })
                 }
                 name => bail!("Unsupported import {}.", name),
             }
@@ -124,9 +112,10 @@ impl Host<MeteringImport> for MeteringHost {
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            MeteringFunc::ChargeEnergy => {
-                self.energy.tick_energy(unsafe { stack.pop_u64() }).map(|_| None)
-            }
+            MeteringFunc::ChargeEnergy => self
+                .energy
+                .tick_energy(unsafe { stack.pop_u64() })
+                .map(|_| None),
             MeteringFunc::TrackCall => {
                 if let Some(fr) = self.activation_frames.checked_sub(1) {
                     self.activation_frames = fr;
@@ -139,9 +128,10 @@ impl Host<MeteringImport> for MeteringHost {
                 self.activation_frames += 1;
                 Ok(None)
             }
-            MeteringFunc::ChargeMemoryAlloc => {
-                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() }).map(|_| None)
-            }
+            MeteringFunc::ChargeMemoryAlloc => self
+                .energy
+                .charge_memory_alloc(unsafe { stack.peek_u32() })
+                .map(|_| None),
         }
     }
 }
@@ -169,7 +159,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     parse::parse_skeleton(black_box(CONTRACT_BYTES_SIMPLE_GAME)).unwrap();
                 let mut module =
                     validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering().is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -180,7 +173,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let mut module =
                     validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
                 module.inject_metering().unwrap();
-                assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
+                assert!(
+                    module.compile::<ProcessedImports>().is_ok(),
+                    "Compilation failed."
+                )
             })
         });
 
@@ -205,7 +201,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_MINIMAL)).unwrap();
                 let mut module =
                     validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering().is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -215,7 +214,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let mut module =
                     validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
                 module.inject_metering().unwrap();
-                assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
+                assert!(
+                    module.compile::<ProcessedImports>().is_ok(),
+                    "Compilation failed."
+                )
             })
         });
 
@@ -242,7 +244,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_COUNTER)).unwrap();
                 let mut module =
                     validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering().is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -252,7 +257,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let mut module =
                     validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
                 module.inject_metering().unwrap();
-                assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
+                assert!(
+                    module.compile::<ProcessedImports>().is_ok(),
+                    "Compilation failed."
+                )
             })
         });
 
@@ -272,7 +280,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "foo_extern", &[Value::I64(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost, "foo_extern", &[Value::I64(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -287,7 +297,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("allocate n = {} pages", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "foo_extern", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost, "foo_extern", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -300,7 +312,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u32 n = {} times", n / 4), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u32", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost, "write_u32", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -313,7 +327,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u64 n = {} times", n / 8), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u64", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost, "write_u64", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -326,7 +342,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u32", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u32_u8", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost, "write_u32_u8", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -339,7 +357,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u64", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u64_u8", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost, "write_u64_u8", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -382,7 +402,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .run(&mut host, name, args)
                         .expect_err("Precondition violation, did not terminate with an error.");
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>()
+                            .is_some(),
                         "Execution did not fail due to out of energy: {}",
                         r
                     )
@@ -500,7 +521,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let module = {
             let mut module =
                 validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
-            module.inject_metering().expect("Metering injection should succeed.");
+            module
+                .inject_metering()
+                .expect("Metering injection should succeed.");
             module
         };
 
@@ -533,9 +556,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<PolicyBytes<'_>>> {
             InitHost {
-                energy:            InterpreterEnergy {
-                    energy: nrg * 1000,
-                },
+                energy:            InterpreterEnergy { energy: nrg * 1000 },
                 activation_frames: MAX_ACTIVATION_FRAMES,
                 logs:              Logs::new(),
                 state:             State::new(None),
@@ -547,9 +568,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let setup_receive_host =
             |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<PolicyBytes<'_>>> {
                 ReceiveHost {
-                    energy: InterpreterEnergy {
-                        energy: nrg * 1000,
-                    },
+                    energy: InterpreterEnergy { energy: nrg * 1000 },
                     activation_frames: MAX_ACTIVATION_FRAMES,
                     logs: Logs::new(),
                     state,
@@ -564,18 +583,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             // only move the reference to the artifact making this closure copyable.
             let artifact = &artifact;
             move |b: &mut criterion::Bencher| {
-                b.iter( || {
-                let mut host = setup_init_host();
-                let r = artifact
-                    .run(&mut host, name, args)
-                    .expect_err("Execution should fail due to out of energy.");
-                assert!(
-                    r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
-                    "Execution did not fail due to out of energy: {}.",
-                    r
-                );
-                }
-                )
+                b.iter(|| {
+                    let mut host = setup_init_host();
+                    let r = artifact
+                        .run(&mut host, name, args)
+                        .expect_err("Execution should fail due to out of energy.");
+                    assert!(
+                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>()
+                            .is_some(), // Should fail due to out of energy.
+                        "Execution did not fail due to out of energy: {}.",
+                        r
+                    );
+                })
             }
         };
 
@@ -590,11 +609,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .run(&mut host, name, args)
                         .expect_err("Execution should fail due to out of energy.");
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
+                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>()
+                            .is_some(), // Should fail due to out of energy.
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );
-            })
+                })
             }
         };
 
@@ -605,35 +625,49 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.bench_function(
             "get_parameter_size",
-            run_receive(None, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "hostfn.get_parameter_size", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                None,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "hostfn.get_parameter_size",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "get_parameter_section",
-            run_receive(None, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "hostfn.get_parameter_section", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                None,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "hostfn.get_parameter_section",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "state_size",
-            run_receive(Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), &[], "hostfn.state_size", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                &[],
+                "hostfn.state_size",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "load_state",
-            run_receive(Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), &[], "hostfn.load_state", &[
-                Value::I64(0),
-            ]),
+            run_receive(
+                Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                &[],
+                "hostfn.load_state",
+                &[Value::I64(0)],
+            ),
         );
 
         group.bench_function(
             "write_state",
-            run_receive(Some(&[0u8; 1 << 16]), &[], "hostfn.write_state", &[Value::I64(0)]),
+            run_receive(Some(&[0u8; 1 << 16]), &[], "hostfn.write_state", &[
+                Value::I64(0),
+            ]),
         );
 
         group.bench_function(
@@ -646,7 +680,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             run_receive(None, &[], "hostfn.get_slot_time", &[Value::I64(0)]),
         );
 
-        group.bench_function("get_init_origin", run_init("init_get_init_origin", &[Value::I64(0)]));
+        group.bench_function(
+            "get_init_origin",
+            run_init("init_get_init_origin", &[Value::I64(0)]),
+        );
 
         group.bench_function(
             "get_receive_invoker",
@@ -660,7 +697,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.bench_function(
             "get_receive_self_address",
-            run_receive(None, &[], "hostfn.get_receive_self_address", &[Value::I64(0)]),
+            run_receive(None, &[], "hostfn.get_receive_self_address", &[Value::I64(
+                0,
+            )]),
         );
 
         group.bench_function(
@@ -670,17 +709,25 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.bench_function(
             "get_receive_self_balance",
-            run_receive(None, &[], "hostfn.get_receive_self_balance", &[Value::I64(0)]),
+            run_receive(None, &[], "hostfn.get_receive_self_balance", &[Value::I64(
+                0,
+            )]),
         );
 
-        group.bench_function("accept", run_receive(None, &[], "hostfn.accept", &[Value::I64(0)]));
+        group.bench_function(
+            "accept",
+            run_receive(None, &[], "hostfn.accept", &[Value::I64(0)]),
+        );
 
         group.bench_function(
             "simple_transfer",
             run_receive(None, &[], "hostfn.simple_transfer", &[Value::I64(0)]),
         );
 
-        group.bench_function("send", run_receive(None, &[], "hostfn.send", &[Value::I64(0)]));
+        group.bench_function(
+            "send",
+            run_receive(None, &[], "hostfn.send", &[Value::I64(0)]),
+        );
 
         group.bench_function(
             "combine_and",

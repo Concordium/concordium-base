@@ -32,9 +32,7 @@ fn mk_state<A: AsRef<[u8]>, B: Copy>(inputs: &[(A, B)]) -> (MutableState, Loader
 where
     Vec<u8>: From<B>, {
     let mut node = MutableTrie::empty();
-    let mut loader = Loader {
-        inner: Vec::new(),
-    };
+    let mut loader = Loader { inner: Vec::new() };
     for (k, v) in inputs {
         node.insert(&mut loader, k.as_ref(), trie::Value::from(*v))
             .expect("No locks, so cannot fail.");
@@ -54,9 +52,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let nrg = 1000;
 
-    let start_energy = InterpreterEnergy {
-        energy: nrg * 1000,
-    };
+    let start_energy = InterpreterEnergy { energy: nrg * 1000 };
 
     // the throughput is meant to correspond to 1NRG. The reported throughput should
     // be around 1M elements per second.
@@ -67,7 +63,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_HOST_FUNCTIONS)).unwrap();
     let module = {
         let mut module = validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
-        module.inject_metering().expect("Metering injection should succeed.");
+        module
+            .inject_metering()
+            .expect("Metering injection should succeed.");
         module
     };
 
@@ -114,49 +112,51 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
         let receive_ctx = &receive_ctx;
         let args = &args[..];
-        group.bench_function(format!("{} n = {}", name, n), move |b: &mut criterion::Bencher| {
-            b.iter_batched(
-                mk_data,
-                |(mut mutable_state, _, parameters)| {
-                    let mut backing_store = Loader {
-                        inner: Vec::new(),
-                    };
-                    let inner = mutable_state.get_inner(&mut backing_store);
-                    let state = InstanceState::new(0, backing_store, inner);
-                    let mut host = ReceiveHost::<_, Vec<u8>, _> {
-                        energy: start_energy,
-                        stateless: StateLessReceiveHost {
-                            activation_frames: MAX_ACTIVATION_FRAMES,
-                            logs: v0::Logs::new(),
-                            receive_ctx,
-                            return_value: Vec::new(),
-                            parameters,
-                        },
-                        state,
-                    };
-                    let r = artifact
-                        .run(&mut host, name, args)
-                        .expect_err("Execution should fail due to out of energy.");
-                    // Should fail due to out of energy.
-                    assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
-                        "Execution did not fail due to out of energy: {}.",
-                        r
-                    );
-                    let params = std::mem::take(&mut host.stateless.parameters);
-                    // it is not ideal to drop the host here since it might contain iterators and
-                    // entries which do take a bit of time to drop.
-                    drop(host);
-                    // return the state so that its drop is not counted in the benchmark.
-                    (mutable_state, params)
-                },
-                if n <= 10 {
-                    BatchSize::SmallInput
-                } else {
-                    BatchSize::LargeInput
-                },
-            )
-        });
+        group.bench_function(
+            format!("{} n = {}", name, n),
+            move |b: &mut criterion::Bencher| {
+                b.iter_batched(
+                    mk_data,
+                    |(mut mutable_state, _, parameters)| {
+                        let mut backing_store = Loader { inner: Vec::new() };
+                        let inner = mutable_state.get_inner(&mut backing_store);
+                        let state = InstanceState::new(0, backing_store, inner);
+                        let mut host = ReceiveHost::<_, Vec<u8>, _> {
+                            energy: start_energy,
+                            stateless: StateLessReceiveHost {
+                                activation_frames: MAX_ACTIVATION_FRAMES,
+                                logs: v0::Logs::new(),
+                                receive_ctx,
+                                return_value: Vec::new(),
+                                parameters,
+                            },
+                            state,
+                        };
+                        let r = artifact
+                            .run(&mut host, name, args)
+                            .expect_err("Execution should fail due to out of energy.");
+                        // Should fail due to out of energy.
+                        assert!(
+                            r.downcast_ref::<wasm_chain_integration::OutOfEnergy>()
+                                .is_some(),
+                            "Execution did not fail due to out of energy: {}.",
+                            r
+                        );
+                        let params = std::mem::take(&mut host.stateless.parameters);
+                        // it is not ideal to drop the host here since it might contain iterators
+                        // and entries which do take a bit of time to drop.
+                        drop(host);
+                        // return the state so that its drop is not counted in the benchmark.
+                        (mutable_state, params)
+                    },
+                    if n <= 10 {
+                        BatchSize::SmallInput
+                    } else {
+                        BatchSize::LargeInput
+                    },
+                )
+            },
+        );
     };
 
     for n in [0, 2, 10, 20, 40, 50, 100, 1000] {
@@ -364,9 +364,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter_batched(
                 mk_data,
                 |(mut mutable_state, _, parameters)| {
-                    let mut backing_store = Loader {
-                        inner: Vec::new(),
-                    };
+                    let mut backing_store = Loader { inner: Vec::new() };
                     let inner = mutable_state.get_inner(&mut backing_store);
                     let state = InstanceState::new(0, backing_store, inner);
                     let mut host = ReceiveHost::<_, Vec<u8>, _> {
@@ -385,7 +383,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .expect_err("Execution should fail due to out of energy.");
                     // Should fail due to out of energy.
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>()
+                            .is_some(),
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );

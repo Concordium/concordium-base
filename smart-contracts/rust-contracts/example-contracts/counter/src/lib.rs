@@ -42,7 +42,10 @@ fn contract_receive<A: HasActions>(
     state: &mut State,
 ) -> Result<A, ReceiveError> {
     ensure!(amount.micro_ccd > 10, ReceiveError::SmallAmount);
-    ensure!(ctx.sender().matches_account(&ctx.owner()), ReceiveError::OnlyOwner);
+    ensure!(
+        ctx.sender().matches_account(&ctx.owner()),
+        ReceiveError::OnlyOwner
+    );
     logger.log(&(1u8, state.step)).expect("Cannot happen.");
     state.current_count += u32::from(state.step);
     Ok(A::accept())
@@ -54,7 +57,13 @@ fn contract_receive<A: HasActions>(
 ///
 /// While in this particular case this is likely irrelevant, it serves to
 /// demonstrates the pattern.
-#[receive(contract = "counter", name = "receive_optimized", low_level, payable, enable_logger)]
+#[receive(
+    contract = "counter",
+    name = "receive_optimized",
+    low_level,
+    payable,
+    enable_logger
+)]
 fn contract_receive_optimized<A: HasActions>(
     ctx: &impl HasReceiveContext<()>,
     amount: Amount,
@@ -96,7 +105,11 @@ mod tests {
             Err(_) => fail!("Contract initialization failed."),
         };
         claim_eq!(state.current_count, 0);
-        claim_eq!(state.step, 13, "The counting step differs from initial amount (mod 256).");
+        claim_eq!(
+            state.step,
+            13,
+            "The counting step differs from initial amount (mod 256)."
+        );
         // and make sure the correct logs were produced.
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         claim_eq!(&logger.logs[0], &[0, 13], "Incorrect log produced.");
@@ -128,9 +141,17 @@ mod tests {
             Err(_) => fail!("Contract receive failed, but it should not have."),
             Ok(actions) => actions,
         };
-        claim_eq!(actions, ActionsTree::Accept, "Contract receive produced incorrect actions.");
+        claim_eq!(
+            actions,
+            ActionsTree::Accept,
+            "Contract receive produced incorrect actions."
+        );
         claim_eq!(state.step, 1, "Contract receive updated the step.");
-        claim_eq!(state.current_count, 14, "Contract receive did not bump the step.");
+        claim_eq!(
+            state.current_count,
+            14,
+            "Contract receive did not bump the step."
+        );
     }
 
     #[concordium_test]

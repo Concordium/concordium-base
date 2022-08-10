@@ -265,7 +265,10 @@ fn get_u64(bytes: &[u8], pc: &mut usize) -> u64 {
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u8(bytes: &[u8], pos: usize) -> RunResult<u8> {
-    bytes.get(pos).copied().ok_or_else(|| anyhow!("Memory access out of bounds."))
+    bytes
+        .get(pos)
+        .copied()
+        .ok_or_else(|| anyhow!("Memory access out of bounds."))
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -286,7 +289,10 @@ fn read_u32(bytes: &[u8], pos: usize) -> RunResult<u32> {
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i8(bytes: &[u8], pos: usize) -> RunResult<i8> {
-    bytes.get(pos).map(|&x| x as i8).ok_or_else(|| anyhow!("Memory access out of bounds."))
+    bytes
+        .get(pos)
+        .map(|&x| x as i8)
+        .ok_or_else(|| anyhow!("Memory access out of bounds."))
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -402,7 +408,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         let start = *self.get_entrypoint_index(name)?;
         // FIXME: The next restriction could easily be lifted, but it is not a problem
         // for now.
-        ensure!(start as usize >= self.imports.len(), RuntimeError::DirectlyCallImport);
+        ensure!(
+            start as usize >= self.imports.len(),
+            RuntimeError::DirectlyCallImport
+        );
         let instructions_idx = start as usize - self.imports.len();
         let outer_function = &self.code[instructions_idx]; // safe because the artifact should be well-formed.
         let num_args: u32 = args.len().try_into()?;
@@ -423,7 +432,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             )
         }
 
-        let globals = self.global.inits.iter().copied().map(StackValue::from).collect::<Vec<_>>();
+        let globals = self
+            .global
+            .inits
+            .iter()
+            .copied()
+            .map(StackValue::from)
+            .collect::<Vec<_>>();
         let mut stack: RuntimeStack = RuntimeStack {
             stack: Vec::with_capacity(1000),
             pos:   0,
@@ -751,12 +766,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             function_frames.push(current_frame);
                             for ty in f.locals() {
                                 match ty {
-                                    ValueType::I32 => stack.push(StackValue {
-                                        short: 0,
-                                    }),
-                                    ValueType::I64 => stack.push(StackValue {
-                                        long: 0,
-                                    }),
+                                    ValueType::I32 => stack.push(StackValue { short: 0 }),
+                                    ValueType::I64 => stack.push(StackValue { long: 0 }),
                                 }
                             }
                             instructions = f.code();
@@ -932,11 +943,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 InternalOpcode::I32Eqz => {
                     let top = stack.peek_mut();
                     let val = unsafe { top.short };
-                    top.short = if val == 0 {
-                        1i32
-                    } else {
-                        0i32
-                    };
+                    top.short = if val == 0 { 1i32 } else { 0i32 };
                 }
                 InternalOpcode::I32Eq => {
                     binary_i32(&mut stack, |left, right| (left == right) as i32);
@@ -948,34 +955,38 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     binary_i32(&mut stack, |left, right| (left < right) as i32);
                 }
                 InternalOpcode::I32LtU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) < (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| {
+                        ((left as u32) < (right as u32)) as i32
+                    });
                 }
                 InternalOpcode::I32GtS => {
                     binary_i32(&mut stack, |left, right| (left > right) as i32);
                 }
                 InternalOpcode::I32GtU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) > (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| {
+                        ((left as u32) > (right as u32)) as i32
+                    });
                 }
                 InternalOpcode::I32LeS => {
                     binary_i32(&mut stack, |left, right| (left <= right) as i32);
                 }
                 InternalOpcode::I32LeU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) <= (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| {
+                        ((left as u32) <= (right as u32)) as i32
+                    });
                 }
                 InternalOpcode::I32GeS => {
                     binary_i32(&mut stack, |left, right| (left >= right) as i32);
                 }
                 InternalOpcode::I32GeU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) >= (right as u32)) as i32);
+                    binary_i32(&mut stack, |left, right| {
+                        ((left as u32) >= (right as u32)) as i32
+                    });
                 }
                 InternalOpcode::I64Eqz => {
                     let top = stack.peek_mut();
                     let val = unsafe { top.long };
-                    top.short = if val == 0 {
-                        1i32
-                    } else {
-                        0i32
-                    };
+                    top.short = if val == 0 { 1i32 } else { 0i32 };
                 }
                 InternalOpcode::I64Eq => {
                     binary_i64_test(&mut stack, |left, right| (left == right) as i32);

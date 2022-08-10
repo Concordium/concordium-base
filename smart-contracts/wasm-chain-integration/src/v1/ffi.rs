@@ -533,7 +533,9 @@ unsafe extern "C" fn artifact_v1_to_bytes(
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let mut bytes = Vec::new();
-    artifact.output(&mut bytes).expect("Artifact serialization does not fail.");
+    artifact
+        .output(&mut bytes)
+        .expect("Artifact serialization does not fail.");
     bytes.shrink_to_fit();
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
@@ -733,7 +735,9 @@ extern "C" fn deserialize_persistent_state_v1(
 /// Take the byte array and copy it into a vector.
 /// The vector must be passed to Rust to be deallocated.
 extern "C" fn copy_to_vec_ffi(data: *const u8, len: libc::size_t) -> *mut Vec<u8> {
-    Box::into_raw(Box::new(unsafe { std::slice::from_raw_parts(data, len) }.to_vec()))
+    Box::into_raw(Box::new(
+        unsafe { std::slice::from_raw_parts(data, len) }.to_vec(),
+    ))
 }
 
 #[no_mangle]
@@ -774,7 +778,9 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
             for i in 0..len {
                 let data = hasher.finalize_reset();
                 hasher.update(&data);
-                state_lock.insert(&mut loader, &data, i.to_be_bytes().to_vec()).unwrap();
+                state_lock
+                    .insert(&mut loader, &data, i.to_be_bytes().to_vec())
+                    .unwrap();
             }
         }
         Box::new(mutable.freeze(&mut loader, &mut trie::EmptyCollector))

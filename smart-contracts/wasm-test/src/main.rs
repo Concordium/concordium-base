@@ -16,7 +16,11 @@ use wast::{parser, AssertExpression, Expression, Span, Wast, WastExecute};
 struct TestCommand {
     #[structopt(name = "dir", long = "dir", help = "Directory with .wast files")]
     dir:     PathBuf,
-    #[structopt(name = "out", long = "out", help = "Directory where to output .wasm modules")]
+    #[structopt(
+        name = "out",
+        long = "out",
+        help = "Directory where to output .wasm modules"
+    )]
     out_dir: Option<PathBuf>,
 }
 
@@ -44,9 +48,7 @@ impl Host<ArtifactNamedImport> for TrapHost {
         _memory: &mut Vec<u8>,
         _stack: &mut RuntimeStack,
     ) -> RunResult<Option<NoInterrupt>> {
-        bail!(HostCallError {
-            name: f.clone(),
-        })
+        bail!(HostCallError { name: f.clone() })
     }
 }
 
@@ -76,9 +78,7 @@ impl Host<ArtifactNamedImport> for MeteringHost {
             self.energy_left -= 1;
         } else if f.matches("concordium_metering", "account_memory") {
         } else {
-            bail!(HostCallError {
-                name: f.clone(),
-            })
+            bail!(HostCallError { name: f.clone() })
         }
         Ok(None)
     }
@@ -111,7 +111,13 @@ macro_rules! fail_test {
         // The +1 in line is because the line indexing as returned by linecol_in is
         // 0-based, but usually in editors it is 1-based
         bail!(ansi_term::Color::Red
-            .paint(format!("{}: line: {}, column: {}, message: {}", $name, line + 1, col, $message))
+            .paint(format!(
+                "{}: line: {}, column: {}, message: {}",
+                $name,
+                line + 1,
+                col,
+                $message
+            ))
             .to_string())
     }};
     ($b:expr => $span:expr, $name:expr, $input:expr, $message:expr) => {
@@ -168,14 +174,8 @@ fn invoke_update(
     args: &[Value],
 ) -> anyhow::Result<Option<Value>> {
     match artifact.run(&mut TrapHost, name, args)? {
-        ExecutionOutcome::Success {
-            result,
-            ..
-        } => Ok(result),
-        ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        } => match reason {}, // impossible case
+        ExecutionOutcome::Success { result, .. } => Ok(result),
+        ExecutionOutcome::Interrupted { reason, .. } => match reason {}, // impossible case
     }
 }
 
@@ -193,14 +193,8 @@ fn invoke_update_metering(
         args,
     )?;
     match run {
-        ExecutionOutcome::Success {
-            result,
-            ..
-        } => Ok(result),
-        ExecutionOutcome::Interrupted {
-            reason,
-            ..
-        } => match reason {},
+        ExecutionOutcome::Success { result, .. } => Ok(result),
+        ExecutionOutcome::Interrupted { reason, .. } => match reason {},
     }
 }
 
@@ -234,7 +228,10 @@ fn main() -> anyhow::Result<()> {
 
     let print_omitted_msg = |span: Span, input: &str, msg: &str| {
         let (line, col) = span.linecol_in(input);
-        eprintln!("{}", warning_style.paint(format!("{}:{}:{} (Omitted)", line + 1, col, msg)));
+        eprintln!(
+            "{}",
+            warning_style.paint(format!("{}:{}:{} (Omitted)", line + 1, col, msg))
+        );
     };
 
     let mut out_counter = 0;
@@ -299,16 +296,14 @@ fn main() -> anyhow::Result<()> {
                                                         "{}",
                                                         e
                                                     ),
-                                                    ParseError::UnsupportedValueType {
-                                                        byte,
-                                                    } => ensure!(
-                                                        *byte == 0x7D || *byte == 0x7C,
-                                                        "{}",
-                                                        e
-                                                    ),
-                                                    ParseError::UnsupportedImportType {
-                                                        tag,
-                                                    } => {
+                                                    ParseError::UnsupportedValueType { byte } => {
+                                                        ensure!(
+                                                            *byte == 0x7D || *byte == 0x7C,
+                                                            "{}",
+                                                            e
+                                                        )
+                                                    }
+                                                    ParseError::UnsupportedImportType { tag } => {
                                                         ensure!(
                                                             *tag == 0x01
                                                                 || *tag == 0x02
@@ -327,9 +322,7 @@ fn main() -> anyhow::Result<()> {
                                                 e.downcast_ref::<ValidationError>()
                                             {
                                                 match e {
-                                                    ValidationError::TooManyLocals {
-                                                        ..
-                                                    } => {}
+                                                    ValidationError::TooManyLocals { .. } => {}
                                                 }
                                             } else {
                                                 bail!("Module {:?} not valid due to {}.", m.id, e)
@@ -338,9 +331,7 @@ fn main() -> anyhow::Result<()> {
                                     }
                                     print_ok();
                                 }
-                                wast::WastDirective::QuoteModule {
-                                    ..
-                                } => {
+                                wast::WastDirective::QuoteModule { .. } => {
                                     // ignore
                                 }
                                 wast::WastDirective::AssertMalformed {
@@ -390,9 +381,7 @@ fn main() -> anyhow::Result<()> {
                                         message
                                     )
                                 }
-                                wast::WastDirective::Register {
-                                    ..
-                                } => {
+                                wast::WastDirective::Register { .. } => {
                                     // we don't support linking, so registering
                                     // is not useful.
                                 }
@@ -451,9 +440,7 @@ fn main() -> anyhow::Result<()> {
                                             // which we
                                             // do not supported
                                         }
-                                        wast::WastExecute::Get {
-                                            ..
-                                        } => {
+                                        wast::WastExecute::Get { .. } => {
                                             // unsupported
                                         }
                                     }
@@ -574,9 +561,7 @@ fn main() -> anyhow::Result<()> {
                                         print_omitted_msg(span, &input, message);
                                     }
                                 }
-                                wast::WastDirective::AssertUnlinkable {
-                                    ..
-                                } => {
+                                wast::WastDirective::AssertUnlinkable { .. } => {
                                     // skip these since we do not support
                                     // dependencies.
                                 }

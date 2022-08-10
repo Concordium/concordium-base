@@ -383,12 +383,20 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             22 => Ok(ImportFunc::Common(CommonFunc::WriteOutput)),
             23 => Ok(ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin)),
             24 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
-            25 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
-            26 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
+            25 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfAddress,
+            )),
+            26 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfBalance,
+            )),
             27 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             28 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
-            29 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntrypointSize)),
-            30 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveEntryPoint)),
+            29 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveEntrypointSize,
+            )),
+            30 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveEntryPoint,
+            )),
             31 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Invoke)),
             32 => Ok(ImportFunc::Common(CommonFunc::VerifyEd25519)),
             33 => Ok(ImportFunc::Common(CommonFunc::VerifySecp256k1)),
@@ -464,10 +472,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
     ) -> wasm_transform::parse::ParseResult<Self> {
         let tag = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 }
 
@@ -636,17 +641,12 @@ impl TryFromImport for ProcessedImports {
             bail!("Unsupported import module {}.", m)
         };
         let ty = match import.description {
-            wasm_transform::types::ImportDescription::Func {
-                type_idx,
-            } => ctx
+            wasm_transform::types::ImportDescription::Func { type_idx } => ctx
                 .get(type_idx as usize)
                 .ok_or_else(|| anyhow::anyhow!("Unknown type, this should not happen."))?
                 .clone(),
         };
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 
     fn ty(&self) -> &FunctionType { &self.ty }
@@ -715,9 +715,7 @@ pub(crate) struct InstanceStateEntryOption {
 }
 
 impl InstanceStateEntryOption {
-    pub const NEW_NONE: Self = Self {
-        index: u64::MAX,
-    };
+    pub const NEW_NONE: Self = Self { index: u64::MAX };
 
     #[inline]
     /// Construct a new index from a generation and index.
@@ -755,9 +753,7 @@ impl InstanceStateEntryResultOption {
     pub const NEW_ERR: Self = Self {
         index: u64::MAX & !(1u64 << 62), // second bit is 0
     };
-    pub const NEW_OK_NONE: Self = Self {
-        index: u64::MAX,
-    };
+    pub const NEW_OK_NONE: Self = Self { index: u64::MAX };
 
     /// Construct a new index from a generation and index.
     /// This assumes both values are small enough, in particular that idx <=
@@ -801,9 +797,7 @@ impl InstanceStateIteratorResultOption {
     pub const NEW_ERR: Self = Self {
         index: u64::MAX & !(1u64 << 62), // second bit is 0
     };
-    pub const NEW_OK_NONE: Self = Self {
-        index: u64::MAX,
-    };
+    pub const NEW_OK_NONE: Self = Self { index: u64::MAX };
 
     /// Construct a new index from a generation and index.
     /// This assumes both values are small enough, in particular that idx <=
@@ -921,11 +915,20 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// encoding of) [None].
     pub(crate) fn create_entry(&mut self, key: &[u8]) -> StateResult<InstanceStateEntryOption> {
         self.changed = true;
-        ensure!(key.len() <= constants::MAX_KEY_SIZE, "Maximum key length exceeded.");
-        if let Ok(id) = self.state_trie.insert(&mut self.backing_store, key, Vec::new()) {
+        ensure!(
+            key.len() <= constants::MAX_KEY_SIZE,
+            "Maximum key length exceeded."
+        );
+        if let Ok(id) = self
+            .state_trie
+            .insert(&mut self.backing_store, key, Vec::new())
+        {
             let idx = self.entry_mapping.len();
             self.entry_mapping.push(id.0);
-            Ok(InstanceStateEntryOption::new_some(self.current_generation, idx))
+            Ok(InstanceStateEntryOption::new_some(
+                self.current_generation,
+                idx,
+            ))
         } else {
             Ok(InstanceStateEntryOption::NEW_NONE)
         }
@@ -962,7 +965,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         key: &[u8],
     ) -> StateResult<u32> {
         self.changed = true;
-        if let Ok(b) = self.state_trie.delete_prefix(&mut self.backing_store, key, energy)? {
+        if let Ok(b) = self
+            .state_trie
+            .delete_prefix(&mut self.backing_store, key, energy)?
+        {
             if b {
                 Ok(2)
             } else {
@@ -1008,10 +1014,16 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return Ok(InstanceStateEntryResultOption::NEW_ERR);
         }
         if let Some(iter) = self.iterators.get_mut(idx).and_then(Option::as_mut) {
-            if let Some(id) = self.state_trie.next(&mut self.backing_store, iter, energy)? {
+            if let Some(id) = self
+                .state_trie
+                .next(&mut self.backing_store, iter, energy)?
+            {
                 let idx = self.entry_mapping.len();
                 self.entry_mapping.push(id);
-                Ok(InstanceStateEntryResultOption::new_ok_some(self.current_generation, idx))
+                Ok(InstanceStateEntryResultOption::new_ok_some(
+                    self.current_generation,
+                    idx,
+                ))
             } else {
                 Ok(InstanceStateEntryResultOption::NEW_OK_NONE)
             }
@@ -1105,12 +1117,14 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return u32::MAX;
         }
         if let Some(entry) = self.entry_mapping.get(idx) {
-            let res = self.state_trie.with_entry(*entry, &mut self.backing_store, |v| {
-                let offset = std::cmp::min(v.len(), offset as usize);
-                let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
-                dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
-                num_copied as u32
-            });
+            let res = self
+                .state_trie
+                .with_entry(*entry, &mut self.backing_store, |v| {
+                    let offset = std::cmp::min(v.len(), offset as usize);
+                    let num_copied = std::cmp::min(v.len().saturating_sub(offset), dest.len());
+                    dest[0..num_copied].copy_from_slice(&v[offset..offset + num_copied]);
+                    num_copied as u32
+                });
             if let Some(res) = res {
                 res
             } else {
@@ -1137,7 +1151,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return Ok(u32::MAX);
         }
         if let Some(entry) = self.entry_mapping.get(idx) {
-            if let Some(v) = self.state_trie.get_mut(*entry, &mut self.backing_store, energy)? {
+            if let Some(v) = self
+                .state_trie
+                .get_mut(*entry, &mut self.backing_store, energy)?
+            {
                 let offset = offset as usize;
                 if offset <= v.len() {
                     // by state invariants, v.len() <= MAX_ENTRY_SIZE.
@@ -1179,8 +1196,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             return u32::MAX;
         }
         if let Some(entry) = self.entry_mapping.get(idx) {
-            let res =
-                self.state_trie.with_entry(*entry, &mut self.backing_store, |v| v.len() as u32);
+            let res = self
+                .state_trie
+                .with_entry(*entry, &mut self.backing_store, |v| v.len() as u32);
             if let Some(res) = res {
                 res
             } else {
@@ -1215,10 +1233,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
             if let Some(v) = self.state_trie.get_mut(
                 entry,
                 &mut self.backing_store,
-                &mut ResizeAllocateCounter {
-                    new_size,
-                    energy,
-                },
+                &mut ResizeAllocateCounter { new_size, energy },
             )? {
                 let existing_len = v.len();
                 if new_size > existing_len as u64 {
@@ -1264,9 +1279,11 @@ impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
     fn allocate(&mut self, data: &trie::Value) -> Result<(), Self::Err> {
         let existing_size = data.len() as u64;
         if self.new_size > existing_size {
-            self.energy.tick_energy(constants::additional_entry_size_cost(existing_size))
+            self.energy
+                .tick_energy(constants::additional_entry_size_cost(existing_size))
         } else {
-            self.energy.tick_energy(constants::additional_entry_size_cost(self.new_size))
+            self.energy
+                .tick_energy(constants::additional_entry_size_cost(self.new_size))
         }
     }
 }

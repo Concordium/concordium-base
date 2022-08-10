@@ -131,7 +131,10 @@ impl<'a, Ctx, A: Parseable<'a, Ctx>> GetParseable<A, Ctx> for &'a [u8] {
     fn next(self, ctx: Ctx) -> ParseResult<A> {
         let mut cursor = Cursor::new(self);
         let res = A::parse(ctx, &mut cursor)?;
-        ensure!(cursor.position() == self.len() as u64, "Not all of the contents was consumed.");
+        ensure!(
+            cursor.position() == self.len() as u64,
+            "Not all of the contents was consumed."
+        );
         Ok(res)
     }
 }
@@ -256,9 +259,7 @@ impl<'a, Ctx> Parseable<'a, Ctx> for &'a [ValueType] {
         let bytes = &cursor.get_ref()[pos..end];
         for &byte in bytes {
             if ValueType::try_from(byte).is_err() {
-                bail!(ParseError::UnsupportedValueType {
-                    byte
-                })
+                bail!(ParseError::UnsupportedValueType { byte })
             }
         }
         Ok(unsafe { &*(bytes as *const [u8] as *const [ValueType]) })
@@ -271,10 +272,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for UnparsedSection<'a> {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let section_id = cursor.next(ctx)?;
         let bytes = cursor.next(ctx)?;
-        Ok(UnparsedSection {
-            section_id,
-            bytes,
-        })
+        Ok(UnparsedSection { section_id, bytes })
     }
 }
 
@@ -365,9 +363,7 @@ impl<'a, Ctx> Parseable<'a, Ctx> for Name {
         ensure!(name_bytes.len() <= MAX_NAME_SIZE, ParseError::NameTooLong);
         let name = std::str::from_utf8(name_bytes)?.to_string();
         ensure!(name.is_ascii(), ParseError::OnlyASCIINames);
-        Ok(Name {
-            name,
-        })
+        Ok(Name { name })
     }
 }
 
@@ -376,10 +372,7 @@ pub fn parse_custom<'a>(sec: &UnparsedSection<'a>) -> ParseResult<CustomSection<
     let mut cursor = Cursor::new(sec.bytes);
     let name = cursor.next(EMPTY_CTX)?;
     let contents = &sec.bytes[cursor.position() as usize..];
-    Ok(CustomSection {
-        name,
-        contents,
-    })
+    Ok(CustomSection { name, contents })
 }
 
 /// Parse a single byte.
@@ -399,9 +392,7 @@ impl<'a, Ctx> Parseable<'a, Ctx> for ValueType {
         if let Ok(x) = ValueType::try_from(byte) {
             Ok(x)
         } else {
-            bail!(ParseError::UnsupportedValueType {
-                byte
-            })
+            bail!(ParseError::UnsupportedValueType { byte })
         }
     }
 }
@@ -413,15 +404,15 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Limits {
         match Byte::parse(ctx, cursor)? {
             0x00 => {
                 let min = cursor.next(ctx)?;
-                Ok(Limits {
-                    min,
-                    max: None,
-                })
+                Ok(Limits { min, max: None })
             }
             0x01 => {
                 let min = cursor.next(ctx)?;
                 let mmax = cursor.next(ctx)?;
-                ensure!(min <= mmax, "Lower limit must be no greater than the upper limit.");
+                ensure!(
+                    min <= mmax,
+                    "Lower limit must be no greater than the upper limit."
+                );
                 Ok(Limits {
                     min,
                     max: Some(mmax),
@@ -436,7 +427,12 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Limits {
 /// match.
 fn expect_byte(cursor: &mut Cursor<&[u8]>, byte: Byte) -> ParseResult<()> {
     let b = Byte::parse(EMPTY_CTX, cursor)?;
-    ensure!(b == byte, "Unexpected byte {:#04x}. Expected {:#04x}", b, byte);
+    ensure!(
+        b == byte,
+        "Unexpected byte {:#04x}. Expected {:#04x}",
+        b,
+        byte
+    );
     Ok(())
 }
 
@@ -449,10 +445,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionType {
         let result_vec = Vec::<ValueType>::parse(ctx, cursor)?;
         ensure!(result_vec.len() <= 1, ParseError::OnlySingleReturn);
         let result = result_vec.first().copied();
-        Ok(FunctionType {
-            parameters,
-            result,
-        })
+        Ok(FunctionType { parameters, result })
     }
 }
 
@@ -464,10 +457,11 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TableType {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         expect_byte(cursor, 0x70)?;
         let limits = Limits::parse(ctx, cursor)?;
-        ensure!(limits.min <= MAX_INIT_TABLE_SIZE, "Initial table size exceeds allowed limits.");
-        Ok(TableType {
-            limits,
-        })
+        ensure!(
+            limits.min <= MAX_INIT_TABLE_SIZE,
+            "Initial table size exceeds allowed limits."
+        );
+        Ok(TableType { limits })
     }
 }
 
@@ -484,11 +478,12 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for MemoryType {
         );
         match limits.max {
             Some(x) => ensure!(x <= 1 << 16, "Memory limits must be in range 2^16."),
-            None => ensure!(limits.min <= 1 << 16, "Memory limits must be in range 2^16."),
+            None => ensure!(
+                limits.min <= 1 << 16,
+                "Memory limits must be in range 2^16."
+            ),
         }
-        Ok(MemoryType {
-            limits,
-        })
+        Ok(MemoryType { limits })
     }
 }
 
@@ -501,9 +496,7 @@ impl<'a, Ctx, X: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Rc<X> {
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TypeSection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let types = cursor.next(ctx)?;
-        Ok(TypeSection {
-            types,
-        })
+        Ok(TypeSection { types })
     }
 }
 
@@ -512,13 +505,9 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportDescription {
         match Byte::parse(ctx, cursor)? {
             0x00 => {
                 let type_idx = cursor.next(ctx)?;
-                Ok(ImportDescription::Func {
-                    type_idx,
-                })
+                Ok(ImportDescription::Func { type_idx })
             }
-            tag => bail!(ParseError::UnsupportedImportType {
-                tag
-            }),
+            tag => bail!(ParseError::UnsupportedImportType { tag }),
         }
     }
 }
@@ -539,18 +528,14 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Import {
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportSection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let imports = cursor.next(ctx)?;
-        Ok(ImportSection {
-            imports,
-        })
+        Ok(ImportSection { imports })
     }
 }
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionSection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let types = cursor.next(ctx)?;
-        Ok(FunctionSection {
-            types,
-        })
+        Ok(FunctionSection { types })
     }
 }
 
@@ -578,11 +563,17 @@ fn read_constant_expr<'a>(
     let instr = decode_opcode(cursor)?;
     let res = match instr {
         OpCode::I32Const(n) => {
-            ensure!(ty == ValueType::I32, "Constant instruction of type I64, but I32 expected.");
+            ensure!(
+                ty == ValueType::I32,
+                "Constant instruction of type I64, but I32 expected."
+            );
             GlobalInit::I32(n)
         }
         OpCode::I64Const(n) => {
-            ensure!(ty == ValueType::I64, "Constant instruction of type I32, but I64 expected.");
+            ensure!(
+                ty == ValueType::I64,
+                "Constant instruction of type I32, but I64 expected."
+            );
             GlobalInit::I64(n)
         }
         OpCode::GlobalGet(idx) => match globals_allowed {
@@ -614,7 +605,10 @@ fn read_constant_expr<'a>(
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TableSection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let table_type_vec: Vec<TableType> = cursor.next(ctx)?;
-        ensure!(table_type_vec.len() <= 1, "Only table with index 0 is supported.");
+        ensure!(
+            table_type_vec.len() <= 1,
+            "Only table with index 0 is supported."
+        );
         Ok(TableSection {
             table_type: table_type_vec.first().copied(),
         })
@@ -624,7 +618,10 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for TableSection {
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for MemorySection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let memory_types_vec: Vec<MemoryType> = cursor.next(ctx)?;
-        ensure!(memory_types_vec.len() <= 1, "Only memory with index 1 is supported.");
+        ensure!(
+            memory_types_vec.len() <= 1,
+            "Only memory with index 1 is supported."
+        );
         Ok(MemorySection {
             memory_type: memory_types_vec.first().copied(),
         })
@@ -636,9 +633,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ExportDescription {
         match Byte::parse(ctx, cursor)? {
             0x00 => {
                 let index = FuncIndex::parse(ctx, cursor)?;
-                Ok(ExportDescription::Func {
-                    index,
-                })
+                Ok(ExportDescription::Func { index })
             }
             0x01 => {
                 let index = TableIndex::parse(ctx, cursor)?;
@@ -652,9 +647,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ExportDescription {
             }
             0x03 => {
                 let index = GlobalIndex::parse(ctx, cursor)?;
-                Ok(ExportDescription::Global {
-                    index,
-                })
+                Ok(ExportDescription::Global { index })
             }
             byte => bail!("Unsupported export tag {:#04x}.", byte),
         }
@@ -666,29 +659,21 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Export {
         let name: Name = cursor.next(ctx)?;
         let description = cursor.next(ctx)?;
 
-        if let ExportDescription::Func {
-            ..
-        } = description
-        {
+        if let ExportDescription::Func { .. } = description {
             ensure!(
                 name.name.len() <= concordium_contracts_common::constants::MAX_FUNC_NAME_SIZE,
                 ParseError::FuncNameTooLong
             );
         }
 
-        Ok(Export {
-            name,
-            description,
-        })
+        Ok(Export { name, description })
     }
 }
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ExportSection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let exports = cursor.next(ctx)?;
-        Ok(ExportSection {
-            exports,
-        })
+        Ok(ExportSection { exports })
     }
 }
 
@@ -708,10 +693,7 @@ impl<'a> Parseable<'a, &GlobalSection> for Element {
         let offset = read_constant_expr(cursor, ValueType::I32, Some(ctx))?;
         let inits = cursor.next(ctx)?;
         if let GlobalInit::I32(offset) = offset {
-            Ok(Element {
-                offset,
-                inits,
-            })
+            Ok(Element { offset, inits })
         } else {
             bail!("Internal error, parsed a constant of type I32 that is not an I32.");
         }
@@ -721,9 +703,7 @@ impl<'a> Parseable<'a, &GlobalSection> for Element {
 impl<'a> Parseable<'a, &GlobalSection> for ElementSection {
     fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let elements = cursor.next(ctx)?;
-        Ok(ElementSection {
-            elements,
-        })
+        Ok(ElementSection { elements })
     }
 }
 
@@ -737,19 +717,14 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Global {
         };
         // Globals initialization expressions cannot refer to other (in-module) globals.
         let init = read_constant_expr(cursor, ty, None)?;
-        Ok(Global {
-            init,
-            mutable,
-        })
+        Ok(Global { init, mutable })
     }
 }
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for GlobalSection {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let globals = cursor.next(ctx)?;
-        Ok(GlobalSection {
-            globals,
-        })
+        Ok(GlobalSection { globals })
     }
 }
 
@@ -773,10 +748,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for MemArg {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let align = cursor.next(ctx)?;
         let offset = cursor.next(ctx)?;
-        Ok(MemArg {
-            offset,
-            align,
-        })
+        Ok(MemArg { offset, align })
     }
 }
 
@@ -784,10 +756,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Local {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let multiplicity = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
-        Ok(Local {
-            multiplicity,
-            ty,
-        })
+        Ok(Local { multiplicity, ty })
     }
 }
 
@@ -798,10 +767,7 @@ impl<'a> Parseable<'a, &GlobalSection> for Data {
         let offset = read_constant_expr(cursor, ValueType::I32, Some(ctx))?;
         let init = cursor.next(ctx)?;
         if let GlobalInit::I32(offset) = offset {
-            Ok(Data {
-                offset,
-                init,
-            })
+            Ok(Data { offset, init })
         } else {
             bail!("Internal error, a constant expression of type I32 is not an I32");
         }
@@ -811,9 +777,7 @@ impl<'a> Parseable<'a, &GlobalSection> for Data {
 impl<'a> Parseable<'a, &GlobalSection> for DataSection {
     fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let sections = cursor.next(ctx)?;
-        Ok(DataSection {
-            sections,
-        })
+        Ok(DataSection { sections })
     }
 }
 
@@ -829,15 +793,9 @@ pub fn parse_sec_with_default<'a, Ctx, A: Parseable<'a, Ctx> + Default>(
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnsupportedInstruction {
-        opcode: Byte,
-    },
-    UnsupportedValueType {
-        byte: Byte,
-    },
-    UnsupportedImportType {
-        tag: Byte,
-    },
+    UnsupportedInstruction { opcode: Byte },
+    UnsupportedValueType { byte: Byte },
+    UnsupportedImportType { tag: Byte },
     OnlySingleReturn,
     OnlyASCIINames,
     NameTooLong,
@@ -848,15 +806,17 @@ pub enum ParseError {
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseError::UnsupportedInstruction {
-                opcode,
-            } => write!(f, "Unsupported instruction {:#04x}", opcode),
-            ParseError::UnsupportedValueType {
-                byte,
-            } => write!(f, "Unknown value type byte {:#04x}", byte),
-            ParseError::UnsupportedImportType {
-                tag,
-            } => write!(f, "Unsupported import type {:#04x}. Only functions can be imported.", tag),
+            ParseError::UnsupportedInstruction { opcode } => {
+                write!(f, "Unsupported instruction {:#04x}", opcode)
+            }
+            ParseError::UnsupportedValueType { byte } => {
+                write!(f, "Unknown value type byte {:#04x}", byte)
+            }
+            ParseError::UnsupportedImportType { tag } => write!(
+                f,
+                "Unsupported import type {:#04x}. Only functions can be imported.",
+                tag
+            ),
             ParseError::OnlySingleReturn => write!(f, "Only single return value is supported."),
             ParseError::OnlyASCIINames => write!(f, "Only ASCII names are allowed."),
             ParseError::NameTooLong => write!(f, "Names are limited to {} bytes.", MAX_NAME_SIZE),
@@ -888,9 +848,7 @@ pub fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
         }
         0x04 => {
             let ty = cursor.next(EMPTY_CTX)?;
-            Ok(OpCode::If {
-                ty,
-            })
+            Ok(OpCode::If { ty })
         }
         0x05 => Ok(OpCode::Else),
         0x0C => {
@@ -904,10 +862,7 @@ pub fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
         0x0E => {
             let labels = cursor.next(EMPTY_CTX)?;
             let default = cursor.next(EMPTY_CTX)?;
-            Ok(OpCode::BrTable {
-                labels,
-                default,
-            })
+            Ok(OpCode::BrTable { labels, default })
         }
         0x0F => Ok(OpCode::Return),
         0x10 => {
@@ -1104,9 +1059,7 @@ pub fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
 
         0xAC => Ok(OpCode::I64ExtendI32S),
         0xAD => Ok(OpCode::I64ExtendI32U),
-        byte => bail!(ParseError::UnsupportedInstruction {
-            opcode: byte,
-        }),
+        byte => bail!(ParseError::UnsupportedInstruction { opcode: byte }),
     }
 }
 
@@ -1166,18 +1119,13 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CodeSkeleton<'a> {
         );
         let expr_bytes = &cursor.get_ref()[end_pos as usize..(end_pos + remaining) as usize];
         cursor.set_position(end_pos + remaining);
-        Ok(CodeSkeleton {
-            locals,
-            expr_bytes,
-        })
+        Ok(CodeSkeleton { locals, expr_bytes })
     }
 }
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CodeSkeletonSection<'a> {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let impls = cursor.next(ctx)?;
-        Ok(CodeSkeletonSection {
-            impls,
-        })
+        Ok(CodeSkeletonSection { impls })
     }
 }

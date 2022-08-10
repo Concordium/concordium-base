@@ -1,13 +1,19 @@
-/**
-Notes on the tests:
-- Note: that the tests currently do not cover all instructions: for instructions that are handled identically by the transformation, only representatives are used.
-- Not all test expressions might actually be valid Wasm; But for testing the accounting transformation this should not hurt and it can still be a useful test.
-
-For further tests:
-- Do some randomized tests, embedding chunks with known transformation results into each other / sequencing them will give more assurance.
-- We should also have tests running the generated code and testing for semantical equivalence (apart from the semantical changes accounting introduces).
-- Another way of testing is transforming and running programs and asserting the expected total energy accounted.
-*/
+/// Notes on the tests:
+/// - Note: that the tests currently do not cover all instructions: for
+///   instructions that are handled identically by the transformation, only
+///   representatives are used.
+/// - Not all test expressions might actually be valid Wasm; But for testing the
+///   accounting transformation this should not hurt and it can still be a
+///   useful test.
+///
+/// For further tests:
+/// - Do some randomized tests, embedding chunks with known transformation
+///   results into each other / sequencing them will give more assurance.
+/// - We should also have tests running the generated code and testing for
+///   semantical equivalence (apart from the semantical changes accounting
+///   introduces).
+/// - Another way of testing is transforming and running programs and asserting
+///   the expected total energy accounted.
 use crate::types::*;
 use std::rc::Rc;
 
@@ -81,32 +87,14 @@ impl HasTransformationContext for TransformationContext {
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
         self.types
             .get(idx as usize)
-            .map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+            .map(|ty| (ty.parameters.len(), if ty.result.is_some() { 1 } else { 0 }))
             .ok_or_else(|| anyhow::anyhow!("Type with index {} not found.", idx))
     }
 
     fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
         self.funcs
             .get(idx as usize)
-            .map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+            .map(|ty| (ty.parameters.len(), if ty.result.is_some() { 1 } else { 0 }))
             .ok_or_else(|| anyhow::anyhow!("Function with index {} not found.", idx))
     }
 }
@@ -141,14 +129,15 @@ fn test_body_ctx(
     let f = Code {
         locals:     mk_locals(&[I32, I64]),
         ty_idx:     0,
-        /* For testing the transformation of the body, we always use these exemplary locals. */
-        expr:       Expression {
-            instrs: body_orig,
-        },
+        // For testing the transformation of the body, we always use these exemplary locals.
+        expr:       Expression { instrs: body_orig },
         ty:         Rc::new(ty),
         num_locals: 2,
     };
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, body_expect);
+    assert_eq!(
+        inject_accounting(&f, &ctx).unwrap().expr.instrs,
+        body_expect
+    );
 }
 
 // Tests with different locals
@@ -173,9 +162,7 @@ fn test_locals_2() {
     let f = Code {
         locals:     mk_locals(&[I32, I64]),
         ty_idx:     0,
-        expr:       Expression {
-            instrs: vec![End],
-        },
+        expr:       Expression { instrs: vec![End] },
         ty:         Rc::new(FunctionType::empty()),
         num_locals: 2,
     };
@@ -202,31 +189,52 @@ fn test_locals_3() {
 
 #[test]
 fn test_empty() {
-    test_body(FunctionType::empty(), vec![End], flatten![energy!(ENTRY), stack!(S), stack!(-S), [
-        End
-    ]])
-}
-
-#[test]
-fn test_simple_1() {
-    test_body(FunctionType::empty(), vec![I64Const(1234567890), End], flatten![
-        energy!(ENTRY + CONST),
+    test_body(FunctionType::empty(), vec![End], flatten![
+        energy!(ENTRY),
         stack!(S),
-        [I64Const(1234567890)],
         stack!(-S),
         [End]
     ])
 }
 
 #[test]
+fn test_simple_1() {
+    test_body(
+        FunctionType::empty(),
+        vec![I64Const(1234567890), End],
+        flatten![
+            energy!(ENTRY + CONST),
+            stack!(S),
+            [I64Const(1234567890)],
+            stack!(-S),
+            [End]
+        ],
+    )
+}
+
+#[test]
 fn test_num_1() {
     test_body(
         FunctionType::empty(),
-        vec![I64Const(1234567890), I32Const(43), I32Const(50), I32DivS, I32WrapI64, I64Sub],
+        vec![
+            I64Const(1234567890),
+            I32Const(43),
+            I32Const(50),
+            I32DivS,
+            I32WrapI64,
+            I64Sub,
+        ],
         flatten![
             energy!(ENTRY + 3 * CONST + SIMPLE_UNOP + SIMPLE_BINOP + DIV),
             stack!(S),
-            [I64Const(1234567890), I32Const(43), I32Const(50), I32DivS, I32WrapI64, I64Sub],
+            [
+                I64Const(1234567890),
+                I32Const(43),
+                I32Const(50),
+                I32DivS,
+                I32WrapI64,
+                I64Sub
+            ],
             stack!(-S)
         ],
     )
@@ -251,11 +259,26 @@ fn test_num_2() {
 fn test_num_3() {
     test_body(
         FunctionType::empty(),
-        vec![I64Const(1234567890), I64Const(0), I64Const(1), I64Const(2), I64Mul, I64Mul, End],
+        vec![
+            I64Const(1234567890),
+            I64Const(0),
+            I64Const(1),
+            I64Const(2),
+            I64Mul,
+            I64Mul,
+            End,
+        ],
         flatten![
             energy!(ENTRY + 4 * CONST + 2 * MUL),
             stack!(S),
-            [I64Const(1234567890), I64Const(0), I64Const(1), I64Const(2), I64Mul, I64Mul],
+            [
+                I64Const(1234567890),
+                I64Const(0),
+                I64Const(1),
+                I64Const(2),
+                I64Mul,
+                I64Mul
+            ],
             stack!(-S),
             [End]
         ],
@@ -266,7 +289,14 @@ fn test_num_3() {
 fn test_return() {
     test_body(
         FunctionType::empty(),
-        vec![I32Const(10), I32Const(20), I32Add, Return, I32Const(30), End],
+        vec![
+            I32Const(10),
+            I32Const(20),
+            I32Add,
+            Return,
+            I32Const(30),
+            End,
+        ],
         flatten![
             energy!(ENTRY + 2 * CONST + SIMPLE_BINOP + branch(0)),
             stack!(S),
@@ -292,7 +322,14 @@ fn test_call() {
             }],
         },
         FunctionType::empty(),
-        vec![I32Const(10), I32Const(20), Call(0), I32Const(40), I32Sub, End],
+        vec![
+            I32Const(10),
+            I32Const(20),
+            Call(0),
+            I32Const(40),
+            I32Sub,
+            End,
+        ],
         flatten![
             energy!(ENTRY + 2 * CONST + invoke_before(2, 1)),
             stack!(S),
@@ -328,7 +365,15 @@ fn test_call_indirect() {
             funcs: vec![],
         },
         FunctionType::empty(),
-        vec![I32Const(10), I32Const(20), I32Const(0), CallIndirect(1), I32Const(40), I32Sub, End],
+        vec![
+            I32Const(10),
+            I32Const(20),
+            I32Const(0),
+            CallIndirect(1),
+            I32Const(40),
+            I32Sub,
+            End,
+        ],
         flatten![
             energy!(ENTRY + 3 * CONST + call_indirect(2, 1)),
             stack!(S),
@@ -362,7 +407,13 @@ fn test_unreachable_1() {
 fn test_unreachable_2() {
     test_body(
         FunctionType::empty(),
-        vec![I32Const(10), I32Const(20), I32Add, Unreachable, I32Const(30)],
+        vec![
+            I32Const(10),
+            I32Const(20),
+            I32Add,
+            Unreachable,
+            I32Const(30),
+        ],
         flatten![
             energy!(ENTRY + 2 * CONST + SIMPLE_BINOP),
             stack!(S),
@@ -377,12 +428,16 @@ fn test_unreachable_2() {
 
 #[test]
 fn test_block_empty() {
-    test_body(FunctionType::empty(), vec![Block(EmptyType), End], flatten![
-        energy!(ENTRY),
-        stack!(S),
-        [Block(EmptyType), End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Block(EmptyType), End],
+        flatten![
+            energy!(ENTRY),
+            stack!(S),
+            [Block(EmptyType), End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
@@ -397,47 +452,63 @@ fn test_loop_empty() {
 
 #[test]
 fn test_block_simple() {
-    test_body(FunctionType::empty(), vec![Block(BlockValue(I64)), I64Const(0), End, End], flatten![
-        energy!(ENTRY + CONST),
-        stack!(S),
-        [Block(BlockValue(I64)), I64Const(0), End],
-        stack!(-S),
-        [End]
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Block(BlockValue(I64)), I64Const(0), End, End],
+        flatten![
+            energy!(ENTRY + CONST),
+            stack!(S),
+            [Block(BlockValue(I64)), I64Const(0), End],
+            stack!(-S),
+            [End]
+        ],
+    )
 }
 
 #[test]
 fn test_loop_simple() {
-    test_body(FunctionType::empty(), vec![Loop(BlockValue(I64)), I64Const(0), End], flatten![
-        energy!(ENTRY),
-        stack!(S),
-        [Loop(BlockValue(I64))],
-        energy!(CONST),
-        [I64Const(0), End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Loop(BlockValue(I64)), I64Const(0), End],
+        flatten![
+            energy!(ENTRY),
+            stack!(S),
+            [Loop(BlockValue(I64))],
+            energy!(CONST),
+            [I64Const(0), End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
 fn test_block_branch() {
-    test_body(FunctionType::empty(), vec![Block(EmptyType), Br(0), End], flatten![
-        energy!(ENTRY + branch(0)),
-        stack!(S),
-        [Block(EmptyType), Br(0), End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Block(EmptyType), Br(0), End],
+        flatten![
+            energy!(ENTRY + branch(0)),
+            stack!(S),
+            [Block(EmptyType), Br(0), End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
 fn test_loop_branch() {
-    test_body(FunctionType::empty(), vec![Loop(EmptyType), Br(0), End], flatten![
-        energy!(ENTRY),
-        stack!(S),
-        [Loop(EmptyType)],
-        energy!(branch(0)),
-        [Br(0), End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Loop(EmptyType), Br(0), End],
+        flatten![
+            energy!(ENTRY),
+            stack!(S),
+            [Loop(EmptyType)],
+            energy!(branch(0)),
+            [Br(0), End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
@@ -480,13 +551,10 @@ fn test_block_br_if() {
             energy!(ENTRY + CONST + BR_IF),
             stack!(S),
             [Block(EmptyType)],
-            flatten![
-                [I32Const(9), If {
-                    ty: EmptyType,
-                }],
-                energy!(branch(0)),
-                [Br(1), End]
-            ],
+            flatten![[I32Const(9), If { ty: EmptyType }], energy!(branch(0)), [
+                Br(1),
+                End
+            ]],
             [End],
             stack!(-S),
             [End]
@@ -508,7 +576,13 @@ fn br_if_substitute(label: LabelIndex) -> Vec<OpCode> {
 fn test_typed_block_br_if() {
     test_body(
         FunctionType::empty(),
-        vec![Block(BlockValue(I32)), I32Const(1), I32Const(1), BrIf(0), End],
+        vec![
+            Block(BlockValue(I32)),
+            I32Const(1),
+            I32Const(1),
+            BrIf(0),
+            End,
+        ],
         flatten![
             energy!(ENTRY + CONST * 2 + BR_IF),
             stack!(S),
@@ -538,7 +612,12 @@ fn test_typed_outer_block_br_if() {
         flatten![
             energy!(ENTRY + CONST * 2 + BR_IF),
             stack!(S),
-            [Block(BlockValue(I32)), Block(EmptyType), I32Const(1), I32Const(2)],
+            [
+                Block(BlockValue(I32)),
+                Block(EmptyType),
+                I32Const(1),
+                I32Const(2)
+            ],
             br_if_substitute(1),
             energy!(DROP),
             [Drop, End],
@@ -551,25 +630,34 @@ fn test_typed_outer_block_br_if() {
 
 #[test]
 fn test_loop_br_if() {
-    test_body(FunctionType::empty(), vec![Loop(EmptyType), I32Const(9), BrIf(0), End], flatten![
-        energy!(ENTRY),
-        stack!(S),
-        [Loop(EmptyType)],
-        energy!(CONST + BR_IF),
-        [I32Const(9), If {
-            ty: EmptyType,
-        }],
-        energy!(branch(0)),
-        [Br(1), End, End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Loop(EmptyType), I32Const(9), BrIf(0), End],
+        flatten![
+            energy!(ENTRY),
+            stack!(S),
+            [Loop(EmptyType)],
+            energy!(CONST + BR_IF),
+            [I32Const(9), If { ty: EmptyType }],
+            energy!(branch(0)),
+            [Br(1), End, End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
 fn test_block_br_if_2() {
     test_body(
         FunctionType::empty(),
-        vec![Block(BlockValue(I64)), I64Const(5), I32Const(9), BrIf(0), I64Const(5), End],
+        vec![
+            Block(BlockValue(I64)),
+            I64Const(5),
+            I32Const(9),
+            BrIf(0),
+            I64Const(5),
+            End,
+        ],
         flatten![
             energy!(ENTRY + 2 * CONST + BR_IF),
             stack!(S),
@@ -586,16 +674,22 @@ fn test_block_br_if_2() {
 fn test_loop_br_if_2() {
     test_body(
         FunctionType::empty(),
-        vec![Loop(BlockValue(I64)), I64Const(5), I32Const(9), BrIf(0), End, I64Const(5), End],
+        vec![
+            Loop(BlockValue(I64)),
+            I64Const(5),
+            I32Const(9),
+            BrIf(0),
+            End,
+            I64Const(5),
+            End,
+        ],
         flatten![
             energy!(ENTRY),
             stack!(S),
             [Loop(BlockValue(I64))],
             flatten![
                 energy!(2 * CONST + BR_IF),
-                [I64Const(5), I32Const(9), If {
-                    ty: EmptyType,
-                }],
+                [I64Const(5), I32Const(9), If { ty: EmptyType }],
                 energy!(branch(0)), // The loop has 0 arguments
                 [Br(1), End, End],
                 energy!(CONST),
@@ -608,33 +702,53 @@ fn test_loop_br_if_2() {
 
 #[test]
 fn test_block_nested() {
-    test_body(FunctionType::empty(), vec![Block(EmptyType), Block(EmptyType), End, End], flatten![
-        energy!(ENTRY),
-        stack!(S),
-        [Block(EmptyType), Block(EmptyType), End, End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Block(EmptyType), Block(EmptyType), End, End],
+        flatten![
+            energy!(ENTRY),
+            stack!(S),
+            [Block(EmptyType), Block(EmptyType), End, End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
 fn test_loop_nested() {
-    test_body(FunctionType::empty(), vec![Loop(EmptyType), Loop(EmptyType), End, End], flatten![
-        energy!(ENTRY),
-        stack!(S),
-        [Loop(EmptyType), Loop(EmptyType), End, End],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![Loop(EmptyType), Loop(EmptyType), End, End],
+        flatten![
+            energy!(ENTRY),
+            stack!(S),
+            [Loop(EmptyType), Loop(EmptyType), End, End],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
 fn test_block_nested_2() {
     test_body(
         FunctionType::empty(),
-        vec![Block(BlockValue(I64)), Block(BlockValue(I64)), I64Const(4), End, End],
+        vec![
+            Block(BlockValue(I64)),
+            Block(BlockValue(I64)),
+            I64Const(4),
+            End,
+            End,
+        ],
         flatten![
             energy!(ENTRY + CONST),
             stack!(S),
-            [Block(BlockValue(I64)), Block(BlockValue(I64)), I64Const(4), End, End],
+            [
+                Block(BlockValue(I64)),
+                Block(BlockValue(I64)),
+                I64Const(4),
+                End,
+                End
+            ],
             stack!(-S)
         ],
     )
@@ -744,11 +858,23 @@ fn test_block_nested_branch_table_2() {
 fn test_block_nested_branch_l0() {
     test_body(
         FunctionType::empty(),
-        vec![Block(BlockValue(I64)), Block(BlockValue(I32)), Br(0), End, End],
+        vec![
+            Block(BlockValue(I64)),
+            Block(BlockValue(I32)),
+            Br(0),
+            End,
+            End,
+        ],
         flatten![
             energy!(ENTRY + branch(1)),
             stack!(S),
-            [Block(BlockValue(I64)), Block(BlockValue(I32)), Br(0), End, End],
+            [
+                Block(BlockValue(I64)),
+                Block(BlockValue(I32)),
+                Br(0),
+                End,
+                End
+            ],
             stack!(-S)
         ],
     )
@@ -772,7 +898,13 @@ fn test_block_nested_branch_l1() {
 fn test_loop_nested_branch_l0() {
     test_body(
         FunctionType::empty(),
-        vec![Loop(BlockValue(I64)), Loop(BlockValue(I32)), Br(0), End, End],
+        vec![
+            Loop(BlockValue(I64)),
+            Loop(BlockValue(I32)),
+            Br(0),
+            End,
+            End,
+        ],
         flatten![
             energy!(ENTRY),
             stack!(S),
@@ -788,7 +920,13 @@ fn test_loop_nested_branch_l0() {
 fn test_loop_nested_branch_l1() {
     test_body(
         FunctionType::empty(),
-        vec![Loop(BlockValue(I64)), Loop(BlockValue(I32)), Br(1), End, End],
+        vec![
+            Loop(BlockValue(I64)),
+            Loop(BlockValue(I32)),
+            Br(1),
+            End,
+            End,
+        ],
         flatten![
             energy!(ENTRY),
             stack!(S),
@@ -804,22 +942,11 @@ fn test_loop_nested_branch_l1() {
 fn test_if_1() {
     test_body(
         FunctionType::empty(),
-        vec![
-            If {
-                ty: EmptyType,
-            },
-            Nop,
-            Else,
-            Nop,
-            Nop,
-            End,
-        ],
+        vec![If { ty: EmptyType }, Nop, Else, Nop, Nop, End],
         flatten![
             energy!(ENTRY + IF_STATEMENT),
             stack!(S),
-            [If {
-                ty: EmptyType,
-            }],
+            [If { ty: EmptyType }],
             energy!(NOP),
             [Nop, Else],
             energy!(2 * NOP),
@@ -834,13 +961,9 @@ fn test_if_2() {
     test_body(
         FunctionType::empty(),
         vec![
-            If {
-                ty: EmptyType,
-            },
+            If { ty: EmptyType },
             Nop,
-            If {
-                ty: EmptyType,
-            },
+            If { ty: EmptyType },
             Nop,
             Else,
             Nop,
@@ -851,14 +974,10 @@ fn test_if_2() {
         flatten![
             energy!(ENTRY + IF_STATEMENT),
             stack!(S),
-            [If {
-                ty: EmptyType,
-            }],
+            [If { ty: EmptyType }],
             energy!(NOP + IF_STATEMENT),
             [Nop],
-            [If {
-                ty: EmptyType,
-            }],
+            [If { ty: EmptyType }],
             energy!(NOP),
             [Nop, Else],
             energy!(2 * NOP),
@@ -880,9 +999,7 @@ fn test_if_branch_0() {
             Br(0),
             Else,
             I64Const(7),
-            If {
-                ty: EmptyType,
-            },
+            If { ty: EmptyType },
             Br(0),
             Else,
             Nop,
@@ -899,9 +1016,7 @@ fn test_if_branch_0() {
             energy!(CONST + branch(1)),
             [I64Const(9), Br(0), Else],
             energy!(CONST + IF_STATEMENT),
-            [I64Const(7), If {
-                ty: EmptyType,
-            }],
+            [I64Const(7), If { ty: EmptyType }],
             energy!(branch(0)),
             [Br(0), Else],
             energy!(NOP + branch(0)),
@@ -923,9 +1038,7 @@ fn test_if_branch_1() {
             Br(0),
             Else,
             I64Const(7),
-            If {
-                ty: EmptyType,
-            },
+            If { ty: EmptyType },
             Br(1),
             Else,
             Nop,
@@ -943,9 +1056,7 @@ fn test_if_branch_1() {
             energy!(CONST + branch(1)),
             [I64Const(9), Br(0), Else],
             energy!(CONST + IF_STATEMENT),
-            [I64Const(7), If {
-                ty: EmptyType,
-            }],
+            [I64Const(7), If { ty: EmptyType }],
             energy!(branch(1)),
             [Br(1), Else],
             energy!(NOP + branch(1)),
@@ -958,12 +1069,16 @@ fn test_if_branch_1() {
 
 #[test]
 fn test_drop() {
-    test_body(FunctionType::empty(), vec![I32Const(10), I64Const(20), Drop, Drop], flatten![
-        energy!(ENTRY + 2 * CONST + 2 * DROP),
-        stack!(S),
-        [I32Const(10), I64Const(20), Drop, Drop],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![I32Const(10), I64Const(20), Drop, Drop],
+        flatten![
+            energy!(ENTRY + 2 * CONST + 2 * DROP),
+            stack!(S),
+            [I32Const(10), I64Const(20), Drop, Drop],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
@@ -996,22 +1111,30 @@ fn test_local_get_set_1() {
 
 #[test]
 fn test_local_get_set_2() {
-    test_body(FunctionType::empty(), vec![I64Const(20), LocalSet(0)], flatten![
-        energy!(ENTRY + CONST + SET_LOCAL),
-        stack!(S),
-        [I64Const(20), LocalSet(0)],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![I64Const(20), LocalSet(0)],
+        flatten![
+            energy!(ENTRY + CONST + SET_LOCAL),
+            stack!(S),
+            [I64Const(20), LocalSet(0)],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
 fn test_local_tee() {
-    test_body(FunctionType::empty(), vec![I64Const(20), LocalTee(0), LocalTee(1)], flatten![
-        energy!(ENTRY + CONST + 2 * TEE_LOCAL),
-        stack!(S),
-        [I64Const(20), LocalTee(0), LocalTee(1)],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![I64Const(20), LocalTee(0), LocalTee(1)],
+        flatten![
+            energy!(ENTRY + CONST + 2 * TEE_LOCAL),
+            stack!(S),
+            [I64Const(20), LocalTee(0), LocalTee(1)],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]
@@ -1030,12 +1153,16 @@ fn test_global_get_set_1() {
 
 #[test]
 fn test_global_get_set_2() {
-    test_body(FunctionType::empty(), vec![I64Const(20), GlobalSet(0)], flatten![
-        energy!(ENTRY + CONST + SET_GLOBAL),
-        stack!(S),
-        [I64Const(20), GlobalSet(0)],
-        stack!(-S)
-    ])
+    test_body(
+        FunctionType::empty(),
+        vec![I64Const(20), GlobalSet(0)],
+        flatten![
+            energy!(ENTRY + CONST + SET_GLOBAL),
+            stack!(S),
+            [I64Const(20), GlobalSet(0)],
+            stack!(-S)
+        ],
+    )
 }
 
 #[test]

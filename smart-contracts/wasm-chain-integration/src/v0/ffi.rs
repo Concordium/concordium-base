@@ -26,9 +26,11 @@ unsafe extern "C" fn call_init_v0(
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
-        let init_ctx =
-            deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len as usize))
-                .expect("Precondition violation: invalid init ctx given by host.");
+        let init_ctx = deserial_init_context(slice_from_c_bytes!(
+            init_ctx_bytes,
+            init_ctx_bytes_len as usize
+        ))
+        .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
@@ -203,7 +205,9 @@ unsafe extern "C" fn artifact_v0_to_bytes(
 ) -> *mut u8 {
     let artifact = Arc::from_raw(artifact_ptr);
     let mut bytes = Vec::new();
-    artifact.output(&mut bytes).expect("Artifact serialization does not fail.");
+    artifact
+        .output(&mut bytes)
+        .expect("Artifact serialization does not fail.");
     bytes.shrink_to_fit();
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();

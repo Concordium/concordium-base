@@ -25,12 +25,16 @@ fn compare_to_reference(
     loader: &mut Loader<Vec<u8>>,
     reference: &BTreeMap<Vec<u8>, Value>,
 ) -> anyhow::Result<()> {
-    let mut iterator = if let Some(i) =
-        trie.iter(loader, &[]).expect("This is the first iterator, so no overflow.")
+    let mut iterator = if let Some(i) = trie
+        .iter(loader, &[])
+        .expect("This is the first iterator, so no overflow.")
     {
         i
     } else {
-        ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+        ensure!(
+            reference.is_empty(),
+            "Reference map is empty, but trie is not."
+        );
         return Ok(());
     };
     for (k, v) in reference.iter() {
@@ -39,7 +43,8 @@ fn compare_to_reference(
             .expect("Empty counter does not fail.")
             .context("Trie iterator ends early.")?;
         ensure!(
-            trie.with_entry(entry, loader, |ev| v == ev).unwrap_or(false),
+            trie.with_entry(entry, loader, |ev| v == ev)
+                .unwrap_or(false),
             "Reference value does not match the trie value."
         );
         let it_key = iterator.get_key();
@@ -73,14 +78,18 @@ fn prop_delete_freeze_lookup() {
         let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         // then thaw it. This makes the tree persistent, and only the root mutable.
         let mut thawed = frozen.make_mutable(0, &mut loader);
         // then delete from the thawed tree
-        let existed =
-            thawed.delete(&mut loader, &key).expect("No iterators, so no part should be locked.");
+        let existed = thawed
+            .delete(&mut loader, &key)
+            .expect("No iterators, so no part should be locked.");
         let existed_reference = reference.remove(&key);
         ensure!(
             existed == existed_reference.is_some(),
@@ -92,14 +101,19 @@ fn prop_delete_freeze_lookup() {
         let frozen = if let Some(t) = thawed.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         // and then make sure the frozen tree matches the (updated) reference.
         let mut trie = frozen.make_mutable(0, &mut loader);
         compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -114,7 +128,10 @@ fn prop_insert_freeze_lookup() {
         let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         // then thaw it. This makes the tree persistent, and only the root mutable.
@@ -134,14 +151,19 @@ fn prop_insert_freeze_lookup() {
         let frozen = if let Some(t) = thawed.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         // and then make sure the frozen tree matches the (updated) reference.
         let mut trie = frozen.make_mutable(0, &mut loader);
         compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -153,15 +175,23 @@ fn prop_storing_caches() {
         let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         let mut ser = Vec::new();
         let _ = frozen.store_update(&mut ser);
-        ensure!(frozen.get(&mut loader).data.is_cached(), "Not all data is stored.");
+        ensure!(
+            frozen.get(&mut loader).data.is_cached(),
+            "Not all data is stored."
+        );
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -185,12 +215,19 @@ fn prop_storing() {
             );
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         let mut backing_store = Vec::new();
-        let top = frozen.store_update(&mut backing_store).expect("Storing succeeds.");
-        let root = backing_store.store_raw(&top).expect("Storing to a vector succeeds.");
+        let top = frozen
+            .store_update(&mut backing_store)
+            .expect("Storing succeeds.");
+        let root = backing_store
+            .store_raw(&top)
+            .expect("Storing to a vector succeeds.");
         let mut loader = Loader {
             inner: backing_store,
         };
@@ -230,7 +267,9 @@ fn prop_storing() {
 
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -242,18 +281,25 @@ fn prop_serialization() {
         let frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         let mut out = Vec::new();
         let node = frozen.get(&mut loader);
-        node.serialize(&mut loader, &mut out).context("Serialization failed.")?;
+        node.serialize(&mut loader, &mut out)
+            .context("Serialization failed.")?;
         let original_hash = frozen.hash(&mut loader);
         let mut source = std::io::Cursor::new(&out);
         let deserialized = CachedRef::Memory {
             value: Hashed::<Node>::deserialize(&mut source).context("Failed to deserialize")?,
         };
-        ensure!(source.position() == out.len() as u64, "Some input was not consumed.");
+        ensure!(
+            source.position() == out.len() as u64,
+            "Some input was not consumed."
+        );
         let deserialized_hash = deserialized.hash(&mut loader);
         ensure!(
             original_hash == deserialized_hash,
@@ -262,7 +308,9 @@ fn prop_serialization() {
         let mut mutable = deserialized.make_mutable(0, &mut loader);
         compare_to_reference(&mut mutable, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -274,13 +322,20 @@ fn prop_storing_preseves_hash() {
         let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
             t
         } else {
-            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie is not."
+            );
             return Ok(());
         };
         let hash_1 = frozen.hash(&mut loader);
         let mut backing_store = Vec::new();
-        let top = frozen.store_update(&mut backing_store).expect("Storing succeeds.");
-        let root = backing_store.store_raw(&top).expect("Storing to a vector succeeds.");
+        let top = frozen
+            .store_update(&mut backing_store)
+            .expect("Storing succeeds.");
+        let root = backing_store
+            .store_raw(&top)
+            .expect("Storing to a vector succeeds.");
         let mut loader = Loader {
             inner: backing_store,
         };
@@ -290,7 +345,9 @@ fn prop_storing_preseves_hash() {
         ensure!(hash_1 == hash_2, "Hashes differ.");
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -324,7 +381,9 @@ fn prop_hash_independent_of_order() {
             ensure!(hash == hash_1, "Hashes differ.");
             Ok(())
         };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -336,7 +395,9 @@ fn prop_matches_reference_basic() {
         let (mut trie, mut loader) = make_mut_trie(inputs);
         compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -362,14 +423,19 @@ fn prop_matches_reference_delete_subtree() {
                     if let Some(e) = trie.get_entry(&mut loader, &input.0) {
                         entries_under_prefix.push(e);
                     } else {
-                        bail!("The key {:?} should have been present in the trie.", input.0);
+                        bail!(
+                            "The key {:?} should have been present in the trie.",
+                            input.0
+                        );
                     }
                 }
             }
 
             ensure!(
                 Ok(true)
-                    == trie.delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter).unwrap(),
+                    == trie
+                        .delete_prefix(&mut loader, &prefix[..], &mut EmptyCounter)
+                        .unwrap(),
                 "There is at least one value with the given prefix, so deleting should succeed."
             );
 
@@ -386,7 +452,9 @@ fn prop_matches_reference_delete_subtree() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -422,11 +490,13 @@ fn prop_iterator_locked_for_modification_multiple() {
             }
             for (candidate, data) in to_insert.iter().zip(0u64..) {
                 // find out if the candidate can or cannot be inserted
-                let not_allowed =
-                    locked_prefixes.iter().any(|iter| candidate.starts_with(iter.get_root()));
+                let not_allowed = locked_prefixes
+                    .iter()
+                    .any(|iter| candidate.starts_with(iter.get_root()));
                 if not_allowed {
                     ensure!(
-                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec()).is_err(),
+                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec())
+                            .is_err(),
                         "{:?} extends one of the iterator keys.",
                         candidate
                     );
@@ -444,12 +514,14 @@ fn prop_iterator_locked_for_modification_multiple() {
                     )
                 } else {
                     ensure!(
-                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec()).is_ok(),
+                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec())
+                            .is_ok(),
                         "{:?} does not extend any of the iterator keys, but insertion failed.",
                         candidate
                     );
-                    let not_allowed_delete_subtree =
-                        locked_prefixes.iter().any(|iter| iter.get_key().starts_with(candidate));
+                    let not_allowed_delete_subtree = locked_prefixes
+                        .iter()
+                        .any(|iter| iter.get_key().starts_with(candidate));
                     if !not_allowed_delete_subtree {
                         if data % 2 == 0 {
                             // now delete the just inserted entry
@@ -514,7 +586,11 @@ fn prop_iterator_locked_for_modification_generations() {
                 )?;
                 if let Some(locked_prefixes) = generation_cleanup_stack.pop() {
                     for iter in &locked_prefixes {
-                        ensure!(trie.delete_iter(iter), "Iterator {:?} should be removed", iter,);
+                        ensure!(
+                            trie.delete_iter(iter),
+                            "Iterator {:?} should be removed",
+                            iter,
+                        );
                     }
                 }
             }
@@ -526,11 +602,13 @@ fn prop_iterator_locked_for_modification_generations() {
             }
             for (candidate, data) in to_insert.iter().zip(0u64..) {
                 // find out if the candidate can or cannot be inserted
-                let not_allowed =
-                    locked_prefixes.iter().any(|iter| candidate.starts_with(iter.get_root()));
+                let not_allowed = locked_prefixes
+                    .iter()
+                    .any(|iter| candidate.starts_with(iter.get_root()));
                 if not_allowed {
                     ensure!(
-                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec()).is_err(),
+                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec())
+                            .is_err(),
                         "{:?} extends one of the iterator keys.",
                         candidate
                     );
@@ -548,12 +626,14 @@ fn prop_iterator_locked_for_modification_generations() {
                     )
                 } else {
                     ensure!(
-                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec()).is_ok(),
+                        trie.insert(&mut loader, candidate, data.to_be_bytes().to_vec())
+                            .is_ok(),
                         "{:?} does not extend any of the iterator keys, but insertion failed.",
                         candidate
                     );
-                    let not_allowed_delete_subtree =
-                        locked_prefixes.iter().any(|iter| iter.get_key().starts_with(candidate));
+                    let not_allowed_delete_subtree = locked_prefixes
+                        .iter()
+                        .any(|iter| iter.get_key().starts_with(candidate));
                     if !not_allowed_delete_subtree {
                         if data % 2 == 0 {
                             // now delete the just inserted entry
@@ -597,11 +677,19 @@ fn prop_iterator_locked_for_modification_generations() {
         for (prefixes_to_lock, to_insert) in tests_by_generation.iter().rev() {
             tester(prefixes_to_lock, to_insert, true)?;
         }
-        ensure!(trie.pop_generation().is_some(), "We should have one generation left.");
-        ensure!(trie.pop_generation().is_none(), "We should have exhausted the generations.");
+        ensure!(
+            trie.pop_generation().is_some(),
+            "We should have one generation left."
+        );
+        ensure!(
+            trie.pop_generation().is_none(),
+            "We should have exhausted the generations."
+        );
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>, Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -620,7 +708,8 @@ fn prop_iterator_locked_for_modification() {
                 let mut locked_prefix_extended = locked_prefix.clone();
                 locked_prefix_extended.push(0);
                 ensure!(
-                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_err(),
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![])
+                        .is_err(),
                     "The subtree should be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
@@ -636,11 +725,7 @@ fn prop_iterator_locked_for_modification() {
                 // test that we can insert at another part of the tree
                 let mut step_up = locked_prefix.clone();
                 if let Some(popped) = step_up.pop() {
-                    let to_go = if popped == 0 {
-                        42
-                    } else {
-                        0
-                    };
+                    let to_go = if popped == 0 { 42 } else { 0 };
                     let mut new_path = step_up.clone();
                     new_path.push(to_go);
                     ensure!(
@@ -675,7 +760,8 @@ fn prop_iterator_locked_for_modification() {
 
                 ensure!(trie.delete_iter(&iter), "Iterator should be removed");
                 ensure!(
-                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_ok(),
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![])
+                        .is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (insertion): \
                      {:#?}, {:#?}, {:?}",
                     trie,
@@ -687,7 +773,8 @@ fn prop_iterator_locked_for_modification() {
                     "The subtree should not be locked for locked_prefix_extended (removal)."
                 );
                 ensure!(
-                    trie.insert(&mut loader, &locked_prefix_extended, vec![]).is_ok(),
+                    trie.insert(&mut loader, &locked_prefix_extended, vec![])
+                        .is_ok(),
                     "The subtree should not be locked for locked_prefix_extended (insertion)."
                 );
                 ensure!(
@@ -709,7 +796,9 @@ fn prop_iterator_locked_for_modification() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
 }
 
 #[test]
@@ -728,7 +817,9 @@ fn prop_matches_reference_checkpoint_delete_subtree() {
         trie.normalize(0);
         compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> _);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> _);
 }
 
 #[test]
@@ -750,7 +841,9 @@ fn prop_matches_reference_delete() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> _);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> _);
 }
 
 #[test]
@@ -770,7 +863,9 @@ fn prop_matches_reference_after_freeze_thaw() {
         let mut trie = trie.make_mutable(0, &mut loader);
         compare_to_reference(&mut trie, &mut loader, &reference)
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> _);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>) -> _);
 }
 
 /// Check that it costs nothing to freeze a tree that is not modified.
@@ -786,7 +881,10 @@ fn prop_freeze_unmodified() {
         let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
             trie
         } else {
-            ensure!(reference.is_empty(), "Cannot freeze, but reference is not empty.");
+            ensure!(
+                reference.is_empty(),
+                "Cannot freeze, but reference is not empty."
+            );
             return Ok(());
         };
         let mut m1 = trie.make_mutable(0, &mut loader);
@@ -796,12 +894,15 @@ fn prop_freeze_unmodified() {
         }
 
         let mut collector = SizeCollector::default();
-        m1.freeze(&mut loader, &mut collector).expect("Freezing m1 should succeed.");
+        m1.freeze(&mut loader, &mut collector)
+            .expect("Freezing m1 should succeed.");
         let s1 = collector.collect();
         ensure!(s1 == 0, "Non-zero cost {}.", s1);
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, _) -> _);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>, _) -> _);
 }
 
 #[test]
@@ -816,47 +917,61 @@ fn prop_freeze_collector() {
         let trie = if let Some(trie) = trie.freeze(&mut loader, &mut EmptyCollector) {
             trie
         } else {
-            ensure!(reference.is_empty(), "Cannot freeze, but reference is not empty.");
+            ensure!(
+                reference.is_empty(),
+                "Cannot freeze, but reference is not empty."
+            );
             return Ok(());
         };
         let (trie_1, mut loader_1) = make_mut_trie(inputs);
         let mut trie_1 = if let Some(trie_1) = trie_1.freeze(&mut loader_1, &mut EmptyCollector) {
             trie_1
         } else {
-            ensure!(reference.is_empty(), "Cannot freeze, but reference is not empty.");
+            ensure!(
+                reference.is_empty(),
+                "Cannot freeze, but reference is not empty."
+            );
             return Ok(());
         };
         let mut buf = Vec::new();
         let mut store = Vec::new();
-        trie_1.store_update_buf(&mut store, &mut buf).expect("Storing trie_1 should succeed.");
-        let stored_location = store.store_raw(&buf).expect("Storing the tree should succeed.");
-        let mut loader_1 = Loader {
-            inner: store,
-        };
+        trie_1
+            .store_update_buf(&mut store, &mut buf)
+            .expect("Storing trie_1 should succeed.");
+        let stored_location = store
+            .store_raw(&buf)
+            .expect("Storing the tree should succeed.");
+        let mut loader_1 = Loader { inner: store };
         let trie_1 = CachedRef::<Hashed<Node>>::load_from_location(&mut loader_1, stored_location)
             .expect("Loading of the tree failed.");
         let mut m1 = trie.make_mutable(0, &mut loader);
         let mut m2 = trie_1.make_mutable(0, &mut loader_1);
 
         for (k, v) in &new {
-            m1.insert(&mut loader, k, v.clone()).expect("Inserting in m1 should succeed.");
+            m1.insert(&mut loader, k, v.clone())
+                .expect("Inserting in m1 should succeed.");
         }
 
         for (k, v) in new {
-            m2.insert(&mut loader_1, &k, v).expect("Inserting in m2 should succeed.");
+            m2.insert(&mut loader_1, &k, v)
+                .expect("Inserting in m2 should succeed.");
         }
         let mut collector = SizeCollector::default();
         let mut collector_1 = SizeCollector::default();
         let d1 = format!("{:#?}", m1);
         let d2 = format!("{:#?}", m2);
-        m1.freeze(&mut loader, &mut collector).expect("Freezing m1 should succeed.");
-        m2.freeze(&mut loader_1, &mut collector_1).expect("Freezing m2 should succeed");
+        m1.freeze(&mut loader, &mut collector)
+            .expect("Freezing m1 should succeed.");
+        m2.freeze(&mut loader_1, &mut collector_1)
+            .expect("Freezing m2 should succeed");
         let s1 = collector.collect();
         let s2 = collector_1.collect();
         ensure!(s1 == s2, "Sizes differ {} != {} {} {}.", s1, s2, d1, d2);
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, _) -> _);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>, _) -> _);
 }
 
 #[test]
@@ -895,8 +1010,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
 
             // insert additions into the new generation.
             let reference_iter = joined_reference.keys();
-            let mut iterator_gen_1 = if let Some(i) =
-                trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+            let mut iterator_gen_1 = if let Some(i) = trie
+                .iter(&mut loader, &[])
+                .expect("This is the first iterator, so no overflow.")
             {
                 i
             } else {
@@ -933,8 +1049,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
 
         trie.pop_generation(); // kill the generation we updated.
         let reference_iter = reference.iter();
-        let mut iterator = if let Some(i) =
-            trie.iter(&mut loader, &[]).expect("This is the first iterator, so no overflow.")
+        let mut iterator = if let Some(i) = trie
+            .iter(&mut loader, &[])
+            .expect("This is the first iterator, so no overflow.")
         {
             i
         } else {
@@ -945,7 +1062,10 @@ fn prop_matches_reference_after_new_gen_mutate() {
                 .next(&mut loader, &mut iterator, &mut EmptyCounter)
                 .expect("Empty counter does not fail.")
             {
-                if !trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false) {
+                if !trie
+                    .with_entry(entry, &mut loader, |ev| v == ev)
+                    .unwrap_or(false)
+                {
                     return false;
                 }
                 if iterator.get_key() != k {
@@ -960,7 +1080,9 @@ fn prop_matches_reference_after_new_gen_mutate() {
             .is_none() // there are no values
                        // left to iterate.
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>, Vec<_>) -> bool);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(Vec<_>, Vec<_>) -> bool);
 }
 
 #[test]
@@ -971,8 +1093,9 @@ fn prop_iterator_get_key() {
         let (mut trie, mut loader) = make_mut_trie(inputs);
 
         let reference_iter = reference.iter();
-        let mut iterator = if let Some(i) =
-            trie.iter(&mut loader, &prefix).expect("This is the first iterator, so no overflow.")
+        let mut iterator = if let Some(i) = trie
+            .iter(&mut loader, &prefix)
+            .expect("This is the first iterator, so no overflow.")
         {
             i
         } else {
@@ -1001,7 +1124,8 @@ fn prop_iterator_get_key() {
                     .expect("Empty counter does not fail.")
                 {
                     ensure!(
-                        trie.with_entry(entry, &mut loader, |ev| v == ev).unwrap_or(false),
+                        trie.with_entry(entry, &mut loader, |ev| v == ev)
+                            .unwrap_or(false),
                         "Value at key {:?} does not match.",
                         k
                     );
@@ -1022,5 +1146,7 @@ fn prop_iterator_get_key() {
         }
         Ok(())
     };
-    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
+    QuickCheck::new()
+        .tests(NUM_TESTS)
+        .quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
 }
