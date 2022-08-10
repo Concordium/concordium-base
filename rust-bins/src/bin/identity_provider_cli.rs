@@ -18,7 +18,7 @@ use structopt::StructOpt;
     about = "Command line client that supports issuing identities for enterprises.",
     name = "Identity provider CLI",
     author = "Concordium",
-    version = "1.0.0"
+    version = "2.0.0"
 )]
 struct IpV0 {
     #[structopt(
@@ -76,7 +76,7 @@ struct IpV0 {
     about = "Command line client that supports issuing identities for enterprises.",
     name = "Identity provider CLI",
     author = "Concordium",
-    version = "1.0.0"
+    version = "2.0.0"
 )]
 struct IpV1 {
     #[structopt(
@@ -123,25 +123,25 @@ struct IpV1 {
     about = "Command line client that supports issuing identities for enterprises.",
     name = "User CLI",
     author = "Concordium",
-    version = "1.0.0"
+    version = "2.0.0"
 )]
 enum IpClient {
     #[structopt(
         name = "sign-identity-request",
         about = "Validate, sign and return version 0 identity object.",
-        version = "1.0.0"
+        version = "2.0.0"
     )]
     SignPioV0(IpV0),
     #[structopt(
         name = "sign-identity-request-v1",
         about = "Validate, sign and return version 1 identity object.",
-        version = "1.0.0"
+        version = "2.0.0"
     )]
     SignPioV1(IpV1),
     #[structopt(
         name = "validate-recovery-request",
         about = "Validate id recovery request.",
-        version = "1.0.0"
+        version = "2.0.0"
     )]
     ValidateIdRecoveryRequest(ValidateIdRecoveryRequest),
 }
@@ -475,7 +475,7 @@ fn handle_validate_recovery(vir: ValidateIdRecoveryRequest) -> anyhow::Result<()
 
     let request = read_recovery_request(&vir.request).context(format!(
         "Could not read recovery request file '{}'.",
-        vir.ip_info.display()
+        vir.request.display()
     ))?;
 
     let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);

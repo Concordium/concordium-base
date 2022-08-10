@@ -55,7 +55,7 @@ It outputs the following files
 - `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
 By default this must be sent to the chain within 15min. A larger or shorter message expiry may be set with `--message-expiry` flag to the command.
-Do note that an expiry longer than 2 hours is not acceptable. Note also that the credential number must be unique for each respective `id-object.json`. Duplicate credential numbers for the same `id-object.json` will be rejected when submitting to chain.
+Note that the credential number must be unique for each respective `id-object.json`. Duplicate credential numbers for the same `id-object.json` will be rejected when submitting to chain.
 
 To create the account on the chain make sure you have access to a node, then do
 ```console
@@ -103,7 +103,7 @@ It outputs the following files
 - `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It cannot be recovered.
 - `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
 By default this must be sent to the chain within 15min. A larger or shorter message expiry may be set with `--message-expiry` flag to the command.
-Do note that an expiry longer than 2 hours is not acceptable. Note also that the credential number must be unique for each respective `id-object.json`. Duplicate credential numbers for the same `id-object.json` will be rejected when submitting to chain.
+Note that the credential number must be unique for each respective `id-object.json`. Duplicate credential numbers for the same `id-object.json` will be rejected when submitting to chain.
 
 To create the account on the chain make sure you have access to a node, then do
 ```console

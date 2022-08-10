@@ -610,7 +610,7 @@ struct GenesisCredentialInput {
 #[structopt(
     about = "Prototype client showcasing ID layer interactions.",
     author = "Concordium",
-    version = "0.36787944117"
+    version = "2.0.0"
 )]
 enum IdClient {
     #[structopt(
