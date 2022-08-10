@@ -12,8 +12,6 @@ The tool is partially interactive.
 - When validating identity recovery requests, a file with recovery request sent by the user. We refer to this file as `recovery-request.json` below.
 
 There are two flows for validating identity object requests, the version 0 flow and the version 1 flow. In the version 0 flow, the creation of an identity involves the creation of an initial account. In the version 1 flow, there is no initial account creation.
-
-
 # Tool invocation
 
 
