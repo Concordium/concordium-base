@@ -3,7 +3,11 @@ use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
 use sha2::Digest;
-use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomData};
+use std::{
+    collections::btree_map::BTreeMap,
+    convert::{TryFrom, TryInto},
+    marker::PhantomData,
+};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
@@ -439,7 +443,8 @@ pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A
 }
 
 // Some more generic implementations
-impl<T: Serial> Serial for [T; 2] {
+
+impl<T: Serial, const N: usize> Serial for [T; N] {
     fn serial<B: Buffer>(&self, out: &mut B) {
         for x in self.iter() {
             x.serial(out);
@@ -447,55 +452,14 @@ impl<T: Serial> Serial for [T; 2] {
     }
 }
 
-// Some more generic implementations
-impl<T: Deserial> Deserial for [T; 2] {
+impl<T: Deserial, const N: usize> Deserial for [T; N] {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        // This is a bit stupid, but I can't figure out how to avoid a
-        // Default constraint otherwise (if I allow it, we can preallocate
-        // with let mut out: [T; 2] = Default::default();
-        // and then iterate over it
-        let x_1 = T::deserial(source)?;
-        let x_2 = T::deserial(source)?;
-        Ok([x_1, x_2])
-    }
-}
-
-impl<T: Serial> Serial for [T; 8] {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        for x in self.iter() {
-            x.serial(out);
+        let mut out_vec = Vec::with_capacity(N);
+        for _ in 0..N {
+            out_vec.push(T::deserial(source)?);
         }
-    }
-}
-
-impl<T: Deserial> Deserial for [T; 8] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let x_1 = T::deserial(source)?;
-        let x_2 = T::deserial(source)?;
-        let x_3 = T::deserial(source)?;
-        let x_4 = T::deserial(source)?;
-        let x_5 = T::deserial(source)?;
-        let x_6 = T::deserial(source)?;
-        let x_7 = T::deserial(source)?;
-        let x_8 = T::deserial(source)?;
-        Ok([x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8])
-    }
-}
-
-// Some more generic implementations
-impl<T: Serial + Default> Serial for [T; 32] {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        for x in self.iter() {
-            x.serial(out);
-        }
-    }
-}
-
-impl Deserial for [u8; 32] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let mut out: [u8; 32] = Default::default();
-        source.read_exact(&mut out)?;
-        Ok(out)
+        let out_array: [T; N] = out_vec.try_into().map_err(|_| ()).unwrap();
+        Ok(out_array)
     }
 }
 

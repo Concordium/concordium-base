@@ -65,6 +65,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aho-corasick"
+version = "0.7.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e37cfd5e7657ada45f742d6e99ca5788580b5c529dc78faf11ece6dc702656f"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -167,6 +176,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
  "block-padding 0.2.1",
+ "generic-array 0.14.4",
+]
+
+[[package]]
+name = "block-buffer"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bf7fe51849ea569fd452f37822f606a5cabb684dc918707a0193fd4664ff324"
+dependencies = [
  "generic-array 0.14.4",
 ]
 
@@ -453,6 +471,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-common"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ccfd8c0ee4cce11e45b3fd6f9d5e69e0cc62912aa6a0cb1bf4617b0eba5a12f"
+dependencies = [
+ "generic-array 0.14.4",
+ "typenum",
+]
+
+[[package]]
 name = "crypto-mac"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,7 +507,7 @@ dependencies = [
  "ff",
  "group",
  "hex",
- "hmac",
+ "hmac 0.11.0",
  "libc",
  "pairing",
  "pbkdf2 0.9.0",
@@ -571,6 +599,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "digest"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2fb860ca6fafa5552fb6d0e816a69c8e49f0908bf524e30a90d97c85892d506"
+dependencies = [
+ "block-buffer 0.10.2",
+ "crypto-common",
+ "subtle",
+]
+
+[[package]]
 name = "dodis_yampolskiy_prf"
 version = "0.1.0"
 dependencies = [
@@ -623,6 +662,18 @@ dependencies = [
  "serde",
  "sha2 0.9.5",
  "zeroize",
+]
+
+[[package]]
+name = "ed25519_hd_key_derivation"
+version = "1.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "hmac 0.12.1",
+ "regex",
+ "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
@@ -939,7 +990,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01706d578d5c281058480e673ae4086a9f4710d8df1ad80a5b03e39ece5f886b"
 dependencies = [
  "digest 0.9.0",
- "hmac",
+ "hmac 0.11.0",
 ]
 
 [[package]]
@@ -950,6 +1001,15 @@ checksum = "2a2a2320eb7ec0ebe8da8f744d7812d9fc4cb4d09344ac01898dbcb6a20ae69b"
 dependencies = [
  "crypto-mac",
  "digest 0.9.0",
+]
+
+[[package]]
+name = "hmac"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
+dependencies = [
+ "digest 0.10.3",
 ]
 
 [[package]]
@@ -1134,6 +1194,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 
 [[package]]
+name = "key_derivation"
+version = "1.0.0"
+dependencies = [
+ "crypto_common",
+ "dodis_yampolskiy_prf",
+ "ed25519-dalek",
+ "ed25519_hd_key_derivation",
+ "hmac 0.12.1",
+ "id",
+ "keygen_bls",
+ "pairing",
+ "pbkdf2 0.10.1",
+ "ps_sig",
+ "serde",
+ "sha2 0.10.2",
+]
+
+[[package]]
 name = "keygen_bls"
 version = "2.0.0"
 dependencies = [
@@ -1227,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "misc_tools"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "aes 0.7.5",
  "aggregate_sig",
@@ -1246,6 +1324,7 @@ dependencies = [
  "dodis_yampolskiy_prf",
  "ecvrf",
  "ed25519-dalek",
+ "ed25519_hd_key_derivation",
  "eddsa_ed25519",
  "either",
  "elgamal",
@@ -1253,8 +1332,9 @@ dependencies = [
  "ff",
  "hex",
  "hkdf",
- "hmac",
+ "hmac 0.11.0",
  "id",
+ "key_derivation",
  "keygen_bls",
  "openssl-sys",
  "pairing",
@@ -1477,7 +1557,7 @@ checksum = "d95f5254224e617595d2cc3cc73ff0a5eaf2637519e25f03388154e9378b6ffa"
 dependencies = [
  "base64ct",
  "crypto-mac",
- "hmac",
+ "hmac 0.11.0",
  "password-hash 0.2.3",
  "sha2 0.9.5",
 ]
@@ -1489,9 +1569,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f05894bce6a1ba4be299d0c5f29563e08af2bc18bb7d48313113bed71e904739"
 dependencies = [
  "crypto-mac",
- "hmac",
+ "hmac 0.11.0",
  "password-hash 0.3.2",
  "sha2 0.9.5",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "271779f35b581956db91a3e55737327a03aa051e90b1c47aeb189508533adfd7"
+dependencies = [
+ "digest 0.10.3",
+ "hmac 0.12.1",
+ "password-hash 0.3.2",
+ "sha2 0.10.2",
 ]
 
 [[package]]
@@ -1755,18 +1847,20 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.5.4"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d07a8629359eb56f1e2fb1652bb04212c072a87ba68546a04065d525673ac461"
+checksum = "4c4eb3267174b8c6c2f654116623910a0fef09c4753f8dd83db29c48a0df988b"
 dependencies = [
+ "aho-corasick",
+ "memchr",
  "regex-syntax",
 ]
 
 [[package]]
 name = "regex-syntax"
-version = "0.6.25"
+version = "0.6.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
+checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
 
 [[package]]
 name = "remove_dir_all"
@@ -1962,6 +2056,17 @@ dependencies = [
  "cpufeatures 0.1.5",
  "digest 0.9.0",
  "opaque-debug 0.3.0",
+]
+
+[[package]]
+name = "sha2"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55deaec60f81eefe3cce0dc50bda92d6d8e88f2a27df7c5033b42afeb1ed2676"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.2",
+ "digest 0.10.3",
 ]
 
 [[package]]
