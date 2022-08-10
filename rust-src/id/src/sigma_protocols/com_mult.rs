@@ -86,13 +86,11 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let cR = state.2;
         for i in 0..2 {
             ss[i].mul_assign(&secret.values[i]); // c * x_i
-            ss[i].negate(); // 
-                            // - c * x_i
+            ss[i].negate(); // - c * x_i
             ss[i].add_assign(&alphas[i]); // alpha - c * x_i
 
             ts[i].mul_assign(&secret.rands[i]); // c * r_i
-            ts[i].negate(); // 
-                            // - c * r_i
+            ts[i].negate(); // - c * r_i
             ts[i].add_assign(&rands[i]); // rTilde_i - c * r_i
         }
 

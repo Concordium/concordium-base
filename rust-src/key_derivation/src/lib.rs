@@ -1,3 +1,4 @@
+use crypto_common::{base16_decode, base16_encode};
 use ed25519_dalek::{PublicKey, SecretKey};
 use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
 use hmac::Hmac;
@@ -11,7 +12,6 @@ use ps_sig::SigRetrievalRandomness;
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use std::fmt;
-use crypto_common::{base16_decode, base16_encode};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Net {
