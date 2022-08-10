@@ -1169,5 +1169,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) -> anyhow::Result<()> {
         "Could not write id recovery request to to {}.",
         girr.request_file.display()
     ))?;
+    let net = if use_mainnet { "Mainnet" } else { "Testnet" };
+    println!("Identity recovery request was generated for {}.", net);
     Ok(())
 }
