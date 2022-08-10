@@ -1,0 +1,20 @@
+{
+    "chosenAttributes": {
+        "countryOfResidence": "DE",
+        "dob": "19800229",
+        "firstName": "John",
+        "idDocExpiresAt": "20291231",
+        "idDocIssuedAt": "20200401",
+        "idDocIssuer": "DK",
+        "idDocNo": "1234567890",
+        "idDocType": "1",
+        "lastName": "Doe",
+        "nationalIdNo": "DK123456789",
+        "nationality": "DK",
+        "sex": "1",
+        "taxIdNo": "DE987654321"
+    },
+    "createdAt": "202004",
+    "maxAccounts": 238,
+    "validTo": "202104"
+}

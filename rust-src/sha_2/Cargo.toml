@@ -1,0 +1,13 @@
+[package]
+name = "sha_2"
+version = "0.1.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE"
+
+[dependencies]
+sha2 = "0.9"
+
+[lib]
+name = "sha_2"
+crate-type = ["rlib", "staticlib", "cdylib"]

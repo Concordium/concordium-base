@@ -1,0 +1,98 @@
+[package]
+name = "misc_tools"
+version = "0.1.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE-APACHE"
+
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored-ssl = ["openssl-sys/vendored"]
+
+[dependencies]
+clap = "2.33"
+dialoguer = "0.10"
+pairing = "0.15"
+rand = "=0.7"
+serde = "1.0"
+serde_json = "1.0"
+ed25519-dalek = "=1.0"
+curve25519-dalek = "3.0"
+structopt = "0.3"
+hex = "0.4"
+sha2 = "0.9"
+hkdf = "0.11"
+ff = "0.5"
+hmac = "0.11"
+reqwest = {version = "0.11", features = ["json", "blocking"]}
+url = "2.1.1"
+chrono = "0.4.19"
+either = "1.6"
+openssl-sys = {version = "0.9", optional = true}
+block-modes = "0.7"
+aes = "0.7"
+base64 = "0.13"
+pbkdf2 = "0.8"
+rpassword = "6.0"
+bitvec = "0.22"
+crossterm = "0.22"
+anyhow = "1.0"
+
+[dependencies.keygen_bls]
+path = "../rust-src/keygen_bls"
+version = "2.0.0"
+
+[dependencies.crypto_common]
+path = "../rust-src/crypto_common"
+version = "0"
+features = ["encryption"]
+
+[dependencies.crypto_common_derive]
+path = "../rust-src/crypto_common_derive"
+version = "0"
+
+[dependencies.curve_arithmetic]
+path = "../rust-src/curve_arithmetic"
+version = "0"
+
+[dependencies.elgamal]
+path = "../rust-src/elgamal"
+version = "0"
+
+[dependencies.dodis_yampolskiy_prf]
+path = "../rust-src/dodis_yampolskiy_prf"
+version = "0"
+
+[dependencies.id]
+path = "../rust-src/id"
+version = "0"
+
+[dependencies.pedersen_scheme]
+path = "../rust-src/pedersen_scheme"
+version = "0"
+
+[dependencies.ps_sig]
+path = "../rust-src/ps_sig"
+version = "0"
+
+[dependencies.eddsa_ed25519]
+path = "../rust-src/eddsa_ed25519"
+version = "0"
+
+[dependencies.ecvrf]
+path = "../rust-src/ecvrf"
+version = "0"
+
+[dependencies.encrypted_transfers]
+path = "../rust-src/encrypted_transfers"
+version = "0"
+
+# To generate keys for bakers only
+[dependencies.aggregate_sig]
+path = "../rust-src/aggregate_sig"
+version = "0"
+
+[lib]
+name = "client_server_helpers"
+path = "src/lib.rs"

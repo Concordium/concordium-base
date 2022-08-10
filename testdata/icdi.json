@@ -1,0 +1,30 @@
+{
+  "v": 0,
+  "value": {
+    "credentialPublicKeys": {
+      "keys": {
+        "0": {
+          "schemeId": "Ed25519",
+          "verifyKey": "9034ee79b69d9b7cf302fe66df4aab85674e438cbe7673565bea6d57a4d7c16f"
+        },
+        "1": {
+          "schemeId": "Ed25519",
+          "verifyKey": "32189736373916073075bdb48eeb891f8527a46bc88174da939ef2d57198af95"
+        },
+        "2": {
+          "schemeId": "Ed25519",
+          "verifyKey": "7bc49e5afe77f8263297a45a4223da908135d66f7dbe9d05418d1953e3a8d321"
+        }
+      },
+      "threshold": 2
+    },
+    "regId": "b5320e7a2053faa24a51b061629360985a4ac40974cf1bc2bf1839ce710a93bddd9936cc7bc7b4932d1d92557d3ef7c2",
+    "ipIdentity": 0,
+    "policy": {
+      "validTo": "202205",
+      "createdAt": "202005",
+      "revealedAttributes": {}
+    },
+    "sig": "de278008b58cf392c49b960534eabfad36665d0a1448367a4dc0787d8bc3052dc1f6f472eccd6d015a7a2ea1fb3316310f82847b5f8cc05835b9532fd9577c06"
+  }
+}
