@@ -10,6 +10,9 @@ c-compatible signatures.
 - Identity layer
     - `char* create_id_request_and_private_data(const char*, uint8_t*)`
     - `char* create_credential(const char*, uint8_t*)`
+    - `char* create_id_request_and_private_data_v1(const char*, uint8_t*)`
+    - `char* create_credential_v1(const char*, uint8_t*)`
+    - `char* generate_recovery_request(const char*, uint8_t*)`
     - `uint8_t check_account_address_ext(const char*)`
 - Regular transactions
     - `char* create_transfer_ext(const char*, uint8_t*)`
@@ -90,6 +93,31 @@ The output of this function is a JSON object with two keys
 
 An example of input is in the file [create_id_request_and_private_data-v1-input.json](files/create_id_request_and_private_data-v1-input.json).
 An example of output is in the file [create_id_request_and_private_data-v1-output.json](files/create_id_request_and_private_data-v1-output.json).
+
+## generate_recovery_request
+
+Semantics: Generates an identity recovery request, used to request a lost identity object from the IdentityProvider.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+
+- `"seed"` ... is a hex encoded seed phrase from which the idCredSec was generated.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+- `"timestamp"` ... an integer indicating the number of seconds since the unix epoch by the time of generating the request.
+
+The output of this function is a JSON object with two keys
+- "idRecoveryRequest" - this is the identity object request that should be sent to
+  the identity provider
+
+An example of input is in the file [generate-recovery-request-input.json](files/generate-recovery-request-input.json).
+An example of output is in the file [generate-recovery-request-output.json](files/generate-recovery-request-output.json).
 
 ## check_account_address
 
