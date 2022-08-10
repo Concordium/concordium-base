@@ -12,10 +12,12 @@ use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*,
     constants::{ArCurve, IpPairing},
+    curve_arithmetic::*,
     identity_provider::*,
     secret_sharing::*,
     types::*,
 };
+use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::{json, to_value};
@@ -28,6 +30,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
+
+use pedersen_scheme::Value as PedersenValue;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
@@ -74,9 +78,88 @@ fn read_validto() -> io::Result<YearMonth> {
 }
 
 #[derive(StructOpt)]
+struct CreateHdWallet {
+    #[structopt(
+        long = "out",
+        help = "Optional file to write the hd wallet to. If not provided, the hd wallet JSON will \
+                be written to standard output."
+    )]
+    out:     Option<PathBuf>,
+    #[structopt(long = "testnet")]
+    testnet: bool,
+}
+
+#[derive(StructOpt)]
+struct GenerateIdRecoveryRequest {
+    #[structopt(
+        long = "ip-info",
+        help = "File with information about the identity provider."
+    )]
+    ip_info:      PathBuf,
+    #[structopt(
+        long = "request-out",
+        help = "File to write the request to that is to be sent to the identity provider."
+    )]
+    request_file: PathBuf,
+    #[structopt(
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
+    global:       PathBuf,
+    #[structopt(long = "chi", help = "File with input credential holder information.")]
+    chi:          PathBuf,
+}
+
+#[derive(StructOpt)]
+struct ValidateIdRecoveryRequest {
+    #[structopt(long = "request", help = "File with id recovery request.")]
+    request: PathBuf,
+    #[structopt(
+        long = "ip-info",
+        help = "File with information about the identity provider."
+    )]
+    ip_info: PathBuf,
+    #[structopt(
+        long = "cryptographic-parameters",
+        help = "File with cryptographic parameters."
+    )]
+    global:  PathBuf,
+}
+
+#[derive(StructOpt)]
 struct CreateChi {
     #[structopt(long = "out")]
-    out: Option<PathBuf>,
+    out:            Option<PathBuf>,
+    #[structopt(
+        long = "hd-wallet",
+        help = "File with hd wallet.",
+        requires = "identity-index"
+    )]
+    hd_wallet:      Option<PathBuf>,
+    #[structopt(
+        long = "identity-index",
+        help = "Identity index.",
+        requires = "hd-wallet"
+    )]
+    identity_index: Option<u32>,
+}
+
+#[derive(StructOpt)]
+struct CreateIdUseData {
+    #[structopt(long = "out")]
+    out:            Option<PathBuf>,
+    #[structopt(
+        long = "hd-wallet",
+        help = "File with hd wallet.",
+        requires = "identity-index"
+    )]
+    hd_wallet:      Option<PathBuf>,
+    #[structopt(
+        long = "identity-index",
+        help = "Identity index.",
+        requires = "hd-wallet"
+    )]
+    identity_index: Option<u32>,
 }
 
 #[derive(StructOpt)]
@@ -99,6 +182,53 @@ struct StartIp {
     anonymity_revokers: PathBuf,
     #[structopt(long = "private", help = "File to write the private ACI data to.")]
     private:            Option<PathBuf>,
+    #[structopt(
+        long = "public",
+        help = "File to write the public data to be sent to the identity provider."
+    )]
+    public:             Option<PathBuf>,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global:             PathBuf,
+    #[structopt(
+        name = "ar-threshold",
+        long = "ar-threshold",
+        help = "Anonymity revocation threshold.",
+        requires = "selected-ars"
+    )]
+    threshold:          Option<u8>,
+    #[structopt(
+        long = "selected-ars",
+        help = "Indices of selected ars. If none are provided an interactive choice will be given.",
+        requires = "ar-threshold"
+    )]
+    selected_ars:       Vec<u32>,
+}
+
+#[derive(StructOpt)]
+struct StartIpV1 {
+    #[structopt(
+        long = "id-use-data",
+        help = "File with input credential holder information and blinding randomness."
+    )]
+    id_use_data:        PathBuf,
+    #[structopt(long = "ips", help = "File with a list of identity providers.", default_value = IDENTITY_PROVIDERS)]
+    identity_providers: PathBuf,
+    #[structopt(
+        long = "ip",
+        help = "Which identity provider to choose. If not given an interactive choice will be \
+                provided."
+    )]
+    identity_provider:  Option<u32>,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
     #[structopt(
         long = "public",
         help = "File to write the public data to be sent to the identity provider."
@@ -283,6 +413,14 @@ struct IpSignPioV1 {
 
 #[derive(StructOpt)]
 struct CreateCredential {
+    #[structopt(long = "hd-wallet", help = "File with hd wallet.")]
+    hd_wallet:          Option<PathBuf>,
+    #[structopt(
+        long = "identity-index",
+        help = "The index of the identity to create the credential from.",
+        requires = "hd-wallet"
+    )]
+    identity_index:     Option<u32>,
     #[structopt(
         long = "id-object",
         help = "File with the JSON encoded identity object."
@@ -302,9 +440,11 @@ struct CreateCredential {
     #[structopt(
         long = "private",
         help = "File with private credential holder information used to generate the identity \
-                object."
+                object.",
+        required_unless = "hd-wallet",
+        conflicts_with = "hd-wallet"
     )]
-    private:            PathBuf,
+    private:            Option<PathBuf>,
     #[structopt(
         long = "account",
         help = "Account address onto which the credential should be deployed.",
@@ -340,7 +480,10 @@ struct CreateCredential {
         default_value = "database/anonymity_revokers.json"
     )]
     anonymity_revokers: PathBuf,
-    #[structopt(long = "index", help = "Index of the account to be created.")]
+    #[structopt(
+        long = "index",
+        help = "Index of the account/credential to be created."
+    )]
     index:              Option<u8>,
 }
 
@@ -467,19 +610,35 @@ struct GenesisCredentialInput {
 #[structopt(
     about = "Prototype client showcasing ID layer interactions.",
     author = "Concordium",
-    version = "0.36787944117"
+    version = "2.0.0"
 )]
 enum IdClient {
+    #[structopt(
+        name = "create-hd-wallet",
+        about = "Create hd-wallet from a list of 24 BIP39 words."
+    )]
+    CreateHdWallet(CreateHdWallet),
     #[structopt(
         name = "create-chi",
         about = "Create new credential holder information."
     )]
     CreateChi(CreateChi),
     #[structopt(
+        name = "create-id-use-data",
+        about = "Create new id use data, either deterministically from a hd wallet, or using \
+                 system randomness."
+    )]
+    CreateIdUseData(CreateIdUseData),
+    #[structopt(
         name = "start-ip",
         about = "Generate data to send to the identity provider to sign and verify."
     )]
     StartIp(StartIp),
+    #[structopt(
+        name = "start-ip-v1",
+        about = "Generate data to send to the identity provider to sign and verify."
+    )]
+    StartIpV1(StartIpV1),
     #[structopt(
         name = "generate-ips",
         about = "Generate given number of identity providers and anonymity revokers. With public \
@@ -518,6 +677,13 @@ enum IdClient {
         about = "Create a genesis account from credentials and possibly baker information."
     )]
     MakeAccount(MakeAccount),
+    #[structopt(name = "recover-identity", about = "Generate id recovery request.")]
+    GenerateIdRecoveryRequest(GenerateIdRecoveryRequest),
+    #[structopt(
+        name = "validate-recovery-request",
+        about = "Validate id recovery request."
+    )]
+    ValidateIdRecoveryRequest(ValidateIdRecoveryRequest),
 }
 
 fn main() {
@@ -529,7 +695,10 @@ fn main() {
     use IdClient::*;
     match client {
         CreateChi(chi) => handle_create_chi(chi),
+        CreateHdWallet(chw) => handle_create_hd_wallet(chw),
+        CreateIdUseData(iud) => handle_create_id_use_data(iud),
         StartIp(ip) => handle_start_ip(ip),
+        StartIpV1(ip) => handle_start_ip_v1(ip),
         GenerateIps(ips) => handle_generate_ips(ips),
         GenerateGlobal(gl) => handle_generate_global(gl),
         IpSignPio(isp) => handle_act_as_ip(isp),
@@ -538,6 +707,8 @@ fn main() {
         ExtendIpList(eil) => handle_extend_ip_list(eil),
         VerifyCredential(vcred) => handle_verify_credential(vcred),
         MakeAccount(macc) => handle_make_account(macc),
+        GenerateIdRecoveryRequest(girr) => handle_recovery(girr),
+        ValidateIdRecoveryRequest(vir) => handle_validate_recovery(vir),
     }
 }
 
@@ -737,16 +908,53 @@ fn handle_extend_ip_list(eil: ExtendIpList) {
     }
 }
 
+enum SomeIdentityObject<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    IdoV0(IdentityObject<P, C, AttributeType>),
+    IdoV1(IdentityObjectV1<P, C, AttributeType>),
+}
+
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    HasIdentityObjectFields<P, C, AttributeType> for SomeIdentityObject<P, C, AttributeType>
+{
+    fn get_common_pio_fields(&self) -> CommonPioFields<P, C> {
+        match self {
+            SomeIdentityObject::IdoV0(ido) => ido.get_common_pio_fields(),
+            SomeIdentityObject::IdoV1(ido) => ido.get_common_pio_fields(),
+        }
+    }
+
+    fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> {
+        match self {
+            SomeIdentityObject::IdoV0(ido) => ido.get_attribute_list(),
+            SomeIdentityObject::IdoV1(ido) => ido.get_attribute_list(),
+        }
+    }
+
+    fn get_signature(&self) -> &ps_sig::Signature<P> {
+        match self {
+            SomeIdentityObject::IdoV0(ido) => ido.get_signature(),
+            SomeIdentityObject::IdoV1(ido) => ido.get_signature(),
+        }
+    }
+}
+
 /// Read the identity object, select attributes to reveal and create a
 /// transaction.
 fn handle_create_credential(cc: CreateCredential) {
     let id_object = {
-        match read_id_object(cc.id_object) {
-            Ok(v) => v,
-            Err(x) => {
-                eprintln!("Could not read identity object because {}", x);
-                return;
-            }
+        match read_id_object(cc.id_object.clone()) {
+            Ok(v) => SomeIdentityObject::IdoV0(v),
+            Err(_) => match read_id_object_v1(cc.id_object) {
+                Ok(v) => SomeIdentityObject::IdoV1(v),
+                Err(x) => {
+                    eprintln!("Could not read identity object because {}", x);
+                    return;
+                }
+            },
         }
     };
 
@@ -771,7 +979,7 @@ fn handle_create_credential(cc: CreateCredential) {
 
     // now we have all the data ready.
     // we first ask the user to select which attributes they wish to reveal
-    let alist = &id_object.alist.alist;
+    let alist = &id_object.get_attribute_list().alist;
 
     let alist_items = alist
         .keys()
@@ -812,28 +1020,122 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     }
     let policy = Policy {
-        valid_to:   id_object.alist.valid_to,
-        created_at: id_object.alist.created_at,
+        valid_to:   id_object.get_attribute_list().valid_to,
+        created_at: id_object.get_attribute_list().created_at,
         policy_vec: revealed_attributes,
         _phantom:   Default::default(),
     };
 
-    // finally we also read the credential holder information with secret keys
-    // which we need to generate CDI.
-    // This file should also contain the public keys of the identity provider who
-    // signed the object.
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_id_use_data(cc.private) {
-        Ok(v) => v,
-        Err(x) => {
-            eprintln!("Could not read CHI object because: {}", x);
-            return;
-        }
+    // We ask what regid index they would like to use.
+    let acc_num = match cc.index {
+        Some(x) => x,
+        None => Input::new()
+            .with_prompt("Account/credential index: ")
+            .interact()
+            .unwrap_or(0), // 0 is the default index
     };
 
-    // We ask what regid index they would like to use.
-    let x = match cc.index {
-        Some(x) => x,
-        None => Input::new().with_prompt("Index").interact().unwrap_or(0), // 0 is the default index
+    // finally we also need the credential holder information with secret keys
+    // which we need to generate CDI.
+    let (id_use_data, acc_data, maybe_context): (
+        IdObjectUseData<Bls12, ExampleCurve>,
+        CredentialData,
+        Option<CredentialContext>,
+    ) = match cc.private {
+        Some(path) => {
+            let id_use_data = match read_id_use_data(&path) {
+                Ok(v) => v,
+                Err(x) => {
+                    eprintln!("Could not read ID use data object because: {}", x);
+                    return;
+                }
+            };
+            let acc_data = {
+                let mut csprng = thread_rng();
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+
+                CredentialData {
+                    keys,
+                    threshold: SignatureThreshold(2),
+                }
+            };
+            (id_use_data, acc_data, None)
+        }
+        None => {
+            let wallet: ConcordiumHdWallet = match read_json_from_file(&cc.hd_wallet.unwrap()) {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!("Could not read file because {}", e);
+                    return;
+                }
+            };
+            let identity_index = match cc.identity_index {
+                Some(x) => x,
+                None => Input::new()
+                    .with_prompt("Identity index")
+                    .interact()
+                    .unwrap_or(0), // 0 is the default index
+            };
+            let prf_key: prf::SecretKey<ArCurve> = match wallet.get_prf_key(identity_index) {
+                Ok(prf) => prf,
+                Err(e) => {
+                    eprintln!("Could not get prf key because {}", e);
+                    return;
+                }
+            };
+
+            let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+                Ok(scalar) => scalar,
+                Err(e) => {
+                    eprintln!("Could not get idCredSec because {}", e);
+                    return;
+                }
+            };
+
+            let randomness = match wallet.get_blinding_randomness(identity_index) {
+                Ok(scalar) => scalar,
+                Err(e) => {
+                    eprintln!("Could not get blinding randomness because {}", e);
+                    return;
+                }
+            };
+
+            let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
+            let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+            let cred_holder_info = CredentialHolderInfo::<ArCurve> { id_cred };
+
+            let aci = AccCredentialInfo {
+                cred_holder_info,
+                prf_key,
+            };
+            let id_use_data = IdObjectUseData { aci, randomness };
+            let secret = match wallet.get_account_signing_key(identity_index, u32::from(acc_num)) {
+                Ok(scalar) => scalar,
+                Err(e) => {
+                    eprintln!("Could not get account signing key because {}", e);
+                    return;
+                }
+            };
+            let cred_data = {
+                let mut keys = std::collections::BTreeMap::new();
+                let public = ed25519::PublicKey::from(&secret);
+                keys.insert(KeyIndex(0), KeyPair { secret, public });
+
+                CredentialData {
+                    keys,
+                    threshold: SignatureThreshold(1),
+                }
+            };
+            let context = CredentialContext {
+                wallet,
+                identity_index,
+                credential_index: u32::from(acc_num),
+            };
+            (id_use_data, cred_data, Some(context))
+        }
     };
 
     // Now we have have everything we need to generate the proofs
@@ -858,18 +1160,6 @@ fn handle_create_credential(cc: CreateCredential) {
     let context = IpContext::new(&ip_info, &ars, &global_ctx);
 
     // We now generate or read account verification/signature key pair.
-    let acc_data = {
-        let mut csprng = thread_rng();
-        let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-        keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
-        keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-
-        CredentialData {
-            keys,
-            threshold: SignatureThreshold(2),
-        }
-    };
 
     let new_or_existing = match (cc.expiry, cc.account) {
         (None, None) => panic!("One of (expiry, address) is required."),
@@ -880,16 +1170,28 @@ fn handle_create_credential(cc: CreateCredential) {
         (Some(_), Some(_)) => panic!("Exactly one of (expiry, address) is required."),
     };
 
-    let cdi = create_credential(
-        context,
-        &id_object,
-        &id_use_data,
-        x,
-        policy,
-        &acc_data,
-        &SystemAttributeRandomness,
-        &new_or_existing,
-    );
+    let cdi = match maybe_context {
+        Some(credential_context) => create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            acc_num,
+            policy,
+            &acc_data,
+            &credential_context,
+            &new_or_existing,
+        ),
+        None => create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            acc_num,
+            policy,
+            &acc_data,
+            &SystemAttributeRandomness,
+            &new_or_existing,
+        ),
+    };
 
     let (cdi, commitments_randomness) = match cdi {
         Ok(cdi) => cdi,
@@ -918,7 +1220,7 @@ fn handle_create_credential(cc: CreateCredential) {
         (Versioned::new(VERSION_0, credentials), randomness)
     };
 
-    let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
+    let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
 
     let secret_key = elgamal::SecretKey {
         generator: *global_ctx.elgamal_generator(),
@@ -989,11 +1291,71 @@ fn handle_create_credential(cc: CreateCredential) {
     }
 }
 
+fn handle_create_hd_wallet(chw: CreateHdWallet) {
+    let bip39_map = bip39_map();
+
+    let words_str = {
+        println!("Please enter existing phrase below.");
+        let input_words = match read_words_from_terminal(24, true, &bip39_map) {
+            Ok(words) => words,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                return;
+            }
+        };
+
+        input_words.join(" ")
+    };
+    let net = if chw.testnet {
+        Net::Testnet
+    } else {
+        Net::Mainnet
+    };
+    let wallet = ConcordiumHdWallet {
+        seed: words_to_seed(&words_str),
+        net,
+    };
+
+    if let Some(filepath) = chw.out {
+        match output_possibly_encrypted(&filepath, &wallet) {
+            Ok(_) => println!("Wrote hd wallet to file."),
+            Err(_) => {
+                eprintln!("Could not write to file. The generated wallet is");
+                output_json(&wallet);
+            }
+        }
+    } else {
+        println!("Generated hd wallet.");
+        output_json(&wallet)
+    }
+}
+
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_chi(cc: CreateChi) {
     let mut csprng = thread_rng();
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials::generate(&mut csprng),
+    let ah_info = if let (Some(path), Some(identity_index)) = (cc.hd_wallet, cc.identity_index) {
+        let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Could not read file because {}", e);
+                return;
+            }
+        };
+        let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+            Ok(scalar) => scalar,
+            Err(e) => {
+                eprintln!("Could not get idCredSec because {}", e);
+                return;
+            }
+        };
+
+        let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
+        let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+        CredentialHolderInfo::<ExampleCurve> { id_cred }
+    } else {
+        CredentialHolderInfo::<ExampleCurve> {
+            id_cred: IdCredentials::generate(&mut csprng),
+        }
     };
     if let Some(filepath) = cc.out {
         match output_possibly_encrypted(&filepath, &ah_info) {
@@ -1006,6 +1368,83 @@ fn handle_create_chi(cc: CreateChi) {
     } else {
         println!("Generated account holder information.");
         output_json(&ah_info)
+    }
+}
+
+// Create a new CHI object (essentially new idCredPub and idCredSec).
+fn handle_create_id_use_data(iud: CreateIdUseData) {
+    let id_use_data = {
+        if let (Some(path), Some(identity_index)) = (iud.hd_wallet, iud.identity_index) {
+            let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!("Could not read file because {}", e);
+                    return;
+                }
+            };
+            let prf_key: prf::SecretKey<ArCurve> = match wallet.get_prf_key(identity_index) {
+                Ok(prf) => prf,
+                Err(e) => {
+                    eprintln!("Could not get prf key because {}", e);
+                    return;
+                }
+            };
+
+            let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+                Ok(scalar) => scalar,
+                Err(e) => {
+                    eprintln!("Could not get idCredSec because {}", e);
+                    return;
+                }
+            };
+
+            let randomness = match wallet.get_blinding_randomness(identity_index) {
+                Ok(scalar) => scalar,
+                Err(e) => {
+                    eprintln!("Could not get blinding randomness because {}", e);
+                    return;
+                }
+            };
+
+            let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
+            let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+            let cred_holder_info = CredentialHolderInfo::<ArCurve> { id_cred };
+
+            let aci = AccCredentialInfo {
+                cred_holder_info,
+                prf_key,
+            };
+            IdObjectUseData { aci, randomness }
+        } else {
+            let mut csprng = thread_rng();
+            let cred_holder_info = CredentialHolderInfo::<ExampleCurve> {
+                id_cred: IdCredentials::generate(&mut csprng),
+            };
+            let prf_key = prf::SecretKey::generate(&mut csprng);
+
+            let aci = AccCredentialInfo {
+                cred_holder_info,
+                prf_key,
+            };
+
+            let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+            IdObjectUseData { aci, randomness }
+        }
+    };
+
+    let ver_id_use_data = Versioned::new(VERSION_0, id_use_data);
+
+    if let Some(filepath) = iud.out {
+        match output_possibly_encrypted(&filepath, &ver_id_use_data) {
+            Ok(_) => println!("Wrote ID use data to file."),
+            Err(_) => {
+                eprintln!("Could not write to file. The generated ID use data is");
+                output_json(&ver_id_use_data);
+            }
+        }
+    } else {
+        println!("Generated ID use data.");
+        output_json(&ver_id_use_data)
     }
 }
 
@@ -1500,6 +1939,165 @@ fn handle_start_ip(sip: StartIp) {
     }
 }
 
+fn handle_start_ip_v1(sip: StartIpV1) {
+    let id_use_data = match read_id_use_data(sip.id_use_data) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not read ID use data object because: {}", x);
+            return;
+        }
+    };
+
+    // now choose an identity provider.
+    let ips = {
+        if let Ok(ips) = read_identity_providers(sip.identity_providers) {
+            ips
+        } else {
+            eprintln!("Cannot read identity providers from the database. Terminating.");
+            return;
+        }
+    };
+
+    // names of identity providers the user can choose from, together with the
+    // names of anonymity revokers associated with them
+    let mut ips_names = Vec::with_capacity(ips.identity_providers.len());
+    for (_, v) in ips.identity_providers.iter() {
+        ips_names.push(format!(
+            "Identity provider {}, {}",
+            &v.ip_identity, v.ip_description.name
+        ))
+    }
+
+    let ip_info = {
+        if let Some(ip) = sip.identity_provider {
+            match ips.identity_providers.get(&IpIdentity(ip)) {
+                Some(ip) => ip.clone(),
+                None => {
+                    eprintln!("Identity provider with identity {} does not exist.", ip);
+                    return;
+                }
+            }
+        } else if let Ok(ip_info_idx) = Select::new()
+            .with_prompt("Choose identity provider")
+            .items(&ips_names)
+            .default(0)
+            .interact()
+        {
+            ips.identity_providers
+                .iter()
+                .nth(ip_info_idx)
+                .unwrap()
+                .1
+                .clone()
+        } else {
+            eprintln!("You have to choose an identity provider. Terminating.");
+            return;
+        }
+    };
+
+    let ars = {
+        if let Ok(ars) = read_anonymity_revokers(sip.anonymity_revokers) {
+            ars
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
+            return;
+        }
+    };
+
+    let ar_ids = if sip.selected_ars.is_empty() {
+        let mrs: Vec<&str> = ars
+            .anonymity_revokers
+            .values()
+            .map(|x| x.ar_description.name.as_str())
+            .collect();
+        let keys = ars.anonymity_revokers.keys().collect::<Vec<_>>();
+        let ar_ids = MultiSelect::new()
+            .with_prompt("Choose anonymity revokers")
+            .items(&mrs)
+            .interact()
+            .unwrap()
+            .iter()
+            .map(|&x| *keys[x])
+            .collect::<Vec<_>>();
+        if ar_ids.is_empty() {
+            eprintln!("You need to select an AR.");
+            return;
+        }
+        ar_ids
+    } else {
+        let res = sip
+            .selected_ars
+            .iter()
+            .map(|&x| ArIdentity::try_from(x))
+            .collect();
+        match res {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Incorrect AR identities: {}", e);
+                return;
+            }
+        }
+    };
+    let num_ars = ar_ids.len();
+    let mut choice_ars = BTreeMap::new();
+    for ar_id in ar_ids.iter() {
+        choice_ars.insert(
+            *ar_id,
+            ars.anonymity_revokers
+                .get(ar_id)
+                .expect("Chosen AR does not exist.")
+                .clone(),
+        );
+    }
+
+    let threshold = if let Some(thr) = sip.threshold {
+        Threshold(thr)
+    } else if let Ok(threshold) = Select::new()
+        .with_prompt("Revocation threshold")
+        .items(&(1..=num_ars).collect::<Vec<usize>>())
+        .default(0)
+        .interact()
+    {
+        Threshold((threshold + 1) as u8) // +1 because the indexing of the
+                                         // selection starts at 1
+    } else {
+        let d = max(1, num_ars - 1);
+        println!(
+            "Selecting default value (= {}) for revocation threshold.",
+            d
+        );
+        Threshold(d as u8)
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(sip.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    let context = IpContext::new(&ip_info, &choice_ars, &global_ctx);
+    // and finally generate the pre-identity object
+    let (pio, _) = generate_pio_v1(&context, threshold, &id_use_data)
+        .expect("Generating the pre-identity object should succeed.");
+
+    // the only thing left is to output all the information
+
+    let ver_pio = Versioned::new(VERSION_0, pio);
+    if let Some(pio_out_path) = sip.public {
+        if write_json_to_file(pio_out_path, &ver_pio).is_ok() {
+            println!("Wrote PIO data to file.");
+        } else {
+            println!("Could not write PIO data to file. Outputting to standard output.");
+            output_json(&ver_pio);
+        }
+    } else {
+        output_json(&ver_pio);
+    }
+}
+
 /// Generate identity providers with public and private information as well as
 /// anonymity revokers. For now we generate identity providers with names
 /// IP_PREFIX-i.json and its associated anonymity revoker has name
@@ -1650,4 +2248,73 @@ fn handle_generate_global(gl: GenerateGlobal) {
     if let Err(err) = write_json_to_file(&gl.output_file, &vgc) {
         eprintln!("Could not write global parameters because {}.", err);
     }
+}
+
+fn handle_recovery(girr: GenerateIdRecoveryRequest) {
+    let ip_info = match read_ip_info(girr.ip_info) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read identity provider info because {}", err);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(girr.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context from database. Terminating.");
+            return;
+        }
+    };
+
+    let chi: CredentialHolderInfo<ExampleCurve> = {
+        match decrypt_input(girr.chi) {
+            Ok(chi) => chi,
+            Err(e) => {
+                eprintln!("Could not read credential holder information: {}", e);
+                return;
+            }
+        }
+    };
+    let timestamp = chrono::Utc::now().timestamp() as u64;
+    let request =
+        generate_id_recovery_request(&ip_info, &global_ctx, &chi.id_cred.id_cred_sec, timestamp);
+    let json = Versioned {
+        version: Version::from(0),
+        value:   request,
+    };
+    if let Err(err) = write_json_to_file(&girr.request_file, &json) {
+        eprintln!("Could not write id recovery request to to {}.", err);
+    }
+}
+
+fn handle_validate_recovery(vir: ValidateIdRecoveryRequest) {
+    let ip_info = match read_ip_info(vir.ip_info) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read identity provider info because {}", err);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(vir.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context from database. Terminating.");
+            return;
+        }
+    };
+
+    let request = match read_recovery_request(&vir.request) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read recovery request because {}", err);
+            return;
+        }
+    };
+
+    let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
+    println!("ID recovery validation result: {}", result);
 }
