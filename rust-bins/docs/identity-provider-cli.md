@@ -7,10 +7,15 @@ The tool is partially interactive.
 - The `identity_provider_cli` tool.
 - A file with cryptographic parameters for the chain. We'll refer to this file as `cryptographic-parameters.json` below.
 - A file with the list of anonymity revokers supported by the identity provider. We refer to this file as `ars.json` below.
-- A file with identity provider private keys. We refer to this file as `ip-data.json` below.
-- An identity object request sent by the user. We refer to this file as `request.json` below.
+- When validating identity object requests, a file with identity provider private keys. We refer to this file as `ip-data.json` below.
+- When validating identity object requests, a file with request sent by the user. We refer to this file as `request.json` below.
+- When validating identity recovery requests, a file with recovery request sent by the user. We refer to this file as `recovery-request.json` below.
 
-# Output files
+There are two flows for validating identity object requests, the version 0 flow and the version 1 flow. In the version 0 flow, the creation of an identity involves the creation of an initial account. In the version 1 flow, there is no initial account creation.
+# Tool invocation
+
+
+## Output files after validation of identity object requests in the version 0 flow
 
 Upon success the tool will generate three files.
 
@@ -18,10 +23,16 @@ Upon success the tool will generate three files.
 - The initial account creation transaction. We refer to this as `initial-account.json` below. This must be submitted to the chain, for example via the wallet proxy.
 - The anonymity revocation record. We refer to this as `ar-record.json` below. This must be stored by the identity provider.
 
-# Tool invocation
+## Output files after validation of identity object requests in the version 1 flow
 
+Upon success the tool will generate three files.
+
+- The identity object which must be sent back to the user. We refer to this as `id-object.json` below.
+- The anonymity revocation record. We refer to this as `ar-record.json` below. This must be stored by the identity provider.
+
+## Validating identity object requests in the version 0 flow
 ```console
-identity_provider_cli --cryptographic-parameters cryptographic-parameters.json \
+identity_provider_cli sign-identity-request --cryptographic-parameters cryptographic-parameters.json \
                       --ars ars.json \
                       --ip-data ip-data.json \
                       --request request.json \
@@ -56,3 +67,33 @@ curl https://wallet-proxy.testnet.concordium.com/v0/submissionStatus/$submission
 ```
 or on the network dashboard
 `https://dashboard.testnet.concordium.com/lookup/$submissionId`
+
+
+## Validating identity object requests in the version 1 flow
+```console
+identity_provider_cli sign-identity-request-v1 --cryptographic-parameters cryptographic-parameters.json \
+                      --ars ars.json \
+                      --ip-data ip-data.json \
+                      --request request.json \
+                      --id-out id-object.json  \
+                      --ar-record-out ar-record.json
+```
+
+The tool will first verify the cryptographic validity of the request. The identity provider must then accept the user's choice of anonymity revokers and anonymity revocation  threshold. After accepting, the tool will ask for the following data
+- expiry year and month of the identity object.
+- an LEI of the entity for which this identity object is being created. This is optional, and if left empty will not be used.
+
+Upon success the tool will display output similar to the following.
+```
+Successfully checked pre-identity data.
+Wrote signed identity object to file id-object.json. Return it to the user.
+Wrote anonymity revocation record to file ar-record.json. Store it.
+```
+
+## Validating a recovery request
+Upon receiving recovery request from the user, run
+```console
+identity_provider_cli validate-recovery-request --cryptographic-parameters cryptographic-parameters.json \
+                      --ip-info ip-info.json \
+                      --request request.json
+```

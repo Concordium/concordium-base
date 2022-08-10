@@ -1,5 +1,7 @@
+use crypto_common::{base16_decode, base16_encode};
 use ed25519_dalek::{PublicKey, SecretKey};
 use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
+use hmac::Hmac;
 use id::{
     curve_arithmetic::Curve, pedersen_commitment::Randomness as CommitmentRandomness,
     types::AttributeTag,
@@ -7,10 +9,11 @@ use id::{
 use keygen_bls::keygen_bls;
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig::SigRetrievalRandomness;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sha2::Sha512;
 use std::fmt;
 
-#[derive(Copy, Clone, Debug, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -34,21 +37,39 @@ fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <G1 as Curve>::Scalar {
     keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
 }
 
+/// Convert 24 BIP-39 words to a 64 bytes seed.
+pub fn words_to_seed(words: &str) -> [u8; 64] {
+    // As described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+
+    let salt = b"mnemonic";
+
+    let mut seed = [0u8; 64];
+    pbkdf2::pbkdf2::<Hmac<Sha512>>(words.as_bytes(), &salt[..], 2048, &mut seed);
+    seed
+}
+
 /// A structure that is used to derive private key material and randomness
 /// for identities and accounts.
 ///
 /// The wallet should be used as a single point for deriving all required keys
 /// and randomness when creating identities and accounts, as it will allow for
 /// recovering the key material and randomness from just the seed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConcordiumHdWallet {
     /// The seed used as the basis for deriving keys. As all private keys are
     /// derived from this seed it means that it should be considered private
     /// and kept secret. The size is 64 bytes which corresponds to the seed
     /// that is given by a 24-word BIP39 seed phrase.
+    #[serde(
+        rename = "seed",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
     pub seed: [u8; 64],
     /// The type of blockchain network to derive keys for. Different key
     /// derivation paths are used depending on the chosen network to avoid
     /// collisions between a Testnet and Mainnet.
+    #[serde(rename = "net")]
     pub net:  Net,
 }
 

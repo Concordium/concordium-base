@@ -7,7 +7,7 @@ own changelogs.
    - `AccountAddress::new` is renamed to `account_address_from_registration_id`.
    - Implement `crypto_common::Serial` and `crypto_common::Deserial` for `ReceiveName` and `ContractName`.
    - Remove `Amount` from `crypto_common` and use the `Amount` defined in `concordium-contracts-common`:
-     - `Amount` now have a field `micro_ccd` instead of `microgtu`.
+     - `Amount` now has a field `micro_ccd` instead of `microgtu`.
      - The default arithmetic (operator syntax, such as `+`, `-`, `*`) with `Amount` is now unchecked.
    - There are no longer implementations of `From<u64> for Amount` and `From<Amount> for u64` as the behavior of these are not obvious.
      Instead, the functions `Amount::from_micro_ccd` or `Amount::from_ccd` and the getter `micro_ccd` should be used instead.
