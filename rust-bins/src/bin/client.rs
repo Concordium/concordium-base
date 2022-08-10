@@ -81,7 +81,7 @@ fn read_validto() -> io::Result<YearMonth> {
 struct CreateHdWallet {
     #[structopt(
         long = "out",
-        help = "Optional file to write the hd wallet to. If not provided, the hd wallet json will \
+        help = "Optional file to write the hd wallet to. If not provided, the hd wallet JSON will \
                 be written to standard output."
     )]
     out:     Option<PathBuf>,
