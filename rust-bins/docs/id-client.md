@@ -43,7 +43,7 @@ which results in the following content in `bob-chi.json`.
 
 This file contains **private** information, namely the value `idCredSecret`.
 
-The data can be generated deterministacally from a hd-wallet if the flags `--hd-wallet` and `identity-index` are provided. For example, using the hd-wallet above, the command
+The data can be generated deterministically from a hd-wallet if the flags `--hd-wallet` and `identity-index` are provided. For example, using the hd-wallet above, the command
 ```console
 $ ./client create-chi --out bob-chi.json --hd-wallet hd-wallet.json --identity-index 0
 Wrote CHI to file.
