@@ -3,7 +3,7 @@ name = "wasm-transform"
 version = "0.1.1"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
-license-file = "../LICENSE-MPL-2.0"
+license-file = "../../LICENSE"
 
 [features]
 fuzz-coverage = []
