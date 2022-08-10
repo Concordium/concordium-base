@@ -933,7 +933,6 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
-
 /// For generating identity recovery requests
 fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
@@ -948,7 +947,12 @@ fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
 
     let timestamp: u64 = try_get(&v, "timestamp")?;
 
-    let request = account_holder::generate_id_recovery_request(&ip_info, &global_context, &id_cred_sec, timestamp);
+    let request = account_holder::generate_id_recovery_request(
+        &ip_info,
+        &global_context,
+        &id_cred_sec,
+        timestamp,
+    );
 
     let response = json!({
         "idRecoveryRequest": Versioned::new(VERSION_0, request),
