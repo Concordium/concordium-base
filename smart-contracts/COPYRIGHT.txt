@@ -1,4 +1,0 @@
-The packages in this repository are licensed either under MPL-2.0 or Apache-2.0
-license. See individual packages Cargo.toml file for details.
-
-Copyright (c) Concordium

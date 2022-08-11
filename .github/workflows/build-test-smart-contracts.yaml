@@ -1,7 +1,6 @@
-name: Build and test
+name: Build and test smart-contracts
 
 # This job runs rustfmt and clippy linting,
-# cargo check on cargo-concordium,
 # and then it runs cargo test and ./target/debug/wasm-test
 
 on:
@@ -21,7 +20,7 @@ env:
 
 jobs:
   "lint_fmt":
-    name: ${{ matrix.build-dir }} lint:fmt
+    name: smart-contracts/${{ matrix.build-dir }} lint:fmt
     # Don't run on draft pull requests
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
@@ -41,7 +40,7 @@ jobs:
           override: true
           components: rustfmt
       - name: Format
-        working-directory: ${{ matrix.build-dir }}
+        working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           cargo fmt -- --color=always --check
 
@@ -72,12 +71,12 @@ jobs:
           target: ${{ env.TARGET }}
           components: rustfmt
       - name: Format
-        working-directory: rust-contracts/example-contracts/${{ matrix.example-contract }}
+        working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           cargo fmt -- --color=always --check
 
   "lint_clippy":
-    name: ${{ matrix.build-dir }} lint:clippy
+    name: smart-contracts/${{ matrix.build-dir }} lint:clippy
     # Don't run on draft pull requests
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
@@ -100,13 +99,13 @@ jobs:
           target: ${{ env.TARGET }}
           components: clippy
       - name: Clippy
-        working-directory: ${{ matrix.build-dir }}
+        working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           cargo clippy --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
-    name: ${{ matrix.example-contract }} lint:clippy
+    name: smart-contracts/${{ matrix.example-contract }} lint:clippy
     # Don't run on draft pull requests
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
@@ -132,7 +131,7 @@ jobs:
           target: ${{ env.TARGET }}
           components: clippy
       - name: Clippy
-        working-directory: rust-contracts/example-contracts/${{ matrix.example-contract }}
+        working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           cargo clippy --color=always --tests -- -Dclippy::all
@@ -140,8 +139,6 @@ jobs:
   "cargo_test":
     name: ${{ matrix.build-dir }} cargo:test
     runs-on: ubuntu-latest
-    needs:
-      - cargo-concordium_cargo_build-bench
     strategy:
       matrix:
         build-dir:
@@ -159,7 +156,7 @@ jobs:
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
       - name: Test
-        working-directory: ${{ matrix.build-dir }}
+        working-directory: smart-contracts/${{ matrix.build-dir }}
         run: cargo test
 
   "cargo_test_example_contracts":
@@ -188,7 +185,7 @@ jobs:
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
       - name: Test
-        working-directory: rust-contracts/example-contracts/${{ matrix.example-contract }}
+        working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           cargo test --target x86_64-unknown-linux-gnu
@@ -208,7 +205,7 @@ jobs:
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
       - name: Test
-        working-directory: wasm-test
+        working-directory: smart-contracts/wasm-test
         run: |
           cargo build
           ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/

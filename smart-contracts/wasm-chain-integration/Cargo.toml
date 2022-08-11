@@ -3,7 +3,7 @@ name = "wasm-chain-integration"
 version = "0.2.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
-license-file = "../LICENSE-MPL-2.0"
+license-file = "../../LICENSE"
 
 [features]
 # If this feature is enabled  the ffi exports are going to be produced
@@ -41,7 +41,7 @@ version = "0"
 
 [dependencies.concordium-contracts-common]
 version = "3.0"
-path = "../concordium-contracts-common/concordium-contracts-common"
+path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
 [lib]

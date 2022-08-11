@@ -1,3 +1,0 @@
-[submodule "concordium-contracts-common"]
-	path = concordium-contracts-common
-	url = ../concordium-contracts-common.git
