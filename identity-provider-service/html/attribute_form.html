@@ -1,0 +1,113 @@
+<!--
+The attribute form that the user is forwarded to, where the attributes can be filled out for testing. In the real
+world scenario the attributes will be derived from the identity verification process.
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+   input[type=text], input[type=number], input[type=month], select {
+       width: 100%;
+      padding: 12px 20px;
+      margin: 8px 0;
+      display: inline-block;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    input[type=submit] {
+      width: 100%;
+      background-color: #4CAF50;
+      color: white;
+      padding: 14px 20px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    input[type=submit]:hover {
+      background-color: #45a049;
+    }
+
+    div {
+      border-radius: 5px;
+      background-color: #f2f2f2;
+      padding: 20px;
+    }
+  </style>
+  <script>
+   document.addEventListener('DOMContentLoaded', function() {
+       let date = new Date();
+       let month = `${date.getMonth() + 1}`.padStart(2, "0");
+       let year = date.getFullYear() + 1;
+       document.getElementById("expiry").value = `${year}-${month}`
+   });
+  </script>
+</head>
+<body>
+  <div>
+    <h1>Concordium Identity Verification</h1>
+    <form action="/api/submit" method="post">
+
+        <input type="hidden" id="idcredpub" name="id_cred_pub" value="$id_cred_pub$">
+        <input type="hidden" id="endpointversion" name="endpoint_version" value="$endpoint_version$">
+        <input type="hidden" id="idcredpubsignature" name="id_cred_pub_signature" value="$id_cred_pub_signature$">
+
+        <label for="fail">Fail identity</label>
+        <input type="checkbox" id="fail" name="fail" value="True">
+        <br/>
+        <label for="fail_delay">Seconds to delay before failing identity</label>
+        <input type="number" id="fail_delay" name="fail_delay" value="10">
+
+        <label for="expiry">Identity expiry</label>
+        <input type="month" id="expiry" name="expiry" required="required">
+
+        <label for="fname">First Name</label>
+        <input type="text" id="fname" name="firstName" value="John">
+
+        <label for="lname">Last Name</label>
+        <input type="text" id="lname" name="lastName" value="Doe">
+
+        <label for="sex">Sex (ISO/IEC 5218, 0 = NOT KNOWN; 1 = MALE; 2 = FEMALE; 9 = NOT APPLICABLE)</label>
+        <input type="text" id="sex" name="sex" value="0">
+
+        <label for="dob">Date of birth (ISO8601 YYYYMMD)</label>
+        <input type="text" id="dob" name="dob" value="19700101">
+
+        <label for="countryOfResidence">Country of residence (ISO 3166-1 ALPHA-2)</label>
+        <input type="text" id="countryOfResidence" name="countryOfResidence" value="DK">
+
+        <label for="nationality">Nationality (ISO 3166-1 ALPHA-2)</label>
+        <input type="text" id="nationality" name="nationality" value="DK">
+
+        <label for="idDocType">Identity document type (NA=0, PASSPORT=1, NATIONAL ID CARD=2, DRIVING LICENSE=3, IMMIGRATION CARD=4)</label>
+        <input type="text" id="idDocType" name="idDocType" value="1">
+
+        <label for="idDocNo">Identity document number</label>
+        <input type="text" id="idDocNo" name="idDocNo" value="12345">
+
+        <label for="idDocIssuer">Identity document issuer (ISO 3166-1 ALPHA-2</label>
+        <input type="text" id="idDocIssuer" name="idDocIssuer" value="DK">
+
+        <label for="idDocIssuedAt">Identity document issued at (ISO8601 YYYYMMDD)</label>
+        <input type="text" id="idDocIssuedAt" name="idDocIssuedAt" value="20200101">
+
+        <label for="idDocExpiresAt">Identity document expires at (ISO8601 YYYYMMDD)</label>
+        <input type="text" id="idDocExpiresAt" name="idDocExpiresAt" value="20211231">
+
+        <label for="nationalIdNo">National id no</label>
+        <input type="text" id="nationalIdNo" name="nationalIdNo" value="N-1234">
+
+        <label for="taxIdNo">Tax id no</label>
+        <input type="text" id="taxIdNo" name="taxIdNo" value="T-1234">
+
+        <input type="submit" value="Submit">
+    </form>
+  </div>
+</body>
+
+</html>

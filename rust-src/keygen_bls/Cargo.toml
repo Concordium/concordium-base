@@ -1,0 +1,21 @@
+[package]
+name = "keygen_bls"
+version = "2.0.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE"
+
+[dependencies]
+pairing = "0.15"
+sha2 = "0.9"
+hkdf = "0.11.0"
+ff = "0.5"
+hex = "0.4"
+
+[dependencies.curve_arithmetic]
+path = "../curve_arithmetic"
+version = "0"
+
+[lib]
+name = "keygen_bls"
+crate-type = ["rlib"]

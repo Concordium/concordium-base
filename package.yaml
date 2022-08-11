@@ -1,0 +1,212 @@
+name:                concordium-base
+version:             0.1.0.0
+license:             MPL-2.0
+license-file:        "LICENSE"
+author:              "Concordium AG"
+maintainer:          "developers@concordium.com"
+copyright:           "Concordium AG"
+
+extra-source-files:
+- README.md
+- LICENSE
+
+custom-setup:
+  dependencies:
+    - base  >= 4.7
+    - Cabal >= 2.2
+    - directory >= 1.3
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         See README
+
+default-extensions:
+- FlexibleContexts
+- FlexibleInstances
+- FunctionalDependencies
+- GeneralizedNewtypeDeriving
+- LambdaCase
+- MultiParamTypeClasses
+- RecordWildCards
+- TupleSections
+
+flags:
+  static:
+    description: Use static linking.
+    manual: True
+    default: False
+
+dependencies:
+- aeson >= 1.4.2
+- base >= 4.7 && < 5
+- base16-bytestring >= 0.1.1.6
+- base64-bytestring >= 1.1.0.0
+# binary is used by aeson and we need for a couple of instances. cereal should
+# be used for everything else.
+- binary >= 0.8
+- bytestring >= 0.10
+- cereal >= 0.5
+- containers >= 0.6
+- cryptonite >= 0.27
+- deepseq >= 1.4
+- exceptions >= 0.10
+- ghc-prim >= 0.5.3
+- hashable >= 1.2
+- microlens >=0.3
+- microlens-platform >=0.3
+- mtl >= 2.2
+- persistent >= 2.10
+- pqueue >= 1.4.1
+- prettyprinter >= 1.2
+- primitive >= 0.7
+- QuickCheck >= 2.12
+- random >= 1.1
+- scientific >= 0.3.2
+- template-haskell >= 2.14
+- text >= 1.2
+- time >= 1.8
+- transformers >= 0.5
+- unordered-containers >= 0.2
+- vector >= 0.12
+
+library:
+  source-dirs: haskell-src
+  ghc-options:
+    - -Wall
+    - -Wcompat
+    - -Werror=missing-fields
+    - -Werror=missing-methods
+    - -Wredundant-constraints
+    - -fno-ignore-asserts
+
+  extra-libraries:
+    - aggregate_sig
+    - ecvrf
+    - eddsa_ed25519
+    - encrypted_transfers
+    - ffi_helpers
+    - id
+    - sha_2
+
+  when:
+    - condition: os(windows)
+      extra-libraries:
+        - userenv
+        - ws2_32
+        - bcrypt
+
+
+executables:
+  generate-update-keys:
+    main: Main.hs
+    source-dirs: haskell-bins/generate-update-keys
+    ghc-options:
+      - -Wall
+      - -Wcompat
+      - -Werror=missing-fields
+      - -Werror=missing-methods
+      - -Wredundant-constraints
+      - -fno-ignore-asserts
+    # when:
+    #   - condition: "!os(windows) && !flag(static)"
+    #     ghc-options: -dynamic
+    dependencies:
+      - aeson-pretty >= 0.8
+      - concordium-base
+      - filepath >= 1.4
+      - optparse-applicative >= 0.15
+
+  genesis:
+    main: Genesis.hs
+    source-dirs: haskell-bins/genesis
+    # when:
+    #   - condition: "!os(windows) && !flag(static)"
+    #     ghc-options: -dynamic
+
+    ghc-options:
+    - -Wall
+    - -Wcompat
+    - -fno-ignore-asserts
+    dependencies:
+    - concordium-base
+    - cmdargs >= 0.10
+    - filepath >= 1.4
+    - aeson-pretty >= 0.8
+
+tests:
+  test:
+    main:                Spec.hs
+    source-dirs:         haskell-tests
+    ghc-options:
+    - -threaded
+    - -with-rtsopts=-N
+    - -Wall
+    - -Wno-deprecations
+
+    when:
+      - condition: flag(static)
+        ld-options:
+          - -static
+
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+    dependencies:
+    - concordium-base
+    - containers
+    - hspec >= 2.6
+    - hspec-expectations >= 0.8
+    - HUnit >= 1.6
+    - QuickCheck >= 2.12
+    - random
+
+benchmarks:
+  ed25519-perf:
+    main: haskell-bench/Ed25519Perf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  ed25519dlog-perf:
+    main: haskell-bench/Ed25519DlogPerf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  bls-perf:
+    main: haskell-bench/BlsPerf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  sha256-perf:
+    main: haskell-bench/SHA256Perf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
+
+  verify-credential-perf:
+    main: haskell-bench/VerifyCredentialPerf.hs
+    dependencies:
+      - concordium-base
+      - criterion >= 1.5
+    when:
+      - condition: "!os(windows)"
+        ghc-options: -dynamic

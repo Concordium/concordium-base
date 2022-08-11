@@ -1,0 +1,29 @@
+title Identity provider proof of concept
+
+
+App->Identity provider: GET identity-provider-url?response_type=code&state=urlencoded({IdentityObjectRequest})&redirect_uri={redirect_uri}
+Identity provider->Identity provider: Validate request and save to database
+Identity provider->App: HTTP 302 Found\nLocation identity-verifier-url/api/verify/{id_cred_pub}/{signed_id_cred_pub}
+
+App->Identity verifier: GET identity-verifier-url/api/verify/{id_cred_pub}/{signed_id_cred_pub}
+Identity verifier->App: Attribute HTML form
+App->Identity verifier: POST identity-verifier-url/api/submit/\nBody id_cred_pub + signed_id_cred_pub + attribute_list
+
+Identity verifier->Identity verifier: Verify signed_id_cred_pub and\n identity, save attribute list
+Identity verifier->App: HTTP 302 Found\nLocation identity-provider-url/api/identity/create/{id_cred_pub}
+
+App->Identity provider: GET identity-provider-url/api/identity/create/{id_cred_pub}
+
+Identity provider->Identity provider: Create identity object and initial account transaction,\n save revocation record and identity object
+Identity provider->Wallet proxy: PUT v0/submitCredential \n Submit initial account creation
+Wallet proxy->Identity provider: { "submissionId": "..." } or HTTP 400 bad request or HTTP 5**
+
+Identity provider->App: HTTP 302 Found \n Location {redirect_uri}#code_uri=identity-provider-url/path/to/identity-object
+
+loop Poll for identity object
+    App->Identity provider: GET identity-provider-url/path/to/identity-object
+    Identity provider->Wallet proxy: GET /v0/submissionStatus/{submissionId}
+    Wallet proxy->Identity provider: { "status": "(finalized|committed|pending|absent)" }
+    Identity provider->Identity provider: Update status of identity\nobject in database
+    Identity provider->App: { "status": "(done|pending|error)", "detail":"Optional", \n "token": { "identityObject": url_encoding_of_json_serialized_versioned_identity_object }}
+end

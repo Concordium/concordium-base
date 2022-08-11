@@ -1,0 +1,23 @@
+version: '3'
+services:
+  identity-provider-service:
+    image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/identity-provider-service:debug
+    environment:
+      - MODE=identity-provider-service
+      - IDENTITY_PROVIDER_SERVICE_PORT=7011
+      - ANONYMITY_REVOKERS=/anonymity_revokers.json
+      - IDENTITY_PROVIDER=/identity_provider.json
+      - GLOBAL=/global.json
+      - RETRIEVE_BASE=https://id-service.eu.staging.concordium.com
+      - ID_VERIFICATION_URL=http://identity-verifier:7012/api/verify
+      - WALLET_PROXY_BASE=https://wallet-proxy.eu.staging.concordium.com
+    ports:
+      - "7011:7011"
+  identity-verifier:
+    image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/identity-provider-service:debug
+    environment:
+      - MODE=identity-verifier
+      - IDENTITY_VERIFIER_PORT=7012
+      - IDENTITY_PROVIDER_URL=http://identity-provider-service:7011
+    ports:
+      - "7012:7012"

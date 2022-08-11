@@ -1,0 +1,10 @@
+{
+  "idRecoveryRequest": {
+    "v": 0,
+    "value": {
+      "idCredPub": "b05e024461f74ef98d14d6ae17121df28bc397fbfd55fedf08889c48c59d92e61c6853c561f054a9a1b6ad648d1da154",
+      "proof": "043b4af07edd7b5a694ac3034df622fd0184450ebf542bb49730cf38eba0b4464d51e0209c147edaaffaf9fc5fc1f2928aed95dc8c9ae15bf5497bc3255394f7",
+      "timestamp": 1657528974
+    }
+  }
+}
