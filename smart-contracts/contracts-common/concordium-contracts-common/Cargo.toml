@@ -35,9 +35,10 @@ version = "1.0"
 optional = true
 version = "0.4.19"
 
-[dependencies.base58check]
+[dependencies.bs58]
 optional = true
-version = "0.1"
+version = "0.4"
+features = ["check"]
 
 [dependencies.num-bigint]
 optional = true
@@ -59,7 +60,7 @@ version = "1"
 default = ["std"]
 
 std = ["fnv/std"]
-derive-serde = ["serde", "serde_json", "std", "base58check", "chrono", "num-bigint", "num-traits", "thiserror"]
+derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "thiserror"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
 
