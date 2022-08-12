@@ -12,6 +12,7 @@
 - Implement `Display` and `FromStr` for `ContractAddress` when `derive-serde` is enabled. The formatting is `<index, subindex>`, E.g `<145,0>` .
 - Implement `Display` and `FromStr` for `Address` when `derive-serde` is enabled. The latter attempts to parse a contract address. If this fails it will attempt to parse an `AccountAddress`.
 - Implement `FromStr` for `OwnedReceiveName`.
+- Add `cursor_position` method to the `Seek` trait.
 
 ## concordium-contracts-common 3.1.0 (2022-08-04)
 
