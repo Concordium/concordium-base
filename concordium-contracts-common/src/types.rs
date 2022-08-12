@@ -1409,9 +1409,7 @@ impl std::error::Error for ParseError {}
 
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
-    // FIXME: This is duplicated from crypto/id/types.
     use super::*;
-    use base58check::*;
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::{fmt, num};
 
@@ -1420,10 +1418,7 @@ mod serde_impl {
     pub enum AccountAddressParseError {
         /// Failed parsing the Base58Check encoding.
         #[error("Invalid Base58Check encoding.")]
-        InvalidBase58Check(FromBase58CheckError),
-        /// Base58Check version byte is not 1.
-        #[error("Invalid version byte, expected 1, but got {0}.")]
-        InvalidBase58CheckVersion(u8),
+        InvalidBase58Check(#[from] bs58::decode::Error),
         /// The decoded bytes are not of length 32.
         #[error("Invalid number of bytes, expected 32, but got {0}.")]
         InvalidByteLength(usize),
@@ -1434,23 +1429,18 @@ mod serde_impl {
         type Err = AccountAddressParseError;
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {
-            let (version, body) =
-                v.from_base58check().map_err(AccountAddressParseError::InvalidBase58Check)?;
-            if version != 1 {
-                return Err(AccountAddressParseError::InvalidBase58CheckVersion(version));
-            }
-            if body.len() != ACCOUNT_ADDRESS_SIZE {
-                return Err(AccountAddressParseError::InvalidByteLength(body.len()));
-            }
             let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-            buf.copy_from_slice(&body);
+            let len = bs58::decode(v).with_check(Some(1)).into(&mut buf)?;
+            if len != ACCOUNT_ADDRESS_SIZE {
+                return Err(AccountAddressParseError::InvalidByteLength(len));
+            }
             Ok(AccountAddress(buf))
         }
     }
 
     impl fmt::Display for AccountAddress {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0.to_base58check(1))
+            write!(f, "{}", bs58::encode(&self.0).with_check().into_string())
         }
     }
 
