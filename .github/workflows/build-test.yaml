@@ -55,7 +55,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-
+      with:
+        submodules: recursive
     # RUST #
 
     # Set up Rust and restore dependencies and targets from cache.

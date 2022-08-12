@@ -1201,7 +1201,7 @@ fn handle_create_credential(cc: CreateCredential) {
         }
     };
 
-    let address = AccountAddress::new(&cdi.values.cred_id);
+    let address = account_address_from_registration_id(&cdi.values.cred_id);
 
     let cdi_no_proofs = AccountCredentialWithoutProofs::Normal {
         cdv:         cdi.values.clone(),

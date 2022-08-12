@@ -200,9 +200,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     let gens = context.bulletproof_generators().take(64);
     let generator = context.encryption_in_exponent_generator();
 
-    let s_prime = u64::from(s) - u64::from(a);
+    let s_prime = s.micro_ccd() - a.micro_ccd();
     let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
-    let a_chunks = CHUNK_SIZE.u64_to_chunks(u64::from(a));
+    let a_chunks = CHUNK_SIZE.u64_to_chunks(a.micro_ccd());
     let A_enc_randomness = a_chunks
         .iter()
         .map(|&x| {
@@ -378,14 +378,14 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
 
     let gens = context.bulletproof_generators();
     let generator = context.encryption_in_exponent_generator();
-    let s_prime = u64::from(s) - u64::from(a);
+    let s_prime = s.micro_ccd() - a.micro_ccd();
     let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
     let S_prime_enc_randomness = s_prime_chunks
         .iter()
         .map(|&x| pk.encrypt_exponent_rand_given_generator(&Value::<C>::from(x), generator, csprng))
         .collect::<Vec<_>>();
     let A_dummy_encryption = {
-        let ha = generator.mul_by_scalar(&C::scalar_from_u64(u64::from(a)));
+        let ha = generator.mul_by_scalar(&C::scalar_from_u64(a.micro_ccd()));
         Cipher(C::zero_point(), ha)
     };
     let A = [A_dummy_encryption];
@@ -402,7 +402,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     let secret = EncTransSecret {
         dlog_secret:     Rc::new(sk.scalar),
         encexp1_secrets: vec![ComEqSecret::<C> {
-            r: PedersenRandomness::from_u64(u64::from(a)),
+            r: PedersenRandomness::from_u64(a.micro_ccd()),
             a: Value::from(0u64),
         }],
         encexp2_secrets: s_prime_secrets,
@@ -595,7 +595,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     let gens = context.bulletproof_generators();
     let a = transaction.transfer_amount;
     let A_dummy_encryption = {
-        let ha = generator.mul_by_scalar(&C::scalar_from_u64(u64::from(a)));
+        let ha = generator.mul_by_scalar(&C::scalar_from_u64(a.micro_ccd()));
         Cipher(C::zero_point(), ha)
     };
     let A = [A_dummy_encryption];
@@ -697,8 +697,8 @@ mod test {
             &pk_receiver,
             index,
             &S,
-            Amount::from(s),
-            Amount::from(a),
+            Amount::from_micro_ccd(s),
+            Amount::from_micro_ccd(a),
             &mut csprng,
         )
         .expect("Could not produce proof.");
@@ -746,8 +746,8 @@ mod test {
             &sk,
             index,
             &S,
-            Amount::from(s),
-            Amount::from(a),
+            Amount::from_micro_ccd(s),
+            Amount::from_micro_ccd(a),
             &mut csprng,
         )
         .expect("Proving failed, but that is extremely unlikely, which indicates a bug.");

@@ -265,7 +265,7 @@ fn main() -> std::io::Result<()> {
             policy,
         };
 
-        let address = AccountAddress::new(&cdv.cred_id);
+        let address = account_address_from_registration_id(&cdv.cred_id);
 
         // we output a credential without proofs but with commitments.
         // This is enough for inclusion in genesis, since we do not care

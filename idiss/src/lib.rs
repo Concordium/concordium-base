@@ -131,7 +131,7 @@ fn validate_request(
         ars_infos:      &ars_infos.anonymity_revokers,
         global_context: &global_context,
     };
-    let addr = AccountAddress::new(&request.pub_info_for_ip.reg_id);
+    let addr = account_address_from_registration_id(&request.pub_info_for_ip.reg_id);
     if let Err(e) = ip_validate_request(&request, context) {
         anyhow::bail!("Ip validation failed: {:?}", e);
     }
@@ -231,7 +231,7 @@ fn create_identity_object(
     let vid = Versioned::new(VERSION_0, id);
 
     let account_address =
-        AccountAddress::new(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
+        account_address_from_registration_id(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
 
     let message = AccountCredentialMessage {
         message_expiry: TransactionTime { seconds: expiry },

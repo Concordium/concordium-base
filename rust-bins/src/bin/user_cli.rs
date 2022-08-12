@@ -396,7 +396,7 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
     // initial account information. We don't have the credential and
     // the randomness so we don't store them.
     // address of the initial account
-    let address = AccountAddress::new(&pio.pub_info_for_ip.reg_id);
+    let address = account_address_from_registration_id(&pio.pub_info_for_ip.reg_id);
     let init_acc = json!({
         "address": address,
         "encryptionSecretKey": secret_key,
@@ -996,7 +996,7 @@ struct CredentialHelperArguments {
 }
 
 fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<()> {
-    let address = AccountAddress::new(&args.cdi.values.cred_id);
+    let address = account_address_from_registration_id(&args.cdi.values.cred_id);
 
     // Output in the format accepted by concordium-client.
     let (versioned_credentials, randomness_map) = {

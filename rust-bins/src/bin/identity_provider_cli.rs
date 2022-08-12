@@ -285,7 +285,7 @@ fn handle_sign_pio_v0(app: IpV0) -> anyhow::Result<()> {
             e
         )
     })?;
-    let account_address = AccountAddress::new(&pio.pub_info_for_ip.reg_id);
+    let account_address = account_address_from_registration_id(&pio.pub_info_for_ip.reg_id);
     let id_object = IdentityObject {
         pre_identity_object: pio,
         alist: attributes,

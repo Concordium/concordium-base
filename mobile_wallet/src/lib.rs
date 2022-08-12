@@ -626,7 +626,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let acc_keys = AccountKeys::from(initial_acc_data);
 
     let reg_id = &pio.pub_info_for_ip.reg_id;
-    let address = AccountAddress::new(reg_id);
+    let address = account_address_from_registration_id(reg_id);
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
         // the unwrap is safe since we've generated the RegID successfully above.
@@ -786,7 +786,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     )?;
 
     let address = match new_or_existing {
-        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Left(_) => account_address_from_registration_id(&cdi.values.cred_id),
         Right(address) => address,
     };
 
@@ -905,7 +905,7 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     )?;
 
     let address = match new_or_existing {
-        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Left(_) => account_address_from_registration_id(&cdi.values.cred_id),
         Right(address) => address,
     };
 
@@ -984,7 +984,7 @@ fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
                 generator: *global_context.elgamal_generator(),
                 scalar:    enc_key,
             };
-            let address = AccountAddress::new(&reg_id);
+            let address = account_address_from_registration_id(&reg_id);
             response.push(json!({
                 "encryptionSecretKey": secret_key,
                 "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
@@ -1437,7 +1437,7 @@ pub unsafe fn decrypt_encrypted_amount(input_ptr: *const c_char, success: *mut u
     };
     if let Ok(v) = decrypt_encrypted_amount_aux(input_str) {
         *success = 1;
-        u64::from(v)
+        v.micro_ccd()
     } else {
         *success = 0;
         0
