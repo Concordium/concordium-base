@@ -26,6 +26,9 @@ pub trait Seek {
     /// Seek to the new position. If successful, return the new position from
     /// the beginning of the stream.
     fn seek(&mut self, pos: SeekFrom) -> Result<u32, Self::Err>;
+
+    /// Get the cursor position counted from the beginning of the stream.
+    fn cursor_position(&self) -> u32;
 }
 
 /// The `HasSize` trait provides a function for getting the current byte size.
