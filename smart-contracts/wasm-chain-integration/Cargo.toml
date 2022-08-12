@@ -1,0 +1,67 @@
+[package]
+name = "wasm-chain-integration"
+version = "0.2.0"
+authors = ["Concordium <developers@concordium.com>"]
+edition = "2018"
+license-file = "../../LICENSE"
+
+[features]
+# If this feature is enabled  the ffi exports are going to be produced
+# for use from Haskell.
+enable-ffi = []
+default=["enable-ffi"]
+fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
+fuzz-coverage = ["wasm-transform/fuzz-coverage"]
+display-state = ["ptree"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+libc = "0.2"
+anyhow = "1"
+serde = "1.0"
+num_enum = "0.5"
+derive_more = "0.99"
+sha2 = "0.10"
+sha3 = "0.10"
+secp256k1 = "0.22"
+ed25519-zebra = "2.2" # TODO: After we only support Rust 1.54+ change to the latest version (3.*)
+thiserror = "1"
+byteorder = "1.4"
+tinyvec = {version = "1.5", features = ["alloc"]}
+slab = "0.4.5"
+ptree = { version = "0.4.0", optional = true }
+
+arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
+wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
+wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main", optional = true }
+
+[dependencies.wasm-transform]
+path = "../wasm-transform"
+version = "0"
+
+[dependencies.concordium-contracts-common]
+version = "3.0"
+path = "../../concordium-contracts-common/concordium-contracts-common"
+features = ["derive-serde"]
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dev-dependencies]
+criterion = { version = ">=0.3.4", features = ["html_reports"] }
+quickcheck = "1.0.3"
+
+[[bench]]
+name = "wasm"
+harness = false
+
+[[bench]]
+name = "v1-host-functions"
+harness = false
+
+[[bench]]
+name = "trie_benches"
+harness = false
+
+[profile.release]
+codegen-units = 1
