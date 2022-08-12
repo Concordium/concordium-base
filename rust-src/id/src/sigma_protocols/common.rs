@@ -257,7 +257,7 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for OrAdapter<P1, P2> {
                 let m1 = self
                     .first
                     .extract_point(&self.first.get_challenge(&c1), &w1)?;
-                // Commit normally for P1
+                // Commit normally for P2
                 let (m2, s2) = self.second.commit_point(sec2, csprng)?;
                 Some(((m1, m2), OrState::P2(s2, c1, w1)))
             }
