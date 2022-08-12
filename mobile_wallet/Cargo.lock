@@ -65,6 +65,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base64ct"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a32fd6af2b5827bce66c29053ba0e7c42b9dcab01835835058558c10851a46b"
+
+[[package]]
 name = "bit-vec"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -206,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "base58check",
  "chrono",
@@ -222,7 +228,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common-derive"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -347,7 +353,7 @@ checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
 dependencies = [
  "byteorder",
  "digest 0.9.0",
- "rand_core",
+ "rand_core 0.5.1",
  "subtle",
  "zeroize",
 ]
@@ -421,7 +427,7 @@ dependencies = [
  "ff",
  "pairing",
  "rand",
- "rand_core",
+ "rand_core 0.5.1",
  "serde",
  "thiserror",
 ]
@@ -516,7 +522,7 @@ dependencies = [
  "libc",
  "pairing",
  "rand",
- "rand_core",
+ "rand_core 0.5.1",
  "serde",
  "thiserror",
 ]
@@ -566,7 +572,7 @@ checksum = "4530da57967e140ee0b44e0143aa66b5cb42bd9c503dbe316a15d5b0be65713e"
 dependencies = [
  "byteorder",
  "ff_derive",
- "rand_core",
+ "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -715,7 +721,7 @@ dependencies = [
  "pedersen_scheme",
  "ps_sig",
  "rand",
- "rand_core",
+ "rand_core 0.5.1",
  "random_oracle",
  "serde",
  "serde_json",
@@ -787,6 +793,7 @@ checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 name = "key_derivation"
 version = "1.0.0"
 dependencies = [
+ "crypto_common",
  "dodis_yampolskiy_prf",
  "ed25519-dalek",
  "ed25519_hd_key_derivation",
@@ -794,6 +801,7 @@ dependencies = [
  "id",
  "keygen_bls",
  "pairing",
+ "pbkdf2",
  "ps_sig",
  "serde",
  "sha2 0.10.2",
@@ -955,7 +963,30 @@ dependencies = [
  "byteorder",
  "ff",
  "group",
- "rand_core",
+ "rand_core 0.5.1",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d791538a6dcc1e7cb7fe6f6b58aca40e7f79403c45b2bc274008b5e647af1d8"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.3",
+ "subtle",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "271779f35b581956db91a3e55737327a03aa051e90b1c47aeb189508533adfd7"
+dependencies = [
+ "digest 0.10.3",
+ "hmac 0.12.1",
+ "password-hash",
+ "sha2 0.10.2",
 ]
 
 [[package]]
@@ -969,7 +1000,7 @@ dependencies = [
  "ff",
  "pairing",
  "rand",
- "rand_core",
+ "rand_core 0.5.1",
  "serde",
  "thiserror",
 ]
@@ -1013,7 +1044,7 @@ dependencies = [
  "pairing",
  "pedersen_scheme",
  "rand",
- "rand_core",
+ "rand_core 0.5.1",
  "rayon",
  "serde",
  "thiserror",
@@ -1037,7 +1068,7 @@ dependencies = [
  "getrandom",
  "libc",
  "rand_chacha",
- "rand_core",
+ "rand_core 0.5.1",
  "rand_hc",
 ]
 
@@ -1048,7 +1079,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4c8ed856279c9737206bf725bf36935d8666ead7aa69b52be55af369d193402"
 dependencies = [
  "ppv-lite86",
- "rand_core",
+ "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -1061,12 +1092,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_core"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
+
+[[package]]
 name = "rand_hc"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
- "rand_core",
+ "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -1075,7 +1112,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77d416b86801d23dde1aa643023b775c3a462efc0ed96443add11546cdf1dca8"
 dependencies = [
- "rand_core",
+ "rand_core 0.5.1",
 ]
 
 [[package]]

@@ -128,14 +128,27 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "base58check",
  "chrono",
+ "concordium-contracts-common-derive",
  "fnv",
  "hashbrown",
+ "num-bigint",
+ "num-traits",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "concordium-contracts-common-derive"
+version = "1.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -245,6 +258,17 @@ name = "libc"
 version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd8f7255a17a627354f321ef0055d63b898c6fb27eff628af4d1b66b7331edf6"
+
+[[package]]
+name = "num-bigint"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
 
 [[package]]
 name = "num-integer"
