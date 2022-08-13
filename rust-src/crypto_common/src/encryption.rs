@@ -1,13 +1,16 @@
 use crate::{SerdeDeserialize, SerdeSerialize};
 use aes::Aes256;
-use block_modes::{block_padding::Pkcs7, BlockMode, Cbc};
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use hmac::Hmac;
 use rand::Rng;
 use serde::{Deserializer, Serializer};
 use std::{convert::TryInto, str::FromStr};
 use thiserror::Error;
 
-type Cipher = Cbc<Aes256, Pkcs7>;
+// Encryption
+type CipherC = cbc::Encryptor<Aes256>;
+// Decryption
+type CipherD = cbc::Decryptor<Aes256>;
 
 /// AES block size in bytes
 pub const AES_BLOCK_SIZE: usize = 16;
@@ -141,9 +144,9 @@ pub fn encrypt<A: AsRef<[u8]>, R: Rng>(
     // bits (16 bytes)
     let initialization_vector: [u8; AES_BLOCK_SIZE] = csprng.gen();
     // Construct the cipher.
-    let cipher = Cipher::new_fix((&key).into(), (&initialization_vector).into());
+    let cipher = CipherC::new((&key).into(), (&initialization_vector).into());
     let cipher_text = CipherText {
-        ct: cipher.encrypt_vec(plaintext.as_ref()),
+        ct: cipher.encrypt_padded_vec_mut::<Pkcs7>(plaintext.as_ref()),
     };
 
     let metadata = EncryptionMetadata {
@@ -179,9 +182,9 @@ pub fn decrypt(pass: &Password, et: &EncryptedData) -> Result<Vec<u8>, Decryptio
         et.metadata.iterations,
         &mut key,
     );
-    let cipher = Cipher::new_fix((&key).into(), (&et.metadata.initialization_vector).into());
+    let cipher = CipherD::new((&key).into(), (&et.metadata.initialization_vector).into());
     cipher
-        .decrypt_vec(&et.cipher_text.ct)
+        .decrypt_padded_vec_mut::<Pkcs7>(&et.cipher_text.ct)
         .map_err(|_| DecryptionError::BlockMode)
 }
 

@@ -172,7 +172,6 @@ mod tests {
     use super::*;
     use crypto_common::base16_encode_string;
     use ed25519_dalek::*;
-    use hex;
     use std::convert::TryInto;
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
@@ -215,9 +214,7 @@ mod tests {
         let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1)
             .get_account_signing_key(0, 0)
             .unwrap();
-
-        let sk = ed25519_dalek::SecretKey::from(signing_key);
-        let expanded_sk = ExpandedSecretKey::from(&sk);
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);

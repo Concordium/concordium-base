@@ -198,7 +198,7 @@ fn make_transaction_bytes(
     body.put(&ctx.expiry);
     body.extend_from_slice(payload_bytes);
 
-    let hasher = Sha256::new().chain(&body);
+    let hasher = Sha256::new().chain_update(&body);
     (hasher.finalize(), body)
 }
 

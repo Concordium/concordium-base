@@ -2,12 +2,11 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
-use generic_array::GenericArray;
 use id::sigma_protocols::{common::*, dlog::*};
 use rand::Rng;
 use random_oracle::RandomOracle;
 use rayon::iter::*;
-use sha2::{Digest, Sha512};
+use sha2::{digest::Output, Digest, Sha512};
 
 /// Size of the aggregate signature public key in bytes.
 pub const PUBLIC_KEY_SIZE: usize = 96;
@@ -222,7 +221,7 @@ fn has_duplicates<T>(messages: &[(&[u8], T)]) -> bool {
 }
 
 // hashes a message using Sha512
-fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> { Sha512::digest(m) }
+fn hash_message(m: &[u8]) -> Output<Sha512> { Sha512::digest(m) }
 
 #[cfg(test)]
 mod test {

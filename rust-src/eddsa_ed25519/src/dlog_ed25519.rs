@@ -61,9 +61,8 @@ fn generate_rand_scalar() -> Scalar {
     let mut csprng = thread_rng();
     let mut bytes = [0u8; 32];
     csprng.fill_bytes(&mut bytes);
-    let mut hasher = Sha512::new();
-    hasher.update(&bytes);
-    Scalar::from_hash(hasher)
+    let digest = Sha512::digest(&bytes);
+    Scalar::from_bytes_mod_order_wide(&digest.into())
 }
 
 fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
