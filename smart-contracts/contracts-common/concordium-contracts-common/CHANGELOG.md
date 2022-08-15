@@ -13,6 +13,9 @@
 - Implement `Display` and `FromStr` for `Address` when `derive-serde` is enabled. The latter attempts to parse a contract address. If this fails it will attempt to parse an `AccountAddress`.
 - Implement `FromStr` for `OwnedReceiveName`.
 - Add `cursor_position` method to the `Seek` trait.
+- Rework attribute values types (breaking change)
+  - Change `AttributeValue` from a slice to a struct.
+  - Remove `OwnedAttributeValue` type.
 
 ## concordium-contracts-common 3.1.0 (2022-08-04)
 

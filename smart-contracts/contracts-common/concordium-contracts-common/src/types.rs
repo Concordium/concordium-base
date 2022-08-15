@@ -1156,6 +1156,27 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for NewAttributeValueError {}
+
+/// Errors that can occur when constructing a new [`AttributeValue`].
+#[derive(Debug, PartialEq, Eq)]
+pub enum NewAttributeValueError {
+    TooLong(usize),
+}
+
+impl fmt::Display for NewAttributeValueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NewAttributeValueError::TooLong(size) => write!(
+                f,
+                "Attribute values have a max length of 31. The slice given had length {}.",
+                size
+            ),
+        }
+    }
+}
+
 /// Tag of an attribute. See the module [attributes](./attributes/index.html)
 /// for the currently supported attributes.
 #[repr(transparent)]
@@ -1163,18 +1184,127 @@ pub struct Cursor<T> {
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct AttributeTag(pub u8);
 
-/// A borrowed attribute value. The slice will have at most 31 bytes.
+/// An attribute value.
 /// The meaning of the bytes is dependent on the type of the attribute.
-pub type AttributeValue<'a> = &'a [u8];
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct AttributeValue {
+    pub(crate) inner: [u8; 32],
+}
 
-/// An owned counterpart of `AttributeValue`, more convenient for testing.
-pub type OwnedAttributeValue = Vec<u8>;
+impl AttributeValue {
+    /// Create a new [`Self`] from a slice of bytes. The slice must have a
+    /// length of *at most 31 bytes*.
+    pub fn new(data: &[u8]) -> Result<Self, NewAttributeValueError> {
+        if data.len() > 31 {
+            return Err(NewAttributeValueError::TooLong(data.len()));
+        }
+        let mut inner = [0u8; 32];
+        inner[1..=data.len()].copy_from_slice(data);
+        inner[0] = data.len() as u8;
+        Ok(Self {
+            inner,
+        })
+    }
+
+    #[doc(hidden)]
+    /// Create a new [`Self`] from a byte array. The first byte *must* tell
+    /// length of the attribute in the array.
+    pub unsafe fn new_unchecked(inner: [u8; 32]) -> Self {
+        Self {
+            inner,
+        }
+    }
+
+    /// Get the length of the attribute value.
+    pub fn len(&self) -> usize { self.inner[0].into() }
+
+    /// Whether the attribute value has zero length.
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
+}
+
+impl AsRef<[u8]> for AttributeValue {
+    fn as_ref(&self) -> &[u8] { &self.inner[1..=usize::from(self.inner[0])] }
+}
+
+impl convert::TryFrom<&[u8]> for AttributeValue {
+    type Error = NewAttributeValueError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> { Self::new(value) }
+}
+
+/// Apply the given macro to each of the elements in the list
+/// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
+/// `println!("foo"); println!("bar").
+macro_rules! repeat_macro {
+    ($f:ident, $n:expr) => ($f!($n););
+    ($f:ident, $n:expr, $($ns:expr),*) => {
+        $f!($n);
+        repeat_macro!($f, $($ns),*);
+    };
+}
+
+/// Generate a [`From`] implementation from a bytearray of size `n` to an
+/// [`AttributeValue`] (also generates one for a referenced array). `n` *must*
+/// be between 0 and 31, both inclusive, otherwise the resulting code will
+/// panic.
+///
+/// The implementation for references of byte arrays are need to ease the use of
+/// literals. Specifically, it allows you to write `b"abc".into()` instead of
+/// `(*b"abc").into()`.
+macro_rules! from_bytearray_to_attribute_value {
+    ($n:expr) => {
+        impl From<[u8; $n]> for AttributeValue {
+            fn from(data: [u8; $n]) -> Self { AttributeValue::new(&data[..]).unwrap() }
+        }
+
+        impl From<&[u8; $n]> for AttributeValue {
+            fn from(data: &[u8; $n]) -> Self { AttributeValue::new(&data[..]).unwrap() }
+        }
+    };
+}
+
+repeat_macro!(
+    from_bytearray_to_attribute_value,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+);
 
 /// A policy with a vector of attributes, fully allocated and owned.
 /// This is in contrast to a policy which is lazily read from a read source.
 /// The latter is useful for efficiency, this type is more useful for testing
 /// since the values are easier to construct.
-pub type OwnedPolicy = Policy<Vec<(AttributeTag, OwnedAttributeValue)>>;
+pub type OwnedPolicy = Policy<Vec<(AttributeTag, AttributeValue)>>;
 
 /// Index of the identity provider on the chain.
 /// An identity provider with the given index will not be replaced,
@@ -1291,7 +1421,9 @@ mod policy_json {
                                 serde_json::Value::String(value_string)
                                     if value_string.as_bytes().len() <= 31 =>
                                 {
-                                    items.push((tag, value_string.into_bytes()))
+                                    let value =
+                                        AttributeValue::new(&value_string.into_bytes()).unwrap(); // Safe as we know the length is valid.
+                                    items.push((tag, value))
                                 }
                                 _ => {
                                     return Err(serde::de::Error::custom(
@@ -1778,5 +1910,26 @@ mod test {
             receive_name.as_receive_name().entrypoint_name(),
             EntrypointName::new_unchecked("receive")
         );
+    }
+
+    #[test]
+    fn test_attribute_value_valid_length() {
+        let data = [0u8; 1];
+        let res = AttributeValue::new(&data[..]);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_attribute_value_max_length() {
+        let data = [0u8; 31];
+        let res = AttributeValue::new(&data[..]);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_attribute_value_invalid_length() {
+        let data = [0u8; 35];
+        let res = AttributeValue::new(&data[..]);
+        assert_eq!(res, Err(NewAttributeValueError::TooLong(35)));
     }
 }

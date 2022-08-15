@@ -980,6 +980,26 @@ impl Deserial for AttributeTag {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { Ok(AttributeTag(source.get()?)) }
 }
 
+impl Serial for AttributeValue {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(&self.inner[..=self.len()]) // Writes the length (u8) +
+                                                  // all the values.
+    }
+}
+
+impl Deserial for AttributeValue {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let mut buf = [0u8; 32];
+        let len: u8 = source.get()?;
+        buf[0] = len;
+        if len > 31 {
+            return Err(ParseError::default());
+        }
+        source.read_exact(&mut buf[1..=len as usize])?;
+        Ok(unsafe { AttributeValue::new_unchecked(buf) })
+    }
+}
+
 impl Serial for OwnedPolicy {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.identity_provider.serial(out)?;
@@ -988,8 +1008,7 @@ impl Serial for OwnedPolicy {
         (self.items.len() as u16).serial(out)?;
         for item in self.items.iter() {
             item.0.serial(out)?;
-            (item.1.len() as u8).serial(out)?;
-            out.write_all(&item.1)?;
+            item.1.serial(out)?;
         }
         Ok(())
     }
@@ -1002,17 +1021,10 @@ impl Deserial for OwnedPolicy {
         let valid_to = source.get()?;
         let len: u16 = source.get()?;
         let mut items = Vec::with_capacity(len as usize);
-        let mut buf = [0u8; 31];
         for _ in 0..len {
             let tag = AttributeTag::deserial(source)?;
-            let value_len: u8 = source.get()?;
-            if value_len > 31 {
-                // Should not happen because all attributes fit into 31 bytes.
-                return Err(ParseError {});
-            }
-            let value_len = usize::from(value_len);
-            source.read_exact(&mut buf[0..value_len])?;
-            items.push((tag, buf[0..value_len].to_vec()))
+            let value = AttributeValue::deserial(source)?;
+            items.push((tag, value))
         }
         Ok(Self {
             identity_provider,
@@ -1305,5 +1317,25 @@ mod test {
 
         let result = cursor.seek(SeekFrom::Current(7));
         result.expect_err("Should have failed to seek beyond end of data");
+    }
+
+    #[test]
+    fn test_owned_policy_serial_deserial_is_identity() {
+        let op = OwnedPolicy {
+            identity_provider: 1234,
+            created_at:        Timestamp::from_timestamp_millis(11),
+            valid_to:          Timestamp::from_timestamp_millis(999999),
+            items:             vec![
+                (attributes::COUNTRY_OF_RESIDENCE, b"DK".into()),
+                (attributes::ID_DOC_TYPE, b"A document type with 31 chars..".into()),
+            ],
+        };
+        let mut buf = Vec::new();
+        op.serial(&mut buf).unwrap();
+        let res = OwnedPolicy::deserial(&mut Cursor::new(buf)).unwrap();
+        assert_eq!(op.identity_provider, res.identity_provider, "identity provider didn't match");
+        assert_eq!(op.created_at, res.created_at, "created_at didn't match");
+        assert_eq!(op.valid_to, res.valid_to, "valid_to didn't match");
+        assert_eq!(op.items, res.items, "items didn't match");
     }
 }
