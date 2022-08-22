@@ -252,7 +252,7 @@ pub fn generate_contract_schema_v0(
 }
 
 /// Tries to generate schemas for parameters and return values of methods for a
-/// V1 contract.
+/// contract with a V1 schema.
 pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
@@ -290,6 +290,49 @@ pub fn generate_contract_schema_v1(
     }
 
     Ok(schema::VersionedModuleSchema::V1(schema::ModuleV1 {
+        contracts: contract_schemas,
+    }))
+}
+
+/// Tries to generate schemas for parameters and return values of methods for a
+/// contract with a V2 schema.
+pub fn generate_contract_schema_v2(
+    module_bytes: &[u8],
+) -> ExecResult<schema::VersionedModuleSchema> {
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+
+    let mut contract_schemas = BTreeMap::new();
+
+    for name in artifact.export.keys() {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV2::default);
+                contract_schema.init = Some(function_schema);
+            } else if rest.contains('.') {
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
+
+                // Generates receive-function parameter schema type
+                let split_name: Vec<_> = rest.splitn(2, '.').collect();
+                let contract_name = split_name[0];
+                let function_name = split_name[1];
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV2::default);
+
+                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+            } else {
+                // do nothing, some other function that is neither init nor
+                // receive.
+            }
+        }
+    }
+
+    Ok(schema::VersionedModuleSchema::V2(schema::ModuleV2 {
         contracts: contract_schemas,
     }))
 }
