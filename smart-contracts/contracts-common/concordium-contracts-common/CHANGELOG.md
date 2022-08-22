@@ -16,6 +16,7 @@
 - Rework attribute values types (breaking change)
   - Change `AttributeValue` from a slice to a struct.
   - Remove `OwnedAttributeValue` type.
+- Add support for smart contract v2 schemas.
 
 ## concordium-contracts-common 3.1.0 (2022-08-04)
 
