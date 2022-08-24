@@ -72,3 +72,9 @@ crate-type = ["rlib"]
 arbitrary = { version = "0.4", features = ["derive"] }
 rand = "=0.7"
 rand_pcg = "0.2.1"
+
+
+[package.metadata.docs.rs]
+# This sets the default target to `wasm32-unknown-unknown`, and builds both the wasm and x86 targets.
+# This is useful because the some parts of documentation only exist on specific platforms.
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
