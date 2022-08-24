@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 4.0.0 (2022-08-24)
+
 - Add type aliases for `ContractIndex` and `ContractSubIndex`.
 - Add `micro_ccd` getter for `Amount`.
 - Add `AccountAddress::get_alias` function for finding account aliases.
