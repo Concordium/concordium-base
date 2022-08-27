@@ -216,6 +216,10 @@ pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion 
 data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) where
     -- |No state migration is performed.
     StateMigrationParametersTrivial :: StateMigrationParameters p p
+    -- |No state migration is performed.
+    StateMigrationParametersTrivialP1P2 :: StateMigrationParameters 'P1 'P2
+    -- |No state migration is performed.
+    StateMigrationParametersTrivialP2P3 :: StateMigrationParameters 'P2 'P3
     -- |The state is migrated from protocol version 'P3' to 'P4'.
     StateMigrationParametersP3ToP4 :: P4.StateMigrationData -> StateMigrationParameters 'P3 'P4
 

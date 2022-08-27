@@ -33,10 +33,6 @@ import Concordium.Genesis.Parameters
 -- To the extent that the 'CoreGenesisParameters' are represented
 -- in the block state, they should agree. (This is probably only
 -- the epoch length.)
---
--- Note that the invariants regarding the 'genesisNewState' are
--- soft: deserialization does not check them, or even that the
--- serialization is valid.
 data GenesisDataP1
     = -- |An initial genesis block.
       GDP1Initial

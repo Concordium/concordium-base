@@ -224,6 +224,14 @@ getPendingUpdates migration = do
                 _pCooldownParametersQueue <- getUpdateQueueForCPV1
                 _pTimeParametersQueue <- getUpdateQueueForCPV1
                 return (_pCooldownParametersQueue, _pTimeParametersQueue)
+            StateMigrationParametersTrivialP1P2 -> do
+                _pCooldownParametersQueue <- getUpdateQueueForCPV1
+                _pTimeParametersQueue <- getUpdateQueueForCPV1
+                return (_pCooldownParametersQueue, _pTimeParametersQueue)
+            StateMigrationParametersTrivialP2P3 -> do
+                _pCooldownParametersQueue <- getUpdateQueueForCPV1
+                _pTimeParametersQueue <- getUpdateQueueForCPV1
+                return (_pCooldownParametersQueue, _pTimeParametersQueue)
             StateMigrationParametersP3ToP4 _ ->
                 return (JustForCPV1 emptyUpdateQueue, JustForCPV1 emptyUpdateQueue)
         return PendingUpdates{..}

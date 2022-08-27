@@ -137,9 +137,7 @@ data RegenesisData = RegenesisData {
     -- new genesis.
     genesisTerminalBlock :: !BlockHash,
     -- |The hash of the block state for the regenesis.
-    genesisStateHash :: !StateHash,
-    -- |The serialized block state. This should match the specified hash.
-    genesisNewState :: !BS.ByteString
+    genesisStateHash :: !StateHash
   } deriving(Eq, Show)
 
 
@@ -150,7 +148,6 @@ getRegenesisData = do
     genesisPreviousGenesis <- get
     genesisTerminalBlock <- get
     genesisStateHash <- get
-    genesisNewState <- getByteStringLen
     return RegenesisData{..}
 
 putRegenesisData :: Putter RegenesisData
@@ -160,7 +157,6 @@ putRegenesisData RegenesisData{..} = do
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
-    putByteStringLen genesisNewState
 
 -- |Initial state configuration for genesis.
 --
