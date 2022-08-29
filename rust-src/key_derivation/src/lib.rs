@@ -92,8 +92,8 @@ impl ConcordiumHdWallet {
         Ok(derivation_path)
     }
 
-    /// Get the account signing key for the identity `identity_index` and
-    /// credential `credential_counter`.
+    /// Get the account signing key for the identity provider `identity_provider_index`, 
+    /// identity `identity_index` and credential `credential_counter`.
     pub fn get_account_signing_key(
         &self,
         identity_provider_index: u32,
@@ -111,8 +111,9 @@ impl ConcordiumHdWallet {
             .expect("The byte array has correct length, so this cannot fail."))
     }
 
-    /// Get the public key corresponding for the identity `identity_index` and
-    /// credential `credential_counter`. Note that this is just a convenience
+    /// Get the public key corresponding for the identity provider `identity_provider_index`, 
+    /// identity `identity_index` and credential `credential_counter`. 
+    /// Note that this is just a convenience
     /// wrapper. The same can be achieved by using [`PublicKey::from`] on
     /// the result of
     /// [`get_account_signing_key`](Self::get_account_signing_key).
@@ -131,7 +132,7 @@ impl ConcordiumHdWallet {
         Ok(public_key)
     }
 
-    /// Compute the `idCredSec` for the given identity index.
+    /// Compute the `idCredSec` for the given identity provider and identity index.
     pub fn get_id_cred_sec(
         &self,
         identity_provider_index: u32,
@@ -142,7 +143,7 @@ impl ConcordiumHdWallet {
         Ok(bls_key_bytes_from_seed(id_cred_sec_seed))
     }
 
-    /// Compute the `prfKey` for the given identity index.
+    /// Compute the `prfKey` for the given identity provider and identity index.
     pub fn get_prf_key(
         &self,
         identity_provider_index: u32,
@@ -168,7 +169,8 @@ impl ConcordiumHdWallet {
         )))
     }
 
-    /// Get the randomness for the specific identity, credential, and attribute.
+    /// Get the randomness for the specific identity provider index, identity, credential, 
+    /// and attribute.
     /// This randomness is used to make a commitment to the attribute when the
     /// credential is deployed to the chain, and may later be used to open the
     /// commitment, or prove certain other properties about the values contained
