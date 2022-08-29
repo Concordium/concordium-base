@@ -55,15 +55,15 @@ pub struct BakerKeys {
     pub aggregation_sign_key:   aggregate_sig::SecretKey<Bls12>,
 }
 
-/// A ConcordiumHdWallet together with an identity provider index, an identity index 
-/// and a credential index for the credential to be created. A CredentialContext can 
-/// then be parsed to the `create_credential` function due to the implementation of
-/// `HasAttributeRandomness` below.
+/// A ConcordiumHdWallet together with an identity provider index, an identity
+/// index and a credential index for the credential to be created. A
+/// CredentialContext can then be parsed to the `create_credential` function due
+/// to the implementation of `HasAttributeRandomness` below.
 struct CredentialContext {
-    wallet:           ConcordiumHdWallet,
+    wallet:                  ConcordiumHdWallet,
     identity_provider_index: u32,
-    identity_index:   u32,
-    credential_index: u32,
+    identity_index:          u32,
+    credential_index:        u32,
 }
 
 impl HasAttributeRandomness<ArCurve> for CredentialContext {
@@ -665,7 +665,8 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
     let identity_provider_index = ip_info.ip_identity.0;
     let identity_index: u32 = try_get(&v, "identityIndex")?;
 
-    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_provider_index, identity_index)?;
+    let prf_key: prf::SecretKey<ArCurve> =
+        wallet.get_prf_key(identity_provider_index, identity_index)?;
 
     let id_cred_sec: PedersenValue<ArCurve> =
         PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
@@ -843,7 +844,8 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
         PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
     let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
     let chi = CredentialHolderInfo::<ArCurve> { id_cred };
-    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_provider_index, identity_index)?;
+    let prf_key: prf::SecretKey<ArCurve> =
+        wallet.get_prf_key(identity_provider_index, identity_index)?;
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
@@ -861,7 +863,11 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     // Create the keys for the new credential.
     let cred_data = {
         let mut keys = std::collections::BTreeMap::new();
-        let secret = wallet.get_account_signing_key(identity_provider_index, identity_index, u32::from(acc_num))?;
+        let secret = wallet.get_account_signing_key(
+            identity_provider_index,
+            identity_index,
+            u32::from(acc_num),
+        )?;
         let public = ed25519::PublicKey::from(&secret);
         keys.insert(KeyIndex(0), KeyPair { secret, public });
 
@@ -1045,7 +1051,8 @@ fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
 
     let prf_key = wallet.get_prf_key(identity_provider_index, identity_index)?;
 
-    let blinding_randomness = wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
+    let blinding_randomness =
+        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
 
     let response = json!({
         "idCredSec": base16_encode_string(&id_cred_sec),
@@ -1062,12 +1069,18 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let identity_index = try_get(&v, "identityIndex")?;
     let account_credential_index = try_get(&v, "accountCredentialIndex")?;
 
-    let account_signing_key =
-        wallet.get_account_signing_key(identity_provider_index, identity_index, account_credential_index)?;
+    let account_signing_key = wallet.get_account_signing_key(
+        identity_provider_index,
+        identity_index,
+        account_credential_index,
+    )?;
     let account_signing_key_hex = hex::encode(account_signing_key);
 
-    let account_verify_key =
-        wallet.get_account_public_key(identity_provider_index, identity_index, account_credential_index)?;
+    let account_verify_key = wallet.get_account_public_key(
+        identity_provider_index,
+        identity_index,
+        account_credential_index,
+    )?;
     let account_verify_key_hex = hex::encode(account_verify_key);
 
     let mut attribute_commitment_randomness = HashMap::new();
