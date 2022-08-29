@@ -65,7 +65,7 @@ where `credential.json` is the file obtained in the previous step.
 
 # The version 1 flow
 
-The tool supports three modes in the version 1 flow: the `generate-request-v1` mode, the `create-credential-v1` mode and the `recover-identity-flow`. The `generate-request-v1` generates the version 1 request for the version 1 identity object that is to be sent to the identity provider. In the `create-credential-v1` mode the tool requires the identity object returned by the identity provider and generates a credential that can be sent to the chain to create an account. The `recover-identity` request can generate a identity recovery request to be sent to the identity provider.
+The tool supports three modes in the version 1 flow: the `generate-request-v1` mode, the `create-credential-v1` mode and the `recover-identity-flow`. The `generate-request-v1` generates the version 1 request for the version 1 identity object that is to be sent to the identity provider. In the `create-credential-v1` mode the tool requires the identity object returned by the identity provider and generates a credential that can be sent to the chain to create an account. The `recover-identity` request can generate an identity recovery request to be sent to the identity provider.
 
 ## Generate a version 1 request for the version 1 identity object
 
@@ -76,7 +76,7 @@ user_cli generate-request-v1 --cryptographic-parameters cryptographic-parameters
                           --ip-info ip-info.json \
                           --request-out request.json # request to send to the identity provider
 ```
-The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. Afterwards, the user is asked whether the identity shall be used for Mainnet or Testnet. Afterwards, 24 BIP-39 will be generated and shown to use user, who is asked to write down the words and type them in again.
+The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. Afterwards, the user is asked whether the identity shall be used for Mainnet or Testnet. Afterwards, 24 BIP-39 will be generated and shown to the user, who is asked to write down the words and type them in again.
 
 It outputs the following files
 - `request.json` contains the request that should be sent to the identity provider.

@@ -618,25 +618,27 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
             Net::Testnet
         },
     };
+    let identity_provider_index = ip_info.ip_identity.0;
     let identity_index = Input::new()
         .with_prompt("Identity index")
         .interact()
         .unwrap_or(0);
-    let prf_key: prf::SecretKey<ExampleCurve> = match wallet.get_prf_key(identity_index) {
-        Ok(prf) => prf,
-        Err(e) => {
-            bail!(format!("Could not get prf key because {}", e));
-        }
-    };
+    let prf_key: prf::SecretKey<ExampleCurve> =
+        match wallet.get_prf_key(identity_provider_index, identity_index) {
+            Ok(prf) => prf,
+            Err(e) => {
+                bail!(format!("Could not get prf key because {}", e));
+            }
+        };
 
-    let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+    let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_provider_index, identity_index) {
         Ok(scalar) => scalar,
         Err(e) => {
             bail!(format!("Could not get idCredSec because {}", e));
         }
     };
 
-    let randomness = match wallet.get_blinding_randomness(identity_index) {
+    let randomness = match wallet.get_blinding_randomness(identity_provider_index, identity_index) {
         Ok(scalar) => scalar,
         Err(e) => {
             bail!(format!("Could not get blinding randomness because {}", e));
@@ -744,22 +746,23 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
     //   (private and public)
 
     let context = IpContext::new(&ip_info, &ars.anonymity_revokers, &global_ctx);
+    let identity_provider_index = ip_info.ip_identity.0;
+    let prf_key: prf::SecretKey<ExampleCurve> =
+        match wallet.get_prf_key(identity_provider_index, identity_index) {
+            Ok(prf) => prf,
+            Err(e) => {
+                bail!(format!("Could not get prf key because {}", e));
+            }
+        };
 
-    let prf_key: prf::SecretKey<ExampleCurve> = match wallet.get_prf_key(identity_index) {
-        Ok(prf) => prf,
-        Err(e) => {
-            bail!(format!("Could not get prf key because {}", e));
-        }
-    };
-
-    let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+    let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_provider_index, identity_index) {
         Ok(scalar) => scalar,
         Err(e) => {
             bail!(format!("Could not get idCredSec because {}", e));
         }
     };
 
-    let randomness = match wallet.get_blinding_randomness(identity_index) {
+    let randomness = match wallet.get_blinding_randomness(identity_provider_index, identity_index) {
         Ok(scalar) => scalar,
         Err(e) => {
             bail!(format!("Could not get blinding randomness because {}", e));
@@ -775,12 +778,14 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         prf_key,
     };
     let id_use_data = IdObjectUseData { aci, randomness };
-    let secret = match wallet.get_account_signing_key(identity_index, u32::from(x)) {
-        Ok(scalar) => scalar,
-        Err(e) => {
-            bail!(format!("Could not get account signing key because {}", e));
-        }
-    };
+    let secret =
+        match wallet.get_account_signing_key(identity_provider_index, identity_index, u32::from(x))
+        {
+            Ok(scalar) => scalar,
+            Err(e) => {
+                bail!(format!("Could not get account signing key because {}", e));
+            }
+        };
     let acc_data = {
         let mut keys = std::collections::BTreeMap::new();
         let public = ed25519::PublicKey::from(&secret);
@@ -793,6 +798,7 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
     };
     let credential_context = CredentialContext {
         wallet,
+        identity_provider_index,
         identity_index,
         credential_index: u32::from(x),
     };
@@ -1151,7 +1157,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) -> anyhow::Result<()> {
         .interact()
         .unwrap_or(0);
 
-    let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
+    let id_cred_sec_scalar = match wallet.get_id_cred_sec(ip_info.ip_identity.0, identity_index) {
         Ok(scalar) => scalar,
         Err(e) => {
             bail!(format!("Could not get idCredSec because {}", e));
