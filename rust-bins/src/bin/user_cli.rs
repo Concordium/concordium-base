@@ -227,40 +227,40 @@ struct CreateCredentialV1 {
              recovery requests.",
     name = "User CLI",
     author = "Concordium",
-    version = "2.0.0"
+    version = "2.1.0"
 )]
 enum UserClient {
     #[structopt(
         name = "generate-request",
         about = "Generate data to send to the identity provider to obtain an identity object.",
-        version = "2.0.0"
+        version = "2.1.0"
     )]
     StartIp(StartIp),
     #[structopt(
         name = "generate-request-v1",
         about = "Generate data to send to the identity provider to obtain a version 1 identity \
                  object.",
-        version = "2.0.0"
+        version = "2.1.0"
     )]
     StartIpV1(StartIpV1),
     #[structopt(
         name = "create-credential",
         about = "Take the identity object and create a credential object to deploy on chain to \
                  create an account.",
-        version = "2.0.0"
+        version = "2.1.0"
     )]
     CreateCredential(CreateCredential),
     #[structopt(
         name = "create-credential-v1",
         about = "Take the identity object and create a credential object to deploy on chain to \
                  create an account.",
-        version = "2.0.0"
+        version = "2.1.0"
     )]
     CreateCredentialV1(CreateCredentialV1),
     #[structopt(
         name = "recover-identity",
         about = "Generate id recovery request.",
-        version = "2.0.0"
+        version = "2.1.0"
     )]
     GenerateIdRecoveryRequest(GenerateIdRecoveryRequest),
 }
