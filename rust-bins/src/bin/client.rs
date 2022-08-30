@@ -129,37 +129,49 @@ struct ValidateIdRecoveryRequest {
 #[derive(StructOpt)]
 struct CreateChi {
     #[structopt(long = "out")]
-    out:            Option<PathBuf>,
+    out:                     Option<PathBuf>,
     #[structopt(
         long = "hd-wallet",
         help = "File with hd wallet.",
         requires = "identity-index"
     )]
-    hd_wallet:      Option<PathBuf>,
+    hd_wallet:               Option<PathBuf>,
+    #[structopt(
+        long = "identity-provider-index",
+        help = "Identity provider index.",
+        requires = "hd-wallet"
+    )]
+    identity_provider_index: Option<u32>,
     #[structopt(
         long = "identity-index",
         help = "Identity index.",
         requires = "hd-wallet"
     )]
-    identity_index: Option<u32>,
+    identity_index:          Option<u32>,
 }
 
 #[derive(StructOpt)]
 struct CreateIdUseData {
     #[structopt(long = "out")]
-    out:            Option<PathBuf>,
+    out:                     Option<PathBuf>,
     #[structopt(
         long = "hd-wallet",
         help = "File with hd wallet.",
         requires = "identity-index"
     )]
-    hd_wallet:      Option<PathBuf>,
+    hd_wallet:               Option<PathBuf>,
+    #[structopt(
+        long = "identity-provider-index",
+        help = "Identity provider index.",
+        requires = "hd-wallet"
+    )]
+    identity_provider_index: Option<u32>,
     #[structopt(
         long = "identity-index",
         help = "Identity index.",
         requires = "hd-wallet"
     )]
-    identity_index: Option<u32>,
+    identity_index:          Option<u32>,
 }
 
 #[derive(StructOpt)]
@@ -610,7 +622,7 @@ struct GenesisCredentialInput {
 #[structopt(
     about = "Prototype client showcasing ID layer interactions.",
     author = "Concordium",
-    version = "2.0.0"
+    version = "2.1.0"
 )]
 enum IdClient {
     #[structopt(
@@ -1072,6 +1084,7 @@ fn handle_create_credential(cc: CreateCredential) {
                     return;
                 }
             };
+            let identity_provider_index = ip_info.ip_identity.0;
             let identity_index = match cc.identity_index {
                 Some(x) => x,
                 None => Input::new()
@@ -1079,29 +1092,32 @@ fn handle_create_credential(cc: CreateCredential) {
                     .interact()
                     .unwrap_or(0), // 0 is the default index
             };
-            let prf_key: prf::SecretKey<ArCurve> = match wallet.get_prf_key(identity_index) {
-                Ok(prf) => prf,
-                Err(e) => {
-                    eprintln!("Could not get prf key because {}", e);
-                    return;
-                }
-            };
+            let prf_key: prf::SecretKey<ArCurve> =
+                match wallet.get_prf_key(identity_provider_index, identity_index) {
+                    Ok(prf) => prf,
+                    Err(e) => {
+                        eprintln!("Could not get prf key because {}", e);
+                        return;
+                    }
+                };
 
-            let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
-                Ok(scalar) => scalar,
-                Err(e) => {
-                    eprintln!("Could not get idCredSec because {}", e);
-                    return;
-                }
-            };
+            let id_cred_sec_scalar =
+                match wallet.get_id_cred_sec(identity_provider_index, identity_index) {
+                    Ok(scalar) => scalar,
+                    Err(e) => {
+                        eprintln!("Could not get idCredSec because {}", e);
+                        return;
+                    }
+                };
 
-            let randomness = match wallet.get_blinding_randomness(identity_index) {
-                Ok(scalar) => scalar,
-                Err(e) => {
-                    eprintln!("Could not get blinding randomness because {}", e);
-                    return;
-                }
-            };
+            let randomness =
+                match wallet.get_blinding_randomness(identity_provider_index, identity_index) {
+                    Ok(scalar) => scalar,
+                    Err(e) => {
+                        eprintln!("Could not get blinding randomness because {}", e);
+                        return;
+                    }
+                };
 
             let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
             let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
@@ -1112,7 +1128,11 @@ fn handle_create_credential(cc: CreateCredential) {
                 prf_key,
             };
             let id_use_data = IdObjectUseData { aci, randomness };
-            let secret = match wallet.get_account_signing_key(identity_index, u32::from(acc_num)) {
+            let secret = match wallet.get_account_signing_key(
+                identity_provider_index,
+                identity_index,
+                u32::from(acc_num),
+            ) {
                 Ok(scalar) => scalar,
                 Err(e) => {
                     eprintln!("Could not get account signing key because {}", e);
@@ -1131,6 +1151,7 @@ fn handle_create_credential(cc: CreateCredential) {
             };
             let context = CredentialContext {
                 wallet,
+                identity_provider_index,
                 identity_index,
                 credential_index: u32::from(acc_num),
             };
@@ -1333,7 +1354,9 @@ fn handle_create_hd_wallet(chw: CreateHdWallet) {
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_chi(cc: CreateChi) {
     let mut csprng = thread_rng();
-    let ah_info = if let (Some(path), Some(identity_index)) = (cc.hd_wallet, cc.identity_index) {
+    let ah_info = if let (Some(path), Some(identity_provider_index), Some(identity_index)) =
+        (cc.hd_wallet, cc.identity_provider_index, cc.identity_index)
+    {
         let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
             Ok(w) => w,
             Err(e) => {
@@ -1341,13 +1364,14 @@ fn handle_create_chi(cc: CreateChi) {
                 return;
             }
         };
-        let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
-            Ok(scalar) => scalar,
-            Err(e) => {
-                eprintln!("Could not get idCredSec because {}", e);
-                return;
-            }
-        };
+        let id_cred_sec_scalar =
+            match wallet.get_id_cred_sec(identity_provider_index, identity_index) {
+                Ok(scalar) => scalar,
+                Err(e) => {
+                    eprintln!("Could not get idCredSec because {}", e);
+                    return;
+                }
+            };
 
         let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
         let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
@@ -1374,7 +1398,11 @@ fn handle_create_chi(cc: CreateChi) {
 // Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_id_use_data(iud: CreateIdUseData) {
     let id_use_data = {
-        if let (Some(path), Some(identity_index)) = (iud.hd_wallet, iud.identity_index) {
+        if let (Some(path), Some(identity_provider_index), Some(identity_index)) = (
+            iud.hd_wallet,
+            iud.identity_provider_index,
+            iud.identity_index,
+        ) {
             let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
                 Ok(w) => w,
                 Err(e) => {
@@ -1382,29 +1410,32 @@ fn handle_create_id_use_data(iud: CreateIdUseData) {
                     return;
                 }
             };
-            let prf_key: prf::SecretKey<ArCurve> = match wallet.get_prf_key(identity_index) {
-                Ok(prf) => prf,
-                Err(e) => {
-                    eprintln!("Could not get prf key because {}", e);
-                    return;
-                }
-            };
+            let prf_key: prf::SecretKey<ArCurve> =
+                match wallet.get_prf_key(identity_provider_index, identity_index) {
+                    Ok(prf) => prf,
+                    Err(e) => {
+                        eprintln!("Could not get prf key because {}", e);
+                        return;
+                    }
+                };
 
-            let id_cred_sec_scalar = match wallet.get_id_cred_sec(identity_index) {
-                Ok(scalar) => scalar,
-                Err(e) => {
-                    eprintln!("Could not get idCredSec because {}", e);
-                    return;
-                }
-            };
+            let id_cred_sec_scalar =
+                match wallet.get_id_cred_sec(identity_provider_index, identity_index) {
+                    Ok(scalar) => scalar,
+                    Err(e) => {
+                        eprintln!("Could not get idCredSec because {}", e);
+                        return;
+                    }
+                };
 
-            let randomness = match wallet.get_blinding_randomness(identity_index) {
-                Ok(scalar) => scalar,
-                Err(e) => {
-                    eprintln!("Could not get blinding randomness because {}", e);
-                    return;
-                }
-            };
+            let randomness =
+                match wallet.get_blinding_randomness(identity_provider_index, identity_index) {
+                    Ok(scalar) => scalar,
+                    Err(e) => {
+                        eprintln!("Could not get blinding randomness because {}", e);
+                        return;
+                    }
+                };
 
             let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
             let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };

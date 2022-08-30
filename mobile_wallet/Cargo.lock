@@ -791,7 +791,7 @@ checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 
 [[package]]
 name = "key_derivation"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "crypto_common",
  "dodis_yampolskiy_prf",
@@ -857,7 +857,7 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "aggregate_sig",
  "anyhow",
