@@ -705,7 +705,6 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         .with_prompt("Do you want to create the account on Mainnet? (If not, Testnet will be used)")
         .interact()
         .unwrap_or(false);
-    println!("{}", use_mainnet);
     let bip39_map = bip39_map();
 
     let words_str = {
@@ -967,7 +966,7 @@ fn prepare_credential_input(
         Some(x) => x,
         None => Input::new()
             .with_prompt(format!(
-                "Credential number (between 1 and {})",
+                "Credential number (between 0 and {})",
                 id_object.get_attribute_list().max_accounts
             ))
             .default(1)
