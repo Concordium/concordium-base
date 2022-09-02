@@ -8,7 +8,7 @@ import Data.Word
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
-import Concordium.Genesis.Data.Base
+import qualified Concordium.Genesis.Data.Base as Base
 import Concordium.Genesis.Parameters
 import Concordium.Types
 
@@ -17,28 +17,38 @@ import Concordium.Types
 data GenesisDataP3
     = GDP3Initial {
       -- |The immutable genesis parameters.
-      genesisCore :: !CoreGenesisParameters,
+      genesisCore :: !Base.CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-      genesisInitialState :: !(GenesisState 'P3)
+      genesisInitialState :: !(Base.GenesisState 'P3)
     }
-    | GDP3Regenesis { genesisRegenesis :: !RegenesisData }
     deriving (Eq, Show)
 
-_core :: GenesisDataP3 -> CoreGenesisParameters
-_core GDP3Initial{..} = genesisCore
-_core GDP3Regenesis{genesisRegenesis=RegenesisData{..}} = genesisCore
+newtype RegenesisP3 = GDP3Regenesis { genesisRegenesis :: Base.RegenesisData }
+    deriving (Eq, Show)
 
-instance BasicGenesisData GenesisDataP3 where
-    gdGenesisTime = genesisTime . _core
+instance Base.BasicGenesisData GenesisDataP3 where
+    gdGenesisTime = Base.genesisTime . genesisCore
     {-# INLINE gdGenesisTime #-}
-    gdSlotDuration = genesisSlotDuration . _core
+    gdSlotDuration = Base.genesisSlotDuration . genesisCore
     {-# INLINE gdSlotDuration #-}
-    gdMaxBlockEnergy = genesisMaxBlockEnergy . _core
+    gdMaxBlockEnergy = Base.genesisMaxBlockEnergy . genesisCore
     {-# INLINE gdMaxBlockEnergy #-}
-    gdFinalizationParameters = genesisFinalizationParameters . _core
+    gdFinalizationParameters = Base.genesisFinalizationParameters . genesisCore
     {-# INLINE gdFinalizationParameters #-}
-    gdEpochLength = genesisEpochLength . _core
+    gdEpochLength = Base.genesisEpochLength . genesisCore
+    {-# INLINE gdEpochLength #-}
+
+instance Base.BasicGenesisData RegenesisP3 where
+    gdGenesisTime = Base.genesisTime . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdGenesisTime #-}
+    gdSlotDuration = Base.genesisSlotDuration . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdSlotDuration #-}
+    gdMaxBlockEnergy = Base.genesisMaxBlockEnergy . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdMaxBlockEnergy #-}
+    gdFinalizationParameters = Base.genesisFinalizationParameters . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdFinalizationParameters #-}
+    gdEpochLength = Base.genesisEpochLength . Base.genesisCore . genesisRegenesis
     {-# INLINE gdEpochLength #-}
 
 -- |Deserialize genesis data in the V5 format.
@@ -49,10 +59,15 @@ getGenesisDataV5 =
             genesisCore <- get
             genesisInitialState <- get
             return GDP3Initial{..}
-        1 -> do
-            genesisRegenesis <- getRegenesisData
-            return GDP3Regenesis{..}
         _ -> fail "Unrecognized P3 genesis data type."
+
+getRegenesisDataV5 :: Get RegenesisP3
+getRegenesisDataV5 =
+    getWord8 >>= \case
+        1 -> do
+            genesisRegenesis <- Base.getRegenesisData
+            return GDP3Regenesis{..}
+        _ -> fail "Unrecognized P3 regenesis data type."
 
 -- |Serialize genesis data in the V5 format.
 putGenesisDataV5 :: Putter GenesisDataP3
@@ -60,9 +75,11 @@ putGenesisDataV5 GDP3Initial{..} = do
   putWord8 0
   put genesisCore
   put genesisInitialState
-putGenesisDataV5 GDP3Regenesis{..} = do
+
+putRegenesisDataV5 :: Putter RegenesisP3
+putRegenesisDataV5 GDP3Regenesis{..} = do
   putWord8 1
-  putRegenesisData genesisRegenesis
+  Base.putRegenesisData genesisRegenesis
 
 -- |Deserialize genesis configuration from the serialized genesis data.
 --
@@ -72,12 +89,12 @@ putGenesisDataV5 GDP3Regenesis{..} = do
 --
 -- The argument is the hash of the genesis data from which the configuration is
 -- to be read.
-getGenesisConfigurationV5 :: BlockHash -> Get GenesisConfiguration
+getGenesisConfigurationV5 :: BlockHash -> Get Base.GenesisConfiguration
 getGenesisConfigurationV5 genHash = do
     getWord8 >>= \case
         0 -> do
             _gcCore <- get
-            return GenesisConfiguration{
+            return Base.GenesisConfiguration{
                 _gcTag = 0,
                 _gcCurrentHash = genHash,
                 _gcFirstGenesis = genHash,
@@ -86,7 +103,7 @@ getGenesisConfigurationV5 genHash = do
         1 -> do
           _gcCore <- get
           _gcFirstGenesis <- get
-          return GenesisConfiguration{
+          return Base.GenesisConfiguration{
             _gcTag = 1,
             _gcCurrentHash = genHash,
             ..
@@ -109,7 +126,7 @@ putVersionedGenesisData gd = do
     putGenesisDataV5 gd
 
 parametersToGenesisData :: GenesisParameters 'P3 -> GenesisDataP3
-parametersToGenesisData = uncurry GDP3Initial . parametersToState
+parametersToGenesisData = uncurry GDP3Initial . Base.parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
 -- Every block hash is derived from a message that begins with the block slot,
@@ -126,7 +143,9 @@ genesisBlockHash GDP3Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
   putWord8 0 -- initial variant
   put genesisCore
   put genesisInitialState
-genesisBlockHash GDP3Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+
+regenesisBlockHash :: RegenesisP3 -> BlockHash
+regenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P3
     putWord8 1 -- regenesis variant
@@ -139,11 +158,12 @@ genesisBlockHash GDP3Regenesis{genesisRegenesis=RegenesisData{..}} = BlockHash .
     put genesisStateHash
 
 -- |The hash of the first genesis block in the chain.
-firstGenesisBlockHash :: GenesisDataP3 -> BlockHash
-firstGenesisBlockHash GDP3Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
-firstGenesisBlockHash other@GDP3Initial{} = genesisBlockHash other
+firstGenesisBlockHash :: RegenesisP3 -> BlockHash
+firstGenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP3 -> Word8
 genesisVariantTag GDP3Initial{} = 0
-genesisVariantTag GDP3Regenesis{} = 1
+
+regenesisVariantTag :: RegenesisP3 -> Word8
+regenesisVariantTag GDP3Regenesis{} = 1
