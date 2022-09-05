@@ -633,7 +633,7 @@ extern "C" fn migrate_persistent_tree_v1(
         Ok(()) => {
             let mut source = std::io::Cursor::new(out);
             match PersistentState::deserialize(&mut source) {
-                // make sure to consume the entire input.
+                // store the tree
                 Ok(mut new_tree) => {
                     let _ = new_tree.store_update(&mut writer);
                     Box::into_raw(Box::new(new_tree))

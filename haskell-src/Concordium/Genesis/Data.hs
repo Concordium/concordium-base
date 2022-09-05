@@ -39,9 +39,9 @@ newtype instance GenesisData 'P2 = GDP2 {unGDP2 :: P2.GenesisDataP2}
 newtype instance GenesisData 'P3 = GDP3 {unGDP3 :: P3.GenesisDataP3}
 newtype instance GenesisData 'P4 = GDP4 {unGDP4 :: P4.GenesisDataP4}
 
--- |Data family for regenesis data.
--- This has been chosen to be a data family so that the genesis data
--- will uniquely determine the protocol version.
+-- |Data family for regenesis data. This has been chosen to be a data family, as
+-- opposed to a type family principally so that it is injective, i.e., so that
+-- the @Regenesis pv@ determines @pv@.
 --
 -- The regenesis data should always be serialized in such a way that a
 -- 'GenesisConfiguration' can be deserialized from the byte array without

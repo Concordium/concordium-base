@@ -122,6 +122,8 @@ migrateAccountStake (StateMigrationParametersP3ToP4 migration) =
                       ..
                     }
 
+-- |Migrate time of the effective change from V0 to V1 accounts. Currently this
+-- translates times relative to genesis to times relative to the unix epoch.
 migratePCE :: P4.StateMigrationData -> PendingChangeEffective 'AccountV0 -> PendingChangeEffective 'AccountV1
 migratePCE P4.StateMigrationData{..} (PendingChangeEffectiveV0 eff) =
     PendingChangeEffectiveV1 $
@@ -129,6 +131,9 @@ migratePCE P4.StateMigrationData{..} (PendingChangeEffectiveV0 eff) =
              migrationPreviousGenesisTime
              (migrationPreviousEpochDuration * fromIntegral eff)
 
+-- |Migrate the stake pending change from the representation used by protocol
+-- version @oldpv@ to the representation used by the protocol version @pv@. The
+-- migration parameters supply auxiliary data needed for the migration.
 migrateStakePendingChange :: forall oldpv pv .
     StateMigrationParameters oldpv pv ->
     StakePendingChange (AccountVersionFor oldpv) ->
