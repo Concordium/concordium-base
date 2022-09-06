@@ -61,6 +61,7 @@ the Android emulator calls the host machine.
 |---|---|---|
 |GET (+POST)|`http://[hostname]:[provider_port]/api/v0/identity`|The endpoint the wallet calls to initiate the version 0 identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
 |GET|`http://[hostname]:[provider_port]/api/v1/identity`|The endpoint the wallet calls to initiate the version 1 identity creation flow. It performs validation of the incoming request and if valid forwards the user to the identity verifier service.|
+|GET|`http://[hostname]:[provider_port]/api/v1/recover`|The endpoint the wallet calls to initiate the version 1 identity recovery flow. It performs validation of the incoming request and if valid the URL for retrieving the identity object is returned.|
 |GET|`http://[hostname]:[provider_port]/api/v0/identity/create/{base_16_encoded_id_cred_pub_hash}`|Endpoint that the identity verifier forwards the user to after having validated their attributes. If the user has created a valid set of attributes, then this endpoint will ensure that an identity is created.|
 |GET|`http://[hostname]:[provider_port]/api/v1/identity/create/{base_16_encoded_id_cred_pub_hash}`|Endpoint that the identity verifier forwards the user to after having validated their attributes in the version 1 flow. If the user has created a valid set of attributes, then this endpoint will ensure that an identity is created.|
 |GET|`http://[hostname]:[provider_port]/api/v0/identity/{base_16_encoded_id_cred_pub_hash}`|The endpoint that exposes access to created identity objects. The caller will be redirected to this URL after creation of an identity object, so that they can retrieve it.|
@@ -263,5 +264,45 @@ being processed, then an error can be returned:
 {
     "status": "error",
     "detail": "Identity object does not exist"
+}
+```
+
+# Identity recovery
+The `state` field of the `GET` request to the endpoint `/api/v1/recover` should be urlencoded string
+containing valid JSON of the form
+```json
+{
+    "idRecoveryRequest": {
+        "v": 0,
+        "value": {
+            "idCredPub": "b05e024461f74ef98d14d6ae17121df28bc397fbfd55fedf08889c48c59d92e61c6853c561f054a9a1b6ad648d1da154",
+            "proof": "043b4af07edd7b5a694ac3034df622fd0184450ebf542bb49730cf38eba0b4464d51e0209c147edaaffaf9fc5fc1f2928aed95dc8c9ae15bf5497bc3255394f7",
+            "timestamp": 1657528974
+        }
+    }
+}
+```
+
+In case of success (if the request is valid), the response is HTTP 200 with a body of the form
+```json
+{
+    "identityRetrievalUrl": "http://localhost:8100/api/v1/identity/ab4c3d1b3b4e183698dab33e8a0c7ba3e0eb72ebc0b6e916f55fda62509c9db"
+}
+```
+
+
+If the timestamp in the request is too far (given by the `--recovery-timestamp-delta` option, default is 60 seconds) from the current time, the response is HTTP 400 (Bad Request) with a body of
+```json
+{
+    "code": 400,
+    "message": "Invalid timestamp."
+}
+```
+
+Otherwise, if the timestamp is OK, but the request is invalid due to an invalid proof, the response is HTTP 400 (Bad Request) with a body of
+```json
+{
+    "code": 400,
+    "message": "Invalid ID recovery proof."
 }
 ```
