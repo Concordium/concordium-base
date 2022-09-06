@@ -97,3 +97,5 @@ identity_provider_cli validate-recovery-request --cryptographic-parameters crypt
                       --ip-info ip-info.json \
                       --request request.json
 ```
+
+Upon success the tool will display the ID recovery validation result. If it is `true`, return the user's identity object.
