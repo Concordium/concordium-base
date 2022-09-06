@@ -283,7 +283,7 @@ containing valid JSON of the form
 }
 ```
 
-In case of success (if the request is valid), the response will be of the form
+In case of success (if the request is valid), the response is HTTP 200 with a body of the form
 ```json
 {
     "identityRetrievalUrl": "http://localhost:8100/api/v1/identity/ab4c3d1b3b4e183698dab33e8a0c7ba3e0eb72ebc0b6e916f55fda62509c9db"
@@ -291,7 +291,7 @@ In case of success (if the request is valid), the response will be of the form
 ```
 
 
-If the timestamp in the request is too far (given by the `--recovery-timestamp-delta` option, default is 60 seconds) from the current time, the response will be
+If the timestamp in the request is too far (given by the `--recovery-timestamp-delta` option, default is 60 seconds) from the current time, the response is HTTP 400 (Bad Request) with a body of
 ```json
 {
     "code": 400,
@@ -299,7 +299,7 @@ If the timestamp in the request is too far (given by the `--recovery-timestamp-d
 }
 ```
 
-Otherwise, if the timestamp is OK, but the request is invalid due to an invalid proof, the response will be
+Otherwise, if the timestamp is OK, but the request is invalid due to an invalid proof, the response is HTTP 400 (Bad Request) with a body of
 ```json
 {
     "code": 400,
