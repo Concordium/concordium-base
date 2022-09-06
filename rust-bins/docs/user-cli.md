@@ -117,11 +117,11 @@ If the identity object used to create credentials is lost, it can be recovered f
 ```console
 user_cli recover-identity --cryptographic-parameters cryptographic-parameters.json \
                           --ip-info ip-info.json \
-                          --request-out recovery_request.json # recovery request to send to the identity provider
+                          --request-out recovery-request.json # recovery request to send to the identity provider
 ```
 
 It outputs the following files
-- `recovery_request.json` contains the recovery request that should be sent to the identity provider.
+- `recovery-request.json` contains the recovery request that should be sent to the identity provider.
 
 The request should be sent to the identity provider through a trusted channel, together with any other required identity data. Assuming everything is in order when validating the request, the identity provider should eventually return the identity object that you lost. You can then recreate your account keys (`account-keys.json`) by running `user_cli create-credential-v1` (see above).
 
