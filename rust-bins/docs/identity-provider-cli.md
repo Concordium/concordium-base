@@ -95,7 +95,7 @@ Upon receiving recovery request from the user, run
 ```console
 identity_provider_cli validate-recovery-request --cryptographic-parameters cryptographic-parameters.json \
                       --ip-info ip-info.json \
-                      --request request.json
+                      --request recovery-request.json
 ```
 
 Upon success the tool will display the ID recovery validation result. If it is `true`, return the user's identity object.
