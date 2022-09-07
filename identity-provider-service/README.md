@@ -362,7 +362,7 @@ If the timestamp is OK, but the request is invalid due to an invalid proof, the 
 }
 ```
 
-Otherwise, if the request is valid, but the ID object was not found in the database, the response is HTTP 400 (Bad Request) with a body of
+Otherwise, if the request is valid, but the ID object was not found in the database, the response is HTTP 404 (Not Found) with a body of
 ```json
 {
     "code": 404,
