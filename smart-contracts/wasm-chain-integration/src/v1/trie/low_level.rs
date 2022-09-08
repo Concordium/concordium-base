@@ -453,33 +453,22 @@ impl<V> CachedRef<V> {
     /// If the value is in memory, set it to cached with the given key.
     /// Otherwise do nothing. This of course has the precondition that the key
     /// stores the value in the relevant backing store. Internal use only.
-    fn cache_with(&mut self, reference: Reference) {
+    /// TOOD: doc
+    fn uncache(&mut self, reference: Reference) {
         if let CachedRef::Memory {
             ..
         } = self
         {
-            let value = std::mem::replace(self, CachedRef::Disk {
+            *self = CachedRef::Disk {
                 reference,
-            });
-            if let CachedRef::Memory {
-                value,
-            } = value
-            {
-                *self = CachedRef::Cached {
-                    value,
-                    reference,
-                };
-            } else {
-                // this is unreachable since we hold a mutable reference to the cached value
-                // and we know the value was a purely in-memory one
-                unsafe { std::hint::unreachable_unchecked() }
-            }
+            };
         }
     }
 
     /// If the value is purely in memory then store it the backing store.
     /// Store the reference (in the backing store) into the provided buffer.
-    pub(crate) fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
+    /// TOOD: doc
+    pub(crate) fn store_and_uncache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -496,29 +485,22 @@ impl<V> CachedRef<V> {
                 let reference = backing_store.store_raw(value.as_ref())?;
                 // Take the value out of the cachedref and temporarily replace it with
                 // a dummy value.
-                let value = std::mem::replace(self, CachedRef::Disk {
+                // and now write the cached value back in.
+                *self = CachedRef::Disk {
                     reference,
-                });
-                if let CachedRef::Memory {
-                    value,
-                } = value
-                {
-                    // and now write the cached value back in.
-                    *self = CachedRef::Cached {
-                        value,
-                        reference,
-                    };
-                } else {
-                    // this is unreachable since we hold a mutable reference to the cached value
-                    // and we know the value was a purely in-memory one
-                    unsafe { std::hint::unreachable_unchecked() }
-                }
+                };
                 reference.store(buf)
             }
             CachedRef::Cached {
-                reference,
-                ..
-            } => reference.store(buf),
+                reference: _,
+                value,
+            } => {
+                let reference = backing_store.store_raw(value.as_ref())?;
+                *self = CachedRef::Disk {
+                    reference,
+                };
+                reference.store(buf)
+            }
         }
     }
 
@@ -1571,7 +1553,7 @@ impl Node {
                         // variant.
                         buf.write_u8(0b1111_1111u8)?;
                         buf.write_all(indirect.hash.as_ref())?;
-                        indirect.data.store_and_cache(backing_store, buf)?;
+                        indirect.data.store_and_uncache(backing_store, buf)?;
                     }
                 }
             }
@@ -1609,7 +1591,7 @@ impl Node {
                         )?;
                         let key = backing_store.store_raw(&tmp_buf)?;
                         ref_stack.push(key);
-                        node_ref_mut.cache_with(key);
+                        node_ref_mut.uncache(key);
                     } else {
                         // the node's children have not yet been processed. Push the node back onto
                         // the stack recording that now the children have
