@@ -617,30 +617,15 @@ extern "C" fn store_persistent_tree_v1(
 }
 
 #[no_mangle]
-/// Migrate the persistent tree from one state to another.
-/// TODO: This migration currently involves serializing the state
-/// into an intermediate buffer. It would likely be better
-/// to implement migration directly. Memory-wise it will be better,
-/// and performance should be substantially better.
+/// Migrate the persistent tree from one backing store to another.
 extern "C" fn migrate_persistent_tree_v1(
     mut loader: LoadCallback,
     mut writer: StoreCallback,
     tree: *mut PersistentState,
 ) -> *mut PersistentState {
     let tree = unsafe { &mut *tree };
-    let mut out = Vec::new();
-    match tree.serialize(&mut loader, &mut out) {
-        Ok(()) => {
-            let mut source = std::io::Cursor::new(out);
-            match PersistentState::deserialize(&mut source) {
-                // store the tree
-                Ok(mut new_tree) => {
-                    let _ = new_tree.store_update(&mut writer);
-                    Box::into_raw(Box::new(new_tree))
-                }
-                _ => std::ptr::null_mut(),
-            }
-        }
+    match tree.migrate(&mut writer, &mut loader) {
+        Ok(new_tree) => Box::into_raw(Box::new(new_tree)),
         Err(_) => std::ptr::null_mut(),
     }
 }
