@@ -98,4 +98,7 @@ identity_provider_cli validate-recovery-request --cryptographic-parameters crypt
                       --request recovery-request.json
 ```
 
-Upon success the tool will display the ID recovery validation result. If it is `true`, return the user's identity object.
+Upon success the tool will display the ID recovery validation result. The identity provider should return the identity object, if the following is satisfied:
+-  the validation result it is `true`, and
+-  the timestamp in the request does not deviate more than 15 minutes from the time the request was received,
+-  the request is not a duplicate, i.e. the identity provider has not seen the very same request before. 
