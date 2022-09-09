@@ -3,7 +3,6 @@
 module Concordium.Genesis.Data.Base where
 
 import Control.Monad
-import qualified Data.ByteString as BS
 import Data.Serialize
 import Data.Word
 import qualified Data.Vector as Vec
