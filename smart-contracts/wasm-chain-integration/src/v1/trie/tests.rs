@@ -146,10 +146,11 @@ fn prop_insert_freeze_lookup() {
 
 #[test]
 /// Check that migration works.
+/// This test creates a random tree, stores it to one backing store, then
+/// migrates it to a new one. Then the new tree is compared to the reference
+/// implementation.
 fn prop_migration_retains_semantics() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
-        // let inputs = inputs.into_iter().map(|(k, mut v)| {v.truncate(11); (k,
-        // v)}).collect::<Vec<_>>();
         let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
         let (trie, mut loader) = make_mut_trie(inputs);
         let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
