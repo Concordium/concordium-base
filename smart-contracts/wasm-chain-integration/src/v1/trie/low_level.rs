@@ -454,13 +454,8 @@ impl<V> CachedRef<V> {
     /// Otherwise do nothing. This of course has the precondition that the key
     /// stores the value in the relevant backing store. Internal use only.
     fn uncache(&mut self, reference: Reference) {
-        if let CachedRef::Memory {
-            ..
-        } = self
-        {
-            *self = CachedRef::Disk {
-                reference,
-            };
+        *self = CachedRef::Disk {
+            reference,
         }
     }
 
@@ -3252,13 +3247,7 @@ impl Node {
     pub fn is_cached(&self) -> bool {
         if let Some(value) = &self.value {
             if let InlineOrHashed::Indirect(value) = &*value.borrow() {
-                match &value.data {
-                    CachedRef::Disk {
-                        reference: _,
-                    } => return false,
-                    // [Cached] or [Memory]
-                    _ => return true,
-                };
+                return !matches!(&value.data, CachedRef::Disk { .. });
             } else {
                 // [InlineOrHashed::Inline] are not [CachedRef]'s
                 return false;
