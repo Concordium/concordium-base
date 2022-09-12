@@ -12,23 +12,8 @@ import qualified Concordium.Genesis.Data.Base as Base
 import Concordium.Types
 import Concordium.Genesis.Parameters
 
--- |Genesis data for the P1 protocol version.
--- Two types of genesis data are supported.
---
--- * 'GDP1Initial' represents an initial genesis block.
---   It specifies how the initial state should be configured.
---
--- * 'GDP1Regenesis' represents a reset of the protocol with
---   a new genesis block.  This includes the full serialized
---   block state to use from this point forward.
---
--- The serialization of the block state may not be unique, so
--- only the hash of it is used in defining the hash of the
--- genesis block.
---
--- The relationship between the new state and the state of the
--- terminal block of the old chain should be defined by the
--- chain update mechanism used.
+-- |The initial genesis data for the P1 protocol version.
+--  It specifies how the initial state should be configured.
 --
 -- To the extent that the 'CoreGenesisParameters' are represented
 -- in the block state, they should agree. (This is probably only
@@ -43,6 +28,13 @@ data GenesisDataP1
         }
     deriving (Eq, Show)
 
+
+-- |The regenesis represents a reset of the protocol with a new genesis block.
+--  This does not include the full new state, but only its hash.
+--
+-- The relationship between the new state and the state of the
+-- terminal block of the old chain should be defined by the
+-- chain update mechanism used.
 newtype RegenesisP1 = GDP1Regenesis {genesisRegenesis :: Base.RegenesisData}
 
 instance Base.BasicGenesisData GenesisDataP1 where
@@ -121,11 +113,6 @@ putGenesisDataV3 GDP1Initial{..} = do
     putWord8 0
     put genesisCore
     put genesisInitialState
-    
-putRegenesisDataV3 :: RegenesisP1 -> PutM ()
-putRegenesisDataV3 GDP1Regenesis{..} = do
-    putWord8 1
-    Base.putRegenesisData genesisRegenesis
 
 -- |Deserialize genesis data with a version tag.
 getVersionedGenesisData :: Get GenesisDataP1
@@ -158,13 +145,14 @@ genesisBlockHash GDP1Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisCore
     put genesisInitialState
 
+-- |Compute the block hash of the regenesis data as defined by the specified
+-- protocol. This becomes the block hash of the genesis block of the new chain
+-- after the protocol update.
 regenesisBlockHash :: RegenesisP1 -> BlockHash
 regenesisBlockHash GDP1Regenesis{genesisRegenesis=Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P1
     putWord8 1 -- Regenesis
-    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
-    -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
@@ -179,5 +167,9 @@ firstGenesisBlockHash GDP1Regenesis{genesisRegenesis=Base.RegenesisData{..}} = g
 genesisVariantTag :: GenesisDataP1 -> Word8
 genesisVariantTag GDP1Initial{} = 0
 
+-- |Tag of the regenesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis and allows
+-- us to deserialize one or the other from the data without knowing apriori what
+-- the data is.
 regenesisVariantTag :: RegenesisP1 -> Word8
 regenesisVariantTag GDP1Regenesis{} = 1

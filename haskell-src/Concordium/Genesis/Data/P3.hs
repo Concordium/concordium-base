@@ -24,6 +24,12 @@ data GenesisDataP3
     }
     deriving (Eq, Show)
 
+-- |The regenesis represents a reset of the protocol with a new genesis block.
+--  This does not include the full new state, but only its hash.
+--
+-- The relationship between the new state and the state of the
+-- terminal block of the old chain should be defined by the
+-- chain update mechanism used.
 newtype RegenesisP3 = GDP3Regenesis { genesisRegenesis :: Base.RegenesisData }
     deriving (Eq, Show)
 
@@ -75,11 +81,6 @@ putGenesisDataV5 GDP3Initial{..} = do
   putWord8 0
   put genesisCore
   put genesisInitialState
-
-putRegenesisDataV5 :: Putter RegenesisP3
-putRegenesisDataV5 GDP3Regenesis{..} = do
-  putWord8 1
-  Base.putRegenesisData genesisRegenesis
 
 -- |Deserialize genesis configuration from the serialized genesis data.
 --
@@ -144,13 +145,14 @@ genesisBlockHash GDP3Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
   put genesisCore
   put genesisInitialState
 
+-- |Compute the block hash of the regenesis data as defined by the specified
+-- protocol. This becomes the block hash of the genesis block of the new chain
+-- after the protocol update.
 regenesisBlockHash :: RegenesisP3 -> BlockHash
 regenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P3
     putWord8 1 -- regenesis variant
-    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
-    -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
@@ -165,5 +167,9 @@ firstGenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = g
 genesisVariantTag :: GenesisDataP3 -> Word8
 genesisVariantTag GDP3Initial{} = 0
 
+-- |Tag of the regenesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis and allows
+-- us to deserialize one or the other from the data without knowing apriori what
+-- the data is.
 regenesisVariantTag :: RegenesisP3 -> Word8
 regenesisVariantTag GDP3Regenesis{} = 1

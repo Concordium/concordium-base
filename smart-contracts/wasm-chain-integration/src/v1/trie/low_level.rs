@@ -1774,8 +1774,10 @@ impl Node {
             }
             Ok(node)
         };
-        // the stack of References. When a node is fully stored then its reference (to
-        // the location in the backing store) is pushed to this stack.
+        // the stack of References. When a node is fully stored then its
+        // reference (to the location in the backing store) is pushed to this
+        // stack. The value is popped from the stack when its parent is being stored
+        // or at the very end for the top-level node.
         let mut ref_stack = Vec::<Reference>::new();
         // A reusable buffer where nodes are stored before being written to the backing
         // store. This is to reduce on the amount of small allocations

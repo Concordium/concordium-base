@@ -41,14 +41,13 @@ import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
 import Concordium.Types
 
-{- |Data family for genesis data.
- This has been chosen to be a data family so that the genesis data
- will uniquely determine the protocol version.
-
- The genesis data should always be serialized in such a way that a
- 'GenesisConfiguration' can be deserialized from the byte array without
- loading extra data.
--}
+-- |Data family for genesis data.
+-- This has been chosen to be a data family so that the genesis data
+-- will uniquely determine the protocol version.
+--
+-- The genesis data should always be serialized in such a way that a
+-- 'GenesisConfiguration' can be deserialized from the byte array without
+-- loading extra data.
 data family GenesisData (pv :: ProtocolVersion)
 
 newtype instance GenesisData 'P1 = GDP1 {unGDP1 :: P1.GenesisDataP1}
@@ -56,14 +55,9 @@ newtype instance GenesisData 'P2 = GDP2 {unGDP2 :: P2.GenesisDataP2}
 newtype instance GenesisData 'P3 = GDP3 {unGDP3 :: P3.GenesisDataP3}
 newtype instance GenesisData 'P4 = GDP4 {unGDP4 :: P4.GenesisDataP4}
 
-{- |Data family for regenesis data. This has been chosen to be a data family, as
- opposed to a type family principally so that it is injective, i.e., so that
- the @Regenesis pv@ determines @pv@.
-
- The regenesis data should always be serialized in such a way that a
- 'GenesisConfiguration' can be deserialized from the byte array without
- loading extra data.
--}
+-- |Data family for regenesis data. This has been chosen to be a data family, as
+-- opposed to a type family principally so that it is injective, i.e., so that
+-- the @Regenesis pv@ determines @pv@.
 data family Regenesis (pv :: ProtocolVersion)
 
 newtype instance Regenesis 'P1 = RGDP1 {unRGP1 :: P1.RegenesisP1}
@@ -201,10 +195,9 @@ putVersionedGenesisData = case protocolVersion @pv of
     SP3 -> P3.putVersionedGenesisData . unGDP3
     SP4 -> P4.putVersionedGenesisData . unGDP4
 
-{- |Generate the block hash of a genesis block with the given genesis data.
- This is based on the presumption that a block hash is computed from a byte string
- beginning with the serialization of the block slot.
--}
+-- |Generate the block hash of a genesis block with the given genesis data.
+-- This is based on the presumption that a block hash is computed from a byte string
+-- beginning with the serialization of the block slot.
 genesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHash
 genesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.genesisBlockHash . unGDP1
@@ -220,10 +213,9 @@ regenesisBlockHash = case protocolVersion @pv of
     SP3 -> P3.regenesisBlockHash . unRGP3
     SP4 -> P4.regenesisBlockHash . unRGP4
 
-{- |Hash of the initial genesis of the chain to which the given genesis data belongs.
- Genesis created as part of a protocol update records the genesis
- hash of the initial genesis block.
--}
+-- |Hash of the initial genesis of the chain to which the given genesis data belongs.
+-- Genesis created as part of a protocol update records the genesis
+-- hash of the initial genesis block.
 firstGenesisBlockHash :: forall pv. IsProtocolVersion pv => Regenesis pv -> BlockHash
 firstGenesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.firstGenesisBlockHash . unRGP1
@@ -231,9 +223,8 @@ firstGenesisBlockHash = case protocolVersion @pv of
     SP3 -> P3.firstGenesisBlockHash . unRGP3
     SP4 -> P4.firstGenesisBlockHash . unRGP4
 
-{- |Tag of the genesis variant used for serialization. This tag determines
- whether the genesis data is, e.g., initial genesis, or regenesis.
--}
+-- |Tag of the genesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis.
 genesisVariantTag :: forall pv. IsProtocolVersion pv => GenesisData pv -> Word8
 genesisVariantTag = case protocolVersion @pv of
     SP1 -> P1.genesisVariantTag . unGDP1
@@ -241,11 +232,10 @@ genesisVariantTag = case protocolVersion @pv of
     SP3 -> P3.genesisVariantTag . unGDP3
     SP4 -> P4.genesisVariantTag . unGDP4
 
-{- |Tag of the regenesis variant used for serialization. This tag determines
- whether the genesis data is, e.g., initial genesis, or regenesis and allows
- us to deserialize one or the other from the data without knowing apriori what
- the data is.
--}
+-- |Tag of the regenesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis and allows
+-- us to deserialize one or the other from the data without knowing apriori what
+-- the data is.
 regenesisVariantTag :: forall pv. IsProtocolVersion pv => Regenesis pv -> Word8
 regenesisVariantTag = case protocolVersion @pv of
     SP1 -> P1.regenesisVariantTag . unRGP1
@@ -314,9 +304,9 @@ data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) wh
     -- |No state migration is performed.
     StateMigrationParametersTrivial :: StateMigrationParameters p p
     -- |No state migration is performed.
-    StateMigrationParametersTrivialP1P2 :: StateMigrationParameters 'P1 'P2
+    StateMigrationParametersP1P2 :: StateMigrationParameters 'P1 'P2
     -- |No state migration is performed.
-    StateMigrationParametersTrivialP2P3 :: StateMigrationParameters 'P2 'P3
+    StateMigrationParametersP2P3 :: StateMigrationParameters 'P2 'P3
     -- |The state is migrated from protocol version 'P3' to 'P4'.
     StateMigrationParametersP3ToP4 :: P4.StateMigrationData -> StateMigrationParameters 'P3 'P4
 

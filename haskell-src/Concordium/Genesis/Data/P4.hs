@@ -109,6 +109,15 @@ data GenesisDataP4
         }
     deriving (Eq, Show)
 
+-- |The regenesis represents a reset of the protocol with a new genesis block.
+--  This does not include the full new state, but only its hash.
+--
+-- The relationship between the new state and the state of the
+-- terminal block of the old chain should be defined by the
+-- chain update mechanism used.
+--
+-- There are two variants, one when migrating from P3, and another one for an
+-- update from P4 to P4.
 data RegenesisP4 = 
     GDP4MigrateFromP3
         { genesisRegenesis :: !Base.RegenesisData,
@@ -169,15 +178,6 @@ putGenesisDataV6 GDP4Initial{..} = do
     putWord8 0
     put genesisCore
     put genesisInitialState
-
-putRegenesisDataV6 :: Putter RegenesisP4
-putRegenesisDataV6 GDP4Regenesis{..} = do
-    putWord8 1
-    Base.putRegenesisData genesisRegenesis
-putRegenesisDataV6 GDP4MigrateFromP3{..} = do
-    putWord8 2
-    Base.putRegenesisData genesisRegenesis
-    put genesisMigration
 
 -- |Deserialize genesis configuration from the serialized genesis **or** regenesis data.
 --
@@ -250,13 +250,14 @@ genesisBlockHash GDP4Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisCore
     put genesisInitialState
 
+-- |Compute the block hash of the regenesis data as defined by the specified
+-- protocol. This becomes the block hash of the genesis block of the new chain
+-- after the protocol update.
 regenesisBlockHash :: RegenesisP4 -> BlockHash
 regenesisBlockHash GDP4Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P4
     putWord8 1 -- regenesis variant
-    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
-    -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
@@ -266,8 +267,6 @@ regenesisBlockHash GDP4MigrateFromP3{genesisRegenesis = Base.RegenesisData{..}, 
     put genesisSlot
     put P4
     putWord8 2 -- migration from P3 variant
-    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
-    -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
@@ -284,7 +283,10 @@ firstGenesisBlockHash GDP4Regenesis{genesisRegenesis=Base.RegenesisData{..}} = g
 genesisVariantTag :: GenesisDataP4 -> Word8
 genesisVariantTag GDP4Initial{} = 0
 
--- |Tag of the regenesis data used for serialization.
+-- |Tag of the regenesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis and allows
+-- us to deserialize one or the other from the data without knowing apriori what
+-- the data is.
 regenesisVariantTag :: RegenesisP4 -> Word8
 regenesisVariantTag GDP4Regenesis{} = 1
 regenesisVariantTag GDP4MigrateFromP3{} = 2
