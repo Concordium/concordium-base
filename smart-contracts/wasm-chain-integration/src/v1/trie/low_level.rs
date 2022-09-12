@@ -3253,14 +3253,19 @@ impl Node {
     pub fn is_cached(&self) -> bool {
         if let Some(value) = &self.value {
             if let InlineOrHashed::Indirect(value) = &*value.borrow() {
-                if let CachedRef::Disk {
-                    ..
-                } = value.data
-                {
-                    return false;
-                }
+                match &value.data {
+                    CachedRef::Disk {
+                        reference: _,
+                    } => return false,
+                    // [Cached] or [Memory]
+                    _ => return true,
+                };
+            } else {
+                // [InlineOrHashed::Inline] are not [CachedRef]'s
+                return false;
             }
         }
+
         for child in self.children.iter() {
             match &*child.1.borrow() {
                 CachedRef::Disk {

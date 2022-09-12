@@ -144,25 +144,29 @@ fn prop_insert_freeze_lookup() {
     QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(_, _) -> anyhow::Result<()>);
 }
 
-///#[test]
-/// Check that storing also caches the data.
-///fn prop_storing_caches() {
-///    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
-///        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
-///        let (trie, mut loader) = make_mut_trie(inputs);
-///        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut
-/// EmptyCollector) {            t
-///        } else {
-///            ensure!(reference.is_empty(), "Reference map is empty, but trie
-/// is not.");            return Ok(());
-///        };
-///        let mut ser = Vec::new();
-///        let _ = frozen.store_update(&mut ser);
-///        ensure!(frozen.get(&mut loader).data.is_cached(), "Not all data is
-/// stored.");        Ok(())
-///    };
-///    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) ->
-/// anyhow::Result<()>); }
+#[test]
+/// Check that storing also uncaches the data.
+fn prop_storing_uncaches() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs);
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(
+                reference.is_empty(),
+                "Reference map is empty, but trie
+ is not."
+            );
+            return Ok(());
+        };
+        let mut ser = Vec::new();
+        let _ = frozen.store_update(&mut ser);
+        ensure!(!frozen.get(&mut loader).data.is_cached(), "Data should not be cached.");
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
 
 #[test]
 /// Check that storing computes the correct size, and that it can be
