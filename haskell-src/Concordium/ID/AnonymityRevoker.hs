@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Concordium.ID.AnonymityRevoker
-  (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity)
+  (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arName, arUrl, arDescription, arPublicKey)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -32,6 +32,10 @@ foreign import ccall safe "ar_info_from_bytes" arInfoFromBytes :: Ptr Word8 -> C
 foreign import ccall safe "ar_info_to_json" arInfoToJSONFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall safe "ar_info_from_json" arInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr ArInfo)
 foreign import ccall unsafe "ar_info_ar_identity" arIdentityFFI :: Ptr ArInfo -> IO ArIdentity
+foreign import ccall unsafe "ar_info_name" arNameFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_url" arUrlFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp
@@ -77,6 +81,24 @@ arInfoToJSON (ArInfo ar) = toJSONHelper arInfoToJSONFFI ar
 
 arIdentity :: ArInfo -> ArIdentity
 arIdentity arInfo = unsafeDupablePerformIO $ withArInfo arInfo arIdentityFFI
+
+-- |Get the description name of the AR.
+arName :: ArInfo -> BS.ByteString
+arName (ArInfo ar) = toBytesHelper arNameFFI ar
+
+-- |Get the description URL of the AR.
+arUrl :: ArInfo -> BS.ByteString
+arUrl (ArInfo ar) = toBytesHelper arUrlFFI ar
+
+-- |Get the description string of the AR.
+arDescription :: ArInfo -> BS.ByteString
+arDescription (ArInfo ar) = toBytesHelper arDescriptionFFI ar
+
+-- |Get the public key of the AR as bytes.
+--  The function is currently only used for returning protobuf data in the gRPC2 api.
+--  That is why it returns bytes instead of a structured publick key.
+arPublicKey :: ArInfo -> BS.ByteString
+arPublicKey (ArInfo ar) = toBytesHelper arPublicKeyFFI ar
 
 -- *JSON instances
 -- These JSON instances are very inefficient and should not be used in

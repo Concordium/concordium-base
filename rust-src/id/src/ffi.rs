@@ -176,6 +176,52 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
     ar_info.ar_identity.into()
 }
 
+//  Return the name of the AR.
+pub extern "C" fn ar_info_name(input_ptr: *mut ArInfo<G1>, output_len: *mut size_t) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = input.ar_description.name.as_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+//  Return the url of the AR.
+pub extern "C" fn ar_info_url(input_ptr: *mut ArInfo<G1>, output_len: *mut size_t) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = input.ar_description.url.as_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+//  Return the description text of the AR.
+pub extern "C" fn ar_info_description(
+    input_ptr: *mut ArInfo<G1>,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = input.ar_description.description.as_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+// Return the public key of the AR.
+pub extern "C" fn ar_info_public_key(
+    input_ptr: *mut ArInfo<G1>,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = to_bytes(&input.ar_public_key);
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
