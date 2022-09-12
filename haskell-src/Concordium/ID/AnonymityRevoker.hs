@@ -13,6 +13,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Binary.Builder as BB
+import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
 import Data.Serialize
 import Control.DeepSeq
 import System.IO.Unsafe
@@ -83,20 +85,26 @@ arIdentity :: ArInfo -> ArIdentity
 arIdentity arInfo = unsafeDupablePerformIO $ withArInfo arInfo arIdentityFFI
 
 -- |Get the description name of the AR.
-arName :: ArInfo -> BS.ByteString
-arName (ArInfo ar) = toBytesHelper arNameFFI ar
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR name is represented as a String in Rust, so it is safe.
+arName :: ArInfo -> Text
+arName (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arNameFFI ar
 
 -- |Get the description URL of the AR.
-arUrl :: ArInfo -> BS.ByteString
-arUrl (ArInfo ar) = toBytesHelper arUrlFFI ar
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR URL is represented as a String in Rust, so it is safe.
+arUrl :: ArInfo -> Text
+arUrl (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arUrlFFI ar
 
 -- |Get the description string of the AR.
-arDescription :: ArInfo -> BS.ByteString
-arDescription (ArInfo ar) = toBytesHelper arDescriptionFFI ar
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR description is represented as a String in Rust, so it is safe.
+arDescription :: ArInfo -> Text
+arDescription (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arDescriptionFFI ar
 
 -- |Get the public key of the AR as bytes.
 --  The function is currently only used for returning protobuf data in the gRPC2 api.
---  That is why it returns bytes instead of a structured publick key.
+--  That is why it returns bytes instead of structured data.
 arPublicKey :: ArInfo -> BS.ByteString
 arPublicKey (ArInfo ar) = toBytesHelper arPublicKeyFFI ar
 

@@ -177,6 +177,7 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
 }
 
 //  Return the name of the AR.
+#[no_mangle]
 pub extern "C" fn ar_info_name(input_ptr: *mut ArInfo<G1>, output_len: *mut size_t) -> *mut u8 {
     let input = from_ptr!(input_ptr);
     let mut bytes = input.ar_description.name.as_bytes().to_vec();
@@ -187,6 +188,7 @@ pub extern "C" fn ar_info_name(input_ptr: *mut ArInfo<G1>, output_len: *mut size
 }
 
 //  Return the url of the AR.
+#[no_mangle]
 pub extern "C" fn ar_info_url(input_ptr: *mut ArInfo<G1>, output_len: *mut size_t) -> *mut u8 {
     let input = from_ptr!(input_ptr);
     let mut bytes = input.ar_description.url.as_bytes().to_vec();
@@ -197,6 +199,7 @@ pub extern "C" fn ar_info_url(input_ptr: *mut ArInfo<G1>, output_len: *mut size_
 }
 
 //  Return the description text of the AR.
+#[no_mangle]
 pub extern "C" fn ar_info_description(
     input_ptr: *mut ArInfo<G1>,
     output_len: *mut size_t,
@@ -210,12 +213,77 @@ pub extern "C" fn ar_info_description(
 }
 
 // Return the public key of the AR.
+#[no_mangle]
 pub extern "C" fn ar_info_public_key(
     input_ptr: *mut ArInfo<G1>,
     output_len: *mut size_t,
 ) -> *mut u8 {
     let input = from_ptr!(input_ptr);
     let mut bytes = to_bytes(&input.ar_public_key);
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+//  Return the name of the IP.
+#[no_mangle]
+pub extern "C" fn ip_info_name(input_ptr: *mut IpInfo<Bls12>, output_len: *mut size_t) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = input.ip_description.name.as_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+//  Return the url of the IP.
+#[no_mangle]
+pub extern "C" fn ip_info_url(input_ptr: *mut IpInfo<Bls12>, output_len: *mut size_t) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = input.ip_description.url.as_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+//  Return the description text of the ip.
+#[no_mangle]
+pub extern "C" fn ip_info_description(
+    input_ptr: *mut IpInfo<Bls12>,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = input.ip_description.description.as_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+// Return the verify key of the IP.
+#[no_mangle]
+pub extern "C" fn ip_info_verify_key(
+    input_ptr: *mut IpInfo<Bls12>,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = to_bytes(&input.ip_verify_key);
+    unsafe { *output_len = bytes.len() as size_t }
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+// Return the cdi verify key of the IP.
+#[no_mangle]
+pub extern "C" fn ip_info_cdi_verify_key(
+    input_ptr: *mut IpInfo<Bls12>,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let input = from_ptr!(input_ptr);
+    let mut bytes = to_bytes(&input.ip_cdi_verify_key);
     unsafe { *output_len = bytes.len() as size_t }
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
