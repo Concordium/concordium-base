@@ -450,10 +450,9 @@ impl<V> CachedRef<V> {
         }
     }
 
-    /// If the value is in memory, set it to cached with the given key.
+    /// If the value is in memory, uncache it with the given key.
     /// Otherwise do nothing. This of course has the precondition that the key
     /// stores the value in the relevant backing store. Internal use only.
-    /// TOOD: doc
     fn uncache(&mut self, reference: Reference) {
         if let CachedRef::Memory {
             ..
@@ -465,9 +464,9 @@ impl<V> CachedRef<V> {
         }
     }
 
-    /// If the value is purely in memory then store it the backing store.
-    /// Store the reference (in the backing store) into the provided buffer.
-    /// TOOD: doc
+    /// If the value is purely in memory then store it the backing store and
+    /// uncache it. Store the reference (in the backing store) into the
+    /// provided buffer.
     pub(crate) fn store_and_uncache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
