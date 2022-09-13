@@ -24,7 +24,7 @@ use libc::size_t;
 use sha2::Digest;
 use std::sync::Arc;
 use wasm_transform::{
-    artifact::{CompiledFunction, OwnedArtifact},
+    artifact::{BorrowedArtifact, CompiledFunction, OwnedArtifact},
     output::Output,
     utils::parse_artifact,
 };
@@ -43,6 +43,7 @@ use wasm_transform::{
 /// we retain a pointer to the artifact in the artifact itself so that we can
 /// easily resume execution.
 type ArtifactV1 = OwnedArtifact<ProcessedImports>;
+type BorrowedArtifactV1<'a> = BorrowedArtifact<'a, ProcessedImports>;
 
 /// A value that is returned from a V1 contract in case of either successful
 /// termination, or logic error. If contract execution traps with an illegal
@@ -103,8 +104,9 @@ unsafe extern "C" fn call_init_v1(
     // is initialized. However reflecting this in types would be a lot of extra work for no
     // real gain. So we require it.
     loader: LoadCallback,
-    artifact_ptr: *const ArtifactV1,
-    init_ctx_bytes: *const u8, // pointer to an initcontext
+    artifact_ptr: *const u8,    // pointer to the artifact
+    artifact_bytes_len: size_t, // length of the artifact
+    init_ctx_bytes: *const u8,  // pointer to an initcontext
     init_ctx_bytes_len: size_t,
     amount: u64,
     init_name: *const u8, // the name of the contract init method
@@ -116,7 +118,14 @@ unsafe extern "C" fn call_init_v1(
     output_len: *mut size_t,
     output_state_ptr: *mut *mut MutableState,
 ) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
+    {
+        borrowed_artifact
+    } else {
+        return std::ptr::null_mut();
+    };
+
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
@@ -127,15 +136,7 @@ unsafe extern "C" fn call_init_v1(
         .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(
-                    artifact.as_ref(),
-                    amount,
-                    init_ctx,
-                    name,
-                    parameter,
-                    energy,
-                    loader,
-                );
+                let res = invoke_init(&artifact, amount, init_ctx, name, parameter, energy, loader);
                 match res {
                     Ok(result) => {
                         let (mut out, initial_state, return_value) = result.extract();
@@ -160,8 +161,6 @@ unsafe extern "C" fn call_init_v1(
             Err(_) => std::ptr::null_mut(),
         }
     });
-    // do not drop the pointer, we are not the owner
-    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or(std::ptr::null_mut())
 }
@@ -202,7 +201,8 @@ unsafe extern "C" fn call_init_v1(
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
     loader: LoadCallback,
-    artifact_ptr: *const ArtifactV1,
+    artifact_ptr: *const u8,      // pointer to the artifact
+    artifact_bytes_len: size_t,   // length of the artifact
     receive_ctx_bytes: *const u8, // receive context
     receive_ctx_bytes_len: size_t,
     amount: u64,
@@ -219,7 +219,13 @@ unsafe extern "C" fn call_receive_v1(
     output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
+    {
+        borrowed_artifact
+    } else {
+        return std::ptr::null_mut();
+    };
     let res = std::panic::catch_unwind(|| -> *mut u8 {
         // For FFI we only pass v0 contexts to keep the other end simpler.
         let receive_ctx_common = v0::deserial_receive_context(slice_from_c_bytes!(
@@ -253,8 +259,12 @@ unsafe extern "C" fn call_receive_v1(
                     common: receive_ctx_common,
                     entrypoint,
                 };
+
+                // We're interrupted. We convert the 'BorrowedArtifactV1' to a (owned)
+                // 'ArtifactV1' and put it in the config.
+                let owned_artifact: Arc<ArtifactV1> = Arc::new(artifact.into());
                 let res = invoke_receive(
-                    artifact.clone(),
+                    owned_artifact.clone(),
                     amount,
                     receive_ctx,
                     actual_name.as_receive_name(),
@@ -299,8 +309,6 @@ unsafe extern "C" fn call_receive_v1(
             None => std::ptr::null_mut(),
         }
     });
-    // do not drop the pointer, we are not the owner
-    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or(std::ptr::null_mut())
 }

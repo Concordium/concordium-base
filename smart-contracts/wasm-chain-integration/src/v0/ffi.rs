@@ -1,17 +1,23 @@
 use crate::{slice_from_c_bytes, v0::*};
 use libc::size_t;
 use std::sync::Arc;
-use wasm_transform::{artifact::CompiledFunction, output::Output, utils::parse_artifact};
+use wasm_transform::{
+    artifact::{CompiledFunction, CompiledFunctionBytes},
+    output::Output,
+    utils::parse_artifact,
+};
 
 /// All functions in this module operate on an Arc<ArtifactV0>. The reason for
 /// choosing an Arc as opposed to Box or Rc is that we need to sometimes share
 /// this artifact to support resumable executions, and we might have to access
 /// it concurrently since these functions are called from Haskell.
 type ArtifactV0 = Artifact<ProcessedImports, CompiledFunction>;
+type BorrowedArtifactV0<'a> = Artifact<ProcessedImports, CompiledFunctionBytes<'a>>;
 
 #[no_mangle]
 unsafe extern "C" fn call_init_v0(
-    artifact_ptr: *const ArtifactV0,
+    artifact_ptr: *const u8,
+    artifact_bytes_len: size_t,
     init_ctx_bytes: *const u8,
     init_ctx_bytes_len: size_t,
     amount: u64,
@@ -22,7 +28,13 @@ unsafe extern "C" fn call_init_v0(
     energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
+    {
+        borrowed_artifact.into()
+    } else {
+        return std::ptr::null_mut();
+    };
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
@@ -31,14 +43,7 @@ unsafe extern "C" fn call_init_v0(
                 .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(
-                    artifact.as_ref(),
-                    amount,
-                    init_ctx,
-                    name,
-                    parameter.into(),
-                    energy,
-                );
+                let res = invoke_init(&artifact, amount, init_ctx, name, parameter.into(), energy);
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
@@ -54,15 +59,14 @@ unsafe extern "C" fn call_init_v0(
             Err(_) => std::ptr::null_mut(),
         }
     });
-    // do not drop the pointer, we are not the owner
-    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or(std::ptr::null_mut())
 }
 
 #[no_mangle]
 unsafe extern "C" fn call_receive_v0(
-    artifact_ptr: *const ArtifactV0,
+    artifact_ptr: *const u8,
+    artifact_bytes_len: size_t,
     receive_ctx_bytes: *const u8,
     receive_ctx_bytes_len: size_t,
     amount: u64,
@@ -75,7 +79,13 @@ unsafe extern "C" fn call_receive_v0(
     energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
+    {
+        borrowed_artifact
+    } else {
+        return std::ptr::null_mut();
+    };
     let res = std::panic::catch_unwind(|| {
         let receive_ctx = deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
@@ -88,7 +98,7 @@ unsafe extern "C" fn call_receive_v0(
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive(
-                    artifact.as_ref(),
+                    &artifact,
                     amount,
                     receive_ctx,
                     state,
@@ -111,8 +121,6 @@ unsafe extern "C" fn call_receive_v0(
             Err(_) => std::ptr::null_mut(), // should not happen.
         }
     });
-    // do not drop the pointer, we are not the owner
-    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or(std::ptr::null_mut())
 }
