@@ -486,14 +486,15 @@ impl<V> CachedRef<V> {
                 reference.store(buf)
             }
             CachedRef::Cached {
-                reference: _,
-                value,
+                reference,
+                value: _,
             } => {
-                let reference = backing_store.store_raw(value.as_ref())?;
                 *self = CachedRef::Disk {
-                    reference,
+                    reference: *reference,
                 };
-                reference.store(buf)
+                // The value was already stored
+                // since it's a [CachedRef::Cached].
+                Ok(())
             }
         }
     }
