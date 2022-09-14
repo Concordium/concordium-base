@@ -510,9 +510,10 @@ pub fn rerandomize_bip39(
 }
 
 pub struct CredentialContext {
-    pub wallet:           ConcordiumHdWallet,
-    pub identity_index:   u32,
-    pub credential_index: u32,
+    pub wallet:                  ConcordiumHdWallet,
+    pub identity_provider_index: u32,
+    pub identity_index:          u32,
+    pub credential_index:        u32,
 }
 
 impl HasAttributeRandomness<ArCurve> for CredentialContext {
@@ -523,6 +524,7 @@ impl HasAttributeRandomness<ArCurve> for CredentialContext {
         attribute_tag: AttributeTag,
     ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
         self.wallet.get_attribute_commitment_randomness(
+            self.identity_provider_index,
             self.identity_index,
             self.credential_index,
             attribute_tag,

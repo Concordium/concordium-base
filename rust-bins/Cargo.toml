@@ -46,7 +46,7 @@ version = "1.0.0"
 
 [dependencies.key_derivation]
 path = "../rust-src/key_derivation"
-version = "1.0.0"
+version = "1.1.0"
 
 [dependencies.keygen_bls]
 path = "../rust-src/keygen_bls"
