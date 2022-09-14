@@ -489,12 +489,11 @@ impl<V> CachedRef<V> {
                 reference,
                 value: _,
             } => {
+                let res = reference.store(buf);
                 *self = CachedRef::Disk {
                     reference: *reference,
                 };
-                // The value was already stored
-                // since it's a [CachedRef::Cached].
-                Ok(())
+                res
             }
         }
     }
