@@ -617,6 +617,20 @@ extern "C" fn store_persistent_tree_v1(
 }
 
 #[no_mangle]
+/// Migrate the persistent tree from one backing store to another.
+extern "C" fn migrate_persistent_tree_v1(
+    mut loader: LoadCallback,
+    mut writer: StoreCallback,
+    tree: *mut PersistentState,
+) -> *mut PersistentState {
+    let tree = unsafe { &mut *tree };
+    match tree.migrate(&mut writer, &mut loader) {
+        Ok(new_tree) => Box::into_raw(Box::new(new_tree)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
 /// Deallocate the persistent state, freeing as much memory as possible.
 extern "C" fn free_persistent_state_v1(tree: *mut PersistentState) {
     unsafe { Box::from_raw(tree) };

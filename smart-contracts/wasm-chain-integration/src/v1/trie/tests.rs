@@ -145,6 +145,42 @@ fn prop_insert_freeze_lookup() {
 }
 
 #[test]
+/// Check that migration works.
+/// This test creates a random tree, stores it to one backing store, then
+/// migrates it to a new one. Then the new tree is compared to the reference
+/// implementation.
+fn prop_migration_retains_semantics() {
+    let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {
+        let reference = inputs.iter().cloned().collect::<BTreeMap<_, _>>();
+        let (trie, mut loader) = make_mut_trie(inputs);
+        let mut frozen = if let Some(t) = trie.freeze(&mut loader, &mut EmptyCollector) {
+            t
+        } else {
+            ensure!(reference.is_empty(), "Reference map is empty, but trie is not.");
+            return Ok(());
+        };
+        let mut backing_store = Vec::new();
+        let top =
+            frozen.store_update(&mut backing_store).context("Serialization should succeed.")?;
+        let _ = backing_store.store_raw(&top).expect("Storing to a vector should succeed.");
+        let mut loader = Loader {
+            inner: backing_store,
+        };
+        let mut new_backing_store = Vec::new();
+        let migrated = frozen
+            .migrate(&mut new_backing_store, &mut loader)
+            .context("Migration should succeed.")?;
+        let mut loader = Loader {
+            inner: new_backing_store,
+        };
+        let mut mutable = migrated.make_mutable(0, &mut loader);
+        compare_to_reference(&mut mutable, &mut loader, &reference)?;
+        Ok(())
+    };
+    QuickCheck::new().tests(NUM_TESTS).quickcheck(prop as fn(Vec<_>) -> anyhow::Result<()>);
+}
+
+#[test]
 /// Check that storing also caches the data.
 fn prop_storing_caches() {
     let prop = |inputs: Vec<(Vec<u8>, Value)>| -> anyhow::Result<()> {

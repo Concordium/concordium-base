@@ -10,7 +10,7 @@ import Data.Word
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
-import Concordium.Genesis.Data.Base
+import qualified Concordium.Genesis.Data.Base as Base
 import Concordium.Genesis.Parameters
 import Concordium.Types
 import Concordium.Types.Accounts
@@ -98,38 +98,56 @@ defaultBakerPoolInfo StateMigrationData{migrationProtocolUpdateData=ProtocolUpda
           _poolCommissionRates = updateDefaultCommissionRate
         }
 
--- |Genesis data for the P4 protocol version. The initial variant is here
--- because it might be used in the future, at present it is not used.
+-- |Initial genesis data for the P4 protocol version.
 data GenesisDataP4
     = GDP4Initial
         { -- |The immutable genesis parameters.
-          genesisCore :: !CoreGenesisParameters,
+          genesisCore :: !Base.CoreGenesisParameters,
           -- |Serialized initial block state.
           -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-          genesisInitialState :: !(GenesisState 'P4)
+          genesisInitialState :: !(Base.GenesisState 'P4)
         }
-    | GDP4MigrateFromP3
-        { genesisRegenesis :: !RegenesisData,
-          genesisMigration :: !StateMigrationData
-        }
-    | GDP4Regenesis {genesisRegenesis :: !RegenesisData}
     deriving (Eq, Show)
 
-_core :: GenesisDataP4 -> CoreGenesisParameters
-_core GDP4Initial{..} = genesisCore
-_core GDP4MigrateFromP3{genesisRegenesis = RegenesisData{..}} = genesisCore
-_core GDP4Regenesis{genesisRegenesis = RegenesisData{..}} = genesisCore
+-- |The regenesis represents a reset of the protocol with a new genesis block.
+--  This does not include the full new state, but only its hash.
+--
+-- The relationship between the new state and the state of the
+-- terminal block of the old chain should be defined by the
+-- chain update mechanism used.
+--
+-- There are two variants, one when migrating from P3, and another one for an
+-- update from P4 to P4.
+data RegenesisP4 = 
+    GDP4MigrateFromP3
+        { genesisRegenesis :: !Base.RegenesisData,
+          genesisMigration :: !StateMigrationData
+        }
+    | GDP4Regenesis {genesisRegenesis :: !Base.RegenesisData}
+    deriving (Eq, Show)
 
-instance BasicGenesisData GenesisDataP4 where
-    gdGenesisTime = genesisTime . _core
+instance Base.BasicGenesisData GenesisDataP4 where
+    gdGenesisTime = Base.genesisTime . genesisCore
     {-# INLINE gdGenesisTime #-}
-    gdSlotDuration = genesisSlotDuration . _core
+    gdSlotDuration = Base.genesisSlotDuration . genesisCore
     {-# INLINE gdSlotDuration #-}
-    gdMaxBlockEnergy = genesisMaxBlockEnergy . _core
+    gdMaxBlockEnergy = Base.genesisMaxBlockEnergy . genesisCore
     {-# INLINE gdMaxBlockEnergy #-}
-    gdFinalizationParameters = genesisFinalizationParameters . _core
+    gdFinalizationParameters = Base.genesisFinalizationParameters . genesisCore
     {-# INLINE gdFinalizationParameters #-}
-    gdEpochLength = genesisEpochLength . _core
+    gdEpochLength = Base.genesisEpochLength . genesisCore
+    {-# INLINE gdEpochLength #-}
+
+instance Base.BasicGenesisData RegenesisP4 where
+    gdGenesisTime = Base.genesisTime . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdGenesisTime #-}
+    gdSlotDuration = Base.genesisSlotDuration . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdSlotDuration #-}
+    gdMaxBlockEnergy = Base.genesisMaxBlockEnergy . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdMaxBlockEnergy #-}
+    gdFinalizationParameters = Base.genesisFinalizationParameters . Base.genesisCore . genesisRegenesis
+    {-# INLINE gdFinalizationParameters #-}
+    gdEpochLength = Base.genesisEpochLength . Base.genesisCore . genesisRegenesis
     {-# INLINE gdEpochLength #-}
 
 -- |Deserialize genesis data in the V6 format.
@@ -140,14 +158,19 @@ getGenesisDataV6 =
             genesisCore <- get
             genesisInitialState <- get
             return GDP4Initial{..}
+        _ -> fail "Unrecognized P4 genesis data type."
+
+getRegenesisData :: Get RegenesisP4
+getRegenesisData =
+    getWord8 >>= \case
         1 -> do
-            genesisRegenesis <- getRegenesisData
+            genesisRegenesis <- Base.getRegenesisData
             return GDP4Regenesis{..}
         2 -> do
-            genesisRegenesis <- getRegenesisData
+            genesisRegenesis <- Base.getRegenesisData
             genesisMigration <- get
             return GDP4MigrateFromP3{..}
-        _ -> fail "Unrecognized P4 genesis data type."
+        _ -> fail "Unrecognized P4 regenesis data type."
 
 -- |Serialize genesis data in the V6 format.
 putGenesisDataV6 :: Putter GenesisDataP4
@@ -155,15 +178,8 @@ putGenesisDataV6 GDP4Initial{..} = do
     putWord8 0
     put genesisCore
     put genesisInitialState
-putGenesisDataV6 GDP4Regenesis{..} = do
-    putWord8 1
-    putRegenesisData genesisRegenesis
-putGenesisDataV6 GDP4MigrateFromP3{..} = do
-    putWord8 2
-    putRegenesisData genesisRegenesis
-    put genesisMigration
 
--- |Deserialize genesis configuration from the serialized genesis data.
+-- |Deserialize genesis configuration from the serialized genesis **or** regenesis data.
 --
 -- Note that this will not consume the entire genesis data, only the initial
 -- prefix. In particular, in case of initial genesis data it will not read the
@@ -171,12 +187,12 @@ putGenesisDataV6 GDP4MigrateFromP3{..} = do
 --
 -- The argument is the hash of the genesis data from which the configuration is
 -- to be read.
-getGenesisConfigurationV6 :: BlockHash -> Get GenesisConfiguration
+getGenesisConfigurationV6 :: BlockHash -> Get Base.GenesisConfiguration
 getGenesisConfigurationV6 genHash = do
     getWord8 >>= \case
         0 -> do
             _gcCore <- get
-            return GenesisConfiguration{
+            return Base.GenesisConfiguration{
                 _gcTag = 0,
                 _gcCurrentHash = genHash,
                 _gcFirstGenesis = genHash,
@@ -185,7 +201,7 @@ getGenesisConfigurationV6 genHash = do
         1 -> do
           _gcCore <- get
           _gcFirstGenesis <- get
-          return GenesisConfiguration{
+          return Base.GenesisConfiguration{
             _gcTag = 1,
             _gcCurrentHash = genHash,
             ..
@@ -193,7 +209,7 @@ getGenesisConfigurationV6 genHash = do
         2 -> do
           _gcCore <- get
           _gcFirstGenesis <- get
-          return GenesisConfiguration{
+          return Base.GenesisConfiguration{
             _gcTag = 2,
             _gcCurrentHash = genHash,
             ..
@@ -216,7 +232,7 @@ putVersionedGenesisData gd = do
     putGenesisDataV6 gd
 
 parametersToGenesisData :: GenesisParameters 'P4 -> GenesisDataP4
-parametersToGenesisData = uncurry GDP4Initial . parametersToState
+parametersToGenesisData = uncurry GDP4Initial . Base.parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
 -- Every block hash is derived from a message that begins with the block slot,
@@ -233,23 +249,24 @@ genesisBlockHash GDP4Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     putWord8 0 -- initial variant
     put genesisCore
     put genesisInitialState
-genesisBlockHash GDP4Regenesis{genesisRegenesis = RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+
+-- |Compute the block hash of the regenesis data as defined by the specified
+-- protocol. This becomes the block hash of the genesis block of the new chain
+-- after the protocol update.
+regenesisBlockHash :: RegenesisP4 -> BlockHash
+regenesisBlockHash GDP4Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P4
     putWord8 1 -- regenesis variant
-    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
-    -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
-genesisBlockHash GDP4MigrateFromP3{genesisRegenesis = RegenesisData{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
+regenesisBlockHash GDP4MigrateFromP3{genesisRegenesis = Base.RegenesisData{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P4
     putWord8 2 -- migration from P3 variant
-    -- NB: 'putRegenesisData' is not used since the state serialization does not go into computing the hash.
-    -- Only the state hash is used.
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
@@ -258,13 +275,18 @@ genesisBlockHash GDP4MigrateFromP3{genesisRegenesis = RegenesisData{..}, ..} = B
     put genesisMigration
 
 -- |The hash of the first genesis block in the chain.
-firstGenesisBlockHash :: GenesisDataP4 -> BlockHash
-firstGenesisBlockHash GDP4Regenesis{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
-firstGenesisBlockHash GDP4MigrateFromP3{genesisRegenesis=RegenesisData{..}} = genesisFirstGenesis
-firstGenesisBlockHash other@GDP4Initial{} = genesisBlockHash other
+firstGenesisBlockHash :: RegenesisP4 -> BlockHash
+firstGenesisBlockHash GDP4MigrateFromP3{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP4Regenesis{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP4 -> Word8
 genesisVariantTag GDP4Initial{} = 0
-genesisVariantTag GDP4Regenesis{} = 1
-genesisVariantTag GDP4MigrateFromP3{} = 2
+
+-- |Tag of the regenesis variant used for serialization. This tag determines
+-- whether the genesis data is, e.g., initial genesis, or regenesis and allows
+-- us to deserialize one or the other from the data without knowing apriori what
+-- the data is.
+regenesisVariantTag :: RegenesisP4 -> Word8
+regenesisVariantTag GDP4Regenesis{} = 1
+regenesisVariantTag GDP4MigrateFromP3{} = 2
