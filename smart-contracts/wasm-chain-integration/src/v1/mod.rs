@@ -1197,8 +1197,15 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
-fn process_receive_result<BackingStore, Param, R: RunnableCode, Ctx1, Ctx2>(
-    artifact: Arc<Artifact<ProcessedImports, R>>,
+fn process_receive_result<
+    BackingStore,
+    Param,
+    R: RunnableCode,
+    Art: Into<Arc<Artifact<ProcessedImports, R>>>,
+    Ctx1,
+    Ctx2,
+>(
+    artifact: Art,
     host: ReceiveHost<'_, BackingStore, Param, Ctx1>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
 ) -> ExecResult<ReceiveResult<R, Ctx2>>
@@ -1255,7 +1262,7 @@ where
                 logs,
                 config: Box::new(ReceiveInterruptedState {
                     host,
-                    artifact,
+                    artifact: artifact.into(),
                     config,
                 }),
                 interrupt: reason,
@@ -1277,18 +1284,20 @@ where
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<
     BackingStore: BackingStoreLoad,
-    R: RunnableCode,
+    R1: RunnableCode,
+    R2: RunnableCode,
+    Art: Borrow<Artifact<ProcessedImports, R1>> + Into<Arc<Artifact<ProcessedImports, R2>>>,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    artifact: Arc<Artifact<ProcessedImports, R>>,
+    artifact: Art,
     amount: u64,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     param: ParameterRef,
     energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
-) -> ExecResult<ReceiveResult<R, Ctx2>> {
+) -> ExecResult<ReceiveResult<R2, Ctx2>> {
     let mut host = ReceiveHost {
         energy,
         stateless: StateLessReceiveHost {
@@ -1301,8 +1310,9 @@ pub fn invoke_receive<
         state: instance_state,
     };
 
-    let result =
-        artifact.run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
+    let result = artifact
+        .borrow()
+        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
     process_receive_result(artifact, host, result)
 }
 

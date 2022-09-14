@@ -260,11 +260,8 @@ unsafe extern "C" fn call_receive_v1(
                     entrypoint,
                 };
 
-                // We're interrupted. We convert the 'BorrowedArtifactV1' to a (owned)
-                // 'ArtifactV1' and put it in the config.
-                let owned_artifact: Arc<ArtifactV1> = Arc::new(artifact.into());
                 let res = invoke_receive(
-                    owned_artifact.clone(),
+                    artifact,
                     amount,
                     receive_ctx,
                     actual_name.as_receive_name(),
