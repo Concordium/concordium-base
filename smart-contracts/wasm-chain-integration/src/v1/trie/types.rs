@@ -51,6 +51,26 @@ pub enum LoadError {
 /// Result of loading data from persistent storage.
 pub type LoadResult<A> = Result<A, LoadError>;
 
+#[derive(Debug, Error)]
+/// An error that may occur when storing or loading data from persistent
+/// storage.
+pub enum LoadWriteError {
+    #[error("Write error: {0}")]
+    Write(#[from] WriteError),
+    #[error("Load error: {0}")]
+    Load(#[from] LoadError),
+}
+
+/// In the context where the LoadWriteError is used we want to propagate
+/// write errors out. So this implementation is the more useful one as opposed
+/// to the implementation which maps io errors through the [`LoadError`].
+impl From<std::io::Error> for LoadWriteError {
+    fn from(err: std::io::Error) -> Self { Self::Write(err.into()) }
+}
+
+/// Result of loading or storing data from or to persistent storage.
+pub type LoadStoreResult<A> = Result<A, LoadWriteError>;
+
 /// Length of the stem that will be stored inline, i.e.,
 /// the stem length will be encoded in the tag bit, as opposed to separate
 /// 4 bytes. This must always fit 6 bits, i.e., can be no more than 63.

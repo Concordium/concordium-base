@@ -94,6 +94,21 @@ impl PersistentState {
         backing_store.store_raw(&top)
     }
 
+    /// Migrate the tree from one backing store to another.
+    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad>(
+        &mut self,
+        backing_store: &mut S,
+        loader: &mut L,
+    ) -> LoadStoreResult<Self> {
+        match self {
+            PersistentState::Empty => Ok(PersistentState::Empty),
+            PersistentState::Root(node) => {
+                let new_node = node.migrate(backing_store, loader)?;
+                Ok(PersistentState::Root(new_node))
+            }
+        }
+    }
+
     /// Serialize the tree into the provided buffer. Note that this is very
     /// different from [Self::store_update]. Whereas that stores the part of
     /// the tree that are only in memory into the provided backing store, this
