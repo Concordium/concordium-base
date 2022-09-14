@@ -682,14 +682,6 @@ extern "C" fn get_new_state_size_v1(mut loader: LoadCallback, tree: *mut Mutable
 }
 
 #[no_mangle]
-/// Load the entire tree into memory. If any data is in the backing store it is
-/// loaded using the provided callback.
-extern "C" fn cache_persistent_state_v1(mut loader: LoadCallback, tree: *mut PersistentState) {
-    let tree = unsafe { &mut *tree };
-    tree.cache(&mut loader)
-}
-
-#[no_mangle]
 /// Compute the hash of the persistent state and write it to the provided
 /// buffer which is assumed to be able to hold 32 bytes.
 /// The hash of the tree is cached, so this is generally a cheap function.
