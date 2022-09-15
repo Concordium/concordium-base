@@ -18,8 +18,9 @@ use super::trie::{
     foreign::{LoadCallback, StoreCallback},
     EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
 };
-use crate::{slice_from_c_bytes, v1::*};
+use crate::v1::*;
 use concordium_contracts_common::OwnedReceiveName;
+use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
 use sha2::Digest;
 use std::sync::Arc;

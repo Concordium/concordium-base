@@ -1,4 +1,5 @@
-use crate::{slice_from_c_bytes, v0::*};
+use crate::v0::*;
+use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
 use std::sync::Arc;
 use wasm_transform::{artifact::CompiledFunction, output::Output, utils::parse_artifact};
