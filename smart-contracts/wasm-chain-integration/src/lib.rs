@@ -45,20 +45,6 @@ macro_rules! type_matches {
 }
 pub(crate) use type_matches;
 
-// After refactoring to have a common dependency with crypto, replace this
-// with the version from crypto.
-macro_rules! slice_from_c_bytes {
-    ($cstr:expr, $length:expr) => {
-        if $length != 0 {
-            assert!(!$cstr.is_null(), "Null pointer in `slice_from_c_bytes`.");
-            std::slice::from_raw_parts($cstr, $length)
-        } else {
-            &[]
-        }
-    };
-}
-pub(crate) use slice_from_c_bytes;
-
 /// Result of contract execution. This is just a wrapper around
 /// [anyhow::Result].
 pub type ExecResult<A> = anyhow::Result<A>;
