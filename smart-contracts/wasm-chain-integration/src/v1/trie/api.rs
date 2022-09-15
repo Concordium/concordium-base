@@ -160,6 +160,22 @@ impl PersistentState {
         }
     }
 
+    /// Derive a fresh mutable trie from the [`PersistentState`] using the given
+    /// loader. In contrast to using [`thaw`](Self::thaw) and then using
+    /// [`MutableState::get_inner`] this directly yields a mutable trie that
+    /// can be used. However this mutable trie is not shareable and does not
+    /// have checkpointing in contrast to the [`MutableState`].
+    ///
+    /// This is intended when the persistent trie is used in read-only way. It
+    /// gives access to the efficient implementations of lookup and
+    /// traversal for the mutable trie.
+    pub fn into_trie(self, loader: &mut impl BackingStoreLoad) -> MutableTrie {
+        match self {
+            PersistentState::Empty => MutableTrie::empty(),
+            PersistentState::Root(root_node) => root_node.make_mutable(0, loader),
+        }
+    }
+
     /// Generate a fresh mutable state from the persistent state.
     pub fn thaw(&self) -> MutableState {
         MutableState {
