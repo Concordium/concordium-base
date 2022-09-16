@@ -146,9 +146,9 @@ unsafe extern "C" fn call_receive_v0(
 /// `*artifact_len` bytes for the artifact, followed by a list of export item
 /// names. The length of the list is encoded as u16, big endian, and each name
 /// is encoded as u16, big endian.
-/// 
-/// If validation succeeds, the serialized artifact is at `*output_artifact_bytes`
-/// and should be freed with `rs_free_array_len`.
+///
+/// If validation succeeds, the serialized artifact is at
+/// `*output_artifact_bytes` and should be freed with `rs_free_array_len`.
 ///
 /// # Safety
 /// This function is safe provided all the supplied pointers are not null and
@@ -190,65 +190,5 @@ unsafe extern "C" fn validate_and_process_v0(
             ptr
         }
         Err(_) => std::ptr::null_mut(),
-    }
-}
-
-// # Administrative functions.
-
-#[no_mangle]
-/// # Safety
-/// This function is safe provided the supplied pointer is
-/// constructed with [Arc::into_raw] and for each [Arc::into_raw] this function
-/// is called only once.
-unsafe extern "C" fn artifact_v0_free(artifact_ptr: *const ArtifactV0) {
-    if !artifact_ptr.is_null() {
-        // decrease the reference count
-        Arc::from_raw(artifact_ptr);
-    }
-}
-
-#[no_mangle]
-/// Convert an artifact to a byte array and return a pointer to it, storing its
-/// length in `output_len`. To avoid leaking memory the return value should be
-/// freed with `rs_free_array_len`.
-///
-/// # Safety
-/// This function is safe provided the `artifact_ptr` was obtained with
-/// `Arc::into_raw` and `output_len` points to a valid memory location.
-unsafe extern "C" fn artifact_v0_to_bytes(
-    artifact_ptr: *const ArtifactV0,
-    output_len: *mut size_t,
-) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
-    let mut bytes = Vec::new();
-    artifact.output(&mut bytes).expect("Artifact serialization does not fail.");
-    bytes.shrink_to_fit();
-    *output_len = bytes.len() as size_t;
-    let ptr = bytes.as_mut_ptr();
-    std::mem::forget(bytes);
-    let _ = Arc::into_raw(artifact);
-    ptr
-}
-
-#[no_mangle]
-/// Deserialize an artifact from bytes and return a pointer to it.
-/// If deserialization fails this returns [None](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None)
-/// and otherwise it returns a valid pointer to the artifact. To avoid leaking
-/// memory the memory must be freed using [artifact_v0_free].
-///
-/// # Safety
-/// This function is safe provided
-/// - either the `input_len` is greater than 0 and the `bytes_ptr` points to
-///   data of the given size
-/// - or `input_len` = 0
-unsafe extern "C" fn artifact_v0_from_bytes(
-    bytes_ptr: *const u8,
-    input_len: size_t,
-) -> *const ArtifactV0 {
-    let bytes = slice_from_c_bytes!(bytes_ptr, input_len as usize);
-    if let Ok(borrowed_artifact) = parse_artifact(bytes) {
-        Arc::into_raw(Arc::new(borrowed_artifact.into()))
-    } else {
-        std::ptr::null()
     }
 }
