@@ -22,14 +22,17 @@
 //! state updates where we only have to store the parts of the state that are
 //! new.
 use super::{
-    low_level::{CachedRef, MutableTrie, Node},
+    low_level::{self, CachedRef, MutableTrie, Node},
     types::*,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 #[cfg(feature = "display-state")]
 use ptree::TreeBuilder;
 use sha2::Digest;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{
+    iter::FusedIterator,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 pub type Value = Vec<u8>;
 
@@ -176,6 +179,23 @@ impl PersistentState {
         }
     }
 
+    /// Get an iterator over the (key, value) pairs stored in the persistent
+    /// state. The iterator yields keys in ascending lexicographic order.
+    pub fn into_iterator<L: BackingStoreLoad>(self, loader: &mut L) -> PersistentStateIterator<L> {
+        let mut state = self.into_trie(loader);
+        // get an iterator over the entire state (starting at root)
+        match state.iter(loader, &[]) {
+            Err(_) => {
+                unreachable!("We just created the trie, so it has no iterators.")
+            }
+            Ok(iterator) => PersistentStateIterator {
+                state,
+                iterator,
+                loader,
+            },
+        }
+    }
+
     /// Generate a fresh mutable state from the persistent state.
     pub fn thaw(&self) -> MutableState {
         MutableState {
@@ -218,6 +238,32 @@ impl PersistentState {
         }
     }
 }
+
+/// Iterator over all (key, value) pairs stored in the persistent state.
+/// Values are returned in increasing order of keys.
+pub struct PersistentStateIterator<'a, L> {
+    state:    MutableTrie,
+    iterator: Option<low_level::Iterator>,
+    loader:   &'a mut L,
+}
+
+impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
+    type Item = (Vec<u8>, Vec<u8>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let iterator = self.iterator.as_mut()?;
+        match self.state.next(self.loader, iterator, &mut EmptyCounter) {
+            Ok(v) => {
+                let entry = v?;
+                let key = iterator.get_key();
+                self.state.with_entry(entry, self.loader, |value| (key.to_vec(), value.to_vec()))
+            }
+            Err(empty) => match empty {},
+        }
+    }
+}
+
+impl<'a, L: BackingStoreLoad> FusedIterator for PersistentStateIterator<'a, L> {}
 
 #[derive(Debug, Clone)]
 /// This type is a technical device to support lazy conversion of
