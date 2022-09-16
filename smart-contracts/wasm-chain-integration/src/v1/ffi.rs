@@ -319,16 +319,21 @@ unsafe extern "C" fn call_receive_v1(
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
-/// - `artifact_out` a pointer where the pointer to the artifact will be
-///   written.
 /// - `output_len` a pointer where the total length of the output will be
 ///   written.
+/// - `output_artifact_len` a pointer where the length of the serialized
+///   artifact will be written.
+/// - `output_artifact_bytes` a pointer where the pointer to the serialized
+///   artifact will be written.
 ///
 /// The return value is either a null pointer if validation fails, or a pointer
 /// to a byte array of length `*output_len`. The byte array starts with
 /// `*artifact_len` bytes for the artifact, followed by a list of export item
 /// names. The length of the list is encoded as u16, big endian, and each name
 /// is encoded as u16, big endian.
+/// 
+/// If validation succeeds, the serialized artifact is at `*output_artifact_bytes`
+/// and should be freed with `rs_free_array_len`.
 ///
 /// # Safety
 /// This function is safe provided all the supplied pointers are not null and
@@ -337,7 +342,8 @@ unsafe extern "C" fn validate_and_process_v1(
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     output_len: *mut size_t, // this is the total length of the output byte array
-    output_artifact: *mut *const ArtifactV1, /* location where the pointer to the artifact will
+    output_artifact_len: *mut size_t, // the length of the artifact byte array
+    output_artifact_bytes: *mut *const u8, /* location where the pointer to the artifact will
                               * be written. */
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
@@ -358,10 +364,14 @@ unsafe extern "C" fn validate_and_process_v1(
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();
             std::mem::forget(out_buf);
-            // move the artifact to the arc.
-            let arc = Arc::new(artifact);
-            // and forget it.
-            *output_artifact = Arc::into_raw(arc);
+
+            let mut artifact_bytes = Vec::new();
+            artifact.output(&mut artifact_bytes).expect("Artifact serialization does not fail.");
+            artifact_bytes.shrink_to_fit();
+            *output_artifact_len = artifact_bytes.len() as size_t;
+            *output_artifact_bytes = artifact_bytes.as_mut_ptr();
+            std::mem::forget(artifact_bytes);
+
             ptr
         }
         Err(_) => std::ptr::null_mut(),
