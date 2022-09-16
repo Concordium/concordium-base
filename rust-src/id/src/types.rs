@@ -1747,7 +1747,7 @@ pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 
 impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
 
-#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 /// A set of cryptographic parameters that are particular to the chain and
 /// shared by everybody that interacts with the chain.
@@ -1761,7 +1761,7 @@ pub struct GlobalContext<C: Curve> {
     /// It is unclear what length we will require here, or whether we'll allow
     /// dynamic generation.
     #[serde(rename = "bulletproofGenerators")]
-    bulletproof_generators:      Generators<C>,
+    pub bulletproof_generators:  Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
     /// A free-form string used to distinguish between different chains even if
