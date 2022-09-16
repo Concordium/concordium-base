@@ -154,6 +154,8 @@ impl PersistentState {
         match self {
             PersistentState::Empty => None,
             PersistentState::Root(root_node) => {
+                // we do lookups in the mutable trie to improve performance, and to
+                // avoid issues with stack overflow.
                 let mut trie = root_node.make_mutable(0, loader);
                 let entry = trie.get_entry(loader, key)?;
                 trie.with_entry(entry, loader, |x| x.to_vec())
@@ -169,7 +171,10 @@ impl PersistentState {
     ///
     /// This is intended when the persistent trie is used in read-only way. It
     /// gives access to the efficient implementations of lookup and
-    /// traversal for the mutable trie.
+    /// traversal for the mutable trie. In particular converting
+    /// [`PersistentState`] to [`MutableTrie`] should be preffered over
+    /// [`lookup`](Self::lookup) if multiple lookups will be performed on
+    /// the resulting [`MutableTrie`].
     pub fn into_trie(self, loader: &mut impl BackingStoreLoad) -> MutableTrie {
         match self {
             PersistentState::Empty => MutableTrie::empty(),
@@ -261,6 +266,9 @@ impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
     }
 }
 
+/// This marker instance informs the compiler, and the users, that once the
+/// iterator returns [`None`] it will always return [`None`], which could be
+/// used to optimize usage.
 impl<'a, L: BackingStoreLoad> FusedIterator for PersistentStateIterator<'a, L> {}
 
 #[derive(Debug, Clone)]
