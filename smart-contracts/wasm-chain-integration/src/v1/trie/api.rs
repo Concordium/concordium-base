@@ -149,16 +149,14 @@ impl PersistentState {
         }
     }
 
-    /// Lookup a key in the tree. This is only meant for testing
-    /// since performance is slow compared to lookup in the mutable tree.
+    /// Lookup a key in the tree and return a copy of the value stored.
     pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[u8]) -> Option<Value> {
         match self {
             PersistentState::Empty => None,
-            PersistentState::Root(node) => {
-                let node = node.get(loader);
-                let data = node.data.lookup(loader, key)?;
-                let borrowed = data.borrow();
-                Some(borrowed.get_copy(loader))
+            PersistentState::Root(root_node) => {
+                let mut trie = root_node.make_mutable(0, loader);
+                let entry = trie.get_entry(loader, key)?;
+                trie.with_entry(entry, loader, |x| x.to_vec())
             }
         }
     }
