@@ -8,7 +8,7 @@ license-file = "../../LICENSE"
 [features]
 # If this feature is enabled  the ffi exports are going to be produced
 # for use from Haskell.
-enable-ffi = []
+enable-ffi = ["ffi_helpers"]
 default=["enable-ffi"]
 fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
 fuzz-coverage = ["wasm-transform/fuzz-coverage"]
@@ -43,6 +43,10 @@ version = "0"
 version = "3.0"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
+
+[dependencies.ffi_helpers]
+path = "../../rust-src/ffi_helpers"
+optional = true
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
