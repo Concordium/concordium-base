@@ -102,7 +102,7 @@ jobs:
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --color=always --tests --benches -- -Dclippy::all
+          cargo clippy --features async --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
     name: smart-contracts/${{ matrix.example-contract }} lint:clippy
@@ -209,4 +209,3 @@ jobs:
         run: |
           cargo build
           ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/
-

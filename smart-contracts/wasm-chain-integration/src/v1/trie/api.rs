@@ -199,6 +199,68 @@ impl PersistentState {
         }
     }
 
+    /// Construct a [PersistentState] from an iterator. If the iterator has
+    /// duplicate keys then values at later keys override earlier ones.
+    /// The resulting state lies entirely in memory and so can be used with any
+    /// [`Loader`].
+    pub fn from_iterator<'a, I: IntoIterator<Item = (&'a [u8], Vec<u8>)>>(iter: I) -> Self {
+        let mut loader = Loader {
+            inner: Vec::new(),
+        };
+        let mut trie = MutableTrie::empty();
+        for (k, v) in iter {
+            trie.insert(&mut loader, k, v).expect("Tree is fresh, so insert cannot fail.");
+        }
+        match trie.freeze(&mut loader, &mut EmptyCollector) {
+            Some(root) => Self::Root(root),
+            None => Self::Empty,
+        }
+    }
+
+    #[cfg(feature = "async")]
+    /// Construct a [PersistentState] from a stream of key-value pairs,
+    /// but where the stream might yield errors at some point. This is intended
+    /// to be used when the stream is coming, e.g., over the network, and might
+    /// be interrupted.
+    ///
+    /// If the stream yields duplicate keys then values at later keys
+    /// override earlier ones. The resulting state lies entirely in memory
+    /// and so can be used with any [`Loader`]. If any item in the stream yields
+    /// an error this function returns early with the given error.
+    pub async fn try_from_stream<E, S>(mut s: S) -> Result<Self, E>
+    where
+        S: futures::stream::Stream<Item = Result<(Vec<u8>, Vec<u8>), E>> + Unpin, {
+        use futures::StreamExt;
+        let mut loader = Loader {
+            inner: Vec::new(),
+        };
+        let mut trie = MutableTrie::empty();
+        while let Some(item) = s.next().await {
+            let (k, v) = item?;
+            trie.insert(&mut loader, &k, v).expect("Tree is fresh, so insert cannot fail.");
+        }
+        Ok(match trie.freeze(&mut loader, &mut EmptyCollector) {
+            Some(root) => Self::Root(root),
+            None => Self::Empty,
+        })
+    }
+
+    #[cfg(feature = "async")]
+    /// Construct a [PersistentState] from a stream of key-value pairs.
+    /// If the stream yields duplicate keys then values at later keys
+    /// override earlier ones. The resulting state lies entirely in memory
+    /// and so can be used with any [`Loader`].
+    pub async fn from_stream<S>(s: S) -> Self
+    where
+        S: futures::stream::Stream<Item = (Vec<u8>, Vec<u8>)> + Unpin, {
+        use futures::StreamExt;
+        enum Empty {}
+        match Self::try_from_stream::<Empty, _>(s.map(Result::Ok)).await {
+            Ok(s) => s,
+            Err(e) => match e {},
+        }
+    }
+
     /// Generate a fresh mutable state from the persistent state.
     pub fn thaw(&self) -> MutableState {
         MutableState {
