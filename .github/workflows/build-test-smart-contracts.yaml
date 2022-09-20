@@ -75,7 +75,7 @@ jobs:
         run: |
           cargo fmt -- --color=always --check
 
-  "lint_clippy":
+  "lint_clippy_wasm_transform":
     name: smart-contracts/${{ matrix.build-dir }} lint:clippy
     # Don't run on draft pull requests
     if: ${{ !github.event.pull_request.draft }}
@@ -84,7 +84,6 @@ jobs:
       matrix:
         build-dir:
           - 'wasm-transform'
-          - 'wasm-chain-integration'
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -102,7 +101,39 @@ jobs:
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --features async --color=always --tests --benches -- -Dclippy::all
+          cargo clippy --color=always --tests --benches -- -Dclippy::all
+
+  "lint_clippy_wasm_chain_integration":
+    name: smart-contracts/${{ matrix.build-dir }} lint:clippy
+    # Don't run on draft pull requests
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-dir:
+          - 'wasm-chain-integration'
+        features:
+          - 'enable-ffi'
+          - 'display-state'
+          - 'async'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+          target: ${{ env.TARGET }}
+          components: clippy
+      - name: Clippy
+        working-directory: smart-contracts/${{ matrix.build-dir }}
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          cargo clippy --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
     name: smart-contracts/${{ matrix.example-contract }} lint:clippy
