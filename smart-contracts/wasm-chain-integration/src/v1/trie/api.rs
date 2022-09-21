@@ -250,6 +250,9 @@ impl PersistentState {
     /// If the stream yields duplicate keys then values at later keys
     /// override earlier ones. The resulting state lies entirely in memory
     /// and so can be used with any [`Loader`].
+    ///
+    /// This function should be preferred over
+    /// [`try_from_stream`](Self::try_from_stream) when it is applicable.
     pub async fn from_stream<S>(s: S) -> Self
     where
         S: futures::stream::Stream<Item = (Vec<u8>, Vec<u8>)> + Unpin, {
