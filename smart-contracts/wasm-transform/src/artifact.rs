@@ -15,7 +15,8 @@ use derive_more::{Display, From, Into};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
-    io::Write, sync::Arc,
+    io::Write,
+    sync::Arc,
 };
 
 #[derive(Copy, Clone)]
@@ -419,12 +420,10 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<Im
     }
 }
 
-/// Convert a borrowed artifact to an owned one inside an `Arc`. This allocates memory for all
-/// the code of the artifact so it should be used sparingly.
+/// Convert a borrowed artifact to an owned one inside an `Arc`. This allocates
+/// memory for all the code of the artifact so it should be used sparingly.
 impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for Arc<OwnedArtifact<ImportFunc>> {
-    fn from(a : BorrowedArtifact<'a, ImportFunc>) -> Self {
-        Arc::new(a.into())
-    }
+    fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self { Arc::new(a.into()) }
 }
 
 /// Internal opcode. This is mostly the same as OpCode, but with control
