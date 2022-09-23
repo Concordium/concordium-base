@@ -22,27 +22,21 @@ use crate::{slice_from_c_bytes, v1::*};
 use concordium_contracts_common::OwnedReceiveName;
 use libc::size_t;
 use sha2::Digest;
-use std::sync::Arc;
 use wasm_transform::{
-    artifact::{BorrowedArtifact, CompiledFunction, OwnedArtifact},
+    artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
     utils::parse_artifact,
 };
 
 /// Creating or updating a contract instance requires access to code to execute.
-/// This code is stored in the [Artifact] which contains a preprocessed Wasm
-/// module in a format that is easy to run.
-/// What is passed through the FFI boundary is a pointer to such an artifact.
-/// Because the artifact might need to be shared, the pointer is
-/// atomically reference counted (using [std::sync::Arc]) so that it can be
-/// cheaply shared in a concurrent setting. The latter can happen since, for
-/// example, node queries might execute the same contract concurrently (via
-/// `InvokeContract` entrypoint of the node).
-///
-/// The main way the artifact is shared is during handling of interrupts. There
-/// we retain a pointer to the artifact in the artifact itself so that we can
-/// easily resume execution.
-type ArtifactV1 = OwnedArtifact<ProcessedImports>;
+/// This code is passed across the FFI boundary as serialized bytes, which are
+/// deserialized into a `BorrowedArtifactV1` using as much zero-copy
+/// deserialization as possible. The Rust code cannot retain a reference to the
+/// artifact after the call returns. However, for handling of interrupts, it is
+/// necessary to retain the artifact so that the function can later be resumed.
+/// In this case, the `BorrowedArtifactV1` is converted to an `OwnedArtifact`
+/// (creating a copy of the artifact), which is then retained by a
+/// `ReceiveInterruptedStateV1`.
 type BorrowedArtifactV1<'a> = BorrowedArtifact<'a, ProcessedImports>;
 
 /// A value that is returned from a V1 contract in case of either successful
@@ -76,8 +70,8 @@ type ReceiveInterruptedStateV1 = ReceiveInterruptedState<CompiledFunction>;
 /// Invoke an init function creating the contract instance.
 /// # Safety
 /// This function is safe provided the following preconditions hold
-/// - the artifact pointer points to a valid artifact and the pointer was
-///   created using [Arc::into_raw]
+/// - the `artifact_pointer` points to a valid serialized artifact of length
+///   `artifact_bytes_len`.
 /// - the `init_ctx_bytes`/`init_name`/`param_bytes` point to valid memory
 ///   addresses which contain
 ///   `init_ctx_bytes_len`/`init_name_len`/`param_bytes_len` bytes of data
@@ -168,8 +162,8 @@ unsafe extern "C" fn call_init_v1(
 /// Invoke a receive function, updating the contract instance.
 /// # Safety
 /// This function is safe provided the following preconditions hold
-/// - the artifact pointer points to a valid artifact and the pointer was
-///   created using [Arc::into_raw]
+/// - the `artifact_pointer` points to a valid serialized artifact of length
+///   `artifact_bytes_len`.
 /// - the `receive_ctx_bytes`/`receive_name`/`param_bytes`/`state_bytes` point
 ///   to valid memory addresses which contain
 ///   `receive_ctx_bytes_len`/`receive_name_len`/`param_bytes_len`/

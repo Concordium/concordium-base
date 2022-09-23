@@ -1,17 +1,12 @@
 use crate::{slice_from_c_bytes, v0::*};
 use libc::size_t;
-use std::sync::Arc;
-use wasm_transform::{
-    artifact::{CompiledFunction, CompiledFunctionBytes},
-    output::Output,
-    utils::parse_artifact,
-};
+use wasm_transform::{artifact::CompiledFunctionBytes, output::Output, utils::parse_artifact};
 
-/// All functions in this module operate on an Arc<ArtifactV0>. The reason for
-/// choosing an Arc as opposed to Box or Rc is that we need to sometimes share
-/// this artifact to support resumable executions, and we might have to access
-/// it concurrently since these functions are called from Haskell.
-type ArtifactV0 = Artifact<ProcessedImports, CompiledFunction>;
+/// All functions in this module operate on serialized artifact bytes. For
+/// execution, these bytes are parsed into a `BorrowedArtifactV0`, which
+/// does as much zero-copy deserialization as possible. As V0 smart contracts
+/// are not interruptable/resumable, no references to or copies of the artifact
+/// are retained after execution.
 type BorrowedArtifactV0<'a> = Artifact<ProcessedImports, CompiledFunctionBytes<'a>>;
 
 #[no_mangle]
@@ -31,7 +26,7 @@ unsafe extern "C" fn call_init_v0(
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
     let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
     {
-        borrowed_artifact.into()
+        borrowed_artifact
     } else {
         return std::ptr::null_mut();
     };
@@ -145,7 +140,7 @@ unsafe extern "C" fn call_receive_v0(
 /// to a byte array of length `*output_len`. The byte array starts with
 /// `*artifact_len` bytes for the artifact, followed by a list of export item
 /// names. The length of the list is encoded as u16, big endian, and each name
-/// is encoded as u16, big endian.
+/// is encoded prefixed by its length as u16, big endian.
 ///
 /// If validation succeeds, the serialized artifact is at
 /// `*output_artifact_bytes` and should be freed with `rs_free_array_len`.
