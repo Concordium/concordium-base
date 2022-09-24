@@ -741,6 +741,7 @@ async fn main() -> anyhow::Result<()> {
 
     let retrieval_db = db.clone();
     let retrieval_db_v1 = db.clone();
+    let recovery_db = db.clone();
     let server_config_retrieve = Arc::clone(&server_config);
 
     // The endpoint for querying the identity object.
@@ -873,9 +874,13 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::path!("api" / "identity" / "retrieve_failed" / i64))
         .and_then(retrieve_failed_identity_token);
 
-    let recover_identity = warp::get()
-        .and(warp::path!("api" / "v1" / "recover"))
-        .and(validate_recovery_request(server_config_validate_recovery));
+    let recover_identity =
+        warp::get()
+            .and(warp::path!("api" / "v1" / "recover"))
+            .and(validate_recovery_request(
+                server_config_validate_recovery,
+                recovery_db,
+            ));
 
     // A broken Endpoint for starting the identity creation flow
     // It will always return an error.
@@ -1068,6 +1073,9 @@ enum IdRecoveryRejection {
     Malformed,
     /// The recovery request timestamp was invalid.
     InvalidTimestamp,
+    /// The recovery request was valid, but the ID object was not found in the
+    /// database.
+    NonExistingIdObject,
 }
 
 impl warp::reject::Reject for IdRequestRejection {}
@@ -1105,7 +1113,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
         Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::IdVerifierFailure) = err.find() {
         let code = StatusCode::BAD_REQUEST;
-        let message = "ID verifier rejected..";
+        let message = "ID verifier rejected.";
         Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::InternalError) = err.find() {
         let code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -1126,6 +1134,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
     } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Invalid ID recovery proof.";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRecoveryRejection::NonExistingIdObject) = err.find() {
+        let code = StatusCode::NOT_FOUND;
+        let message = "ID object not found in database.";
         Ok(mk_reply(message, code))
     } else if let Some(IdRecoveryRejection::InvalidTimestamp) = err.find() {
         let code = StatusCode::BAD_REQUEST;
@@ -1647,9 +1659,11 @@ fn extract_and_validate_request_query_v1(
 /// request is valid.
 fn validate_recovery_request(
     server_config: Arc<ServerConfig>,
+    db: DB,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::query().and_then(move |input: RecoveryGetParameters| {
         let server_config = server_config.clone();
+        let db = db.clone();
         async move {
             info!("Queried for identity recovery");
             let id_recovery_request: Versioned<IdRecoveryRequest<ArCurve>> =
@@ -1696,15 +1710,28 @@ fn validate_recovery_request(
                     Sha256::digest(&to_bytes(&id_recovery_request.value.id_cred_pub));
                 let base_16_encoded_id_cred_pub_hash =
                     base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
-                let mut retrieve_url = server_config.retrieve_url.clone();
-                retrieve_url.set_path(&format!(
-                    "api/v1/identity/{}",
-                    base_16_encoded_id_cred_pub_hash
-                ));
-                let json = json!({
-                    "identityRetrievalUrl": retrieve_url.as_str()
-                });
-                Ok(warp::reply::json(&json))
+                match db.read_identity_object(&base_16_encoded_id_cred_pub_hash) {
+                    Ok(identity_object) => {
+                        match identity_object.get("identityObject") {
+                            Some(ido) => {
+                                info!("Identity object found");
+                                Ok(warp::reply::json(&ido))
+                            }
+                            None => {
+                                warn!("`identityObject` field not found."); // This should not happen.
+                                Err(warp::reject::custom(
+                                    IdRecoveryRejection::NonExistingIdObject,
+                                ))
+                            }
+                        }
+                    }
+                    Err(_e) => {
+                        warn!("Identity object does not exist.");
+                        Err(warp::reject::custom(
+                            IdRecoveryRejection::NonExistingIdObject,
+                        ))
+                    }
+                }
             } else {
                 warn!("Id ownership proof did not verify");
                 Err(warp::reject::custom(IdRecoveryRejection::InvalidProofs))

@@ -450,36 +450,19 @@ impl<V> CachedRef<V> {
         }
     }
 
-    /// If the value is in memory, set it to cached with the given key.
+    /// If the value is in memory, uncache it with the given key.
     /// Otherwise do nothing. This of course has the precondition that the key
     /// stores the value in the relevant backing store. Internal use only.
-    fn cache_with(&mut self, reference: Reference) {
-        if let CachedRef::Memory {
-            ..
-        } = self
-        {
-            let value = std::mem::replace(self, CachedRef::Disk {
-                reference,
-            });
-            if let CachedRef::Memory {
-                value,
-            } = value
-            {
-                *self = CachedRef::Cached {
-                    value,
-                    reference,
-                };
-            } else {
-                // this is unreachable since we hold a mutable reference to the cached value
-                // and we know the value was a purely in-memory one
-                unsafe { std::hint::unreachable_unchecked() }
-            }
+    fn uncache(&mut self, reference: Reference) {
+        *self = CachedRef::Disk {
+            reference,
         }
     }
 
-    /// If the value is purely in memory then store it the backing store.
-    /// Store the reference (in the backing store) into the provided buffer.
-    pub(crate) fn store_and_cache<S: BackingStoreStore, W: std::io::Write>(
+    /// If the value is purely in memory then store it the backing store and
+    /// uncache it. Store the reference (in the backing store) into the
+    /// provided buffer.
+    pub(crate) fn store_and_uncache<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -496,29 +479,66 @@ impl<V> CachedRef<V> {
                 let reference = backing_store.store_raw(value.as_ref())?;
                 // Take the value out of the cachedref and temporarily replace it with
                 // a dummy value.
-                let value = std::mem::replace(self, CachedRef::Disk {
+                // and now write the cached value back in.
+                *self = CachedRef::Disk {
                     reference,
-                });
-                if let CachedRef::Memory {
-                    value,
-                } = value
-                {
-                    // and now write the cached value back in.
-                    *self = CachedRef::Cached {
-                        value,
-                        reference,
-                    };
-                } else {
-                    // this is unreachable since we hold a mutable reference to the cached value
-                    // and we know the value was a purely in-memory one
-                    unsafe { std::hint::unreachable_unchecked() }
-                }
+                };
                 reference.store(buf)
             }
             CachedRef::Cached {
                 reference,
+                value: _,
+            } => {
+                let res = reference.store(buf);
+                *self = CachedRef::Disk {
+                    reference: *reference,
+                };
+                res
+            }
+        }
+    }
+
+    /// Migrate the reference to the new backing store, loading the value
+    /// using the existing loader. The resulting reference is purely on disk.
+    /// Write the reference in the new backing store into the provided buffer.
+    pub(crate) fn load_and_store<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
+        &mut self,
+        backing_store: &mut S,
+        loader: &mut L,
+        buf: &mut W,
+    ) -> LoadStoreResult<Self>
+    where
+        V: AsRef<[u8]> + Loadable + Clone, {
+        match self {
+            CachedRef::Disk {
+                reference,
+            } => {
+                let value = V::load_from_location(loader, *reference)?;
+                let new_reference = backing_store.store_raw(value.as_ref())?;
+                new_reference.store(buf)?;
+                Ok(Self::Disk {
+                    reference: new_reference,
+                })
+            }
+            CachedRef::Memory {
+                value,
+            } => {
+                let reference = backing_store.store_raw(value.as_ref())?;
+                reference.store(buf)?;
+                Ok(Self::Disk {
+                    reference,
+                })
+            }
+            CachedRef::Cached {
+                value,
                 ..
-            } => reference.store(buf),
+            } => {
+                let reference = backing_store.store_raw(value.as_ref())?;
+                reference.store(buf)?;
+                Ok(Self::Disk {
+                    reference,
+                })
+            }
         }
     }
 
@@ -1503,6 +1523,20 @@ impl Hashed<Node> {
         buf.write_all(self.hash.as_ref())?;
         self.data.store_update_buf(backing_store, buf)
     }
+
+    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
+        &self,
+        backing_store: &mut S,
+        loader: &mut L,
+        buf: &mut W,
+    ) -> LoadStoreResult<Self> {
+        buf.write_all(self.hash.as_ref())?;
+        let inner = self.data.migrate(backing_store, loader, buf)?;
+        Ok(Self {
+            hash: self.hash,
+            data: inner,
+        })
+    }
 }
 
 impl Node {
@@ -1571,7 +1605,7 @@ impl Node {
                         // variant.
                         buf.write_u8(0b1111_1111u8)?;
                         buf.write_all(indirect.hash.as_ref())?;
-                        indirect.data.store_and_cache(backing_store, buf)?;
+                        indirect.data.store_and_uncache(backing_store, buf)?;
                     }
                 }
             }
@@ -1609,7 +1643,7 @@ impl Node {
                         )?;
                         let key = backing_store.store_raw(&tmp_buf)?;
                         ref_stack.push(key);
-                        node_ref_mut.cache_with(key);
+                        node_ref_mut.uncache(key);
                     } else {
                         // the node's children have not yet been processed. Push the node back onto
                         // the stack recording that now the children have
@@ -1634,6 +1668,122 @@ impl Node {
         store_node(self, &mut tmp_buf, backing_store, &mut ref_stack)?;
         buf.write_all(&tmp_buf)?;
         Ok(())
+    }
+
+    /// Store node into the provided backing store, loading it as necessary. All
+    /// the children are (recursively) in the [CachedRef::Disk] variant.
+    ///
+    /// This is used during protocol updates to migrate state from one database
+    /// to another.
+    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
+        &self,
+        backing_store: &mut S,
+        loader: &mut L,
+        buf: &mut W,
+    ) -> LoadStoreResult<Self> {
+        // This function would be very natural to write recursively, essentially
+        // - recursively write all the children that are only in memory
+        // - this would return Reference's to where these children are written in the
+        //   backing store
+        // - use these to write the node into the provided buffer (`buf`).
+        //
+        // However this would be prone to stack overflow since Rust generally has little
+        // control on stack size. Thus we write the function with an explicit
+        // stack, modelling the recursive function that way without using any explicit
+        // recursion. This gives more control and predictability.
+
+        // The stack of nodes to process. Initialized by all the children of the node.
+        let mut stack = Vec::new();
+        for (_, ch) in self.children.iter() {
+            let ch = ch.borrow().get(loader).make_owned();
+            stack.push((ch, false));
+        }
+        // A closure that stores the node (including the value) assuming all its
+        // children have already been stored and are in the correct positions in
+        // the `ref_stack`.
+        let store_node = |mut node: Node,
+                          buf: &mut Vec<u8>,
+                          backing_store: &mut S,
+                          loader: &mut L,
+                          ref_stack: &mut Vec<Reference>|
+         -> LoadStoreResult<Self> {
+            let (stem_len, stem_ref) = node.path.to_slice();
+            write_node_path_and_value_tag(stem_len, node.value.is_none(), buf)
+                .map_err(|x| LoadWriteError::Write(x.into()))?;
+            // store the path
+            buf.write_all(stem_ref).map_err(|x| LoadWriteError::Write(x.into()))?;
+            // store the value
+            if let Some(v) = &mut node.value {
+                let mut borrowed = v.borrow_mut();
+                match &mut *borrowed {
+                    InlineOrHashed::Inline {
+                        len,
+                        data,
+                    } => {
+                        // write length as a single byte.
+                        buf.write_u8(*len)?;
+                        buf.write_all(&data[0..usize::from(*len)])?;
+                    }
+                    InlineOrHashed::Indirect(indirect) => {
+                        // Since `INLINE_VALUE_LEN` is no more than `0b1111_1110`
+                        // the length of the inline variant will never have all 8 bits set.
+                        // We utilize this here to use this special tag value to indicate the
+                        // variant. buf.write_u8(0b1111_1111u8)?;
+                        buf.write_u8(0b1111_1111u8)?;
+                        buf.write_all(indirect.hash.as_ref())?;
+                        indirect.data.load_and_store(backing_store, loader, buf)?;
+                    }
+                }
+            }
+            // Since we branch on 4 bits there can be at most 16 children.
+            // So using u8 is safe.
+            buf.write_u8(node.children.len() as u8)?;
+            for (k, ch) in node.children.iter_mut() {
+                buf.write_u8(k.value)?;
+                let reference = ref_stack.pop().unwrap();
+                reference.store(buf)?;
+                // Set the child pointer to the correct value, and drop
+                // the child from memory.
+                *ch.borrow_mut() = CachedRef::Disk {
+                    reference,
+                };
+            }
+            Ok(node)
+        };
+        // the stack of References. When a node is fully stored then its
+        // reference (to the location in the backing store) is pushed to this
+        // stack. The value is popped from the stack when its parent is being stored
+        // or at the very end for the top-level node.
+        let mut ref_stack = Vec::<Reference>::new();
+        // A reusable buffer where nodes are stored before being written to the backing
+        // store. This is to reduce on the amount of small allocations
+        // compared to allocating a new vector for each of the child nodes.
+        let mut tmp_buf = Vec::new();
+        while let Some((hashed_node, children_processed)) = stack.pop() {
+            // the node is not stored in the backing store yet. So we need to do it.
+            if children_processed {
+                // The node's children have already been processed. Store the node.
+                tmp_buf.clear();
+                tmp_buf.write_all(hashed_node.hash.as_ref())?;
+                store_node(hashed_node.data, &mut tmp_buf, backing_store, loader, &mut ref_stack)?;
+                let key = backing_store.store_raw(&tmp_buf)?;
+                ref_stack.push(key);
+            } else {
+                // the node's children have not yet been processed. Push the node back onto
+                // the stack recording that now the children have
+                // been processed.
+                stack.push((hashed_node.clone(), true));
+                // and then push all the children to be processed.
+                for (_, ch) in hashed_node.data.children.iter() {
+                    let ch = ch.borrow().get(loader).make_owned();
+                    stack.push((ch, false));
+                }
+            }
+        }
+        tmp_buf.clear();
+        let ret = store_node(self.clone(), &mut tmp_buf, backing_store, loader, &mut ref_stack)?;
+        buf.write_all(&tmp_buf)?;
+        Ok(ret)
     }
 }
 
@@ -1854,6 +2004,21 @@ impl CachedRef<Hashed<Node>> {
             Err(reference) => reference,
         };
         reference.store(buf)
+    }
+
+    /// Migrate the stored value to the new backing store. The value is not
+    /// retained in memory. Only a disk reference is maintained.
+    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad>(
+        &self,
+        backing_store: &mut S,
+        loader: &mut L,
+    ) -> LoadStoreResult<Self> {
+        let mut buf = Vec::new();
+        let _ = self.get(loader).migrate(backing_store, loader, &mut buf)?;
+        let reference = backing_store.store_raw(&buf)?;
+        Ok(Self::Disk {
+            reference,
+        })
     }
 }
 
@@ -3271,14 +3436,13 @@ impl Node {
     pub fn is_cached(&self) -> bool {
         if let Some(value) = &self.value {
             if let InlineOrHashed::Indirect(value) = &*value.borrow() {
-                if let CachedRef::Disk {
-                    ..
-                } = value.data
-                {
-                    return false;
-                }
+                return !matches!(&value.data, CachedRef::Disk { .. });
+            } else {
+                // [InlineOrHashed::Inline] are not [CachedRef]'s
+                return false;
             }
         }
+
         for child in self.children.iter() {
             match &*child.1.borrow() {
                 CachedRef::Disk {

@@ -2,8 +2,8 @@
     "idRecoveryRequest": {
         "v": 0,
         "value": {
-            "idCredPub": "a2627cd8cc1c8254ab4939e09de0cc4a8f35dd8fdf5210707e67150b69743973046c71dbc039d0b36e94958d88e64b3c",
-            "proof": "3ff4c1d0d902cf2b17a4435c5f7ef13c392cda4e4215b1572d9fbfce8e7e701c31fcac909266b5ce7863fd0e69f4a8c106f95ce29f9bb5ab3d814498f7d8f1e4",
+            "idCredPub": "b90ac099da08decc14cc94d2ebcfc546aa5bd654546da4caf6b8450fbbd11a34341d73ee5cc8698903c4d62ddaa603a7",
+            "proof": "17023c57706e1cc9cd2309c48a528e54995f0befc757b364970340c55236010901f10abbcc31de4ef8033f2671229138b0680c01b3225416085c5a2a598db6c5",
             "timestamp": 1660115569
         }
     }

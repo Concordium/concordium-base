@@ -65,7 +65,7 @@ where `credential.json` is the file obtained in the previous step.
 
 # The version 1 flow
 
-The tool supports three modes in the version 1 flow: the `generate-request-v1` mode, the `create-credential-v1` mode and the `recover-identity-flow`. The `generate-request-v1` generates the version 1 request for the version 1 identity object that is to be sent to the identity provider. In the `create-credential-v1` mode the tool requires the identity object returned by the identity provider and generates a credential that can be sent to the chain to create an account. The `recover-identity` request can generate a identity recovery request to be sent to the identity provider.
+The tool supports three modes in the version 1 flow: the `generate-request-v1` mode, the `create-credential-v1` mode and the `recover-identity-flow`. The `generate-request-v1` generates the version 1 request for the version 1 identity object that is to be sent to the identity provider. In the `create-credential-v1` mode the tool requires the identity object returned by the identity provider and generates a credential that can be sent to the chain to create an account. The `recover-identity` request can generate an identity recovery request to be sent to the identity provider.
 
 ## Generate a version 1 request for the version 1 identity object
 
@@ -76,7 +76,7 @@ user_cli generate-request-v1 --cryptographic-parameters cryptographic-parameters
                           --ip-info ip-info.json \
                           --request-out request.json # request to send to the identity provider
 ```
-The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. Afterwards, the user is asked whether the identity shall be used for Mainnet or Testnet. Afterwards, 24 BIP-39 will be generated and shown to use user, who is asked to write down the words and type them in again.
+The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. Afterwards, the user is asked whether the identity shall be used for Mainnet or Testnet. Afterwards, 24 BIP-39 will be generated and shown to the user, who is asked to write down the words and type them in again.
 
 It outputs the following files
 - `request.json` contains the request that should be sent to the identity provider.
@@ -100,7 +100,7 @@ user_cli create-credential-v1 --cryptographic-parameters cryptographic-parameter
 You will have to select whether to reveal the LEI, which was optional when creating the identity object. Use the space key to select and deselect list entries. You will also be asked whether to create credential for Mainnet or Testnet. Afterwards you will be asked to type in the 24 words from earlier.
 
 It outputs the following files
-- `account-keys.json` which contains account keys of the account that will be created by the credential. DO NOT LOSE THIS FILE. It cannot be recovered.
+- `account-keys.json` which contains account keys of the account that will be created by the credential.
 - `credential.json` which contains the payload of the account creation transaction. **This must be sent to the chain, otherwise the account will not be created.**
 By default this must be sent to the chain within 15min. A larger or shorter message expiry may be set with `--message-expiry` flag to the command.
 Note that the credential number must be unique for each respective `id-object.json`. Duplicate credential numbers for the same `id-object.json` will be rejected when submitting to chain.
@@ -117,13 +117,13 @@ If the identity object used to create credentials is lost, it can be recovered f
 ```console
 user_cli recover-identity --cryptographic-parameters cryptographic-parameters.json \
                           --ip-info ip-info.json \
-                          --request-out request.json # recovery request to send to the identity provider
+                          --request-out recovery-request.json # recovery request to send to the identity provider
 ```
 
 It outputs the following files
-- `request.json` contains the recovery request that should be sent to the identity provider.
+- `recovery-request.json` contains the recovery request that should be sent to the identity provider.
 
-The request should be sent to the identity provider through a trusted channel, together with any other required identity data. Assuming everything is in order when validating the request, the identity provider should eventually return the identity object that you lost.
+The request should be sent to the identity provider through a trusted channel, together with any other required identity data. Assuming everything is in order when validating the request, the identity provider should eventually return the identity object that you lost. You can then recreate your account keys (`account-keys.json`) by running `user_cli create-credential-v1` (see above).
 
 
 # Import created accounts into concordium-client

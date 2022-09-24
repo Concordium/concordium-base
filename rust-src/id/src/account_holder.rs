@@ -466,11 +466,11 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
 
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<'a, C: Curve> {
-    pub ar: &'a ArInfo<C>,
-    share: Value<C>,
-    pub encrypted_share: Cipher<C>,
-    encryption_randomness: elgamal::Randomness<C>,
-    pub cmm_to_share: Commitment<C>,
+    pub ar:                  &'a ArInfo<C>,
+    share:                   Value<C>,
+    pub encrypted_share:     Cipher<C>,
+    encryption_randomness:   elgamal::Randomness<C>,
+    pub cmm_to_share:        Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
 }
 
@@ -567,7 +567,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     shared_scalar: &Value<C>,                           // Value to be shared.
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
-    global_context: &GlobalContext<C>, // commitment key
+    global_context: &GlobalContext<C>,                  // commitment key
 ) -> SharingDataPrf<'a, C> {
     let commitment_key = &global_context.on_chain_commitment_key;
     let n = ar_parameters.len() as u32;
