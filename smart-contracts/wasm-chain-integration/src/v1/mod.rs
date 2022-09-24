@@ -1316,6 +1316,21 @@ pub fn invoke_receive<
     process_receive_result(artifact, host, result)
 }
 
+/// Resume execution of the receive method after handling the interrupt.
+/// The arguments
+///
+/// - `interrupted_state` is the state of execution that is captured when we
+///   started handling the interrupt
+/// - `response` is the response from the operation that was invoked
+/// - `energy` is the remaning energy left for execution
+/// - `state_trie` is the current state of the contract instance, **after**
+///   handling the interrupt
+/// - `state_updated` indicates whether the state of the instance has changed
+///   during handling of the operation This can currently only happen if there
+///   is re-entrancy, i.e., if during handling of the interrupt the instance
+///   that invoked it is itself again invoked.
+/// - `backing_store` gives access to any on-disk storage for the instance
+///   state.
 pub fn resume_receive<BackingStore: BackingStoreLoad>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
@@ -1340,9 +1355,9 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
     };
     let response = match response {
         InvokeResponse::Success {
-            state_updated,
             new_balance,
             data,
+            ..
         } => {
             host.stateless.receive_ctx.common.self_balance = new_balance;
             // the response value is constructed by setting the last 5 bytes to 0
