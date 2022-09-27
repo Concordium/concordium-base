@@ -22,14 +22,17 @@
 //! state updates where we only have to store the parts of the state that are
 //! new.
 use super::{
-    low_level::{CachedRef, MutableTrie, Node},
+    low_level::{self, CachedRef, MutableTrie, Node},
     types::*,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 #[cfg(feature = "display-state")]
 use ptree::TreeBuilder;
 use sha2::Digest;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{
+    iter::FusedIterator,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 pub type Value = Vec<u8>;
 
@@ -94,6 +97,21 @@ impl PersistentState {
         backing_store.store_raw(&top)
     }
 
+    /// Migrate the tree from one backing store to another.
+    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad>(
+        &mut self,
+        backing_store: &mut S,
+        loader: &mut L,
+    ) -> LoadStoreResult<Self> {
+        match self {
+            PersistentState::Empty => Ok(PersistentState::Empty),
+            PersistentState::Root(node) => {
+                let new_node = node.migrate(backing_store, loader)?;
+                Ok(PersistentState::Root(new_node))
+            }
+        }
+    }
+
     /// Serialize the tree into the provided buffer. Note that this is very
     /// different from [Self::store_update]. Whereas that stores the part of
     /// the tree that are only in memory into the provided backing store, this
@@ -131,17 +149,118 @@ impl PersistentState {
         }
     }
 
-    /// Lookup a key in the tree. This is only meant for testing
-    /// since performance is slow compared to lookup in the mutable tree.
+    /// Lookup a key in the tree and return a copy of the value stored.
     pub fn lookup(&self, loader: &mut impl BackingStoreLoad, key: &[u8]) -> Option<Value> {
         match self {
             PersistentState::Empty => None,
-            PersistentState::Root(node) => {
-                let node = node.get(loader);
-                let data = node.data.lookup(loader, key)?;
-                let borrowed = data.borrow();
-                Some(borrowed.get_copy(loader))
+            PersistentState::Root(root_node) => {
+                // we do lookups in the mutable trie to improve performance, and to
+                // avoid issues with stack overflow.
+                let mut trie = root_node.make_mutable(0, loader);
+                let entry = trie.get_entry(loader, key)?;
+                trie.with_entry(entry, loader, |x| x.to_vec())
             }
+        }
+    }
+
+    /// Derive a fresh mutable trie from the [`PersistentState`] using the given
+    /// loader. In contrast to using [`thaw`](Self::thaw) and then using
+    /// [`MutableState::get_inner`] this directly yields a mutable trie that
+    /// can be used. However this mutable trie is not shareable and does not
+    /// have checkpointing in contrast to the [`MutableState`].
+    ///
+    /// This is intended when the persistent trie is used in read-only way. It
+    /// gives access to the efficient implementations of lookup and
+    /// traversal for the mutable trie. In particular converting
+    /// [`PersistentState`] to [`MutableTrie`] should be preffered over
+    /// [`lookup`](Self::lookup) if multiple lookups will be performed on
+    /// the resulting [`MutableTrie`].
+    pub fn into_trie(self, loader: &mut impl BackingStoreLoad) -> MutableTrie {
+        match self {
+            PersistentState::Empty => MutableTrie::empty(),
+            PersistentState::Root(root_node) => root_node.make_mutable(0, loader),
+        }
+    }
+
+    /// Get an iterator over the (key, value) pairs stored in the persistent
+    /// state. The iterator yields keys in ascending lexicographic order.
+    pub fn into_iterator<L: BackingStoreLoad>(self, loader: &mut L) -> PersistentStateIterator<L> {
+        let mut state = self.into_trie(loader);
+        // get an iterator over the entire state (starting at root)
+        match state.iter(loader, &[]) {
+            Err(_) => {
+                unreachable!("We just created the trie, so it has no iterators.")
+            }
+            Ok(iterator) => PersistentStateIterator {
+                state,
+                iterator,
+                loader,
+            },
+        }
+    }
+
+    /// Construct a [PersistentState] from an iterator. If the iterator has
+    /// duplicate keys then values at later keys override earlier ones.
+    /// The resulting state lies entirely in memory and so can be used with any
+    /// [`Loader`].
+    pub fn from_iterator<'a, I: IntoIterator<Item = (&'a [u8], Vec<u8>)>>(iter: I) -> Self {
+        let mut loader = Loader {
+            inner: Vec::new(),
+        };
+        let mut trie = MutableTrie::empty();
+        for (k, v) in iter {
+            trie.insert(&mut loader, k, v).expect("Tree is fresh, so insert cannot fail.");
+        }
+        match trie.freeze(&mut loader, &mut EmptyCollector) {
+            Some(root) => Self::Root(root),
+            None => Self::Empty,
+        }
+    }
+
+    #[cfg(feature = "async")]
+    /// Construct a [PersistentState] from a stream of key-value pairs,
+    /// but where the stream might yield errors at some point. This is intended
+    /// to be used when the stream is coming, e.g., over the network, and might
+    /// be interrupted.
+    ///
+    /// If the stream yields duplicate keys then values at later keys
+    /// override earlier ones. The resulting state lies entirely in memory
+    /// and so can be used with any [`Loader`]. If any item in the stream yields
+    /// an error this function returns early with the given error.
+    pub async fn try_from_stream<E, S>(mut s: S) -> Result<Self, E>
+    where
+        S: futures::stream::Stream<Item = Result<(Vec<u8>, Vec<u8>), E>> + Unpin, {
+        use futures::StreamExt;
+        let mut loader = Loader {
+            inner: Vec::new(),
+        };
+        let mut trie = MutableTrie::empty();
+        while let Some(item) = s.next().await {
+            let (k, v) = item?;
+            trie.insert(&mut loader, &k, v).expect("Tree is fresh, so insert cannot fail.");
+        }
+        Ok(match trie.freeze(&mut loader, &mut EmptyCollector) {
+            Some(root) => Self::Root(root),
+            None => Self::Empty,
+        })
+    }
+
+    #[cfg(feature = "async")]
+    /// Construct a [PersistentState] from a stream of key-value pairs.
+    /// If the stream yields duplicate keys then values at later keys
+    /// override earlier ones. The resulting state lies entirely in memory
+    /// and so can be used with any [`Loader`].
+    ///
+    /// This function should be preferred over
+    /// [`try_from_stream`](Self::try_from_stream) when it is applicable.
+    pub async fn from_stream<S>(s: S) -> Self
+    where
+        S: futures::stream::Stream<Item = (Vec<u8>, Vec<u8>)> + Unpin, {
+        use futures::StreamExt;
+        enum Empty {}
+        match Self::try_from_stream::<Empty, _>(s.map(Result::Ok)).await {
+            Ok(s) => s,
+            Err(e) => match e {},
         }
     }
 
@@ -187,6 +306,35 @@ impl PersistentState {
         }
     }
 }
+
+/// Iterator over all (key, value) pairs stored in the persistent state.
+/// Values are returned in increasing order of keys.
+pub struct PersistentStateIterator<'a, L> {
+    state:    MutableTrie,
+    iterator: Option<low_level::Iterator>,
+    loader:   &'a mut L,
+}
+
+impl<'a, L: BackingStoreLoad> Iterator for PersistentStateIterator<'a, L> {
+    type Item = (Vec<u8>, Vec<u8>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let iterator = self.iterator.as_mut()?;
+        match self.state.next(self.loader, iterator, &mut EmptyCounter) {
+            Ok(v) => {
+                let entry = v?;
+                let key = iterator.get_key();
+                self.state.with_entry(entry, self.loader, |value| (key.to_vec(), value.to_vec()))
+            }
+            Err(empty) => match empty {},
+        }
+    }
+}
+
+/// This marker instance informs the compiler, and the users, that once the
+/// iterator returns [`None`] it will always return [`None`], which could be
+/// used to optimize usage.
+impl<'a, L: BackingStoreLoad> FusedIterator for PersistentStateIterator<'a, L> {}
 
 #[derive(Debug, Clone)]
 /// This type is a technical device to support lazy conversion of

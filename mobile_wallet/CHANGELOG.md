@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.16.0
+- Updated version of `key_derivation` library to `1.1.0` and started using the index of the identity provider for key derivation.
+
 ## 0.15.0
 - Added function `generate_recovery_request` for creating identity recovery requests.
 

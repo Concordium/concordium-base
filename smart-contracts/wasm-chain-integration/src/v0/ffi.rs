@@ -1,17 +1,19 @@
-use crate::{slice_from_c_bytes, v0::*};
+use crate::v0::*;
+use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
-use std::sync::Arc;
-use wasm_transform::{artifact::CompiledFunction, output::Output, utils::parse_artifact};
+use wasm_transform::{artifact::CompiledFunctionBytes, output::Output, utils::parse_artifact};
 
-/// All functions in this module operate on an Arc<ArtifactV0>. The reason for
-/// choosing an Arc as opposed to Box or Rc is that we need to sometimes share
-/// this artifact to support resumable executions, and we might have to access
-/// it concurrently since these functions are called from Haskell.
-type ArtifactV0 = Artifact<ProcessedImports, CompiledFunction>;
+/// All functions in this module operate on serialized artifact bytes. For
+/// execution, these bytes are parsed into a `BorrowedArtifactV0`, which
+/// does as much zero-copy deserialization as possible. As V0 smart contracts
+/// are not interruptable/resumable, no references to or copies of the artifact
+/// are retained after execution.
+type BorrowedArtifactV0<'a> = Artifact<ProcessedImports, CompiledFunctionBytes<'a>>;
 
 #[no_mangle]
 unsafe extern "C" fn call_init_v0(
-    artifact_ptr: *const ArtifactV0,
+    artifact_ptr: *const u8,
+    artifact_bytes_len: size_t,
     init_ctx_bytes: *const u8,
     init_ctx_bytes_len: size_t,
     amount: u64,
@@ -22,7 +24,13 @@ unsafe extern "C" fn call_init_v0(
     energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
+    {
+        borrowed_artifact
+    } else {
+        return std::ptr::null_mut();
+    };
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
@@ -31,14 +39,7 @@ unsafe extern "C" fn call_init_v0(
                 .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(
-                    artifact.as_ref(),
-                    amount,
-                    init_ctx,
-                    name,
-                    parameter.into(),
-                    energy,
-                );
+                let res = invoke_init(&artifact, amount, init_ctx, name, parameter.into(), energy);
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
@@ -54,15 +55,14 @@ unsafe extern "C" fn call_init_v0(
             Err(_) => std::ptr::null_mut(),
         }
     });
-    // do not drop the pointer, we are not the owner
-    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or(std::ptr::null_mut())
 }
 
 #[no_mangle]
 unsafe extern "C" fn call_receive_v0(
-    artifact_ptr: *const ArtifactV0,
+    artifact_ptr: *const u8,
+    artifact_bytes_len: size_t,
     receive_ctx_bytes: *const u8,
     receive_ctx_bytes_len: size_t,
     amount: u64,
@@ -75,7 +75,13 @@ unsafe extern "C" fn call_receive_v0(
     energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact: BorrowedArtifactV0 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
+    {
+        borrowed_artifact
+    } else {
+        return std::ptr::null_mut();
+    };
     let res = std::panic::catch_unwind(|| {
         let receive_ctx = deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
@@ -88,7 +94,7 @@ unsafe extern "C" fn call_receive_v0(
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive(
-                    artifact.as_ref(),
+                    &artifact,
                     amount,
                     receive_ctx,
                     state,
@@ -111,8 +117,6 @@ unsafe extern "C" fn call_receive_v0(
             Err(_) => std::ptr::null_mut(), // should not happen.
         }
     });
-    // do not drop the pointer, we are not the owner
-    let _ = Arc::into_raw(artifact);
     // and return the value
     res.unwrap_or(std::ptr::null_mut())
 }
@@ -126,16 +130,21 @@ unsafe extern "C" fn call_receive_v0(
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
-/// - `artifact_out` a pointer where the pointer to the artifact will be
-///   written.
 /// - `output_len` a pointer where the total length of the output will be
 ///   written.
+/// - `output_artifact_len` a pointer where the length of the serialized
+///   artifact will be written.
+/// - `output_artifact_bytes` a pointer where the pointer to the serialized
+///   artifact will be written.
 ///
 /// The return value is either a null pointer if validation fails, or a pointer
 /// to a byte array of length `*output_len`. The byte array starts with
 /// `*artifact_len` bytes for the artifact, followed by a list of export item
 /// names. The length of the list is encoded as u16, big endian, and each name
-/// is encoded as u16, big endian.
+/// is encoded prefixed by its length as u16, big endian.
+///
+/// If validation succeeds, the serialized artifact is at
+/// `*output_artifact_bytes` and should be freed with `rs_free_array_len`.
 ///
 /// # Safety
 /// This function is safe provided all the supplied pointers are not null and
@@ -144,7 +153,8 @@ unsafe extern "C" fn validate_and_process_v0(
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     output_len: *mut size_t, // this is the total length of the output byte array
-    output_artifact: *mut *const ArtifactV0, /* location where the pointer to the artifact will
+    output_artifact_len: *mut size_t, // the length of the artifact byte array
+    output_artifact_bytes: *mut *const u8, /* location where the pointer to the artifact will
                               * be written. */
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
@@ -165,72 +175,16 @@ unsafe extern "C" fn validate_and_process_v0(
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();
             std::mem::forget(out_buf);
-            // move the artifact to the arc.
-            let arc = Arc::new(artifact);
-            // and forget it.
-            *output_artifact = Arc::into_raw(arc);
+
+            let mut artifact_bytes = Vec::new();
+            artifact.output(&mut artifact_bytes).expect("Artifact serialization does not fail.");
+            artifact_bytes.shrink_to_fit();
+            *output_artifact_len = artifact_bytes.len() as size_t;
+            *output_artifact_bytes = artifact_bytes.as_mut_ptr();
+            std::mem::forget(artifact_bytes);
+
             ptr
         }
         Err(_) => std::ptr::null_mut(),
-    }
-}
-
-// # Administrative functions.
-
-#[no_mangle]
-/// # Safety
-/// This function is safe provided the supplied pointer is
-/// constructed with [Arc::into_raw] and for each [Arc::into_raw] this function
-/// is called only once.
-unsafe extern "C" fn artifact_v0_free(artifact_ptr: *const ArtifactV0) {
-    if !artifact_ptr.is_null() {
-        // decrease the reference count
-        Arc::from_raw(artifact_ptr);
-    }
-}
-
-#[no_mangle]
-/// Convert an artifact to a byte array and return a pointer to it, storing its
-/// length in `output_len`. To avoid leaking memory the return value should be
-/// freed with `rs_free_array_len`.
-///
-/// # Safety
-/// This function is safe provided the `artifact_ptr` was obtained with
-/// `Arc::into_raw` and `output_len` points to a valid memory location.
-unsafe extern "C" fn artifact_v0_to_bytes(
-    artifact_ptr: *const ArtifactV0,
-    output_len: *mut size_t,
-) -> *mut u8 {
-    let artifact = Arc::from_raw(artifact_ptr);
-    let mut bytes = Vec::new();
-    artifact.output(&mut bytes).expect("Artifact serialization does not fail.");
-    bytes.shrink_to_fit();
-    *output_len = bytes.len() as size_t;
-    let ptr = bytes.as_mut_ptr();
-    std::mem::forget(bytes);
-    let _ = Arc::into_raw(artifact);
-    ptr
-}
-
-#[no_mangle]
-/// Deserialize an artifact from bytes and return a pointer to it.
-/// If deserialization fails this returns [None](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None)
-/// and otherwise it returns a valid pointer to the artifact. To avoid leaking
-/// memory the memory must be freed using [artifact_v0_free].
-///
-/// # Safety
-/// This function is safe provided
-/// - either the `input_len` is greater than 0 and the `bytes_ptr` points to
-///   data of the given size
-/// - or `input_len` = 0
-unsafe extern "C" fn artifact_v0_from_bytes(
-    bytes_ptr: *const u8,
-    input_len: size_t,
-) -> *const ArtifactV0 {
-    let bytes = slice_from_c_bytes!(bytes_ptr, input_len as usize);
-    if let Ok(borrowed_artifact) = parse_artifact(bytes) {
-        Arc::into_raw(Arc::new(borrowed_artifact.into()))
-    } else {
-        std::ptr::null()
     }
 }

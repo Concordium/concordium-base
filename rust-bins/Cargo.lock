@@ -1105,7 +1105,7 @@ checksum = "f9b7d56ba4a8344d6be9729995e6b06f928af29998cdf79fe390cbf6b1fee838"
 
 [[package]]
 name = "key_derivation"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "crypto_common",
  "dodis_yampolskiy_prf",
