@@ -54,15 +54,9 @@ pub enum PointDecodingError {
     NotAScalar,
 }
 
-/// FIXME: This is a temporary hack due to library incompatibilites
-/// (dependencies on rand require two different versions.
-
 fn generate_rand_scalar() -> Scalar {
     let mut csprng = thread_rng();
-    let mut bytes = [0u8; 32];
-    csprng.fill_bytes(&mut bytes);
-    let digest = Sha512::digest(&bytes);
-    Scalar::from_bytes_mod_order_wide(&digest.into())
+    Scalar::random(&mut csprng)
 }
 
 fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
