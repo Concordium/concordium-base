@@ -65,7 +65,9 @@ impl RandomOracle {
     pub fn empty() -> Self { RandomOracle(Sha3_256::new()) }
 
     /// Start with the initial domain string.
-    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_256::new().chain_update(data)) }
+    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
+        RandomOracle(Sha3_256::new().chain_update(data))
+    }
 
     /// Duplicate the random oracle, creating a fresh copy of it.
     /// Further updates are independent.

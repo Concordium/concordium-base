@@ -1,6 +1,8 @@
 use crate::{SerdeDeserialize, SerdeSerialize};
-use aes::Aes256;
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::{
+    cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit},
+    Aes256,
+};
 use hmac::Hmac;
 use rand::Rng;
 use serde::{Deserializer, Serializer};
