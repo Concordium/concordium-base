@@ -43,6 +43,8 @@ pub struct CredentialIndex {
     pub index: u8,
 }
 
+/// A URL that is part of the protocol update instruction, as well as
+/// baker related transactions.
 pub struct UrlText {
     pub url: String,
 }
@@ -206,58 +208,6 @@ impl Deserial for OwnedContractName {
         let len: u16 = source.get()?;
         let name = deserial_string(source, len.into())?;
         Ok(OwnedContractName::new(name)?)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Memo {
-    pub memo: Vec<u8>,
-}
-
-pub const MAX_MEMO_SIZE: usize = 256; // Needs to be same as maxMemoSize in Types.hs in haskell-src
-
-impl Serial for Memo {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        (self.memo.len() as u16).serial(out);
-        out.write_all(&self.memo)
-            .expect("Writing to buffer should succeed.");
-    }
-}
-
-impl Deserial for Memo {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let len: u16 = source.get()?;
-        anyhow::ensure!(
-            len as usize <= MAX_MEMO_SIZE,
-            "Memo size of {} is too big. Maximum size is {}.",
-            len,
-            MAX_MEMO_SIZE
-        );
-        let mut memo = vec![0; len as usize];
-        source.read_exact(&mut memo)?;
-        Ok(Memo { memo })
-    }
-}
-
-impl SerdeSerialize for Memo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer, {
-        serializer.serialize_str(&hex::encode(&self.memo))
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for Memo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>, {
-        let s = String::deserialize(deserializer)?;
-        let memo = hex::decode(s).map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
-        if memo.len() <= MAX_MEMO_SIZE {
-            Ok(Memo { memo })
-        } else {
-            Err(serde::de::Error::custom("Memo length out of bounds."))
-        }
     }
 }
 

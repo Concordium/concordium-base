@@ -1643,6 +1643,22 @@ pub struct CredentialDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+// Since all variants are fieldless, the default JSON serialization will convert
+// all the variants to simple strings.
+/// Enumeration of the types of credentials.
+pub enum CredentialType {
+    /// Initial credential is a credential that is submitted by the identity
+    /// provider on behalf of the user. There is only one initial credential
+    /// per identity.
+    Initial,
+    /// A normal credential is one where the identity behind it is only known to
+    /// the owner of the account, unless the anonymity revocation process was
+    /// followed.
+    Normal,
+}
+
 /// Account credential with values and commitments, but without proofs.
 /// Serialization must match the serializaiton of `AccountCredential` in
 /// Haskell.
