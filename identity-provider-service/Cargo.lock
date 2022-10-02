@@ -890,7 +890,6 @@ dependencies = [
  "chrono",
  "clap",
  "crypto_common",
- "curve_arithmetic",
  "ed25519-dalek",
  "env_logger",
  "hex",

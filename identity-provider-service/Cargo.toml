@@ -39,10 +39,6 @@ version = "0"
 path = "../rust-src/crypto_common"
 version = "0"
 
-[dependencies.curve_arithmetic]
-path = "../rust-src/curve_arithmetic"
-version = "0"
-
 [dev-dependencies]
 tokio-test = "0.4"
 
