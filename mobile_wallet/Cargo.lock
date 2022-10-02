@@ -114,12 +114,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a32fd6af2b5827bce66c29053ba0e7c42b9dcab01835835058558c10851a46b"
 
 [[package]]
-name = "bit-vec"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
-
-[[package]]
 name = "block-buffer"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -179,7 +173,6 @@ checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 name = "bulletproofs"
 version = "0.1.0"
 dependencies = [
- "bit-vec",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -209,12 +202,6 @@ name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
-
-[[package]]
-name = "cc"
-version = "1.0.70"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d26a6ce4b6a484fa3edb70f7efa6fc430fd2b87285fe8b84304fd0936faa0dc0"
 
 [[package]]
 name = "cesu8"
@@ -248,15 +235,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f8e7987cbd042a63249497f41aed09f8e65add917ea6566effbc56578d6801"
 dependencies = [
  "generic-array 0.14.4",
-]
-
-[[package]]
-name = "clear_on_drop"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9cc5db465b294c3fa986d5bbb0f3017cd850bff6dd6c52f9ccff8b4d21b7b08"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -536,7 +514,6 @@ dependencies = [
 name = "ecvrf"
 version = "0.0.1"
 dependencies = [
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve25519-dalek",
@@ -589,7 +566,6 @@ name = "eddsa_ed25519"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve25519-dalek",
@@ -618,7 +594,6 @@ dependencies = [
  "crypto_common_derive",
  "curve_arithmetic",
  "ff",
- "ffi_helpers",
  "libc",
  "pairing",
  "rand",
@@ -809,7 +784,6 @@ dependencies = [
  "derive_more",
  "dodis_yampolskiy_prf",
  "ed25519-dalek",
- "eddsa_ed25519",
  "either",
  "elgamal",
  "ff",
@@ -1186,7 +1160,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "byteorder",
- "clear_on_drop",
  "crypto_common",
  "crypto_common_derive",
  "curve_arithmetic",
@@ -1196,7 +1169,6 @@ dependencies = [
  "pedersen_scheme",
  "rand",
  "rand_core 0.5.1",
- "rayon",
  "serde",
  "thiserror",
 ]

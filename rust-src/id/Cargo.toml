@@ -23,9 +23,6 @@ pairing = "0.15"
 derive_more = "0.99"
 thiserror = "1.0"
 
-[dependencies.eddsa_ed25519]
-path = "../eddsa_ed25519"
-version = "0"
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
 version = "0"
