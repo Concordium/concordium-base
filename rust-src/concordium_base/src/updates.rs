@@ -667,7 +667,7 @@ pub struct UpdateHeader {
 #[derive(Debug, Clone, derive::Serial, Into)]
 pub struct UpdateInstructionSignature {
     #[map_size_length = 2]
-    signatures: BTreeMap<UpdateKeysIndex, Signature>,
+    pub signatures: BTreeMap<UpdateKeysIndex, Signature>,
 }
 
 impl Deserial for UpdateInstructionSignature {

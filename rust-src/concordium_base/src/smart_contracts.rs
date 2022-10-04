@@ -13,6 +13,7 @@ use crypto_common::{
 use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
+use thiserror::Error;
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Copy, Clone, Display)]
 #[serde(try_from = "u8", into = "u8")]
@@ -110,9 +111,7 @@ impl WasmModule {
 }
 
 // FIXME: Move to Wasm, and check size also in JSON deserialization
-#[derive(
-    SerdeSerialize, SerdeDeserialize, derive::Serial, Debug, Clone, AsRef, Into, From, Default,
-)]
+#[derive(SerdeSerialize, SerdeDeserialize, derive::Serial, Debug, Clone, AsRef, Into, Default)]
 #[serde(transparent)]
 /// A smart contract parameter. The [Default] implementation produces an empty
 /// parameter.
@@ -120,6 +119,39 @@ pub struct Parameter {
     #[serde(with = "crate::internal::byte_array_hex")]
     #[size_length = 2]
     bytes: Vec<u8>,
+}
+
+impl Parameter {
+    /// Construct a parameter without checking that it fits the size limit.
+    /// The caller is assumed to ensure this via external means.
+    #[inline]
+    pub fn new_unchecked(bytes: Vec<u8>) -> Self { Self { bytes } }
+}
+
+#[derive(Debug, Error)]
+#[error("The byte array of size {actual} is too large to fit into parameter size limit {max}.")]
+pub struct ExceedsParameterSize {
+    pub actual: usize,
+    pub max:    usize,
+}
+
+/// Attempt to convert a byte array to a parameter. This will fail if the byte
+/// array is too large. If it is known upfront that the array is less than
+/// [`MAX_PARAMETER_LEN`] then it is better to use [`Parameter::new_unchecked`].
+impl TryFrom<Vec<u8>> for Parameter {
+    type Error = ExceedsParameterSize;
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        let actual = bytes.len();
+        if actual <= MAX_PARAMETER_LEN {
+            Ok(Self::new_unchecked(bytes))
+        } else {
+            Err(ExceedsParameterSize {
+                actual,
+                max: MAX_PARAMETER_LEN,
+            })
+        }
+    }
 }
 
 /// Manual implementation to ensure size limit.
