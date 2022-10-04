@@ -20,6 +20,7 @@ use std::{
 use thiserror::Error;
 
 /// Duration of a slot in milliseconds.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -38,6 +39,7 @@ impl From<SlotDuration> for chrono::Duration {
 }
 
 /// Duration in seconds.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -56,6 +58,7 @@ impl From<DurationSeconds> for chrono::Duration {
 }
 
 /// Internal short id of the baker.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -64,6 +67,7 @@ pub struct BakerId {
 }
 
 /// Internal short id of the delegator.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -76,6 +80,7 @@ pub struct DelegatorId {
 /// [`MAX_URL_TEXT_LENGTH`](crate::constants::MAX_URL_TEXT_LENGTH) bytes.
 ///
 /// The default instance produces the empty URL.
+#[repr(transparent)]
 #[derive(
     SerdeSerialize,
     SerdeDeserialize,
@@ -207,6 +212,7 @@ pub struct BakerPoolInfo {
 }
 
 /// Slot number
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -215,6 +221,7 @@ pub struct Slot {
 }
 
 /// Epoch number
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -222,6 +229,7 @@ pub struct Epoch {
     pub epoch: u64,
 }
 
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -241,6 +249,7 @@ impl Nonce {
     pub fn next_mut(&mut self) { self.nonce += 1; }
 }
 
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -264,6 +273,7 @@ impl UpdateSequenceNumber {
     pub fn next_mut(&mut self) { self.number += 1; }
 }
 
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Into, Serial)]
@@ -294,15 +304,20 @@ impl TryFrom<u8> for AccountThreshold {
     }
 }
 
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+/// Limit on the number of credential deployments in a block. Since credential
+/// deployments create accounts, this is in effect a limit on the number of
+/// accounts that can be created in a block.
 pub struct CredentialsPerBlockLimit {
     pub limit: u16,
 }
 
 /// Height of a block. Last genesis block is at height 0, a child of a block at
 /// height n is at height n+1. This height counts from the last protocol update.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -313,6 +328,7 @@ pub struct BlockHeight {
 /// Type indicating the index of a (re)genesis block.
 /// The initial genesis block has index `0` and each subsequent regenesis
 /// has an incrementally higher index.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -390,6 +406,7 @@ pub struct ChainParameterVersion0;
 pub struct ChainParameterVersion1;
 
 /// Height of a block since chain genesis.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -406,6 +423,7 @@ impl AbsoluteBlockHeight {
     }
 }
 
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
@@ -416,6 +434,7 @@ pub struct AccountIndex {
 }
 
 /// Energy measure.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add)]
@@ -424,6 +443,7 @@ pub struct Energy {
 }
 
 /// Position of the transaction in a block.
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Serialize, Clone, Copy)]
 #[serde(transparent)]
 pub struct TransactionIndex {
@@ -433,6 +453,7 @@ pub struct TransactionIndex {
 pub type AggregateSigPairing = id::constants::IpPairing;
 
 /// FIXME: Move higher up in the dependency
+#[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
 pub struct BakerAggregationSignKey {
     pub(crate) sign_key: aggregate_sig::SecretKey<AggregateSigPairing>,
@@ -457,6 +478,7 @@ impl BakerAggregationSignKey {
 }
 
 /// FIXME: Move higher up in the dependency
+#[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
 pub struct BakerAggregationVerifyKey {
     pub(crate) verify_key: aggregate_sig::PublicKey<AggregateSigPairing>,
@@ -471,6 +493,7 @@ impl From<&BakerAggregationSignKey> for BakerAggregationVerifyKey {
 }
 
 /// FIXME: Move higher up in the dependency
+#[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
 pub struct BakerSignatureSignKey {
     pub(crate) sign_key: ed25519_dalek::SecretKey,
@@ -485,6 +508,7 @@ impl BakerSignatureSignKey {
 }
 
 /// FIXME: Move higher up in the dependency
+#[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
 pub struct BakerSignatureVerifyKey {
     pub(crate) verify_key: ed25519_dalek::PublicKey,
@@ -499,6 +523,7 @@ impl From<&BakerSignatureSignKey> for BakerSignatureVerifyKey {
 }
 
 /// FIXME: Move higher up in the dependency
+#[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
 pub struct BakerElectionSignKey {
     pub(crate) sign_key: ecvrf::SecretKey,
@@ -513,6 +538,7 @@ impl BakerElectionSignKey {
 }
 
 /// FIXME: Move higher up in the dependency
+#[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
 pub struct BakerElectionVerifyKey {
     pub(crate) verify_key: ecvrf::PublicKey,
@@ -599,6 +625,7 @@ impl fmt::Display for CredentialRegistrationID {
     }
 }
 
+#[repr(transparent)]
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, Serialize, Clone, Into, From, PartialEq, Eq)]
 #[serde(transparent)]
 /// A single public key that can sign updates.
@@ -682,6 +709,7 @@ impl Deserial for UpdateKeysThreshold {
     }
 }
 
+#[repr(transparent)]
 #[derive(
     Debug,
     Clone,
@@ -700,6 +728,7 @@ pub struct UpdateKeysIndex {
     pub index: u16,
 }
 
+#[repr(transparent)]
 #[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr)]
 #[serde(transparent)]
 /// Representation of the election difficulty as parts per `100_000`. The
@@ -727,6 +756,7 @@ impl ElectionDifficulty {
     }
 }
 
+#[repr(transparent)]
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Into)]
 /// A fraction between 0 and 1 with a precision of 1/100_000.
 /// The `Into<u32>` implementation returns the number of parts per `100_000`.
@@ -1026,9 +1056,9 @@ impl AmountFraction {
     }
 }
 
+#[repr(transparent)]
 #[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr)]
 #[serde(transparent)]
-#[repr(transparent)]
 /// A bound on the relative share of the total staked capital that a baker can
 /// have as its stake. This is required to be greater than 0.
 pub struct CapitalBound {
@@ -1036,6 +1066,7 @@ pub struct CapitalBound {
     pub bound: AmountFraction,
 }
 
+#[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
