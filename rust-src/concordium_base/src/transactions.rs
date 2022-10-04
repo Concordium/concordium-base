@@ -199,6 +199,26 @@ pub struct EncodedPayload {
     pub(crate) payload: Vec<u8>,
 }
 
+#[derive(Debug, Error)]
+#[error("The given byte array of size {actual}B exceeds maximum payload size {max}B")]
+pub struct ExceedsPayloadSize{
+    pub actual: usize,
+    pub max: u32,
+}
+
+impl TryFrom<Vec<u8>> for EncodedPayload {
+    type Error = ExceedsPayloadSize;
+
+    fn try_from(payload: Vec<u8>) -> Result<Self, Self::Error> {
+        let actual = payload.len();
+        if actual.try_into().map_or(false, |x: u32| x <= MAX_PAYLOAD_SIZE) {
+            Ok(Self{payload})
+        } else {
+            Err(ExceedsPayloadSize { actual, max: MAX_PAYLOAD_SIZE })
+        }
+    }
+}
+
 impl EncodedPayload {
     pub fn decode(&self) -> ParseResult<Payload> {
         let mut source = std::io::Cursor::new(&self.payload);

@@ -1,5 +1,5 @@
 /// Maximum size of a transaction payload.
-pub const MAX_PAYLOAD_SIZE: u32 = 100 * 1024;
+pub const MAX_PAYLOAD_SIZE: u32 = MAX_WASM_MODULE_SIZE + 1 + 4 + 4;
 
 /// Minimum valid transaction nonce. Nonces must be strictly sequential starting
 /// with [MIN_NONCE].
