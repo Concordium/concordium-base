@@ -22,7 +22,7 @@ use id::types::{
     AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
     CredentialPublicKeys,
 };
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use random_oracle::RandomOracle;
 use sha2::Digest;
 use std::{collections::BTreeMap, marker::PhantomData};
@@ -402,7 +402,7 @@ pub type ConfigureBakerKeysPayload = BakerKeysPayload<ConfigureBakerKeysMarker>;
 
 impl<T> BakerKeysPayload<T> {
     /// Construct a BakerKeysPayload taking a prefix for the challenge.
-    fn new_payload<R: Rng>(
+    fn new_payload<R: Rng + CryptoRng>(
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,
         challenge_prefix: &[u8],
@@ -416,11 +416,13 @@ impl<T> BakerKeysPayload<T> {
         baker_keys.aggregation_verify.serial(&mut challenge);
 
         let proof_election = eddsa_ed25519::prove_dlog_ed25519(
+            csprng,
             &mut RandomOracle::domain(&challenge),
             &baker_keys.election_verify.verify_key,
             &baker_keys.election_sign.sign_key,
         );
         let proof_sig = eddsa_ed25519::prove_dlog_ed25519(
+            csprng,
             &mut RandomOracle::domain(&challenge),
             &baker_keys.signature_verify.verify_key,
             &baker_keys.signature_sign.sign_key,
@@ -443,21 +445,33 @@ impl<T> BakerKeysPayload<T> {
 
 impl BakerAddKeysPayload {
     /// Construct a BakerKeysPayload with proofs for adding a baker.
-    pub fn new<T: Rng>(baker_keys: &BakerKeyPairs, sender: AccountAddress, csprng: &mut T) -> Self {
+    pub fn new<T: Rng + CryptoRng>(
+        baker_keys: &BakerKeyPairs,
+        sender: AccountAddress,
+        csprng: &mut T,
+    ) -> Self {
         BakerKeysPayload::new_payload(baker_keys, sender, b"addBaker", csprng)
     }
 }
 
 impl BakerUpdateKeysPayload {
     /// Construct a BakerKeysPayload with proofs for updating baker keys.
-    pub fn new<T: Rng>(baker_keys: &BakerKeyPairs, sender: AccountAddress, csprng: &mut T) -> Self {
+    pub fn new<T: Rng + CryptoRng>(
+        baker_keys: &BakerKeyPairs,
+        sender: AccountAddress,
+        csprng: &mut T,
+    ) -> Self {
         BakerKeysPayload::new_payload(baker_keys, sender, b"updateBakerKeys", csprng)
     }
 }
 
 impl ConfigureBakerKeysPayload {
     /// Construct a BakerKeysPayload with proofs for updating baker keys.
-    pub fn new<T: Rng>(baker_keys: &BakerKeyPairs, sender: AccountAddress, csprng: &mut T) -> Self {
+    pub fn new<T: Rng + CryptoRng>(
+        baker_keys: &BakerKeyPairs,
+        sender: AccountAddress,
+        csprng: &mut T,
+    ) -> Self {
         BakerKeysPayload::new_payload(baker_keys, sender, b"configureBaker", csprng)
     }
 }
@@ -561,7 +575,7 @@ impl ConfigureBakerPayload {
 
     /// Add keys to the payload. This will construct proofs of validity and
     /// insert the public keys into the payload.
-    pub fn add_keys<T: Rng>(
+    pub fn add_keys<T: Rng + CryptoRng>(
         &mut self,
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,

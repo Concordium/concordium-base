@@ -172,7 +172,9 @@ extern "C" fn eddsa_prove_dlog_ed25519(
         }
     };
     let proof_bytes = mut_slice_from_c_bytes!(proof_ptr, PROOF_LENGTH);
+    let mut csprng = thread_rng();
     let proof = prove_dlog_ed25519(
+        &mut csprng,
         &mut RandomOracle::domain(&challenge),
         &public_key,
         &secret_key,

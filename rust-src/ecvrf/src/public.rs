@@ -4,11 +4,10 @@ use core::fmt::Debug;
 use crypto_common::*;
 use curve25519_dalek::{
     constants,
-    digest::Digest,
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,
 };
-use sha2::Sha512;
+use sha2::{Digest, Sha512};
 
 use crate::{constants::*, errors::*, proof::*, secret::*};
 /// An ed25519-like public key. This has a bit stricter requirements than the
