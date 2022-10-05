@@ -18,10 +18,19 @@ use thiserror::Error;
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Copy, Clone, Display)]
 #[serde(try_from = "u8", into = "u8")]
 #[repr(u8)]
+/// Version of the module. This determines the chain API that the module can
+/// access.
 pub enum WasmVersion {
     #[display = "V0"]
+    /// The initial smart contracts version. This has a simple state API that
+    /// has very limited capacity. `V0` contracts also use message-passing as
+    /// the interaction method.
     V0 = 0u8,
     #[display = "V1"]
+    /// `V1` contracts were introduced with protocol version 4. In comparison to
+    /// `V0` contracts they use synchronous calls as the interaction method,
+    /// and they have access to a more fine-grained state API allowing for
+    /// unlimited (apart from NRG costs) state size.
     V1,
 }
 
@@ -110,7 +119,10 @@ impl WasmModule {
     }
 }
 
-// FIXME: Move to Wasm, and check size also in JSON deserialization
+// FIXME: This would ideally live in contracts_common, or rather we would reuse
+// that. But that already has its own definition of "Parameter" with a
+// `From<Vec<u8>>` implementation which makes more sense inside Wasm.
+// So for now this is here, but that is not ideal.
 #[derive(SerdeSerialize, SerdeDeserialize, derive::Serial, Debug, Clone, AsRef, Into, Default)]
 #[serde(transparent)]
 /// A smart contract parameter. The [Default] implementation produces an empty

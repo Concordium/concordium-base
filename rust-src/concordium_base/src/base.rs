@@ -156,6 +156,7 @@ impl Deserial for OpenStatus {
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", tag = "delegateType")]
+/// Target of delegation.
 pub enum DelegationTarget {
     #[serde(rename = "Passive")]
     /// Delegate passively, i.e., to no specific baker.
@@ -199,7 +200,8 @@ impl Deserial for DelegationTarget {
 }
 
 /// Additional information about a baking pool.
-/// This information is added with the introduction of delegation.
+/// This information is added with the introduction of delegation in protocol
+/// version 4.
 #[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BakerPoolInfo {
@@ -233,6 +235,9 @@ pub struct Epoch {
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+/// A sequence number ordering transactions from a specific account. The initial
+/// sequence number is `1`, and a transaction with sequence number `m` must be
+/// followed by a transaction with sequence number `m+1`.
 pub struct Nonce {
     pub nonce: u64,
 }
@@ -345,12 +350,18 @@ pub struct GenesisIndex {
 #[serde(into = "u64", try_from = "u64")]
 pub enum ProtocolVersion {
     #[display(fmt = "P1")]
+    /// The initial protocol version at mainnet launch.
     P1,
     #[display(fmt = "P2")]
+    /// Protocol `P2` introduces support for transfers with memos.
     P2,
     #[display(fmt = "P3")]
+    /// Protocol `P3` introduces support for account aliases. Each account can
+    /// now be referred to by `2^24` different addresses.
     P3,
     #[display(fmt = "P4")]
+    /// Protocol `P4` is a major upgrade that adds support for delegation,
+    /// baking pools, and V1 smart contracts.
     P4,
 }
 
@@ -452,14 +463,15 @@ pub struct TransactionIndex {
 
 pub type AggregateSigPairing = id::constants::IpPairing;
 
-/// FIXME: Move higher up in the dependency
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
+/// A secret key used by bakers and finalizers to sign finalization records.
 pub struct BakerAggregationSignKey {
     pub(crate) sign_key: aggregate_sig::SecretKey<AggregateSigPairing>,
 }
 
 impl BakerAggregationSignKey {
+    /// Generate a fresh key using the provided random number generatro.
     pub fn generate<T: Rng>(csprng: &mut T) -> Self {
         Self {
             sign_key: aggregate_sig::SecretKey::generate(csprng),
@@ -477,9 +489,9 @@ impl BakerAggregationSignKey {
     }
 }
 
-/// FIXME: Move higher up in the dependency
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
+/// Public key corresponding to [`BakerAggregationVerifyKey`].
 pub struct BakerAggregationVerifyKey {
     pub(crate) verify_key: aggregate_sig::PublicKey<AggregateSigPairing>,
 }
@@ -492,14 +504,15 @@ impl From<&BakerAggregationSignKey> for BakerAggregationVerifyKey {
     }
 }
 
-/// FIXME: Move higher up in the dependency
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
+/// A secret key used by a baker to sign blocks.
 pub struct BakerSignatureSignKey {
     pub(crate) sign_key: ed25519_dalek::SecretKey,
 }
 
 impl BakerSignatureSignKey {
+    /// Generate a fresh key using the provided random number generator.
     pub fn generate<T: CryptoRng + Rng>(csprng: &mut T) -> Self {
         Self {
             sign_key: ed25519_dalek::SecretKey::generate(csprng),
@@ -507,9 +520,9 @@ impl BakerSignatureSignKey {
     }
 }
 
-/// FIXME: Move higher up in the dependency
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
+/// A public key that corresponds to [`BakerSignatureVerifyKey`].
 pub struct BakerSignatureVerifyKey {
     pub(crate) verify_key: ed25519_dalek::PublicKey,
 }
@@ -522,9 +535,10 @@ impl From<&BakerSignatureSignKey> for BakerSignatureVerifyKey {
     }
 }
 
-/// FIXME: Move higher up in the dependency
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
+/// A secret key used by a baker to prove that they won the lottery to produce a
+/// block.
 pub struct BakerElectionSignKey {
     pub(crate) sign_key: ecvrf::SecretKey,
 }
@@ -537,9 +551,9 @@ impl BakerElectionSignKey {
     }
 }
 
-/// FIXME: Move higher up in the dependency
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
+/// A public key that corresponds to [`BakerElectionSignKey`].
 pub struct BakerElectionVerifyKey {
     pub(crate) verify_key: ecvrf::PublicKey,
 }
@@ -614,8 +628,12 @@ impl BakerCredentials {
     }
 }
 
-/// FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
+// FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
 #[derive(SerdeBase16Serialize, Serialize, Debug, Clone, Copy)]
+/// A registration ID of a credential. This ID is generated from the user's PRF
+/// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
+/// the same PRF key, but different counter values cannot easily be linked
+/// together.
 pub struct CredentialRegistrationID(id::constants::ArCurve);
 
 impl fmt::Display for CredentialRegistrationID {
@@ -649,6 +667,7 @@ pub struct UpdateKeyPair {
 }
 
 impl UpdateKeyPair {
+    /// Generate a fresh key pair using the provided random number generator.
     pub fn generate<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
         let kp = ed25519_dalek::Keypair::generate(rng);
         Self {
@@ -659,6 +678,7 @@ impl UpdateKeyPair {
         }
     }
 
+    /// Sign the message with the keypair.
     pub fn sign(&self, msg: &[u8]) -> Signature {
         let expanded = ed25519_dalek::ExpandedSecretKey::from(&self.secret);
         match self.public.public {
@@ -676,11 +696,17 @@ impl From<&UpdateKeyPair> for UpdatePublicKey {
     fn from(kp: &UpdateKeyPair) -> Self { kp.public.clone() }
 }
 
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serial, Into)]
+#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into)]
 #[serde(transparent)]
+/// A lower bound on the number of signatures needed to sign a valid update
+/// message of a particular type. This is never 0.
 pub struct UpdateKeysThreshold {
-    #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
-    pub(crate) threshold: u16,
+    pub(crate) threshold: std::num::NonZeroU16,
+}
+
+impl From<UpdateKeysThreshold> for u16 {
+    #[inline]
+    fn from(u: UpdateKeysThreshold) -> Self { u.threshold.get() }
 }
 
 #[derive(Debug, Error)]
@@ -693,19 +719,9 @@ impl TryFrom<u16> for UpdateKeysThreshold {
     type Error = ZeroSignatureThreshold;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        if value == 0 {
-            Err(ZeroSignatureThreshold)
-        } else {
-            Ok(Self { threshold: value })
-        }
-    }
-}
-
-impl Deserial for UpdateKeysThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let threshold = source.get()?;
-        anyhow::ensure!(threshold != 0, "Threshold cannot be 0.");
-        Ok(Self { threshold })
+        std::num::NonZeroU16::new(value).map_or(Err(ZeroSignatureThreshold), |threshold| {
+            Ok(UpdateKeysThreshold { threshold })
+        })
     }
 }
 
@@ -724,6 +740,9 @@ impl Deserial for UpdateKeysThreshold {
     From,
 )]
 #[serde(transparent)]
+/// An identifier of a key that can sign update instructions. A signature of an
+/// update instruction is a collection of signatures. An [`UpdateKeysIndex`]
+/// identifies keys that correspond to the signatures.
 pub struct UpdateKeysIndex {
     pub index: u16,
 }
@@ -854,6 +873,8 @@ impl<T: Ord> InclusiveRange<T> {
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy)]
+/// An exchange rate between two quantities. This is never 0, and the exchange
+/// rate should also never be infinite.
 pub struct ExchangeRate {
     #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
     pub numerator:   u64,
@@ -878,6 +899,8 @@ impl Deserial for ExchangeRate {
 
 #[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy)]
 #[serde(try_from = "leverage_factor_json::LeverageFactorRaw")]
+/// The amount of leverage that a baker can get from delegation. A leverage
+/// factor of 1 means that a baker does not gain anything from delegation.
 pub struct LeverageFactor {
     #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
     pub numerator:   u64,
@@ -895,6 +918,8 @@ impl LeverageFactor {
     }
 }
 
+/// An internal helper to deserialize a leverage factor and ensure that it is
+/// in reduced form.
 mod leverage_factor_json {
     #[derive(super::SerdeDeserialize)]
     pub struct LeverageFactorRaw {
@@ -1008,6 +1033,12 @@ impl MintDistributionFamily for ChainParameterVersion1 {
 pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
 
 #[derive(Debug, Serialize, Clone, Copy)]
+/// Rate of creation of new CCDs. For example, A value of `0.05` would mean an
+/// increase of 5 percent per unit of time. This value does not specify the time
+/// unit, and this differs based on the protocol version.
+///
+/// The representation is base-10 floating point number representation.
+/// The value is `mantissa * 10^(-exponent)`.
 pub struct MintRate {
     pub mantissa: u32,
     pub exponent: u8,
@@ -1103,7 +1134,6 @@ impl std::ops::Add for AmountFraction {
 }
 
 impl SerdeSerialize for PartsPerHundredThousands {
-    /// FIXME: This instance needs to be improved and tested.
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         let decimal = rust_decimal::Decimal::try_new(self.parts.into(), 5)
             .map_err(serde::ser::Error::custom)?;

@@ -226,6 +226,9 @@ impl TryFrom<Vec<u8>> for EncodedPayload {
 }
 
 impl EncodedPayload {
+    /// Attempt to decode the [`EncodedPayload`] into a structured [`Payload`].
+    /// This also checks that all data is used, i.e., that there are no
+    /// remaining trailing bytes.
     pub fn decode(&self) -> ParseResult<Payload> {
         let mut source = std::io::Cursor::new(&self.payload);
         let payload = source.get()?;
@@ -538,16 +541,19 @@ impl ConfigureBakerPayload {
         }
     }
 
+    /// Set the new baker capital.
     pub fn set_capital(&mut self, amount: Amount) -> &mut Self {
         self.capital = Some(amount);
         self
     }
 
+    /// Set whether or not earnings are automatically added to the stake.
     pub fn set_restake_earnings(&mut self, restake_earnings: bool) -> &mut Self {
         self.restake_earnings = Some(restake_earnings);
         self
     }
 
+    /// Update the delegation status of the pool.
     pub fn set_open_for_delegation(&mut self, open_for_delegation: OpenStatus) -> &mut Self {
         self.open_for_delegation = Some(open_for_delegation);
         self
@@ -567,11 +573,13 @@ impl ConfigureBakerPayload {
         self
     }
 
+    /// Add metadata URL to the payload.
     pub fn set_metadata_url(&mut self, metadata_url: UrlText) -> &mut Self {
         self.metadata_url = Some(metadata_url);
         self
     }
 
+    /// Set a new transaction fee commission.
     pub fn set_transaction_fee_commission(
         &mut self,
         transaction_fee_commission: AmountFraction,
@@ -580,6 +588,7 @@ impl ConfigureBakerPayload {
         self
     }
 
+    /// Set a new baking reward commission.
     pub fn set_baking_reward_commission(
         &mut self,
         baking_reward_commission: AmountFraction,
@@ -588,6 +597,7 @@ impl ConfigureBakerPayload {
         self
     }
 
+    /// Set a new finalization reward commission.
     pub fn set_finalization_reward_commission(
         &mut self,
         finalization_reward_commission: AmountFraction,
@@ -2070,8 +2080,6 @@ pub mod construct {
     }
 
     /// Register the sender account as a baker.
-    /// TODO: Make a function for constructing the keys payload, with correct
-    /// proofs and context.
     pub fn add_baker(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2101,8 +2109,6 @@ pub mod construct {
     }
 
     /// Update keys of the baker associated with the sender account.
-    /// TODO: Make a function for constructing the keys payload, with correct
-    /// proofs and context.
     pub fn update_baker_keys(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2169,6 +2175,8 @@ pub mod construct {
         )
     }
 
+    /// Update whether the earnings are automatically added to the baker's stake
+    /// or not.
     pub fn update_baker_restake_earnings(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2328,6 +2336,13 @@ pub mod construct {
         )
     }
 
+    /// An upper bound on the amount of energy to spend on a transaction.
+    /// Transaction costs have two components, one is based on the size of the
+    /// transaction and the number of signatures, and then there is a
+    /// transaction specific one. This construction helps handle the fixed
+    /// costs and allows the user to focus only on the transaction specific
+    /// ones. The most important case for this are smart contract
+    /// initialisations and updates.
     pub enum GivenEnergy {
         /// Use this exact amount of energy.
         Absolute(Energy),
@@ -2557,6 +2572,8 @@ pub mod send {
             .sign(signer)
     }
 
+    /// Update whether the earnings are automatically added to the baker's stake
+    /// or not.
     pub fn update_baker_restake_earnings(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2657,6 +2674,13 @@ pub mod send {
     }
 
     #[derive(Debug, Copy, Clone)]
+    /// An upper bound on the amount of energy to spend on a transaction.
+    /// Transaction costs have two components, one is based on the size of the
+    /// transaction and the number of signatures, and then there is a
+    /// transaction specific one. This construction helps handle the fixed
+    /// costs and allows the user to focus only on the transaction specific
+    /// ones. The most important case for this are smart contract
+    /// initialisations and updates.
     pub enum GivenEnergy {
         /// Use this exact amount of energy.
         Absolute(Energy),

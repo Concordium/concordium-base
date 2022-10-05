@@ -274,7 +274,10 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
         let keys_len: u16 = source.get()?;
         let keys = deserial_vector_no_length(source, keys_len as usize)?;
         let threshold: UpdateKeysThreshold = source.get()?;
-        anyhow::ensure!(threshold.threshold <= keys_len, "Threshold too large.");
+        anyhow::ensure!(
+            threshold.threshold.get() <= keys_len,
+            "Threshold too large."
+        );
         Ok(Self {
             keys,
             threshold,
@@ -300,7 +303,7 @@ impl Deserial for AccessStructure {
         let authorized_keys = deserial_set_no_length(source, authorized_keys_len as usize)?;
         let threshold: UpdateKeysThreshold = source.get()?;
         anyhow::ensure!(
-            threshold.threshold <= authorized_keys_len,
+            threshold.threshold.get() <= authorized_keys_len,
             "Threshold too large."
         );
         Ok(Self {
@@ -421,6 +424,9 @@ impl AuthorizationsV1 {
     }
 }
 
+/// Together with [`Authorizations`] this defines a type family allowing us to
+/// map [`ChainParametersVersion0`] and [`ChainParametersVersion1`] to the
+/// corresponding `Authorizations` version.
 pub trait AuthorizationsFamily {
     type Output: std::fmt::Debug;
 }
@@ -433,6 +439,7 @@ impl AuthorizationsFamily for ChainParameterVersion1 {
     type Output = AuthorizationsV1;
 }
 
+/// A mapping of chain parameter versions to authorization versions.
 pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
 #[derive(SerdeSerialize, SerdeDeserialize, derive::Serialize, Debug, Clone)]
@@ -587,7 +594,11 @@ pub enum UpdateType {
     /// corresponds to the the update of the baker stake threshold. In
     /// protocol version 4 and up this includes other pool parameters.
     UpdatePoolParameters,
+    /// Update for cooldown parameters. Only applies to protocol version
+    /// [`P4`](ProtocolVersion::P4) and up.
     UpdateCooldownParameters,
+    /// Update of the time parameters. Only applies to protocol version
+    /// [`P4`](ProtocolVersion::P4) and up.
     UpdateTimeParameters,
 }
 
@@ -623,6 +634,7 @@ pub struct UpdateInstruction {
     pub signatures: UpdateInstructionSignature,
 }
 
+/// Implementors of this trait can sign update instructions.
 pub trait UpdateSigner {
     /// Sign the specified transaction hash, allocating and returning the
     /// signatures.
@@ -657,14 +669,21 @@ impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
 }
 
 #[derive(Debug, Clone, Copy, derive::Serialize)]
+/// A header common to all update instructions.
 pub struct UpdateHeader {
+    /// Sequence number of the update. Each update queue maintains its own
+    /// sequence number.
     pub seq_number:     UpdateSequenceNumber,
+    /// An effective time of the update. 0 is used to mean "immediate".
     pub effective_time: TransactionTime,
+    /// Timeout of the update. The timeout must not be after the effective time.
     pub timeout:        TransactionTime,
+    /// Size of the update instruction payload.
     pub payload_size:   PayloadSize,
 }
 
 #[derive(Debug, Clone, derive::Serial, Into)]
+/// Signature of an update instruction.
 pub struct UpdateInstructionSignature {
     #[map_size_length = 2]
     pub signatures: BTreeMap<UpdateKeysIndex, Signature>,
@@ -679,6 +698,8 @@ impl Deserial for UpdateInstructionSignature {
     }
 }
 
+/// A module that provides helpers for constructing and signing update
+/// instructions.
 pub mod update {
     use sha2::Digest;
     use std::io::Write;
