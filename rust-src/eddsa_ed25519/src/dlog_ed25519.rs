@@ -54,11 +54,6 @@ pub enum PointDecodingError {
     NotAScalar,
 }
 
-fn generate_rand_scalar() -> Scalar {
-    let mut csprng = thread_rng();
-    Scalar::random(&mut csprng)
-}
-
 fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
@@ -87,7 +82,8 @@ fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
 /// in a different crate and thus have different types. This situation should be
 /// remedied to regain type safety when we have time to do it properly. This
 /// will probably mean some reorganization of the crates.
-pub fn prove_dlog_ed25519(
+pub fn prove_dlog_ed25519<R: Rng + CryptoRng>(
+    csprng: &mut R,
     ro: &mut RandomOracle,
     public_key: &impl Serial,
     secret_key: &impl AsRef<[u8]>,
@@ -96,8 +92,8 @@ pub fn prove_dlog_ed25519(
     // FIXME: Add base to the proof.
     ro.append_message(b"dlog_ed25519", public_key);
 
-    // FIXME non_zero scalar should be generated
-    let rand_scalar = generate_rand_scalar();
+    let rand_scalar = Scalar::random(csprng);
+
     let randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
 
     ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
@@ -158,7 +154,7 @@ mod tests {
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let mut ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_dlog_ed25519(&mut ro.split(), &public, &secret);
+            let proof = prove_dlog_ed25519(&mut csprng, &mut ro.split(), &public, &secret);
             assert!(verify_dlog_ed25519(&mut ro, &public, &proof));
             let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
             if verify_dlog_ed25519(
@@ -179,6 +175,7 @@ mod tests {
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let proof = prove_dlog_ed25519(
+                &mut csprng,
                 &mut RandomOracle::domain(&challenge_prefix),
                 &public,
                 &secret,

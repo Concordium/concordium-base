@@ -396,19 +396,21 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
             challenge.put(&baker_keys.signature_verify_key);
             challenge.put(&baker_keys.aggregation_verify_key);
 
+            let mut csprng = thread_rng();
             let election_proof = eddsa_ed25519::prove_dlog_ed25519(
+                &mut csprng,
                 &mut random_oracle::RandomOracle::domain(&challenge),
                 &baker_keys.election_verify_key,
                 &baker_keys.election_private_key,
             );
 
             let signature_proof = eddsa_ed25519::prove_dlog_ed25519(
+                &mut csprng,
                 &mut random_oracle::RandomOracle::domain(&challenge),
                 &baker_keys.signature_verify_key,
                 &baker_keys.signature_sign_key,
             );
 
-            let mut csprng = thread_rng();
             let aggregation_proof = baker_keys.aggregation_sign_key.prove(
                 &mut csprng,
                 &mut random_oracle::RandomOracle::domain(&challenge),
