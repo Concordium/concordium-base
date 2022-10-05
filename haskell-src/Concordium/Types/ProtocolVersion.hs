@@ -1,9 +1,11 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
@@ -33,6 +35,7 @@ data ProtocolVersion
     | P2
     | P3
     | P4
+    | P5
     deriving (Eq, Show, Ord)
 
 -- |The singleton type associated with 'ProtocolVersion'.
@@ -43,18 +46,21 @@ data SProtocolVersion (pv :: ProtocolVersion) where
     SP2 :: SProtocolVersion 'P2
     SP3 :: SProtocolVersion 'P3
     SP4 :: SProtocolVersion 'P4
+    SP5 :: SProtocolVersion 'P5
 
 protocolVersionToWord64 :: ProtocolVersion -> Word64
 protocolVersionToWord64 P1 = 1
 protocolVersionToWord64 P2 = 2
 protocolVersionToWord64 P3 = 3
 protocolVersionToWord64 P4 = 4
+protocolVersionToWord64 P5 = 5
 
 protocolVersionFromWord64 :: MonadFail m => Word64 -> m ProtocolVersion
 protocolVersionFromWord64 1 = return P1
 protocolVersionFromWord64 2 = return P2
 protocolVersionFromWord64 3 = return P3
 protocolVersionFromWord64 4 = return P4
+protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 type family PVNat (pv :: ProtocolVersion) :: Nat where
@@ -62,6 +68,7 @@ type family PVNat (pv :: ProtocolVersion) :: Nat where
     PVNat 'P2 = 2
     PVNat 'P3 = 3
     PVNat 'P4 = 4
+    PVNat 'P5 = 5
 
 type SupportsDelegation pv = 4 <= PVNat pv
 
@@ -104,12 +111,17 @@ instance IsProtocolVersion 'P4 where
     protocolVersion = SP4
     {-# INLINE protocolVersion #-}
 
+instance IsProtocolVersion 'P5 where
+    protocolVersion = SP5
+    {-# INLINE protocolVersion #-}
+
 -- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
 demoteProtocolVersion SP1 = P1
 demoteProtocolVersion SP2 = P2
 demoteProtocolVersion SP3 = P3
 demoteProtocolVersion SP4 = P4
+demoteProtocolVersion SP5 = P5
 
 -- |An existentially quantified protocol version.
 data SomeProtocolVersion where
@@ -122,6 +134,7 @@ promoteProtocolVersion P1 = SomeProtocolVersion SP1
 promoteProtocolVersion P2 = SomeProtocolVersion SP2
 promoteProtocolVersion P3 = SomeProtocolVersion SP3
 promoteProtocolVersion P4 = SomeProtocolVersion SP4
+promoteProtocolVersion P5 = SomeProtocolVersion SP5
 
 data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
     deriving (Eq, Show)
@@ -131,6 +144,7 @@ type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParameters
     ChainParametersVersionFor 'P2 = 'ChainParametersV0
     ChainParametersVersionFor 'P3 = 'ChainParametersV0
     ChainParametersVersionFor 'P4 = 'ChainParametersV1
+    ChainParametersVersionFor 'P5 = 'ChainParametersV1
 
 data SChainParametersVersion (cpv :: ChainParametersVersion) where
     SCPV0 :: SChainParametersVersion 'ChainParametersV0
@@ -156,6 +170,7 @@ chainParametersVersionFor spv = case spv of
     SP2 -> SCPV0
     SP3 -> SCPV0
     SP4 -> SCPV1
+    SP5 -> SCPV1
 
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
 demoteChainParameterVersion SCPV0 = ChainParametersV0
@@ -170,11 +185,14 @@ data AccountVersion
       AccountV0
     | -- |Account version used in P4. Adds stake delegation.
       AccountV1
+    | -- |Account version used in P5. Modifies hashing.
+      AccountV2
 
 -- |A singleton type corresponding to 'SAccountVersion'.
 data SAccountVersion (av :: AccountVersion) where
     SAccountV0 :: SAccountVersion 'AccountV0
     SAccountV1 :: SAccountVersion 'AccountV1
+    SAccountV2 :: SAccountVersion 'AccountV2
 
 -- |Projection of 'ProtocolVersion' to 'AccountVersion'.
 type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
@@ -182,6 +200,7 @@ type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
     AccountVersionFor 'P2 = 'AccountV0
     AccountVersionFor 'P3 = 'AccountV0
     AccountVersionFor 'P4 = 'AccountV1
+    AccountVersionFor 'P5 = 'AccountV2
 
 -- |Projection of 'SProtocolVersion' to 'SAccountVersion'.
 accountVersionFor :: SProtocolVersion pv -> SAccountVersion (AccountVersionFor pv)
@@ -189,6 +208,7 @@ accountVersionFor SP1 = SAccountV0
 accountVersionFor SP2 = SAccountV0
 accountVersionFor SP3 = SAccountV0
 accountVersionFor SP4 = SAccountV1
+accountVersionFor SP5 = SAccountV2
 
 class IsAccountVersion (av :: AccountVersion) where
     -- |The singleton associated with the account version
@@ -199,6 +219,55 @@ instance IsAccountVersion 'AccountV0 where
 
 instance IsAccountVersion 'AccountV1 where
     accountVersion = SAccountV1
+
+instance IsAccountVersion 'AccountV2 where
+    accountVersion = SAccountV2
+
+type family AVNat (av :: AccountVersion) where
+    AVNat 'AccountV0 = 0
+    AVNat 'AccountV1 = 1
+    AVNat 'AccountV2 = 2
+
+-- |A type used at the kind level to denote that delegation is or is not expected to be supported
+-- at an account version. This is intended to give more descriptive type errors in cases where the
+-- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
+-- @AVSupportsDelegation 'AccountV0@ will give a type error:
+--
+-- @
+--   Couldn't match type: 'DelegationNotSupported 'AccountV0
+--   with: 'DelegationSupported 'AccountV0
+-- @
+--
+-- This is more meaningful than @Couldn't match type: 'False with: 'True@.
+-- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
+data DelegationSupport
+    = DelegationSupported AccountVersion -- ^Delegation is supported at the account version
+    | DelegationNotSupported AccountVersion -- ^Delegation is not supported at the account version
+
+-- |Type-level predicate that determines if an account version supports delegation.
+type family AVSupportsDelegationB (av :: AccountVersion) :: DelegationSupport where
+    AVSupportsDelegationB 'AccountV0 = 'DelegationNotSupported 'AccountV0
+    AVSupportsDelegationB av = 'DelegationSupported av
+
+-- |Constraint that an account version supports delegation.
+--
+-- TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
+type AVSupportsDelegation (av :: AccountVersion) = AVSupportsDelegationB av ~ 'DelegationSupported av
+
+-- |A GADT that covers the cases for whether an account version supports delegation or not.
+-- The case that it doesn't is limited to 'AccountV0', and in the other case, this provides an
+-- instance of 'AVSupportsDelegation'.
+data SAVDelegationSupport (av :: AccountVersion) where
+    SAVDelegetionNotSupported :: SAVDelegationSupport 'AccountV0
+    SAVDelegationSupported :: AVSupportsDelegation av => SAVDelegationSupport av
+
+-- |Determine if delegation is supported at the account version.
+delegationSupport :: forall av. (IsAccountVersion av) => SAVDelegationSupport av
+{-# INLINE delegationSupport #-}
+delegationSupport = case accountVersion @av of
+    SAccountV0 -> SAVDelegetionNotSupported
+    SAccountV1 -> SAVDelegationSupported
+    SAccountV2 -> SAVDelegationSupported
 
 -- |Whether the protocol version supports memo functionality.
 -- (Memos are supported in 'P2' onwards.)
@@ -213,6 +282,7 @@ supportsDelegation SP1 = False
 supportsDelegation SP2 = False
 supportsDelegation SP3 = False
 supportsDelegation SP4 = True
+supportsDelegation SP5 = True
 
 -- |Whether the protocol version supports V1 smart contracts.
 -- (V1 contracts are supported in 'P4' onwards.)
@@ -221,3 +291,4 @@ supportsV1Contracts SP1 = False
 supportsV1Contracts SP2 = False
 supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
+supportsV1Contracts SP5 = True

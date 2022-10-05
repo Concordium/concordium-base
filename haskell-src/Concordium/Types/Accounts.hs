@@ -11,6 +11,9 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+-- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
+-- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |Types for representing the results of consensus queries.
 module Concordium.Types.Accounts (
@@ -64,8 +67,8 @@ module Concordium.Types.Accounts (
     delegationTarget,
     delegationPendingChange,
     AccountStake (..),
-    getAccountStake,
-    putAccountStake,
+    serializeAccountStake,
+    deserializeAccountStake,
     AccountStakeHash,
     getAccountStakeHash,
     AccountInfo (..),
@@ -78,7 +81,7 @@ import Data.Aeson.Types (Parser)
 import qualified Data.Map as Map
 import Data.Serialize
 import Data.Time
-import Lens.Micro.Platform (makeClassy, makeLenses, (^.), Lens', lens)
+import Lens.Micro.Platform (Lens', lens, makeClassy, makeLenses, (^.))
 
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -120,15 +123,16 @@ makeClassy ''BakerInfo
 
 -- |Additional information about a baking pool.
 -- This information is added with the introduction of delegation.
-data BakerPoolInfo = -- |The introduction of delegation requires information about the pool.
-    BakerPoolInfo
-    { -- |Whether the pool allows delegators.
-      _poolOpenStatus :: !OpenStatus,
-      -- |The URL that links to the metadata about the pool.
-      _poolMetadataUrl :: !UrlText,
-      -- |The commission rates charged by the pool owner.
-      _poolCommissionRates :: !CommissionRates
-    }
+data BakerPoolInfo
+    = -- |The introduction of delegation requires information about the pool.
+      BakerPoolInfo
+      { -- |Whether the pool allows delegators.
+        _poolOpenStatus :: !OpenStatus,
+        -- |The URL that links to the metadata about the pool.
+        _poolMetadataUrl :: !UrlText,
+        -- |The commission rates charged by the pool owner.
+        _poolCommissionRates :: !CommissionRates
+      }
     deriving (Eq, Show)
 
 instance Serialize BakerPoolInfo where
@@ -170,27 +174,28 @@ instance FromJSON BakerPoolInfo where
 data BakerInfoEx (av :: AccountVersion) where
     BakerInfoExV0 :: !BakerInfo -> BakerInfoEx 'AccountV0
     BakerInfoExV1 ::
+        AVSupportsDelegation av =>
         { -- |The baker ID and keys.
           _bieBakerInfo :: !BakerInfo,
           -- |The baker pool info.
           _bieBakerPoolInfo :: !BakerPoolInfo
         } ->
-        BakerInfoEx 'AccountV1
+        BakerInfoEx av
 
 deriving instance Eq (BakerInfoEx av)
 deriving instance Show (BakerInfoEx av)
 
 -- |Lens for '_bieBakerInfo'
 {-# INLINE bieBakerInfo #-}
-bieBakerInfo :: Lens' (BakerInfoEx 'AccountV1) BakerInfo
+bieBakerInfo :: AVSupportsDelegation av => Lens' (BakerInfoEx av) BakerInfo
 bieBakerInfo =
-  lens _bieBakerInfo (\bie x -> bie{_bieBakerInfo = x})
+    lens _bieBakerInfo (\bie x -> bie{_bieBakerInfo = x})
 
 -- |Lens for '_bieBakerPoolInfo'
 {-# INLINE bieBakerPoolInfo #-}
-bieBakerPoolInfo :: Lens' (BakerInfoEx 'AccountV1) BakerPoolInfo
+bieBakerPoolInfo :: AVSupportsDelegation av => Lens' (BakerInfoEx av) BakerPoolInfo
 bieBakerPoolInfo =
-  lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
+    lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
 -- |Note that the serialization of 'BakerInfoEx' matches exactly
 -- the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve
@@ -199,9 +204,9 @@ bieBakerPoolInfo =
 instance forall av. IsAccountVersion av => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
     put BakerInfoExV1{..} = put _bieBakerInfo >> put _bieBakerPoolInfo
-    get = case accountVersion @av of
-        SAccountV0 -> BakerInfoExV0 <$> get
-        SAccountV1 -> do
+    get = case delegationSupport @av of
+        SAVDelegetionNotSupported -> BakerInfoExV0 <$> get
+        SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
             return BakerInfoExV1{..}
@@ -225,7 +230,7 @@ instance HasBakerPoolInfo (BakerInfoEx 'AccountV1) where
 -- resetting of the Epoch counter.
 data PendingChangeEffective (av :: AccountVersion) where
     PendingChangeEffectiveV0 :: !Epoch -> PendingChangeEffective 'AccountV0
-    PendingChangeEffectiveV1 :: !Timestamp -> PendingChangeEffective 'AccountV1
+    PendingChangeEffectiveV1 :: AVSupportsDelegation av => !Timestamp -> PendingChangeEffective av
 
 deriving instance Eq (PendingChangeEffective av)
 deriving instance Ord (PendingChangeEffective av)
@@ -237,6 +242,7 @@ instance IsAccountVersion av => Serialize (PendingChangeEffective av) where
     get = case accountVersion @av of
         SAccountV0 -> PendingChangeEffectiveV0 <$> get
         SAccountV1 -> PendingChangeEffectiveV1 <$> get
+        SAccountV2 -> PendingChangeEffectiveV1 <$> get
 
 -- |Pending changes to the baker or delegation associated with an account.
 data StakePendingChange' effectiveTime
@@ -307,58 +313,57 @@ getAccountBaker = do
 
 data AccountDelegation (av :: AccountVersion) where
     AccountDelegationV1 ::
+        (AVSupportsDelegation av) =>
         { _delegationIdentity :: !DelegatorId,
           _delegationStakedAmount :: !Amount,
           _delegationStakeEarnings :: !Bool,
           _delegationTarget :: !DelegationTarget,
-          _delegationPendingChange :: !(StakePendingChange 'AccountV1)
+          _delegationPendingChange :: !(StakePendingChange av)
         } ->
-        AccountDelegation 'AccountV1
+        AccountDelegation av
 
 deriving instance Eq (AccountDelegation av)
 deriving instance Show (AccountDelegation av)
 
 -- |Lens for '_delegationIdentity'
 {-# INLINE delegationIdentity #-}
-delegationIdentity :: Lens' (AccountDelegation 'AccountV1) DelegatorId
+delegationIdentity :: Lens' (AccountDelegation av) DelegatorId
 delegationIdentity = lens _delegationIdentity (\ad x -> ad{_delegationIdentity = x})
 
 -- |Lens for '_delegationStakedAmount'
 {-# INLINE delegationStakedAmount #-}
-delegationStakedAmount :: Lens' (AccountDelegation 'AccountV1) Amount
+delegationStakedAmount :: Lens' (AccountDelegation av) Amount
 delegationStakedAmount = lens _delegationStakedAmount (\ad x -> ad{_delegationStakedAmount = x})
 
 -- |Lens for '_delegationStakeEarnings'
 {-# INLINE delegationStakeEarnings #-}
-delegationStakeEarnings :: Lens' (AccountDelegation 'AccountV1) Bool
+delegationStakeEarnings :: Lens' (AccountDelegation av) Bool
 delegationStakeEarnings = lens _delegationStakeEarnings (\ad x -> ad{_delegationStakeEarnings = x})
 
 -- |Lens for '_delegationTarget'
 {-# INLINE delegationTarget #-}
-delegationTarget :: Lens' (AccountDelegation 'AccountV1) DelegationTarget
+delegationTarget :: Lens' (AccountDelegation av) DelegationTarget
 delegationTarget = lens _delegationTarget (\ad x -> ad{_delegationTarget = x})
 
 -- |Lens for '_delegationPendingChange'
 {-# INLINE delegationPendingChange #-}
-delegationPendingChange :: Lens' (AccountDelegation 'AccountV1) (StakePendingChange 'AccountV1)
+delegationPendingChange :: Lens' (AccountDelegation av) (StakePendingChange av)
 delegationPendingChange = lens _delegationPendingChange (\ad x -> ad{_delegationPendingChange = x})
 
-instance forall av. IsAccountVersion av => Serialize (AccountDelegation av) where
+instance forall av. (IsAccountVersion av, AVSupportsDelegation av) => Serialize (AccountDelegation av) where
     put AccountDelegationV1{..} = do
         put _delegationIdentity
         put _delegationStakedAmount
         put _delegationStakeEarnings
         put _delegationTarget
         put _delegationPendingChange
-    get = case accountVersion @av of
-        SAccountV0 -> fail "Cannot get account delegation in this protocol version"
-        SAccountV1 -> do
-            _delegationIdentity <- get
-            _delegationStakedAmount <- get
-            _delegationStakeEarnings <- get
-            _delegationTarget <- get
-            _delegationPendingChange <- get
-            return AccountDelegationV1{..}
+    get = do
+        _delegationIdentity <- get
+        _delegationStakedAmount <- get
+        _delegationStakeEarnings <- get
+        _delegationTarget <- get
+        _delegationPendingChange <- get
+        return AccountDelegationV1{..}
 
 -- |Whether an account stakes as a baker, delegates to a baker, or neither.
 data AccountStake (av :: AccountVersion) where
@@ -376,14 +381,14 @@ data AccountStake (av :: AccountVersion) where
 --
 -- For 'AccountV1', a byte is written that records whether the stake is as a baker (0) or
 -- delegated (1).  Following this, the baker or delegation is simply serialized.
-putAccountStake :: forall av. IsAccountVersion av => Putter (AccountStake av)
-putAccountStake AccountStakeNone = return ()
-putAccountStake (AccountStakeBaker bkr) = case accountVersion @av of
-    SAccountV0 -> putAccountBaker bkr
-    SAccountV1 -> do
+serializeAccountStake :: forall av. IsAccountVersion av => Putter (AccountStake av)
+serializeAccountStake AccountStakeNone = return ()
+serializeAccountStake (AccountStakeBaker bkr) = case delegationSupport @av of
+    SAVDelegetionNotSupported -> putAccountBaker bkr
+    SAVDelegationSupported -> do
         putWord8 0
         putAccountBaker bkr
-putAccountStake (AccountStakeDelegate dlg) = do
+serializeAccountStake (AccountStakeDelegate dlg@AccountDelegationV1{}) = do
     -- Only applies for AccountV1
     putWord8 1
     put dlg
@@ -395,10 +400,10 @@ putAccountStake (AccountStakeDelegate dlg) = do
 -- For 'AccountV0', the baker is simply deserialized. (Delegation is not possible.)
 --
 -- For 'AccountV1', the first byte indicates whether a baker (0) or a delegation (1) is read.
-getAccountStake :: forall av. IsAccountVersion av => Get (AccountStake av)
-getAccountStake = case accountVersion @av of
-    SAccountV0 -> AccountStakeBaker <$> getAccountBaker
-    SAccountV1 ->
+deserializeAccountStake :: forall av. IsAccountVersion av => Get (AccountStake av)
+deserializeAccountStake = case delegationSupport @av of
+    SAVDelegetionNotSupported -> AccountStakeBaker <$> getAccountBaker
+    SAVDelegationSupported ->
         getWord8 >>= \case
             0 -> AccountStakeBaker <$> getAccountBaker
             1 -> AccountStakeDelegate <$> get
@@ -453,11 +458,42 @@ instance HashableTo (AccountStakeHash 'AccountV1) (AccountStake 'AccountV1) wher
                             put _delegationTarget
                         )
 
+-- |Hash of 'AccountStakeNone' in 'AccountV2'.
+accountStakeNoneHashV2 :: AccountStakeHash 'AccountV2
+{-# NOINLINE accountStakeNoneHashV2 #-}
+accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "NoStake"
+
+-- |The 'AccountV2' hashing of 'AccountStake' uses tags to enforce distinction between the cases.
+instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
+    getHash AccountStakeNone = accountStakeNoneHashV2
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakedAmount
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                            put _bakerPendingChange
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationStakedAmount
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                        )
+
 -- |Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. IsAccountVersion av => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
     SAccountV0 -> getHash
     SAccountV1 -> getHash
+    SAccountV2 -> getHash
 
 -- |A representation type (used for queries) for the staking status of an account.
 -- This representation is agnostic to the protocol version and represents pending change times
@@ -508,7 +544,7 @@ toAccountStakingInfo _ (AccountStakeDelegate AccountDelegationV1{..}) =
           asiDelegationPendingChange = pcTime <$> _delegationPendingChange
         }
   where
-    pcTime :: PendingChangeEffective 'AccountV1 -> UTCTime
+    pcTime :: AVSupportsDelegation av => PendingChangeEffective av -> UTCTime
     pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
 
 pendingChangeToJSON :: KeyValue kv => StakePendingChange' UTCTime -> [kv]

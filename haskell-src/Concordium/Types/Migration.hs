@@ -30,6 +30,7 @@ migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{
         }
   where
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
+migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 
 -- |Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -55,6 +56,7 @@ migrateMintDistribution StateMigrationParametersP1P2 mint = mint
 migrateMintDistribution StateMigrationParametersP2P3 mint = mint
 migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
     MintDistribution{_mdMintPerSlot = MintPerSlotForCPV0None, ..}
+migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 
 -- |Apply a state migration to a 'PoolParameters' structure.
 --
@@ -69,6 +71,7 @@ migratePoolParameters StateMigrationParametersP1P2 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP2P3 poolParams = poolParams
 migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
+migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 
 -- |Apply a state migration to a 'ChainParameters' structure.
 --
@@ -97,6 +100,7 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
   where
     RewardParameters{..} = _cpRewardParameters
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
+migrateChainParameters StateMigrationParametersP4ToP5 cps = cps
 
 -- |Apply a state migration to an 'AccountStake' structure.
 --
@@ -121,6 +125,25 @@ migrateAccountStake (StateMigrationParametersP3ToP4 migration) =
                       _bakerPendingChange = migratePendingChangeEffective migration <$> _bakerPendingChange,
                       ..
                     }
+migrateAccountStake StateMigrationParametersP4ToP5 =
+    \case
+        AccountStakeNone -> AccountStakeNone
+        AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV1{..}, ..} ->
+            AccountStakeBaker
+                AccountBaker
+                    { _accountBakerInfo = BakerInfoExV1{..},
+                      _bakerPendingChange = migratePC <$> _bakerPendingChange,
+                      ..
+                    }
+        AccountStakeDelegate AccountDelegationV1{..} ->
+            AccountStakeDelegate
+                AccountDelegationV1
+                    { _delegationPendingChange = migratePC <$> _delegationPendingChange,
+                      ..
+                    }
+  where
+    migratePC :: PendingChangeEffective 'AccountV1 -> PendingChangeEffective 'AccountV2
+    migratePC (PendingChangeEffectiveV1 ts) = PendingChangeEffectiveV1 ts
 
 -- |Migrate time of the effective change from V0 to V1 accounts. Currently this
 -- translates times relative to genesis to times relative to the unix epoch.
@@ -145,4 +168,5 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
   NoChange -> NoChange
   ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
   RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
+migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap (\(PendingChangeEffectiveV1 ts) -> PendingChangeEffectiveV1 ts)
   
