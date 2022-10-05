@@ -190,7 +190,7 @@ pub struct TransactionHeader {
     pub expiry:        TransactionTime,
 }
 
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
 #[serde(transparent)]
 /// An account transaction payload that has not yet been deserialized.
 /// This is a simple wrapper around Vec<u8> with bespoke serialization.
