@@ -8,7 +8,7 @@ use crypto_common::*;
 use curve_arithmetic::Curve;
 use dialoguer::{Confirm, Input};
 use elgamal::{PublicKey, SecretKey};
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use id::types::*;
 use keygen_bls::{keygen_bls, keygen_bls_deprecated};
 use pairing::bls12_381::{Bls12, Fr, G1, G2};

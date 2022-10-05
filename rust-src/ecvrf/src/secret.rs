@@ -3,9 +3,9 @@
 use crate::{constants::*, errors::*, public::*};
 use core::fmt::Debug;
 use crypto_common::*;
-use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
+use curve25519_dalek::{constants, scalar::Scalar};
 use rand::{CryptoRng, Rng};
-use sha2::Sha512;
+use sha2::{digest::Digest, Sha512};
 use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
@@ -162,7 +162,10 @@ impl ExpandedSecretKey {
 
     /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2>
     fn nonce_generation(&self, h_string: &[u8]) -> Scalar {
-        let h: Sha512 = Sha512::new().chain(self.nonce).chain(h_string);
-        Scalar::from_hash(h)
+        let digest = Sha512::new()
+            .chain_update(self.nonce)
+            .chain_update(h_string)
+            .finalize();
+        Scalar::from_bytes_mod_order_wide(&digest.into())
     }
 }
