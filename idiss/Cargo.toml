@@ -56,10 +56,6 @@ version = "0"
 path = "../rust-src/id"
 version = "0"
 
-[dependencies.ps_sig]
-path = "../rust-src/ps_sig"
-version = "0"
-
 [build-dependencies]
 napi-build = "*"
 
