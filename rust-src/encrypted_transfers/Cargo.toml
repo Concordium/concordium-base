@@ -7,7 +7,7 @@ license-file = "../../LICENSE"
 
 [dependencies]
 ff = "0.5"
-itertools = "0.9"
+itertools = "0.10"
 pairing = "0.15"
 serde = "1.0"
 libc = "0.2"

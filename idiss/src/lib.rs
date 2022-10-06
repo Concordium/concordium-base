@@ -195,7 +195,7 @@ fn create_identity_object(
     let ip_private_key_str = std::str::from_utf8(ip_private_key_bytes)?;
     let ip_cdi_private_key_str = std::str::from_utf8(ip_cdi_private_key_bytes)?;
 
-    let ip_private_key: ps_sig::SecretKey<Bls12> =
+    let ip_private_key: id::ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;
     let ip_cdi_private_key: ed25519_dalek::SecretKey = base16_decode_string(ip_cdi_private_key_str)
         .context("Could not parse ip_cdi_private_key")?;
@@ -261,7 +261,7 @@ fn create_identity_object_v1(
         serde_json::from_slice(alist_bytes).context("Could not parse attribute list")?;
     let ip_private_key_str = std::str::from_utf8(ip_private_key_bytes)?;
 
-    let ip_private_key: ps_sig::SecretKey<Bls12> =
+    let ip_private_key: id::ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;
 
     let request: PreIdentityObjectV1<Bls12, ExampleCurve> =

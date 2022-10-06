@@ -38,7 +38,6 @@ bitvec = "0.22"
 crossterm = "0.22"
 anyhow = "1.0"
 
-
 [dependencies.ed25519_hd_key_derivation]
 path = "../rust-src/ed25519_hd_key_derivation"
 version = "1.0.0"
@@ -82,10 +81,6 @@ version = "0"
 
 [dependencies.ps_sig]
 path = "../rust-src/ps_sig"
-version = "0"
-
-[dependencies.eddsa_ed25519]
-path = "../rust-src/eddsa_ed25519"
 version = "0"
 
 [dependencies.ecvrf]

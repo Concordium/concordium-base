@@ -15,12 +15,6 @@ libc = "0.2"
 anyhow = "1.0"
 thiserror = "1.0"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-clear_on_drop = { version = "0.2", features = [ "no_cc" ] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-clear_on_drop = { version = "0.2" }
-
 [dependencies.ffi_helpers]
 path = "../ffi_helpers"
 version = "0"
