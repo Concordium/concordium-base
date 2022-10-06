@@ -574,10 +574,10 @@ data PendingUpdateEffect =
   | PUEElectionDifficulty !ElectionDifficulty
   -- |Updates to the euro:energy exchange rate.
   | PUEEuroPerEnergy !ExchangeRate
-  -- |Updates to the GTU:euro exchange rate.
-  | PUEMicroGTUPerEuro !ExchangeRate
+  -- |Updates to the CCD:euro exchange rate.
+  | PUEMicroCCDPerEuro !ExchangeRate
   -- |Updates to the foundation account.
-  | PUEFoundationAccount !AccountIndex
+  | PUEFoundationAccount !AccountAddress
   -- |Updates to the mint distribution.
   | PUEMintDistributionV0 !(MintDistribution 'ChainParametersV0)
   -- |Updates to the mint distribution.
@@ -612,7 +612,7 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers {
     _nusnElectionDifficulty :: !U.UpdateSequenceNumber,
     -- |Updates to the euro:energy exchange rate.
     _nusnEuroPerEnergy :: !U.UpdateSequenceNumber,
-    -- |Updates to the GTU:euro exchange rate.
+    -- |Updates to the CCD:euro exchange rate.
     _nusnMicroCCDPerEuro :: !U.UpdateSequenceNumber,
     -- |Updates to the foundation account.
     _nusnFoundationAccount :: !U.UpdateSequenceNumber,
@@ -633,45 +633,6 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers {
     -- |Updates to time parameters for chain parameters version 1.
     _nusnTimeParameters :: !U.UpdateSequenceNumber
 } deriving (Show, Eq)
-
--- | Flatten all of the pending update queues into one queue ordered by effective time.
-flattenUpdateQueues :: forall cpv. IsChainParametersVersion cpv => UQ.PendingUpdates cpv -> [(TransactionTime, PendingUpdateEffect)]
-flattenUpdateQueues UQ.PendingUpdates{..} =
-  queueMapper PUERootKeys _pRootKeysUpdateQueue `merge`
-  queueMapper PUELevel1Keys _pLevel1KeysUpdateQueue `merge`
-  (case chainParametersVersion @cpv of
-    SCPV0 -> queueMapper PUELevel2KeysV0 _pLevel2KeysUpdateQueue
-    SCPV1 -> queueMapper PUELevel2KeysV1 _pLevel2KeysUpdateQueue) `merge`
-  queueMapper PUEProtocol _pProtocolQueue `merge`
-  queueMapper PUEElectionDifficulty _pElectionDifficultyQueue `merge`
-  queueMapper PUEEuroPerEnergy _pEuroPerEnergyQueue `merge`
-  queueMapper PUEMicroGTUPerEuro _pMicroGTUPerEuroQueue `merge`
-  queueMapper PUEFoundationAccount _pFoundationAccountQueue `merge`
-  (case chainParametersVersion @cpv of
-    SCPV0 -> queueMapper PUEMintDistributionV0 _pMintDistributionQueue
-    SCPV1 -> queueMapper PUEMintDistributionV1 _pMintDistributionQueue) `merge`
-  queueMapper PUETransactionFeeDistribution _pTransactionFeeDistributionQueue `merge`
-  queueMapper PUEGASRewards _pGASRewardsQueue `merge`
-  (case chainParametersVersion @cpv of
-    SCPV0 -> queueMapper PUEPoolParametersV0 _pPoolParametersQueue
-    SCPV1 -> queueMapper PUEPoolParametersV1 _pPoolParametersQueue) `merge`
-  queueMapper PUEAddAnonymityRevoker _pAddAnonymityRevokerQueue `merge`
-  queueMapper PUEAddIdentityProvider _pAddIdentityProviderQueue `merge`
-  queueMapperForCPV1 PUECooldownParameters _pCooldownParametersQueue `merge`
-  queueMapperForCPV1 PUETimeParameters _pTimeParametersQueue
-  where
-    queueMapper :: (a -> PendingUpdateEffect) -> UQ.UpdateQueue a -> [(TransactionTime, PendingUpdateEffect)]
-    queueMapper constructor UQ.UpdateQueue {..} = second constructor <$> _uqQueue
-
-    queueMapperForCPV1 :: (a -> PendingUpdateEffect) -> UQ.UpdateQueueForCPV1 cpv a -> [(TransactionTime, PendingUpdateEffect)]
-    queueMapperForCPV1 _ NothingForCPV1 = []
-    queueMapperForCPV1 constructor (JustForCPV1 queue) = queueMapper constructor queue
-
-    merge :: [(TransactionTime, PendingUpdateEffect)] -> [(TransactionTime, PendingUpdateEffect)] -> [(TransactionTime, PendingUpdateEffect)]
-    merge [] y = y
-    merge x [] = x
-    merge (x:xs) (y:ys) | fst y < fst x = y : merge (x:xs) ys
-    merge (x:xs) (y:ys)                 = x : merge xs (y:ys)
 
 -- | Build the struct containing all of the next available sequence numbers for updating any of the
 -- chain parameters
