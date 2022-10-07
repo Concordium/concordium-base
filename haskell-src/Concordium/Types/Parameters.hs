@@ -709,6 +709,10 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
 
 makeLenses ''ChainParameters'
 
+-- |An existentially qualified chain parameters variant that is useful where we
+-- need to return chain parameters in queries.
+data EChainParameters = forall (cpv :: ChainParametersVersion) . IsChainParametersVersion cpv => EChainParameters (ChainParameters' cpv)
+
 -- |Chain parameters for a specific 'ProtocolVersion'.
 type ChainParameters (pv :: ProtocolVersion) = ChainParameters' (ChainParametersVersionFor pv)
 
