@@ -47,8 +47,11 @@ module Concordium.Types.Accounts (
     bieBakerInfo,
     bieBakerPoolInfo,
     PendingChangeEffective (..),
+    pendingChangeEffectiveTimestamp,
+    coercePendingChangeEffectiveV1,
     StakePendingChange' (..),
     StakePendingChange,
+    stakePendingChangeTimestamp,
     AccountBaker (..),
     -- |The amount staked by the baker.
     stakedAmount,
@@ -58,8 +61,8 @@ module Concordium.Types.Accounts (
     accountBakerInfo,
     -- |The pending change (if any) to the baker's status.
     bakerPendingChange,
-    putAccountBaker,
-    getAccountBaker,
+    serializeAccountBaker,
+    deserializeAccountBaker,
     AccountDelegation (..),
     delegationIdentity,
     delegationStakedAmount,
@@ -205,7 +208,7 @@ instance forall av. IsAccountVersion av => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
     put BakerInfoExV1{..} = put _bieBakerInfo >> put _bieBakerPoolInfo
     get = case delegationSupport @av of
-        SAVDelegetionNotSupported -> BakerInfoExV0 <$> get
+        SAVDelegationNotSupported -> BakerInfoExV0 <$> get
         SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
@@ -215,7 +218,7 @@ instance HasBakerInfo (BakerInfoEx av) where
     bakerInfo upd (BakerInfoExV0 bi) = BakerInfoExV0 <$> upd bi
     bakerInfo upd bie@BakerInfoExV1{..} = (\bi' -> bie{_bieBakerInfo = bi'}) <$> upd _bieBakerInfo
 
-instance HasBakerPoolInfo (BakerInfoEx 'AccountV1) where
+instance (AVSupportsDelegation av) => HasBakerPoolInfo (BakerInfoEx av) where
     bakerPoolInfo upd bie@BakerInfoExV1{..} =
         (\bpi' -> bie{_bieBakerPoolInfo = bpi'})
             <$> upd _bieBakerPoolInfo
@@ -239,10 +242,18 @@ deriving instance Show (PendingChangeEffective av)
 instance IsAccountVersion av => Serialize (PendingChangeEffective av) where
     put (PendingChangeEffectiveV0 epoch) = put epoch
     put (PendingChangeEffectiveV1 timestamp) = put timestamp
-    get = case accountVersion @av of
-        SAccountV0 -> PendingChangeEffectiveV0 <$> get
-        SAccountV1 -> PendingChangeEffectiveV1 <$> get
-        SAccountV2 -> PendingChangeEffectiveV1 <$> get
+    get = case delegationSupport @av of
+        SAVDelegationNotSupported -> PendingChangeEffectiveV0 <$> get
+        SAVDelegationSupported -> PendingChangeEffectiveV1 <$> get
+
+-- |Get the 'Timestamp' from a 'PendingChangeEffective' if the account version supports delegation.
+pendingChangeEffectiveTimestamp :: (AVSupportsDelegation av) => PendingChangeEffective av -> Timestamp
+{-# INLINE pendingChangeEffectiveTimestamp #-}
+pendingChangeEffectiveTimestamp (PendingChangeEffectiveV1 ts) = ts
+
+-- |Convert a 'PendingChangeEffective' between account versions that support delegation.
+coercePendingChangeEffectiveV1 :: (AVSupportsDelegation av1, AVSupportsDelegation av2) => PendingChangeEffective av1 -> PendingChangeEffective av2
+coercePendingChangeEffectiveV1 (PendingChangeEffectiveV1 ts) = PendingChangeEffectiveV1 ts
 
 -- |Pending changes to the baker or delegation associated with an account.
 data StakePendingChange' effectiveTime
@@ -268,6 +279,10 @@ instance Serialize effectiveTime => Serialize (StakePendingChange' effectiveTime
 
 type StakePendingChange (av :: AccountVersion) = StakePendingChange' (PendingChangeEffective av)
 
+-- |Coerce a 'StakePendingChange' to use 'Timestamp' for the effective time.
+stakePendingChangeTimestamp :: forall av. (AVSupportsDelegation av, IsAccountVersion av) => StakePendingChange av -> StakePendingChange' Timestamp
+stakePendingChangeTimestamp = fmap pendingChangeEffectiveTimestamp
+
 -- |A baker associated with an account.
 data AccountBaker (av :: AccountVersion) = AccountBaker
     { -- |The amount staked by the baker.
@@ -286,20 +301,20 @@ makeLenses ''AccountBaker
 instance HasBakerInfo (AccountBaker av) where
     bakerInfo = accountBakerInfo . bakerInfo
 
-instance HasBakerPoolInfo (AccountBaker 'AccountV1) where
+instance (AVSupportsDelegation av) => HasBakerPoolInfo (AccountBaker av) where
     bakerPoolInfo = accountBakerInfo . bakerPoolInfo
 
 -- |Serialize an 'AccountBaker'
-putAccountBaker :: IsAccountVersion av => Putter (AccountBaker av)
-putAccountBaker AccountBaker{..} = do
+serializeAccountBaker :: IsAccountVersion av => Putter (AccountBaker av)
+serializeAccountBaker AccountBaker{..} = do
     put _stakedAmount
     put _stakeEarnings
     put _accountBakerInfo
     put _bakerPendingChange
 
 -- |Deserialize an 'AccountBaker'.
-getAccountBaker :: IsAccountVersion av => Get (AccountBaker av)
-getAccountBaker = do
+deserializeAccountBaker :: IsAccountVersion av => Get (AccountBaker av)
+deserializeAccountBaker = do
     _stakedAmount <- get
     _stakeEarnings <- get
     _accountBakerInfo <- get
@@ -384,10 +399,10 @@ data AccountStake (av :: AccountVersion) where
 serializeAccountStake :: forall av. IsAccountVersion av => Putter (AccountStake av)
 serializeAccountStake AccountStakeNone = return ()
 serializeAccountStake (AccountStakeBaker bkr) = case delegationSupport @av of
-    SAVDelegetionNotSupported -> putAccountBaker bkr
+    SAVDelegationNotSupported -> serializeAccountBaker bkr
     SAVDelegationSupported -> do
         putWord8 0
-        putAccountBaker bkr
+        serializeAccountBaker bkr
 serializeAccountStake (AccountStakeDelegate dlg@AccountDelegationV1{}) = do
     -- Only applies for AccountV1
     putWord8 1
@@ -402,10 +417,10 @@ serializeAccountStake (AccountStakeDelegate dlg@AccountDelegationV1{}) = do
 -- For 'AccountV1', the first byte indicates whether a baker (0) or a delegation (1) is read.
 deserializeAccountStake :: forall av. IsAccountVersion av => Get (AccountStake av)
 deserializeAccountStake = case delegationSupport @av of
-    SAVDelegetionNotSupported -> AccountStakeBaker <$> getAccountBaker
+    SAVDelegationNotSupported -> AccountStakeBaker <$> deserializeAccountBaker
     SAVDelegationSupported ->
         getWord8 >>= \case
-            0 -> AccountStakeBaker <$> getAccountBaker
+            0 -> AccountStakeBaker <$> deserializeAccountBaker
             1 -> AccountStakeDelegate <$> get
             _ -> fail "Invalid stake type"
 
@@ -521,7 +536,7 @@ data AccountStakingInfo
 -- |Convert an 'AccountStake' to an 'AccountStakingInfo'.
 -- This takes a function for converting an epoch time to a 'UTCTime' (of the start of the epoch).
 -- (This is used for rendering cooldowns prior to 'P4'.)
-toAccountStakingInfo :: (Epoch -> UTCTime) -> AccountStake av -> AccountStakingInfo
+toAccountStakingInfo :: forall av. IsAccountVersion av => (Epoch -> UTCTime) -> AccountStake av -> AccountStakingInfo
 toAccountStakingInfo _ AccountStakeNone = AccountStakingNone
 toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
     AccountStakingBaker

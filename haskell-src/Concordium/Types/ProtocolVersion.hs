@@ -6,6 +6,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+-- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
+-- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
@@ -69,8 +72,6 @@ type family PVNat (pv :: ProtocolVersion) :: Nat where
     PVNat 'P3 = 3
     PVNat 'P4 = 4
     PVNat 'P5 = 5
-
-type SupportsDelegation pv = 4 <= PVNat pv
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64
@@ -254,20 +255,43 @@ type family AVSupportsDelegationB (av :: AccountVersion) :: DelegationSupport wh
 -- TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
 type AVSupportsDelegation (av :: AccountVersion) = AVSupportsDelegationB av ~ 'DelegationSupported av
 
+-- |Constraint that a protocol version supports delegation.
+type SupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
+
 -- |A GADT that covers the cases for whether an account version supports delegation or not.
 -- The case that it doesn't is limited to 'AccountV0', and in the other case, this provides an
 -- instance of 'AVSupportsDelegation'.
 data SAVDelegationSupport (av :: AccountVersion) where
-    SAVDelegetionNotSupported :: SAVDelegationSupport 'AccountV0
+    SAVDelegationNotSupported :: SAVDelegationSupport 'AccountV0
     SAVDelegationSupported :: AVSupportsDelegation av => SAVDelegationSupport av
 
 -- |Determine if delegation is supported at the account version.
 delegationSupport :: forall av. (IsAccountVersion av) => SAVDelegationSupport av
 {-# INLINE delegationSupport #-}
 delegationSupport = case accountVersion @av of
-    SAccountV0 -> SAVDelegetionNotSupported
+    SAccountV0 -> SAVDelegationNotSupported
     SAccountV1 -> SAVDelegationSupported
     SAccountV2 -> SAVDelegationSupported
+
+-- |A GADT that witnesses the chain parameter version for a protocol version that supports delegation.
+-- Currently, all protocol versions that support delegation (P4 and P5) have chain parameters
+-- version 1.
+data DelegationChainParameters (pv :: ProtocolVersion) where
+    DelegationChainParametersV1 :: (ChainParametersVersionFor pv ~ 'ChainParametersV1) => DelegationChainParameters pv
+
+-- |Constrain the chain parameters given that the protocol version supports delegation.
+-- Currently, all protocol versions that support delegation (P4 and P5) have chain parameters
+-- version 1.
+--
+-- This should be used in a context where @SupportsDelegation pv@ is known and a constraint of
+-- @ChainParametersVersionFor pv ~ 'ChainParametersV1@ is required:
+--
+-- > case delegationChainParameters @pv of
+-- >    DelegationChainParametersV1 -> {- here: ChainParametersVersionFor pv ~ 'ChainParametersV1 -}
+delegationChainParameters :: forall pv. (IsProtocolVersion pv, SupportsDelegation pv) => DelegationChainParameters pv
+delegationChainParameters = case protocolVersion @pv of
+    SP4 -> DelegationChainParametersV1
+    SP5 -> DelegationChainParametersV1
 
 -- |Whether the protocol version supports memo functionality.
 -- (Memos are supported in 'P2' onwards.)

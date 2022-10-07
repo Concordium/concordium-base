@@ -132,18 +132,15 @@ migrateAccountStake StateMigrationParametersP4ToP5 =
             AccountStakeBaker
                 AccountBaker
                     { _accountBakerInfo = BakerInfoExV1{..},
-                      _bakerPendingChange = migratePC <$> _bakerPendingChange,
+                      _bakerPendingChange = coercePendingChangeEffectiveV1 <$> _bakerPendingChange,
                       ..
                     }
         AccountStakeDelegate AccountDelegationV1{..} ->
             AccountStakeDelegate
                 AccountDelegationV1
-                    { _delegationPendingChange = migratePC <$> _delegationPendingChange,
+                    { _delegationPendingChange = coercePendingChangeEffectiveV1 <$> _delegationPendingChange,
                       ..
                     }
-  where
-    migratePC :: PendingChangeEffective 'AccountV1 -> PendingChangeEffective 'AccountV2
-    migratePC (PendingChangeEffectiveV1 ts) = PendingChangeEffectiveV1 ts
 
 -- |Migrate time of the effective change from V0 to V1 accounts. Currently this
 -- translates times relative to genesis to times relative to the unix epoch.
@@ -168,5 +165,4 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
   NoChange -> NoChange
   ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
   RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
-migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap (\(PendingChangeEffectiveV1 ts) -> PendingChangeEffectiveV1 ts)
-  
+migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
