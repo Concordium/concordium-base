@@ -21,7 +21,6 @@ import qualified Data.Sequence as Seq
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import Data.Word
-import Data.Bifunctor (second)
 
 import Concordium.Types
 import Concordium.Types.Accounts
