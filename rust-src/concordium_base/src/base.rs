@@ -427,6 +427,7 @@ pub struct AbsoluteBlockHeight {
 
 impl AbsoluteBlockHeight {
     /// Get the next height.
+    #[must_use]
     pub fn next(self) -> Self {
         AbsoluteBlockHeight {
             height: 1 + self.height,
