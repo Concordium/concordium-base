@@ -427,6 +427,7 @@ pub struct AbsoluteBlockHeight {
 
 impl AbsoluteBlockHeight {
     /// Get the next height.
+    #[must_use]
     pub fn next(self) -> Self {
         AbsoluteBlockHeight {
             height: 1 + self.height,
@@ -882,18 +883,27 @@ pub struct ExchangeRate {
     pub denominator: u64,
 }
 
+impl ExchangeRate {
+    /// Attempt to construct an exchange rate from a numerator and denominator.
+    /// The numerator and denominator must both be non-zero, and they have to be
+    /// in reduced form.
+    pub fn new(numerator: u64, denominator: u64) -> Option<Self> {
+        if numerator != 0 && denominator != 0 && num::integer::gcd(numerator, denominator) == 1 {
+            Some(Self {
+                numerator,
+                denominator,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 impl Deserial for ExchangeRate {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let numerator = source.get()?;
         let denominator = source.get()?;
-        anyhow::ensure!(
-            numerator != 0 && denominator != 0 && num::integer::gcd(numerator, denominator) == 1,
-            "Invalid exchange rate."
-        );
-        Ok(Self {
-            numerator,
-            denominator,
-        })
+        Self::new(numerator, denominator).ok_or_else(|| anyhow::anyhow!("Invalid exchange rate."))
     }
 }
 
@@ -909,11 +919,27 @@ pub struct LeverageFactor {
 }
 
 impl LeverageFactor {
-    /// Construct an integral leverage factor.
-    pub fn new(factor: u64) -> Self {
+    /// Construct an integral leverage factor that is assumed to be at least 1.
+    pub fn new_integral(factor: u64) -> Self {
         Self {
             numerator:   factor,
             denominator: 1,
+        }
+    }
+
+    /// Construct a new leverage factor from a numerator and denominator,
+    /// checking that it is well-formed.
+    pub fn new(numerator: u64, denominator: u64) -> Option<Self> {
+        if numerator >= denominator
+            && denominator != 0
+            && num::integer::gcd(numerator, denominator) == 1
+        {
+            Some(Self {
+                numerator,
+                denominator,
+            })
+        } else {
+            None
         }
     }
 }
@@ -933,16 +959,8 @@ mod leverage_factor_json {
         fn try_from(value: LeverageFactorRaw) -> Result<Self, Self::Error> {
             let numerator = value.numerator;
             let denominator = value.denominator;
-            anyhow::ensure!(
-                numerator >= denominator
-                    && denominator != 0
-                    && num::integer::gcd(numerator, denominator) == 1,
-                "Invalid leverage factor."
-            );
-            Ok(super::LeverageFactor {
-                numerator,
-                denominator,
-            })
+            super::LeverageFactor::new(numerator, denominator)
+                .ok_or_else(|| anyhow::anyhow!("Invalid leverage factor."))
         }
     }
 }
@@ -951,16 +969,7 @@ impl Deserial for LeverageFactor {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let numerator = source.get()?;
         let denominator = source.get()?;
-        anyhow::ensure!(
-            numerator >= denominator
-                && denominator != 0
-                && num::integer::gcd(numerator, denominator) == 1,
-            "Invalid leverage factor."
-        );
-        Ok(Self {
-            numerator,
-            denominator,
-        })
+        Self::new(numerator, denominator).ok_or_else(|| anyhow::anyhow!("Invalid leverage factor."))
     }
 }
 
