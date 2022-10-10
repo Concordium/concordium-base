@@ -58,6 +58,13 @@ pub struct ModuleV2 {
     pub contracts: BTreeMap<String, ContractV2>,
 }
 
+/// Contains all the contract schemas for a smart contract module V1 with a V3
+/// schema.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleV3 {
+    pub contracts: BTreeMap<String, ContractV3>,
+}
+
 /// Represents the different schema versions.
 ///
 /// The serialization of this type includes the versioning information. The
@@ -74,6 +81,8 @@ pub enum VersionedModuleSchema {
     V1(ModuleV1),
     /// Version 2 schema, only supported by V1 smart contracts.
     V2(ModuleV2),
+    /// Version 3 schema, only supported by V1 smart contracts.
+    V3(ModuleV3),
 }
 
 /// Describes all the schemas of a V0 smart contract.
@@ -99,6 +108,14 @@ pub struct ContractV1 {
 pub struct ContractV2 {
     pub init:    Option<FunctionV2>,
     pub receive: BTreeMap<String, FunctionV2>,
+}
+
+/// Describes all the schemas of a V1 smart contract with a V3 schema.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+/// The [Default] instance produces an empty schema.
+pub struct ContractV3 {
+    pub init:    Option<FunctionV3>,
+    pub receive: BTreeMap<String, FunctionV3>,
 }
 
 /// Describes the schema of an init or a receive function for V1 contracts with
@@ -221,6 +238,115 @@ impl FunctionV2 {
                 ..
             } => Some(error),
             FunctionV2::ParamRvError {
+                error,
+                ..
+            } => Some(error),
+            _ => None,
+        }
+    }
+}
+
+/// Describes the schema of an init or a receive function for V1 contracts with
+/// V3 schemas. Differs from [`FunctionV2`] in that a schema for the events can
+/// be included.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionV3 {
+    Param(Type),
+    /// Rv is short for Return value.
+    Rv(Type),
+    ParamRv {
+        parameter:    Type,
+        return_value: Type,
+    },
+    Error(Type),
+    ParamError {
+        parameter: Type,
+        error:     Type,
+    },
+    RvError {
+        return_value: Type,
+        error:        Type,
+    },
+    ParamRvError {
+        parameter:    Type,
+        return_value: Type,
+        error:        Type,
+    },
+    ParamEvent {
+        parameter: Type,
+        event:     Type,
+    },
+}
+
+impl FunctionV3 {
+    /// Extract the event schema if it exists.
+    pub fn event(&self) -> Option<&Type> {
+        match self {
+            FunctionV3::ParamEvent {
+                event,
+                ..
+            } => Some(event),
+            _ => None,
+        }
+    }
+
+    /// Extract the parameter schema if it exists.
+    pub fn parameter(&self) -> Option<&Type> {
+        match self {
+            FunctionV3::Param(ty) => Some(ty),
+            FunctionV3::ParamRv {
+                parameter,
+                ..
+            } => Some(parameter),
+            FunctionV3::ParamError {
+                parameter,
+                ..
+            } => Some(parameter),
+            FunctionV3::ParamRvError {
+                parameter,
+                ..
+            } => Some(parameter),
+            FunctionV3::ParamEvent {
+                parameter,
+                ..
+            } => Some(parameter),
+            _ => None,
+        }
+    }
+
+    /// Extract the return value schema if it exists.
+    pub fn return_value(&self) -> Option<&Type> {
+        match self {
+            FunctionV3::Rv(rv) => Some(rv),
+            FunctionV3::ParamRv {
+                return_value,
+                ..
+            } => Some(return_value),
+            FunctionV3::RvError {
+                return_value,
+                ..
+            } => Some(return_value),
+            FunctionV3::ParamRvError {
+                return_value,
+                ..
+            } => Some(return_value),
+            _ => None,
+        }
+    }
+
+    /// Extract the error schema if it exists.
+    pub fn error(&self) -> Option<&Type> {
+        match self {
+            FunctionV3::Error(error) => Some(error),
+            FunctionV3::ParamError {
+                error,
+                ..
+            } => Some(error),
+            FunctionV3::RvError {
+                error,
+                ..
+            } => Some(error),
+            FunctionV3::ParamRvError {
                 error,
                 ..
             } => Some(error),
@@ -519,6 +645,13 @@ impl Serial for ModuleV2 {
     }
 }
 
+impl Serial for ModuleV3 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.contracts.serial(out)?;
+        Ok(())
+    }
+}
+
 impl Serial for VersionedModuleSchema {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         // Prefix for versioned module schema, used to distinquish from the unversioned.
@@ -534,6 +667,10 @@ impl Serial for VersionedModuleSchema {
             }
             VersionedModuleSchema::V2(module) => {
                 out.write_u8(2)?;
+                module.serial(out)?;
+            }
+            VersionedModuleSchema::V3(module) => {
+                out.write_u8(3)?;
                 module.serial(out)?;
             }
         }
@@ -571,6 +708,16 @@ impl Deserial for ModuleV2 {
     }
 }
 
+impl Deserial for ModuleV3 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ModuleV3 {
+            contracts,
+        })
+    }
+}
+
 impl Deserial for VersionedModuleSchema {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         // First we ensure the prefix is correct.
@@ -591,6 +738,10 @@ impl Deserial for VersionedModuleSchema {
             2 => {
                 let module = source.get()?;
                 Ok(VersionedModuleSchema::V2(module))
+            }
+            3 => {
+                let module = source.get()?;
+                Ok(VersionedModuleSchema::V3(module))
             }
             _ => Err(ParseError {}),
         }
@@ -615,6 +766,14 @@ impl Serial for ContractV1 {
 }
 
 impl Serial for ContractV2 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.init.serial(out)?;
+        self.receive.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Serial for ContractV3 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.init.serial(out)?;
         self.receive.serial(out)?;
@@ -654,6 +813,18 @@ impl Deserial for ContractV2 {
         let len: u32 = source.get()?;
         let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
         Ok(ContractV2 {
+            init,
+            receive,
+        })
+    }
+}
+
+impl Deserial for ContractV3 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let init = source.get()?;
+        let len: u32 = source.get()?;
+        let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ContractV3 {
             init,
             receive,
         })
@@ -774,6 +945,100 @@ impl Deserial for FunctionV2 {
                 parameter:    source.get()?,
                 return_value: source.get()?,
                 error:        source.get()?,
+            }),
+            _ => Err(ParseError::default()),
+        }
+    }
+}
+
+impl Serial for FunctionV3 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            FunctionV3::Param(parameter) => {
+                out.write_u8(0)?;
+                parameter.serial(out)
+            }
+            FunctionV3::Rv(return_value) => {
+                out.write_u8(1)?;
+                return_value.serial(out)
+            }
+            FunctionV3::ParamRv {
+                parameter,
+                return_value,
+            } => {
+                out.write_u8(2)?;
+                parameter.serial(out)?;
+                return_value.serial(out)
+            }
+            FunctionV3::Error(error) => {
+                out.write_u8(3)?;
+                error.serial(out)
+            }
+            FunctionV3::ParamError {
+                parameter,
+                error,
+            } => {
+                out.write_u8(4)?;
+                parameter.serial(out)?;
+                error.serial(out)
+            }
+            FunctionV3::RvError {
+                return_value,
+                error,
+            } => {
+                out.write_u8(5)?;
+                return_value.serial(out)?;
+                error.serial(out)
+            }
+            FunctionV3::ParamRvError {
+                parameter,
+                return_value,
+                error,
+            } => {
+                out.write_u8(6)?;
+                parameter.serial(out)?;
+                return_value.serial(out)?;
+                error.serial(out)
+            }
+            FunctionV3::ParamEvent {
+                parameter,
+                event,
+            } => {
+                out.write_u8(7)?;
+                parameter.serial(out)?;
+                event.serial(out)
+            }
+        }
+    }
+}
+
+impl Deserial for FunctionV3 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let idx = source.read_u8()?;
+        match idx {
+            0 => Ok(FunctionV3::Param(source.get()?)),
+            1 => Ok(FunctionV3::Rv(source.get()?)),
+            2 => Ok(FunctionV3::ParamRv {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+            }),
+            3 => Ok(FunctionV3::Error(source.get()?)),
+            4 => Ok(FunctionV3::ParamError {
+                parameter: source.get()?,
+                error:     source.get()?,
+            }),
+            5 => Ok(FunctionV3::RvError {
+                return_value: source.get()?,
+                error:        source.get()?,
+            }),
+            6 => Ok(FunctionV3::ParamRvError {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+                error:        source.get()?,
+            }),
+            7 => Ok(FunctionV3::ParamEvent {
+                parameter: source.get()?,
+                event:     source.get()?,
             }),
             _ => Err(ParseError::default()),
         }
