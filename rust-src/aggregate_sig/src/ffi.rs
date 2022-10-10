@@ -1,3 +1,5 @@
+#![cfg(feature = "ffi")]
+
 use crate::*;
 use crypto_common::*;
 use ffi_helpers::*;

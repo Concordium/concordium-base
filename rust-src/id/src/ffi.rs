@@ -1,3 +1,5 @@
+#![cfg(feature = "ffi")]
+
 use crate::{
     chain::{self, CdiVerificationError},
     constants::*,

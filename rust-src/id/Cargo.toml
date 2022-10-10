@@ -5,6 +5,12 @@ authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
 
+[features]
+default = ["ffi"]
+ffi = ["ffi_helpers"]
+# This feature is used to expose some internal testing code so it can be used in integration tests and benchmarks.
+test-helpers = [] 
+
 [dependencies]
 ff = "0.5"
 sha2 = "0.10"
@@ -41,6 +47,7 @@ version = "0"
 [dependencies.ffi_helpers]
 path = "../ffi_helpers"
 version = "0"
+optional = true
 [dependencies.crypto_common]
 path = "../crypto_common"
 version = "0"
@@ -87,9 +94,3 @@ required-features = ["test-helpers"]
 [[bench]]
 name = "commitment_to_share"
 harness = false
-
-[features]
-default = ["ffi"]
-ffi = []
-# This feature is used to expose some internal testing code so it can be used in integration tests and benchmarks.
-test-helpers = [] 

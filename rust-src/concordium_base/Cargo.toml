@@ -30,12 +30,12 @@ rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-p
 # Local dependencies
 random_oracle = { version = "*", path = "../random_oracle/" }
 id = { version = "*", path = "../id", default-features=false }
-eddsa_ed25519 = { version = "*", path = "../eddsa_ed25519" }
+eddsa_ed25519 = { version = "*", path = "../eddsa_ed25519", default-features = false }
 crypto_common = { version = "*", path = "../crypto_common", features = ["encryption"] }
 concordium-contracts-common = { version = "*", path = "../../concordium-contracts-common/concordium-contracts-common", features = ["derive-serde", "sdk"] }
-encrypted_transfers = { version = "*", path = "../encrypted_transfers" }
-aggregate_sig = {version = "0", path = "../aggregate_sig" }
-ecvrf = { version = "*", path = "../ecvrf" }
+encrypted_transfers = { version = "*", path = "../encrypted_transfers", default-features = false }
+aggregate_sig = {version = "0", path = "../aggregate_sig", default-features = false }
+ecvrf = { version = "*", path = "../ecvrf", default-features = false }
 
 [lib]
 name = "concordium_base"
