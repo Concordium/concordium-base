@@ -7,7 +7,7 @@ license-file = "../../LICENSE"
 
 [dependencies]
 ff = "0.5"
-sha2 = "0.9"
+sha2 = "0.10"
 anyhow = "1.0"
 rand_core = "=0.5"
 serde = {version = "1.0", features = ["derive"]}
@@ -23,9 +23,6 @@ pairing = "0.15"
 derive_more = "0.99"
 thiserror = "1.0"
 
-[dependencies.eddsa_ed25519]
-path = "../eddsa_ed25519"
-version = "0"
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
 version = "0"

@@ -7,7 +7,7 @@ license-file = "../../LICENSE"
 
 [dependencies]
 rand = "=0.7"
-sha2 = "0.9"
+sha2 = "0.10"
 rayon = "1.5"
 generic-array = "0.14"
 pairing = "0.15"

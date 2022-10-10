@@ -169,7 +169,8 @@ macro_rules! macro_free_ffi {
                 return;
             }
             unsafe {
-                $fr(ptr);
+                let v = $fr(ptr);
+                drop(v);
             }
         }
     };

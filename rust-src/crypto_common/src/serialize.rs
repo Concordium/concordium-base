@@ -1,5 +1,5 @@
 pub use crate::impls::*;
-use anyhow::bail;
+use anyhow::{bail, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
 use sha2::Digest;
@@ -28,6 +28,12 @@ pub fn safe_with_capacity<T>(capacity: usize) -> Vec<T> {
 /// Trait for types which can be recovered from byte sources.
 pub trait Deserial: Sized {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self>;
+}
+
+impl Deserial for u128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u128> {
+        Ok(source.read_u128::<BigEndian>()?)
+    }
 }
 
 impl Deserial for u64 {
@@ -63,6 +69,12 @@ impl Deserial for u8 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> { Ok(source.read_u8()?) }
 }
 
+impl Deserial for i128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i128> {
+        Ok(source.read_i128::<BigEndian>()?)
+    }
+}
+
 impl Deserial for i64 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i64> {
         Ok(source.read_i64::<BigEndian>()?)
@@ -83,6 +95,74 @@ impl Deserial for i16 {
 
 impl Deserial for i8 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> { Ok(source.read_i8()?) }
+}
+
+impl Deserial for std::num::NonZeroU8 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroU16 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+impl Deserial for std::num::NonZeroU32 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroU64 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroU128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI8 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI16 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+impl Deserial for std::num::NonZeroI32 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI64 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
 }
 
 /// Read a vector where the first 8 bytes are taken as length in big endian.
@@ -262,6 +342,76 @@ impl Serial for i16 {
 impl Serial for i8 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_i8(*self)
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU8 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u8(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU16 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u16::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU32 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u32::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU64 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u64::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU128 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u128::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI8 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i8(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI16 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i16::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI32 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i32::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI64 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i64::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI128 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i128::<BigEndian>(self.get())
             .expect("Writing to a buffer should not fail.")
     }
 }
