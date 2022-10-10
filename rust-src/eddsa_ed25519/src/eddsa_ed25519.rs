@@ -1,3 +1,4 @@
+#![cfg(feature = "ffi")]
 use ed25519_dalek::*;
 use rand::*;
 
@@ -9,7 +10,6 @@ use std::{convert::TryFrom, io::Cursor};
 use random_oracle::RandomOracle;
 
 // foreign function interfacee
-
 #[no_mangle]
 extern "C" fn eddsa_priv_key() -> *mut SecretKey {
     let mut csprng = thread_rng();
