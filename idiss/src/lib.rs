@@ -131,7 +131,7 @@ fn validate_request(
         ars_infos:      &ars_infos.anonymity_revokers,
         global_context: &global_context,
     };
-    let addr = AccountAddress::new(&request.pub_info_for_ip.reg_id);
+    let addr = account_address_from_registration_id(&request.pub_info_for_ip.reg_id);
     if let Err(e) = ip_validate_request(&request, context) {
         anyhow::bail!("Ip validation failed: {:?}", e);
     }
@@ -195,7 +195,7 @@ fn create_identity_object(
     let ip_private_key_str = std::str::from_utf8(ip_private_key_bytes)?;
     let ip_cdi_private_key_str = std::str::from_utf8(ip_cdi_private_key_bytes)?;
 
-    let ip_private_key: ps_sig::SecretKey<Bls12> =
+    let ip_private_key: id::ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;
     let ip_cdi_private_key: ed25519_dalek::SecretKey = base16_decode_string(ip_cdi_private_key_str)
         .context("Could not parse ip_cdi_private_key")?;
@@ -231,7 +231,7 @@ fn create_identity_object(
     let vid = Versioned::new(VERSION_0, id);
 
     let account_address =
-        AccountAddress::new(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
+        account_address_from_registration_id(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
 
     let message = AccountCredentialMessage {
         message_expiry: TransactionTime { seconds: expiry },
@@ -261,7 +261,7 @@ fn create_identity_object_v1(
         serde_json::from_slice(alist_bytes).context("Could not parse attribute list")?;
     let ip_private_key_str = std::str::from_utf8(ip_private_key_bytes)?;
 
-    let ip_private_key: ps_sig::SecretKey<Bls12> =
+    let ip_private_key: id::ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;
 
     let request: PreIdentityObjectV1<Bls12, ExampleCurve> =

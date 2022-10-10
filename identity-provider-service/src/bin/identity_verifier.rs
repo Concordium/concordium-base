@@ -118,9 +118,6 @@ async fn main() {
             .and(warp::path!("api" / "submit"))
             .and(
                 warp::body::form().map(move |mut input: BTreeMap<String, String>| {
-                    info!(
-                        "Saving verified attributes and forwarding user back to identity provider."
-                    );
                     let id_cred_pub_hash = match input.get("id_cred_pub") {
                         Some(hash) => hash.clone(),
                         None => {
@@ -129,6 +126,41 @@ async fn main() {
                                 .body("id_cred_pub not present.".to_string());
                         }
                     };
+
+                    let endpoint_version = match input.get("endpoint_version") {
+                        Some(version) => version.clone(),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("endpoint_version not present.".to_string());
+                        }
+                    };
+                    input.remove("endpoint_version");
+
+                    if input.get("fail").is_some() {
+                        let delay = match input.get("fail_delay") {
+                            Some(d) => d,
+                            None => {
+                                return Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body("expiry not present.".to_string());
+                            }
+                        };
+                        let location = format!(
+                            "{}api/{}/identity/fail/{}?delay={}",
+                            id_provider_url, endpoint_version, id_cred_pub_hash, delay
+                        );
+                        return Response::builder()
+                            .header(LOCATION, location)
+                            .status(StatusCode::FOUND)
+                            .body("Ok".to_string());
+                    }
+                    input.remove("fail_delay");
+
+                    info!(
+                        "Saving verified attributes and forwarding user back to identity provider."
+                    );
+
                     let id_cred_pub_hash_bytes = hex::decode(&id_cred_pub_hash).unwrap();
                     input.remove("id_cred_pub");
 
@@ -141,16 +173,6 @@ async fn main() {
                         }
                     };
                     input.remove("id_cred_pub_signature");
-
-                    let endpoint_version = match input.get("endpoint_version") {
-                        Some(version) => version.clone(),
-                        None => {
-                            return Response::builder()
-                                .status(StatusCode::BAD_REQUEST)
-                                .body("endpoint_version not present.".to_string());
-                        }
-                    };
-                    input.remove("endpoint_version");
 
                     let identity_endpoint = if endpoint_version.eq("v0") {
                         "v0/identity"
@@ -192,9 +214,18 @@ async fn main() {
                         }
                     }
 
+                    let expiry = match input.get("expiry") {
+                        Some(i) => i.replace('-', ""),
+                        None => {
+                            return Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body("expiry not present.".to_string());
+                        }
+                    };
+                    input.remove("expiry");
+
                     // The signature was valid, so save the received attributes to the file
                     // database.
-
                     let file = match std::fs::File::create(
                         root_clone.join("attributes").join(&id_cred_pub_hash),
                     ) {
@@ -215,8 +246,8 @@ async fn main() {
                     };
 
                     let location = format!(
-                        "{}api/{}/create/{}",
-                        id_provider_url, identity_endpoint, id_cred_pub_hash
+                        "{}api/{}/create/{}?expiry={}",
+                        id_provider_url, identity_endpoint, id_cred_pub_hash, expiry
                     );
                     Response::builder()
                         .header(LOCATION, location)

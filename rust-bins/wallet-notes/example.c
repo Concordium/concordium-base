@@ -8,6 +8,7 @@ char* create_id_request_and_private_data(char*, uint8_t*);
 char* create_credential(char*, uint8_t*);
 char* create_id_request_and_private_data_v1(char*, uint8_t*);
 char* create_credential_v1(char*, uint8_t*);
+char* generate_recovery_request(char*, uint8_t*);
 char* generate_accounts(char*, uint8_t*);
 uint8_t check_account_address(char*);
 
@@ -109,6 +110,9 @@ int main(int argc, char *argv[]) {
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_credential-v1-input.json")) {
         out = create_credential_v1(buffer, &flag);
+        return printStr(out, flag);
+      } else if (ends_with(argv[1], "generate-recovery-request-input.json")) {
+        out = generate_recovery_request(buffer, &flag);
         return printStr(out, flag);
       } else if (ends_with(argv[1], "create_configure_delegation_transaction-input.json")) {
         out = create_configure_delegation_transaction(buffer, &flag);

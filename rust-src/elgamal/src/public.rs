@@ -22,7 +22,7 @@ impl<C: Curve> Debug for PublicKey<C> {
     }
 }
 
-impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
+impl<C: Curve> From<&SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(secret_key: &SecretKey<C>) -> PublicKey<C> {
         let generator: C = secret_key.generator;
@@ -138,7 +138,7 @@ impl<C: Curve> PublicKey<C> {
     where
         T: Rng,
         I: IntoIterator<Item = &'a Value<C>>, {
-        let f = move |x: &'a Value<C>| -> (Cipher<C>, Randomness<C>) {
+        let f = move |x: &Value<C>| -> (Cipher<C>, Randomness<C>) {
             self.encrypt_exponent_rand_given_generator(x, h, csprng)
         };
         es.into_iter().map(f).collect()

@@ -53,7 +53,6 @@ impl<F: Field + Serialize> Drop for Secret<F> {
 /// A secret value. The idea of this datatype is to mark
 /// some scalars as secret, so that their use is harder and there is
 /// no implicit copy.
-#[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize, Clone, SerdeBase16Serialize)]
 pub struct Value<C: Curve> {
     pub value: Rc<Secret<C::Scalar>>,

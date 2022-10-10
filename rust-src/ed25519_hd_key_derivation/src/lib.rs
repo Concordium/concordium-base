@@ -236,7 +236,7 @@ mod tests {
     pub fn test_valid_path() {
         let valid_path = "m/44'/919'/0'/1'/0'";
         assert!(
-            parse_path(&valid_path).is_ok(),
+            parse_path(valid_path).is_ok(),
             "Path {} should be valid.",
             valid_path
         );

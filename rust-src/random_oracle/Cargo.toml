@@ -8,7 +8,7 @@ license-file = "../../LICENSE"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sha3 = "0.9"
+sha3 = "0.10"
 rand = "=0.7"
 
 [dependencies.curve_arithmetic]

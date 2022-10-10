@@ -9,6 +9,10 @@ import Control.Monad.Except
 import Control.Exception
 
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Types as AE
+import qualified Data.Aeson.Internal as AE
+import qualified Data.Aeson.Parser as AE
+import qualified Data.Aeson.KeyMap as AEMap
 import Data.Aeson ((.:),(.=))
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
@@ -229,6 +233,12 @@ encryptText emEncryptionMethod emKeyDerivationMethod text pwd =
 newtype EncryptedJSON a = EncryptedJSON EncryptedText
   deriving (AE.FromJSON, AE.ToJSON, Show, Eq)
 
+-- |Check whether the given JSON object likely contains an encryption. This is established
+-- by the presence of fields @metadata@ and @cipherText@
+isLikelyEncrypted :: AE.Value -> Bool
+isLikelyEncrypted (AE.Object o) = AEMap.member "cipherText" o && AEMap.member "metadata" o
+isLikelyEncrypted _ = False
+
 -- | Failures that can occur when decrypting an 'EncryptedJSON'.
 data DecryptJSONFailure
   -- | Decryption failed.
@@ -247,9 +257,19 @@ decryptJSON :: (MonadError DecryptJSONFailure m, AE.FromJSON a)
   => EncryptedJSON a
   -> Password
   -> m a
-decryptJSON (EncryptedJSON encryptedText) pwd = do
+decryptJSON ej pwd = decryptJSONWith ej pwd AE.parseJSON
+
+-- | Decrypt and deserialize an 'EncryptedJSON' using the provided parser.
+decryptJSONWith :: (MonadError DecryptJSONFailure m)
+  => EncryptedJSON a
+  -> Password
+  -> (AE.Value -> AE.Parser a)
+  -> m a
+decryptJSONWith (EncryptedJSON encryptedText) pwd parser = do
   decrypted <- decryptText encryptedText pwd `embedErr` DecryptionFailure
-  AE.eitherDecodeStrict decrypted `embedErr` IncorrectJSON
+  case AE.eitherDecodeStrictWith AE.json' (AE.iparse parser) decrypted of
+    Left (path, err) -> throwError (IncorrectJSON (AE.formatError path err))
+    Right a -> return a
 
 -- | Encrypt a JSON-serializable value.
 encryptJSON :: (AE.ToJSON a)

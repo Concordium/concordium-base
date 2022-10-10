@@ -24,11 +24,11 @@ pipeline {
                     cbindgen src/lib.rs -l c > mobile_wallet.h
 
                     # Build
-                    cargo lipo --release
+                    ./scripts/build-ios.sh
 
                     # Prepate output
                     mkdir ../out
-                    cp target/universal/release/${FILENAME_ROOT}.a ../out/
+                    cp ./ios/build/${FILENAME_ROOT}.xcframework ../out/
                 '''.stripIndent()
                 stash includes: 'out/**/*', name: 'release'
             }
@@ -40,7 +40,7 @@ pipeline {
                 unstash 'release'
                 sh '''\
                     # Push to s3
-                    aws s3 cp "out/${FILENAME_ROOT}.a" "${S3_BUCKET}/${FILENAME_ROOT}_${VERSION}.a" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
+                    aws s3 cp "out/${FILENAME_ROOT}.xcframework" "${S3_BUCKET}/${FILENAME_ROOT}_${VERSION}.xcframework" --grants read=uri=http://acs.amazonaws.com/groups/global/AllUsers
                 '''.stripIndent()
             }
         }

@@ -1,0 +1,36 @@
+
+[package]
+name = "wasm-chain-integration-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Disables inlines in order to generate fuzzer-coverage reports. Otherwise, we currently get linker errors.
+[features]
+fuzz-coverage = ["wasm-chain-integration/fuzz-coverage"]
+
+[dependencies]
+libfuzzer-sys = "0.3"
+
+[dependencies.wasm-chain-integration]
+path = ".."
+features = ["fuzz"]
+
+[dependencies.wasm-transform]
+path = "../../wasm-transform"
+version = "0"
+
+[dependencies.concordium-contracts-common]
+version = "2.0"
+path = "../../concordium-contracts-common"
+features = ["derive-serde", "fuzz"]
+
+[[bin]]
+name = "interpreter"
+path = "fuzz_targets/interpreter.rs"
+test = false
+doc = false

@@ -4,6 +4,14 @@ The [idiss](./idiss) and [mobile_wallet](./mobile_wallet/) libraries have their
 own changelogs.
 
 ## rust-src libraries (most recent on top)
+   - `AccountAddress::new` is renamed to `account_address_from_registration_id`.
+   - Implement `crypto_common::Serial` and `crypto_common::Deserial` for `ReceiveName` and `ContractName`.
+   - Remove `Amount` from `crypto_common` and use the `Amount` defined in `concordium-contracts-common`:
+     - `Amount` now has a field `micro_ccd` instead of `microgtu`.
+     - The default arithmetic (operator syntax, such as `+`, `-`, `*`) with `Amount` is now unchecked.
+   - There are no longer implementations of `From<u64> for Amount` and `From<Amount> for u64` as the behavior of these are not obvious.
+     Instead, the functions `Amount::from_micro_ccd` or `Amount::from_ccd` and the getter `micro_ccd` should be used instead.
+   - Remove `AccountAddress` from `id` and use the `AccountAddress` defined in `concordium-contracts-common`.
    - Introduce core functionality for proving and verifying properties about an identity behind an account, such as
      revealing an attribute, proving ownership of an account, and proving that an attribute is in a range.
    - Move AttributeKind from the id::ffi module to id::constants.

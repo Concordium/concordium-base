@@ -54,9 +54,9 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
            * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
     ];
 
-    for j in 0..usize::from(m) {
+    for &v in v_vec.iter().take(m.into()) {
         let r = Randomness::generate(rng);
-        let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
+        let v_scalar = SomeCurve::scalar_from_u64(v);
         let v_value = Value::<SomeCurve>::new(v_scalar);
         let com = keys.hide(&v_value, &r);
         randomness.push(r);
@@ -139,8 +139,8 @@ fn compare_inner_product_proof(c: &mut Criterion) {
     c.bench_function("Naive inner product proof.", move |b| {
         b.iter(|| {
             let mut y_inv_i = SomeField::one();
-            for i in 0..n {
-                H_prime.push(H[i].mul_by_scalar(&y_inv_i));
+            for h in H.iter().take(n) {
+                H_prime.push(h.mul_by_scalar(&y_inv_i));
                 y_inv_i.mul_assign(&y_inv);
             }
             prove_inner_product(&mut transcript, &G_vec, &H_prime, &Q, &a_vec, &b_vec);

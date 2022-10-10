@@ -191,7 +191,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         let n = _data_size;
         let cmm_key = CommitmentKey::generate(csprng);
@@ -389,11 +389,11 @@ mod tests {
         let mut rs = Vec::with_capacity(usize::from(m));
         let mut cmms = Vec::with_capacity(usize::from(m));
         let cmm = cmm_key.hide(&sum, &r);
-        for i in 0..usize::from(m) {
+        for x_value in xs_values.iter().take(m.into()) {
             us.push(ui);
             ui.mul_assign(&two_32);
             let ri = Randomness::<G1>::generate(rng);
-            cmms.push(cmm_key.hide(&xs_values[i], &ri));
+            cmms.push(cmm_key.hide(x_value, &ri));
             rs.push(ri);
         }
         let rs_copy = rs.clone();

@@ -61,8 +61,8 @@ pub fn enc_trans_bench(c: &mut Criterion) {
                 &pk_receiver,
                 index,
                 &S,
-                Amount::from(s),
-                Amount::from(a),
+                Amount::from_micro_ccd(s),
+                Amount::from_micro_ccd(a),
                 &mut csprng,
             )
             .expect("Could not produce proof.");
@@ -82,8 +82,8 @@ pub fn enc_trans_bench(c: &mut Criterion) {
         &pk_receiver,
         index,
         &S,
-        Amount::from(s),
-        Amount::from(a),
+        Amount::from_micro_ccd(s),
+        Amount::from_micro_ccd(a),
         &mut csprng,
     )
     .expect("Could not produce proof.");
@@ -140,8 +140,8 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
                 &sk_clone,
                 index,
                 &S,
-                Amount::from(s),
-                Amount::from(a),
+                Amount::from_micro_ccd(s),
+                Amount::from_micro_ccd(a),
                 &mut csprng,
             )
             .expect("Could not produce proof.");
@@ -160,8 +160,8 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
         &sk,
         index,
         &S,
-        Amount::from(s),
-        Amount::from(a),
+        Amount::from_micro_ccd(s),
+        Amount::from_micro_ccd(a),
         &mut csprng,
     )
     .expect("Could not produce proof.");

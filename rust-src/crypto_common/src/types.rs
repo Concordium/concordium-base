@@ -1,14 +1,17 @@
 //! Common types needed in concordium.
 
 use crate::{
-    serial_string, Buffer, Deserial, Get, ParseResult, SerdeDeserialize, SerdeSerialize, Serial,
+    deserial_string, serial_string, Buffer, Deserial, Get, ParseResult, SerdeDeserialize,
+    SerdeSerialize, Serial,
 };
-use byteorder::ReadBytesExt;
+use byteorder::{BigEndian, ReadBytesExt};
+pub use concordium_contracts_common::{AccountAddress, Amount, ACCOUNT_ADDRESS_SIZE};
+use concordium_contracts_common::{
+    ContractAddress, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
+};
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
-use std::{collections::BTreeMap, num::ParseIntError, ops::Add, str::FromStr};
-use thiserror::*;
-
+use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.
 #[derive(
     Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Display, From, Into,
@@ -40,317 +43,95 @@ pub struct CredentialIndex {
     pub index: u8,
 }
 
-pub struct UrlText {
-    pub url: String,
-}
-
-pub const MAX_URL_SIZE: usize = 2048; // Needs to be same as maxUrlTextLength in Types.hs in haskell-src
-
-impl Serial for UrlText {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        (self.url.len() as u16).serial(out);
-        serial_string(&self.url, out)
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for UrlText {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>, {
-        let url = String::deserialize(deserializer)?;
-        if url.len() <= MAX_URL_SIZE {
-            Ok(UrlText { url })
-        } else {
-            Err(serde::de::Error::custom("Url length out of bounds."))
-        }
-    }
-}
-
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
-pub enum OpenStatus {
-    #[serde(rename = "openForAll")]
-    OpenForAll,
-    #[serde(rename = "closedForNew")]
-    ClosedForNew,
-    #[serde(rename = "closedForAll")]
-    ClosedForAll,
-}
-
-impl Serial for OpenStatus {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match *self {
-            OpenStatus::OpenForAll => out.write_u8(0),
-            OpenStatus::ClosedForNew => out.write_u8(1),
-            OpenStatus::ClosedForAll => out.write_u8(2),
-        }
-        .expect("Writing to a buffer should not fail.");
-    }
-}
-
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
-#[serde(tag = "delegateType")]
-pub enum DelegationTarget {
-    #[serde(rename = "Passive")]
-    DelegatePassive,
-    #[serde(rename = "Baker")]
-    DelegateToBaker {
-        #[serde(rename = "bakerId")]
-        target_baker: u64,
-    },
-}
-
-impl Serial for DelegationTarget {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        match *self {
-            DelegationTarget::DelegatePassive => out
-                .write_u8(0)
-                .expect("Writing to a buffer should not fail."),
-            DelegationTarget::DelegateToBaker { target_baker } => {
-                out.write_u8(1)
-                    .expect("Writing to a buffer should not fail.");
-                target_baker.serial(out)
-            }
-        }
-    }
-}
-
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-/// An amount of CCD. The lowest expressible amount is 1microCCD. The string
-/// representation of this type uses a decimal separator with at most 6
-/// decimals.
-pub struct Amount {
-    pub microccd: u64,
-}
-
-impl Amount {
-    pub fn from_micro_ccd(micro_ccd: u64) -> Self {
-        Self {
-            microccd: micro_ccd,
-        }
-    }
-
-    pub fn from_ccd(ccd: u64) -> Self {
-        Self {
-            microccd: ccd * 1_000_000,
-        }
-    }
-}
-
-impl From<Amount> for u64 {
-    fn from(x: Amount) -> Self { x.microccd }
-}
-
-impl From<u64> for Amount {
-    fn from(microccd: u64) -> Self { Amount { microccd } }
-}
-
 impl Serial for Amount {
-    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.microccd.serial(out) }
+    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.micro_ccd().serial(out) }
 }
 
 impl Deserial for Amount {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let microccd = source.get()?;
-        Ok(Amount { microccd })
+        let micro_ccd = source.get()?;
+        Ok(Amount::from_micro_ccd(micro_ccd))
     }
 }
 
-/// Add two amounts together, checking for overflow.
-impl Add for Amount {
-    type Output = Option<Amount>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let microgtu = self.microccd.checked_add(rhs.microccd)?;
-        Some(Amount { microccd: microgtu })
+impl Serial for AccountAddress {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        x.write_all(&self.0)
+            .expect("Writing to buffer should succeed.")
     }
 }
 
-/// Add an amount to an optional amount, propagating `None`.
-impl Add<Option<Amount>> for Amount {
-    type Output = Option<Amount>;
-
-    fn add(self, rhs: Option<Amount>) -> Self::Output {
-        let rhs = rhs?;
-        let microgtu = self.microccd.checked_add(rhs.microccd)?;
-        Some(Amount { microccd: microgtu })
+impl Deserial for AccountAddress {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
+        source.read_exact(&mut buf)?;
+        Ok(AccountAddress(buf))
     }
 }
 
-/// Errors that can occur during parsing of an [Amount] from a string.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-pub enum AmountParseError {
-    #[error("Amount overflow.")]
-    Overflow,
-    #[error("Expected dot.")]
-    ExpectedDot,
-    #[error("Expected digit.")]
-    ExpectedDigit,
-    #[error("Expected more input.")]
-    ExpectedMore,
-    #[error("Expected digit or dot.")]
-    ExpectedDigitOrDot,
-    #[error("Amounts can have at most six decimals.")]
-    AtMostSixDecimals,
-}
-
-/// Parse from string in GTU units. The input string must be of the form
-/// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
-/// that that part is optional.
-///
-/// - if `n` starts with 0 then it must be 0l
-/// - `m` can have at most 6 digits, and must have at least 1
-/// - both `n` and `m` must be non-negative.
-impl std::str::FromStr for Amount {
-    type Err = AmountParseError;
-
-    fn from_str(v: &str) -> Result<Self, Self::Err> {
-        let mut microgtu: u64 = 0;
-        let mut after_dot = 0;
-        let mut state = 0;
-        for c in v.chars() {
-            match state {
-                0 => {
-                    // looking at the first character.
-                    if let Some(d) = c.to_digit(10) {
-                        if d == 0 {
-                            state = 1;
-                        } else {
-                            microgtu = u64::from(d);
-                            state = 2;
-                        }
-                    } else {
-                        return Err(AmountParseError::ExpectedDigit);
-                    }
-                }
-                1 => {
-                    // we want to be looking at a dot now (unless we reached the end, in which case
-                    // this is not reachable anyhow)
-                    if c != '.' {
-                        return Err(AmountParseError::ExpectedDot);
-                    } else {
-                        state = 3;
-                    }
-                }
-                2 => {
-                    // we are reading a normal number until we hit the dot.
-                    if let Some(d) = c.to_digit(10) {
-                        microgtu = microgtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
-                        microgtu = microgtu
-                            .checked_add(u64::from(d))
-                            .ok_or(AmountParseError::Overflow)?;
-                    } else if c == '.' {
-                        state = 3;
-                    } else {
-                        return Err(AmountParseError::ExpectedDigitOrDot);
-                    }
-                }
-                3 => {
-                    // we're reading after the dot.
-                    if after_dot >= 6 {
-                        return Err(AmountParseError::AtMostSixDecimals);
-                    }
-                    if let Some(d) = c.to_digit(10) {
-                        microgtu = microgtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
-                        microgtu = microgtu
-                            .checked_add(u64::from(d))
-                            .ok_or(AmountParseError::Overflow)?;
-                        after_dot += 1;
-                    } else {
-                        return Err(AmountParseError::ExpectedDigit);
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-        if state == 0 || state >= 3 && after_dot == 0 {
-            return Err(AmountParseError::ExpectedMore);
-        }
-        for _ in 0..6 - after_dot {
-            microgtu = microgtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
-        }
-        Ok(Amount { microccd: microgtu })
-    }
-}
-
-impl std::fmt::Display for Amount {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let high = self.microccd / 1_000_000;
-        let low = self.microccd % 1_000_000;
-        if low == 0 {
-            write!(f, "{}", high)
-        } else {
-            write!(f, "{}.{:06}", high, low)
-        }
-    }
-}
-
-/// JSON instance serializes and deserializes in microgtu units.
-impl SerdeSerialize for Amount {
-    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&self.microccd.to_string())
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for Amount {
-    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(des)?;
-        let microgtu = s
-            .parse::<u64>()
-            .map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
-        Ok(Amount { microccd: microgtu })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Memo {
-    pub memo: Vec<u8>,
-}
-
-pub const MAX_MEMO_SIZE: usize = 256; // Needs to be same as maxMemoSize in Types.hs in haskell-src
-
-impl Serial for Memo {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        (self.memo.len() as u16).serial(out);
-        out.write_all(&self.memo)
+impl Serial for ContractAddress {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        x.write_u64::<BigEndian>(self.index)
+            .expect("Writing to buffer should succeed.");
+        x.write_u64::<BigEndian>(self.subindex)
             .expect("Writing to buffer should succeed.");
     }
 }
 
-impl Deserial for Memo {
+impl Deserial for ContractAddress {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let index = source.read_u64::<BigEndian>()?;
+        let subindex = source.read_u64::<BigEndian>()?;
+        Ok(ContractAddress::new(index, subindex))
+    }
+}
+
+impl Serial for ReceiveName<'_> {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let string = self.get_chain_name();
+        (string.len() as u16).serial(out);
+        serial_string(string, out)
+    }
+}
+
+impl Serial for OwnedReceiveName {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) { self.as_receive_name().serial(x) }
+}
+
+impl Deserial for OwnedReceiveName {
+    #[inline]
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
-        anyhow::ensure!(
-            len as usize <= MAX_MEMO_SIZE,
-            "Memo size of {} is too big. Maximum size is {}.",
-            len,
-            MAX_MEMO_SIZE
-        );
-        let mut memo = vec![0; len as usize];
-        source.read_exact(&mut memo)?;
-        Ok(Memo { memo })
+        let name = deserial_string(source, len.into())?;
+        Ok(OwnedReceiveName::new(name)?)
     }
 }
 
-impl SerdeSerialize for Memo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer, {
-        serializer.serialize_str(&hex::encode(&self.memo))
+impl Serial for ContractName<'_> {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let string = self.get_chain_name();
+        (string.len() as u16).serial(out);
+        serial_string(string, out)
     }
 }
 
-impl<'de> SerdeDeserialize<'de> for Memo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>, {
-        let s = String::deserialize(deserializer)?;
-        let memo = hex::decode(s).map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
-        if memo.len() <= MAX_MEMO_SIZE {
-            Ok(Memo { memo })
-        } else {
-            Err(serde::de::Error::custom("Memo length out of bounds."))
-        }
+impl Serial for OwnedContractName {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) { self.as_contract_name().serial(x) }
+}
+
+impl Deserial for OwnedContractName {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let name = deserial_string(source, len.into())?;
+        Ok(OwnedContractName::new(name)?)
     }
 }
 
@@ -597,7 +378,7 @@ mod tests {
             let js = serde_json::to_string(&signatures).expect("Serialization should succeed.");
             match serde_json::from_str::<TransactionSignature>(&js) {
                 Ok(s) => assert_eq!(s, signatures, "Deserialized incorrect value."),
-                Err(e) => assert!(false, "{}", e),
+                Err(e) => panic!("{}", e),
             }
 
             let binary_result = crate::serialize_deserialize(&signatures)
@@ -610,77 +391,10 @@ mod tests {
     }
 
     #[test]
-    // test amount serialization is correct
-    fn amount_serialization() {
-        let mut rng = rand::thread_rng();
-        for _ in 0..1000 {
-            let microgtu = Amount::from(rng.gen::<u64>());
-            let s = microgtu.to_string();
-            let parsed = s.parse::<Amount>();
-            assert_eq!(
-                Ok(microgtu),
-                parsed,
-                "Parsed amount differs from expected amount."
-            );
-        }
-
-        assert_eq!(
-            "0.".parse::<Amount>(),
-            Err(AmountParseError::ExpectedMore),
-            "There must be at least one digit after dot."
-        );
-        assert_eq!(
-            "0.1234567".parse::<Amount>(),
-            Err(AmountParseError::AtMostSixDecimals),
-            "There can be at most 6 digits after dot."
-        );
-        assert_eq!(
-            "0.000000000".parse::<Amount>(),
-            Err(AmountParseError::AtMostSixDecimals),
-            "There can be at most 6 digits after dot."
-        );
-        assert_eq!(
-            "00.1234".parse::<Amount>(),
-            Err(AmountParseError::ExpectedDot),
-            "There can be at most one leading 0."
-        );
-        assert_eq!(
-            "01.1234".parse::<Amount>(),
-            Err(AmountParseError::ExpectedDot),
-            "Leading zero must be followed by a dot."
-        );
-        assert_eq!(
-            "0.1234".parse::<Amount>(),
-            Ok(Amount::from(123400u64)),
-            "Leading zero is OK."
-        );
-        assert_eq!(
-            "0.0".parse::<Amount>(),
-            Ok(Amount::from(0)),
-            "Leading zero and zero after dot is OK."
-        );
-        assert_eq!(
-            ".0".parse::<Amount>(),
-            Err(AmountParseError::ExpectedDigit),
-            "There should be at least one digit before a dot."
-        );
-        assert_eq!(
-            "13".parse::<Amount>(),
-            Ok(Amount::from(13000000)),
-            "No dot is needed."
-        );
-        assert_eq!(
-            "".parse::<Amount>(),
-            Err(AmountParseError::ExpectedMore),
-            "Empty string is not a valid amount."
-        );
-    }
-
-    #[test]
     fn amount_json_serialization() {
         let mut rng = rand::thread_rng();
         for _ in 0..1000 {
-            let amount = Amount::from(rng.gen::<u64>());
+            let amount = Amount::from_micro_ccd(rng.gen::<u64>());
             let s = serde_json::to_string(&amount).expect("Could not serialize");
             assert_eq!(
                 amount,
@@ -689,7 +403,7 @@ mod tests {
             );
         }
 
-        let amount = Amount::from(12345);
+        let amount = Amount::from_micro_ccd(12345);
         let s = serde_json::to_string(&amount).expect("Could not serialize");
         assert_eq!(s, r#""12345""#, "Could not deserialize amount.");
 
