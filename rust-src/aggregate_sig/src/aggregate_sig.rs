@@ -117,7 +117,7 @@ impl<P: Pairing> Signature<P> {
 
     /// The empty signature is the unit with respect to aggregation,
     /// and can be used as a dummy signature.
-    pub(crate) fn empty() -> Self { Signature(P::G1::zero_point()) }
+    pub fn empty() -> Self { Signature(P::G1::zero_point()) }
 }
 
 impl<P: Pairing> Clone for Signature<P> {

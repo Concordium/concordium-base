@@ -17,11 +17,9 @@ use id::types::*;
 use rand::*;
 use random_oracle::*;
 
-/// # Internal helper functions.
-
 /// Encrypt a single amount using the given public key, returning the encrypted
 /// amount as well as the randomness used in the encryption of chunks.
-fn encrypt_amount<C: Curve, R: Rng>(
+pub fn encrypt_amount<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
     pk: &PublicKey<C>,
     amount: Amount,
