@@ -7,8 +7,8 @@ license-file = "../../LICENSE"
 
 [dependencies]
 pairing = "0.15"
-sha2 = "0.9"
-hkdf = "0.11.0"
+sha2 = "0.10"
+hkdf = "0.12.0"
 ff = "0.5"
 hex = "0.4"
 

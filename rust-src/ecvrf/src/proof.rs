@@ -83,10 +83,10 @@ impl Proof {
     pub fn to_hash(&self) -> [u8; 64] {
         let p = self.0.mul_by_cofactor();
         let hash: Sha512 = Sha512::new()
-            .chain(SUITE_STRING)
-            .chain(THREE_STRING)
-            .chain(p.compress().to_bytes())
-            .chain(ZERO_STRING);
+            .chain_update(SUITE_STRING)
+            .chain_update(THREE_STRING)
+            .chain_update(p.compress().to_bytes())
+            .chain_update(ZERO_STRING);
         let mut c_bytes: [u8; 64] = [0; 64];
         c_bytes.copy_from_slice(hash.finalize().as_slice());
         c_bytes

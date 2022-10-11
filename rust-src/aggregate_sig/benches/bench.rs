@@ -23,7 +23,7 @@ macro_rules! get_sks_pks {
         let pks: Vec<PublicKey<Bls12>> = sks.iter().map(PublicKey::<Bls12>::from_secret).collect();
 
         (sks, pks)
-    };};
+    }};
 }
 
 fn bench_sign_and_verify(c: &mut Criterion) {

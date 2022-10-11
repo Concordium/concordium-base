@@ -106,8 +106,21 @@ impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
                     )))
                 }
             }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error, {
+                if v > 0 {
+                    self.visit_u64(v as u64)
+                } else {
+                    Err(de::Error::custom(format!(
+                        "Signature threshold out of range {}",
+                        v
+                    )))
+                }
+            }
         }
-        des.deserialize_u8(SignatureThresholdVisitor)
+        des.deserialize_u64(SignatureThresholdVisitor)
     }
 }
 
@@ -192,6 +205,7 @@ impl AccountOwnershipProof {
     Clone,
     Copy,
     Hash,
+    From,
     Serialize,
     SerdeSerialize,
     SerdeDeserialize,
@@ -577,7 +591,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 /// a scalar raising a generator to this scalar gives a public credentials. If
 /// two groups have the same scalar field we can have two different public
 /// credentials from the same secret credentials.
-#[derive(SerdeBase16Serialize)]
+#[derive(SerdeBase16Serialize, From, Into)]
 pub struct IdCredentials<C: Curve> {
     /// Secret id credentials.
     /// Since the use of this value is quite complex, we allocate
@@ -1629,6 +1643,22 @@ pub struct CredentialDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+// Since all variants are fieldless, the default JSON serialization will convert
+// all the variants to simple strings.
+/// Enumeration of the types of credentials.
+pub enum CredentialType {
+    /// Initial credential is a credential that is submitted by the identity
+    /// provider on behalf of the user. There is only one initial credential
+    /// per identity.
+    Initial,
+    /// A normal credential is one where the identity behind it is only known to
+    /// the owner of the account, unless the anonymity revocation process was
+    /// followed.
+    Normal,
+}
+
 /// Account credential with values and commitments, but without proofs.
 /// Serialization must match the serializaiton of `AccountCredential` in
 /// Haskell.
@@ -1651,6 +1681,44 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
         #[serde(rename = "commitments")]
         commitments: CredentialDeploymentCommitments<C>,
     },
+}
+
+impl<C: Curve, AttributeType: Serial + Attribute<C::Scalar>> Serial
+    for AccountCredentialWithoutProofs<C, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => {
+                0u8.serial(out);
+                icdv.serial(out);
+            }
+            AccountCredentialWithoutProofs::Normal { cdv, commitments } => {
+                1u8.serial(out);
+                cdv.serial(out);
+                commitments.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Deserial + Attribute<C::Scalar>> Deserial
+    for AccountCredentialWithoutProofs<C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag = u8::deserial(source)?;
+        match tag {
+            0u8 => {
+                let icdv = source.get()?;
+                Ok(Self::Initial { icdv })
+            }
+            1u8 => {
+                let cdv = source.get()?;
+                let commitments = source.get()?;
+                Ok(Self::Normal { cdv, commitments })
+            }
+            _ => bail!("Unsupported credential tag: {}", tag),
+        }
+    }
 }
 
 /// Type of credential registration IDs.
@@ -1747,7 +1815,7 @@ pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 
 impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
 
-#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 /// A set of cryptographic parameters that are particular to the chain and
 /// shared by everybody that interacts with the chain.
@@ -1761,7 +1829,7 @@ pub struct GlobalContext<C: Curve> {
     /// It is unclear what length we will require here, or whether we'll allow
     /// dynamic generation.
     #[serde(rename = "bulletproofGenerators")]
-    bulletproof_generators:      Generators<C>,
+    pub bulletproof_generators:  Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
     /// A free-form string used to distinguish between different chains even if
@@ -1914,7 +1982,7 @@ pub trait CredentialDataWithSigning: PublicCredentialData {
 }
 
 /// All account keys indexed by credentials.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct AccountKeys {
     /// All keys per credential
     #[serde(rename = "keys")]
@@ -1960,7 +2028,7 @@ impl From<InitialAccountData> for AccountKeys {
 /// the credential object. This contains all the keys on the credential at the
 /// moment of its deployment. If this creates the account then the account
 /// starts with exactly these keys.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialData {
     #[serde(rename = "keys")]
     pub keys:      BTreeMap<KeyIndex, crypto_common::types::KeyPair>,

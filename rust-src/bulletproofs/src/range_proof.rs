@@ -89,7 +89,7 @@ fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
 
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
-#[derive(Clone, Serialize, SerdeBase16Serialize)]
+#[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
 pub struct Generators<C: Curve> {
     #[size_length = 4]
     pub G_H: Vec<(C, C)>,

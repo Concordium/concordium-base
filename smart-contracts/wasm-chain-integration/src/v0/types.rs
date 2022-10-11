@@ -102,6 +102,7 @@ impl<Policies> ReceiveContext<Policies> {
     pub fn self_address(&self) -> &ContractAddress { &self.self_address }
 }
 
+#[cfg(feature = "enable-ffi")]
 pub(crate) fn deserial_receive_context(source: &[u8]) -> ParseResult<ReceiveContext<&[u8]>> {
     let mut cursor = Cursor::new(source);
     let metadata = cursor.get()?;
@@ -126,6 +127,7 @@ pub(crate) fn deserial_receive_context(source: &[u8]) -> ParseResult<ReceiveCont
     }
 }
 
+#[cfg(feature = "enable-ffi")]
 pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[u8]>> {
     let mut cursor = Cursor::new(source);
     let metadata = cursor.get()?;
