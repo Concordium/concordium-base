@@ -76,7 +76,20 @@ must be a valid JSON object with fields
   data is the one obtained from the server by making a GET request to /ip_info.
 
 - `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
-  a JSON object with fields `"arIdentity"`, `extend-
+  a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
+
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+
+- `"seed"` ... is a hex encoded seed phrase used to generate the prf key and the signature blinding determinstically.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+
+In addition the field `"arThreshold"` can be added to specify an anonymity revocation threshold different from the default value, as a JSON encoded byte value.
+
+The output of this function is a JSON object with two keys
+- "idObjectRequest" - this is the identity object request that should be sent to
+  the identity provider
 
 An example of input is in the file [create_id_request_and_private_data-v1-input.json](files/create_id_request_and_private_data-v1-input.json).
 An example of output is in the file [create_id_request_and_private_data-v1-output.json](files/create_id_request_and_private_data-v1-output.json).
@@ -594,7 +607,6 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
 An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
 
-
 ## sign_transaction
 Semantics: Signs the provided transaction and returns the hex encoded transaction along with the signatures on the transaction.
 
@@ -636,6 +648,7 @@ The returned value is a JSON object with the following fields:
 
 An example input to this request is in the file [transaction_to_json-input.json](files/sign_transaction-input.json).
 An example output to this request is in the file [transaction_to_json-output.json](files/sign_transaction-output.json).
+
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This
