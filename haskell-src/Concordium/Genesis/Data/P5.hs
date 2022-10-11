@@ -30,9 +30,6 @@ data GenesisDataP5 = GDP5Initial
 -- The relationship between the new state and the state of the
 -- terminal block of the old chain should be defined by the
 -- chain update mechanism used.
---
--- There are two variants, one when migrating from P3, and another one for an
--- update from P5 to P5.
 newtype RegenesisP5 = GDP5Regenesis {genesisRegenesis :: Base.RegenesisData}
     deriving (Eq, Show)
 
