@@ -469,14 +469,14 @@ $( deriveJSON
 -- |Construct a 'PoolPendingChange' from the 'StakePendingChange' of the pool owner.
 makePoolPendingChange ::
     -- |Pool owner's pending stake change
-    StakePendingChange 'AccountV1 ->
+    StakePendingChange' Timestamp ->
     PoolPendingChange
 makePoolPendingChange NoChange = PPCNoChange
-makePoolPendingChange (ReduceStake ppcBakerEquityCapital (PendingChangeEffectiveV1 et)) =
+makePoolPendingChange (ReduceStake ppcBakerEquityCapital et) =
     PPCReduceBakerCapital{..}
     where
         ppcEffectiveTime = timestampToUTCTime et
-makePoolPendingChange (RemoveStake (PendingChangeEffectiveV1 et)) = PPCRemovePool{..}
+makePoolPendingChange (RemoveStake et) = PPCRemovePool{..}
     where
         ppcEffectiveTime = timestampToUTCTime et
 

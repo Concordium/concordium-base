@@ -39,6 +39,7 @@ import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
+import qualified Concordium.Genesis.Data.P5 as P5
 import Concordium.Types
 
 -- |Data family for genesis data.
@@ -54,6 +55,7 @@ newtype instance GenesisData 'P1 = GDP1 {unGDP1 :: P1.GenesisDataP1}
 newtype instance GenesisData 'P2 = GDP2 {unGDP2 :: P2.GenesisDataP2}
 newtype instance GenesisData 'P3 = GDP3 {unGDP3 :: P3.GenesisDataP3}
 newtype instance GenesisData 'P4 = GDP4 {unGDP4 :: P4.GenesisDataP4}
+newtype instance GenesisData 'P5 = GDP5 {unGDP5 :: P5.GenesisDataP5}
 
 -- |Data family for regenesis data. This has been chosen to be a data family, as
 -- opposed to a type family principally so that it is injective, i.e., so that
@@ -64,6 +66,7 @@ newtype instance Regenesis 'P1 = RGDP1 {unRGP1 :: P1.RegenesisP1}
 newtype instance Regenesis 'P2 = RGDP2 {unRGP2 :: P2.RegenesisP2}
 newtype instance Regenesis 'P3 = RGDP3 {unRGP3 :: P3.RegenesisP3}
 newtype instance Regenesis 'P4 = RGDP4 {unRGP4 :: P4.RegenesisP4}
+newtype instance Regenesis 'P5 = RGDP5 {unRGP5 :: P5.RegenesisP5}
 
 instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
     gdGenesisTime = case protocolVersion @pv of
@@ -71,30 +74,35 @@ instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
         SP2 -> gdGenesisTime . unGDP2
         SP3 -> gdGenesisTime . unGDP3
         SP4 -> gdGenesisTime . unGDP4
+        SP5 -> gdGenesisTime . unGDP5
     {-# INLINE gdGenesisTime #-}
     gdSlotDuration = case protocolVersion @pv of
         SP1 -> gdSlotDuration . unGDP1
         SP2 -> gdSlotDuration . unGDP2
         SP3 -> gdSlotDuration . unGDP3
         SP4 -> gdSlotDuration . unGDP4
+        SP5 -> gdSlotDuration . unGDP5
     {-# INLINE gdSlotDuration #-}
     gdMaxBlockEnergy = case protocolVersion @pv of
         SP1 -> gdMaxBlockEnergy . unGDP1
         SP2 -> gdMaxBlockEnergy . unGDP2
         SP3 -> gdMaxBlockEnergy . unGDP3
         SP4 -> gdMaxBlockEnergy . unGDP4
+        SP5 -> gdMaxBlockEnergy . unGDP5
     {-# INLINE gdMaxBlockEnergy #-}
     gdFinalizationParameters = case protocolVersion @pv of
         SP1 -> gdFinalizationParameters . unGDP1
         SP2 -> gdFinalizationParameters . unGDP2
         SP3 -> gdFinalizationParameters . unGDP3
         SP4 -> gdFinalizationParameters . unGDP4
+        SP5 -> gdFinalizationParameters . unGDP5
     {-# INLINE gdFinalizationParameters #-}
     gdEpochLength = case protocolVersion @pv of
         SP1 -> gdEpochLength . unGDP1
         SP2 -> gdEpochLength . unGDP2
         SP3 -> gdEpochLength . unGDP3
         SP4 -> gdEpochLength . unGDP4
+        SP5 -> gdEpochLength . unGDP5
     {-# INLINE gdEpochLength #-}
 
 instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
@@ -103,30 +111,35 @@ instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
         SP2 -> gdGenesisTime . unRGP2
         SP3 -> gdGenesisTime . unRGP3
         SP4 -> gdGenesisTime . unRGP4
+        SP5 -> gdGenesisTime . unRGP5
     {-# INLINE gdGenesisTime #-}
     gdSlotDuration = case protocolVersion @pv of
         SP1 -> gdSlotDuration . unRGP1
         SP2 -> gdSlotDuration . unRGP2
         SP3 -> gdSlotDuration . unRGP3
         SP4 -> gdSlotDuration . unRGP4
+        SP5 -> gdSlotDuration . unRGP5
     {-# INLINE gdSlotDuration #-}
     gdMaxBlockEnergy = case protocolVersion @pv of
         SP1 -> gdMaxBlockEnergy . unRGP1
         SP2 -> gdMaxBlockEnergy . unRGP2
         SP3 -> gdMaxBlockEnergy . unRGP3
         SP4 -> gdMaxBlockEnergy . unRGP4
+        SP5 -> gdMaxBlockEnergy . unRGP5
     {-# INLINE gdMaxBlockEnergy #-}
     gdFinalizationParameters = case protocolVersion @pv of
         SP1 -> gdFinalizationParameters . unRGP1
         SP2 -> gdFinalizationParameters . unRGP2
         SP3 -> gdFinalizationParameters . unRGP3
         SP4 -> gdFinalizationParameters . unRGP4
+        SP5 -> gdFinalizationParameters . unRGP5
     {-# INLINE gdFinalizationParameters #-}
     gdEpochLength = case protocolVersion @pv of
         SP1 -> gdEpochLength . unRGP1
         SP2 -> gdEpochLength . unRGP2
         SP3 -> gdEpochLength . unRGP3
         SP4 -> gdEpochLength . unRGP4
+        SP5 -> gdEpochLength . unRGP5
     {-# INLINE gdEpochLength #-}
 
 instance (IsProtocolVersion pv) => Eq (GenesisData pv) where
@@ -135,6 +148,7 @@ instance (IsProtocolVersion pv) => Eq (GenesisData pv) where
         SP2 -> (==) `on` unGDP2
         SP3 -> (==) `on` unGDP3
         SP4 -> (==) `on` unGDP4
+        SP5 -> (==) `on` unGDP5
 
 instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
     get = case protocolVersion @pv of
@@ -142,12 +156,14 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP2 -> GDP2 <$> P2.getGenesisDataV4
         SP3 -> GDP3 <$> P3.getGenesisDataV5
         SP4 -> GDP4 <$> P4.getGenesisDataV6
+        SP5 -> GDP5 <$> P5.getGenesisDataV7
 
     put = case protocolVersion @pv of
         SP1 -> P1.putGenesisDataV3 . unGDP1
         SP2 -> P2.putGenesisDataV4 . unGDP2
         SP3 -> P3.putGenesisDataV5 . unGDP3
         SP4 -> P4.putGenesisDataV6 . unGDP4
+        SP5 -> P5.putGenesisDataV7 . unGDP5
 
 {- |Deserialize 'GenesisConfiguration' given the hash of the genesis. If
  'GenesisData' or 'Regenesis' is decodable (using its Serialize instance) from a given
@@ -163,6 +179,7 @@ getGenesisConfiguration spv genHash = case spv of
     SP2 -> P2.getGenesisConfigurationV4 genHash
     SP3 -> P3.getGenesisConfigurationV5 genHash
     SP4 -> P4.getGenesisConfigurationV6 genHash
+    SP5 -> P5.getGenesisConfigurationV7 genHash
 
 {- |Deserialize genesis data with a version tag.
  See `putVersionedGenesisData` for details of the version tag.
@@ -173,6 +190,7 @@ getVersionedGenesisData = case protocolVersion @pv of
     SP2 -> GDP2 <$> P2.getVersionedGenesisData
     SP3 -> GDP3 <$> P3.getVersionedGenesisData
     SP4 -> GDP4 <$> P4.getVersionedGenesisData
+    SP5 -> GDP5 <$> P5.getVersionedGenesisData
 
 {- |Serialize genesis data with a version tag.
  Each version tag must be specific to a protocol version, though more than one version tag can
@@ -186,6 +204,7 @@ getVersionedGenesisData = case protocolVersion @pv of
  | 4           | P2               |
  | 5           | P3               |
  | 6           | P4               |
+ | 7           | P5               |
  +-------------+------------------+
 -}
 putVersionedGenesisData :: forall pv. IsProtocolVersion pv => Putter (GenesisData pv)
@@ -194,6 +213,7 @@ putVersionedGenesisData = case protocolVersion @pv of
     SP2 -> P2.putVersionedGenesisData . unGDP2
     SP3 -> P3.putVersionedGenesisData . unGDP3
     SP4 -> P4.putVersionedGenesisData . unGDP4
+    SP5 -> P5.putVersionedGenesisData . unGDP5
 
 -- |Generate the block hash of a genesis block with the given genesis data.
 -- This is based on the presumption that a block hash is computed from a byte string
@@ -204,6 +224,7 @@ genesisBlockHash = case protocolVersion @pv of
     SP2 -> P2.genesisBlockHash . unGDP2
     SP3 -> P3.genesisBlockHash . unGDP3
     SP4 -> P4.genesisBlockHash . unGDP4
+    SP5 -> P5.genesisBlockHash . unGDP5
 
 -- |Generate the block hash of a regenesis block with the given regenesis data.
 regenesisBlockHash :: forall pv. IsProtocolVersion pv => Regenesis pv -> BlockHash
@@ -212,6 +233,7 @@ regenesisBlockHash = case protocolVersion @pv of
     SP2 -> P2.regenesisBlockHash . unRGP2
     SP3 -> P3.regenesisBlockHash . unRGP3
     SP4 -> P4.regenesisBlockHash . unRGP4
+    SP5 -> P5.regenesisBlockHash . unRGP5
 
 -- |Hash of the initial genesis of the chain to which the given genesis data belongs.
 -- Genesis created as part of a protocol update records the genesis
@@ -222,6 +244,7 @@ firstGenesisBlockHash = case protocolVersion @pv of
     SP2 -> P2.firstGenesisBlockHash . unRGP2
     SP3 -> P3.firstGenesisBlockHash . unRGP3
     SP4 -> P4.firstGenesisBlockHash . unRGP4
+    SP5 -> P5.firstGenesisBlockHash . unRGP5
 
 -- |Tag of the genesis variant used for serialization. This tag determines
 -- whether the genesis data is, e.g., initial genesis, or regenesis.
@@ -231,6 +254,7 @@ genesisVariantTag = case protocolVersion @pv of
     SP2 -> P2.genesisVariantTag . unGDP2
     SP3 -> P3.genesisVariantTag . unGDP3
     SP4 -> P4.genesisVariantTag . unGDP4
+    SP5 -> P5.genesisVariantTag . unGDP5
 
 -- |Tag of the regenesis variant used for serialization. This tag determines
 -- whether the genesis data is, e.g., initial genesis, or regenesis and allows
@@ -242,6 +266,7 @@ regenesisVariantTag = case protocolVersion @pv of
     SP2 -> P2.regenesisVariantTag . unRGP2
     SP3 -> P3.regenesisVariantTag . unRGP3
     SP4 -> P4.regenesisVariantTag . unRGP4
+    SP5 -> P5.regenesisVariantTag . unRGP5
 
 -- |A dependent pair of a protocol version and genesis data.
 data PVGenesisData = forall pv. IsProtocolVersion pv => PVGenesisData (GenesisData pv)
@@ -261,6 +286,7 @@ getPVGenesisData = do
         4 -> PVGenesisData . GDP2 <$> P2.getGenesisDataV4
         5 -> PVGenesisData . GDP3 <$> P3.getGenesisDataV5
         6 -> PVGenesisData . GDP4 <$> P4.getGenesisDataV6
+        7 -> PVGenesisData . GDP5 <$> P5.getGenesisDataV7
         n -> fail $ "Unsupported genesis version: " ++ show n
 
 {- |Deserialize a genesis data version tag and return the associated protocol
@@ -275,6 +301,7 @@ getPVGenesisDataPV = do
         4 -> return $ SomeProtocolVersion SP2
         5 -> return $ SomeProtocolVersion SP3
         6 -> return $ SomeProtocolVersion SP4
+        7 -> return $ SomeProtocolVersion SP5
         n -> fail $ "Unsupported genesis version: " ++ show n
 
 {- |Serialize genesis data with a version tag. This is a helper function that
@@ -303,12 +330,14 @@ pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion 
 data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) where
     -- |No state migration is performed.
     StateMigrationParametersTrivial :: StateMigrationParameters p p
-    -- |No state migration is performed.
+    -- |The state is migrated from protocol version 'P1' to 'P2'.
     StateMigrationParametersP1P2 :: StateMigrationParameters 'P1 'P2
-    -- |No state migration is performed.
+    -- |The state is migrated from protocol version 'P2' to 'P3'.
     StateMigrationParametersP2P3 :: StateMigrationParameters 'P2 'P3
     -- |The state is migrated from protocol version 'P3' to 'P4'.
     StateMigrationParametersP3ToP4 :: P4.StateMigrationData -> StateMigrationParameters 'P3 'P4
+    -- |The state is migrated from protocol version 'P4' to 'P5'.
+    StateMigrationParametersP4ToP5 :: StateMigrationParameters 'P4 'P5
 
 -- |Extract the genesis configuration from the genesis data.
 genesisConfiguration :: IsProtocolVersion pv => GenesisData pv -> GenesisConfiguration
