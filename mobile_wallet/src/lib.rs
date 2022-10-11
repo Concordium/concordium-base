@@ -4,7 +4,10 @@ use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
         self, base16_decode_string, c_char,
-        types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
+        types::{
+            Amount, CredentialIndex, KeyIndex, KeyPair, Signature, TransactionSignature,
+            TransactionTime,
+        },
         Deserial,
     },
     contracts_common::{
@@ -35,6 +38,7 @@ use key_derivation::{ConcordiumHdWallet, Net};
 use pairing::bls12_381::Bls12;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
+use sha2::{Digest, Sha256};
 use std::{
     cmp::max,
     collections::{BTreeMap, HashMap},
@@ -92,6 +96,52 @@ fn make_signatures(
     let body = common::to_bytes(&pre_tx);
     let tx = pre_tx.sign(keys);
     (tx.signature, body)
+}
+
+/// Compute the message digest for some message and an account. The message
+/// digest is constructed so that it cannot be the prefix of an actual
+/// account transaction.
+fn get_message_digest(account_address: [u8; 32], message: String) -> [u8; 32] {
+    let prepend_bytes = [0_u8; 8];
+    let message_as_bytes = message.as_bytes();
+
+    let mut hasher = Sha256::new();
+    hasher.update(account_address);
+    hasher.update(prepend_bytes);
+    hasher.update(message_as_bytes);
+    let hash: [u8; 32] = hasher.finalize().into();
+    hash
+}
+
+fn sign_message_with_keys(
+    keys: &AccountKeys,
+    msg: String,
+    account_address: [u8; 32],
+) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>> {
+    let message_digest = get_message_digest(account_address, msg);
+
+    // TODO: The code below has been copied from sign_transaction_hash(), where to
+    // put a shared function to avoid duplication?
+    let iter = keys
+        .keys
+        .iter()
+        .take(usize::from(u8::from(keys.threshold)))
+        .map(|(k, v)| {
+            (k, {
+                let num = u8::from(v.threshold);
+                v.keys.iter().take(num.into())
+            })
+        });
+
+    let mut signatures = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, _>>::new();
+    for (ci, cred_keys) in iter {
+        let cred_sigs = cred_keys
+            .into_iter()
+            .map(|(ki, kp)| (*ki, kp.sign(&message_digest)))
+            .collect::<BTreeMap<_, _>>();
+        signatures.insert(*ci, cred_sigs);
+    }
+    signatures
 }
 
 /// Create a JSON encoding of an encrypted transfer transaction.
@@ -351,6 +401,19 @@ fn sign_transaction_aux(input: &str) -> anyhow::Result<String> {
     });
 
     Ok(to_string(&response)?)
+}
+
+fn sign_message_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let message: String = try_get(&v, "message")?;
+    let address: String = try_get(&v, "address")?;
+    let account_address = address.parse::<AccountAddress>()?.0;
+    let keys: AccountKeys = try_get(&v, "keys")?;
+    Ok(to_string(&sign_message_with_keys(
+        &keys,
+        message,
+        account_address,
+    ))?)
 }
 
 fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
@@ -1494,6 +1557,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => transaction_to_json -> transaction_to_json_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => sign_message -> sign_message_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///

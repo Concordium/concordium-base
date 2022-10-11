@@ -626,6 +626,21 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [sign_transaction-input.json](files/sign_transaction-input.json).
 An example output to this request is in the file [sign_transaction-output.json](files/sign_transaction-output.json).
 
+## sign_message
+Semantics: Signs a message with the provided account keys.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"message"` ... the text message to be signed
+
+- `"keys"` ... mapping with the keys of the signing account.
+
+The returned value is a JSON object containing a list with signatures of the message with the provided keys.
+
+An example input to this request is in the file [sign_message-input.json](files/sign_message-input.json).
+An example output to this request is in the file [sign_message-output.json](files/sign_message-output.json).
+
 ## transaction_to_json
 Semantics: Converts a serialized transaction (as bytes) into JSON.
 
