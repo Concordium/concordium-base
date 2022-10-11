@@ -1,10 +1,16 @@
 use anyhow::{bail, ensure};
+use byteorder::{BigEndian, ByteOrder};
 use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
-        self, c_char,
+        self, base16_decode_string, c_char,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
+    },
+    contracts_common::{
+        from_bytes,
+        schema::{ModuleV0, ModuleV1, ModuleV2, Type},
+        Cursor,
     },
     encrypted_transfers,
     id::{
@@ -17,7 +23,8 @@ use concordium_base::{
     },
     transactions::{
         self, construct::PreAccountTransaction, ConfigureBakerKeysPayload, ConfigureBakerPayload,
-        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo,
+        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo, Payload,
+        UpdateContractPayload,
     },
 };
 use dodis_yampolskiy_prf as prf;
@@ -33,7 +40,6 @@ use std::{
     collections::{BTreeMap, HashMap},
     convert::TryInto,
     ffi::{CStr, CString},
-    io::Cursor,
     str::FromStr,
 };
 
@@ -158,6 +164,190 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
         "signatures": signatures,
         "transaction": hex::encode(&body),
         "remaining": remaining_amount,
+    });
+
+    Ok(to_string(&response)?)
+}
+
+pub fn replace_json_value(v: &Value, replacement_key: &String, replacement: &Value) -> Value {
+    match v {
+        Value::Object(m) => {
+            let mut mutable_map = m.clone();
+
+            for (key, value) in m {
+                if key == replacement_key {
+                    mutable_map.insert(String::from(replacement_key), replacement.clone());
+                    break;
+                } else {
+                    mutable_map.insert(
+                        String::from(key),
+                        replace_json_value(value, replacement_key, replacement),
+                    );
+                }
+            }
+
+            Value::Object(mutable_map)
+        }
+        v => v.clone(),
+    }
+}
+
+fn get_receive_schema(
+    schema_bytes: &[u8],
+    schema_version: &u8,
+    contract_name: &String,
+    entrypoint_name: &String,
+) -> anyhow::Result<Type> {
+    let receive_schema = match schema_version {
+        0 => {
+            let module_schema: ModuleV0 = match from_bytes(schema_bytes) {
+                Ok(o) => o,
+                Err(e) => return Err(anyhow::anyhow!("Failed to parse ModuleV0 schema: {:#?}", e)),
+            };
+
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .clone()
+        }
+        1 => {
+            let module_schema: ModuleV1 = match from_bytes(schema_bytes) {
+                Ok(o) => o,
+                Err(e) => return Err(anyhow::anyhow!("Failed to parse ModuleV1 schema: {:#?}", e)),
+            };
+
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            let entrypoint_parameter = contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .parameter();
+            match entrypoint_parameter {
+                Some(value) => value.clone(),
+                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
+            }
+        }
+        2 => {
+            let module_schema: ModuleV2 = match from_bytes(schema_bytes) {
+                Ok(o) => o,
+                Err(e) => return Err(anyhow::anyhow!("Failed to parse ModuleV2 schema: {:#?}", e)),
+            };
+
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            let entrypoint_parameter = contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .parameter();
+            match entrypoint_parameter {
+                Some(value) => value.clone(),
+                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
+            }
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unsupported schema version: {}",
+                schema_version
+            ));
+        }
+    };
+
+    Ok(receive_schema)
+}
+
+fn get_parameters_as_json(
+    payload: UpdateContractPayload,
+    schema: &str,
+    schema_version: &Option<u8>,
+) -> anyhow::Result<Value> {
+    let schema_bytes = hex::decode(schema)?;
+    let prefix = BigEndian::read_u16(&schema_bytes[0..2]);
+
+    let contract_name = &payload
+        .receive_name
+        .as_receive_name()
+        .contract_name()
+        .to_string();
+    let entrypoint_name = &payload
+        .receive_name
+        .as_receive_name()
+        .entrypoint_name()
+        .to_string();
+
+    let receive_schema = match prefix {
+        // Magic prefix for versioned schemas.
+        65535 => {
+            let version = &schema_bytes[2];
+            get_receive_schema(&schema_bytes[3..], version, contract_name, entrypoint_name)?
+        }
+        _ => match schema_version {
+            Some(version) => {
+                get_receive_schema(&schema_bytes, version, contract_name, entrypoint_name)?
+            }
+            None => return Err(anyhow::anyhow!("Missing schema version")),
+        },
+    };
+
+    let parameter_bytes: Vec<u8> = payload.message.into();
+    let mut parameters_cursor = Cursor::new(&parameter_bytes[..]);
+    match receive_schema.to_json(&mut parameters_cursor) {
+        Ok(schema) => Ok(schema),
+        Err(e) => Err(anyhow::anyhow!(
+            "Unable to parse parameters to JSON: {:?}",
+            e
+        )),
+    }
+}
+
+fn transaction_to_json_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let serialized_transaction: String = try_get(&v, "transaction")?;
+    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
+
+    let response = match pre_tx.clone().payload {
+        Payload::Update { payload } => {
+            let schema: String = try_get(&v, "schema")?;
+            let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
+            let parameters_as_json = get_parameters_as_json(payload, &schema, &schema_version)?;
+            let transaction_as_json = serde_json::json!(pre_tx);
+            replace_json_value(
+                &transaction_as_json,
+                &String::from("message"),
+                &parameters_as_json,
+            )
+        }
+        _ => {
+            serde_json::json!(pre_tx)
+        }
+    };
+
+    Ok(to_string(&response)?)
+}
+
+fn sign_transaction_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let serialized_transaction: String = try_get(&v, "transaction")?;
+    let keys: AccountKeys = try_get(&v, "keys")?;
+    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
+    let (signatures, body) = make_signatures(&keys, pre_tx);
+
+    let response = serde_json::json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
     });
 
     Ok(to_string(&response)?)
@@ -865,7 +1055,7 @@ fn decrypt_encrypted_amount_aux(input: &str) -> anyhow::Result<Amount> {
     let encrypted_amount = try_get(&v, "encryptedAmount")?;
     let secret = try_get(&v, "encryptionSecretKey")?;
 
-    let table = BabyStepGiantStep::deserial(&mut Cursor::new(TABLE_BYTES))?;
+    let table = BabyStepGiantStep::deserial(&mut std::io::Cursor::new(TABLE_BYTES))?;
     Ok(
         encrypted_transfers::decrypt_amount::<id::constants::ArCurve>(
             &table,
@@ -1276,6 +1466,34 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => get_account_keys_and_randomness -> get_account_keys_and_randomness_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => sign_transaction -> sign_transaction_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => transaction_to_json -> transaction_to_json_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///

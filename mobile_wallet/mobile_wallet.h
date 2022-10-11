@@ -224,6 +224,36 @@ char *get_identity_keys_and_randomness(const char *input_ptr, uint8_t *success);
 char *get_account_keys_and_randomness(const char *input_ptr, uint8_t *success);
 
 /**
+ * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+ * UTF8-encoded string. The returned string must be freed by the caller by
+ * calling the function 'free_response_string'. In case of failure the function
+ * returns an error message as the response, and sets the 'success' flag to 0.
+ *
+ * See rust-bins/wallet-notes/README.md for the description of input and output
+ * formats.
+ *
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *sign_transaction(const char *input_ptr, uint8_t *success);
+
+/**
+ * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+ * UTF8-encoded string. The returned string must be freed by the caller by
+ * calling the function 'free_response_string'. In case of failure the function
+ * returns an error message as the response, and sets the 'success' flag to 0.
+ *
+ * See rust-bins/wallet-notes/README.md for the description of input and output
+ * formats.
+ *
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *transaction_to_json(const char *input_ptr, uint8_t *success);
+
+/**
  * # Safety
  * This function is unsafe in the sense that if the argument pointer was not
  * Constructed via CString::into_raw its behaviour is undefined.
