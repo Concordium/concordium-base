@@ -12,7 +12,7 @@ use std::iter::once;
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     /// Commitment to the bits of the value
-    A:        C, 
+    A:        C,
     /// Commitment to the blinding factors in s_L and s_R
     S:        C,
     /// Commitment to the t_1 coefficient of polynomial t(x)
@@ -34,7 +34,7 @@ pub struct RangeProof<C: Curve> {
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 
 /// This function computes the n-bit binary representation a_L of input value v
-/// The vector a_R is the bit-wise negation of a_R 
+/// The vector a_R is the bit-wise negation of a_R
 #[allow(non_snake_case)]
 fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
     let mut a_L = Vec::with_capacity(usize::from(n));
@@ -170,12 +170,10 @@ pub fn prove<C: Curve, T: Rng>(
     v_keys: &CommitmentKey<C>,
     randomness: &[Randomness<C>],
 ) -> Option<RangeProof<C>> {
-    /*
-        Part 1: Setup and generation of vector commitments 
-        V (for the values), 
-        A (their binary representation), 
-        S (the blinding factors)
-    */
+    // Part 1: Setup and generation of vector commitments
+    // V (for the values),
+    // A (their binary representation),
+    // S (the blinding factors)
     let nm = usize::from(n) * usize::from(m);
     // Check that we have enough generators for vector commitments
     if gens.G_H.len() < nm {
@@ -187,7 +185,7 @@ pub fn prove<C: Curve, T: Rng>(
     let B = v_keys.g;
     // Generator for the blinding of commitments
     let B_tilde = v_keys.h;
-    //Setup blinding factors for a_L and a_R
+    // Setup blinding factors for a_L and a_R
     let mut s_L = Vec::with_capacity(usize::from(n));
     let mut s_R = Vec::with_capacity(usize::from(n));
     for _ in 0..nm {
@@ -199,7 +197,7 @@ pub fn prove<C: Curve, T: Rng>(
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     // Vectors for value commitments V_j
     let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
-    //Blinding factors for V_j,A_j,S_j committments
+    // Blinding factors for V_j,A_j,S_j committments
     let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut a_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut s_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
@@ -209,7 +207,7 @@ pub fn prove<C: Curve, T: Rng>(
         a_L.extend(&a_L_j);
         a_R.extend(&a_R_j);
         // generate blinding factors
-        let v_j_tilde = &randomness[j];   // let v_j_tilde = Randomness::<C>::generate(csprng);
+        let v_j_tilde = &randomness[j]; // let v_j_tilde = Randomness::<C>::generate(csprng);
         let a_j_tilde = Randomness::<C>::generate(csprng);
         let s_j_tilde = Randomness::<C>::generate(csprng);
         v_tilde_vec.push(*v_j_tilde.as_ref());
@@ -257,14 +255,12 @@ pub fn prove<C: Curve, T: Rng>(
     let table = multiexp_table(&GH_B_tilde, window_size);
     let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
     let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
-    // append commitments A and S to transcript 
+    // append commitments A and S to transcript
     transcript.append_message(b"A", &A);
     transcript.append_message(b"S", &S);
 
-    /*
-        Part 2: Computation of vector polynomials l(x),r(x)
-    */
-    //get challenges y,z from transcript
+    // Part 2: Computation of vector polynomials l(x),r(x)
+    // get challenges y,z from transcript
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
 
@@ -290,11 +286,11 @@ pub fn prove<C: Curve, T: Rng>(
     let mut r_1 = Vec::with_capacity(nm);
     // compute l_0 and l_1
     for i in 0..a_L.len() {
-        //l_0[i] <- a_L[i] - z
+        // l_0[i] <- a_L[i] - z
         let mut l_0_i = a_L[i];
         l_0_i.sub_assign(&z);
         l_0.push(l_0_i);
-        //l_1[i] <- s_L[i]
+        // l_1[i] <- s_L[i]
         l_1.push(s_L[i]);
     }
     // compute r_0 and r_1
@@ -317,21 +313,19 @@ pub fn prove<C: Curve, T: Rng>(
         r_1.push(r_1_i);
     }
 
-    /*
-        Part 3: Computation of polynomial t(x) = <l(x),r(x)>
-    */
+    // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
     // coefficients of polynomials t_j(x)
     let mut t_0 = Vec::with_capacity(usize::from(m));
     let mut t_1 = Vec::with_capacity(usize::from(m));
     let mut t_2 = Vec::with_capacity(usize::from(m));
-    //blinding factors for upper coefficients of t_j(x)
+    // blinding factors for upper coefficients of t_j(x)
     let mut t_1_tilde = Vec::with_capacity(usize::from(m));
     let mut t_2_tilde = Vec::with_capacity(usize::from(m));
 
-    //for each t_j(x)
+    // for each t_j(x)
     for j in 0..usize::from(m) {
         let n = usize::from(n);
-        //compute coefficients of t_j(x)
+        // compute coefficients of t_j(x)
         // t_0,j <- <l_{0,j},r_{0,j}>
         let t_0_j = inner_product(&l_0[j * n..(j + 1) * n], &r_0[j * n..(j + 1) * n]);
         // t_2,j <- <l_{1,j},r_{1,j}>
@@ -382,9 +376,7 @@ pub fn prove<C: Curve, T: Rng>(
     transcript.append_message(b"T1", &T_1);
     transcript.append_message(b"T2", &T_2);
 
-    /*
-        Part 4: Evaluate l(x), r(x), and t(x) at challenge point x
-    */
+    // Part 4: Evaluate l(x), r(x), and t(x) at challenge point x
     // get challenge x from transcript
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     // println!("prover's x = {:?}", x);
@@ -407,7 +399,7 @@ pub fn prove<C: Curve, T: Rng>(
         r.push(r_i);
     }
 
-    // evaluate t(x) at challenge point x,  
+    // evaluate t(x) at challenge point x,
     // compute blinding factor tx_tilde for t(x) evaluation committment,
     // and compute bilding factor e_tilde for the inner product committment
     let mut tx: C::Scalar = C::Scalar::zero();
@@ -438,7 +430,7 @@ pub fn prove<C: Curve, T: Rng>(
         txj_tilde.add_assign(&x2t2j_tilde);
         tx_tilde.add_assign(&txj_tilde);
 
-        // e_tilde_j <- a_tilde_j + s_tilde_j * x 
+        // e_tilde_j <- a_tilde_j + s_tilde_j * x
         let mut ej_tilde = x;
         ej_tilde.mul_assign(&s_tilde_vec[j]);
         ej_tilde.add_assign(&a_tilde_vec[j]);
@@ -449,16 +441,15 @@ pub fn prove<C: Curve, T: Rng>(
     transcript.append_message(b"tx_tilde", &tx_tilde);
     transcript.append_message(b"e_tilde", &e_tilde);
 
-    /*
-        Part 5: Inner product proof for t(x) = <l(x),r(x)>
-    */    
+    // Part 5: Inner product proof for t(x) = <l(x),r(x)>
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     // get generator q
     let Q = B.mul_by_scalar(&w);
 
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
-    // compute scalars such that c*H = H', that is H_prime_scalars = (1, y^-1, \dots, y^-(nm-1))
+    // compute scalars such that c*H = H', that is H_prime_scalars = (1, y^-1,
+    // \dots, y^-(nm-1))
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
     let y_inv = match y.inverse() {
         Some(inv) => inv,
@@ -472,7 +463,7 @@ pub fn prove<C: Curve, T: Rng>(
     }
     // compute inner product proof
     let proof = prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
-    
+
     // return range proof
     if let Some(ip_proof) = proof {
         return Some(RangeProof {
@@ -527,9 +518,7 @@ pub fn verify_efficient<C: Curve>(
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
-    /*
-        Part 1: Setup 
-    */ 
+    // Part 1: Setup
     let m = commitments.len();
     let nm = usize::from(n) * m;
     // Check that we have enough generators for vector commitments
@@ -554,10 +543,10 @@ pub fn verify_efficient<C: Curve>(
     // define blinding factors for tx and i.p. proof
     let tx_tilde = proof.tx_tilde;
     let e_tilde = proof.e_tilde;
-    // append commitments A and S to transcript 
+    // append commitments A and S to transcript
     transcript.append_message(b"A", &A);
     transcript.append_message(b"S", &S);
-    //get challenges y,z from transcript
+    // get challenges y,z from transcript
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
     let mut z2 = z;
@@ -579,9 +568,7 @@ pub fn verify_efficient<C: Curve>(
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
 
-    /*
-        Part 2: Check verification equation 1
-    */ 
+    // Part 2: Check verification equation 1
     // Calculate delta(x,y) <- (z-z^2)*<1,y_nm> -  <1,2_nm> * sum_j=0^m-1 z^(j+3)
     // ip_1_y_nm <- <1,y_nm>
     let mut ip_1_y_nm = C::Scalar::zero();
@@ -590,7 +577,7 @@ pub fn verify_efficient<C: Curve>(
         ip_1_y_nm.add_assign(&yi);
         yi.mul_assign(&y);
     }
-    //ip_1_2_n <- <1,2_nm>
+    // ip_1_2_n <- <1,2_nm>
     let mut ip_1_2_n = C::Scalar::zero();
     let mut two_i = C::Scalar::one();
     for _ in 0..usize::from(n) {
@@ -608,7 +595,6 @@ pub fn verify_efficient<C: Curve>(
     delta_yz.sub_assign(&z2);
     delta_yz.mul_assign(&ip_1_y_nm);
     delta_yz.sub_assign(&sum);
-
 
     // eq1 LHS  <- t_x*B + t_tilde(x)*B_tilde
     let LHS = B
@@ -635,17 +621,15 @@ pub fn verify_efficient<C: Curve>(
         return Err(VerificationError::First);
     }
 
-    /*
-        Part 2: Check verification equation 2
-        
-        Equation 2 is of the form: scalar_G * G + scalar_H * H + ...
-
-        Thus:
-        1) Compute all scalars
-        2) Multiexponentiation to comptue the summands
-        3) Check that the sum is zero
-
-    */ 
+    // Part 2: Check verification equation 2
+    //
+    // Equation 2 is of the form: scalar_G * G + scalar_H * H + ...
+    //
+    // Thus:
+    // 1) Compute all scalars
+    // 2) Multiexponentiation to comptue the summands
+    // 3) Check that the sum is zero
+    //
     let ip_proof = &proof.ip_proof;
     // compute vectors u^2,u^-2,s
     let verification_scalars = verify_scalars(transcript, G.len(), ip_proof);
@@ -665,8 +649,8 @@ pub fn verify_efficient<C: Curve>(
     let z_2_m = z_vec(z, 2, m);
     // (s_0^-1,s_1^-1,...)
     let mut s_inv = s;
-    s_inv.reverse(); //the inverses of s is the reversed list
-    // (1,2,...,2^(n-1))
+    s_inv.reverse(); // the inverses of s is the reversed list
+                     // (1,2,...,2^(n-1))
     let two_n: Vec<C::Scalar> = two_n_vec(n);
 
     // compute scalar H_scalars[j] <- z+y^-j*(z^(2+j//n)*2^(j%n)-b*s_j^-1)
@@ -716,7 +700,7 @@ pub fn verify_efficient<C: Curve>(
     // compute G_scalar[i] <- -z-a*s_i
     let mut G_scalars = Vec::with_capacity(G.len());
     s_inv.reverse();
-    let s = s_inv; 
+    let s = s_inv;
     for si in s {
         let mut G_scalar = z;
         G_scalar.negate();
@@ -737,7 +721,7 @@ pub fn verify_efficient<C: Curve>(
         .plus_point(&H_term)
         .plus_point(&L_term)
         .plus_point(&R_term);
-    // sum ?= 0 
+    // sum ?= 0
     let second = sum.is_zero_point();
     if first && second {
         Ok(())
