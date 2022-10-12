@@ -1969,11 +1969,11 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | PoolClosed
                   -- |The module reference provided for the contract upgrade did not
                   -- point to a deployed module.
-                  | UpgradeInvalidModuleReference
+                  | UpgradeInvalidModuleReference !ModuleRef
                   -- |The module for upgrading to did not contain a contract name of the one upgrading from.
-                  | UpgradeInvalidContractName
-                  -- |The module for upgrading to is not a supported smart contract version. 
-                  | UpgradeInvalidUpgradeModuleVersion
+                  | UpgradeInvalidContractName !ModuleRef !Wasm.InitName
+                  -- |The module for upgrading to is not a supported smart contract version.
+                  | UpgradeInvalidUpgradeModuleVersion !ModuleRef !Wasm.WasmVersion
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
