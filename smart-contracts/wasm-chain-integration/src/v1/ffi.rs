@@ -334,6 +334,8 @@ unsafe extern "C" fn call_receive_v1(
 /// This function is safe provided all the supplied pointers are not null and
 /// the `wasm_bytes_ptr` points to an array of length at least `wasm_bytes_len`.
 unsafe extern "C" fn validate_and_process_v1(
+    // The current protocol.
+    protocol_version: u32,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
@@ -343,8 +345,6 @@ unsafe extern "C" fn validate_and_process_v1(
     /* location where the pointer to the artifact will
      * be written. */
     output_artifact_bytes: *mut *const u8,
-    // The current protocol.
-    protocol_version: u32,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
     match utils::instantiate_with_metering::<ProcessedImports, _>(

@@ -787,7 +787,7 @@ mod host {
         ensure!(module_ref_end <= memory.len(), "Illegal memory access.");
         let mut module_reference_bytes = [0u8; MODULE_REFERENCE_SIZE];
         module_reference_bytes
-            .copy_from_slice(&memory[module_ref_start..module_ref_start + MODULE_REFERENCE_SIZE]);
+            .copy_from_slice(&memory[module_ref_start..module_ref_end]);
         let module_ref = ModuleReference::from(module_reference_bytes);
         // We tick a base action cost here and
         // tick the remaining cost in the 'Scheduler' as it knows the size
