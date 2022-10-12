@@ -25,6 +25,11 @@ use wasm_transform::{
     utils,
 };
 
+// TOOD: Move these to concordium-contracts-common?
+pub const MODULE_REF_SIZE: usize = 32;
+#[derive(Debug)]
+pub struct ModuleRef(pub [u8; 32]);
+
 /// Interrupt triggered by the smart contract to execute an instruction on the
 /// host, either an account transfer or a smart contract call.
 #[derive(Debug)]
@@ -38,6 +43,9 @@ pub enum Interrupt {
         parameter: ParameterVec,
         name:      OwnedEntrypointName,
         amount:    Amount,
+    },
+    Upgrade {
+        module_ref: ModuleRef,
     },
 }
 
@@ -68,6 +76,13 @@ impl Interrupt {
                 out.write_all(&(name_str.as_bytes().len() as u16).to_be_bytes())?;
                 out.write_all(name_str.as_bytes())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
+                Ok(())
+            }
+            Interrupt::Upgrade {
+                module_ref,
+            } => {
+                out.push(2u8);
+                out.write_all(&module_ref.0)?;
                 Ok(())
             }
         }
@@ -186,6 +201,7 @@ mod host {
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
+    const UPGRADE_TAG: u32 = 2;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -308,6 +324,20 @@ mod host {
                     Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
                     Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
+            }
+            UPGRADE_TAG => {
+                ensure!(
+                    length == MODULE_REF_SIZE,
+                    "Upgrade must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut module_ref_bytes = [0u8; MODULE_REF_SIZE];
+                module_ref_bytes.copy_from_slice(&memory[start..start + MODULE_REF_SIZE]);
+                let module_ref = ModuleRef(module_ref_bytes);
+                Ok(Some(Interrupt::Upgrade {
+                    module_ref,
+                }))
             }
             c => bail!("Illegal instruction code {}.", c),
         }
