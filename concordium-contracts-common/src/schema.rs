@@ -390,6 +390,9 @@ impl SchemaType for i128 {
 impl SchemaType for Amount {
     fn get_type() -> Type { Type::Amount }
 }
+impl SchemaType for ModuleReference {
+    fn get_type() -> Type { Type::ByteArray(32) }
+}
 impl SchemaType for AccountAddress {
     fn get_type() -> Type { Type::AccountAddress }
 }
@@ -454,6 +457,10 @@ impl SchemaType for OwnedContractName {
 
 impl SchemaType for OwnedReceiveName {
     fn get_type() -> Type { Type::ReceiveName(SizeLength::U16) }
+}
+
+impl SchemaType for OwnedEntrypointName {
+    fn get_type() -> Type { Type::String(SizeLength::U16) }
 }
 
 impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
