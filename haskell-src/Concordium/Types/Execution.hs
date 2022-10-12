@@ -1967,6 +1967,13 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | PoolWouldBecomeOverDelegated
                   -- |The pool is not open to delegators.
                   | PoolClosed
+                  -- |The module reference provided for the contract upgrade did not
+                  -- point to a deployed module.
+                  | UpgradeInvalidModuleReference
+                  -- |The module for upgrading to did not contain a contract name of the one upgrading from.
+                  | UpgradeInvalidContractName
+                  -- |The module for upgrading to is not a supported smart contract version. 
+                  | UpgradeInvalidUpgradeModuleVersion
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
