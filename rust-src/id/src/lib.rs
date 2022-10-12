@@ -14,6 +14,7 @@ pub mod secret_sharing;
 pub mod sigma_protocols;
 pub mod types;
 pub mod utils;
+pub mod zk_lang;
 
 /// Re-export of Pedersen commitments functionality.
 pub use pedersen_scheme as pedersen_commitment;

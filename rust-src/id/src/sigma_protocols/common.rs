@@ -391,7 +391,7 @@ impl<A: Serial, B: Serial> Serial for Either<A,B> {
             },
             Either::Right(a) => {
                 let right = (false, a);
-                false.serial(out)
+                right.serial(out)
             }
         }
     }
