@@ -330,6 +330,7 @@ pub enum ReceiveOnlyFunc {
     GetReceiveOwner,
     GetReceiveEntrypointSize,
     GetReceiveEntryPoint,
+    Upgrade,
 }
 
 #[repr(u8)]
@@ -445,6 +446,7 @@ impl Output for ImportFunc {
                 ReceiveOnlyFunc::GetReceiveEntrypointSize => 29,
                 ReceiveOnlyFunc::GetReceiveEntryPoint => 30,
                 ReceiveOnlyFunc::Invoke => 31,
+                ReceiveOnlyFunc::Upgrade => 32,
             },
         };
         tag.output(out)
@@ -529,6 +531,7 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "hash_sha2_256" => type_matches!(ty => [I32, I32, I32]),
                 "hash_sha3_256" => type_matches!(ty => [I32, I32, I32]),
                 "hash_keccak_256" => type_matches!(ty => [I32, I32, I32]),
+                "upgrade" => type_matches!(ty => [I32]; I64),
                 _ => false,
             }
         } else {
@@ -630,6 +633,7 @@ impl TryFromImport for ProcessedImports {
                 "hash_sha2_256" => ImportFunc::Common(CommonFunc::HashSHA2_256),
                 "hash_sha3_256" => ImportFunc::Common(CommonFunc::HashSHA3_256),
                 "hash_keccak_256" => ImportFunc::Common(CommonFunc::HashKeccak256),
+                "upgrade" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {

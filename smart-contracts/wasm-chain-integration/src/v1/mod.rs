@@ -12,7 +12,7 @@ use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
-    OwnedEntrypointName, ReceiveName,
+    ModuleReference, OwnedEntrypointName, ReceiveName,
 };
 use machine::Value;
 use sha3::Digest;
@@ -25,13 +25,9 @@ use wasm_transform::{
     utils,
 };
 
-// TOOD: Move these to concordium-contracts-common?
-pub const MODULE_REF_SIZE: usize = 32;
-#[derive(Debug)]
-pub struct ModuleRef(pub [u8; 32]);
-
 /// Interrupt triggered by the smart contract to execute an instruction on the
-/// host, either an account transfer or a smart contract call.
+/// host, either an account transfer, a smart contract call or an upgrade
+/// instruction.
 #[derive(Debug)]
 pub enum Interrupt {
     Transfer {
@@ -45,9 +41,12 @@ pub enum Interrupt {
         amount:    Amount,
     },
     Upgrade {
-        module_ref: ModuleRef,
+        module_ref: ModuleReference,
     },
 }
+
+// TODO: Move to contracts common
+pub const MODULE_REFERENCE_SIZE: usize = 32;
 
 impl Interrupt {
     pub fn to_bytes(&self, out: &mut Vec<u8>) -> anyhow::Result<()> {
@@ -82,7 +81,7 @@ impl Interrupt {
                 module_ref,
             } => {
                 out.push(2u8);
-                out.write_all(&module_ref.0)?;
+                out.write_all(&module_ref.as_ref()[..])?;
                 Ok(())
             }
         }
@@ -201,7 +200,6 @@ mod host {
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
-    const UPGRADE_TAG: u32 = 2;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -324,20 +322,6 @@ mod host {
                     Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
                     Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
-            }
-            UPGRADE_TAG => {
-                ensure!(
-                    length == MODULE_REF_SIZE,
-                    "Upgrade must have exactly 32 bytes of payload, but was {}",
-                    length
-                );
-                ensure!(start + length <= memory.len(), "Illegal memory access.");
-                let mut module_ref_bytes = [0u8; MODULE_REF_SIZE];
-                module_ref_bytes.copy_from_slice(&memory[start..start + MODULE_REF_SIZE]);
-                let module_ref = ModuleRef(module_ref_bytes);
-                Ok(Some(Interrupt::Upgrade {
-                    module_ref,
-                }))
             }
             c => bail!("Illegal instruction code {}.", c),
         }
@@ -790,6 +774,29 @@ mod host {
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
     }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `upgrade` host function.
+    pub fn upgrade(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<Option<Interrupt>> {
+        let module_ref_start = unsafe { stack.pop_u32() } as usize;
+        let module_ref_end = module_ref_start + MODULE_REFERENCE_SIZE as usize;
+        ensure!(module_ref_end <= memory.len(), "Illegal memory access.");
+        let mut module_reference_bytes = [0u8; MODULE_REFERENCE_SIZE];
+        module_reference_bytes
+            .copy_from_slice(&memory[module_ref_start..module_ref_start + MODULE_REFERENCE_SIZE]);
+        let module_ref = ModuleReference::from(module_reference_bytes);
+        // We tick a base action cost here and
+        // tick the remaining cost in the 'Scheduler' as it knows the size
+        // of the new module.
+        energy.tick_energy(constants::BASE_ACTION_COST)?;
+        Ok(Some(Interrupt::Upgrade {
+            module_ref,
+        }))
+    }
 }
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
@@ -1071,6 +1078,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     stack,
                     self.stateless.receive_ctx.entrypoint()?,
                 ),
+                ReceiveOnlyFunc::Upgrade => {
+                    return host::upgrade(memory, stack, &mut self.energy);
+                },
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 bail!("Not implemented for receive.");
