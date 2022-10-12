@@ -2112,8 +2112,8 @@ instance S.Serialize RejectReason where
     53 -> return PoolWouldBecomeOverDelegated
     54 -> return PoolClosed
     55 -> UpgradeInvalidModuleReference <$> S.get
-    56 -> UpgradeInvalidContractName <$> getListOf S.get
-    57 -> UpgradeInvalidVersion <$> getListOf S.get
+    56 -> UpgradeInvalidContractName <$> S.get <*> S.get
+    57 -> UpgradeInvalidVersion <$> S.get <*> S.get
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
