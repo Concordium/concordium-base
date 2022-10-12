@@ -2045,6 +2045,9 @@ instance S.Serialize RejectReason where
     StakeOverMaximumThresholdForPool -> S.putWord8 52
     PoolWouldBecomeOverDelegated -> S.putWord8 53
     PoolClosed -> S.putWord8 54
+    UpgradeInvalidModuleReference moduleRef -> S.putWord8 55 <> S.put moduleRef
+    UpgradeInvalidContractName moduleRef initName -> S.putWord8 56 <> S.put moduleRef <> S.put initName
+    UpgradeInvalidVersion moduleRef wasmVersion -> S.putWord8 57 <> S.put moduleRef <> S.put wasmVersion
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -2108,6 +2111,9 @@ instance S.Serialize RejectReason where
     52 -> return StakeOverMaximumThresholdForPool
     53 -> return PoolWouldBecomeOverDelegated
     54 -> return PoolClosed
+    55 -> UpgradeInvalidModuleReference <$> S.get
+    56 -> UpgradeInvalidContractName <$> getListOf S.get
+    57 -> UpgradeInvalidVersion <$> getListOf S.get
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
