@@ -1973,7 +1973,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   -- |The module for upgrading to did not contain a contract name of the one upgrading from.
                   | UpgradeInvalidContractName !ModuleRef !Wasm.InitName
                   -- |The module for upgrading to is not a supported smart contract version.
-                  | UpgradeInvalidUpgradeModuleVersion !ModuleRef !Wasm.WasmVersion
+                  | UpgradeInvalidVersion !ModuleRef !Wasm.WasmVersion
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
