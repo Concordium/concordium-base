@@ -337,14 +337,17 @@ impl ops::RemAssign<u64> for Amount {
 pub struct ModuleReference([u8; 32]);
 
 impl convert::AsRef<[u8; 32]> for ModuleReference {
+    #[inline(always)]
     fn as_ref(&self) -> &[u8; 32] { &self.0 }
 }
 
 impl convert::From<[u8; 32]> for ModuleReference {
+    #[inline(always)]
     fn from(bytes: [u8; 32]) -> Self { Self(bytes) }
 }
 
 impl convert::From<ModuleReference> for [u8; 32] {
+    #[inline(always)]
     fn from(module: ModuleReference) -> Self { module.0 }
 }
 
