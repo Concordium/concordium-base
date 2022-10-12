@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+- Add type `ModuleReference` representing a module reference.
+- Implement `SchemaType` for `OwnedEntrypointName`.
+
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
 - Add type aliases for `ContractIndex` and `ContractSubIndex`.
