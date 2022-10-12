@@ -334,8 +334,8 @@ unsafe extern "C" fn call_receive_v1(
 /// This function is safe provided all the supplied pointers are not null and
 /// the `wasm_bytes_ptr` points to an array of length at least `wasm_bytes_len`.
 unsafe extern "C" fn validate_and_process_v1(
-    // The current protocol.
-    protocol_version: u32,
+    // The current protocol version.
+    protocol_version: u64,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
