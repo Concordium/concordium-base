@@ -792,7 +792,7 @@ mod host {
         // We tick a base action cost here and
         // tick the remaining cost in the 'Scheduler' as it knows the size
         // of the new module.
-        energy.tick_energy(constants::BASE_ACTION_COST)?;
+        energy.tick_energy(constants::INVOKE_BASE_COST)?;
         Ok(Some(Interrupt::Upgrade {
             module_ref,
         }))
