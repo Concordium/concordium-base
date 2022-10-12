@@ -336,10 +336,15 @@ unsafe extern "C" fn call_receive_v1(
 unsafe extern "C" fn validate_and_process_v1(
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
-    output_len: *mut size_t, // this is the total length of the output byte array
-    output_artifact_len: *mut size_t, // the length of the artifact byte array
-    output_artifact_bytes: *mut *const u8, /* location where the pointer to the artifact will
-                              * be written. */
+    // this is the total length of the output byte array
+    output_len: *mut size_t,
+    // the length of the artifact byte array
+    output_artifact_len: *mut size_t,
+    /* location where the pointer to the artifact will
+     * be written. */
+    output_artifact_bytes: *mut *const u8,
+    // The current protocol.
+    protocol_version: u32,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
@@ -351,6 +356,13 @@ unsafe extern "C" fn validate_and_process_v1(
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
             for name in artifact.export.keys() {
+                // Only V1 contracts from P5 and onwards
+                // supports 'upgrade'.
+                // todo: should this be handled differently? E.g. should the 'wasm_transform'
+                // handle this?
+                if protocol_version < 5 && name.as_ref() == "upgrade" {
+                    return std::ptr::null_mut();
+                }
                 let len = name.as_ref().as_bytes().len();
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
