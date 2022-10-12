@@ -3,11 +3,10 @@ use client_server_helpers::*;
 use crypto_common::*;
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve_arithmetic::Curve;
-use ed25519_dalek::*;
 use elgamal::PublicKey;
 use id::types::*;
 use pairing::bls12_381::{Bls12, G1, G2};
-use sha2::Sha512;
+use sha2::{Digest, Sha512};
 use std::{fs, path::PathBuf};
 use structopt::StructOpt;
 

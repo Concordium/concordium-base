@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables #-}
+{-# LANGUAGE KindSignatures, DataKinds, ScopedTypeVariables #-}
 
 module Concordium.Genesis.Data.Base where
 
@@ -120,10 +120,8 @@ instance BasicGenesisData GenesisConfiguration where
 putGenesisConfiguration :: Putter GenesisConfiguration
 putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> put _gcFirstGenesis <> put _gcCurrentHash
 
--- | Data in the "regenesis" block, which is the first block of the chain after
+-- | Common data in the "regenesis" block, which is the first block of the chain after
 -- the protocol update takes effect.
--- It is likely that the data in here will change for future protocol versions, but
--- P1 and P2 updates share it.
 data RegenesisData = RegenesisData {
     -- |The immutable genesis parameters.
     -- (These need not be invariant across re-genesis.)
