@@ -1,5 +1,4 @@
 use anyhow::{bail, ensure};
-use byteorder::{BigEndian, ByteOrder};
 use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
@@ -12,7 +11,7 @@ use concordium_base::{
     },
     contracts_common::{
         from_bytes,
-        schema::{ModuleV0, ModuleV1, ModuleV2, Type},
+        schema::{Type, VersionedModuleSchema},
         Cursor,
     },
     encrypted_transfers,
@@ -243,18 +242,12 @@ pub fn replace_json_value(v: &Value, replacement_key: &String, replacement: &Val
 }
 
 fn get_receive_schema(
-    schema_bytes: &[u8],
-    schema_version: &u8,
+    versioned_module_schema: VersionedModuleSchema,
     contract_name: &String,
     entrypoint_name: &String,
 ) -> anyhow::Result<Type> {
-    let receive_schema = match schema_version {
-        0 => {
-            let module_schema: ModuleV0 = match from_bytes(schema_bytes) {
-                Ok(o) => o,
-                Err(e) => return Err(anyhow::anyhow!("Failed to parse ModuleV0 schema: {:#?}", e)),
-            };
-
+    let receive_schema = match versioned_module_schema {
+        VersionedModuleSchema::V0(module_schema) => {
             let contract_schema = module_schema
                 .contracts
                 .get(contract_name)
@@ -266,12 +259,7 @@ fn get_receive_schema(
                 .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
                 .clone()
         }
-        1 => {
-            let module_schema: ModuleV1 = match from_bytes(schema_bytes) {
-                Ok(o) => o,
-                Err(e) => return Err(anyhow::anyhow!("Failed to parse ModuleV1 schema: {:#?}", e)),
-            };
-
+        VersionedModuleSchema::V1(module_schema) => {
             let contract_schema = module_schema
                 .contracts
                 .get(contract_name)
@@ -287,12 +275,7 @@ fn get_receive_schema(
                 None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
             }
         }
-        2 => {
-            let module_schema: ModuleV2 = match from_bytes(schema_bytes) {
-                Ok(o) => o,
-                Err(e) => return Err(anyhow::anyhow!("Failed to parse ModuleV2 schema: {:#?}", e)),
-            };
-
+        VersionedModuleSchema::V2(module_schema) => {
             let contract_schema = module_schema
                 .contracts
                 .get(contract_name)
@@ -307,15 +290,8 @@ fn get_receive_schema(
                 Some(value) => value.clone(),
                 None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
             }
-        }
-        _ => {
-            return Err(anyhow::anyhow!(
-                "Unsupported schema version: {}",
-                schema_version
-            ));
         }
     };
-
     Ok(receive_schema)
 }
 
@@ -324,8 +300,7 @@ fn get_parameters_as_json(
     schema: &str,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
-    let schema_bytes = hex::decode(schema)?;
-    let prefix = BigEndian::read_u16(&schema_bytes[0..2]);
+    let mut schema_bytes = hex::decode(schema)?;
 
     let contract_name = &payload
         .receive_name
@@ -338,15 +313,18 @@ fn get_parameters_as_json(
         .entrypoint_name()
         .to_string();
 
-    let receive_schema = match prefix {
-        // Magic prefix for versioned schemas.
-        65535 => {
-            let version = &schema_bytes[2];
-            get_receive_schema(&schema_bytes[3..], version, contract_name, entrypoint_name)?
-        }
-        _ => match schema_version {
+    let receive_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
+        Ok(versioned) => get_receive_schema(versioned, contract_name, entrypoint_name)?,
+        Err(_) => match schema_version {
             Some(version) => {
-                get_receive_schema(&schema_bytes, version, contract_name, entrypoint_name)?
+                let mut versioned_schema_bytes: Vec<u8> = vec![u8::MAX, u8::MAX, *version];
+                versioned_schema_bytes.append(&mut schema_bytes);
+                let versioned_schema: VersionedModuleSchema =
+                    match from_bytes(&versioned_schema_bytes) {
+                        Ok(v) => v,
+                        Err(_) => return Err(anyhow::anyhow!("Invalid schema or schema version")),
+                    };
+                get_receive_schema(versioned_schema, contract_name, entrypoint_name)?
             }
             None => return Err(anyhow::anyhow!("Missing schema version")),
         },
