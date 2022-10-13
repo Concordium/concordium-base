@@ -1033,6 +1033,13 @@ data Event =
               -- |Delegator account
               edrAccount :: !AccountAddress
            }
+           -- |The contract was upgraded.
+           | Upgraded {
+               euFrom: !ModuleRef,
+               -- ^The old 'ModuleRef'.
+               euTo: !ModuleRef
+               -- ^The new 'ModuleRef'.
+           }
   deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
@@ -1211,6 +1218,10 @@ putEvent = \case ModuleDeployed mref ->
                    S.putWord8 34 <>
                    S.put edrDelegatorId <>
                    S.put edrAccount
+                 Upgraded{..} ->
+                   S.putWord8 35 <>
+                   S.put euFrom <>
+                   S.put euTo
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1390,6 +1401,10 @@ getEvent spv =
         edrDelegatorId <- S.get
         edrAccount <- S.get
         return DelegationRemoved{..}
+    35 -> do
+        euFrom <- S.get
+        euTo <- S.get
+        return Upgraded{..}
     n -> fail $ "Unrecognized event tag: " ++ show n
     where
       supportMemo = supportsMemo spv
@@ -1605,6 +1620,11 @@ instance AE.ToJSON Event where
         "delegatorId" .= edrDelegatorId,
         "account" .= edrAccount
       ]
+    Upgraded {..} -> AE.object [
+        "tag" .= AE.String "Upgraded",
+        "from" .= euFrom,
+        "to" .= euTo
+      ]
 
 instance AE.FromJSON Event where
   parseJSON = AE.withObject "Event" $ \obj -> do
@@ -1781,6 +1801,10 @@ instance AE.FromJSON Event where
         edrDelegatorId <- obj .: "delegatorId"
         edrAccount <- obj .: "account"
         return DelegationRemoved {..}
+      "Upgraded" -> do
+        euFrom <- obj .: "from"
+        euTo <- obj .: "to"
+        return Upgraded {..}
       tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- |Index of the transaction in a block, starting from 0.
