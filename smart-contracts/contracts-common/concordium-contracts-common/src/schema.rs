@@ -1948,6 +1948,75 @@ mod tests {
     }
 
     #[test]
+    fn test_function_v3_serial_deserial_is_id() {
+        let f1 = FunctionV3::Param(Type::String(SizeLength::U32));
+        let f2 = FunctionV3::Rv(Type::U128);
+        let f3 = FunctionV3::ParamRv {
+            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            return_value: Type::ILeb128(3),
+        };
+        let f4 = FunctionV3::Error(Type::ByteList(SizeLength::U32));
+        let f5 = FunctionV3::ParamError {
+            parameter: Type::U8,
+            error:     Type::String(SizeLength::U8),
+        };
+        let f6 = FunctionV3::ParamRvError {
+            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            return_value: Type::ILeb128(3),
+            error:        Type::Bool,
+        };
+        let f7 = FunctionV3::ParamEvent {
+            parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            event:     Type::Bool,
+        };
+        let f8 = FunctionV3::RvEvent {
+            return_value: Type::ILeb128(3),
+            event:        Type::Bool,
+        };
+        let f9 = FunctionV3::ParamRvEvent {
+            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            return_value: Type::ILeb128(3),
+            event:        Type::Bool,
+        };
+        let f10 = FunctionV3::ErrorEvent {
+            error: Type::Bool,
+            event: Type::Bool,
+        };
+        let f11 = FunctionV3::ParamErrorEvent {
+            parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            error:     Type::Bool,
+            event:     Type::Bool,
+        };
+        let f12 = FunctionV3::RvErrorEvent {
+            return_value: Type::ILeb128(3),
+            error:        Type::Bool,
+            event:        Type::Bool,
+        };
+        let f13 = FunctionV3::ParamRvErrorEvent {
+            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            return_value: Type::ILeb128(3),
+            error:        Type::Bool,
+            event:        Type::Bool,
+        };
+        let f14 = FunctionV3::Event(Type::U128);
+
+        assert_eq!(serial_deserial(&f1), Ok(f1));
+        assert_eq!(serial_deserial(&f2), Ok(f2));
+        assert_eq!(serial_deserial(&f3), Ok(f3));
+        assert_eq!(serial_deserial(&f4), Ok(f4));
+        assert_eq!(serial_deserial(&f5), Ok(f5));
+        assert_eq!(serial_deserial(&f6), Ok(f6));
+        assert_eq!(serial_deserial(&f7), Ok(f7));
+        assert_eq!(serial_deserial(&f8), Ok(f8));
+        assert_eq!(serial_deserial(&f9), Ok(f9));
+        assert_eq!(serial_deserial(&f10), Ok(f10));
+        assert_eq!(serial_deserial(&f11), Ok(f11));
+        assert_eq!(serial_deserial(&f12), Ok(f12));
+        assert_eq!(serial_deserial(&f13), Ok(f13));
+        assert_eq!(serial_deserial(&f14), Ok(f14));
+    }
+
+    #[test]
     fn test_module_v0_serial_deserial_is_id() {
         let m = ModuleV0 {
             contracts: BTreeMap::from([("a".into(), ContractV0 {
@@ -1991,6 +2060,27 @@ mod tests {
                     ("c".into(), FunctionV2::ParamError {
                         parameter: Type::U8,
                         error:     Type::Bool,
+                    }),
+                ]),
+            })]),
+        };
+
+        assert_eq!(serial_deserial(&m), Ok(m));
+    }
+
+    #[test]
+    fn test_module_v3_serial_deserial_is_id() {
+        let m = ModuleV3 {
+            contracts: BTreeMap::from([("a".into(), ContractV3 {
+                init:    Some(FunctionV3::ParamEvent {
+                    parameter: Type::U8,
+                    event:     Type::Bool,
+                }),
+                receive: BTreeMap::from([
+                    ("b".into(), FunctionV3::Rv(Type::String(SizeLength::U32))),
+                    ("c".into(), FunctionV3::ParamRv {
+                        parameter:    Type::U8,
+                        return_value: Type::Bool,
                     }),
                 ]),
             })]),
