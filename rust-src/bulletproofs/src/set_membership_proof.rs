@@ -9,7 +9,7 @@ use random_oracle::RandomOracle;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
-    /// Commitment to the indicator function
+    /// Commitment to the evalutation indicator function Iv on S
     A:        C,
     /// Commitment to the blinding factors in s_L and s_R
     S:        C,

@@ -4,3 +4,4 @@
 pub mod inner_product_proof;
 pub mod range_proof;
 pub mod set_membership_proof;
+pub mod utils;
