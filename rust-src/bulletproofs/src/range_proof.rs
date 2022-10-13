@@ -87,7 +87,6 @@ fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
     z_n
 }
 
-
 /// This function produces a range proof given scalars in a prime field
 /// instead of integers. It invokes prove(), documented below.
 ///

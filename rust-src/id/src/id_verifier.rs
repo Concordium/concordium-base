@@ -1,5 +1,8 @@
 use crate::{types::*, utils};
-use bulletproofs::range_proof::{verify_efficient, Generators, RangeProof, VerificationError};
+use bulletproofs::{
+    range_proof::{verify_efficient, RangeProof, VerificationError},
+    utils::Generators,
+};
 use curve_arithmetic::Curve;
 use ff::Field;
 use pedersen_scheme::{

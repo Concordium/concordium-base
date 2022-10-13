@@ -34,8 +34,8 @@ pub enum ProverError {
 }
 
 /// This function produces a set membership proof, i.e. a proof of knowledge
-/// of a value v that is in a given set S  and that is consistent with the commitment V to v.
-/// The arguments are
+/// of a value v that is in a given set S  and that is consistent with the
+/// commitment V to v. The arguments are
 /// - transcript - the random oracle for Fiat Shamir
 /// - csprng - cryptographic safe randomness generator
 /// - S - the set S as a vector
@@ -51,14 +51,14 @@ pub fn prove<C: Curve, R: Rng>(
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
     v_rand: &[Randomness<C>],
-) -> Result<SetMembershipProof<C>,ProverError>{
-    Err(ProverError::NotEnoughGenerators) 
+) -> Result<SetMembershipProof<C>, ProverError> {
+    Err(ProverError::NotEnoughGenerators)
 }
 
 /// Error messages detailing why proof verification failed
 pub enum VerificationError {
     /// The length of G_H was less than |S|, which is too small
-    NotEnoughGenerators,    
+    NotEnoughGenerators,
 }
 
 /// This function verifies a set membership proof, i.e. a proof of knowledge
@@ -77,5 +77,8 @@ pub fn verify_efficient<C: Curve>(
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
-    Err(VerificationError::NotEnoughGenerators) 
+    Err(VerificationError::NotEnoughGenerators)
 }
+
+#[cfg(test)]
+mod tests {}

@@ -1,6 +1,7 @@
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
+use ff::{Field, PrimeField};
 use rand::*;
 
 /// Struct containing generators G and H needed for range proofs
@@ -27,5 +28,57 @@ impl<C: Curve> Generators<C> {
         Self {
             G_H: self.G_H[0..nm].to_vec(),
         }
+    }
+}
+
+/// Converts the u64 set vector into a vector over the field
+pub fn get_set_vector<F: PrimeField>(S: &[u64]) -> Option<Vec<F>> {
+    let n = S.len();
+    let mut s_vec = Vec::with_capacity(n);
+    for i in 0..n {
+        let s_i = F::from_repr(F::Repr::from(S[i]));
+        if s_i.is_err() {
+            return None;
+        }
+        s_vec.push(s_i.unwrap());
+    }
+    Some(s_vec)
+}
+
+/// Pads a field vector two a power of two length by repeating the last element
+pub fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
+    let n = vec.len();
+    let k = n.next_power_of_two();
+    if let Some(last) = vec.last().cloned() {
+        let d = k - n;
+        for _ in 0..d {
+            vec.push(last)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use ff::Field;
+
+    use super::pad_vector_to_power_of_two;
+    type SomeField = pairing::bls12_381::Fq;
+
+    #[test]
+    fn test_vector_padding() {
+        let n = 10;
+        let mut vec = Vec::with_capacity(n);
+        for _ in 0..n {
+            vec.push(SomeField::one())
+        }
+        vec.push(SomeField::zero());
+        pad_vector_to_power_of_two(&mut vec);
+        assert_eq!(vec.len(), 16, "Vector should have power of two length.");
+        assert_eq!(
+            *vec.last().unwrap(),
+            SomeField::zero(),
+            "Vector should be padded with last element."
+        )
     }
 }
