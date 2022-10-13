@@ -415,33 +415,16 @@ unsafe extern "C" fn resume_receive_v1(
                 Some(data)
             }
         };
-        let state_updated = state_updated_tag != 0;
         // NB: This must match the response encoding in V1.hs in consensus
         // If the first 3 bytes are all set that indicates an error.
-        let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
-            if response_status & 0x0000_00ff_0000_0000 != 0 {
-                // this is an environment error. No return value is produced.
-                InvokeResponse::Failure {
-                    code: response_status & 0x0000_00ff_0000_0000,
-                    data: None,
-                }
-            } else {
-                // The return value is present since this was a logic error.
-                if response_status & 0x0000_0000_ffff_ffff == 0 {
-                    // Host violated precondition. There must be a non-zero error code.
-                    return std::ptr::null_mut();
-                }
-                InvokeResponse::Failure {
-                    code: response_status & 0x0000_0000_ffff_ffff,
-                    data,
-                }
-            }
+        let response = if let Ok(r) = InvokeResponse::try_from_ffi_response(
+            response_status,
+            Amount::from_micro_ccd(new_amount),
+            data,
+        ) {
+            r
         } else {
-            InvokeResponse::Success {
-                state_updated,
-                new_balance: Amount::from_micro_ccd(new_amount),
-                data,
-            }
+            return std::ptr::null_mut();
         };
         // mark the interrupted state as consumed in case any panics happen from here to
         // the end. this means the state is in a consistent state and the
@@ -460,6 +443,7 @@ unsafe extern "C" fn resume_receive_v1(
         // it is important to invalidate all previous iterators and entries we have
         // given out. so we start a new generation.
         let config = Box::from_raw(config);
+        let state_updated = state_updated_tag != 0;
         let res = resume_receive(config, response, energy, &mut state, state_updated, loader);
         match res {
             Ok(result) => {
