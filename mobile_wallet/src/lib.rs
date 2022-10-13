@@ -3,10 +3,7 @@ use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
         self, base16_decode_string, c_char,
-        types::{
-            Amount, CredentialIndex, KeyIndex, KeyPair, Signature, TransactionSignature,
-            TransactionTime,
-        },
+        types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
     contracts_common::{
@@ -15,6 +12,7 @@ use concordium_base::{
         Cursor,
     },
     encrypted_transfers,
+    hashes::{HashBytes, TransactionSignHash},
     id::{
         self, account_holder,
         constants::{ArCurve, AttributeKind},
@@ -25,7 +23,7 @@ use concordium_base::{
     },
     transactions::{
         self, construct::PreAccountTransaction, ConfigureBakerKeysPayload, ConfigureBakerPayload,
-        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo, Payload,
+        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo, Payload, TransactionSigner,
         UpdateContractPayload,
     },
 };
@@ -100,7 +98,7 @@ fn make_signatures(
 /// Compute the message digest for some message and an account. The message
 /// digest is constructed so that it cannot be the prefix of an actual
 /// account transaction.
-fn get_message_digest(account_address: [u8; 32], message: String) -> [u8; 32] {
+fn get_message_digest(account_address: [u8; 32], message: String) -> TransactionSignHash {
     let prepend_bytes = [0_u8; 8];
     let message_as_bytes = message.as_bytes();
 
@@ -109,38 +107,16 @@ fn get_message_digest(account_address: [u8; 32], message: String) -> [u8; 32] {
     hasher.update(prepend_bytes);
     hasher.update(message_as_bytes);
     let hash: [u8; 32] = hasher.finalize().into();
-    hash
+    HashBytes::new(hash)
 }
 
 fn sign_message_with_keys(
     keys: &AccountKeys,
     msg: String,
     account_address: [u8; 32],
-) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>> {
-    let message_digest = get_message_digest(account_address, msg);
-
-    // TODO: The code below has been copied from sign_transaction_hash(), where to
-    // put a shared function to avoid duplication?
-    let iter = keys
-        .keys
-        .iter()
-        .take(usize::from(u8::from(keys.threshold)))
-        .map(|(k, v)| {
-            (k, {
-                let num = u8::from(v.threshold);
-                v.keys.iter().take(num.into())
-            })
-        });
-
-    let mut signatures = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, _>>::new();
-    for (ci, cred_keys) in iter {
-        let cred_sigs = cred_keys
-            .into_iter()
-            .map(|(ki, kp)| (*ki, kp.sign(&message_digest)))
-            .collect::<BTreeMap<_, _>>();
-        signatures.insert(*ci, cred_sigs);
-    }
-    signatures
+) -> TransactionSignature {
+    let hash_to_sign = get_message_digest(account_address, msg);
+    keys.sign_transaction_hash(&hash_to_sign)
 }
 
 /// Create a JSON encoding of an encrypted transfer transaction.
@@ -218,29 +194,6 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
-pub fn replace_json_value(v: &Value, replacement_key: &String, replacement: &Value) -> Value {
-    match v {
-        Value::Object(m) => {
-            let mut mutable_map = m.clone();
-
-            for (key, value) in m {
-                if key == replacement_key {
-                    mutable_map.insert(String::from(replacement_key), replacement.clone());
-                    break;
-                } else {
-                    mutable_map.insert(
-                        String::from(key),
-                        replace_json_value(value, replacement_key, replacement),
-                    );
-                }
-            }
-
-            Value::Object(mutable_map)
-        }
-        v => v.clone(),
-    }
-}
-
 fn get_receive_schema(
     versioned_module_schema: VersionedModuleSchema,
     contract_name: &String,
@@ -296,7 +249,7 @@ fn get_receive_schema(
 }
 
 fn get_parameters_as_json(
-    payload: UpdateContractPayload,
+    payload: &UpdateContractPayload,
     schema: &str,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
@@ -330,7 +283,7 @@ fn get_parameters_as_json(
         },
     };
 
-    let parameter_bytes: Vec<u8> = payload.message.into();
+    let parameter_bytes: Vec<u8> = payload.message.clone().into();
     let mut parameters_cursor = Cursor::new(&parameter_bytes[..]);
     match receive_schema.to_json(&mut parameters_cursor) {
         Ok(schema) => Ok(schema),
@@ -350,13 +303,20 @@ fn transaction_to_json_aux(input: &str) -> anyhow::Result<String> {
         Payload::Update { payload } => {
             let schema: String = try_get(&v, "schema")?;
             let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
-            let parameters_as_json = get_parameters_as_json(payload, &schema, &schema_version)?;
-            let transaction_as_json = serde_json::json!(pre_tx);
-            replace_json_value(
-                &transaction_as_json,
-                &String::from("message"),
-                &parameters_as_json,
-            )
+            let parameters_as_json = get_parameters_as_json(&payload, &schema, &schema_version)?;
+
+            serde_json::json!({
+                "hashToSign": pre_tx.hash_to_sign,
+                "header": pre_tx.header,
+                "payload": {
+                    "update": {
+                        "address": payload.address,
+                        "amount": payload.amount,
+                        "message": parameters_as_json,
+                        "receiveName": payload.receive_name
+                    }
+                }
+            })
         }
         _ => {
             serde_json::json!(pre_tx)
