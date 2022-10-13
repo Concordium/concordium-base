@@ -1,4 +1,4 @@
-use crate::{inner_product_proof::*, range_proof::{Generators}};
+use crate::{inner_product_proof::*, utils::*};
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
