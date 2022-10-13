@@ -14,6 +14,8 @@
 //! In addition to pointers to structured objects, the remaining data passed
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
+use std::convert::TryInto;
+
 use super::trie::{
     foreign::{LoadCallback, StoreCallback},
     EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
@@ -347,41 +349,43 @@ unsafe extern "C" fn validate_and_process_v1(
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
-        &ConcordiumAllowedImports,
-        wasm_bytes,
-    ) {
-        Ok(artifact) => {
-            let mut out_buf = Vec::new();
-            let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
-            out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
-            for name in artifact.export.keys() {
-                // Only V1 contracts from P5 and onwards
-                // supports 'upgrade'.
-                // todo: should this be handled differently? E.g. should the 'wasm_transform'
-                // handle this?
-                if protocol_version < 5 && name.as_ref() == "upgrade" {
-                    return std::ptr::null_mut();
+    // We fail if the the protocol version supplied is not valid.
+    if let Ok(pv) = protocol_version.try_into() {
+        match utils::instantiate_with_metering::<ProcessedImports, _>(
+            &ConcordiumAllowedImports {
+                pv,
+            },
+            wasm_bytes,
+        ) {
+            Ok(artifact) => {
+                let mut out_buf = Vec::new();
+                let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
+                out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
+                for name in artifact.export.keys() {
+                    let len = name.as_ref().as_bytes().len();
+                    out_buf.extend_from_slice(&(len as u16).to_be_bytes());
+                    out_buf.extend_from_slice(name.as_ref().as_bytes());
                 }
-                let len = name.as_ref().as_bytes().len();
-                out_buf.extend_from_slice(&(len as u16).to_be_bytes());
-                out_buf.extend_from_slice(name.as_ref().as_bytes());
+                out_buf.shrink_to_fit();
+                *output_len = out_buf.len() as size_t;
+                let ptr = out_buf.as_mut_ptr();
+                std::mem::forget(out_buf);
+
+                let mut artifact_bytes = Vec::new();
+                artifact
+                    .output(&mut artifact_bytes)
+                    .expect("Artifact serialization does not fail.");
+                artifact_bytes.shrink_to_fit();
+                *output_artifact_len = artifact_bytes.len() as size_t;
+                *output_artifact_bytes = artifact_bytes.as_mut_ptr();
+                std::mem::forget(artifact_bytes);
+
+                ptr
             }
-            out_buf.shrink_to_fit();
-            *output_len = out_buf.len() as size_t;
-            let ptr = out_buf.as_mut_ptr();
-            std::mem::forget(out_buf);
-
-            let mut artifact_bytes = Vec::new();
-            artifact.output(&mut artifact_bytes).expect("Artifact serialization does not fail.");
-            artifact_bytes.shrink_to_fit();
-            *output_artifact_len = artifact_bytes.len() as size_t;
-            *output_artifact_bytes = artifact_bytes.as_mut_ptr();
-            std::mem::forget(artifact_bytes);
-
-            ptr
+            Err(_) => std::ptr::null_mut(),
         }
-        Err(_) => std::ptr::null_mut(),
+    } else {
+        std::ptr::null_mut()
     }
 }
 

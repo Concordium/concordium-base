@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use super::{
     trie::{self, MutableState},
     Interrupt, ParameterVec, StateLessReceiveHost,
@@ -481,7 +483,11 @@ impl Output for ProcessedImports {
     }
 }
 
-pub struct ConcordiumAllowedImports;
+/// Allowed imports parameterized by the current protocol
+/// version on chain.
+pub struct ConcordiumAllowedImports {
+    pub pv: ProtocolVersion,
+}
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
     fn validate_import_function(
@@ -532,7 +538,8 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "hash_sha2_256" => type_matches!(ty => [I32, I32, I32]),
                 "hash_sha3_256" => type_matches!(ty => [I32, I32, I32]),
                 "hash_keccak_256" => type_matches!(ty => [I32, I32, I32]),
-                "upgrade" => type_matches!(ty => [I32]; I64),
+                // Upgrade is only available from P5.
+                "upgrade" => self.pv == ProtocolVersion::V5 && type_matches!(ty => [I32]; I64),
                 _ => false,
             }
         } else {
@@ -1272,6 +1279,36 @@ impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
             self.energy.tick_energy(constants::additional_entry_size_cost(existing_size))
         } else {
             self.energy.tick_energy(constants::additional_entry_size_cost(self.new_size))
+        }
+    }
+}
+
+/// Protocol versions supported by the chain.
+/// This type is used to verify imports of a wasm module.
+/// In particular the 'Upgrade' host function is only available from
+/// protocol version 5.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProtocolVersion {
+    V1,
+    V2,
+    V3,
+    V4,
+    V5,
+}
+
+/// Fails if the value is not within the range of currently
+/// supported protocol versions.
+impl TryFrom<u64> for ProtocolVersion {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(ProtocolVersion::V1),
+            2 => Ok(ProtocolVersion::V2),
+            3 => Ok(ProtocolVersion::V3),
+            4 => Ok(ProtocolVersion::V4),
+            5 => Ok(ProtocolVersion::V5),
+            _ => bail!("Unknown ProtocolVersion {}", value),
         }
     }
 }

@@ -786,8 +786,7 @@ mod host {
         let module_ref_end = module_ref_start + MODULE_REFERENCE_SIZE as usize;
         ensure!(module_ref_end <= memory.len(), "Illegal memory access.");
         let mut module_reference_bytes = [0u8; MODULE_REFERENCE_SIZE];
-        module_reference_bytes
-            .copy_from_slice(&memory[module_ref_start..module_ref_end]);
+        module_reference_bytes.copy_from_slice(&memory[module_ref_start..module_ref_end]);
         let module_ref = ModuleReference::from(module_reference_bytes);
         // We tick a base action cost here and
         // tick the remaining cost in the 'Scheduler' as it knows the size
@@ -1080,7 +1079,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 ),
                 ReceiveOnlyFunc::Upgrade => {
                     return host::upgrade(memory, stack, &mut self.energy);
-                },
+                }
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 bail!("Not implemented for receive.");
@@ -1209,6 +1208,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
+    pv: ProtocolVersion,
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -1217,7 +1217,12 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate(
+        &ConcordiumAllowedImports {
+            pv,
+        },
+        source_bytes,
+    )?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
@@ -1225,6 +1230,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
+    pv: ProtocolVersion,
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -1233,7 +1239,12 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        &ConcordiumAllowedImports {
+            pv,
+        },
+        source_bytes,
+    )?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
 }
 
@@ -1480,6 +1491,7 @@ pub fn invoke_receive_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
+    pv: ProtocolVersion,
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
@@ -1488,7 +1500,12 @@ pub fn invoke_receive_from_source<
     energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate(
+        &ConcordiumAllowedImports {
+            pv,
+        },
+        source_bytes,
+    )?;
     invoke_receive(
         Arc::new(artifact),
         amount,
@@ -1508,6 +1525,7 @@ pub fn invoke_receive_with_metering_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
+    pv: ProtocolVersion,
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
@@ -1516,7 +1534,12 @@ pub fn invoke_receive_with_metering_from_source<
     energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        &ConcordiumAllowedImports {
+            pv,
+        },
+        source_bytes,
+    )?;
     invoke_receive(
         Arc::new(artifact),
         amount,
