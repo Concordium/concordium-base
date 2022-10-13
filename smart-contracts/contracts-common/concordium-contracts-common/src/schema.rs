@@ -276,6 +276,36 @@ pub enum FunctionV3 {
         parameter: Type,
         event:     Type,
     },
+    RvEvent {
+        return_value: Type,
+        event:        Type,
+    },
+    ParamRvEvent {
+        parameter:    Type,
+        return_value: Type,
+        event:        Type,
+    },
+    ErrorEvent {
+        error: Type,
+        event: Type,
+    },
+    ParamErrorEvent {
+        parameter: Type,
+        error:     Type,
+        event:     Type,
+    },
+    RvErrorEvent {
+        return_value: Type,
+        error:        Type,
+        event:        Type,
+    },
+    ParamRvErrorEvent {
+        parameter:    Type,
+        return_value: Type,
+        error:        Type,
+        event:        Type,
+    },
+    Event(Type),
 }
 
 impl FunctionV3 {
@@ -286,6 +316,31 @@ impl FunctionV3 {
                 event,
                 ..
             } => Some(event),
+            FunctionV3::RvEvent {
+                event,
+                ..
+            } => Some(event),
+            FunctionV3::ParamRvEvent {
+                event,
+                ..
+            } => Some(event),
+            FunctionV3::ErrorEvent {
+                event,
+                ..
+            } => Some(event),
+            FunctionV3::ParamErrorEvent {
+                event,
+                ..
+            } => Some(event),
+            FunctionV3::RvErrorEvent {
+                event,
+                ..
+            } => Some(event),
+            FunctionV3::ParamRvErrorEvent {
+                event,
+                ..
+            } => Some(event),
+            FunctionV3::Event(ty) => Some(ty),
             _ => None,
         }
     }
@@ -310,6 +365,18 @@ impl FunctionV3 {
                 parameter,
                 ..
             } => Some(parameter),
+            FunctionV3::ParamRvEvent {
+                parameter,
+                ..
+            } => Some(parameter),
+            FunctionV3::ParamErrorEvent {
+                parameter,
+                ..
+            } => Some(parameter),
+            FunctionV3::ParamRvErrorEvent {
+                parameter,
+                ..
+            } => Some(parameter),
             _ => None,
         }
     }
@@ -327,6 +394,22 @@ impl FunctionV3 {
                 ..
             } => Some(return_value),
             FunctionV3::ParamRvError {
+                return_value,
+                ..
+            } => Some(return_value),
+            FunctionV3::RvEvent {
+                return_value,
+                ..
+            } => Some(return_value),
+            FunctionV3::ParamRvEvent {
+                return_value,
+                ..
+            } => Some(return_value),
+            FunctionV3::RvErrorEvent {
+                return_value,
+                ..
+            } => Some(return_value),
+            FunctionV3::ParamRvErrorEvent {
                 return_value,
                 ..
             } => Some(return_value),
@@ -1008,6 +1091,68 @@ impl Serial for FunctionV3 {
                 parameter.serial(out)?;
                 event.serial(out)
             }
+            FunctionV3::RvEvent {
+                return_value,
+                event,
+            } => {
+                out.write_u8(8)?;
+                return_value.serial(out)?;
+                event.serial(out)
+            }
+            FunctionV3::ParamRvEvent {
+                parameter,
+                return_value,
+                event,
+            } => {
+                out.write_u8(9)?;
+                parameter.serial(out)?;
+                return_value.serial(out)?;
+                event.serial(out)
+            }
+            FunctionV3::ErrorEvent {
+                error,
+                event,
+            } => {
+                out.write_u8(10)?;
+                error.serial(out)?;
+                event.serial(out)
+            }
+            FunctionV3::ParamErrorEvent {
+                parameter,
+                error,
+                event,
+            } => {
+                out.write_u8(11)?;
+                parameter.serial(out)?;
+                error.serial(out)?;
+                event.serial(out)
+            }
+            FunctionV3::RvErrorEvent {
+                return_value,
+                error,
+                event,
+            } => {
+                out.write_u8(12)?;
+                return_value.serial(out)?;
+                error.serial(out)?;
+                event.serial(out)
+            }
+            FunctionV3::ParamRvErrorEvent {
+                parameter,
+                return_value,
+                error,
+                event,
+            } => {
+                out.write_u8(13)?;
+                parameter.serial(out)?;
+                return_value.serial(out)?;
+                error.serial(out)?;
+                event.serial(out)
+            }
+            FunctionV3::Event(event) => {
+                out.write_u8(14)?;
+                event.serial(out)
+            }
         }
     }
 }
@@ -1040,6 +1185,36 @@ impl Deserial for FunctionV3 {
                 parameter: source.get()?,
                 event:     source.get()?,
             }),
+            8 => Ok(FunctionV3::RvEvent {
+                return_value: source.get()?,
+                event:        source.get()?,
+            }),
+            9 => Ok(FunctionV3::ParamRvEvent {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+                event:        source.get()?,
+            }),
+            10 => Ok(FunctionV3::ErrorEvent {
+                error: source.get()?,
+                event: source.get()?,
+            }),
+            11 => Ok(FunctionV3::ParamErrorEvent {
+                parameter: source.get()?,
+                error:     source.get()?,
+                event:     source.get()?,
+            }),
+            12 => Ok(FunctionV3::RvErrorEvent {
+                return_value: source.get()?,
+                error:        source.get()?,
+                event:        source.get()?,
+            }),
+            13 => Ok(FunctionV3::ParamRvErrorEvent {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+                error:        source.get()?,
+                event:        source.get()?,
+            }),
+            14 => Ok(FunctionV3::Event(source.get()?)),
             _ => Err(ParseError::default()),
         }
     }
