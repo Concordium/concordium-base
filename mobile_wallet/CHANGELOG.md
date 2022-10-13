@@ -2,6 +2,7 @@
 
 ## 0.17.0
 - Added a function for signing any account transaction.
+- Added a function for signing a message.
 - Added a function for converting a serialized account transaction (as bytes) into JSON.
 
 ## 0.16.0
