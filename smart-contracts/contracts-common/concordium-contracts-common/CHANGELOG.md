@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 4.1.0 (Unreleased)
+
+- Add support for smart contract v3 schemas.
 - Add type `ModuleReference` representing a module reference.
 - Implement `SchemaType` for `OwnedEntrypointName`.
 
@@ -27,7 +30,7 @@
 
 - Extend schema type with `ULeb128`, `ILeb128`, `ByteList` and `ByteArray`.
   - `ULeb128` and `ILeb128` allow for integers of arbitrary size and are represented in JSON as a string containing the integer.
-  - `ByteList` and `ByteArray` are byte specialized versions of `List` and `Array` and are represented in JSON as lowercase hex encoded strings.  
+  - `ByteList` and `ByteArray` are byte specialized versions of `List` and `Array` and are represented in JSON as lowercase hex encoded strings.
 - Add new schema version which include the versioning in the serialization.
 - Use `schema::Type::ByteList` for `[u8]` implementation of `SchemaType`.
 - Introduce `HasSize` trait.
@@ -39,7 +42,7 @@
 ## concordium-contracts-common 3.0.0 (2022-05-17)
 
 - Introduce Entrypoint and Parameter types, and their owned versions.
-- Add a new schema version for V1 smart contracts. 
+- Add a new schema version for V1 smart contracts.
   This adds schema for return values of init and receive functions, and removes the state schema.
 - `get_chain_name`, `get_name_parts` have been moved from `OwnedReceiveName` to
   `ReceiveName`. The method `get_func_name` of `OwnedReceiveName` became
