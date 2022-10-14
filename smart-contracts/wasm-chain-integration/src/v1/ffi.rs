@@ -233,7 +233,7 @@ unsafe extern "C" fn call_receive_v1(
         let state_ptr = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         let mut loader = loader;
         let mut state = (&mut *state_ptr).make_fresh_generation(&mut loader);
-        let instance_state = InstanceState::new(0, loader, state.get_inner(&mut loader));
+        let instance_state = InstanceState::new(loader, state.get_inner(&mut loader));
         match std::str::from_utf8(receive_name)
             .ok()
             .and_then(|s| OwnedReceiveName::new(s.into()).ok())

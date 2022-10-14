@@ -1071,7 +1071,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
 ) -> ExecResult<InitResult> {
     let mut initial_state = trie::MutableState::initial_state();
     let inner = initial_state.get_inner(&mut loader);
-    let state_ref = InstanceState::new(0, loader, inner);
+    let state_ref = InstanceState::new(loader, inner);
     let mut host = InitHost {
         energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
