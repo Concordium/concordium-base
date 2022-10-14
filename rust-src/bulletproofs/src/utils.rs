@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
@@ -42,11 +44,13 @@ impl<C: Curve> Generators<C> {
 /// - n - the integer n.
 pub fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
     let mut z_n = Vec::with_capacity(n);
-    let mut z_i = F::one();
+    //let mut z_i = F::one();
     // FIXME: This should would be better to do with `pow`.
-    for _ in 0..first_power {
-        z_i.mul_assign(&z);
-    }
+    //for _ in 0..first_power {
+    //    z_i.mul_assign(&z);
+    //}
+    let exp: [u64;1] = [first_power as u64];
+    let mut z_i = z.pow(exp);
     for _ in 0..n {
         z_n.push(z_i);
         z_i.mul_assign(&z);
