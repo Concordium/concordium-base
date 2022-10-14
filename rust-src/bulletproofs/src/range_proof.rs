@@ -67,26 +67,6 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
     two_n
 }
 
-/// This function takes one argument n and returns the
-/// vector (z^j, z^{j+1}, ..., z^{j+n-1}) in F^n for any field F
-/// The arguments are
-/// - z - the field element z
-/// - first_power - the first power j
-/// - n - the integer n.
-fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
-    let mut z_n = Vec::with_capacity(n);
-    let mut z_i = F::one();
-    // FIXME: This should would be better to do with `pow`.
-    for _ in 0..first_power {
-        z_i.mul_assign(&z);
-    }
-    for _ in 0..n {
-        z_n.push(z_i);
-        z_i.mul_assign(&z);
-    }
-    z_n
-}
-
 /// This function produces a range proof given scalars in a prime field
 /// instead of integers. It invokes prove(), documented below.
 ///
