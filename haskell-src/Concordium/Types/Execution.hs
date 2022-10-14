@@ -1035,9 +1035,9 @@ data Event =
            }
            -- |The contract was upgraded.
            | Upgraded {
-               euFrom: !ModuleRef,
+               euFrom :: !ModuleRef,
                -- ^The old 'ModuleRef'.
-               euTo: !ModuleRef
+               euTo :: !ModuleRef
                -- ^The new 'ModuleRef'.
            }
   deriving (Show, Generic, Eq)
