@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use crate::{inner_product_proof::*, utils::*};
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
+use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
@@ -9,7 +12,7 @@ use random_oracle::RandomOracle;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
-    /// Commitment to the evalutation indicator function Iv on S
+    /// Commitment to the evalutation of the indicator function I_{v} on the_set
     A:        C,
     /// Commitment to the blinding factors in s_L and s_R
     S:        C,
@@ -33,12 +36,45 @@ pub enum ProverError {
     NotEnoughGenerators,
 }
 
+
+/// This function takes a set (as a vector) and a value v as input.
+/// If v in S the function computes bit vectors aL and aR where
+/// aL_i = 1 <=> s_i = v
+/// and a_R is the bit-wise negation of a_L
+/// Note: For multi sets this function only sets the first hit to one.
+#[allow(non_snake_case)]
+fn a_L_a_R<F: Field>(v: F, set_vec: Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
+    let n = set_vec.len();
+    let mut a_L = Vec::with_capacity(usize::from(n));
+    let mut a_R = Vec::with_capacity(usize::from(n));
+    let mut found_element = false;
+    for i in 0..n {
+        let mut bit = F::zero();
+        let s_i = set_vec.get(i);
+        if s_i.is_none() {
+            return None
+        }
+        if (!found_element) && (v == *s_i.unwrap()){
+            bit = F::one();
+            found_element = true;
+        }
+        a_L.push(bit);
+        bit.sub_assign(&F::one());
+        a_R.push(bit);
+    }
+    //The set does not contain v
+    if !found_element {
+        return None
+    }
+    Some((a_L, a_R))
+}
+
 /// This function produces a set membership proof, i.e. a proof of knowledge
-/// of a value v that is in a given set S  and that is consistent with the
+/// of a value v that is in a given set the_set  and that is consistent with the
 /// commitment V to v. The arguments are
 /// - transcript - the random oracle for Fiat Shamir
 /// - csprng - cryptographic safe randomness generator
-/// - S - the set S as a vector
+/// - the_set - the set as a vector
 /// - v the value
 /// - gens - generators containing vectors G and H both of length nm
 /// - v_keys - commitmentment keys B and B_tilde
@@ -52,6 +88,8 @@ pub fn prove<C: Curve, R: Rng>(
     v_keys: &CommitmentKey<C>,
     v_rand: &[Randomness<C>],
 ) -> Result<SetMembershipProof<C>, ProverError> {
+    // Part 1: Setup and generation of vector commitments
+
     Err(ProverError::NotEnoughGenerators)
 }
 
