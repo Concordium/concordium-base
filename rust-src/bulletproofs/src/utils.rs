@@ -1,9 +1,8 @@
-use std::convert::TryInto;
-
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
+use rand::Rng;
 
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
@@ -44,12 +43,12 @@ impl<C: Curve> Generators<C> {
 /// - n - the integer n.
 pub fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
     let mut z_n = Vec::with_capacity(n);
-    //let mut z_i = F::one();
+    // let mut z_i = F::one();
     // FIXME: This should would be better to do with `pow`.
-    //for _ in 0..first_power {
+    // for _ in 0..first_power {
     //    z_i.mul_assign(&z);
     //}
-    let exp: [u64;1] = [first_power as u64];
+    let exp: [u64; 1] = [first_power as u64];
     let mut z_i = z.pow(exp);
     for _ in 0..n {
         z_n.push(z_i);
@@ -86,10 +85,10 @@ pub fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
 
 #[cfg(test)]
 mod tests {
-
     use ff::Field;
+    use rand::thread_rng;
 
-    use super::pad_vector_to_power_of_two;
+    use super::{pad_vector_to_power_of_two, z_vec};
     type SomeField = pairing::bls12_381::Fq;
 
     #[test]
@@ -102,10 +101,39 @@ mod tests {
         vec.push(SomeField::zero());
         pad_vector_to_power_of_two(&mut vec);
         assert_eq!(vec.len(), 16, "Vector should have power of two length.");
+        for i in 0..vec.len() {
+            if i < n {
+                assert_eq!(
+                    *vec.get(i).unwrap(),
+                    SomeField::one(),
+                    "Vector element {} should be one", i
+                )
+            } else {
+                assert_eq!(
+                    *vec.get(i).unwrap(),
+                    SomeField::zero(),
+                    "Vector element {} should be zero", i
+                )
+            }
+        }
+    }
+
+    #[test]
+    fn test_z_vec() {
+        let rng = &mut thread_rng();
+        let mut z = SomeField::random(rng);
+        let n = 10;
+        let vec = z_vec(z, 2, n);
         assert_eq!(
-            *vec.last().unwrap(),
-            SomeField::zero(),
-            "Vector should be padded with last element."
-        )
+            vec.len(),
+            n,
+            "Vector length should be {}", n
+        );
+        z.square();
+        assert_eq!(
+            *vec.get(0).unwrap(),
+            z,
+            "First element should be z^2"
+        )            
     }
 }
