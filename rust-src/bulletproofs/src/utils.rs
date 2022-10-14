@@ -2,7 +2,6 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
-use rand::*;
 
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
@@ -13,7 +12,11 @@ pub struct Generators<C: Curve> {
 }
 
 impl<C: Curve> Generators<C> {
-    /// Generate a list of generators of a given size.
+    /// **Warning** do not use in production!
+    /// This **unsafely** generates a list of generators of a given size for
+    /// testing purposes. For production, generator must be created with
+    /// care.
+    #[cfg(test)]
     pub fn generate(n: usize, csprng: &mut impl Rng) -> Self {
         let mut gh = Vec::with_capacity(n);
         for _ in 0..n {
@@ -32,11 +35,11 @@ impl<C: Curve> Generators<C> {
 }
 
 /// Converts the u64 set vector into a vector over the field
-pub fn get_set_vector<F: PrimeField>(S: &[u64]) -> Option<Vec<F>> {
-    let n = S.len();
+pub fn get_set_vector<F: PrimeField>(the_set: &[u64]) -> Option<Vec<F>> {
+    let n = the_set.len();
     let mut s_vec = Vec::with_capacity(n);
     for i in 0..n {
-        let s_i = F::from_repr(F::Repr::from(S[i]));
+        let s_i = F::from_repr(F::Repr::from(the_set[i]));
         if s_i.is_err() {
             return None;
         }

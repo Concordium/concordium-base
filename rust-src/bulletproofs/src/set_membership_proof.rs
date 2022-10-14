@@ -46,7 +46,7 @@ pub enum ProverError {
 pub fn prove<C: Curve, R: Rng>(
     transcript: &mut RandomOracle,
     csprng: &mut R,
-    S: &[u64],
+    the_set: &[u64],
     v: u64,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
@@ -71,7 +71,7 @@ pub enum VerificationError {
 /// - v_keys - commitment keys B and B_tilde
 pub fn verify_efficient<C: Curve>(
     transcript: &mut RandomOracle,
-    S: &[u64],
+    the_set: &[u64],
     V: &[Commitment<C>],
     proof: &SetMembershipProof<C>,
     gens: &Generators<C>,
