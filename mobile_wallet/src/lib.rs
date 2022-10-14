@@ -253,7 +253,7 @@ fn get_parameters_as_json(
     schema: &str,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
-    let mut schema_bytes = hex::decode(schema)?;
+    let schema_bytes = hex::decode(schema)?;
 
     let contract_name = &payload
         .receive_name
@@ -266,24 +266,19 @@ fn get_parameters_as_json(
         .entrypoint_name()
         .to_string();
 
-    let receive_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
-        Ok(versioned) => get_receive_schema(versioned, contract_name, entrypoint_name)?,
+    let module_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
+        Ok(versioned) => versioned,
         Err(_) => match schema_version {
-            Some(version) => {
-                let mut versioned_schema_bytes: Vec<u8> = vec![u8::MAX, u8::MAX, *version];
-                versioned_schema_bytes.append(&mut schema_bytes);
-                let versioned_schema: VersionedModuleSchema =
-                    match from_bytes(&versioned_schema_bytes) {
-                        Ok(v) => v,
-                        Err(_) => return Err(anyhow::anyhow!("Invalid schema or schema version")),
-                    };
-                get_receive_schema(versioned_schema, contract_name, entrypoint_name)?
-            }
+            Some(0) => VersionedModuleSchema::V0(from_bytes(&schema_bytes)?),
+            Some(1) => VersionedModuleSchema::V1(from_bytes(&schema_bytes)?),
+            Some(2) => VersionedModuleSchema::V2(from_bytes(&schema_bytes)?),
+            Some(_) => return Err(anyhow::anyhow!("Invalid schema version")),
             None => return Err(anyhow::anyhow!("Missing schema version")),
         },
     };
+    let receive_schema = get_receive_schema(module_schema, contract_name, entrypoint_name)?;
 
-    let parameter_bytes: Vec<u8> = payload.message.clone().into();
+    let parameter_bytes = payload.message.as_ref();
     let mut parameters_cursor = Cursor::new(&parameter_bytes[..]);
     match receive_schema.to_json(&mut parameters_cursor) {
         Ok(schema) => Ok(schema),

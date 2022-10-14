@@ -651,7 +651,7 @@ must be a valid JSON object with fields
 
 - `"schema"` ... optional, required for update smart contract transactions, hex encoded schema for the corresponding smart contract.
 
-- `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema.
+- `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 
 The returned value is a JSON object with the following fields:
 
