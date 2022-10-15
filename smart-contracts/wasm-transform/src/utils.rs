@@ -19,7 +19,7 @@ pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
 }
 
 /// Parse, validate, inject metering, and compile to a runnable artifact.
-/// Returning the runnable artifact and a bool indicating whether the 
+/// Returning the runnable artifact and a bool indicating whether the
 /// contract supports native upgrade or not.
 pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
     imp: &VI,
@@ -28,7 +28,7 @@ pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
     let mut module = validate_module(imp, &parse_skeleton(bytes)?)?;
     module.inject_metering()?;
     let artifact = module.compile()?;
-    // TODO: Figure out the best way to pass this information through. 
+    // TODO: Figure out the best way to pass this information through.
     // We could look at the import here and check whether there's a match
     // for 'upgrade' however that solution does not seem really nice...
     let supports_upgrade = false;
