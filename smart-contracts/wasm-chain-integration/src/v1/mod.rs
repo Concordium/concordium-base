@@ -1206,6 +1206,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
 }
 
 /// Invokes an init-function from Wasm module bytes
+#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     pv: ProtocolVersion,
@@ -1228,6 +1229,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
+#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     pv: ProtocolVersion,
@@ -1239,7 +1241,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate_with_metering(
+    let (artifact, _) = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
             pv,
         },
@@ -1485,6 +1487,7 @@ pub fn invoke_receive_from_artifact<
 }
 
 /// Invokes an receive-function from Wasm module bytes
+#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
@@ -1519,6 +1522,7 @@ pub fn invoke_receive_from_source<
 
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
+#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<
     BackingStore: BackingStoreLoad,
@@ -1534,7 +1538,7 @@ pub fn invoke_receive_with_metering_from_source<
     energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
-    let artifact = utils::instantiate_with_metering(
+    let (artifact, _) = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
             pv,
         },
