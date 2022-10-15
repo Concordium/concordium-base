@@ -66,7 +66,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_HOST_FUNCTIONS)).unwrap();
     let module = {
-        let mut module = validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+        let mut module = validate::validate_module(
+            &ConcordiumAllowedImports {
+                pv: wasm_chain_integration::v1::ProtocolVersion::V5,
+            },
+            &skeleton,
+        )
+        .unwrap();
         module.inject_metering().expect("Metering injection should succeed.");
         module
     };
