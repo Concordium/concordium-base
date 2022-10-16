@@ -464,7 +464,6 @@ instance Serialize Parameter where
 
 -- |State of a smart contract. In general we don't know anything other than
 -- it is a sequence of bytes.
--- FIXME: In the future this should be more structured allowing for more sharing.
 newtype ContractState = ContractState {contractState :: BS.ByteString }
     deriving(Eq)
 
