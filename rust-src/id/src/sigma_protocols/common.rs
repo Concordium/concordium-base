@@ -337,58 +337,56 @@ pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
     challenge_prefix
 }
 
-
-pub enum Either<A,B> {
+// TODO: use either::Either here instead
+pub enum Either<A, B> {
     Left(A),
     Right(B),
 }
 
-impl<A,B> Either<A,B> {
+impl<A, B> Either<A, B> {
     pub fn get_left(self) -> Option<A> {
         match self {
             Either::Left(a) => Some(a),
-            Either::Right(_) => None
+            Either::Right(_) => None,
         }
     }
 }
 
-impl<A,B> Either<A,B> {
+impl<A, B> Either<A, B> {
     pub fn get_left_ref(&self) -> Option<&A> {
         match self {
             Either::Left(a) => Some(&a),
-            Either::Right(_) => None
+            Either::Right(_) => None,
         }
     }
 }
 
-
-impl<A,B> Either<A,B> {
+impl<A, B> Either<A, B> {
     pub fn get_right(self) -> Option<B> {
         match self {
             Either::Left(_) => None,
-            Either::Right(b) => Some(b)
+            Either::Right(b) => Some(b),
         }
     }
 }
 
-impl<A,B> Either<A,B> {
+impl<A, B> Either<A, B> {
     pub fn get_right_ref(&self) -> Option<&B> {
         match self {
             Either::Left(_) => None,
-            Either::Right(b) => Some(&b)
+            Either::Right(b) => Some(&b),
         }
     }
 }
 
-
-impl<A: Serial, B: Serial> Serial for Either<A,B> {
+impl<A: Serial, B: Serial> Serial for Either<A, B> {
     #[inline]
     fn serial<C: Buffer>(&self, out: &mut C) {
         match self {
             Either::Left(a) => {
                 let left = (true, a);
                 left.serial(out)
-            },
+            }
             Either::Right(a) => {
                 let right = (false, a);
                 right.serial(out)
@@ -397,44 +395,42 @@ impl<A: Serial, B: Serial> Serial for Either<A,B> {
     }
 }
 
-impl<A: Deserial, B: Deserial> Deserial for Either<A,B> {
+impl<A: Deserial, B: Deserial> Deserial for Either<A, B> {
     #[inline]
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        match  <(bool,A)>::deserial(source) {
+        match <(bool, A)>::deserial(source) {
             Result::Ok((b1, a)) => {
                 if b1 {
-                     return Ok(Either::Left(a))
-                }
-                else {
+                    return Ok(Either::Left(a));
+                } else {
                     anyhow::bail!("Unrecognized left of Either")
-                }},
-            Result::Err(_) => {
-                match  <(bool,B)>::deserial(source) {
-                    Result::Ok((b1, b)) => {
-                        if b1 {
-                             return Ok(Either::Right(b))
-                        }
-                        else {
-                            anyhow::bail!("Unrecognized right of Either")
-                        }},
-                    Result::Err(e) => Err(e)
+                }
             }
-        }    }
-}
+            Result::Err(_) => match <(bool, B)>::deserial(source) {
+                Result::Ok((b1, b)) => {
+                    if b1 {
+                        return Ok(Either::Right(b));
+                    } else {
+                        anyhow::bail!("Unrecognized right of Either")
+                    }
+                }
+                Result::Err(e) => Err(e),
+            },
+        }
+    }
 }
 
 #[derive(Serialize)]
 pub struct EitherWitness<W1: Serialize, W2: Serialize> {
-    pub w: Either<W1,W2>,
+    pub w: Either<W1, W2>,
 }
-
 
 // An "either" adapter to combine multiple provers or multiple verifiers.
 // Either of the two combined protocols is executed
 /// The marker type C is for convenience in use with the
 /// SigmaProtocolProver/Verifier traits below.
 pub struct EitherAdapter<P1, P2> {
-    pub protocol : Either<P1,P2>
+    pub protocol: Either<P1, P2>,
 }
 
 impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for EitherAdapter<P1, P2> {
@@ -447,9 +443,9 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for EitherAdapter<P1, P
     fn public(&self, ro: &mut RandomOracle) {
         match &self.protocol {
             Either::Left(p) => p.public(ro),
-            Either::Right(p) => p.public(ro)
+            Either::Right(p) => p.public(ro),
         }
-     }
+    }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
         match &self.protocol {
@@ -464,13 +460,11 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for EitherAdapter<P1, P
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         match &self.protocol {
             Either::Left(p) => {
-                let (m1, s1) = 
-                    p.commit_point(csprng)?;
-                Some((Either::Left(m1),Either::Left(s1)))
+                let (m1, s1) = p.commit_point(csprng)?;
+                Some((Either::Left(m1), Either::Left(s1)))
             }
             Either::Right(p) => {
-                let (m1, s1) = 
-                    p.commit_point( csprng)?;
+                let (m1, s1) = p.commit_point(csprng)?;
                 Some((Either::Right(m1), Either::Right(s1)))
             }
         }
@@ -489,13 +483,15 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for EitherAdapter<P1, P
                 let ch = challenge.get_left_ref()?;
                 let w = p.generate_witness(s, st, &ch)?;
                 Some(EitherWitness { w: Either::Left(w) })
-            },
-        Either::Right(p) => {
+            }
+            Either::Right(p) => {
                 let s = secret.get_right()?;
                 let st = state.get_right()?;
                 let ch = challenge.get_right_ref()?;
                 let w = p.generate_witness(s, st, &ch)?;
-                Some(EitherWitness { w: Either::Right(w) })
+                Some(EitherWitness {
+                    w: Either::Right(w),
+                })
             }
         }
     }
@@ -509,13 +505,13 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for EitherAdapter<P1, P
             Either::Left(p) => {
                 let ch = challenge.get_left_ref()?;
                 let w = witness.w.get_left_ref()?;
-                let p =p.extract_point(&ch, &w)?;
+                let p = p.extract_point(&ch, &w)?;
                 Some(Either::Left(p))
             }
             Either::Right(p) => {
                 let ch = challenge.get_right_ref()?;
                 let w = witness.w.get_right_ref()?;
-                let p =p.extract_point(&ch, &w)?;
+                let p = p.extract_point(&ch, &w)?;
                 Some(Either::Right(p))
             }
         }
