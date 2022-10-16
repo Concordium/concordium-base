@@ -24,15 +24,10 @@ pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
 pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
     imp: &VI,
     bytes: &[u8],
-) -> anyhow::Result<(Artifact<I, CompiledFunction>, bool)> {
+) -> anyhow::Result<Artifact<I, CompiledFunction>> {
     let mut module = validate_module(imp, &parse_skeleton(bytes)?)?;
     module.inject_metering()?;
-    let artifact = module.compile()?;
-    // TODO: Figure out the best way to pass this information through.
-    // We could look at the import here and check whether there's a match
-    // for 'upgrade' however that solution does not seem really nice...
-    let supports_upgrade = false;
-    Ok((artifact, supports_upgrade))
+    module.compile()
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]

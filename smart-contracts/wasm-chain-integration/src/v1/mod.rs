@@ -1241,7 +1241,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let (artifact, _) = utils::instantiate_with_metering(
+    let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
             pv,
         },
@@ -1538,7 +1538,7 @@ pub fn invoke_receive_with_metering_from_source<
     energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
-    let (artifact, _) = utils::instantiate_with_metering(
+    let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
             pv,
         },

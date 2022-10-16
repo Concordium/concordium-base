@@ -934,7 +934,7 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     parameter: Parameter,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
-    let (artifact, _) = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
@@ -1058,6 +1058,6 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     parameter: Parameter,
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
-    let (artifact, _) = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }

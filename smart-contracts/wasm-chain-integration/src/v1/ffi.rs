@@ -329,10 +329,6 @@ unsafe extern "C" fn call_receive_v1(
 /// `*artifact_len` bytes for the artifact, followed by a list of export item
 /// names. The length of the list is encoded as u16, big endian, and each name
 /// is encoded as u16, big endian.
-/// Finally a meta data byte is appended which currently captures:
-/// * If the contract supports 'upgrading' or not. If the contract supports
-///   upgrading then the value is 1 and if it does __not__ support upgrade
-///   natively then the byte value is 0.
 ///
 /// If validation succeeds, the serialized artifact is at
 /// `*output_artifact_bytes` and should be freed with `rs_free_array_len`.
@@ -362,7 +358,7 @@ unsafe extern "C" fn validate_and_process_v1(
             },
             wasm_bytes,
         ) {
-            Ok((artifact, supports_upgrade)) => {
+            Ok(artifact) => {
                 let mut out_buf = Vec::new();
                 let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
                 out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
@@ -371,10 +367,6 @@ unsafe extern "C" fn validate_and_process_v1(
                     out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                     out_buf.extend_from_slice(name.as_ref().as_bytes());
                 }
-                // Whether the contract supports natively upgrading or not.
-                // 0 if the contract does __not__ support native upgrades.
-                // 1 if the contract does support native upgrades.
-                out_buf.push(supports_upgrade as u8);
 
                 out_buf.shrink_to_fit();
                 *output_len = out_buf.len() as size_t;
