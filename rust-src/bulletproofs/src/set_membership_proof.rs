@@ -337,6 +337,7 @@ pub fn prove<C: Curve, R: Rng>(
 }
 
 /// Error messages detailing why proof verification failed
+#[derive(Debug, PartialEq)]
 pub enum VerificationError {
     /// The length of G_H was less than |S|, which is too small
     NotEnoughGenerators,
@@ -354,7 +355,8 @@ pub enum VerificationError {
 /// - S - the set as a vector
 /// - V - commitment to v
 /// - proof - the set membership proof to verify
-/// - gens - generators containing vectors G and H both of length at least |S| (bold g,h in bluepaper)
+/// - gens - generators containing vectors G and H both of length at least |S|
+///   (bold g,h in bluepaper)
 /// - v_keys - commitment keys B and B_tilde (g,h in bluepaper)
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
@@ -422,7 +424,7 @@ pub fn verify<C: Curve>(
     let mut z4 = z3; // z^4
     z4.mul_assign(&z);
     let ns = C::scalar_from_u64(n); // n as scalar
-    // compute yn = <1, y_n>
+                                    // compute yn = <1, y_n>
     let mut yi = C::Scalar::one(); // y^0
     let mut ip_1_yn = C::Scalar::zero();
     for _ in 0..n {
@@ -454,7 +456,7 @@ pub fn verify<C: Curve>(
     let mut nz4 = ns;
     nz4.mul_assign(&z4);
 
-    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s>) 
+    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s>)
     delta_yz.sub_assign(&nz4);
     // End of delta_yz computation
 
@@ -491,12 +493,12 @@ pub fn verify<C: Curve>(
 
     let P_prime = A; // TODO!
 
-    let ip_verification = false; //TODO, verify_inner_product(transcript, G_vec, H_vec, &P_prime, Q, proof);
+    let ip_verification = false; // TODO, verify_inner_product(transcript, G_vec, H_vec, &P_prime, Q, proof);
 
     if !ip_verification {
         return Err(VerificationError::IPVerificationError);
     }
-    
+
     return Ok(());
 }
 
@@ -740,9 +742,16 @@ mod tests {
             &gens,
             &v_keys,
         );
-
-        assert!(result.is_ok());
+        dbg!(&result);
+        assert!(result.is_ok(), "Verification error {}");
         let result = result.unwrap();
-        assert!(result, "Proof should verify")
+        dbg!(&result);
+
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        dbg!(&result);
+        assert!(result.is_ok(), "Verification error {}");
+        let result = result.unwrap();
+        dbg!(&result);
     }
 }
