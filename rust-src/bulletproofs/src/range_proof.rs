@@ -34,7 +34,7 @@ pub struct RangeProof<C: Curve> {
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 
 /// This function computes the n-bit binary representation a_L of input value v
-/// The vector a_R is the bit-wise negation of a_R
+/// The vector a_R is the bit-wise negation of a_L
 #[allow(non_snake_case)]
 fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
     let mut a_L = Vec::with_capacity(usize::from(n));
