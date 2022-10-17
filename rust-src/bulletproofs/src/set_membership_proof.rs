@@ -1,7 +1,7 @@
 use crate::{inner_product_proof::*, utils::*};
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::{Curve, multiexp_worker_given_table, multiexp_table};
+use curve_arithmetic::{multiexp_table, multiexp_worker_given_table, Curve};
 use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
@@ -97,16 +97,16 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 0: Add public inputs to transcript
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
-    // Compute commitment V for v 
+    // Compute commitment V for v
     let v_scalar = C::scalar_from_u64(v);
     let v_value = Value::<C>::new(v_scalar);
     let V = v_keys.hide(&v_value, v_rand);
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
     // Convert the u64 set into a field element vector
-    let maybe_set:Option<Vec<C::Scalar>> = get_set_vector(the_set);
+    let maybe_set: Option<Vec<C::Scalar>> = get_set_vector(the_set);
     if maybe_set.is_none() {
-        return Err(ProverError::SetConversionFailed)
+        return Err(ProverError::SetConversionFailed);
     }
     let set_vec = maybe_set.unwrap();
     // Append the set to the transcript
@@ -124,11 +124,11 @@ pub fn prove<C: Curve, R: Rng>(
     let B = v_keys.g;
     let B_tilde = v_keys.h;
     // Compute aL (indicator vector) and aR
-    let maybe_aLaR:Option<(Vec<C::Scalar>, Vec<C::Scalar>)> = a_L_a_R(v_scalar, set_vec);
+    let maybe_aLaR: Option<(Vec<C::Scalar>, Vec<C::Scalar>)> = a_L_a_R(v_scalar, set_vec);
     if maybe_aLaR.is_none() {
         return Err(ProverError::CouldNotFindValueInSet);
     }
-    let (a_L,a_R):(Vec<C::Scalar>, Vec<C::Scalar>) = maybe_aLaR.unwrap();
+    let (a_L, a_R): (Vec<C::Scalar>, Vec<C::Scalar>) = maybe_aLaR.unwrap();
     // Setup blinding factors for a_L and a_R
     let mut s_L = Vec::with_capacity(usize::from(n));
     let mut s_R = Vec::with_capacity(usize::from(n));
@@ -137,7 +137,7 @@ pub fn prove<C: Curve, R: Rng>(
         s_R.push(C::generate_scalar(csprng));
     }
     // Commitment randomness for A and S
-    let a_tilde = C::generate_scalar(csprng); //Randomness::<C>::generate(csprng);
+    let a_tilde = C::generate_scalar(csprng); // Randomness::<C>::generate(csprng);
     let s_tilde = C::generate_scalar(csprng);
     // get scalars for A commitment, that is (a_L,a_r,a_tilde)
     let A_scalars: Vec<C::Scalar> = a_L
@@ -173,7 +173,6 @@ pub fn prove<C: Curve, R: Rng>(
     // get challenges y,z from transcript
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
-
 
     Err(ProverError::InnerProductProofFailure)
 }
