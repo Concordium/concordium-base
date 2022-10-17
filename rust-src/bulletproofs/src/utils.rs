@@ -60,8 +60,8 @@ pub fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
 pub fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
     let n = the_set.len();
     let mut s_vec = Vec::with_capacity(n);
-    for i in 0..n {
-        let s_i = C::scalar_from_u64(the_set[i]);
+    for elem_i in the_set {
+        let s_i = C::scalar_from_u64(*elem_i);
         s_vec.push(s_i);
     }
     s_vec
