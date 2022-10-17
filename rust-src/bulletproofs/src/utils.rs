@@ -7,7 +7,8 @@ use rand::Rng;
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
-pub struct Generators<C: Curve> {
+pub struct 
+Generators<C: Curve> {
     #[size_length = 4]
     pub G_H: Vec<(C, C)>,
 }
@@ -106,13 +107,15 @@ mod tests {
                 assert_eq!(
                     *vec.get(i).unwrap(),
                     SomeField::one(),
-                    "Vector element {} should be one", i
+                    "Vector element {} should be one",
+                    i
                 )
             } else {
                 assert_eq!(
                     *vec.get(i).unwrap(),
                     SomeField::zero(),
-                    "Vector element {} should be zero", i
+                    "Vector element {} should be zero",
+                    i
                 )
             }
         }
@@ -124,16 +127,8 @@ mod tests {
         let mut z = SomeField::random(rng);
         let n = 10;
         let vec = z_vec(z, 2, n);
-        assert_eq!(
-            vec.len(),
-            n,
-            "Vector length should be {}", n
-        );
+        assert_eq!(vec.len(), n, "Vector length should be {}", n);
         z.square();
-        assert_eq!(
-            *vec.get(0).unwrap(),
-            z,
-            "First element should be z^2"
-        )            
+        assert_eq!(*vec.get(0).unwrap(), z, "First element should be z^2")
     }
 }
