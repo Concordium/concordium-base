@@ -14,8 +14,6 @@
 //! In addition to pointers to structured objects, the remaining data passed
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
-use std::convert::TryInto;
-
 use super::trie::{
     foreign::{LoadCallback, StoreCallback},
     EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
@@ -25,6 +23,7 @@ use concordium_contracts_common::OwnedReceiveName;
 use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
 use sha2::Digest;
+use std::convert::TryInto;
 use wasm_transform::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,

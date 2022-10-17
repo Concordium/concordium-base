@@ -81,7 +81,7 @@ impl Interrupt {
                 module_ref,
             } => {
                 out.push(2u8);
-                out.write_all(&module_ref.as_ref()[..])?;
+                out.write_all(&module_ref.as_ref().as_slice())?;
                 Ok(())
             }
         }
