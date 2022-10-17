@@ -30,6 +30,7 @@ pub struct SetMembershipProof<C: Curve> {
 }
 
 /// Error messages detailing why proof generation failed
+#[derive(Debug, PartialEq)]
 pub enum ProverError {
     /// The set must have a size of a power of two
     SetSizeNotPowerOfTwo,
@@ -362,21 +363,24 @@ pub fn verify_efficient<C: Curve>(
 
 #[cfg(test)]
 mod tests {
-    use curve_arithmetic::multiexp;
-
     use super::*;
+    use curve_arithmetic::multiexp;
+    use pairing::bls12_381::G1;
 
+    type SomeCurve = G1;
+
+    #[derive(Debug, PartialEq)]
     pub enum UltraVerificationError {
         /// The length of G_H was less than |S|, which is too small
         NotEnoughGenerators,
         IpScalarCheckFailed,
         CouldNotInvertY,
     }
-    
+
     #[allow(non_snake_case)]
     fn verify_ultra_efficient<C: Curve, R: Rng>(
-        csprng: &mut R,
         transcript: &mut RandomOracle,
+        csprng: &mut R,
         the_set: &[u64],
         V: &Commitment<C>,
         proof: &SetMembershipProof<C>,
@@ -415,11 +419,11 @@ mod tests {
         let T_1 = proof.T_1;
         let T_2 = proof.T_2;
         transcript.append_message(b"T1", &T_1);
-        transcript.append_message(b"T2", &T_2);      
+        transcript.append_message(b"T2", &T_2);
         let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
-        
+
         let tx = proof.tx;
         let tx_tilde = proof.tx_tilde;
         let e_tilde = proof.e_tilde;
@@ -428,7 +432,7 @@ mod tests {
         transcript.append_message(b"e_tilde", &e_tilde);
         let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
 
-        //Calculate delta(x,y) <- z^3(1-zn-<1,s>)+(z-z^2)*<1,y^n>
+        // Calculate delta(x,y) <- z^3(1-zn-<1,s>)+(z-z^2)*<1,y^n>
         //<1,y^n>
         let mut ip_1_y = C::Scalar::zero();
         let mut yi = C::Scalar::one();
@@ -443,7 +447,7 @@ mod tests {
         }
         let mut zn = C::scalar_from_u64(n as u64);
         zn.mul_assign(&z);
-        //z^3(1-zn-<1,s>)
+        // z^3(1-zn-<1,s>)
         let mut z3_term = C::Scalar::one();
         z3_term.sub_assign(&zn);
         z3_term.sub_assign(&ip_1_s);
@@ -454,7 +458,7 @@ mod tests {
         let mut delta_yz = z3_term;
         delta_yz.add_assign(&yn_term);
 
-        //Get ip scalars
+        // Get ip scalars
         let ip_proof = &proof.ip_proof;
         let verification_scalars = verify_scalars(transcript, n, ip_proof);
         if verification_scalars.is_none() {
@@ -466,7 +470,7 @@ mod tests {
             verification_scalars.u_inv_sq,
             verification_scalars.s,
         );
-        
+
         let a = ip_proof.a;
         let b = ip_proof.b;
         let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
@@ -481,7 +485,7 @@ mod tests {
         // Select random c
         let c = C::generate_scalar(csprng);
 
-        //Compute scalars
+        // Compute scalars
         let A_scalar = C::Scalar::one();
         let S_scalar = x;
         let mut V_scalar = c;
@@ -490,7 +494,7 @@ mod tests {
         T_1_scalar.mul_assign(&x);
         let mut T_2_scalar = T_1_scalar;
         T_2_scalar.mul_assign(&x);
-        //B_scalar <- w(tx-ab)+c(delta_yz-tx)
+        // B_scalar <- w(tx-ab)+c(delta_yz-tx)
         let mut ab = a;
         ab.mul_assign(&b);
         let mut c_delta_minus_tx = delta_yz;
@@ -500,14 +504,14 @@ mod tests {
         B_scalar.sub_assign(&ab);
         B_scalar.mul_assign(&w);
         B_scalar.add_assign(&c_delta_minus_tx);
-        //B_tilde_scalar <- -e_tilde-c*tx_tilde
+        // B_tilde_scalar <- -e_tilde-c*tx_tilde
         let mut minus_e_tilde = e_tilde;
         minus_e_tilde.negate();
         let mut ctx_tilde = tx_tilde;
         ctx_tilde.mul_assign(&c);
         let mut B_tilde_scalar = minus_e_tilde;
-        B_tilde_scalar.sub_assign(&ctx_tilde);    
-        //G_scalars g_i <- -z-a*s_i
+        B_tilde_scalar.sub_assign(&ctx_tilde);
+        // G_scalars g_i <- -z-a*s_i
         let mut G_scalars = Vec::with_capacity(n);
         for si in s {
             let mut G_scalar = z;
@@ -516,8 +520,8 @@ mod tests {
             sa.mul_assign(&a);
             G_scalar.sub_assign(&sa);
             G_scalars.push(G_scalar);
-        }        
-        //H_scalars h_i <- y^-i * (z^2set_i-b*s_inv_i+z^3) + z
+        }
+        // H_scalars h_i <- y^-i * (z^2set_i-b*s_inv_i+z^3) + z
         let mut H_scalars = Vec::with_capacity(n);
         for i in 0..n {
             let mut H_scalar = set_vec[i];
@@ -530,11 +534,11 @@ mod tests {
             H_scalar.add_assign(&z);
             H_scalars.push(H_scalar);
         }
-        //L and R scalars
+        // L and R scalars
         let mut L_scalars = u_sq;
         let mut R_scalars = u_inv_sq;
 
-        //Combine scalar vectors
+        // Combine scalar vectors
         let mut all_scalars = vec![A_scalar];
         all_scalars.push(S_scalar);
         all_scalars.push(T_1_scalar);
@@ -543,10 +547,10 @@ mod tests {
         all_scalars.push(B_tilde_scalar);
         all_scalars.push(V_scalar);
         all_scalars.append(&mut G_scalars);
-        all_scalars.append(&mut H_scalars);        
+        all_scalars.append(&mut H_scalars);
         all_scalars.append(&mut L_scalars);
         all_scalars.append(&mut R_scalars);
-        //Combine generator vectors
+        // Combine generator vectors
         let mut all_points = vec![A];
         all_points.push(S);
         all_points.push(T_1);
@@ -563,5 +567,43 @@ mod tests {
         Ok(sum.is_zero_point())
     }
 
-    
+    #[test]
+    fn test_smp_with_ultra_verification() {
+        let rng = &mut thread_rng();
+        let mut transcript = RandomOracle::empty();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let v: u64 = 3;
+        let n = the_set.len();
+
+        let gens = Generators::generate(n, rng);
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let v_keys = CommitmentKey { g: B, h: B_tilde };
+
+        let v_rand = Randomness::generate(rng);
+        let v_scalar = SomeCurve::scalar_from_u64(v);
+        let v_value = Value::<SomeCurve>::new(v_scalar);
+        let v_com = v_keys.hide(&v_value, &v_rand);
+
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        let mut transcript = RandomOracle::empty();
+        let result = verify_ultra_efficient(
+            &mut transcript,
+            rng,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result, "Proof should verify")
+    }
 }
