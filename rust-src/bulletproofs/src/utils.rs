@@ -1,9 +1,8 @@
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
-use ff::{Field, PrimeField};
+use ff::Field;
 use rand::Rng;
-
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
@@ -58,17 +57,14 @@ pub fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
 }
 
 /// Converts the u64 set vector into a vector over the field
-pub fn get_set_vector<F: PrimeField>(the_set: &[u64]) -> Option<Vec<F>> {
+pub fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
     let n = the_set.len();
     let mut s_vec = Vec::with_capacity(n);
     for i in 0..n {
-        let s_i = F::from_repr(F::Repr::from(the_set[i]));
-        if s_i.is_err() {
-            return None;
-        }
-        s_vec.push(s_i.unwrap());
+        let s_i = C::scalar_from_u64(the_set[i]);
+        s_vec.push(s_i);
     }
-    Some(s_vec)
+    s_vec
 }
 
 /// Pads a field vector two a power of two length by repeating the last element
@@ -89,6 +85,8 @@ mod tests {
     use rand::thread_rng;
 
     use super::{pad_vector_to_power_of_two, z_vec};
+
+    type SomeCurve = pairing::bls12_381::G1;
     type SomeField = pairing::bls12_381::Fq;
 
     #[test]

@@ -6,7 +6,7 @@ use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
-use std::{iter::once, borrow::BorrowMut};
+use std::{borrow::BorrowMut, iter::once};
 
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
@@ -31,8 +31,8 @@ pub struct SetMembershipProof<C: Curve> {
 
 /// Error messages detailing why proof generation failed
 pub enum ProverError {
-    /// Set conversion failed
-    SetConversionFailed,
+    /// The set must have a size of a power of two
+    SetSizeNotPowerOfTwo,
     /// The length of G_H was less than |S|, which is too small
     NotEnoughGenerators,
     /// Could not compute the indicator
@@ -40,7 +40,7 @@ pub enum ProverError {
     /// Could not generate inner product proof
     InnerProductProofFailure,
     /// Could not invert y
-    CouldNotInvertY
+    CouldNotInvertY,
 }
 
 /// This function takes a set (as a vector) and a value v as input.
@@ -96,6 +96,10 @@ pub fn prove<C: Curve, R: Rng>(
     v_keys: &CommitmentKey<C>,
     v_rand: &Randomness<C>,
 ) -> Result<SetMembershipProof<C>, ProverError> {
+    let n = the_set.len();
+    if !n.is_power_of_two() {
+        return Err(ProverError::SetSizeNotPowerOfTwo);
+    }
     // Part 0: Add public inputs to transcript
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -106,16 +110,11 @@ pub fn prove<C: Curve, R: Rng>(
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
     // Convert the u64 set into a field element vector
-    let maybe_set: Option<Vec<C::Scalar>> = get_set_vector(the_set);
-    if maybe_set.is_none() {
-        return Err(ProverError::SetConversionFailed);
-    }
-    let set_vec = maybe_set.unwrap();
+    let set_vec = get_set_vector::<C>(&the_set);
     // Append the set to the transcript
     transcript.append_message(b"theSet", &set_vec);
 
     // Part 1: Setup and generation of vector commitments
-    let n = set_vec.len();
     // Check that we have enough generators for vector commitments
     if gens.G_H.len() < n {
         return Err(ProverError::NotEnoughGenerators);
@@ -309,14 +308,16 @@ pub fn prove<C: Curve, R: Rng>(
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     // get generator q
     let Q = B.mul_by_scalar(&w);
-    // compute scalars c such that c*H = H', that is H_prime_scalars = (1, y^-1,.., y^-(n-1))
+    // compute scalars c such that c*H = H', that is H_prime_scalars = (1, y^-1,..,
+    // y^-(n-1))
     let y_inv = match y.inverse() {
         Some(inv) => inv,
         None => return Err(ProverError::CouldNotInvertY),
     };
     let H_prime_scalars = z_vec(y_inv, 0, n);
     // compute inner product proof
-    let proof = prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
+    let proof =
+        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
 
     // return range proof
     if let Some(ip_proof) = proof {
