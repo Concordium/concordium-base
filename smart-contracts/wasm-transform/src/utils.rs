@@ -19,8 +19,6 @@ pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
 }
 
 /// Parse, validate, inject metering, and compile to a runnable artifact.
-/// Returning the runnable artifact and a bool indicating whether the
-/// contract supports native upgrade or not.
 pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
     imp: &VI,
     bytes: &[u8],
