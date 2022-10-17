@@ -25,7 +25,7 @@ fn prop_create_write_read_delete() {
         };
         let mut m_state = MutableState::initial_state();
         let inner = m_state.get_inner(&mut loader);
-        let mut state = InstanceState::new(0, loader, inner);
+        let mut state = InstanceState::new(loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         for (k, v) in &inputs {
             let entry = state
@@ -105,7 +105,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
-    let mut state = InstanceState::new(0, loader, inner);
+    let mut state = InstanceState::new(loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let k = &[42];
     let entry = state
@@ -201,7 +201,7 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
-    let mut state = InstanceState::new(0, loader, inner);
+    let mut state = InstanceState::new(loader, inner);
     let entry = state
         .create_entry(&[0])
         .context("Entry should be created.")?
@@ -246,7 +246,7 @@ fn prop_entry_write_resizing() {
         };
         let mut m_state = MutableState::initial_state();
         let inner = m_state.get_inner(&mut loader);
-        let mut state = InstanceState::new(0, loader, inner);
+        let mut state = InstanceState::new(loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         for (k, v) in &inputs {
             let entry = state
@@ -289,7 +289,7 @@ fn test_prefix_removal_fails_if_out_of_energy() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
-    let mut state = InstanceState::new(0, loader, inner);
+    let mut state = InstanceState::new(loader, inner);
     let key = vec![1];
     for k in &key {
         let entry = state
@@ -326,7 +326,7 @@ fn prop_iterators() {
         };
         let mut m_state = MutableState::initial_state();
         let inner = m_state.get_inner(&mut loader);
-        let mut state = InstanceState::new(0, loader, inner);
+        let mut state = InstanceState::new(loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         // create the state with some locked parts.
         for (k, v) in &inputs {
@@ -458,7 +458,7 @@ fn prop_iterator_traversing() {
         };
         let mut m_state = MutableState::initial_state();
         let inner = m_state.get_inner(&mut loader);
-        let mut state = InstanceState::new(0, loader, inner);
+        let mut state = InstanceState::new(loader, inner);
         let mut energy = crate::InterpreterEnergy::from(u64::MAX);
         let mut prefixes = trie::low_level::PrefixesMap::new();
         for (k, v) in &inputs {
@@ -520,7 +520,7 @@ fn test_iterator_errors() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
-    let mut state = InstanceState::new(0, loader, inner);
+    let mut state = InstanceState::new(loader, inner);
 
     ensure!(state.create_entry(&[0, 1]).is_ok(), "Entry should have been created");
     ensure!(state.create_entry(&[0, 2]).is_ok(), "Entry should have been created");
@@ -569,7 +569,7 @@ fn test_iterator_deletion_and_consuming() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
-    let mut state = InstanceState::new(0, loader, inner);
+    let mut state = InstanceState::new(loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let key = &[0];
     ensure!(state.create_entry(key).is_ok(), "Entry should have been created.");
@@ -647,7 +647,7 @@ fn test_invalid_generation_operations() -> anyhow::Result<()> {
     };
     let mut m_state = MutableState::initial_state();
     let inner = m_state.get_inner(&mut loader);
-    let mut state = InstanceState::new(0, loader, inner);
+    let mut state = InstanceState::new(loader, inner);
     let mut energy = crate::InterpreterEnergy::from(u64::MAX);
     let entry = state
         .create_entry(&[0])
