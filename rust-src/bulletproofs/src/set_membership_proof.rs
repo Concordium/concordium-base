@@ -361,4 +361,10 @@ pub fn verify_efficient<C: Curve>(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    fn verify_ultra_efficient<C: Curve>() -> Result<(), VerificationError> {
+        Err(VerificationError::NotEnoughGenerators)
+    }
+}

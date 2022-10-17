@@ -86,7 +86,7 @@ mod tests {
 
     use super::{pad_vector_to_power_of_two, z_vec};
 
-    type SomeCurve = pairing::bls12_381::G1;
+    // type SomeCurve = pairing::bls12_381::G1;
     type SomeField = pairing::bls12_381::Fq;
 
     #[test]
