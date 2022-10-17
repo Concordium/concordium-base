@@ -1,7 +1,7 @@
 use crate::{inner_product_proof::*, utils::*};
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::{multiexp_table, multiexp_worker_given_table, Curve};
+use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve};
 use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
@@ -339,25 +339,164 @@ pub fn prove<C: Curve, R: Rng>(
 pub enum VerificationError {
     /// The length of G_H was less than |S|, which is too small
     NotEnoughGenerators,
+    /// The consistency check for t_0 failed
+    InconsistentT0,
+    /// Choice of randomness led to verification failure
+    DivisionError,
+    /// inner product proof verification failed
+    IPVerificationError,
 }
 
 /// This function verifies a set membership proof, i.e. a proof of knowledge
 /// of value v that is in a set S and that is consistent
-/// with commitments V to v. The arguments are
+/// with a commitment V to v. The arguments are
 /// - S - the set as a vector
-/// - V - commitments to v
-/// - proof - the set membership proof
-/// - gens - generators containing vectors G and H both of length nm
-/// - v_keys - commitment keys B and B_tilde
-pub fn verify_efficient<C: Curve>(
+/// - V - commitment to v
+/// - proof - the set membership proof to verify
+/// - gens - generators containing vectors G and H both of length at least |S| (bold g,h in bluepaper)
+/// - v_keys - commitment keys B and B_tilde (g,h in bluepaper)
+#[allow(non_snake_case)]
+pub fn verify<C: Curve>(
     transcript: &mut RandomOracle,
     the_set: &[u64],
-    V: &[Commitment<C>],
+    V: &Commitment<C>,
     proof: &SetMembershipProof<C>,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
-    Err(VerificationError::NotEnoughGenerators)
+    // Part 1: Setup
+    // TODO: Check that n := |S| is a power of 2?
+    // TODO: Check whether this should be done for range proof verification
+    let n = the_set.len();
+    if gens.G_H.len() < n {
+        return Err(VerificationError::NotEnoughGenerators);
+    }
+
+    // TODO: Check whether n fits into u64
+    let n = n as u64;
+
+    // append commitment V to transcript
+    transcript.append_message(b"V", &V.0);
+
+    // define the commitments A,S
+    let A = proof.A;
+    let S = proof.S;
+    // append commitments A and S to transcript
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
+
+    // get challenges y,z from transcript
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+
+    // define the commitments A,S
+    let T_1 = proof.T_1;
+    let T_2 = proof.T_2;
+    // append T1, T2 commitments to transcript
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+
+    // get challenge x (evaluation point) from transcript
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+
+    // define polynomial evaluation value
+    let tx = proof.tx;
+    // define blinding factors for tx and i.p. proof
+    let tx_tilde = proof.tx_tilde;
+    let e_tilde = proof.e_tilde;
+    // append tx, tx_tilde, e_tilde to transcript
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+
+    // get challenge w from transcript
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+
+    // compute delta(y,z) = -nz^4 + z^3 (1 - <1,s>) + (z-z^2) (<1,y^n>)
+    // first compute helper values
+    let mut z2 = z; // z^2
+    z2.mul_assign(&z);
+    let mut z3 = z2; // z^3
+    z3.mul_assign(&z);
+    let mut z4 = z3; // z^4
+    z4.mul_assign(&z);
+    let ns = C::scalar_from_u64(n); // n as scalar
+    // compute yn = <1, y_n>
+    let mut yi = C::Scalar::one(); // y^0
+    let mut ip_1_yn = C::Scalar::zero();
+    for _ in 0..n {
+        ip_1_yn.add_assign(&yi);
+        yi.mul_assign(&y);
+    }
+
+    let mut delta_yz = z; // delta_yz = z
+    delta_yz.sub_assign(&z2); // delta_yz = z - z^2
+    delta_yz.mul_assign(&ip_1_yn); // delta_yz = (z - z^2) (<1,y^n>)
+
+    // compute ip_1_s = <1,s>
+    let mut ip_1_s = C::Scalar::zero();
+    for si in the_set {
+        let sis = C::scalar_from_u64(*si);
+        ip_1_s.add_assign(&sis);
+    }
+
+    // compute z3_one_minus_ip_1_s = z^3 (1 - <1,s>)
+    let mut one_minus_ip_1_s = C::Scalar::one();
+    one_minus_ip_1_s.sub_assign(&ip_1_s);
+    let mut z3_one_minus_ip_1_s = z3;
+    z3_one_minus_ip_1_s.mul_assign(&one_minus_ip_1_s);
+
+    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s>)
+    delta_yz.add_assign(&z3_one_minus_ip_1_s);
+
+    // compute nz^4
+    let mut nz4 = ns;
+    nz4.mul_assign(&z4);
+
+    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s>) 
+    delta_yz.sub_assign(&nz4);
+    // End of delta_yz computation
+
+    // Part 2: Verify consistency of t_0
+    // i.e., check 0 = V^z^2 * g^(delta_yz - t_x) * T_1^x * T_2^x^2 * h^(-tx_tilde)
+    let mut delta_minus_tx = delta_yz;
+    delta_minus_tx.sub_assign(&tx);
+    let mut x2 = x; // x^2
+    x2.mul_assign(&x);
+    let mut minus_tx_tilde = C::Scalar::zero();
+    minus_tx_tilde.sub_assign(&tx_tilde);
+
+    let base_points = vec![V.0, v_keys.g, T_1, T_2, v_keys.h];
+    let exponents = vec![z2, delta_minus_tx, x, x2, minus_tx_tilde];
+
+    let rhs = multiexp(&base_points, &exponents);
+    if !rhs.is_zero_point() {
+        return Err(VerificationError::InconsistentT0);
+    }
+
+    // Part 3: Verify inner product
+    // First compute helper variables g_hat, h_prime, and P_prime
+    let mut g_hat = v_keys.g;
+    g_hat.mul_by_scalar(&w);
+
+    let y_inv = match y.inverse() {
+        Some(inv) => inv,
+        None => return Err(VerificationError::DivisionError),
+    };
+    let y_inv_n = z_vec(y_inv, 0, n as usize); // TODO: Unify whether z_vec takes usize or u64
+
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let mut h_prime = multiexp(&H, &y_inv_n);
+
+    let P_prime = A; // TODO!
+
+    let ip_verification = false; //TODO, verify_inner_product(transcript, G_vec, H_vec, &P_prime, Q, proof);
+
+    if !ip_verification {
+        return Err(VerificationError::IPVerificationError);
+    }
+    
+    return Ok(());
 }
 
 #[cfg(test)]
