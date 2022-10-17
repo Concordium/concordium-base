@@ -118,6 +118,37 @@ pub struct ContractV3 {
     pub receive: BTreeMap<String, FunctionV3>,
 }
 
+/// Contains event schema and associated event tag vector.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventSchema {
+    /// Event schema.
+    pub event_schema: Type,
+    /// Event tags are mapped to enum indexes:
+    /// The event at index 0 in the event schema enum is mapped to the event tag
+    /// value `event_tags[0]`. The event at index 1 in the event schema enum
+    /// is mapped to the event tag value `event_tags[1]`. ...
+    pub event_tags:   Option<Vec<u8>>,
+}
+
+impl Deserial for EventSchema {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let event_schema = source.get()?;
+        let event_tags = source.get()?;
+        Ok(EventSchema {
+            event_schema,
+            event_tags,
+        })
+    }
+}
+
+impl Serial for EventSchema {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.event_schema.serial(out)?;
+        self.event_tags.serial(out)?;
+        Ok(())
+    }
+}
+
 /// Describes the schema of an init or a receive function for V1 contracts with
 /// V1 schemas.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -274,43 +305,43 @@ pub enum FunctionV3 {
     },
     ParamEvent {
         parameter: Type,
-        event:     Type,
+        event:     EventSchema,
     },
     RvEvent {
         return_value: Type,
-        event:        Type,
+        event:        EventSchema,
     },
     ParamRvEvent {
         parameter:    Type,
         return_value: Type,
-        event:        Type,
+        event:        EventSchema,
     },
     ErrorEvent {
         error: Type,
-        event: Type,
+        event: EventSchema,
     },
     ParamErrorEvent {
         parameter: Type,
         error:     Type,
-        event:     Type,
+        event:     EventSchema,
     },
     RvErrorEvent {
         return_value: Type,
         error:        Type,
-        event:        Type,
+        event:        EventSchema,
     },
     ParamRvErrorEvent {
         parameter:    Type,
         return_value: Type,
         error:        Type,
-        event:        Type,
+        event:        EventSchema,
     },
-    Event(Type),
+    Event(EventSchema),
 }
 
 impl FunctionV3 {
     /// Extract the event schema if it exists.
-    pub fn event(&self) -> Option<&Type> {
+    pub fn event(&self) -> Option<&EventSchema> {
         match self {
             FunctionV3::ParamEvent {
                 event,
@@ -340,7 +371,7 @@ impl FunctionV3 {
                 event,
                 ..
             } => Some(event),
-            FunctionV3::Event(ty) => Some(ty),
+            FunctionV3::Event(event) => Some(event),
             _ => None,
         }
     }
@@ -430,6 +461,22 @@ impl FunctionV3 {
                 ..
             } => Some(error),
             FunctionV3::ParamRvError {
+                error,
+                ..
+            } => Some(error),
+            FunctionV3::ErrorEvent {
+                error,
+                ..
+            } => Some(error),
+            FunctionV3::ParamErrorEvent {
+                error,
+                ..
+            } => Some(error),
+            FunctionV3::RvErrorEvent {
+                error,
+                ..
+            } => Some(error),
+            FunctionV3::ParamRvErrorEvent {
                 error,
                 ..
             } => Some(error),
@@ -1967,38 +2014,62 @@ mod tests {
         };
         let f7 = FunctionV3::ParamEvent {
             parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            event:     Type::Bool,
+            event:     EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
         let f8 = FunctionV3::RvEvent {
             return_value: Type::ILeb128(3),
-            event:        Type::Bool,
+            event:        EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
         let f9 = FunctionV3::ParamRvEvent {
             parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             return_value: Type::ILeb128(3),
-            event:        Type::Bool,
+            event:        EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
         let f10 = FunctionV3::ErrorEvent {
             error: Type::Bool,
-            event: Type::Bool,
+            event: EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
         let f11 = FunctionV3::ParamErrorEvent {
             parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             error:     Type::Bool,
-            event:     Type::Bool,
+            event:     EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
         let f12 = FunctionV3::RvErrorEvent {
             return_value: Type::ILeb128(3),
             error:        Type::Bool,
-            event:        Type::Bool,
+            event:        EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
         let f13 = FunctionV3::ParamRvErrorEvent {
             parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             return_value: Type::ILeb128(3),
             error:        Type::Bool,
-            event:        Type::Bool,
+            event:        EventSchema {
+                event_schema: Type::Bool,
+                event_tags:   Some(vec![1, 2, 3]),
+            },
         };
-        let f14 = FunctionV3::Event(Type::U128);
+        let f14 = FunctionV3::Event(EventSchema {
+            event_schema: Type::Bool,
+            event_tags:   Some(vec![1, 2, 3]),
+        });
 
         assert_eq!(serial_deserial(&f1), Ok(f1));
         assert_eq!(serial_deserial(&f2), Ok(f2));
@@ -2074,7 +2145,10 @@ mod tests {
             contracts: BTreeMap::from([("a".into(), ContractV3 {
                 init:    Some(FunctionV3::ParamEvent {
                     parameter: Type::U8,
-                    event:     Type::Bool,
+                    event:     EventSchema {
+                        event_schema: Type::Bool,
+                        event_tags:   Some(vec![1, 2, 3]),
+                    },
                 }),
                 receive: BTreeMap::from([
                     ("b".into(), FunctionV3::Rv(Type::String(SizeLength::U32))),
