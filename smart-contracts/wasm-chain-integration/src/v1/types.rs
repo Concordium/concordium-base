@@ -869,13 +869,14 @@ impl trie::AllocCounter<trie::Value> for InterpreterEnergy {
 }
 
 impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
+    /// Create a new [`InstanceState`] using the given backing store to load
+    /// data from disk.
     pub fn new(
-        current_generation: u32,
         backing_store: BackingStore,
         state: &'a trie::MutableStateInner,
     ) -> InstanceState<'a, BackingStore> {
         Self {
-            current_generation,
+            current_generation: 0,
             backing_store,
             changed: false,
             state_trie: state.lock(),
@@ -884,6 +885,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         }
     }
 
+    /// Migrate the [`InstanceState`] to a new generation.
     pub fn migrate(
         state_updated: bool,
         current_generation: InstanceCounter,

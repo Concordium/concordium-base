@@ -1110,7 +1110,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
 ) -> ExecResult<InitResult> {
     let mut initial_state = trie::MutableState::initial_state();
     let inner = initial_state.get_inner(&mut loader);
-    let state_ref = InstanceState::new(0, loader, inner);
+    let state_ref = InstanceState::new(loader, inner);
     let mut host = InitHost {
         energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
@@ -1171,23 +1171,129 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     }
 }
 
+#[derive(Debug, Clone)]
+/// The kind of errors that may occur during handling of contract `invoke` or
+/// `upgrade`.
+pub enum InvokeFailure {
+    /// The V1 contract rejected the call with the specific code. The code is
+    /// always negative.
+    ContractReject {
+        code: i32,
+        data: ParameterVec,
+    },
+    /// A transfer was attempted, but the sender did not have sufficient funds.
+    InsufficientAmount,
+    /// The receiving account of the transfer did not exist.
+    NonExistentAccount,
+    /// Contract to invoke did not exist (i.e., there is no contract on the
+    /// supplied address).
+    NonExistentContract,
+    /// The contract existed, but the entrypoint did not.
+    NonExistentEntrypoint,
+    /// Sending a message to a V0 contact failed.
+    SendingV0Failed,
+    /// Invoking a contract failed with a runtime error.
+    RuntimeError,
+    UpgradeInvalidModuleRef,
+    UpgradeInvalidContractName,
+    UpgradeInvalidVersion,
+}
+
+impl InvokeFailure {
+    /// Encode the failure kind in a format that is expected from a host
+    /// function. If the return value is present it is pushed to the supplied
+    /// vector of parameters.
+    pub(crate) fn encode_as_u64(self, parameters: &mut Vec<ParameterVec>) -> anyhow::Result<u64> {
+        Ok(match self {
+            InvokeFailure::ContractReject {
+                code,
+                data,
+            } => {
+                let len = parameters.len();
+                if len > 0b0111_1111_1111_1111_1111_1111 {
+                    bail!("Too many calls.")
+                }
+                parameters.push(data);
+                (len as u64) << 40 | (code as u32 as u64)
+            }
+            InvokeFailure::InsufficientAmount => 0x01_0000_0000,
+            InvokeFailure::NonExistentAccount => 0x02_0000_0000,
+            InvokeFailure::NonExistentContract => 0x03_0000_0000,
+            InvokeFailure::NonExistentEntrypoint => 0x04_0000_0000,
+            InvokeFailure::SendingV0Failed => 0x05_0000_0000,
+            InvokeFailure::RuntimeError => 0x06_0000_0000,
+            InvokeFailure::UpgradeInvalidModuleRef => 0x07_0000_0000,
+            InvokeFailure::UpgradeInvalidContractName => 0x08_0000_0000,
+            InvokeFailure::UpgradeInvalidVersion => 0x09_0000_0000,
+        })
+    }
+}
+
 /// Response from an invoke call.
 pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {
-        /// Whether the state has been updated or not.
-        state_updated: bool,
         /// Balance after the execution of the interrupt.
-        new_balance:   Amount,
+        new_balance: Amount,
         /// Some calls do not have any return values, such as transfers.
-        data:          Option<ParameterVec>,
+        data:        Option<ParameterVec>,
     },
     /// Execution was not successful. The state did not change
-    /// and the contract responded with the given error code and data.
+    /// and the contract or environment responded with the given error.
     Failure {
-        code: u64,
-        data: Option<ParameterVec>,
+        kind: InvokeFailure,
     },
+}
+
+#[cfg(feature = "enable-ffi")]
+impl InvokeResponse {
+    // NB: This must match the response encoding in V1.hs in consensus
+    pub(crate) fn try_from_ffi_response(
+        response_status: u64,
+        new_balance: Amount,
+        data: Option<ParameterVec>,
+    ) -> anyhow::Result<Self> {
+        // If the first 3 bytes are all set that indicates an error.
+        let response = if response_status & 0xffff_ff00_0000_0000 == 0xffff_ff00_0000_0000 {
+            let kind = match response_status & 0x0000_00ff_0000_0000 {
+                0x0000_0000_0000_0000 => {
+                    // The return value is present since this was a logic error.
+                    if response_status & 0x0000_0000_ffff_ffff == 0 {
+                        // Host violated precondition. There must be a non-zero error code.
+                        bail!("Host violated precondition.")
+                    }
+                    let code = (response_status & 0x0000_0000_ffff_ffff) as u32 as i32;
+                    if let Some(data) = data {
+                        InvokeFailure::ContractReject {
+                            code,
+                            data,
+                        }
+                    } else {
+                        bail!("Return value should be present in case of logic error.")
+                    }
+                }
+                0x0000_0001_0000_0000 => InvokeFailure::InsufficientAmount,
+                0x0000_0002_0000_0000 => InvokeFailure::NonExistentAccount,
+                0x0000_0003_0000_0000 => InvokeFailure::NonExistentContract,
+                0x0000_0004_0000_0000 => InvokeFailure::NonExistentEntrypoint,
+                0x0000_0005_0000_0000 => InvokeFailure::SendingV0Failed,
+                0x0000_0006_0000_0000 => InvokeFailure::RuntimeError,
+                0x0000_0007_0000_0000 => InvokeFailure::UpgradeInvalidModuleRef,
+                0x0000_0008_0000_0000 => InvokeFailure::UpgradeInvalidContractName,
+                0x0000_0009_0000_0000 => InvokeFailure::UpgradeInvalidVersion,
+                x => bail!("Unrecognized error code: {}", x),
+            };
+            InvokeResponse::Failure {
+                kind,
+            }
+        } else {
+            InvokeResponse::Success {
+                new_balance,
+                data,
+            }
+        };
+        Ok(response)
+    }
 }
 
 /// Invokes an init-function from a given artifact *bytes*
@@ -1369,6 +1475,21 @@ pub fn invoke_receive<
     process_receive_result(artifact, host, result)
 }
 
+/// Resume execution of the receive method after handling the interrupt.
+/// The arguments
+///
+/// - `interrupted_state` is the state of execution that is captured when we
+///   started handling the interrupt
+/// - `response` is the response from the operation that was invoked
+/// - `energy` is the remaning energy left for execution
+/// - `state_trie` is the current state of the contract instance, **after**
+///   handling the interrupt
+/// - `state_updated` indicates whether the state of the instance has changed
+///   during handling of the operation This can currently only happen if there
+///   is re-entrancy, i.e., if during handling of the interrupt the instance
+///   that invoked it is itself again invoked.
+/// - `backing_store` gives access to any on-disk storage for the instance
+///   state.
 pub fn resume_receive<BackingStore: BackingStoreLoad>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
@@ -1393,7 +1514,6 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
     };
     let response = match response {
         InvokeResponse::Success {
-            state_updated,
             new_balance,
             data,
         } => {
@@ -1423,22 +1543,8 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
             }
         }
         InvokeResponse::Failure {
-            code,
-            data,
-        } => {
-            // state did not change
-            if let Some(data) = data {
-                let len = host.stateless.parameters.len();
-                if len > 0b0111_1111_1111_1111_1111_1111 {
-                    bail!("Too many calls.")
-                }
-                host.stateless.parameters.push(data);
-                // return the index of the parameter to retrieve.
-                (len as u64) << 40 | code
-            } else {
-                code
-            }
-        }
+            kind,
+        } => kind.encode_as_u64(&mut host.stateless.parameters)?,
     };
     // push the response from the invoke
     let mut config = interrupted_state.config;
