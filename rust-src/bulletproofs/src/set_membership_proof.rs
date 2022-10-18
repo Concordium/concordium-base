@@ -496,9 +496,8 @@ pub fn verify<C: Curve>(
 
     // compute h' = (h_i^{(y^{-n})_i}) = (h[0], h[1]^{y_inv}, h[2]^{y_inv^2}, ...)
     let mut h_prime = Vec::with_capacity(n);
-    h_prime[0] = H[0];
     for i in 0..n {
-        h_prime[i] = H[i].mul_by_scalar(&y_inv_n[i]);
+        h_prime.push(H[i].mul_by_scalar(&y_inv_n[i]));
     }
 
     let mut minus_e_tilde = e_tilde;
@@ -507,7 +506,7 @@ pub fn verify<C: Curve>(
     // compute exponent for h, i.e., z1 + z^2y^-n * s + z^3y^-n
     let mut h_exponents: Vec<<C as Curve>::Scalar> = Vec::with_capacity(n);
     for i in 0..n {
-        h_exponents[i].add_assign(&z);
+        h_exponents.push(z);
         let mut z2ynisi = z2;
         z2ynisi.mul_assign(&y_inv_n[i]);
         z2ynisi.mul_assign(&the_set_vec[i]);
