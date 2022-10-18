@@ -6,7 +6,7 @@ use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
-use std::{borrow::BorrowMut, iter::once};
+use std::iter::once;
 
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
@@ -209,9 +209,9 @@ pub fn prove<C: Curve, R: Rng>(
         let mut r_0_i = a_R[i];
         r_0_i.add_assign(&z);
         r_0_i.mul_assign(&y_n[i]);
-        r_0_i.add_assign(&z_cb); // y_n[i] * (a_R[i] + z)
+        r_0_i.add_assign(&z_cb);
         let mut z_cb_si = z_sq;
-        z_cb_si.add_assign(&set_vec[i]); // z^2*set_vec[i]
+        z_cb_si.mul_assign(&set_vec[i]);
         r_0_i.add_assign(&z_cb_si);
         r_0.push(r_0_i);
 
@@ -572,7 +572,6 @@ mod tests {
         transcript.append_message(b"tx_tilde", &tx_tilde);
         transcript.append_message(b"e_tilde", &e_tilde);
         let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
-
         // Calculate delta(x,y) <- z^3(1-zn-<1,s>)+(z-z^2)*<1,y^n>
         //<1,y^n>
         let mut ip_1_y = C::Scalar::zero();
@@ -705,6 +704,7 @@ mod tests {
         all_points.extend_from_slice(&R);
 
         let sum = multiexp(&all_points, &all_scalars);
+
         Ok(sum.is_zero_point())
     }
 
@@ -742,16 +742,8 @@ mod tests {
             &gens,
             &v_keys,
         );
-        dbg!(&result);
-        assert!(result.is_ok(), "Verification error {}");
+        assert!(result.is_ok());
         let result = result.unwrap();
-        dbg!(&result);
-
-        let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
-        dbg!(&result);
-        assert!(result.is_ok(), "Verification error {}");
-        let result = result.unwrap();
-        dbg!(&result);
+        assert!(result);
     }
 }
