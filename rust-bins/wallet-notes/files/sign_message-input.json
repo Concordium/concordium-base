@@ -1,0 +1,18 @@
+{
+    "address": "3eP94feEdmhYiPC1333F9VoV31KGMswonuHk5tqmZrzf761zK5",
+    "message": "test",
+    "keys": {
+        "keys": {
+            "0": {
+                "keys": {
+                    "0": {
+                        "signKey": "e1cf504954663e49f4fe884c7c35415b09632cccd82d3d2a62ab2825e67d785d",
+                        "verifyKey": "fef5414fc757cd4694bf0c7ea436f015cb7f87a80d08e1d1085b9cc91f13f376"
+                    }
+                },
+                "threshold": 1
+            }
+        },
+        "threshold": 1
+    }
+}
