@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate criterion;
 
-use std::time::Duration;
 use bulletproofs::{set_membership_proof::*, utils::Generators};
 use criterion::{BenchmarkId, Criterion};
 use curve_arithmetic::*;
@@ -9,6 +8,7 @@ use pairing::bls12_381::G1;
 use pedersen_scheme::{CommitmentKey, Randomness};
 use rand::*;
 use random_oracle::RandomOracle;
+use std::time::Duration;
 
 #[allow(non_snake_case)]
 pub fn bench_set_membership_proof(c: &mut Criterion) {
@@ -91,7 +91,7 @@ pub fn bench_set_membership_proof(c: &mut Criterion) {
                 )
                 .unwrap();
             })
-        });        
+        });
 
         // Bench ultra verification
         group.bench_function(BenchmarkId::new("Ultra Verification", n), move |b| {

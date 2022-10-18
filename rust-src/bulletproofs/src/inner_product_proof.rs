@@ -331,6 +331,113 @@ pub fn verify_inner_product<C: Curve>(
     P_prime.minus_point(&RHS).is_zero_point()
 }
 
+/// This function is an optimized varaint of the above.
+/// It is verified whether P'=<a,G>+<b,H>+<a,b>Q for P' =
+/// multiexp(P_prime_bases, P_prime_exponents) and H_i =
+/// H_vec[i]^H_exponents[i]. Arguments:
+/// - transcript - the proof transcipt
+/// - G_vec - the vector G of elliptic curve points
+/// - H_vec - the vector H of elliptic curve points
+/// - H_exponents - vector of scalars to whose powers the elements H_vec are
+///   raised
+/// - P_prime_bases - vector of points for computing curve point P'. It is
+///   assumed that the the first base points are G_vec | H_vec, which are
+///   implicit and omitted from P_prime_bases
+/// - P_prime_exponents - vector of scalars to whose powers the elements
+///   P_prime_bases are raised
+/// - Q - the elliptic curve point Q
+/// - proof - the inner product proof
+/// Precondictions:
+/// G_vec, H_vec, and H_exponents should all be of the same length, and this
+/// length must a power of 2. Furthermore, the length of P_prime_exponents is
+/// equal to the length of P_prime_bases plus the length of G_vec plus the
+/// length of H_vec (since those are omitted from P_prime_bases). Warning: This
+/// function modifies the given arguments!
+#[allow(non_snake_case)]
+pub fn verify_inner_product_faster<C: Curve>(
+    transcript: &mut RandomOracle,
+    G_vec: &mut Vec<C>,
+    H_vec: &mut Vec<C>,
+    H_exponents: &mut Vec<<C as Curve>::Scalar>,
+    P_prime_bases: &mut Vec<C>,
+    P_prime_exponents: &mut Vec<<C as Curve>::Scalar>,
+    Q: &C,
+    proof: &InnerProductProof<C>,
+) -> bool {
+    let n = G_vec.len();
+    let L_R = &proof.lr_vec;
+    let a = proof.a;
+    let b = proof.b;
+    let mut ab = a;
+    ab.mul_assign(&b);
+
+    let verification_scalars = match verify_scalars(transcript, n, proof) {
+        None => return false,
+        Some(scalars) => scalars,
+    };
+    let (u_sq, u_inv_sq, s) = (
+        verification_scalars.u_sq,
+        verification_scalars.u_inv_sq,
+        verification_scalars.s,
+    );
+
+    // nsum = sum^-1 = prod_j L_R[j].0 ^ -u_sq[j] * L_R[j].1 ^ -u_inv_sq[j]
+    let mut nsum_bases = Vec::with_capacity(2 * L_R.len());
+    let mut nsum_exps = Vec::with_capacity(2 * L_R.len());
+    for j in 0..L_R.len() {
+        nsum_bases.push(L_R[j].0);
+        nsum_bases.push(L_R[j].1);
+        let mut musq = u_sq[j];
+        let mut muisq = u_inv_sq[j];
+        musq.negate();
+        muisq.negate();
+        nsum_exps.push(musq);
+        nsum_exps.push(muisq);
+    }
+
+    // RHS = prod_i G_i^(s_i*a) H_i^(H_exponents_i * s_i^-1 * b) * Q^{ab} * nsum
+    let mut s_inv = s.clone();
+    s_inv.reverse();
+    let mut G_exps = s;
+    for i in 0..G_exps.len() {
+        G_exps[i].mul_assign(&a);
+    }
+
+    let mut H_exps = H_exponents;
+    for i in 0..H_exps.len() {
+        H_exps[i].mul_assign(&s_inv[i]);
+        H_exps[i].mul_assign(&b);
+    }
+
+    let rhs_bases = G_vec;
+    rhs_bases.append(H_vec);
+    rhs_bases.push(*Q);
+    rhs_bases.append(&mut nsum_bases);
+    let mut rhs_exps = G_exps;
+    rhs_exps.append(&mut H_exps);
+    rhs_exps.push(ab);
+    rhs_exps.append(&mut nsum_exps);
+
+    // check whether P' = RHS <=> 0 = RHS P'^-1
+    // add first exponents to beginning since they belong to G_vec and H_vec
+    for i in 0..2 * n {
+        rhs_exps[i].sub_assign(&P_prime_exponents[i]);
+    }
+
+    // negate remaining elements of P_prime_exponents and add them to rhs_exps
+    let mut nppexps = P_prime_exponents[2 * n..].to_vec();
+    for i in 0..nppexps.len() {
+        nppexps[i].negate();
+    }
+
+    rhs_bases.append(P_prime_bases);
+    rhs_exps.append(&mut nppexps);
+
+    let RHS = multiexp(&rhs_bases, &rhs_exps);
+
+    RHS.is_zero_point()
+}
+
 /// This function calculates the inner product between two vectors over any
 /// field F. The arguments are
 /// - a - the first vector

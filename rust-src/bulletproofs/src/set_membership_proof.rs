@@ -12,19 +12,19 @@ use std::iter::once;
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
     /// Commitment to the evalutation of the indicator function I_{v} on the_set
-    A: C,
+    A:        C,
     /// Commitment to the blinding factors in s_L and s_R
-    S: C,
+    S:        C,
     /// Commitment to the t_1 coefficient of polynomial t(x)
-    T_1: C,
+    T_1:      C,
     /// Commitment to the t_2 coefficient of polynomial t(x)
-    T_2: C,
+    T_2:      C,
     /// Evaluation of t(x) at the challenge point x
-    tx: C::Scalar,
+    tx:       C::Scalar,
     /// Blinding factor for the commitment to tx
     tx_tilde: C::Scalar,
     /// Blinding factor for the commitment to the inner-product arguments
-    e_tilde: C::Scalar,
+    e_tilde:  C::Scalar,
     /// Inner product proof
     ip_proof: InnerProductProof<C>,
 }
@@ -361,7 +361,7 @@ pub enum VerificationError {
 ///   (bold g,h in bluepaper)
 /// - v_keys - commitment keys B and B_tilde (g,h in bluepaper)
 #[allow(non_snake_case)]
-pub fn verify<C: Curve>(
+pub fn verify_naive<C: Curve>(
     transcript: &mut RandomOracle,
     the_set: &[u64],
     V: &Commitment<C>,
@@ -533,6 +533,197 @@ pub fn verify<C: Curve>(
 
     let ip_verification =
         verify_inner_product(transcript, &G, &h_prime, &P_prime, &g_hat, &proof.ip_proof);
+
+    if !ip_verification {
+        return Err(VerificationError::IPVerificationError);
+    }
+
+    return Ok(());
+}
+
+/// This function verifies a set membership proof, i.e. a proof of knowledge
+/// of value v that is in a set S and that is consistent
+/// with a commitment V to v. The arguments are
+/// - S - the set as a vector
+/// - V - commitment to v
+/// - proof - the set membership proof to verify
+/// - gens - generators containing vectors G and H both of length at least |S|
+///   (bold g,h in bluepaper)
+/// - v_keys - commitment keys B and B_tilde (g,h in bluepaper)
+#[allow(non_snake_case)]
+pub fn verify<C: Curve>(
+    transcript: &mut RandomOracle,
+    the_set: &[u64],
+    V: &Commitment<C>,
+    proof: &SetMembershipProof<C>,
+    gens: &Generators<C>,
+    v_keys: &CommitmentKey<C>,
+) -> Result<(), VerificationError> {
+    // Part 1: Setup
+    let n = the_set.len();
+    if !n.is_power_of_two() {
+        return Err(VerificationError::SetSizeNotPowerOfTwo);
+    }
+    if gens.G_H.len() < n {
+        return Err(VerificationError::NotEnoughGenerators);
+    }
+
+    // TODO: Check whether n fits into u64
+    let the_set_vec = get_set_vector::<C>(&the_set);
+
+    // Domain separation
+    transcript.add_bytes(b"SetMembershipProof");
+    // append commitment V to transcript
+    transcript.append_message(b"V", &V.0);
+    transcript.append_message(b"theSet", &the_set_vec);
+
+    // define the commitments A,S
+    let A = proof.A;
+    let S = proof.S;
+    // append commitments A and S to transcript
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
+
+    // get challenges y,z from transcript
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+
+    // define the commitments A,S
+    let T_1 = proof.T_1;
+    let T_2 = proof.T_2;
+    // append T1, T2 commitments to transcript
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+
+    // get challenge x (evaluation point) from transcript
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+
+    // define polynomial evaluation value
+    let tx = proof.tx;
+    // define blinding factors for tx and i.p. proof
+    let tx_tilde = proof.tx_tilde;
+    let e_tilde = proof.e_tilde;
+    // append tx, tx_tilde, e_tilde to transcript
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+
+    // get challenge w from transcript
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+
+    // compute delta(y,z) = -nz^4 + z^3 (1 - <1,s>) + (z-z^2) (<1,y^n>)
+    // first compute helper values
+    let mut z2 = z; // z^2
+    z2.mul_assign(&z);
+    let mut z3 = z2; // z^3
+    z3.mul_assign(&z);
+    let mut z4 = z3; // z^4
+    z4.mul_assign(&z);
+    let ns = C::scalar_from_u64(n as u64); // n as scalar
+                                           // compute yn = <1, y_n>
+    let mut yi = C::Scalar::one(); // y^0
+    let mut ip_1_yn = C::Scalar::zero();
+    for _ in 0..n {
+        ip_1_yn.add_assign(&yi);
+        yi.mul_assign(&y);
+    }
+
+    let mut delta_yz = z; // delta_yz = z
+    delta_yz.sub_assign(&z2); // delta_yz = z - z^2
+    delta_yz.mul_assign(&ip_1_yn); // delta_yz = (z - z^2) (<1,y^n>)
+
+    // compute ip_1_s = <1,s>
+    let mut ip_1_s = C::Scalar::zero();
+    for si in &the_set_vec {
+        ip_1_s.add_assign(&si);
+    }
+
+    // compute z3_one_minus_ip_1_s = z^3 (1 - <1,s>)
+    let mut one_minus_ip_1_s = C::Scalar::one();
+    one_minus_ip_1_s.sub_assign(&ip_1_s);
+    let mut z3_one_minus_ip_1_s = z3;
+    z3_one_minus_ip_1_s.mul_assign(&one_minus_ip_1_s);
+
+    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s>)
+    delta_yz.add_assign(&z3_one_minus_ip_1_s);
+
+    // compute nz^4
+    let mut nz4 = ns;
+    nz4.mul_assign(&z4);
+
+    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s>)
+    delta_yz.sub_assign(&nz4);
+    // End of delta_yz computation
+
+    // Part 2: Verify consistency of t_0
+    // i.e., check 0 = V^z^2 * g^(delta_yz - t_x) * T_1^x * T_2^x^2 * h^(-tx_tilde)
+    let mut delta_minus_tx = delta_yz;
+    delta_minus_tx.sub_assign(&tx);
+    let mut x2 = x; // x^2
+    x2.mul_assign(&x);
+    let mut minus_tx_tilde = tx_tilde;
+    minus_tx_tilde.negate();
+
+    let t0_check_base_points = vec![V.0, v_keys.g, T_1, T_2, v_keys.h];
+    let t0_check_exponents = vec![z2, delta_minus_tx, x, x2, minus_tx_tilde];
+
+    let rhs = multiexp(&t0_check_base_points, &t0_check_exponents);
+    if !rhs.is_zero_point() {
+        return Err(VerificationError::InconsistentT0);
+    }
+
+    // Part 3: Verify inner product
+    // First compute helper variables g_hat, h_prime, and P_prime
+    let g_hat = v_keys.g.mul_by_scalar(&w);
+
+    let y_inv = match y.inverse() {
+        Some(inv) => inv,
+        None => return Err(VerificationError::DivisionError),
+    };
+    let mut y_inv_n = z_vec(y_inv, 0, n);
+
+    let (mut G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+
+    let mut minus_e_tilde = e_tilde;
+    minus_e_tilde.negate();
+
+    // compute exponent for h, i.e., z1 + z^2y^-n * s + z^3y^-n
+    let mut h_exponents: Vec<<C as Curve>::Scalar> = Vec::with_capacity(n);
+    for i in 0..n {
+        h_exponents.push(z);
+        let mut z2ynisi = z2;
+        z2ynisi.mul_assign(&y_inv_n[i]);
+        z2ynisi.mul_assign(&the_set_vec[i]);
+        h_exponents[i].add_assign(&z2ynisi);
+        let mut z3yni = z3;
+        z3yni.mul_assign(&y_inv_n[i]);
+        h_exponents[i].add_assign(&z3yni);
+    }
+    // get exponent for g, i.e., [-z, -z, ..., -z]
+    let mut minus_z = z;
+    minus_z.negate();
+    let mut minus_z_vec = vec![minus_z; n];
+
+    let mut P_prime_exps = minus_z_vec;
+    P_prime_exps.append(&mut h_exponents);
+    P_prime_exps.push(tx);
+    P_prime_exps.push(minus_e_tilde);
+    P_prime_exps.push(C::Scalar::one());
+    P_prime_exps.push(x);
+
+    let mut P_prime_bases = vec![g_hat, v_keys.h, A, S];
+
+    // Finally verify inner product
+    let ip_verification = verify_inner_product_faster(
+        transcript,
+        &mut G,
+        &mut H,
+        &mut y_inv_n,
+        &mut P_prime_bases,
+        &mut P_prime_exps,
+        &g_hat,
+        &proof.ip_proof,
+    );
 
     if !ip_verification {
         return Err(VerificationError::IPVerificationError);
@@ -810,14 +1001,7 @@ mod tests {
         let proof = proof.unwrap();
 
         let mut transcript = RandomOracle::empty();
-        let result = verify(
-            &mut transcript,
-            &the_set,
-            &v_com,
-            &proof,
-            &gens,
-            &v_keys,
-        );
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
         assert!(result.is_ok());
     }
 }
