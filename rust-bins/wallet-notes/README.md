@@ -10,6 +10,9 @@ c-compatible signatures.
 - Identity layer
     - `char* create_id_request_and_private_data(const char*, uint8_t*)`
     - `char* create_credential(const char*, uint8_t*)`
+    - `char* create_id_request_and_private_data_v1(const char*, uint8_t*)`
+    - `char* create_credential_v1(const char*, uint8_t*)`
+    - `char* generate_recovery_request(const char*, uint8_t*)`
     - `uint8_t check_account_address_ext(const char*)`
 - Regular transactions
     - `char* create_transfer_ext(const char*, uint8_t*)`
@@ -90,6 +93,31 @@ The output of this function is a JSON object with two keys
 
 An example of input is in the file [create_id_request_and_private_data-v1-input.json](files/create_id_request_and_private_data-v1-input.json).
 An example of output is in the file [create_id_request_and_private_data-v1-output.json](files/create_id_request_and_private_data-v1-output.json).
+
+## generate_recovery_request
+
+Semantics: Generates an identity recovery request, used to request a lost identity object from the IdentityProvider.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+
+- `"seed"` ... is a hex encoded seed phrase from which the idCredSec was generated.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+- `"timestamp"` ... an integer indicating the number of seconds since the unix epoch by the time of generating the request.
+
+The output of this function is a JSON object with two keys
+- "idRecoveryRequest" - this is the identity object request that should be sent to
+  the identity provider
+
+An example of input is in the file [generate-recovery-request-input.json](files/generate-recovery-request-input.json).
+An example of output is in the file [generate-recovery-request-output.json](files/generate-recovery-request-output.json).
 
 ## check_account_address
 
@@ -578,6 +606,63 @@ The returned value is a JSON object with the following fields:
 
 An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
 An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
+
+## sign_transaction
+Semantics: Signs the provided transaction and returns the hex encoded transaction along with the signatures on the transaction.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction.
+
+An example input to this request is in the file [sign_transaction-input.json](files/sign_transaction-input.json).
+An example output to this request is in the file [sign_transaction-output.json](files/sign_transaction-output.json).
+
+## sign_message
+Semantics: Signs a message with the provided account keys.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"message"` ... the text message to be signed
+
+- `"keys"` ... mapping with the keys of the signing account.
+
+The returned value is a JSON object containing a list with signatures of the message with the provided keys.
+
+An example input to this request is in the file [sign_message-input.json](files/sign_message-input.json).
+An example output to this request is in the file [sign_message-output.json](files/sign_message-output.json).
+
+## transaction_to_json
+Semantics: Converts a serialized transaction (as bytes) into JSON.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
+
+- `"schema"` ... optional, required for update smart contract transactions, hex encoded schema for the corresponding smart contract.
+
+- `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
+
+The returned value is a JSON object with the following fields:
+
+- `"hashToSign"` ... hex encoding of the hash of the transaction
+
+- `"header"` ... the transaction header
+
+- `"payload"` ... the transaction payload, the exact contents is dependent on the transaction type. For smart contract updates the `message` field is replaced with a JSON view of the paramaters instead of the hex encoded bytes.
+
+An example input to this request is in the file [transaction_to_json-input.json](files/sign_transaction-input.json).
+An example output to this request is in the file [transaction_to_json-output.json](files/sign_transaction-output.json).
 
 
 ## Example

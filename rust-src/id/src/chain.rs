@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(cdi_check, Ok(()));
 
         // Testing with an existing RegId (i.e. an existing account)
-        let existing_reg_id = AccountAddress::new(&cdi.values.cred_id);
+        let existing_reg_id = account_address_from_registration_id(&cdi.values.cred_id);
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();
@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(cdi_check, Ok(()));
 
         // Testing with an existing RegId (i.e. an existing account)
-        let existing_reg_id = AccountAddress::new(&cdi.values.cred_id);
+        let existing_reg_id = account_address_from_registration_id(&cdi.values.cred_id);
         let cred_data = CredentialData {
             keys:      {
                 let mut keys = BTreeMap::new();

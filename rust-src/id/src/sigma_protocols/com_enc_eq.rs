@@ -176,7 +176,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     fn with_valid_data<R: Rng>(
         _data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         use elgamal::SecretKey;
         let sk = SecretKey::generate_all(csprng);

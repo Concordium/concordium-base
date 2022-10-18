@@ -65,10 +65,7 @@ impl Write for RandomOracle {
 /// This implementation allows the use of a random oracle without intermediate
 /// allocations of byte buffers.
 impl Buffer for RandomOracle {
-    type Result = sha3::digest::generic_array::GenericArray<
-        u8,
-        <Sha3_256 as sha3::digest::Digest>::OutputSize,
-    >;
+    type Result = sha3::digest::Output<Sha3_256>;
 
     #[inline(always)]
     fn start() -> Self { RandomOracle::empty() }
@@ -88,7 +85,9 @@ impl RandomOracle {
     pub fn empty() -> Self { RandomOracle(Sha3_256::new()) }
 
     /// Start with the initial domain string.
-    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_256::new().chain(data)) }
+    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self {
+        RandomOracle(Sha3_256::new().chain_update(data))
+    }
 
     /// Duplicate the random oracle, creating a fresh copy of it.
     /// Further updates are independent.
@@ -150,8 +149,8 @@ mod tests {
         let mut v1 = vec![0u8; 50];
         let mut csprng = thread_rng();
         for _ in 0..1000 {
-            for i in 0..50 {
-                v1[i] = csprng.gen::<u8>();
+            for v in v1.iter_mut() {
+                *v = csprng.gen::<u8>();
             }
             let mut s1 = RandomOracle::empty();
             for x in v1.iter() {
@@ -175,9 +174,9 @@ mod tests {
             let mut s1 = RandomOracle::empty();
             s1.add(&v1);
             let mut s2 = s1.split();
-            for i in 0..50 {
-                v1[i] = csprng.gen::<u8>();
-                s1.add(&v1[i]);
+            for v in v1.iter_mut() {
+                *v = csprng.gen::<u8>();
+                s1.add(v);
             }
             let res1 = s1.result();
             let ref_res1: &[u8] = res1.as_ref();

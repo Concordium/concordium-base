@@ -31,6 +31,7 @@ import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
+import qualified Concordium.Genesis.Data.P5 as P5
 import qualified Concordium.Genesis.Data.Base as GDBase
 import Concordium.Types.IdentityProviders
 import Concordium.Types.AnonymityRevokers
@@ -195,62 +196,15 @@ main = cmdArgsRun mode >>=
             Right (PVGenesisData (gdata :: GenesisData pv)) ->
               case protocolVersion @pv of
                 SP1 -> case gdata of
-                  GDP1 P1.GDP1Regenesis{..} -> printRegenesis P1 genesisRegenesis
                   gd@(GDP1 P1.GDP1Initial{..}) -> printInitial SP1 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP2 -> case gdata of
-                  GDP2 P2.GDP2Regenesis{..} -> printRegenesis P2 genesisRegenesis
                   gd@(GDP2 P2.GDP2Initial{..}) -> printInitial SP2 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP3 -> case gdata of
-                  GDP3 P3.GDP3Regenesis{..} -> printRegenesis P3 genesisRegenesis
                   gd@(GDP3 P3.GDP3Initial{..}) -> printInitial SP3 (genesisBlockHash gd) genesisCore genesisInitialState
                 SP4 -> case gdata of
-                  GDP4 P4.GDP4Regenesis{..} -> printRegenesis P4 genesisRegenesis
-                  GDP4 P4.GDP4MigrateFromP3{..} -> printP3P4Migration genesisRegenesis genesisMigration
                   gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
-
-printP3P4Migration :: RegenesisData -> P4.StateMigrationData -> IO ()
-printP3P4Migration regen P4.StateMigrationData{migrationProtocolUpdateData=P4.ProtocolUpdateData{..},..} = do
-    putStrLn "Migration from protocol P3 to P4"
-    printRegenesis P4 regen
-    putStrLn ""
-    putStrLn "Migration parameters:"
-    putStrLn $ " - default pool commission rates:"
-    putStrLn $ "   + finalization commission rate: " ++ show (_finalizationCommission updateDefaultCommissionRate)
-    putStrLn $ "   + baking commission rate: " ++ show (_bakingCommission updateDefaultCommissionRate)
-    putStrLn $ "   + transaction commission rate: " ++ show (_transactionCommission updateDefaultCommissionRate)
-    putStrLn $ " - default pool state: " ++ show updateDefaultPoolState
-    putStrLn $ " - previous genesis time: " ++ showTime migrationPreviousGenesisTime
-    putStrLn $ " - previous epoch duration: " ++ show (durationToNominalDiffTime migrationPreviousEpochDuration)
-    printAccessStructure "cooldown parameters" updateCooldownParametersAccessStructure
-    printAccessStructure "time parameters" updateTimeParametersAccessStructure
-    printCooldownParametersV1 updateCooldownParameters
-    printTimeParametersV1 updateTimeParameters
-    printPoolParametersV1 updatePoolParameters
-
-printRegenesis :: ProtocolVersion -> RegenesisData -> IO ()
-printRegenesis pv RegenesisData{genesisCore=CoreGenesisParameters{..},..} = do
-    putStrLn $ "Re-genesis data for protocol version " ++ show pv
-    putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
-    putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
-    putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
-
-    putStrLn ""
-    putStrLn "Finalization parameters: "
-    let FinalizationParameters{..} = genesisFinalizationParameters
-    putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
-    putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
-    putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-    putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
-    putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
-    putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
-    putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
-    putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
-
-    putStrLn ""
-    putStrLn $ "First genesis block: " ++ show genesisFirstGenesis
-    putStrLn $ "Previous (re)genesis block: " ++ show genesisPreviousGenesis
-    putStrLn $ "Terminal block of previous chain: " ++ show genesisTerminalBlock
-    putStrLn $ "State hash: " ++ show genesisStateHash
+                SP5 -> case gdata of
+                  gd@(GDP5 P5.GDP5Initial{..}) -> printInitial SP5 (genesisBlockHash gd) genesisCore genesisInitialState
 
 printInitial :: SProtocolVersion pv -> BlockHash -> CoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
 printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do

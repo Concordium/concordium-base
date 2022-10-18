@@ -3,9 +3,9 @@
 use crate::{constants::*, errors::*, public::*};
 use core::fmt::Debug;
 use crypto_common::*;
-use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
+use curve25519_dalek::{constants, scalar::Scalar};
 use rand::{CryptoRng, Rng};
-use sha2::Sha512;
+use sha2::{digest::Digest, Sha512};
 use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
@@ -108,10 +108,10 @@ impl Drop for ExpandedSecretKey {
     }
 }
 
-impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
+impl From<&SecretKey> for ExpandedSecretKey {
     /// Construct an `ExpandedSecretKey` from a `SecretKey`.
     /// Implements <https://tools.ietf.org/html/rfc8032#section-5.1.5>
-    fn from(secret_key: &'a SecretKey) -> ExpandedSecretKey {
+    fn from(secret_key: &SecretKey) -> ExpandedSecretKey {
         let mut h: Sha512 = Sha512::new();
         let mut hash: [u8; 64] = [0u8; 64];
         let mut lower: [u8; 32] = [0u8; 32];
@@ -162,7 +162,10 @@ impl ExpandedSecretKey {
 
     /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2>
     fn nonce_generation(&self, h_string: &[u8]) -> Scalar {
-        let h: Sha512 = Sha512::new().chain(self.nonce).chain(h_string);
-        Scalar::from_hash(h)
+        let digest = Sha512::new()
+            .chain_update(self.nonce)
+            .chain_update(h_string)
+            .finalize();
+        Scalar::from_bytes_mod_order_wide(&digest.into())
     }
 }

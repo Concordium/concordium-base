@@ -229,7 +229,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
             if !rid.no_secret {
                 regids.push(json!({
                     "regId": regid_hex,
-                    "accountAddress": AccountAddress::new(&regid),
+                    "accountAddress": account_address_from_registration_id(&regid),
                     "encryptionSecretKey": elgamal::SecretKey{
                         generator: *global_context.elgamal_generator(),
                         scalar: secret
@@ -238,7 +238,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
             } else {
                 regids.push(json!({
                     "regId": regid_hex,
-                    "accountAddress": AccountAddress::new(&regid),
+                    "accountAddress": account_address_from_registration_id(&regid),
                 }));
             }
         }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.0
+- Added a function for signing any account transaction.
+- Added a function for signing a message.
+- Added a function for converting a serialized account transaction (as bytes) into JSON.
+
+## 0.16.0
+- Updated version of `key_derivation` library to `1.1.0` and started using the index of the identity provider for key derivation.
+
+## 0.15.0
+- Added function `generate_recovery_request` for creating identity recovery requests.
 
 ## 0.14.0
 - Added function `create_id_request_and_private_data_v1` for creating an id request in the version 1 flow, where

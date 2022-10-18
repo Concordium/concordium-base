@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 
 module Concordium.Types.Migration where
 
@@ -19,6 +20,8 @@ migrateAuthorizations ::
     Authorizations (ChainParametersVersionFor oldpv) ->
     Authorizations (ChainParametersVersionFor pv)
 migrateAuthorizations StateMigrationParametersTrivial auths = auths
+migrateAuthorizations StateMigrationParametersP1P2 auths = auths
+migrateAuthorizations StateMigrationParametersP2P3 auths = auths
 migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{..} =
     Authorizations
         { asCooldownParameters = JustForCPV1 updateCooldownParametersAccessStructure,
@@ -27,6 +30,7 @@ migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{
         }
   where
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
+migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 
 -- |Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -48,8 +52,11 @@ migrateMintDistribution ::
     MintDistribution (ChainParametersVersionFor oldpv) ->
     MintDistribution (ChainParametersVersionFor pv)
 migrateMintDistribution StateMigrationParametersTrivial mint = mint
+migrateMintDistribution StateMigrationParametersP1P2 mint = mint
+migrateMintDistribution StateMigrationParametersP2P3 mint = mint
 migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
     MintDistribution{_mdMintPerSlot = MintPerSlotForCPV0None, ..}
+migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 
 -- |Apply a state migration to a 'PoolParameters' structure.
 --
@@ -60,8 +67,11 @@ migratePoolParameters ::
     PoolParameters (ChainParametersVersionFor oldpv) ->
     PoolParameters (ChainParametersVersionFor pv)
 migratePoolParameters StateMigrationParametersTrivial poolParams = poolParams
+migratePoolParameters StateMigrationParametersP1P2 poolParams = poolParams
+migratePoolParameters StateMigrationParametersP2P3 poolParams = poolParams
 migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
+migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 
 -- |Apply a state migration to a 'ChainParameters' structure.
 --
@@ -73,6 +83,8 @@ migrateChainParameters ::
     ChainParameters oldpv ->
     ChainParameters pv
 migrateChainParameters StateMigrationParametersTrivial cps = cps
+migrateChainParameters StateMigrationParametersP1P2 cps = cps
+migrateChainParameters StateMigrationParametersP2P3 cps = cps
 migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParameters{..} =
     ChainParameters
         { _cpCooldownParameters = updateCooldownParameters,
@@ -88,6 +100,7 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
   where
     RewardParameters{..} = _cpRewardParameters
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
+migrateChainParameters StateMigrationParametersP4ToP5 cps = cps
 
 -- |Apply a state migration to an 'AccountStake' structure.
 --
@@ -100,19 +113,56 @@ migrateAccountStake ::
     AccountStake (AccountVersionFor oldpv) ->
     AccountStake (AccountVersionFor pv)
 migrateAccountStake StateMigrationParametersTrivial = id
-migrateAccountStake (StateMigrationParametersP3ToP4 migration@P4.StateMigrationData{..}) =
+migrateAccountStake StateMigrationParametersP1P2 = id
+migrateAccountStake StateMigrationParametersP2P3 = id
+migrateAccountStake (StateMigrationParametersP3ToP4 migration) =
     \case
         AccountStakeNone -> AccountStakeNone
         AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV0 bi, ..} ->
             AccountStakeBaker
                 AccountBaker
                     { _accountBakerInfo = BakerInfoExV1 bi (P4.defaultBakerPoolInfo migration),
-                      _bakerPendingChange = migratePCE <$> _bakerPendingChange,
+                      _bakerPendingChange = migratePendingChangeEffective migration <$> _bakerPendingChange,
                       ..
                     }
-  where
-    migratePCE (PendingChangeEffectiveV0 eff) =
-        PendingChangeEffectiveV1 $
-            addDuration
-                migrationPreviousGenesisTime
-                (migrationPreviousEpochDuration * fromIntegral eff)
+migrateAccountStake StateMigrationParametersP4ToP5 =
+    \case
+        AccountStakeNone -> AccountStakeNone
+        AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV1{..}, ..} ->
+            AccountStakeBaker
+                AccountBaker
+                    { _accountBakerInfo = BakerInfoExV1{..},
+                      _bakerPendingChange = coercePendingChangeEffectiveV1 <$> _bakerPendingChange,
+                      ..
+                    }
+        AccountStakeDelegate AccountDelegationV1{..} ->
+            AccountStakeDelegate
+                AccountDelegationV1
+                    { _delegationPendingChange = coercePendingChangeEffectiveV1 <$> _delegationPendingChange,
+                      ..
+                    }
+
+-- |Migrate time of the effective change from V0 to V1 accounts. Currently this
+-- translates times relative to genesis to times relative to the unix epoch.
+migratePendingChangeEffective :: P4.StateMigrationData -> PendingChangeEffective 'AccountV0 -> PendingChangeEffective 'AccountV1
+migratePendingChangeEffective P4.StateMigrationData{..} (PendingChangeEffectiveV0 eff) =
+    PendingChangeEffectiveV1 $
+         addDuration
+             migrationPreviousGenesisTime
+             (migrationPreviousEpochDuration * fromIntegral eff)
+
+-- |Migrate the stake pending change from the representation used by protocol
+-- version @oldpv@ to the representation used by the protocol version @pv@. The
+-- migration parameters supply auxiliary data needed for the migration.
+migrateStakePendingChange :: forall oldpv pv .
+    StateMigrationParameters oldpv pv ->
+    StakePendingChange (AccountVersionFor oldpv) ->
+    StakePendingChange (AccountVersionFor pv)
+migrateStakePendingChange StateMigrationParametersTrivial = id
+migrateStakePendingChange StateMigrationParametersP1P2 = id
+migrateStakePendingChange StateMigrationParametersP2P3 = id
+migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
+  NoChange -> NoChange
+  ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
+  RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
+migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1

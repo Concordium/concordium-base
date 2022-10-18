@@ -11,6 +11,7 @@ import Concordium.Types
 import Concordium.Types.Transactions
 import Concordium.Types.Execution
 import Concordium.ID.Types
+import qualified Concordium.Cost as Cost
 
 
 {-# WARNING dummyblockPointer "Do not use in production." #-}
@@ -68,13 +69,13 @@ bakerAggregationKey n = fst (randomBlsSecretKey (mkStdGen n))
 -- NB: The cost needs to be in-line with that defined in the scheduler.
 makeTransferTransaction :: (Sig.KeyPair, AccountAddress) -> AccountAddress -> Amount -> Nonce -> BlockItem
 makeTransferTransaction (fromKP, fromAddress) toAddress amount n =
-  normalTransaction . fromAccountTransaction 0 . signTransactionSingle fromKP header $ payload
+  normalTransaction . fromAccountTransaction (TransactionTime maxBound) . signTransactionSingle fromKP header $ payload
     where
         header = TransactionHeader{
             thNonce = n,
             thSender = fromAddress,
             -- The cost needs to be in-line with that in the scheduler
-            thEnergyAmount = 6 + 1 * 53 + 0,
+            thEnergyAmount = Cost.baseCost (transactionHeaderSize + fromIntegral (payloadSize payload)) 1 + Cost.simpleTransferCost,
             thExpiry = dummyMaxTransactionExpiryTime,
             thPayloadSize = payloadSize payload
         }

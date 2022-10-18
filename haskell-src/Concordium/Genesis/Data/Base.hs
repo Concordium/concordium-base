@@ -1,9 +1,8 @@
-{-# LANGUAGE TypeApplications, KindSignatures, DataKinds, ScopedTypeVariables #-}
+{-# LANGUAGE KindSignatures, DataKinds, ScopedTypeVariables #-}
 
 module Concordium.Genesis.Data.Base where
 
 import Control.Monad
-import qualified Data.ByteString as BS
 import Data.Serialize
 import Data.Word
 import qualified Data.Vector as Vec
@@ -121,10 +120,8 @@ instance BasicGenesisData GenesisConfiguration where
 putGenesisConfiguration :: Putter GenesisConfiguration
 putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> put _gcFirstGenesis <> put _gcCurrentHash
 
--- | Data in the "regenesis" block, which is the first block of the chain after
+-- | Common data in the "regenesis" block, which is the first block of the chain after
 -- the protocol update takes effect.
--- It is likely that the data in here will change for future protocol versions, but
--- P1 and P2 updates share it.
 data RegenesisData = RegenesisData {
     -- |The immutable genesis parameters.
     -- (These need not be invariant across re-genesis.)
@@ -137,9 +134,7 @@ data RegenesisData = RegenesisData {
     -- new genesis.
     genesisTerminalBlock :: !BlockHash,
     -- |The hash of the block state for the regenesis.
-    genesisStateHash :: !StateHash,
-    -- |The serialized block state. This should match the specified hash.
-    genesisNewState :: !BS.ByteString
+    genesisStateHash :: !StateHash
   } deriving(Eq, Show)
 
 
@@ -150,7 +145,6 @@ getRegenesisData = do
     genesisPreviousGenesis <- get
     genesisTerminalBlock <- get
     genesisStateHash <- get
-    genesisNewState <- getByteStringLen
     return RegenesisData{..}
 
 putRegenesisData :: Putter RegenesisData
@@ -160,7 +154,6 @@ putRegenesisData RegenesisData{..} = do
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
-    putByteStringLen genesisNewState
 
 -- |Initial state configuration for genesis.
 --

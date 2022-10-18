@@ -90,7 +90,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Dlog<C>, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Dlog<C>, Self::SecretData, &mut R),
     ) {
         let secret = Value::generate(csprng);
         let base = C::generate(csprng);

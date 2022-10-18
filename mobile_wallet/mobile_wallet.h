@@ -86,6 +86,13 @@ char *create_id_request_and_private_data(const char *input_ptr, uint8_t *success
 char *create_id_request_and_private_data_v1(const char *input_ptr, uint8_t *success);
 
 /**
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *generate_recovery_request(const char *input_ptr, uint8_t *success);
+
+/**
  * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
  * UTF8-encoded string. The returned string must be freed by the caller by
  * calling the function 'free_response_string'. In case of failure the function
@@ -215,6 +222,51 @@ char *get_identity_keys_and_randomness(const char *input_ptr, uint8_t *success);
  * function will fail in unspecified ways.
  */
 char *get_account_keys_and_randomness(const char *input_ptr, uint8_t *success);
+
+/**
+ * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+ * UTF8-encoded string. The returned string must be freed by the caller by
+ * calling the function 'free_response_string'. In case of failure the function
+ * returns an error message as the response, and sets the 'success' flag to 0.
+ *
+ * See rust-bins/wallet-notes/README.md for the description of input and output
+ * formats.
+ *
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *sign_transaction(const char *input_ptr, uint8_t *success);
+
+/**
+ * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+ * UTF8-encoded string. The returned string must be freed by the caller by
+ * calling the function 'free_response_string'. In case of failure the function
+ * returns an error message as the response, and sets the 'success' flag to 0.
+ *
+ * See rust-bins/wallet-notes/README.md for the description of input and output
+ * formats.
+ *
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *transaction_to_json(const char *input_ptr, uint8_t *success);
+
+/**
+ * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+ * UTF8-encoded string. The returned string must be freed by the caller by
+ * calling the function 'free_response_string'. In case of failure the function
+ * returns an error message as the response, and sets the 'success' flag to 0.
+ *
+ * See rust-bins/wallet-notes/README.md for the description of input and output
+ * formats.
+ *
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
+char *sign_message(const char *input_ptr, uint8_t *success);
 
 /**
  * # Safety

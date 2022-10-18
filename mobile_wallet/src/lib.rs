@@ -1,26 +1,36 @@
-#[macro_use]
-extern crate serde_json;
 use anyhow::{bail, ensure};
-use crypto_common::{
-    types::{
-        Amount, DelegationTarget, KeyIndex, Memo, OpenStatus, Signature, TransactionSignature,
-        UrlText,
+use concordium_base::{
+    base::{self, Energy, Nonce},
+    common::{
+        self, base16_decode_string, c_char,
+        types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
+        Deserial,
     },
-    *,
+    contracts_common::{
+        from_bytes,
+        schema::{Type, VersionedModuleSchema},
+        Cursor,
+    },
+    encrypted_transfers,
+    hashes::{HashBytes, TransactionSignHash},
+    id::{
+        self, account_holder,
+        constants::{ArCurve, AttributeKind},
+        pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
+        ps_sig,
+        secret_sharing::Threshold,
+        types::*,
+    },
+    transactions::{
+        self, construct::PreAccountTransaction, ConfigureBakerKeysPayload, ConfigureBakerPayload,
+        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo, Payload, TransactionSigner,
+        UpdateContractPayload,
+    },
 };
 use dodis_yampolskiy_prf as prf;
-use ed25519_dalek as ed25519;
-use ed25519_dalek::Signer;
 use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
-use encrypted_transfers::encrypt_amount_with_fixed_randomness;
-use id::{
-    account_holder,
-    constants::{ArCurve, AttributeKind},
-    pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
-    secret_sharing::Threshold,
-    types::*,
-};
+use elgamal::BabyStepGiantStep;
 use key_derivation::{ConcordiumHdWallet, Net};
 use pairing::bls12_381::Bls12;
 use rand::thread_rng;
@@ -31,38 +41,18 @@ use std::{
     collections::{BTreeMap, HashMap},
     convert::TryInto,
     ffi::{CStr, CString},
-    io::Cursor,
     str::FromStr,
 };
 
-use crypto_common::types::KeyPair;
-
-/// Baker keys
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BakerKeys {
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub election_verify_key:    ecvrf::PublicKey,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub election_private_key:   ecvrf::SecretKey,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub signature_verify_key:   ed25519::PublicKey,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub signature_sign_key:     ed25519::SecretKey,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub aggregation_verify_key: aggregate_sig::PublicKey<Bls12>,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub aggregation_sign_key:   aggregate_sig::SecretKey<Bls12>,
-}
-
-/// A ConcordiumHdWallet together with an identity index and credential index
-/// for the credential to be created. A CredentialContext can then be parsed to
-/// the `create_credential` function due to the implementation of
-/// `HasAttributeRandomness` below.
+/// A ConcordiumHdWallet together with an identity provider index, an identity
+/// index and a credential index for the credential to be created. A
+/// CredentialContext can then be parsed to the `create_credential` function due
+/// to the implementation of `HasAttributeRandomness` below.
 struct CredentialContext {
-    wallet:           ConcordiumHdWallet,
-    identity_index:   u32,
-    credential_index: u32,
+    wallet:                  ConcordiumHdWallet,
+    identity_provider_index: u32,
+    identity_index:          u32,
+    credential_index:        u32,
 }
 
 impl HasAttributeRandomness<ArCurve> for CredentialContext {
@@ -73,6 +63,7 @@ impl HasAttributeRandomness<ArCurve> for CredentialContext {
         attribute_tag: AttributeTag,
     ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
         self.wallet.get_attribute_commitment_randomness(
+            self.identity_provider_index,
             self.identity_index,
             self.credential_index,
             attribute_tag,
@@ -81,36 +72,51 @@ impl HasAttributeRandomness<ArCurve> for CredentialContext {
 }
 
 /// Context for a transaction to send.
-#[derive(SerdeDeserialize)]
+#[derive(common::SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransferContext {
     pub from:   AccountAddress,
     pub to:     Option<AccountAddress>,
-    pub expiry: u64,
-    pub nonce:  u64,
+    pub expiry: TransactionTime,
+    pub nonce:  Nonce,
     pub keys:   AccountKeys,
-    pub energy: u64,
+    #[allow(dead_code)] // this is no longer used since
+    // the library knows about energy costs.
+    pub energy: Energy,
 }
 
-/// Sign the given hash.
-fn make_signatures<H: AsRef<[u8]>>(keys: AccountKeys, hash: &H) -> TransactionSignature {
-    // we'll just sign with all the keys we are given, disregarding the threshold.
-    // It is not our job here to decide and in any case the wallet is meant to
-    // support only single key accounts.
-    let mut out = BTreeMap::new();
-    for (cred_index, map) in keys.keys.into_iter() {
-        let mut cred_sigs = BTreeMap::new();
-        for (key_index, kp) in map.keys.into_iter() {
-            let public = kp.public;
-            let secret = kp.secret;
-            let signature = ed25519_dalek::Keypair { secret, public }.sign(hash.as_ref());
-            cred_sigs.insert(key_index, Signature {
-                sig: signature.to_bytes().to_vec(),
-            });
-        }
-        out.insert(cred_index, cred_sigs);
-    }
-    TransactionSignature { signatures: out }
+/// Sign the given pre-transaction and return the signature and serialized body.
+fn make_signatures(
+    keys: &AccountKeys,
+    pre_tx: PreAccountTransaction,
+) -> (TransactionSignature, Vec<u8>) {
+    let body = common::to_bytes(&pre_tx);
+    let tx = pre_tx.sign(keys);
+    (tx.signature, body)
+}
+
+/// Compute the message digest for some message and an account. The message
+/// digest is constructed so that it cannot be the prefix of an actual
+/// account transaction.
+fn get_message_digest(account_address: [u8; 32], message: String) -> TransactionSignHash {
+    let prepend_bytes = [0_u8; 8];
+    let message_as_bytes = message.as_bytes();
+
+    let mut hasher = Sha256::new();
+    hasher.update(account_address);
+    hasher.update(prepend_bytes);
+    hasher.update(message_as_bytes);
+    let hash: [u8; 32] = hasher.finalize().into();
+    HashBytes::new(hash)
+}
+
+fn sign_message_with_keys(
+    keys: &AccountKeys,
+    msg: String,
+    account_address: [u8; 32],
+) -> TransactionSignature {
+    let hash_to_sign = get_message_digest(account_address, msg);
+    keys.sign_transaction_hash(&hash_to_sign)
 }
 
 /// Create a JSON encoding of an encrypted transfer transaction.
@@ -156,50 +162,191 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
         None => bail!("Could not produce payload."),
     };
 
-    let (hash, body) = {
-        let mut payload_bytes = Vec::new();
-        if let Some(memo) = maybe_memo {
-            payload_bytes.put(&23u8); // transaction type is encrypted transfer with memo
-            payload_bytes.put(&ctx_to);
-            payload_bytes.put(&memo);
-        } else {
-            payload_bytes.put(&16u8); // transaction type is encrypted transfer
-            payload_bytes.put(&ctx_to);
-        }
-        payload_bytes.extend_from_slice(&to_bytes(&payload));
-
-        make_transaction_bytes(&ctx, &payload_bytes)
+    let remaining_amount = payload.remaining_amount.clone();
+    let pre_tx = match maybe_memo {
+        Some(memo) => transactions::construct::encrypted_transfer_with_memo(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            ctx_to,
+            payload,
+            memo,
+        ),
+        None => transactions::construct::encrypted_transfer(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            ctx_to,
+            payload,
+        ),
     };
 
-    let signatures = make_signatures(ctx.keys, &hash);
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
 
-    let response = json!({
+    let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
-        "remaining": payload.remaining_amount,
+        "remaining": remaining_amount,
     });
 
     Ok(to_string(&response)?)
 }
 
-/// Given payload bytes, make a full transaction body (that is, transaction
-/// minus the signature) together with its hash.
-fn make_transaction_bytes(
-    ctx: &TransferContext,
-    payload_bytes: &[u8],
-) -> (impl AsRef<[u8]>, Vec<u8>) {
-    let payload_size: u32 = payload_bytes.len() as u32;
-    let mut body = Vec::new();
-    // this needs to match with what is in Transactions.hs
-    body.put(&ctx.from);
-    body.put(&ctx.nonce);
-    body.put(&ctx.energy);
-    body.put(&payload_size);
-    body.put(&ctx.expiry);
-    body.extend_from_slice(payload_bytes);
+fn get_receive_schema(
+    versioned_module_schema: VersionedModuleSchema,
+    contract_name: &String,
+    entrypoint_name: &String,
+) -> anyhow::Result<Type> {
+    let receive_schema = match versioned_module_schema {
+        VersionedModuleSchema::V0(module_schema) => {
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
 
-    let hasher = Sha256::new().chain(&body);
-    (hasher.finalize(), body)
+            contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .clone()
+        }
+        VersionedModuleSchema::V1(module_schema) => {
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            let entrypoint_parameter = contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .parameter();
+            match entrypoint_parameter {
+                Some(value) => value.clone(),
+                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
+            }
+        }
+        VersionedModuleSchema::V2(module_schema) => {
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            let entrypoint_parameter = contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .parameter();
+            match entrypoint_parameter {
+                Some(value) => value.clone(),
+                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
+            }
+        }
+    };
+    Ok(receive_schema)
+}
+
+fn get_parameters_as_json(
+    payload: &UpdateContractPayload,
+    schema: &str,
+    schema_version: &Option<u8>,
+) -> anyhow::Result<Value> {
+    let schema_bytes = hex::decode(schema)?;
+
+    let contract_name = &payload
+        .receive_name
+        .as_receive_name()
+        .contract_name()
+        .to_string();
+    let entrypoint_name = &payload
+        .receive_name
+        .as_receive_name()
+        .entrypoint_name()
+        .to_string();
+
+    let module_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
+        Ok(versioned) => versioned,
+        Err(_) => match schema_version {
+            Some(0) => VersionedModuleSchema::V0(from_bytes(&schema_bytes)?),
+            Some(1) => VersionedModuleSchema::V1(from_bytes(&schema_bytes)?),
+            Some(2) => VersionedModuleSchema::V2(from_bytes(&schema_bytes)?),
+            Some(_) => return Err(anyhow::anyhow!("Invalid schema version")),
+            None => return Err(anyhow::anyhow!("Missing schema version")),
+        },
+    };
+    let receive_schema = get_receive_schema(module_schema, contract_name, entrypoint_name)?;
+
+    let parameter_bytes = payload.message.as_ref();
+    let mut parameters_cursor = Cursor::new(&parameter_bytes[..]);
+    match receive_schema.to_json(&mut parameters_cursor) {
+        Ok(schema) => Ok(schema),
+        Err(e) => Err(anyhow::anyhow!(
+            "Unable to parse parameters to JSON: {:?}",
+            e
+        )),
+    }
+}
+
+fn transaction_to_json_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let serialized_transaction: String = try_get(&v, "transaction")?;
+    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
+
+    let response = match pre_tx.clone().payload {
+        Payload::Update { payload } => {
+            let schema: String = try_get(&v, "schema")?;
+            let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
+            let parameters_as_json = get_parameters_as_json(&payload, &schema, &schema_version)?;
+
+            serde_json::json!({
+                "hashToSign": pre_tx.hash_to_sign,
+                "header": pre_tx.header,
+                "payload": {
+                    "update": {
+                        "address": payload.address,
+                        "amount": payload.amount,
+                        "message": parameters_as_json,
+                        "receiveName": payload.receive_name
+                    }
+                }
+            })
+        }
+        _ => {
+            serde_json::json!(pre_tx)
+        }
+    };
+
+    Ok(to_string(&response)?)
+}
+
+fn sign_transaction_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let serialized_transaction: String = try_get(&v, "transaction")?;
+    let keys: AccountKeys = try_get(&v, "keys")?;
+    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
+    let (signatures, body) = make_signatures(&keys, pre_tx);
+
+    let response = serde_json::json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
+}
+
+fn sign_message_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let message: String = try_get(&v, "message")?;
+    let address: String = try_get(&v, "address")?;
+    let account_address = address.parse::<AccountAddress>()?.0;
+    let keys: AccountKeys = try_get(&v, "keys")?;
+    Ok(to_string(&sign_message_with_keys(
+        &keys,
+        message,
+        account_address,
+    ))?)
 }
 
 fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
@@ -217,24 +364,29 @@ fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
         None => None,
     };
 
-    let (hash, body) = {
-        let mut payload = Vec::new();
-        if let Some(memo) = maybe_memo {
-            payload.put(&22u8); // transaction type is transfer with memo
-            payload.put(&ctx_to);
-            payload.put(&memo);
-        } else {
-            payload.put(&3u8); // transaction type is transfer
-            payload.put(&ctx_to);
-        }
-        payload.put(&amount);
-
-        make_transaction_bytes(&ctx, &payload)
+    let pre_tx = match maybe_memo {
+        Some(memo) => transactions::construct::transfer_with_memo(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            ctx_to,
+            amount,
+            memo,
+        ),
+        None => transactions::construct::transfer(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            ctx_to,
+            amount,
+        ),
     };
 
-    let signatures = make_signatures(ctx.keys, &hash);
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
 
-    let response = json!({
+    let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
     });
@@ -246,46 +398,18 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
     let v: Value = from_str(input)?;
 
     let ctx: TransferContext = from_value(v.clone())?;
+    let payload: ConfigureDelegationPayload = from_value(v)?;
 
-    let maybe_capital: Option<Amount> = maybe_get(&v, "capital")?;
+    let pre_tx = transactions::construct::configure_delegation(
+        ctx.keys.num_keys(),
+        ctx.from,
+        ctx.nonce,
+        ctx.expiry,
+        payload,
+    );
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
 
-    let maybe_restake_earnings: Option<bool> = maybe_get(&v, "restakeEarnings")?;
-
-    let maybe_delegation_target: Option<DelegationTarget> = maybe_get(&v, "delegationTarget")?;
-
-    let mut bitmap: u16 = 0b0000000000000000;
-    if maybe_capital.is_some() {
-        bitmap |= 1 << 0;
-    }
-
-    if maybe_restake_earnings.is_some() {
-        bitmap |= 1 << 1;
-    }
-
-    if maybe_delegation_target.is_some() {
-        bitmap |= 1 << 2;
-    }
-
-    let (hash, body) = {
-        let mut payload = Vec::new();
-        payload.put(&26u8); // transaction type is configure delegation
-        payload.put(&bitmap);
-        if let Some(capital) = maybe_capital {
-            payload.put(&capital);
-        }
-        if let Some(restake_earnings) = maybe_restake_earnings {
-            payload.put(&restake_earnings);
-        }
-        if let Some(delegation_target) = maybe_delegation_target {
-            payload.put(&delegation_target);
-        }
-
-        make_transaction_bytes(&ctx, &payload)
-    };
-
-    let signatures = make_signatures(ctx.keys, &hash);
-
-    let response = json!({
+    let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
     });
@@ -295,21 +419,7 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
 
 fn generate_baker_keys_aux() -> anyhow::Result<String> {
     let mut csprng = thread_rng();
-    let election_private_key = ecvrf::SecretKey::generate(&mut csprng);
-    let election_verify_key = ecvrf::PublicKey::from(&election_private_key);
-    let signature_sign_key = ed25519::SecretKey::generate(&mut csprng);
-    let signature_verify_key = ed25519::PublicKey::from(&signature_sign_key);
-    let aggregation_sign_key = aggregate_sig::SecretKey::<Bls12>::generate(&mut csprng);
-    let aggregation_verify_key =
-        aggregate_sig::PublicKey::<Bls12>::from_secret(&aggregation_sign_key);
-    let keys = BakerKeys {
-        election_verify_key,
-        election_private_key,
-        signature_verify_key,
-        signature_sign_key,
-        aggregation_verify_key,
-        aggregation_sign_key,
-    };
+    let keys = base::BakerKeyPairs::generate(&mut csprng);
     Ok(to_string(&keys)?)
 }
 
@@ -318,125 +428,47 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
 
     let ctx: TransferContext = from_value(v.clone())?;
 
-    let maybe_capital: Option<Amount> = maybe_get(&v, "capital")?;
-
-    let maybe_restake_earnings: Option<bool> = maybe_get(&v, "restakeEarnings")?;
-
-    let maybe_openstatus: Option<OpenStatus> = maybe_get(&v, "openStatus")?;
-
-    let maybe_url: Option<UrlText> = maybe_get(&v, "metadataUrl")?;
-
-    let maybe_transaction_fee_float: Option<f64> = maybe_get(&v, "transactionFeeCommission")?;
-    let maybe_transaction_fee: Option<u32> =
-        maybe_transaction_fee_float.map(|x| (x * 100_000.0).round() as u32);
-
-    let maybe_baking_reward_float: Option<f64> = maybe_get(&v, "bakingRewardCommission")?;
-    let maybe_baking_reward: Option<u32> =
-        maybe_baking_reward_float.map(|x| (x * 100_000.0).round() as u32);
-
-    let maybe_finalization_reward_float: Option<f64> =
+    let capital: Option<Amount> = maybe_get(&v, "capital")?;
+    let restake_earnings: Option<bool> = maybe_get(&v, "restakeEarnings")?;
+    let open_for_delegation: Option<base::OpenStatus> = maybe_get(&v, "openStatus")?;
+    let metadata_url: Option<base::UrlText> = maybe_get(&v, "metadataUrl")?;
+    let transaction_fee_commission: Option<base::AmountFraction> =
+        maybe_get(&v, "transactionFeeCommission")?;
+    let baking_reward_commission: Option<base::AmountFraction> =
+        maybe_get(&v, "bakingRewardCommission")?;
+    let finalization_reward_commission: Option<base::AmountFraction> =
         maybe_get(&v, "finalizationRewardCommission")?;
-    let maybe_finalization_reward: Option<u32> =
-        maybe_finalization_reward_float.map(|x| (x * 100_000.0).round() as u32);
+    let maybe_baker_keys: Option<base::BakerKeyPairs> = maybe_get(&v, "bakerKeys")?;
 
-    let maybe_baker_keys: Option<BakerKeys> = maybe_get(&v, "bakerKeys")?;
-
-    let mut bitmap: u16 = 0b0000000000000000;
-    if maybe_capital.is_some() {
-        bitmap |= 1 << 0;
-    }
-
-    if maybe_restake_earnings.is_some() {
-        bitmap |= 1 << 1;
-    }
-
-    if maybe_openstatus.is_some() {
-        bitmap |= 1 << 2;
-    }
-
-    if maybe_baker_keys.is_some() {
-        bitmap |= 1 << 3;
-    }
-
-    if maybe_url.is_some() {
-        bitmap |= 1 << 4;
-    }
-
-    if maybe_transaction_fee.is_some() {
-        bitmap |= 1 << 5;
-    }
-
-    if maybe_baking_reward.is_some() {
-        bitmap |= 1 << 6;
-    }
-
-    if maybe_finalization_reward.is_some() {
-        bitmap |= 1 << 7;
-    }
-
-    let (hash, body) = {
-        let mut payload = Vec::new();
-        payload.put(&25u8); // transaction type is configure baker
-        payload.put(&bitmap);
-        if let Some(capital) = maybe_capital {
-            payload.put(&capital);
-        }
-        if let Some(restake_earnings) = maybe_restake_earnings {
-            payload.put(&restake_earnings);
-        }
-        if let Some(openstatus) = maybe_openstatus {
-            payload.put(&openstatus);
-        }
-        if let Some(baker_keys) = maybe_baker_keys {
-            let mut challenge = b"configureBaker".to_vec();
-            challenge.put(&ctx.from);
-            challenge.put(&baker_keys.election_verify_key);
-            challenge.put(&baker_keys.signature_verify_key);
-            challenge.put(&baker_keys.aggregation_verify_key);
-
-            let election_proof = eddsa_ed25519::prove_dlog_ed25519(
-                &mut random_oracle::RandomOracle::domain(&challenge),
-                &baker_keys.election_verify_key,
-                &baker_keys.election_private_key,
-            );
-
-            let signature_proof = eddsa_ed25519::prove_dlog_ed25519(
-                &mut random_oracle::RandomOracle::domain(&challenge),
-                &baker_keys.signature_verify_key,
-                &baker_keys.signature_sign_key,
-            );
-
+    let keys_with_proofs = match maybe_baker_keys {
+        Some(ref keys) => {
             let mut csprng = thread_rng();
-            let aggregation_proof = baker_keys.aggregation_sign_key.prove(
-                &mut csprng,
-                &mut random_oracle::RandomOracle::domain(&challenge),
-            );
-            payload.put(&baker_keys.election_verify_key);
-            payload.put(&election_proof);
-            payload.put(&baker_keys.signature_verify_key);
-            payload.put(&signature_proof);
-            payload.put(&baker_keys.aggregation_verify_key);
-            payload.put(&aggregation_proof);
+            Some(ConfigureBakerKeysPayload::new(keys, ctx.from, &mut csprng))
         }
-        if let Some(url) = maybe_url {
-            payload.put(&url);
-        }
-        if let Some(transaction_fee) = maybe_transaction_fee {
-            payload.put(&transaction_fee);
-        }
-        if let Some(baking_reward) = maybe_baking_reward {
-            payload.put(&baking_reward);
-        }
-        if let Some(finalization_reward) = maybe_finalization_reward {
-            payload.put(&finalization_reward);
-        }
-
-        make_transaction_bytes(&ctx, &payload)
+        None => None,
     };
 
-    let signatures = make_signatures(ctx.keys, &hash);
+    let configure_baker_payload = ConfigureBakerPayload {
+        capital,
+        restake_earnings,
+        open_for_delegation,
+        keys_with_proofs,
+        metadata_url,
+        transaction_fee_commission,
+        baking_reward_commission,
+        finalization_reward_commission,
+    };
 
-    let response = json!({
+    let pre_tx = transactions::construct::configure_baker(
+        ctx.keys.num_keys(),
+        ctx.from,
+        ctx.nonce,
+        ctx.expiry,
+        configure_baker_payload,
+    );
+
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
+    let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
     });
@@ -454,20 +486,18 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     // context with parameters
     let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
-    let (hash, body) = {
-        let mut payload = Vec::new();
-        payload.put(&17u8); // transaction type is public to secret transfer
-        payload.put(&amount);
+    let encryption =
+        encrypted_transfers::encrypt_amount_with_fixed_randomness(&global_context, amount);
+    let pre_tx = transactions::construct::transfer_to_encrypted(
+        ctx.keys.num_keys(),
+        ctx.from,
+        ctx.nonce,
+        ctx.expiry,
+        amount,
+    );
 
-        // let payload_size: u32 = payload.len() as u32;
-        // assert_eq!(payload_size, 41);
-
-        make_transaction_bytes(&ctx, &payload)
-    };
-
-    let signatures = make_signatures(ctx.keys, &hash);
-    let encryption = encrypt_amount_with_fixed_randomness(&global_context, amount);
-    let response = json!({
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
+    let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
         "addedSelfEncryptedAmount": encryption
@@ -507,20 +537,22 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
         None => bail!("Could not produce payload."),
     };
 
-    let (hash, body) = {
-        let mut payload_bytes = Vec::new();
-        payload_bytes.put(&18u8); // transaction type is secret to public transfer
-        payload_bytes.extend_from_slice(&to_bytes(&payload));
+    let remaining_amount = payload.remaining_amount.clone();
 
-        make_transaction_bytes(&ctx, &payload_bytes)
-    };
+    let pre_tx = transactions::construct::transfer_to_public(
+        ctx.keys.num_keys(),
+        ctx.from,
+        ctx.nonce,
+        ctx.expiry,
+        payload,
+    );
 
-    let signatures = make_signatures(ctx.keys, &hash);
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
 
-    let response = json!({
+    let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
-        "remaining": payload.remaining_amount,
+        "remaining": remaining_amount,
     });
 
     Ok(to_string(&response)?)
@@ -609,7 +641,9 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let mut csprng = thread_rng();
     keys.insert(
         KeyIndex(0),
-        crypto_common::types::KeyPair::from(ed25519::Keypair::generate(&mut csprng)),
+        concordium_base::common::types::KeyPair::from(ed25519_dalek::Keypair::generate(
+            &mut csprng,
+        )),
     );
 
     let initial_acc_data = InitialAccountData {
@@ -626,17 +660,17 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let acc_keys = AccountKeys::from(initial_acc_data);
 
     let reg_id = &pio.pub_info_for_ip.reg_id;
-    let address = AccountAddress::new(reg_id);
+    let address = account_address_from_registration_id(reg_id);
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
         // the unwrap is safe since we've generated the RegID successfully above.
         scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
     };
 
-    let response = json!({
-        "idObjectRequest": Versioned::new(VERSION_0, pio),
-        "privateIdObjectData": Versioned::new(VERSION_0, id_use_data),
-        "initialAccountData": json!({
+    let response = serde_json::json!({
+        "idObjectRequest": common::Versioned::new(common::VERSION_0, pio),
+        "privateIdObjectData": common::Versioned::new(common::VERSION_0, id_use_data),
+        "initialAccountData": serde_json::json!({
             "accountKeys": acc_keys,
             "encryptionSecretKey": secret_key,
             "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
@@ -660,16 +694,18 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
     let ars_infos: BTreeMap<ArIdentity, ArInfo<ArCurve>> = try_get(&v, "arsInfos")?;
 
     let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = ip_info.ip_identity.0;
     let identity_index: u32 = try_get(&v, "identityIndex")?;
 
-    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index)?;
+    let prf_key: prf::SecretKey<ArCurve> =
+        wallet.get_prf_key(identity_provider_index, identity_index)?;
 
     let id_cred_sec: PedersenValue<ArCurve> =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_index)?);
+        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
     let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
 
     let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
-        wallet.get_blinding_randomness(identity_index)?;
+        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
 
     let num_of_ars = ars_infos.len();
     let threshold = match v.get("arThreshold") {
@@ -714,7 +750,8 @@ fn create_id_request_and_private_data_v1_aux(input: &str) -> anyhow::Result<Stri
         }
     };
 
-    let response = json!({ "idObjectRequest": Versioned::new(VERSION_0, pio) });
+    let response =
+        serde_json::json!({ "idObjectRequest": common::Versioned::new(common::VERSION_0, pio) });
 
     Ok(to_string(&response)?)
 }
@@ -786,7 +823,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     )?;
 
     let address = match new_or_existing {
-        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Left(_) => account_address_from_registration_id(&cdi.values.cred_id),
         Right(address) => address,
     };
 
@@ -803,8 +840,8 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
         credential:     AccountCredential::Normal { cdi },
     };
 
-    let response = json!({
-        "credential": Versioned::new(VERSION_0, credential_message),
+    let response = serde_json::json!({
+        "credential": common::Versioned::new(common::VERSION_0, credential_message),
         "commitmentsRandomness": randomness,
         "accountKeys": AccountKeys::from(cred_data),
         "encryptionSecretKey": secret_key,
@@ -830,16 +867,18 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     let tags: Vec<AttributeTag> = try_get(&v, "revealedAttributes")?;
 
     let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = ip_info.ip_identity.0;
     let identity_index: u32 = try_get(&v, "identityIndex")?;
     let acc_num: u8 = try_get(&v, "accountNumber")?;
 
     let sig_retrievel_randomness: ps_sig::SigRetrievalRandomness<Bls12> =
-        wallet.get_blinding_randomness(identity_index)?;
+        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
     let id_cred_sec: PedersenValue<ArCurve> =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_index)?);
+        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
     let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
     let chi = CredentialHolderInfo::<ArCurve> { id_cred };
-    let prf_key: prf::SecretKey<ArCurve> = wallet.get_prf_key(identity_index)?;
+    let prf_key: prf::SecretKey<ArCurve> =
+        wallet.get_prf_key(identity_provider_index, identity_index)?;
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
@@ -857,8 +896,12 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     // Create the keys for the new credential.
     let cred_data = {
         let mut keys = std::collections::BTreeMap::new();
-        let secret = wallet.get_account_signing_key(identity_index, u32::from(acc_num))?;
-        let public = ed25519::PublicKey::from(&secret);
+        let secret = wallet.get_account_signing_key(
+            identity_provider_index,
+            identity_index,
+            u32::from(acc_num),
+        )?;
+        let public = ed25519_dalek::PublicKey::from(&secret);
         keys.insert(KeyIndex(0), KeyPair { secret, public });
 
         CredentialData {
@@ -890,6 +933,7 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 
     let credential_context = CredentialContext {
         wallet,
+        identity_provider_index,
         identity_index,
         credential_index: u32::from(acc_num),
     };
@@ -905,7 +949,7 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     )?;
 
     let address = match new_or_existing {
-        Left(_) => AccountAddress::new(&cdi.values.cred_id),
+        Left(_) => account_address_from_registration_id(&cdi.values.cred_id),
         Right(address) => address,
     };
 
@@ -922,13 +966,41 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
         credential:     AccountCredential::Normal { cdi },
     };
 
-    let response = json!({
-        "credential": Versioned::new(VERSION_0, credential_message),
+    let response = serde_json::json!({
+        "credential": common::Versioned::new(common::VERSION_0, credential_message),
         "commitmentsRandomness": randomness,
         "accountKeys": AccountKeys::from(cred_data),
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountAddress": address,
+    });
+    Ok(to_string(&response)?)
+}
+
+/// For generating identity recovery requests
+fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+
+    let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
+
+    let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = ip_info.ip_identity.0;
+    let identity_index: u32 = try_get(&v, "identityIndex")?;
+    let id_cred_sec: PedersenValue<ArCurve> =
+        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
+
+    let timestamp: u64 = try_get(&v, "timestamp")?;
+
+    let request = account_holder::generate_id_recovery_request(
+        &ip_info,
+        &global_context,
+        &id_cred_sec,
+        timestamp,
+    );
+
+    let response = serde_json::json!({
+        "idRecoveryRequest": common::Versioned::new(common::VERSION_0, request),
     });
     Ok(to_string(&response)?)
 }
@@ -957,8 +1029,8 @@ fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
                 generator: *global_context.elgamal_generator(),
                 scalar:    enc_key,
             };
-            let address = AccountAddress::new(&reg_id);
-            response.push(json!({
+            let address = account_address_from_registration_id(&reg_id);
+            response.push(serde_json::json!({
                 "encryptionSecretKey": secret_key,
                 "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
                 "accountAddress": address,
@@ -979,7 +1051,7 @@ fn decrypt_encrypted_amount_aux(input: &str) -> anyhow::Result<Amount> {
     let encrypted_amount = try_get(&v, "encryptedAmount")?;
     let secret = try_get(&v, "encryptionSecretKey")?;
 
-    let table = (&mut Cursor::new(TABLE_BYTES)).get()?;
+    let table = BabyStepGiantStep::deserial(&mut std::io::Cursor::new(TABLE_BYTES))?;
     Ok(
         encrypted_transfers::decrypt_amount::<id::constants::ArCurve>(
             &table,
@@ -1005,18 +1077,20 @@ fn parse_wallet_input(v: &Value) -> anyhow::Result<ConcordiumHdWallet> {
 fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = try_get(&v, "identityProviderIndex")?;
     let identity_index = try_get(&v, "identityIndex")?;
 
-    let id_cred_sec = wallet.get_id_cred_sec(identity_index)?;
+    let id_cred_sec = wallet.get_id_cred_sec(identity_provider_index, identity_index)?;
 
-    let prf_key = wallet.get_prf_key(identity_index)?;
+    let prf_key = wallet.get_prf_key(identity_provider_index, identity_index)?;
 
-    let blinding_randomness = wallet.get_blinding_randomness(identity_index)?;
+    let blinding_randomness =
+        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
 
-    let response = json!({
-        "idCredSec": base16_encode_string(&id_cred_sec),
-        "prfKey": base16_encode_string(&prf_key),
-        "blindingRandomness": base16_encode_string(&blinding_randomness)
+    let response = serde_json::json!({
+        "idCredSec": common::base16_encode_string(&id_cred_sec),
+        "prfKey": common::base16_encode_string(&prf_key),
+        "blindingRandomness": common::base16_encode_string(&blinding_randomness)
     });
     Ok(to_string(&response)?)
 }
@@ -1024,15 +1098,22 @@ fn get_identity_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
 fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = try_get(&v, "identityProviderIndex")?;
     let identity_index = try_get(&v, "identityIndex")?;
     let account_credential_index = try_get(&v, "accountCredentialIndex")?;
 
-    let account_signing_key =
-        wallet.get_account_signing_key(identity_index, account_credential_index)?;
+    let account_signing_key = wallet.get_account_signing_key(
+        identity_provider_index,
+        identity_index,
+        account_credential_index,
+    )?;
     let account_signing_key_hex = hex::encode(account_signing_key);
 
-    let account_verify_key =
-        wallet.get_account_public_key(identity_index, account_credential_index)?;
+    let account_verify_key = wallet.get_account_public_key(
+        identity_provider_index,
+        identity_index,
+        account_credential_index,
+    )?;
     let account_verify_key_hex = hex::encode(account_verify_key);
 
     let mut attribute_commitment_randomness = HashMap::new();
@@ -1040,15 +1121,16 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     for attribute_name in ATTRIBUTE_NAMES {
         let attribute_tag = AttributeTag::from_str(attribute_name)?;
         let commitment_randomness = wallet.get_attribute_commitment_randomness(
+            identity_provider_index,
             identity_index,
             account_credential_index,
             attribute_tag,
         )?;
-        let commitment_randomness_hex = base16_encode_string(&commitment_randomness);
+        let commitment_randomness_hex = common::base16_encode_string(&commitment_randomness);
         attribute_commitment_randomness.insert(attribute_tag.0, commitment_randomness_hex);
     }
 
-    let response = json!({
+    let response = serde_json::json!({
         "signKey": account_signing_key_hex,
         "verifyKey": account_verify_key_hex,
         "attributeCommitmentRandomness": attribute_commitment_randomness
@@ -1273,6 +1355,20 @@ make_wrapper!(
     /// returns an error message as the response, and sets the 'success' flag to 0.
     ///
     /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => generate_recovery_request -> generate_recovery_request_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
     /// formats for encrypted transfers.
     ///
     /// # Safety
@@ -1367,6 +1463,48 @@ make_wrapper!(
     /// function will fail in unspecified ways.
     => get_account_keys_and_randomness -> get_account_keys_and_randomness_aux);
 
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => sign_transaction -> sign_transaction_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => transaction_to_json -> transaction_to_json_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => sign_message -> sign_message_aux);
+
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///
 /// In case of failure to decode the input the function will
@@ -1396,7 +1534,7 @@ pub unsafe fn decrypt_encrypted_amount(input_ptr: *const c_char, success: *mut u
     };
     if let Ok(v) = decrypt_encrypted_amount_aux(input_str) {
         *success = 1;
-        u64::from(v)
+        v.micro_ccd()
     } else {
         *success = 0;
         0

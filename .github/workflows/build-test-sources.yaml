@@ -11,14 +11,14 @@
 # The dependencies between the steps are described in inline comments below
 # along with a few suggestions for improving parallelization.
 
-name: Build and test
+name: Build and test Haskell and Rust sources
 
 on:
   pull_request:
     branches: main
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-    - '.github/workflows/build-test.yaml'
+    - '.github/workflows/build-test-sources.yaml'
     - '**.hs'
     - 'stack*.yaml'
     - 'package.yaml'
@@ -28,7 +28,7 @@ on:
   push:
     branches: main
     paths:
-    - '.github/workflows/build-test.yaml'
+    - '.github/workflows/build-test-sources.yaml'
     - '**.hs'
     - 'stack*.yaml'
     - 'package.yaml'
@@ -50,12 +50,13 @@ jobs:
       matrix:
         plan:
         - ghc: 9.0.2 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.53
+          rust: 1.62
 
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-
+      with:
+        submodules: recursive
     # RUST #
 
     # Set up Rust and restore dependencies and targets from cache.

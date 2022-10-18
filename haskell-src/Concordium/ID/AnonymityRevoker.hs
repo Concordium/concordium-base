@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Concordium.ID.AnonymityRevoker
-  (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity)
+  (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arName, arUrl, arDescription, arPublicKey)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -13,6 +13,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Binary.Builder as BB
+import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
 import Data.Serialize
 import Control.DeepSeq
 import System.IO.Unsafe
@@ -32,6 +34,10 @@ foreign import ccall safe "ar_info_from_bytes" arInfoFromBytes :: Ptr Word8 -> C
 foreign import ccall safe "ar_info_to_json" arInfoToJSONFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall safe "ar_info_from_json" arInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr ArInfo)
 foreign import ccall unsafe "ar_info_ar_identity" arIdentityFFI :: Ptr ArInfo -> IO ArIdentity
+foreign import ccall unsafe "ar_info_name" arNameFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_url" arUrlFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp
@@ -77,6 +83,30 @@ arInfoToJSON (ArInfo ar) = toJSONHelper arInfoToJSONFFI ar
 
 arIdentity :: ArInfo -> ArIdentity
 arIdentity arInfo = unsafeDupablePerformIO $ withArInfo arInfo arIdentityFFI
+
+-- |Get the description name of the AR.
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR name is represented as a String in Rust, so it is safe.
+arName :: ArInfo -> Text
+arName (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arNameFFI ar
+
+-- |Get the description URL of the AR.
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR URL is represented as a String in Rust, so it is safe.
+arUrl :: ArInfo -> Text
+arUrl (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arUrlFFI ar
+
+-- |Get the description string of the AR.
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR description is represented as a String in Rust, so it is safe.
+arDescription :: ArInfo -> Text
+arDescription (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arDescriptionFFI ar
+
+-- |Get the public key of the AR as bytes.
+--  The function is currently only used for returning protobuf data in the gRPC2 api.
+--  That is why it returns bytes instead of structured data.
+arPublicKey :: ArInfo -> BS.ByteString
+arPublicKey (ArInfo ar) = toBytesHelper arPublicKeyFFI ar
 
 -- *JSON instances
 -- These JSON instances are very inefficient and should not be used in

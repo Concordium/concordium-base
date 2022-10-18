@@ -106,7 +106,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     fn with_valid_data<R: rand::Rng>(
         data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         let mut secret = Vec::with_capacity(data_size);
         let mut coeff = Vec::with_capacity(data_size);

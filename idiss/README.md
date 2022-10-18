@@ -119,7 +119,7 @@ Otherwise, the return value is an error.
 
 In order to build you need the following
 - the rust compiler, stable toolchain, a recent version. We've tested with
-  1.53.
+  1.62.
 - clang development libraries. On ubuntu these can be installed with 
   ```
   apt install libclang-dev

@@ -9,9 +9,9 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail};
-use base58check::*; // only for account addresses
 use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
+pub use crypto_common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crypto_common::{
     types::{CredentialIndex, KeyIndex, KeyPair},
     *,
@@ -50,9 +50,6 @@ use thiserror::Error;
 /// this could be what is desired, but it is important to be aware of it.
 pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.dat");
 
-/// Size in bytes of an account address in binary encoding.
-pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
-
 /// This is currently the number required, since the only
 /// place these are used is for encrypted amounts.
 pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
@@ -60,110 +57,11 @@ pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
 /// Chunk size for encryption of prf key
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, PartialOrd, Ord, From)]
-/// Address of an account. Textual representation uses base58check encoding with
-/// version byte 1.
-pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
-
-impl std::fmt::Display for AccountAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.to_base58check(1).fmt(f) }
-}
-
-// Parse from string assuming base58 check encoding.
-impl std::str::FromStr for AccountAddress {
-    type Err = &'static str;
-
-    fn from_str(v: &str) -> Result<Self, Self::Err> {
-        let (version, body) = v
-            .from_base58check()
-            .map_err(|_| "The string is not valid base 58 check v1.")?;
-        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
-            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-            buf.copy_from_slice(&body);
-            Ok(AccountAddress(buf))
-        } else {
-            Err("The string does not represent a valid Concordium address.")
-        }
-    }
-}
-
-impl AsRef<[u8; 32]> for AccountAddress {
-    fn as_ref(&self) -> &[u8; 32] { &self.0 }
-}
-
-impl AsMut<[u8; 32]> for AccountAddress {
-    fn as_mut(&mut self) -> &mut [u8; 32] { &mut self.0 }
-}
-
-impl SerdeSerialize for AccountAddress {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let b58_str = self.to_string();
-        ser.serialize_str(&b58_str)
-    }
-}
-
-impl<'de> SerdeDeserialize<'de> for AccountAddress {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        des.deserialize_str(Base58Visitor)
-    }
-}
-
-struct Base58Visitor;
-
-impl<'de> Visitor<'de> for Base58Visitor {
-    type Value = AccountAddress;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "A base58 string, version 1.")
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        v.parse::<AccountAddress>()
-            .map_err(|_| de::Error::custom("Wrong Base58 version."))
-    }
-}
-
-impl Serial for AccountAddress {
-    #[inline]
-    fn serial<B: Buffer>(&self, x: &mut B) {
-        x.write_all(&self.0)
-            .expect("Writing to buffer should succeed.")
-    }
-}
-
-impl Deserial for AccountAddress {
-    #[inline]
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-        source.read_exact(&mut buf)?;
-        Ok(AccountAddress(buf))
-    }
-}
-
-impl AccountAddress {
-    /// Construct account address from the registration id.
-    pub fn new<C: Curve>(reg_id: &C) -> Self {
-        let mut out = [0; ACCOUNT_ADDRESS_SIZE];
-        let hasher = Sha256::new().chain(&to_bytes(reg_id));
-        out.copy_from_slice(&hasher.finalize());
-        AccountAddress(out)
-    }
-
-    /// Check whether an address is an alias of another. Two addresses that are
-    /// aliases point to the same account.
-    pub fn is_alias_of(&self, other: &AccountAddress) -> bool { self.0[0..29] == other.0[0..29] }
-
-    /// Get the `n-th` alias of an address. There are 2^24 possible aliases.
-    /// If the counter is `>= 2^24` then this function will return [`None`].
-    pub fn get_alias(&self, counter: u32) -> Option<Self> {
-        if counter < (1 << 24) {
-            let mut data = self.0;
-            data[29..].copy_from_slice(&counter.to_be_bytes()[1..]);
-            Some(Self(data))
-        } else {
-            None
-        }
-    }
+/// Construct account address from the registration id.
+pub fn account_address_from_registration_id(reg_id: &impl Curve) -> AccountAddress {
+    let mut hasher = Sha256::new();
+    reg_id.serial(&mut hasher);
+    AccountAddress(hasher.finalize().into())
 }
 
 /// Threshold for the number of signatures required.
@@ -208,8 +106,21 @@ impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
                     )))
                 }
             }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error, {
+                if v > 0 {
+                    self.visit_u64(v as u64)
+                } else {
+                    Err(de::Error::custom(format!(
+                        "Signature threshold out of range {}",
+                        v
+                    )))
+                }
+            }
         }
-        des.deserialize_u8(SignatureThresholdVisitor)
+        des.deserialize_u64(SignatureThresholdVisitor)
     }
 }
 
@@ -294,6 +205,7 @@ impl AccountOwnershipProof {
     Clone,
     Copy,
     Hash,
+    From,
     Serialize,
     SerdeSerialize,
     SerdeDeserialize,
@@ -429,14 +341,14 @@ pub const ATTRIBUTE_TAG_LEI: AttributeTag = AttributeTag(13);
 /// are internal tags, values at those indices are string tags).
 pub struct AttributeStringTag(String);
 
-impl<'a> fmt::Display for AttributeStringTag {
+impl fmt::Display for AttributeStringTag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 // NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
 // FIXME: This method's complexity is linear in the size of the set of
 // attributes.
-impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
+impl TryFrom<AttributeStringTag> for AttributeTag {
     type Error = anyhow::Error;
 
     fn try_from(v: AttributeStringTag) -> Result<Self, Self::Error> {
@@ -452,7 +364,7 @@ impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
     }
 }
 
-impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
+impl std::convert::From<AttributeTag> for AttributeStringTag {
     fn from(v: AttributeTag) -> Self {
         let v_usize: usize = v.into();
         if v_usize < ATTRIBUTE_NAMES.len() {
@@ -679,7 +591,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 /// a scalar raising a generator to this scalar gives a public credentials. If
 /// two groups have the same scalar field we can have two different public
 /// credentials from the same secret credentials.
-#[derive(SerdeBase16Serialize)]
+#[derive(SerdeBase16Serialize, From, Into)]
 pub struct IdCredentials<C: Curve> {
     /// Secret id credentials.
     /// Since the use of this value is quite complex, we allocate
@@ -1731,6 +1643,22 @@ pub struct CredentialDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+// Since all variants are fieldless, the default JSON serialization will convert
+// all the variants to simple strings.
+/// Enumeration of the types of credentials.
+pub enum CredentialType {
+    /// Initial credential is a credential that is submitted by the identity
+    /// provider on behalf of the user. There is only one initial credential
+    /// per identity.
+    Initial,
+    /// A normal credential is one where the identity behind it is only known to
+    /// the owner of the account, unless the anonymity revocation process was
+    /// followed.
+    Normal,
+}
+
 /// Account credential with values and commitments, but without proofs.
 /// Serialization must match the serializaiton of `AccountCredential` in
 /// Haskell.
@@ -1753,6 +1681,44 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
         #[serde(rename = "commitments")]
         commitments: CredentialDeploymentCommitments<C>,
     },
+}
+
+impl<C: Curve, AttributeType: Serial + Attribute<C::Scalar>> Serial
+    for AccountCredentialWithoutProofs<C, AttributeType>
+{
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => {
+                0u8.serial(out);
+                icdv.serial(out);
+            }
+            AccountCredentialWithoutProofs::Normal { cdv, commitments } => {
+                1u8.serial(out);
+                cdv.serial(out);
+                commitments.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Deserial + Attribute<C::Scalar>> Deserial
+    for AccountCredentialWithoutProofs<C, AttributeType>
+{
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let tag = u8::deserial(source)?;
+        match tag {
+            0u8 => {
+                let icdv = source.get()?;
+                Ok(Self::Initial { icdv })
+            }
+            1u8 => {
+                let cdv = source.get()?;
+                let commitments = source.get()?;
+                Ok(Self::Normal { cdv, commitments })
+            }
+            _ => bail!("Unsupported credential tag: {}", tag),
+        }
+    }
 }
 
 /// Type of credential registration IDs.
@@ -1849,7 +1815,7 @@ pub struct IpContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 
 impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IpContext<'a, P, C> {}
 
-#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 /// A set of cryptographic parameters that are particular to the chain and
 /// shared by everybody that interacts with the chain.
@@ -1863,7 +1829,7 @@ pub struct GlobalContext<C: Curve> {
     /// It is unclear what length we will require here, or whether we'll allow
     /// dynamic generation.
     #[serde(rename = "bulletproofGenerators")]
-    bulletproof_generators:      Generators<C>,
+    pub bulletproof_generators:  Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
     /// A free-form string used to distinguish between different chains even if
@@ -2016,7 +1982,7 @@ pub trait CredentialDataWithSigning: PublicCredentialData {
 }
 
 /// All account keys indexed by credentials.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct AccountKeys {
     /// All keys per credential
     #[serde(rename = "keys")]
@@ -2062,7 +2028,7 @@ impl From<InitialAccountData> for AccountKeys {
 /// the credential object. This contains all the keys on the credential at the
 /// moment of its deployment. If this creates the account then the account
 /// starts with exactly these keys.
-#[derive(SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialData {
     #[serde(rename = "keys")]
     pub keys:      BTreeMap<KeyIndex, crypto_common::types::KeyPair>,
@@ -2457,8 +2423,8 @@ mod tests {
     #[test]
     fn test_yearmonth_serialization() {
         // Test equality
-        let ym1 = YearMonth::new(2020, 02).unwrap();
-        let ym2 = YearMonth::new(2020, 02).unwrap();
+        let ym1 = YearMonth::new(2020, 2).unwrap();
+        let ym2 = YearMonth::new(2020, 2).unwrap();
         assert_eq!(ym1, ym2);
 
         // Test serialization
@@ -2491,7 +2457,7 @@ mod tests {
                 .get_alias(i)
                 .expect("Counter < 2^24, so alias should exist.");
             anyhow::ensure!(
-                alias.is_alias_of(&base),
+                alias.is_alias(&base),
                 "Generated alias {:?} is not an alias of the base address {:?}.",
                 alias,
                 base

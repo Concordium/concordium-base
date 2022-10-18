@@ -2,13 +2,31 @@ This page describes the identity-layer related interactions currently implemente
 
 # Account holder interactions
 
+## Creation of a HD Wallet
+
+Private keys and randomness used to create pre-identity objects and credentials can either be generated using system randomness or deterministically from a seed.
+A hd wallet with a seed can be generated from 24 BIP-39 words using the command
+```console
+client create-hd-wallet --out hd-wallet.json
+```
+This will then ask the user to type in 24 BIP-39 words and will produce a file with a seed.
+As an example, running the command above and typing in the words `"vendor sphere crew wise puppy wise stand wait tissue boy fortune myself hamster intact window garment negative dynamic permit genre limb work dial guess"` will produce a file `hd-wallet.json` containing
+```json
+{
+  "seed": "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860",
+  "net": "Mainnet"
+}
+```
+
+If the flag `--testnet` is provided, the `"net"` above will instead be `"Testnet"`.
+
 ## Creation of Credential Holder.
 
 A credential holder is somebody who can go to the identity provider.
 The credential holder consists only of the secret identity credentials.
 These can be used multiple times to go to different identity providers, or multiple times to the same one, although we are not sure what the utility of this is.
 
-The command-line tool can be used to generate a new Credential Holder Information structure as follows.
+The command-line tool can be used to generate a new Credential Holder Information structure as follows using system randomness.
 
 ```console
 $ ./client create-chi --out bob-chi.json
@@ -25,9 +43,69 @@ which results in the following content in `bob-chi.json`.
 
 This file contains **private** information, namely the value `idCredSecret`.
 
+The data can be generated deterministically from a hd-wallet if the flags `--hd-wallet` and `identity-index` are provided. For example, using the hd-wallet above, the command
+```console
+$ ./client create-chi --out bob-chi.json --hd-wallet hd-wallet.json --identity-index 0
+Wrote CHI to file.
+```
+results in the following content in `bob-chi.json`.
+```json
+{
+  "idCredSecret": "369f02f422c932a4f040806062fa6d0868d34454cae761c3a261d3896c82e14e"
+}
+```
+
+## Creation of ID use data.
+
+ID use data is used to create credentials from an identity object. It contains the credential holder information above together with a prf key and some randomness.
+When creating version 0 pre-identity objects, the credential holder information is given as input, while the prf key and the randomness is generated using system randomness.
+The ID use data is in this case output so that it can be used to create credentials.
+
+To create version 1 pre-identity objects, the id use data is instead given as input. It can be generated using randomness as follows.
+```console
+$ ./client create-id-use-data --out bob-id-use-data.json
+Wrote ID use data to file.
+
+```
+which results in the following content in `bob-id-use-data.json`.
+
+```json
+{
+  "aci": {
+    "credentialHolderInformation": {
+      "idCredSecret": "15abc2f86509a0d11ad023d6e4dcc5936c89ba4a1205d557d8303ec94dc3d322"
+    },
+    "prfKey": "1cfbc2f9a44bc5e94fbeaa432f8313c7e1c89fa0ee09604d8852b6cc636b6ae5"
+  },
+  "randomness": "4c071ef28df26a4843a44693bf29590514399fa2fe316ced1f43e47a2a498615"
+}
+  ```
+
+This file contains **private** information, namely the values `idCredSecret`, `prfKey` and `randomness`.
+
+The data can be generated deterministically from a hd-wallet if the flags `--hd-wallet` and `identity-index` are provided. For example, using the hd-wallet above, the command
+```console
+$ ./client create-id-use-data --out bob-id-use-data.json --hd-wallet hd-wallet.json --identity-index 0
+Wrote ID use data to file.
+```
+results in the following content in `bob-id-use-data.json`.
+```json
+{
+  "aci": {
+    "credentialHolderInformation": {
+      "idCredSecret": "369f02f422c932a4f040806062fa6d0868d34454cae761c3a261d3896c82e14e"
+    },
+    "prfKey": "48e4f93333f97cda1bd146812ab3ce5b7c19bd7dc68d9fe71511633ffe7f7485"
+  },
+  "randomness": "1956663b76651afec2275310a3c0948a735b8d37f246b1e92ab542799ae6aedf"
+}
+```
+
 ## Creation of pre-identity objects.
 
-A pre-identity object is a public object (to be sent to the identity provider) and consists of the public parts of the credential holder information, the commitment to the prf key, choice of the attribute list and values for specific attributes, etc.
+A pre-identity object is a public object (to be sent to the identity provider) and consists of the public parts of the credential holder information, the commitment to the prf key, choice of the attribute list and values for specific attributes, etc. Both version 0 and version 1 pre-identity objects can be created with the tool.
+
+### Version 0 pre-identity objects
 
 The command-line tool can be invoked as follows.
 
@@ -62,7 +140,7 @@ The result is output into two files. The **private** information that must be re
 ```
 This information must be retained by the account holder in order to generate credentials later on.
 
-The public **pre-identity object**, the data that should be sent to the identity provider, is as follows
+The public (version 0) **pre-identity object**, the data that should be sent to the identity provider, is as follows
 ```json
 {
   "v": 0,
@@ -122,14 +200,65 @@ The public **pre-identity object**, the data that should be sent to the identity
 ```
 This contains the data of the request that is sent to the identity provider.
 
+### Version 1 pre-identity objects
+
+The command-line tool can be invoked as follows.
+
+```console
+$ ./client start-ip-v1 --id-use-data bob-id-use-data.json --public bob-pio.json
+Choose identity provider: Identity provider 1, identity_provider-1
+Choose anonymity revokers: AR-2, AR-4
+Revocation threshold: 2
+Wrote PIO data to file.
+```
+By default the command will try to locate the information about identity providers and anonymity revokers in the `database` subdirectory.
+If needed the defaults can be overridden by command-line flags, see `./client start-ip-v1 --help` for details.
+
+This allows one to select from a list of anonymity revokers associated with this IP. It then generates a PRF key.
+
+The result is output into the file `bob-pio.json` containing the public (version 1) **pre-identity object**, the data that should be sent to the identity provider, is as follows
+```json
+{
+  "v": 0,
+  "value": {
+    "idCredPub": "88672ad001a1d434701a5fbaa12adddfb22321279fcb7d772d1ed6235001e3925bf4c6bfc49588140497343de842b261",
+    "ipArData": {
+      "2": {
+        "encPrfKeyShare": "a346b068bc26ba9bd154f9f1f783ba179f97eb6efd78f8bfbaac2a7886b1bbe3b4b6eec36f0ecf03800fa0d374cfe7a78246e494eabf12fe5c57e35884224dfbf5d5deb31b2cfb08f541afca7abc0dedf0aba2aac4f2c536cf6ca8d6ac4f4918a11c7cb14f621145c9ebf8cff802bd2ce535daa57d37019c3fbf9b8729410fd33358e834af1dee3ff1250bfc053c10dfb64e3d2c4f15e5c190bf3777964f9b8331aca7d8fddf570524a76e6d1ffa995672cdb7e61fe4bf239789382daba8aad58a0e201d3ff792859498853672d82b8fbbb2ec4c275fd4690d7fbe0e83e3503a28e2714b07a937d6c3931eaea61a6c089316c53740bccd7b22d0bd65c74f2d26cfaa736004a7194f9fa0b05a9d5b84dd42c84a6c0ddb8bc9762b4143205a0ddda14c636f014d85e65b0be40e97ba2a345ebc7b7131067bcd478a45b56d3234f7af6f37a98358d9814d2d7f091c0a50a897c4593a103fa919f440213aacc0da73be41378f1b8b97051767f46e078a28d10b43afcf016b712f92fe18cf8815acea969828a365d2e78b9001c53596da98667149ae0640ed0aced5d55f7acb75810219b83a8d8c880b4aa2c112b40615a7e6a57d31ebe9f8cb2fb6d19ef8afcdd28cfb4791b4698d6950251924f28849cf10b3fe28f99b328f8cf80a545d789dd231ab366a76fa6cc8f6c46c182387153bdd820e00749c18ff99316e19219cf01d7d999bb1a167a3777f544420ee6845b6c2965bd299c41c44b6241661453b291b5f6c456c3dd2ec7adc3db76adae3ab2590ee8d6c12adf3190c433349af246b834089e35ed33787ce934f65d309ed11faf7f494519276889c3f2c49c800de195a85fb0e44a50750c7bb3b65037beaa4d76ba2c9ae0318b9211e3aaa2e2175d2c52b80806852b92e283952fd41315ece946c092530ab0077982f419a80b68124a91586f2cb9c2a68385330fafba9af6255e502b50cccf5bbfe4ee27d696190d0362762803ee0745d6d85099253250876bb8487bc6e0af249c4b96d6a1f61389cc60f36591b5bfdbd9230e2ca128aabbb11834984a891b9e0212fc0af1cfcd8aa4eb3",
+        "proofComEncEq": "5dec6b4e91d274686f5bf1817801ebc0cc5a1aa59a58c8b365b6fda4bc0060225da7d8cd3f1e9bffa9e1cd8620d8b7a97c0eca1b4a9efa16224d13daa13b928369c1e53b8aaeba9d1ddbac774bf15f58cc7dbf74953dc02f002cbacd67a553d0"
+      },
+      "4": {
+        "encPrfKeyShare": "aeb580f66b5b88b16b6ff639f0e3e04a5b780cffd642d136fe80a7e356f974c2d212293459cfc4ffbe89b798a929966c805c68e375b1f769098bf94bd832a2316d7dfb3475e7e09448018897f6659b9870ad32b637a6d4625a533f8baa101ebf8deeec7a02b2b13c73644dbe4fa1f53c88f744a8084a38845257153504b12de4c68b1de213063ecd1caa55f81d4ba574ac9b8bda7dcdb2aab0e1c4cf787823b00a213f6e4cf301abe5cecaaf9266acb241407adb1f7f9cbe01e8e0ea128466ec808e6994e2399552ca6f75a3809a61e98522a13f1468baf5130e085e6294775ebf102576eb9eb3b148f17bf375c94064a191b405cab03a3f72c334fde5c5e08401a7a161237066a1432a514eef30d07ba042b5818b6693ca3772300b452c120da70a06a3919b95431df0dc61642b84e0cfffad40e5182c20f911d082b40a0d89584481d3f6f44c0a762c1bc8bd71654682e3b91f66c00e5b1e95ea1279558b37327a9032d51345b6beddb12ea898f2783efece3abc34afa6f4442a5885c96b85a2428276cb85e8f98b746131c74c64e841e7410ae0f0963f41fc3a8eec4f4ae3a7c2273dea23969166898a45c3be018299406776cef9d2175a539d99abae8b6f084df521d0c2f5a0bef4af31bd02e8cc89ade738f0b5ac781d5f401bc9dc23d098bdc94f26e94971b016094d912f51e4f0f9cd661f252c5f58d5cbe136c53ac6cbc97d614a6af9657683ca65950d8bb889f6daba472d4d8c7d7ba4b98e9840b38299c443429a7d5eaa60832c4ce5c647f57207dfba0e2d10772f3043de5266aaa2e281145966b5f0a75e457c2925fb4134807a1c10b4e5738b8e93471e7073689fad09e0d39483b7732cc8caef9a287da400e4b2448bf9ef0f68f7f45183428970c47fe597c33e246a7572a811f130f582c167058af64780dc7015dcf7c1db0d92e1015d4882c662a2d761c6a9480d1a668247bea4fab88550017e3411f29a1df3ad8f7b69076bf928c238dd433b194e90155f2506222d68daed12a576b68e534dbadb67ad55fd81189e24ea31f3f1ec92905af7584d2c952922ca75ad42fc78",
+        "proofComEncEq": "0d05b079470a5f4b9b7db38bc40cafd8b68ca565030f50314a2d3356727966833b51ba14b7693a3bcc88812290f05cefedb36e687e6cbe25df293fa10dd77cec64506425b9647f47e6a667a98cdcbaafb3db37514f3b874c733a7d8993c33ea3"
+      }
+    },
+    "choiceArData": {
+      "arIdentities": [
+        2,
+        4
+      ],
+      "threshold": 2
+    },
+    "idCredSecCommitment": "96d9355553a70997dfcaafa895260cac3ce17fb200466dffae8e344e41773a71bd19c1d941295cea0fac62e3bec9682c",
+    "prfKeyCommitmentWithIP": "89cfdf725713121ebd316294b09c630f068298b64f2614b547559e6525701901af3fec5c601e55df6f6d20e92bc88b8a",
+    "prfKeySharingCoeffCommitments": [
+      "b026eb187a7cbb7ee810e9f220e83b56df3a46abeae7d689215ad0d1392d1e66d1cb57d707c00d2c69f3119eadeadacf",
+      "b6a9c154cb6cc19f2a06015a28ba3ce09da6e4dbe8a007f5a6ea6341481adaf8603893fe6490c10a523b4783b1ea595a"
+    ],
+    "proofsOfKnowledge": "9a58a012fb4618bf90eb35c004517b1aac95ae8e052a2f2183a90ca0bd33b76c6cbb921fc840ec396bb63cfd3a70dc417324ef38fdad963c98ad55b8ee6545ba6fc1609e39628412e977c09cf0b88cc729ad4d78795b0a2319a1c629963a6d32002589337ab3287dbe4232e0db6032843fd3a81f45db5de749e53c922b900cc34279e2a654ead93fe6671eaaff5c79dddf47dc69a28d18db11e86876a1a0374d63b0eab9f73c0252795e4865b983927ace466b1dfca746fe3eeb7701730d339a15220f8c65c2c8e738679a2f04b41581d8d2113fa308d376a1701bfdc9fe04120000000000000002841bfaeae09d933507f7d78d1d259113de902a2d8f9feef7bc3bb2a9923c714d9921f4f7f21f15365f336c404e7bac63aba7bd2a846a9cb8a576e2706b8730412945d1c6ab2e9c0c5c6aaba67734b6e20a7a2d515f7770008564fe752a28340baeb908f05b7fb6e39ca9e885ca067ca65c193f7e22909be241a45dd752785d4411908a93de39d9f7ac30d072f31a9bcd8548f68ae95fa637f2731a5a273016f8a019f9f4f8b19156b226c8b3815f7bb283e3c3d8b317b6a0df47abd6ef17a0cb6556d9944a8f9971721575f4df4d19a3ad123f497037ba355266d28bb4ee66950d0a3a270ba5ce0ac3c7a92b7edce4b9bb3ac32a3f6b4b2e8f1ed603cf41c43433b174e51cda7d6cf6fe8c8068eccb41d03fe6aa19777d9a73af14ef539f726d000000088a228057720dd902379f2a245dedac0079a60eae950232ce1022d4f5cf5448ee78f7499283985fdf054dea53625595dfb96f6607129e0d6ee3b865290807476dbb2399108e55e703a3f3e390364b63703c1052d9943602b2b585e02fe92c1d1ea040c7bae3e9206f3477f7ce1f184382952f51f9bea3e7c99b1207668d057a6cd9fc0071e3d4ecd62a652c6cef5d351d97320aef983ba0e0ac67c465546c94eccb678aa3a2580c6045cc0573a10d602b27bb42770881d9b7b8e87f44a86c2cc2b255ed3bedd0a33c87781da25a93547f43def2c15ba3062c84fa40b1c7aa9716841bbcb49ff7af41923a689bb09a2715b994c5f33feb3847b203ca1e7e1f8ef1d2a06a8e7c07e516b5a74ba47d2d7600faf554b66c9fe860d96cf6dd32a39bd6ad039b93e0f78391fe5e2a96075aa6f63b3c428a3bbec0d5bcdc4b6ee7edb8e593bc7efab7521a04e4cac799ff5835ae845b6ed27631c7b32c705dad111d7c2b154e1b90ab1cfc1b8c42e9b0b6ad4a1b1ae2e319dae2d1ba9d9ccc9938b39909b5a23ff256d0825cdd54998e57555df17c55f836481388ef09378ae75bcbe9c865cc038d4d9c1eaf0ba42d149ac9eb64a6d78e761bb46da67b87cf2fc21c8ac71325614c7788ac83e71e89145cba90727314fd1947b7070179c5799bafe7dc9b994d226379f32cccf8d4abba44e4589677d543f327e9d285c8fae8f962de88380fa91d15632fd5e990d76d1e23ed7abea6b68715451232979f326dfb0371ba9798408629e7d3b567879e369851d82792e3fba8af4bc3a8f48eadfbe70ed71c6b8be3f6b1e6d1fb31911cb5cf0d24a3de84bb7b71b946767a687032cc036abbc0b8ec0e17b9ce42bce6f852da1df4bfccb30214f6a4b5c138edc27b08abd9f4cc8f5cf9f586a08ac202ea335c2371e16b1fd578a0a22628ad058537a671ed9a24a8c2cf56f00268e99f0e7f2f66a0a07108b2dffe84228e189db8e2619040a1b4df2c04cc38559e0bfc59ee343d4b5668a2403c02cb6e1bbb5fa10560a9cd873b91caa4fdc0ccc3f637fdd5dff5dc7a23872bf5e543c561a184f7bafe7b02c6956df6ca1896e755e35407d3f24039878837a99597b685faa26630e8f53533554f332fb7cc966982bd3fbaba8f0a62d072ad4f7340bfd5dd18f71eb0e17cfd5eecaffcb9c7703e5e3681d8c85d2adb2c5baf65d5c146dba9625f79921c0a4666dd302d28a1f1560aff1f84aa9051213b50aa6fd08ec7b8d901e48bfc686503bb17e0ad0b226650e9a994ba29047ca03e13f36629130cf1124217cdd8200572589c8c37ccbf96138d73c54abde941dc3ee9eabb2cc1997de43c24e4e17caca4c2fcc48a4f2696c6d1a94c0f2a19ab8a94b68cfc6b90007b1a37e2392277b11df289068f8b727758d27650c62f6540b51e03b2f5d686849d37794cb7f0376ac12cba2e3716b9087f9e528b607ddb0352a87b78462acd2503a8b6c88f03a0f2ac6d6b19f874912991f6999dc6f7268650f1ae7224f721aae0a6eb20e3dfac2e49a2e7200995174656a4ae88f1d767381944e1ddfc0c2c86f079c1f3d099a02b52e7230000000899677528f154fc521e1363868be54edd131a11a13737e271726280f9140e929fb4c7d1d8179ababeceaa5e7054d8f0d8a3548eab26235a1fc5e485bf7cb31504cb96a5fa52262ec604fa892252d9f1ba08d9163f7ad69fa9906ba9ba40d0846ba9c13935c3d4663bfd84de3d6c523915868fe66fc8827e8ccd62a1895f453b29752dc19232c22d68aa7b1d7b08db7521a6927558c549265875d450b2e5e02299baa9605a3c635af9f0dcf809ae1c6c5d040cd864a5298d733d4009ad24f8340db43706c29b50949e200fbe62e3c6fe1ff5ed03bca8c2390b31f4bd0134732844d8779c87ce6bb2f3cc50e2fe10a955bbaa998562fee65591f5ce17c500e37a8179c7ba733eee36e1a9b7fc388c50c6335c8ca557741e3496141762a452ec17caa6eb3396b80098cf8858c503823636ad6c23e760f1371adfc32e6968eabe0bdc2f673d6ed29183a72fe1550b99538aba80a616f3f59c22b43a94333c991b35f81b8d8cd6ca17d3f9208ba4913a29cf3fe5738090f3fd858bfee13c7dcef353218215babec49809fe97a627f38918423f9c6f63e35b0104596a4607f80fb98dae1cbe7bd66e6cfc9bc9cee2bd78fea03490bf7ba29c83e007a3e53f4bf5fcd5a6ab5fb6e3ff33152d4e3503e97f50ad1a32da4ec5542d848ec6476309c1c37b7ab5b656678635650b9a84b70bbb5a8bcfb1cce509f71c12f954b4c4fff60d1b5cb7ad68865c467ee6fb4e2849daf69be684818f0692d68f8421371978ec5c26eb4b85513496961c0b622f163e1f1257a1ece8a996a0a18ace0afa8c0c24d919a1838cc6b1b160ec7c4114ba4940a8dfc1fdfdb89efedd7cfc2a229d11b6900cc2fd44812283a3bd58e5e3ad740813b06698d4670a87414a56b46c8257a7cf3a16e57b1fc345d252a5a3b9725d947a799d752fb342b079b02c4be3b387d8dd967495ff44a24cbd002ad55badbd89a52357512cc7d3cdca5d1276b2ee01d7dbb2db9ee7a4b234585310453e4136fad7fdb1b5ddbc447decabd22a06c7f45b76248418dc29b9d38c89341138616360b64207022905d2d9653c35d68500c2a4f73b26579a42471605f6ede3df36190d06221ff58a01dab557a13aacfbcf48d2e5bc521dcc44d16fa66b105eab6342865b851e590dbf3e4c5921c49046f9dc63ec8788"
+  }
+}
+```
+This contains the data of the request that is sent to the identity provider.
 
 ## Deployment of credentials onto the chain
 
 This is the last step that is done by the account holder given the private data, the signed identity object (see below), and the choice of which attributes they wish to reveal.
+The command works for both version 0 and version 1 identity objects.
 
 An example interaction looks as follows.
 ```console
-$ ./client create-credential --id-object bob-identity-object.json --private bob-aci.json --out credential.json --ip-info database/identity_provider-1.pub.json --keys-out account-keys.json --expiry 300
+$ ./client create-credential --id-object bob-identity-object.json --private bob-id-use-data.json --out credential.json --ip-info database/identity_provider-1.pub.json --keys-out account-keys.json --expiry 300
 Select which attributes you wish to reveal: nationality
 Generated fresh verification and signature key of the account to file account_keys.json
 Index: 3
@@ -237,12 +366,21 @@ The key parts are the `accountKeys` field which are the keys used to sign transa
 
 The identity provider verifies that all the data it is sent (the pre-identity object) is valid, verifies the user, and supplies user attributes.
 
-The command-line tool allows one to act as the identity provider (provided the user has relevant keys) as follows.
+The command-line tool allows one to act as the identity provider (provided the user has relevant keys) as follows. It can validate and sign both version 0 and version 1 pre-identity-objects.
+
+To validate and sign a version 0 pre-identity-object, run the following command.
 ```console
 $ ./client ip-sign-pio --pio bob-pio.json --ip-data database/identity_provider-1.json --out bob-identity-object.json --initial-cdi-out initial-account.json --expiry 300
 ...
 ```
-This will output two files, the `bob-identity-object.json` file which contains the identity object that is sent back to the user, and `initial-account.json` which must be sent to the chain to create the initial account.
+This will output two files, the `bob-identity-object.json` file which contains the version 0 identity object that is sent back to the user, and `initial-account.json` which must be sent to the chain to create the initial account.
+
+To validate and sign a version 1 pre-identity-object, run the following command.
+```console
+$ ./client ip-sign-pio-v1 --pio bob-pio.json --ip-data database/identity_provider-1.json --out bob-identity-object.json
+...
+```
+This will output the `bob-identity-object.json` file which contains the version 1 identity object that is sent back to the user.
 
 # Anonymity revocation
 

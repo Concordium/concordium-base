@@ -1,9 +1,13 @@
 pub use crate::impls::*;
-use anyhow::bail;
+use anyhow::{bail, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use core::cmp;
 use sha2::Digest;
-use std::{collections::btree_map::BTreeMap, convert::TryFrom, marker::PhantomData};
+use std::{
+    collections::btree_map::BTreeMap,
+    convert::{TryFrom, TryInto},
+    marker::PhantomData,
+};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
@@ -24,6 +28,12 @@ pub fn safe_with_capacity<T>(capacity: usize) -> Vec<T> {
 /// Trait for types which can be recovered from byte sources.
 pub trait Deserial: Sized {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self>;
+}
+
+impl Deserial for u128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u128> {
+        Ok(source.read_u128::<BigEndian>()?)
+    }
 }
 
 impl Deserial for u64 {
@@ -59,6 +69,12 @@ impl Deserial for u8 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<u8> { Ok(source.read_u8()?) }
 }
 
+impl Deserial for i128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i128> {
+        Ok(source.read_i128::<BigEndian>()?)
+    }
+}
+
 impl Deserial for i64 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i64> {
         Ok(source.read_i64::<BigEndian>()?)
@@ -79,6 +95,74 @@ impl Deserial for i16 {
 
 impl Deserial for i8 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<i8> { Ok(source.read_i8()?) }
+}
+
+impl Deserial for std::num::NonZeroU8 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroU16 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+impl Deserial for std::num::NonZeroU32 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroU64 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroU128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI8 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI16 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+impl Deserial for std::num::NonZeroI32 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI64 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for std::num::NonZeroI128 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let value = source.get()?;
+        Self::new(value).context("Zero is not valid.")
+    }
 }
 
 /// Read a vector where the first 8 bytes are taken as length in big endian.
@@ -262,6 +346,76 @@ impl Serial for i8 {
     }
 }
 
+impl Serial for std::num::NonZeroU8 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u8(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU16 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u16::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU32 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u32::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU64 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u64::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroU128 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u128::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI8 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i8(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI16 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i16::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI32 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i32::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI64 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i64::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for std::num::NonZeroI128 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_i128::<BigEndian>(self.get())
+            .expect("Writing to a buffer should not fail.")
+    }
+}
+
 /// Serialize a vector by encoding its length as a u64 in big endian and then
 /// the list of elements in sequence.
 impl<T: Serial> Serial for Vec<T> {
@@ -284,10 +438,7 @@ pub fn serial_vector_no_length<B: Buffer, T: Serial>(xs: &[T], out: &mut B) {
 }
 
 /// Serialize an ordered map. Serialization is by increasing order of keys.
-pub fn serial_map_no_length<'a, B: Buffer, K: Serial + 'a, V: Serial + 'a>(
-    map: &BTreeMap<K, V>,
-    out: &mut B,
-) {
+pub fn serial_map_no_length<B: Buffer, K: Serial, V: Serial>(map: &BTreeMap<K, V>, out: &mut B) {
     for (k, v) in map.iter() {
         // iterator over ordered pairs.
         out.put(k);
@@ -324,7 +475,7 @@ pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Dese
 }
 
 /// Analogous to [serial_map_no_length], but for sets.
-pub fn serial_set_no_length<'a, B: Buffer, K: Serial + 'a>(map: &BTreeSet<K>, out: &mut B) {
+pub fn serial_set_no_length<B: Buffer, K: Serial>(map: &BTreeSet<K>, out: &mut B) {
     for k in map.iter() {
         out.put(k);
     }
@@ -442,7 +593,8 @@ pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> ParseResult<A
 }
 
 // Some more generic implementations
-impl<T: Serial> Serial for [T; 2] {
+
+impl<T: Serial, const N: usize> Serial for [T; N] {
     fn serial<B: Buffer>(&self, out: &mut B) {
         for x in self.iter() {
             x.serial(out);
@@ -450,55 +602,14 @@ impl<T: Serial> Serial for [T; 2] {
     }
 }
 
-// Some more generic implementations
-impl<T: Deserial> Deserial for [T; 2] {
+impl<T: Deserial, const N: usize> Deserial for [T; N] {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        // This is a bit stupid, but I can't figure out how to avoid a
-        // Default constraint otherwise (if I allow it, we can preallocate
-        // with let mut out: [T; 2] = Default::default();
-        // and then iterate over it
-        let x_1 = T::deserial(source)?;
-        let x_2 = T::deserial(source)?;
-        Ok([x_1, x_2])
-    }
-}
-
-impl<T: Serial> Serial for [T; 8] {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        for x in self.iter() {
-            x.serial(out);
+        let mut out_vec = Vec::with_capacity(N);
+        for _ in 0..N {
+            out_vec.push(T::deserial(source)?);
         }
-    }
-}
-
-impl<T: Deserial> Deserial for [T; 8] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let x_1 = T::deserial(source)?;
-        let x_2 = T::deserial(source)?;
-        let x_3 = T::deserial(source)?;
-        let x_4 = T::deserial(source)?;
-        let x_5 = T::deserial(source)?;
-        let x_6 = T::deserial(source)?;
-        let x_7 = T::deserial(source)?;
-        let x_8 = T::deserial(source)?;
-        Ok([x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8])
-    }
-}
-
-// Some more generic implementations
-impl<T: Serial + Default> Serial for [T; 32] {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        for x in self.iter() {
-            x.serial(out);
-        }
-    }
-}
-
-impl Deserial for [u8; 32] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let mut out: [u8; 32] = Default::default();
-        source.read_exact(&mut out)?;
-        Ok(out)
+        let out_array: [T; N] = out_vec.try_into().map_err(|_| ()).unwrap();
+        Ok(out_array)
     }
 }
 
@@ -601,7 +712,7 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
     }
 }
 
-impl<'a, T: Serial> Serial for &'a T {
+impl<T: Serial> Serial for &T {
     fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { (*self).serial(target) }
 }
 

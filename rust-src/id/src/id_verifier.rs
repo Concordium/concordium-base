@@ -123,7 +123,7 @@ mod tests {
         let pub_data = cred_data.get_cred_key_info();
 
         let reg_id: G1 = Curve::hash_to_group(b"some_bytes");
-        let account_address = AccountAddress::new(&reg_id);
+        let account_address = account_address_from_registration_id(&reg_id);
         let challenge = b"13549686546546546854651357687354";
 
         let proof = prove_ownership_of_account(&cred_data, account_address, challenge);
@@ -162,15 +162,15 @@ mod tests {
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let maybe_proof =
-            prove_attribute_in_range(&gens, &keys, &attribute, &lower, &upper, &randomness);
+            prove_attribute_in_range(gens, &keys, &attribute, &lower, &upper, &randomness);
         if let Some(proof) = maybe_proof {
             assert_eq!(
-                verify_attribute_range(&keys, &gens, &lower, &upper, &commitment, &proof),
+                verify_attribute_range(&keys, gens, &lower, &upper, &commitment, &proof),
                 Ok(()),
                 "Incorrect range proof."
             );
         } else {
-            assert!(false, "Failed to produce proof.");
+            panic!("Failed to produce proof.");
         };
     }
 }

@@ -70,7 +70,7 @@ pub trait SigmaProtocol: Sized {
     fn with_valid_data<R: rand::Rng>(
         data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     );
 }
 
@@ -162,7 +162,7 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for AndAdapter<P1, P2> 
     fn with_valid_data<R: rand::Rng>(
         data_size: usize,
         csprng: &mut R,
-        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         P1::with_valid_data(data_size, csprng, |first, s1, csprng| {
             P2::with_valid_data(data_size, csprng, |second, s2, csprng| {
@@ -452,7 +452,7 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,
         _csprng: &mut R,
-        _f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+        _f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
         todo!()
     }

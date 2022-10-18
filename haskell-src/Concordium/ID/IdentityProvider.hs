@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Concordium.ID.IdentityProvider
-  (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity)
+  (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity, ipName, ipUrl, ipDescription, ipVerifyKey, ipCdiVerifyKey)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -13,6 +13,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Binary.Builder as BB
+import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
 import Concordium.ID.Types
 import Concordium.Types.HashableTo (HashableTo, getHash, MHashableTo)
 import qualified Concordium.Crypto.SHA256 as H
@@ -31,6 +33,11 @@ foreign import ccall safe "ip_info_from_bytes" ipInfoFromBytes :: Ptr Word8 -> C
 foreign import ccall safe "ip_info_to_json" ipInfoToJSONFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall safe "ip_info_from_json" ipInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
 foreign import ccall unsafe "ip_info_ip_identity" ipIdentityFFI :: Ptr IpInfo -> IO IdentityProviderIdentity
+foreign import ccall unsafe "ip_info_name" ipNameFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_url" ipUrlFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_description" ipDescriptionFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 
 withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
 withIpInfo (IpInfo fp) = withForeignPtr fp
@@ -76,6 +83,36 @@ ipInfoToJSON (IpInfo ip) = toJSONHelper ipInfoToJSONFFI ip
 
 ipIdentity :: IpInfo -> IdentityProviderIdentity
 ipIdentity ipInfo = unsafeDupablePerformIO $ withIpInfo ipInfo ipIdentityFFI
+
+-- |Get the description name of the IP.
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR name is represented as a String in Rust, so it is safe.
+ipName :: IpInfo -> Text
+ipName (IpInfo ip) = Text.decodeUtf8 $ toBytesHelper ipNameFFI ip
+
+-- |Get the description URL of the IP.
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR name is represented as a String in Rust, so it is safe.
+ipUrl :: IpInfo -> Text
+ipUrl (IpInfo ip) = Text.decodeUtf8 $ toBytesHelper ipUrlFFI ip
+
+-- |Get the description text of the IP.
+--  Using Text.decodeUtf8 which can throw an exception,
+--  but the AR name is represented as a String in Rust, so it is safe.
+ipDescription :: IpInfo -> Text
+ipDescription (IpInfo ip) = Text.decodeUtf8 $ toBytesHelper ipDescriptionFFI ip
+
+-- |Get the verify key of the IP as bytes.
+--  The function is currently only used for returning protobuf data in the gRPC2 api.
+--  That is why it returns bytes instead of structured data.
+ipVerifyKey :: IpInfo -> BS.ByteString
+ipVerifyKey (IpInfo ip) = toBytesHelper ipVerifyKeyFFI ip
+
+-- |Get the cdi verify key of the IP as bytes.
+--  The function is currently only used for returning protobuf data in the gRPC2 api.
+--  That is why it returns bytes instead of a structured data.
+ipCdiVerifyKey :: IpInfo -> BS.ByteString
+ipCdiVerifyKey (IpInfo ip) = toBytesHelper ipCdiVerifyKeyFFI ip
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading
