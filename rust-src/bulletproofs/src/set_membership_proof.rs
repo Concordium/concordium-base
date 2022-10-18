@@ -12,19 +12,19 @@ use std::iter::once;
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
     /// Commitment to the evalutation of the indicator function I_{v} on the_set
-    A:        C,
+    A: C,
     /// Commitment to the blinding factors in s_L and s_R
-    S:        C,
+    S: C,
     /// Commitment to the t_1 coefficient of polynomial t(x)
-    T_1:      C,
+    T_1: C,
     /// Commitment to the t_2 coefficient of polynomial t(x)
-    T_2:      C,
+    T_2: C,
     /// Evaluation of t(x) at the challenge point x
-    tx:       C::Scalar,
+    tx: C::Scalar,
     /// Blinding factor for the commitment to tx
     tx_tilde: C::Scalar,
     /// Blinding factor for the commitment to the inner-product arguments
-    e_tilde:  C::Scalar,
+    e_tilde: C::Scalar,
     /// Inner product proof
     ip_proof: InnerProductProof<C>,
 }
@@ -339,6 +339,8 @@ pub fn prove<C: Curve, R: Rng>(
 /// Error messages detailing why proof verification failed
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
+    /// The set must have a size of a power of two
+    SetSizeNotPowerOfTwo,
     /// The length of G_H was less than |S|, which is too small
     NotEnoughGenerators,
     /// The consistency check for t_0 failed
@@ -368,18 +370,22 @@ pub fn verify<C: Curve>(
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
     // Part 1: Setup
-    // TODO: Check that n := |S| is a power of 2?
-    // TODO: Check whether this should be done for range proof verification
     let n = the_set.len();
+    if !n.is_power_of_two() {
+        return Err(VerificationError::SetSizeNotPowerOfTwo);
+    }
     if gens.G_H.len() < n {
         return Err(VerificationError::NotEnoughGenerators);
     }
 
     // TODO: Check whether n fits into u64
-    let n = n as u64;
+    let the_set_vec = get_set_vector::<C>(&the_set);
 
+    // Domain separation
+    transcript.add_bytes(b"SetMembershipProof");
     // append commitment V to transcript
     transcript.append_message(b"V", &V.0);
+    transcript.append_message(b"theSet", &the_set_vec);
 
     // define the commitments A,S
     let A = proof.A;
@@ -423,8 +429,8 @@ pub fn verify<C: Curve>(
     z3.mul_assign(&z);
     let mut z4 = z3; // z^4
     z4.mul_assign(&z);
-    let ns = C::scalar_from_u64(n); // n as scalar
-                                    // compute yn = <1, y_n>
+    let ns = C::scalar_from_u64(n as u64); // n as scalar
+                                           // compute yn = <1, y_n>
     let mut yi = C::Scalar::one(); // y^0
     let mut ip_1_yn = C::Scalar::zero();
     for _ in 0..n {
@@ -438,9 +444,8 @@ pub fn verify<C: Curve>(
 
     // compute ip_1_s = <1,s>
     let mut ip_1_s = C::Scalar::zero();
-    for si in the_set {
-        let sis = C::scalar_from_u64(*si);
-        ip_1_s.add_assign(&sis);
+    for si in &the_set_vec {
+        ip_1_s.add_assign(&si);
     }
 
     // compute z3_one_minus_ip_1_s = z^3 (1 - <1,s>)
@@ -466,34 +471,69 @@ pub fn verify<C: Curve>(
     delta_minus_tx.sub_assign(&tx);
     let mut x2 = x; // x^2
     x2.mul_assign(&x);
-    let mut minus_tx_tilde = C::Scalar::zero();
-    minus_tx_tilde.sub_assign(&tx_tilde);
+    let mut minus_tx_tilde = tx_tilde;
+    minus_tx_tilde.negate();
 
-    let base_points = vec![V.0, v_keys.g, T_1, T_2, v_keys.h];
-    let exponents = vec![z2, delta_minus_tx, x, x2, minus_tx_tilde];
+    let t0_check_base_points = vec![V.0, v_keys.g, T_1, T_2, v_keys.h];
+    let t0_check_exponents = vec![z2, delta_minus_tx, x, x2, minus_tx_tilde];
 
-    let rhs = multiexp(&base_points, &exponents);
+    let rhs = multiexp(&t0_check_base_points, &t0_check_exponents);
     if !rhs.is_zero_point() {
         return Err(VerificationError::InconsistentT0);
     }
 
     // Part 3: Verify inner product
     // First compute helper variables g_hat, h_prime, and P_prime
-    let mut g_hat = v_keys.g;
-    g_hat.mul_by_scalar(&w);
+    let g_hat = v_keys.g.mul_by_scalar(&w);
 
     let y_inv = match y.inverse() {
         Some(inv) => inv,
         None => return Err(VerificationError::DivisionError),
     };
-    let y_inv_n = z_vec(y_inv, 0, n as usize); // TODO: Unify whether z_vec takes usize or u64
+    let y_inv_n = z_vec(y_inv, 0, n);
 
-    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-    let mut h_prime = multiexp(&H, &y_inv_n);
+    let (G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
 
-    let P_prime = A; // TODO!
+    // compute h' = (h_i^{(y^{-n})_i}) = (h[0], h[1]^{y_inv}, h[2]^{y_inv^2}, ...)
+    let mut h_prime = Vec::with_capacity(n);
+    h_prime[0] = H[0];
+    for i in 0..n {
+        h_prime[i] = H[i].mul_by_scalar(&y_inv_n[i]);
+    }
 
-    let ip_verification = false; // TODO, verify_inner_product(transcript, G_vec, H_vec, &P_prime, Q, proof);
+    let mut minus_e_tilde = e_tilde;
+    minus_e_tilde.negate();
+
+    // compute exponent for h, i.e., z1 + z^2y^-n * s + z^3y^-n
+    let mut h_exponents: Vec<<C as Curve>::Scalar> = Vec::with_capacity(n);
+    for i in 0..n {
+        h_exponents[i].add_assign(&z);
+        let mut z2ynisi = z2;
+        z2ynisi.mul_assign(&y_inv_n[i]);
+        z2ynisi.mul_assign(&the_set_vec[i]);
+        h_exponents[i].add_assign(&z2ynisi);
+        let mut z3yni = z3;
+        z3yni.mul_assign(&y_inv_n[i]);
+        h_exponents[i].add_assign(&z3yni);
+    }
+    // get exponent for g, i.e., [-z, -z, ..., -z]
+    let mut minus_z = z;
+    minus_z.negate();
+    let mut minus_z_vec = vec![minus_z; n];
+
+    let mut P_prime_exps = vec![tx, minus_e_tilde, C::Scalar::one(), x];
+    P_prime_exps.append(&mut h_exponents);
+    P_prime_exps.append(&mut minus_z_vec);
+
+    let mut P_prime_bases = vec![g_hat, v_keys.h, A, S];
+    P_prime_bases.append(&mut H);
+    P_prime_bases.append(&mut G.clone());
+
+    // Finally compute P' and verify inner product
+    let P_prime = multiexp(&P_prime_bases, &P_prime_exps);
+
+    let ip_verification =
+        verify_inner_product(transcript, &G, &h_prime, &P_prime, &g_hat, &proof.ip_proof);
 
     if !ip_verification {
         return Err(VerificationError::IPVerificationError);
