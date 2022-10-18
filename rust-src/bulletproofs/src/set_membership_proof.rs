@@ -735,6 +735,19 @@ mod tests {
         let proof = proof.unwrap();
 
         let mut transcript = RandomOracle::empty();
+        let result = verrify(
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result);       
+
+        let mut transcript = RandomOracle::empty();
         let result = verify_ultra_efficient(
             &mut transcript,
             rng,
