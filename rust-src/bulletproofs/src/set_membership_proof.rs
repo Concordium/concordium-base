@@ -745,7 +745,6 @@ pub fn verify_ultra_efficient<C: Curve, R: Rng>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve_arithmetic::multiexp;
     use pairing::bls12_381::G1;
 
     type SomeCurve = G1;
@@ -770,22 +769,8 @@ mod tests {
         let v_com = v_keys.hide(&v_value, &v_rand);
 
         let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-
         assert!(proof.is_ok());
         let proof = proof.unwrap();
-
-        let mut transcript = RandomOracle::empty();
-        let result = verrify(
-            &mut transcript,
-            &the_set,
-            &v_com,
-            &proof,
-            &gens,
-            &v_keys,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result);       
 
         let mut transcript = RandomOracle::empty();
         let result = verify_ultra_efficient(
@@ -800,5 +785,40 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result);
+    }
+
+    #[test]
+    fn test_smp_verification() {
+        let rng = &mut thread_rng();
+        let mut transcript = RandomOracle::empty();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let v: u64 = 3;
+        let n = the_set.len();
+
+        let gens = Generators::generate(n, rng);
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let v_keys = CommitmentKey { g: B, h: B_tilde };
+
+        let v_rand = Randomness::generate(rng);
+        let v_scalar = SomeCurve::scalar_from_u64(v);
+        let v_value = Value::<SomeCurve>::new(v_scalar);
+        let v_com = v_keys.hide(&v_value, &v_rand);
+
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        let mut transcript = RandomOracle::empty();
+        let result = verify(
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok());
     }
 }
