@@ -72,6 +72,27 @@ pub fn bench_set_membership_proof(c: &mut Criterion) {
         assert!(proof.is_ok());
         let proof = proof.unwrap();
 
+        // Bench verification
+        let the_set_p = the_set.clone();
+        let v_com_p = v_com.clone();
+        let gens_p = gens.clone();
+        let v_keys_p = v_keys.clone();
+        let proof_p = proof.clone();
+        group.bench_function(BenchmarkId::new("BP Verification", n), move |b| {
+            b.iter(|| {
+                let mut transcript = RandomOracle::empty();
+                verify(
+                    &mut transcript,
+                    &the_set_p,
+                    &v_com_p,
+                    &proof_p,
+                    &gens_p,
+                    &v_keys_p,
+                )
+                .unwrap();
+            })
+        });        
+
         // Bench ultra verification
         group.bench_function(BenchmarkId::new("Ultra Verification", n), move |b| {
             b.iter(|| {
