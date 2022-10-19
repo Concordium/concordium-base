@@ -693,18 +693,6 @@ pub fn verify<C: Curve>(
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
 
-    // compute exponent for h, i.e., z1 + z^2y^-n * s + z^3y^-n
-    let mut h_exponents: Vec<<C as Curve>::Scalar> = Vec::with_capacity(n);
-    for i in 0..n {
-        h_exponents.push(z);
-        let mut z2ynisi = z2;
-        z2ynisi.mul_assign(&y_inv_n[i]);
-        z2ynisi.mul_assign(&the_set_vec[i]);
-        h_exponents[i].add_assign(&z2ynisi);
-        let mut z3yni = z3;
-        z3yni.mul_assign(&y_inv_n[i]);
-        h_exponents[i].add_assign(&z3yni);
-    }
     // get exponent for g, i.e., [-z, -z, ..., -z]
     let mut minus_z = z;
     minus_z.negate();
@@ -712,7 +700,22 @@ pub fn verify<C: Curve>(
 
     let mut P_prime_exps = Vec::with_capacity(2 * n + 4);
     P_prime_exps.append(&mut minus_z_vec);
-    P_prime_exps.append(&mut h_exponents);
+
+    // compute exponent for h, i.e., z1 + z^2y^-n * s + z^3y^-n
+    for i in 0..n {
+        let mut hexp = z;
+        let mut z2ynisi = z2;
+        z2ynisi.mul_assign(&y_inv_n[i]);
+        z2ynisi.mul_assign(&the_set_vec[i]);
+        hexp.add_assign(&z2ynisi);
+        let mut z3yni = z3;
+        z3yni.mul_assign(&y_inv_n[i]);
+        hexp.add_assign(&z3yni);
+
+        P_prime_exps.push(hexp);
+    }
+
+    // add remaining exponents
     P_prime_exps.push(tx);
     P_prime_exps.push(minus_e_tilde);
     P_prime_exps.push(C::Scalar::one());
