@@ -396,8 +396,8 @@ pub fn verify_inner_product_with_scalars<C: Curve>(
     let mut s_inv = s.clone();
     s_inv.reverse();
     let mut G_exps = s;
-    for i in 0..G_exps.len() {
-        G_exps[i].mul_assign(&a);
+    for ge in &mut G_exps {
+        ge.mul_assign(&a);
     }
 
     let mut rhs_bases = Vec::with_capacity(2 * n + 1 + nsum_bases.len() + P_prime_bases.len());
@@ -435,8 +435,8 @@ pub fn verify_inner_product_with_scalars<C: Curve>(
 
     // negate remaining elements of P_prime_exponents and add them to rhs_exps
     let mut nppexps = P_prime_exponents[2 * n..].to_vec();
-    for i in 0..nppexps.len() {
-        nppexps[i].negate();
+    for nppe in &mut nppexps {
+        nppe.negate();
     }
     rhs_exps.append(&mut nppexps);
 

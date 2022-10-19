@@ -11,7 +11,7 @@ use std::iter::once;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
-    /// Commitment to the evalutation of the indicator function I_{v} on the_set
+    /// Commitment to the evaluation of the indicator function I_{v} on the_set
     A:        C,
     /// Commitment to the blinding factors in s_L and s_R
     S:        C,
@@ -85,7 +85,7 @@ fn a_L_a_R<F: Field>(v: &F, set_vec: &Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
 /// - the_set - the set as a vector
 /// - v the value
 /// - gens - generators containing vectors G and H both of length nm
-/// - v_keys - commitmentment keys B and B_tilde
+/// - v_keys - commitment keys B and B_tilde
 /// - v_rand - the randomness used to commit to each v using v_keys
 #[allow(non_snake_case)]
 pub fn prove<C: Curve, R: Rng>(
@@ -111,7 +111,7 @@ pub fn prove<C: Curve, R: Rng>(
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
     // Convert the u64 set into a field element vector
-    let set_vec = get_set_vector::<C>(&the_set);
+    let set_vec = get_set_vector::<C>(the_set);
     // Append the set to the transcript
     transcript.append_message(b"theSet", &set_vec);
 
@@ -162,7 +162,7 @@ pub fn prove<C: Curve, R: Rng>(
         .copied()
         .chain(once(B_tilde))
         .collect();
-    // compute A and S comittments using multi exponentiation
+    // compute A and S commitments using multi exponentiation
     let window_size = 4;
     let table = multiexp_table(&GH_B_tilde, window_size);
     let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
@@ -287,7 +287,7 @@ pub fn prove<C: Curve, R: Rng>(
     // Compute the blinding t_x_tilde
     // t_x_tilde <- z^2*v_rand + t_1_tilde*x + t_2_tilde*x^2
     let mut tx_tilde = z_sq;
-    tx_tilde.mul_assign(&v_rand);
+    tx_tilde.mul_assign(v_rand);
     let mut tx_s1 = t_1_tilde;
     tx_s1.mul_assign(&x);
     tx_tilde.add_assign(&tx_s1);
@@ -379,7 +379,7 @@ pub fn verify_naive<C: Curve>(
     }
 
     // TODO: Check whether n fits into u64
-    let the_set_vec = get_set_vector::<C>(&the_set);
+    let the_set_vec = get_set_vector::<C>(the_set);
 
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -445,7 +445,7 @@ pub fn verify_naive<C: Curve>(
     // compute ip_1_s = <1,s>
     let mut ip_1_s = C::Scalar::zero();
     for si in &the_set_vec {
-        ip_1_s.add_assign(&si);
+        ip_1_s.add_assign(si);
     }
 
     // compute z3_one_minus_ip_1_s = z^3 (1 - <1,s>)
@@ -546,7 +546,7 @@ pub fn verify_naive<C: Curve>(
         return Err(VerificationError::IPVerificationError);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 /// This function verifies a set membership proof, i.e. a proof of knowledge
@@ -577,7 +577,7 @@ pub fn verify<C: Curve>(
     }
 
     // TODO: Check whether n fits into u64
-    let the_set_vec = get_set_vector::<C>(&the_set);
+    let the_set_vec = get_set_vector::<C>(the_set);
 
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -644,7 +644,7 @@ pub fn verify<C: Curve>(
     // compute ip_1_s = <1,s>
     let mut ip_1_s = C::Scalar::zero();
     for si in &the_set_vec {
-        ip_1_s.add_assign(&si);
+        ip_1_s.add_assign(si);
     }
 
     // compute z3_one_minus_ip_1_s = z^3 (1 - <1,s>)
@@ -735,7 +735,7 @@ pub fn verify<C: Curve>(
         return Err(VerificationError::IPVerificationError);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 #[derive(Debug, PartialEq)]
@@ -762,7 +762,7 @@ pub fn verify_ultra_efficient<C: Curve, R: Rng>(
     transcript.add_bytes(b"SetMembershipProof");
     transcript.append_message(b"V", &V.0);
     // Convert the u64 set into a field element vector
-    let set_vec = get_set_vector::<C>(&the_set);
+    let set_vec = get_set_vector::<C>(the_set);
     let n = set_vec.len();
     // Append the set to the transcript
     transcript.append_message(b"theSet", &set_vec);
@@ -813,7 +813,7 @@ pub fn verify_ultra_efficient<C: Curve, R: Rng>(
     //<1,s>
     let mut ip_1_s = C::Scalar::zero();
     for s_i in &set_vec {
-        ip_1_s.add_assign(&s_i);
+        ip_1_s.add_assign(s_i);
     }
     let mut zn = C::scalar_from_u64(n as u64);
     zn.mul_assign(&z);
