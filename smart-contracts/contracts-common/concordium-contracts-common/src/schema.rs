@@ -141,6 +141,24 @@ impl Deserial for EventSchema {
     }
 }
 
+impl<A: Deserial, B: Deserial, C: Deserial> Deserial for (A, B, C) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        Ok((a, b, c))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial> Serial for (A, B, C) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        Ok(())
+    }
+}
+
 impl Serial for EventSchema {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.event_schema.serial(out)?;
@@ -305,43 +323,43 @@ pub enum FunctionV3 {
     },
     ParamEvent {
         parameter: Type,
-        event:     EventSchema,
+        event:     Type,
     },
     RvEvent {
         return_value: Type,
-        event:        EventSchema,
+        event:        Type,
     },
     ParamRvEvent {
         parameter:    Type,
         return_value: Type,
-        event:        EventSchema,
+        event:        Type,
     },
     ErrorEvent {
         error: Type,
-        event: EventSchema,
+        event: Type,
     },
     ParamErrorEvent {
         parameter: Type,
         error:     Type,
-        event:     EventSchema,
+        event:     Type,
     },
     RvErrorEvent {
         return_value: Type,
         error:        Type,
-        event:        EventSchema,
+        event:        Type,
     },
     ParamRvErrorEvent {
         parameter:    Type,
         return_value: Type,
         error:        Type,
-        event:        EventSchema,
+        event:        Type,
     },
-    Event(EventSchema),
+    Event(Type),
 }
 
 impl FunctionV3 {
     /// Extract the event schema if it exists.
-    pub fn event(&self) -> Option<&EventSchema> {
+    pub fn event(&self) -> Option<&Type> {
         match self {
             FunctionV3::ParamEvent {
                 event,
@@ -589,6 +607,7 @@ pub enum Type {
     ByteList(SizeLength),
     /// A fixed sized list of bytes.
     ByteArray(u32),
+    EnumEvent(Vec<(String, Fields, u8)>),
 }
 
 impl Type {
@@ -1378,6 +1397,10 @@ impl Serial for Type {
                 out.write_u8(30)?;
                 len.serial(out)
             }
+            Type::EnumEvent(fields) => {
+                out.write_u8(31)?;
+                fields.serial(out)
+            }
         }
     }
 }
@@ -1464,6 +1487,10 @@ impl Deserial for Type {
             30 => {
                 let len = u32::deserial(source)?;
                 Ok(Type::ByteArray(len))
+            }
+            31 => {
+                let variants = source.get()?;
+                Ok(Type::EnumEvent(variants))
             }
 
             _ => Err(ParseError::default()),
@@ -1703,6 +1730,24 @@ mod impls {
                     let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
                     let fields = fields_ty.to_json(source)?;
                     Ok(json!({ name: fields }))
+                }
+                Type::EnumEvent(variants) => {
+                    let enum_index = if variants.len() <= 256 {
+                        let idx = u8::deserial(source)?;
+                        // Find the enum index which is associated to the event tag.
+                        variants
+                            .iter()
+                            .position(|item| item.2 == idx)
+                            .ok_or_else(ParseError::default)?
+                    } else {
+                        // Event schemas are not supported for more than 256 event variants.
+                        return Err(ParseError::default());
+                    };
+
+                    let (name, fields_ty, tag) =
+                        variants.get(enum_index).ok_or_else(ParseError::default)?;
+                    let fields = fields_ty.to_json(source)?;
+                    Ok(json!({"EventLogIndex": tag, name: fields}))
                 }
                 Type::String(size_len) => {
                     let string = deserial_string(source, *size_len)?;
@@ -2018,62 +2063,70 @@ mod tests {
         };
         let f7 = FunctionV3::ParamEvent {
             parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            event:     EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event:     Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
         let f8 = FunctionV3::RvEvent {
             return_value: Type::ILeb128(3),
-            event:        EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event:        Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
         let f9 = FunctionV3::ParamRvEvent {
             parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             return_value: Type::ILeb128(3),
-            event:        EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event:        Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
         let f10 = FunctionV3::ErrorEvent {
             error: Type::Bool,
-            event: EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event: Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
         let f11 = FunctionV3::ParamErrorEvent {
             parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             error:     Type::Bool,
-            event:     EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event:     Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
         let f12 = FunctionV3::RvErrorEvent {
             return_value: Type::ILeb128(3),
             error:        Type::Bool,
-            event:        EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event:        Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
         let f13 = FunctionV3::ParamRvErrorEvent {
             parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
             return_value: Type::ILeb128(3),
             error:        Type::Bool,
-            event:        EventSchema {
-                event_schema: Type::Bool,
-                event_tags:   Some(vec![1, 2, 3]),
-            },
+            event:        Type::EnumEvent(vec![(
+                String::from("EventOne"),
+                Fields::Named(vec![(String::from("index"), Type::U8)]),
+                0,
+            )]),
         };
-        let f14 = FunctionV3::Event(EventSchema {
-            event_schema: Type::Bool,
-            event_tags:   Some(vec![1, 2, 3]),
-        });
+        let f14 = Type::EnumEvent(vec![(
+            String::from("EventOne"),
+            Fields::Named(vec![(String::from("index"), Type::U8)]),
+            0,
+        )]);
 
         assert_eq!(serial_deserial(&f1), Ok(f1));
         assert_eq!(serial_deserial(&f2), Ok(f2));
@@ -2147,13 +2200,15 @@ mod tests {
     fn test_module_v3_serial_deserial_is_id() {
         let m = ModuleV3 {
             contracts: BTreeMap::from([("a".into(), ContractV3 {
-                init:    Some(FunctionV3::ParamEvent {
+                init: Some(FunctionV3::ParamEvent {
                     parameter: Type::U8,
-                    event:     EventSchema {
-                        event_schema: Type::Bool,
-                        event_tags:   Some(vec![1, 2, 3]),
-                    },
+                    event:     Type::EnumEvent(vec![(
+                        String::from("EventOne"),
+                        Fields::Named(vec![(String::from("index"), Type::U8)]),
+                        0,
+                    )]),
                 }),
+
                 receive: BTreeMap::from([
                     ("b".into(), FunctionV3::Rv(Type::String(SizeLength::U32))),
                     ("c".into(), FunctionV3::ParamRv {
