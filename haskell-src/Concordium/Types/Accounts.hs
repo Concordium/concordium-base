@@ -72,11 +72,14 @@ module Concordium.Types.Accounts (
     AccountStake (..),
     serializeAccountStake,
     deserializeAccountStake,
-    AccountStakeHash,
+    AccountStakeHash (..),
     getAccountStakeHash,
     AccountInfo (..),
     AccountStakingInfo (..),
     toAccountStakingInfo,
+    -- * Account structure version
+    AccountStructureVersion(..),
+    AccountStructureVersionFor,
 ) where
 
 import Data.Aeson
@@ -93,6 +96,19 @@ import Concordium.Types
 import Concordium.Types.Accounts.Releases
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
+
+-- |The version of the account structure. This is used to index types that vary the account
+-- structure.
+data AccountStructureVersion =
+    AccountStructureV0 -- ^Account structure used prior to P5
+    | AccountStructureV1 -- ^Account structure used from P5
+
+-- |The account structure version associated with an account version.
+type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructureVersion where
+    AccountStructureVersionFor 'AccountV0 = 'AccountStructureV0
+    AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
+    AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
+
 
 -- |The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
@@ -424,7 +440,7 @@ deserializeAccountStake = case delegationSupport @av of
             1 -> AccountStakeDelegate <$> get
             _ -> fail "Invalid stake type"
 
-newtype AccountStakeHash (av :: AccountVersion) = AccountStakeHash Hash.Hash
+newtype AccountStakeHash (av :: AccountVersion) = AccountStakeHash {theAccountStakeHash :: Hash.Hash}
     deriving (Eq, Ord, Show, Serialize, ToJSON, FromJSON) via Hash.Hash
 
 -- |Hash of 'AccountStakeNone' in 'AccountV0'.
@@ -476,18 +492,17 @@ instance HashableTo (AccountStakeHash 'AccountV1) (AccountStake 'AccountV1) wher
 -- |Hash of 'AccountStakeNone' in 'AccountV2'.
 accountStakeNoneHashV2 :: AccountStakeHash 'AccountV2
 {-# NOINLINE accountStakeNoneHashV2 #-}
-accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "NoStake"
+accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "A2NoStake"
 
--- |The 'AccountV2' hashing of 'AccountStake' uses tags to enforce distinction between the cases.
+-- |The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
     getHash AccountStakeNone = accountStakeNoneHashV2
     getHash (AccountStakeBaker AccountBaker{..}) =
         AccountStakeHash $
             Hash.hashLazy $
-                "Baker"
+                "A2Baker"
                     <> runPutLazy
                         ( do
-                            put _stakedAmount
                             put _stakeEarnings
                             put _accountBakerInfo
                             put _bakerPendingChange
@@ -495,12 +510,13 @@ instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) wher
     getHash (AccountStakeDelegate AccountDelegationV1{..}) =
         AccountStakeHash $
             Hash.hashLazy $
-                "Delegation"
+                "A2Delegation"
                     <> runPutLazy
                         ( do
-                            put _delegationStakedAmount
+                            put _delegationIdentity
                             put _delegationStakeEarnings
                             put _delegationTarget
+                            put _delegationPendingChange
                         )
 
 -- |Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
