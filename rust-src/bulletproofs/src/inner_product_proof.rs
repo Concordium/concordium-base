@@ -1,3 +1,4 @@
+use crate::utils::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
@@ -331,40 +332,36 @@ pub fn verify_inner_product<C: Curve>(
     P_prime.minus_point(&RHS).is_zero_point()
 }
 
-/// This function is an optimized varaint of the above.
-/// It is verified whether P'=<a,G>+<b,H>+<a,b>Q for P' =
-/// multiexp(P_prime_bases, P_prime_exponents) and H_i =
-/// H_vec[i]^H_exponents[i]. Arguments:
-/// - transcript - the proof transcipt
-/// - G_vec - the vector G of elliptic curve points
-/// - H_vec - the vector H of elliptic curve points
-/// - H_exponents - vector of scalars to whose powers the elements H_vec are
-///   raised
-/// - P_prime_bases - vector of points for computing curve point P'. It is
-///   assumed that the the first base points are G_vec | H_vec, which are
-///   implicit and omitted from P_prime_bases
-/// - P_prime_exponents - vector of scalars to whose powers the elements
+/// This function is an optimized variant of the above.
+/// It is verified whether P'=<a,G>+<b,H'>+<a,b>Q for P' =
+/// multiexp(P_prime_bases, P_prime_exponents) and H'_i =
+/// H_i^H_exponents_i. Arguments:
+/// - transcript - the proof transcript
+/// - gens - generators containing vectors G and H both of length n
+/// - H_exponents - slice of scalars to whose powers the H_i are raised
+/// - P_prime_bases - slice of points for computing curve point P'. It is
+///   assumed that the the first base points are G | H, which are implicit and
+///   omitted from P_prime_bases
+/// - P_prime_exponents - slice of scalars to whose powers the elements
 ///   P_prime_bases are raised
 /// - Q - the elliptic curve point Q
 /// - proof - the inner product proof
 /// Precondictions:
-/// G_vec, H_vec, and H_exponents should all be of the same length, and this
+/// G, H, and H_exponents should all be of the same length n, and this
 /// length must a power of 2. Furthermore, the length of P_prime_exponents is
-/// equal to the length of P_prime_bases plus the length of G_vec plus the
-/// length of H_vec (since those are omitted from P_prime_bases). Warning: This
-/// function modifies the given arguments!
+/// equal to the length of P_prime_bases plus of 2n (since G and H are omitted
+/// from P_prime_bases).
 #[allow(non_snake_case)]
-pub fn verify_inner_product_faster<C: Curve>(
+pub fn verify_inner_product_with_scalars<C: Curve>(
     transcript: &mut RandomOracle,
-    G_vec: &mut Vec<C>,
-    H_vec: &mut Vec<C>,
-    H_exponents: &mut Vec<<C as Curve>::Scalar>,
-    P_prime_bases: &mut Vec<C>,
-    P_prime_exponents: &mut Vec<<C as Curve>::Scalar>,
+    gens: &Generators<C>,
+    H_exponents: &[C::Scalar],
+    P_prime_bases: &[C],
+    P_prime_exponents: &[C::Scalar],
     Q: &C,
     proof: &InnerProductProof<C>,
 ) -> bool {
-    let n = G_vec.len();
+    let n = gens.G_H.len();
     let L_R = &proof.lr_vec;
     let a = proof.a;
     let b = proof.b;
@@ -403,18 +400,30 @@ pub fn verify_inner_product_faster<C: Curve>(
         G_exps[i].mul_assign(&a);
     }
 
-    let mut H_exps = H_exponents;
-    for i in 0..H_exps.len() {
-        H_exps[i].mul_assign(&s_inv[i]);
-        H_exps[i].mul_assign(&b);
+    let mut rhs_bases = Vec::with_capacity(2 * n + 1 + nsum_bases.len() + P_prime_bases.len());
+    // Add G and H from gens to rhs_bases
+    for i in 0..n {
+        rhs_bases.push(gens.G_H[i].0);
+    }
+    for i in 0..n {
+        rhs_bases.push(gens.G_H[i].1);
     }
 
-    let rhs_bases = G_vec;
-    rhs_bases.append(H_vec);
+    // add further elements to rhs_bases
     rhs_bases.push(*Q);
     rhs_bases.append(&mut nsum_bases);
-    let mut rhs_exps = G_exps;
-    rhs_exps.append(&mut H_exps);
+    rhs_bases.extend(P_prime_bases);
+
+    let mut rhs_exps = Vec::with_capacity(rhs_bases.len());
+    rhs_exps.append(&mut G_exps);
+
+    // Compute H_exps_i = H_exponents_i * s_i^-1 * b and add to rhs_exps
+    for i in 0..H_exponents.len() {
+        let mut hi = H_exponents[i];
+        hi.mul_assign(&s_inv[i]);
+        hi.mul_assign(&b);
+        rhs_exps.push(hi);
+    }
     rhs_exps.push(ab);
     rhs_exps.append(&mut nsum_exps);
 
@@ -429,12 +438,9 @@ pub fn verify_inner_product_faster<C: Curve>(
     for i in 0..nppexps.len() {
         nppexps[i].negate();
     }
-
-    rhs_bases.append(P_prime_bases);
     rhs_exps.append(&mut nppexps);
 
     let RHS = multiexp(&rhs_bases, &rhs_exps);
-
     RHS.is_zero_point()
 }
 

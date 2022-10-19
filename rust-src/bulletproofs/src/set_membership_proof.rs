@@ -492,7 +492,7 @@ pub fn verify_naive<C: Curve>(
     };
     let y_inv_n = z_vec(y_inv, 0, n);
 
-    let (G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
 
     // compute h' = (h_i^{(y^{-n})_i}) = (h[0], h[1]^{y_inv}, h[2]^{y_inv^2}, ...)
     let mut h_prime = Vec::with_capacity(n);
@@ -520,13 +520,21 @@ pub fn verify_naive<C: Curve>(
     minus_z.negate();
     let mut minus_z_vec = vec![minus_z; n];
 
-    let mut P_prime_exps = vec![tx, minus_e_tilde, C::Scalar::one(), x];
-    P_prime_exps.append(&mut h_exponents);
+    let mut P_prime_exps = Vec::with_capacity(2 * n + 4);
     P_prime_exps.append(&mut minus_z_vec);
+    P_prime_exps.append(&mut h_exponents);
+    P_prime_exps.push(tx);
+    P_prime_exps.push(minus_e_tilde);
+    P_prime_exps.push(C::Scalar::one());
+    P_prime_exps.push(x);
 
-    let mut P_prime_bases = vec![g_hat, v_keys.h, A, S];
-    P_prime_bases.append(&mut H);
-    P_prime_bases.append(&mut G.clone());
+    let mut P_prime_bases = Vec::with_capacity(2 * n + 4);
+    P_prime_bases.extend(&G);
+    P_prime_bases.extend(&H);
+    P_prime_bases.push(g_hat);
+    P_prime_bases.push(v_keys.h);
+    P_prime_bases.push(A);
+    P_prime_bases.push(S);
 
     // Finally compute P' and verify inner product
     let P_prime = multiexp(&P_prime_bases, &P_prime_exps);
@@ -620,7 +628,8 @@ pub fn verify<C: Curve>(
     let mut z4 = z3; // z^4
     z4.mul_assign(&z);
     let ns = C::scalar_from_u64(n as u64); // n as scalar
-                                           // compute yn = <1, y_n>
+
+    // compute yn = <1, y_n>
     let mut yi = C::Scalar::one(); // y^0
     let mut ip_1_yn = C::Scalar::zero();
     for _ in 0..n {
@@ -680,10 +689,7 @@ pub fn verify<C: Curve>(
         Some(inv) => inv,
         None => return Err(VerificationError::DivisionError),
     };
-    let mut y_inv_n = z_vec(y_inv, 0, n);
-
-    let (mut G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-
+    let y_inv_n = z_vec(y_inv, 0, n);
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
 
@@ -704,23 +710,23 @@ pub fn verify<C: Curve>(
     minus_z.negate();
     let mut minus_z_vec = vec![minus_z; n];
 
-    let mut P_prime_exps = minus_z_vec;
+    let mut P_prime_exps = Vec::with_capacity(2 * n + 4);
+    P_prime_exps.append(&mut minus_z_vec);
     P_prime_exps.append(&mut h_exponents);
     P_prime_exps.push(tx);
     P_prime_exps.push(minus_e_tilde);
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    let mut P_prime_bases = vec![g_hat, v_keys.h, A, S];
+    let P_prime_bases = vec![g_hat, v_keys.h, A, S];
 
     // Finally verify inner product
-    let ip_verification = verify_inner_product_faster(
+    let ip_verification = verify_inner_product_with_scalars(
         transcript,
-        &mut G,
-        &mut H,
-        &mut y_inv_n,
-        &mut P_prime_bases,
-        &mut P_prime_exps,
+        gens,
+        &y_inv_n,
+        &P_prime_bases,
+        &P_prime_exps,
         &g_hat,
         &proof.ip_proof,
     );
@@ -940,6 +946,7 @@ mod tests {
     type SomeCurve = G1;
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_smp_with_ultra_verification() {
         let rng = &mut thread_rng();
         let mut transcript = RandomOracle::empty();
@@ -978,6 +985,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
     fn test_smp_verification() {
         let rng = &mut thread_rng();
         let mut transcript = RandomOracle::empty();
