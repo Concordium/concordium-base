@@ -749,6 +749,8 @@ pub enum UltraVerificationError {
     IpScalarCheckFailed,
     /// Could not invert the given y
     CouldNotInvertY,
+    /// Verification sum non-zero
+    VerificationSumNonZero,
 }
 
 #[allow(non_snake_case)]
@@ -760,7 +762,7 @@ pub fn verify_ultra_efficient<C: Curve, R: Rng>(
     proof: &SetMembershipProof<C>,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
-) -> Result<bool, UltraVerificationError> {
+) -> Result<(), UltraVerificationError> {
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
     transcript.append_message(b"V", &V.0);
@@ -938,7 +940,11 @@ pub fn verify_ultra_efficient<C: Curve, R: Rng>(
 
     let sum = multiexp(&all_points, &all_scalars);
 
-    Ok(sum.is_zero_point())
+    if !sum.is_zero_point() {
+        return Err(UltraVerificationError::VerificationSumNonZero);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -983,8 +989,6 @@ mod tests {
             &v_keys,
         );
         assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result);
     }
 
     #[test]
