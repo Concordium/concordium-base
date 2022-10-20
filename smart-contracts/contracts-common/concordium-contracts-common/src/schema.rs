@@ -118,29 +118,6 @@ pub struct ContractV3 {
     pub receive: BTreeMap<String, FunctionV3>,
 }
 
-/// Contains event schema and associated event tag vector.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EventSchema {
-    /// Event schema.
-    pub event_schema: Type,
-    /// Event tags are mapped to enum indexes:
-    /// The event at index 0 in the event schema enum is mapped to the event tag
-    /// value `event_tags[0]`. The event at index 1 in the event schema enum
-    /// is mapped to the event tag value `event_tags[1]`. ...
-    pub event_tags:   Option<Vec<u8>>,
-}
-
-impl Deserial for EventSchema {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let event_schema = source.get()?;
-        let event_tags = source.get()?;
-        Ok(EventSchema {
-            event_schema,
-            event_tags,
-        })
-    }
-}
-
 impl<A: Deserial, B: Deserial, C: Deserial> Deserial for (A, B, C) {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let a = source.get()?;
@@ -155,14 +132,6 @@ impl<A: Serial, B: Serial, C: Serial> Serial for (A, B, C) {
         self.0.serial(out)?;
         self.1.serial(out)?;
         self.2.serial(out)?;
-        Ok(())
-    }
-}
-
-impl Serial for EventSchema {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.event_schema.serial(out)?;
-        self.event_tags.serial(out)?;
         Ok(())
     }
 }
@@ -425,6 +394,7 @@ pub enum Type {
     ByteList(SizeLength),
     /// A fixed sized list of bytes.
     ByteArray(u32),
+    /// A sum type for event schemas. The event tag is represented as u8.
     EnumEvent(Vec<(String, Fields, u8)>),
 }
 
