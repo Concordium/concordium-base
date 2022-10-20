@@ -2,6 +2,7 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 use ff::Field;
+#[cfg(test)]
 use rand::Rng;
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]

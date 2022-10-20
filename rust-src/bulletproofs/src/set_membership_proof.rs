@@ -30,7 +30,7 @@ pub struct SetMembershipProof<C: Curve> {
 }
 
 /// Error messages detailing why proof generation failed
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ProverError {
     /// The set must have a size of a power of two
     SetSizeNotPowerOfTwo,
@@ -59,9 +59,7 @@ fn a_L_a_R<F: Field>(v: &F, set_vec: &Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
     for i in 0..n {
         let mut bit = F::zero();
         let s_i = set_vec.get(i);
-        if s_i.is_none() {
-            return None;
-        }
+        s_i?;
         if (!found_element) && (*v == *s_i.unwrap()) {
             bit = F::one();
             found_element = true;
@@ -337,7 +335,7 @@ pub fn prove<C: Curve, R: Rng>(
 }
 
 /// Error messages detailing why proof verification failed
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
     /// The set must have a size of a power of two
     SetSizeNotPowerOfTwo,
@@ -379,7 +377,8 @@ pub fn verify<C: Curve>(
     }
 
     // TODO: Check whether n fits into u64
-    // TODO: Check whether u64 integers fit into the field (note this should be the case assuming reasonable fields)
+    // TODO: Check whether u64 integers fit into the field (note this should be the
+    // case assuming reasonable fields)
     let the_set_vec = get_set_vector::<C>(the_set);
 
     // Domain separation
@@ -422,7 +421,7 @@ pub fn verify<C: Curve>(
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
 
-    // compute delta(y,z) = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>) 
+    // compute delta(y,z) = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>)
     // first compute helper values
     let mut z2 = z; // z^2
     z2.mul_assign(&z);
@@ -458,7 +457,7 @@ pub fn verify<C: Curve>(
     z3_term.sub_assign(&ip_1_s);
     z3_term.mul_assign(&z3);
 
-    // delta_yz = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>) 
+    // delta_yz = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>)
     delta_yz.add_assign(&z3_term);
     // End of delta_yz computation
 
@@ -539,7 +538,7 @@ pub fn verify<C: Curve>(
     Ok(())
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum UltraVerificationError {
     /// The length of G_H was less than |S|, which is too small
     NotEnoughGenerators,
