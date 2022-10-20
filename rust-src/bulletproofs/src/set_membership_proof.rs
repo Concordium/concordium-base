@@ -379,6 +379,7 @@ pub fn verify<C: Curve>(
     }
 
     // TODO: Check whether n fits into u64
+    // TODO: Check whether u64 integers fit into the field (note this should be the case assuming reasonable fields)
     let the_set_vec = get_set_vector::<C>(the_set);
 
     // Domain separation
@@ -421,7 +422,7 @@ pub fn verify<C: Curve>(
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
 
-    // compute delta(y,z) = -nz^4 + z^3 (1 - <1,s>) + (z-z^2) (<1,y^n>)
+    // compute delta(y,z) = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>) 
     // first compute helper values
     let mut z2 = z; // z^2
     z2.mul_assign(&z);
@@ -451,13 +452,13 @@ pub fn verify<C: Curve>(
     let mut zn = ns;
     zn.mul_assign(&z);
 
-    // compute z3_term = z^3 (1 - <1,s> + zn)
+    // compute z3_term = z^3 (1 - zn - <1,s>)
     let mut z3_term = C::Scalar::one();
-    z3_term.sub_assign(&ip_1_s);
     z3_term.sub_assign(&zn);
+    z3_term.sub_assign(&ip_1_s);
     z3_term.mul_assign(&z3);
 
-    // delta_yz = (z - z^2) (<1,y^n>) + z^3 (1 - <1,s> + zn)
+    // delta_yz = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>) 
     delta_yz.add_assign(&z3_term);
     // End of delta_yz computation
 
