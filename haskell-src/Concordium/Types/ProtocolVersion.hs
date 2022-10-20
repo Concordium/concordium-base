@@ -29,7 +29,6 @@ import Data.Aeson
 import Data.Aeson.Types
 import Data.Serialize
 import Data.Word
-import GHC.TypeNats
 
 -- |An enumeration of the supported versions of the consensus protocol.
 -- Binary and JSON serializations are as Word64 corresponding to the protocol number.
@@ -65,13 +64,6 @@ protocolVersionFromWord64 3 = return P3
 protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
-
-type family PVNat (pv :: ProtocolVersion) :: Nat where
-    PVNat 'P1 = 1
-    PVNat 'P2 = 2
-    PVNat 'P3 = 3
-    PVNat 'P4 = 4
-    PVNat 'P5 = 5
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64
@@ -223,11 +215,6 @@ instance IsAccountVersion 'AccountV1 where
 
 instance IsAccountVersion 'AccountV2 where
     accountVersion = SAccountV2
-
-type family AVNat (av :: AccountVersion) where
-    AVNat 'AccountV0 = 0
-    AVNat 'AccountV1 = 1
-    AVNat 'AccountV2 = 2
 
 -- |A type used at the kind level to denote that delegation is or is not expected to be supported
 -- at an account version. This is intended to give more descriptive type errors in cases where the

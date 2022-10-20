@@ -51,7 +51,6 @@ module Concordium.Types.Accounts (
     coercePendingChangeEffectiveV1,
     StakePendingChange' (..),
     StakePendingChange,
-    stakePendingChangeTimestamp,
     AccountBaker (..),
     -- |The amount staked by the baker.
     stakedAmount,
@@ -294,10 +293,6 @@ instance Serialize effectiveTime => Serialize (StakePendingChange' effectiveTime
             _ -> fail "Invalid StakePendingChange"
 
 type StakePendingChange (av :: AccountVersion) = StakePendingChange' (PendingChangeEffective av)
-
--- |Coerce a 'StakePendingChange' to use 'Timestamp' for the effective time.
-stakePendingChangeTimestamp :: forall av. (AVSupportsDelegation av, IsAccountVersion av) => StakePendingChange av -> StakePendingChange' Timestamp
-stakePendingChangeTimestamp = fmap pendingChangeEffectiveTimestamp
 
 -- |A baker associated with an account.
 data AccountBaker (av :: AccountVersion) = AccountBaker
