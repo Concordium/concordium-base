@@ -14,6 +14,8 @@ use curve_arithmetic::*;
 use ff::Field;
 
 use rand::*;
+use std::ops::{Neg, AddAssign, SubAssign, MulAssign, Mul};
+
 
 /// A secret key
 #[derive(Debug, Serialize)]

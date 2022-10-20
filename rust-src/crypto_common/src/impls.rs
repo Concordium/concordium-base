@@ -1,10 +1,14 @@
-use anyhow::bail;
+use anyhow::{bail, Context};
 use byteorder::ReadBytesExt;
 
 use ff::PrimeField;
-use group::{CurveAffine, CurveProjective, EncodedPoint};
-use pairing::bls12_381::{
-    Fq12, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
+use pairing::{
+    Engine, PairingCurveAffine,
+};
+use bls12_381::{
+    Bls12, G1Affine, G2Affine,
+    G2Prepared, G1Projective, G2Projective, Scalar as Fr,
+    Gt,
 };
 use std::convert::TryFrom;
 
@@ -12,35 +16,37 @@ use crate::serialize::*;
 
 impl Deserial for Fr {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {
-        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
+        let mut frrepr: [u64; 4] = [0u64; 4];
         // Read the scalar in big endian.
         for digit in frrepr.as_mut().iter_mut().rev() {
             *digit = source.get()?;
         }
-        Ok(Fr::from_repr(frrepr)?)
+        Ok(Fr::from_raw(frrepr))
     }
 }
 
 impl Serial for Fr {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let frpr = &self.into_repr();
+        let frpr = &self.to_repr();
         for a in frpr.as_ref().iter().rev() {
             a.serial(out);
         }
     }
 }
 
-impl Deserial for G1 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G1> {
-        let mut g = G1Compressed::empty();
+impl Deserial for G1Projective {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G1Projective> {
+        let mut g: [u8; 48] = [0; 48];
         source.read_exact(g.as_mut())?;
-        Ok(g.into_affine()?.into_projective())
+        let maybe_g1: Option<G1Affine> = Option::from(G1Affine::from_compressed(&g));
+        Ok(maybe_g1.context("Could not deserialize G1 point.")?.into())
+        // Ok(g.into_affine()?.into_projective())
     }
 }
 
-impl Serial for G1 {
+impl Serial for G1Projective {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let g = self.into_affine().into_compressed();
+        let g = G1Affine::from(self).to_compressed();
         let g_bytes = g.as_ref();
         if let Err(e) = out.write_all(g_bytes) {
             panic!(
@@ -53,15 +59,15 @@ impl Serial for G1 {
 
 impl Deserial for G1Affine {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G1Affine> {
-        let mut g = G1Compressed::empty();
+        let mut g: [u8; 48] = [0; 48];
         source.read_exact(g.as_mut())?;
-        Ok(g.into_affine()?)
+        Ok(Option::from(G1Affine::from_compressed(&g)).context("Could not deserialize G1Affine point.")?)
     }
 }
 
 impl Serial for G1Affine {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let g = self.into_compressed();
+        let g = self.to_compressed();
         let g_bytes = g.as_ref();
         if let Err(e) = out.write_all(g_bytes) {
             panic!(
@@ -72,17 +78,18 @@ impl Serial for G1Affine {
     }
 }
 
-impl Deserial for G2 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G2> {
-        let mut g = G2Compressed::empty();
+impl Deserial for G2Projective {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G2Projective> {
+        let mut g: [u8; 96] = [0; 96];
         source.read_exact(g.as_mut())?;
-        Ok(g.into_affine()?.into_projective())
+        let maybe_g2: Option<G2Affine> = Option::from(G2Affine::from_compressed(&g));
+        Ok(maybe_g2.context("Could not deserialize G2 point.")?.into())
     }
 }
 
-impl Serial for G2 {
+impl Serial for G2Projective {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let g = self.into_affine().into_compressed();
+        let g = G2Affine::from(self).to_compressed();
         let g_bytes = g.as_ref();
         if let Err(e) = out.write_all(g_bytes) {
             panic!(
@@ -95,15 +102,15 @@ impl Serial for G2 {
 
 impl Deserial for G2Affine {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<G2Affine> {
-        let mut g = G2Compressed::empty();
+        let mut g:[u8; 96] = [0; 96];
         source.read_exact(g.as_mut())?;
-        Ok(g.into_affine()?)
+        Ok(Option::from(G2Affine::from_compressed(&g)).context("Could not deserialize G2Affine point.")?)
     }
 }
 
 impl Serial for G2Affine {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let g = self.into_compressed();
+        let g = self.to_compressed();
         let g_bytes = g.as_ref();
         if let Err(e) = out.write_all(g_bytes) {
             panic!(
@@ -118,11 +125,11 @@ impl Serial for G2Affine {
 /// via that specific tower of extensions (of degrees) 2 -> 3 -> 2,
 /// and the specific representation of those fields.
 /// We use big-endian representation all the way down to the field Fq.
-impl Serial for Fq12 {
+impl Serial for Gt {
     fn serial<B: Buffer>(&self, out: &mut B) {
         // coefficients in the extension F_6
-        let c0_6 = self.c0;
-        let c1_6 = self.c1;
+        let c0_6 = self.serial(out); //self.0.c0;
+        let c1_6 = //self.0.c1;
 
         let coeffs = [
             // coefficients of c1_6 in the extension F_2

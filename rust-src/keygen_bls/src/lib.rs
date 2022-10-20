@@ -3,8 +3,10 @@
 use curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
 use hkdf::Hkdf;
-use pairing::bls12_381::{Fr, FrRepr, G1};
+use bls12_381::{Scalar as Fr, G1Projective as  G1};
 use sha2::{Digest, Sha256};
+
+use std::ops::{Neg, AddAssign, SubAssign, MulAssign, Mul};
 
 /// This function is an implementation of the procedure described in <https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3>
 /// It computes a random scalar in Fr given a seed (the argument `ikm`).
@@ -24,9 +26,9 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength
     // shift with
     // 452312848583266388373324160190187140051835877600158453279131187530910662656 =
     // 2^248 = 2^(31*8)
-    let shift = Fr::from_repr(FrRepr([0, 0, 0, 72057594037927936])).unwrap();
+    let shift = Fr::from_raw([0, 0, 0, 72057594037927936]);
     let mut salt = Sha256::digest(&salt[..]);
-    while sk.is_zero() {
+    while sk.is_zero().into() {
         let (_, h) = Hkdf::<Sha256>::extract(Some(&salt), &ikm);
         let mut okm = vec![0u8; l as usize];
         h.expand(&l_bytes, &mut okm)?;
@@ -74,9 +76,9 @@ pub fn keygen_bls_deprecated(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::In
     // shift with
     // 452312848583266388373324160190187140051835877600158453279131187530910662656 =
     // 2^248
-    let shift = Fr::from_repr(FrRepr([0, 0, 0, 72057594037927936])).unwrap();
+    let shift = Fr::from_raw([0, 0, 0, 72057594037927936]);
     let mut salt = Sha256::digest(&salt[..]);
-    while sk.is_zero() {
+    while sk.is_zero().into() {
         let (_, h) = Hkdf::<Sha256>::extract(Some(&salt), &ikm);
         let mut okm = vec![0u8; l as usize];
         h.expand(&l_bytes, &mut okm)?;

@@ -2,11 +2,12 @@ use crate::inner_product_proof::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
-use ff::{Field, PrimeField};
+use ff::{Field, PrimeFieldBits};
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
 use std::iter::once;
+use std::ops::{Neg, AddAssign, SubAssign, MulAssign, Mul};
 
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
@@ -121,8 +122,8 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 ) -> Option<RangeProof<C>> {
     let mut v_integers = Vec::with_capacity(v_vec.len());
     for &v in v_vec {
-        let rep = v.into_repr();
-        let r = rep.as_ref()[0];
+        let rep = v.to_le_bits();
+        let r = rep.as_raw_slice()[0];
         v_integers.push(r);
     }
 
@@ -314,9 +315,9 @@ pub fn prove<C: Curve, T: Rng>(
     let mut t_2_tilde_sum = C::Scalar::zero();
     for i in 0..t_1.len() {
         t_1_sum.add_assign(&t_1[i]);
-        t_1_tilde_sum.add_assign(&t_1_tilde[i]);
+        t_1_tilde_sum.add_assign(*t_1_tilde[i]);
         t_2_sum.add_assign(&t_2[i]);
-        t_2_tilde_sum.add_assign(&t_2_tilde[i]);
+        t_2_tilde_sum.add_assign(*t_2_tilde[i]);
     }
     let T_1 = B
         .mul_by_scalar(&t_1_sum)
@@ -365,9 +366,9 @@ pub fn prove<C: Curve, T: Rng>(
         z2vj_tilde.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation
         z2vj_tilde.mul_assign(&v_tilde_vec[j]);
         let mut xt1j_tilde = x;
-        xt1j_tilde.mul_assign(&t_1_tilde[j]);
+        xt1j_tilde.mul_assign(*t_1_tilde[j]);
         let mut x2t2j_tilde = x2;
-        x2t2j_tilde.mul_assign(&t_2_tilde[j]);
+        x2t2j_tilde.mul_assign(*t_2_tilde[j]);
         let mut txj_tilde = z2vj_tilde;
         txj_tilde.add_assign(&xt1j_tilde);
         txj_tilde.add_assign(&x2t2j_tilde);
@@ -387,7 +388,7 @@ pub fn prove<C: Curve, T: Rng>(
     let Q = B.mul_by_scalar(&w);
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
-    let y_inv = match y.inverse() {
+    let y_inv = match y.invert().into() {
         Some(inv) => inv,
         None => return None,
     };
@@ -555,7 +556,7 @@ pub fn verify_efficient<C: Curve>(
     let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
     let mut s_inv = s;
     s_inv.reverse();
-    let y_inv = match y.inverse() {
+    let y_inv = match y.invert().into() {
         Some(inv) => inv,
         None => return Err(VerificationError::DivisionError),
     };
@@ -583,14 +584,12 @@ pub fn verify_efficient<C: Curve>(
     B_scalar.sub_assign(&ab);
     B_scalar.mul_assign(&w);
     let B_term = B.mul_by_scalar(&B_scalar);
-    let mut minus_e_tilde = e_tilde;
-    minus_e_tilde.negate();
+    let minus_e_tilde = e_tilde.neg();
     let B_tilde_scalar = minus_e_tilde;
     let B_tilde_term = B_tilde.mul_by_scalar(&B_tilde_scalar);
     let mut G_scalars = Vec::with_capacity(G.len());
     for si in s {
-        let mut G_scalar = z;
-        G_scalar.negate();
+        let mut G_scalar = z.neg();
         let mut sa = si;
         sa.mul_assign(&a);
         G_scalar.sub_assign(&sa);
@@ -634,7 +633,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
     randomness_b: &Randomness<C>,
 ) -> Option<RangeProof<C>> {
     let mut randomness = **randomness_b;
-    randomness.sub_assign(randomness_a);
+    randomness.sub_assign(**randomness_a);
     prove(transcript, csprng, n, 2, &[b - a, a], gens, key, &[
         Randomness::new(randomness),
         Randomness::new(**randomness_a),

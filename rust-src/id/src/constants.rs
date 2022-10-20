@@ -6,7 +6,7 @@ use crypto_common::{
     Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };
 use curve_arithmetic::{Curve, Pairing};
-use pairing::bls12_381::G1;
+use bls12_381::G1Projective as G1;
 use serde::{
     de::{self, Visitor},
     Deserializer, Serializer,
@@ -15,12 +15,12 @@ use std::{fmt, io::Cursor, str::FromStr};
 use thiserror::Error;
 
 /// Curve used by the anonymity revoker.
-pub type ArCurve = pairing::bls12_381::G1;
+pub type ArCurve = bls12_381::G1Projective;
 /// Pairing used by the identity provider.
-pub type IpPairing = pairing::bls12_381::Bls12;
+pub type IpPairing = bls12_381::Bls12;
 /// Field used by the identity provider and anonymity revoker.
 /// This isthe base field of both the ArCurve and the IpPairing.
-pub type BaseField = <pairing::bls12_381::Bls12 as Pairing>::ScalarField;
+pub type BaseField = <bls12_381::Bls12 as Pairing>::ScalarField;
 
 /// Index used to create the RegId of the initial credential.
 pub const INITIAL_CREDENTIAL_INDEX: u8 = 0;

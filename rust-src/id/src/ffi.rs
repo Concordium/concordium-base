@@ -8,7 +8,7 @@ use crate::{
 use crypto_common::{size_t, types::TransactionTime, *};
 use either::Either::{Left, Right};
 use ffi_helpers::*;
-use pairing::bls12_381::{Bls12, G1};
+use bls12_381::{Bls12, G1Projective as G1};
 use pedersen_scheme::CommitmentKey as PedersenKey;
 use rand::thread_rng;
 use std::{collections::BTreeMap, convert::TryInto, io::Cursor};

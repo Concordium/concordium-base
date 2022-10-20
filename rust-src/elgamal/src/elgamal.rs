@@ -1,7 +1,9 @@
 use crate::{cipher::*, public::*, secret::*};
 use curve_arithmetic::{Curve, Value};
-use ff::{Field, PrimeField};
+use ff::{Field, PrimeFieldBits};
 use rand::*;
+use std::ops::{Neg, AddAssign, SubAssign, MulAssign, Mul};
+
 
 /// Possible chunk sizes in bits.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -84,8 +86,8 @@ pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: ChunkSize) -> Vec<
     let size = usize::from(u8::from(chunk_size));
     let n = C::SCALAR_LENGTH / size;
     let mut out = Vec::with_capacity(n);
-    let repr = val.into_repr();
-    let u64_chunks = repr.as_ref();
+    let repr = val.to_le_bits();
+    let u64_chunks = repr.as_raw_slice();
     for &chunk in u64_chunks {
         out.extend(
             chunk_size
@@ -113,8 +115,8 @@ pub fn chunks_to_value<C: Curve>(chunks: &[Value<C>], chunk_size: ChunkSize) -> 
     for chunk_section in chunks.chunks(64 / usize::from(u8::from(chunk_size))) {
         // get the u64 encoded in this chunk section
         let v = chunk_size.chunks_to_u64(chunk_section.iter().map(|chunk| {
-            let repr = chunk.into_repr();
-            repr.as_ref()[0]
+            let repr = chunk.to_le_bits();
+            repr.as_raw_slice()[0]
         }));
         let mut val = C::scalar_from_u64(v);
         val.mul_assign(&factor);

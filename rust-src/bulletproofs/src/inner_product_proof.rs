@@ -3,6 +3,8 @@ use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::RandomOracle;
+use std::ops::{Neg, AddAssign, SubAssign, MulAssign, Mul};
+
 
 #[derive(Clone, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
@@ -133,7 +135,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
         L_R.push((Lj, Rj));
         let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
         // println!("Prover's u_{:?} = {:?}", j, u_j);
-        let u_j_inv = match u_j.inverse() {
+        let u_j_inv = match u_j.invert().into() {
             Some(inv) => inv,
             _ => return None,
         };
@@ -237,7 +239,7 @@ pub fn verify_scalars<C: Curve>(
         transcript.append_message(b"Lj", Lj);
         transcript.append_message(b"Rj", Rj);
         let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
-        let u_j_inv = match u_j.inverse() {
+        let u_j_inv = match u_j.invert().into() {
             Some(inv) => inv,
             _ => return None,
         };

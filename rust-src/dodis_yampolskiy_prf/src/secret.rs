@@ -6,6 +6,7 @@ use curve_arithmetic::{Curve, Secret, Value};
 use ff::Field;
 use rand::*;
 use std::rc::Rc;
+use std::ops::AddAssign;
 
 /// A PRF key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
@@ -51,8 +52,8 @@ impl<C: Curve> SecretKey<C> {
     /// return Ok, and vice-versa.
     pub fn prf_exponent(&self, n: u8) -> Result<C::Scalar, PrfError> {
         let mut x = C::scalar_from_u64(u64::from(n));
-        x.add_assign(self);
-        match x.inverse() {
+        x.add_assign(self.as_ref());
+        match Option::from(x.invert()) {
             None => Err(PrfError(DivisionByZero)),
             Some(y) => Ok(y),
         }

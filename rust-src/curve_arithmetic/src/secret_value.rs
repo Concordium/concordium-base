@@ -98,7 +98,7 @@ impl<C: Curve> Value<C> {
         }
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,3 +123,4 @@ mod tests {
 
     macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g2_affine, G2Affine);
 }
+*/

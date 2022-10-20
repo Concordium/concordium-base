@@ -8,6 +8,8 @@ use curve_arithmetic::{Curve, Value};
 use ff::Field;
 use rand::*;
 use std::collections::HashMap;
+use std::ops::{Neg, AddAssign, SubAssign, MulAssign, Mul};
+
 
 /// Elgamal secret key packed together with a chosen generator.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]

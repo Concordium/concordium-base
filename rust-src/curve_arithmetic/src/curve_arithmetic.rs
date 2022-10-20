@@ -1,12 +1,15 @@
 use byteorder::ReadBytesExt;
 use crypto_common::{Serial, Serialize};
-use ff::{Field, PrimeField};
+use ff::{Field, PrimeField, PrimeFieldBits};
+use group::Group;
 use rand::*;
 use std::{
     borrow::Borrow,
     fmt::{Debug, Display},
 };
 use thiserror::Error;
+use std::ops::{AddAssign, SubAssign, MulAssign};
+use pairing::{MillerLoopResult};
 
 #[derive(Error, Debug)]
 pub enum CurveDecodingError {
@@ -21,9 +24,9 @@ pub enum CurveDecodingError {
 pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
     /// The prime field of the group order size.
-    type Scalar: PrimeField + Field + Serialize;
+    type Scalar: PrimeField + Field + Serialize + PrimeFieldBits<ReprBits=[u64; 4]>;
     /// The base field of the curve. In general larger than the Scalar field.
-    type Base: Field;
+    // type Base: Field;
     /// A compressed representation of curve points used for compact
     /// serialization.
     type Compressed;
@@ -70,7 +73,7 @@ pub trait Curve:
     fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::Scalar {
         loop {
             let s = Self::generate_scalar(rng);
-            if !s.is_zero() {
+            if !s.is_zero_vartime() {
                 return s;
             }
         }
@@ -90,26 +93,27 @@ pub trait Curve:
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
     /// The first group of the pairing.
-    type G1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G1: Curve<Scalar = Self::ScalarField>;
     /// The second group, must have the same order as [Pairing::G1]. Both G1 and
     /// G2 must be of prime order size.
-    type G2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G2: Curve<Scalar = Self::ScalarField>;
     /// An auxiliary type that is used as an input to the pairing function.
     type G1Prepared;
     /// An auxiliary type that is used as an input to the pairing function.
     type G2Prepared;
     /// Field of the size of G1 and G2.
-    type BaseField: PrimeField;
+    // type BaseField: PrimeField;
     /// The target of the pairing function. The pairing function actually maps
     /// to a subgroup of the same order as G1 and G2, but this subgroup is
     /// not exposed here and is generally not useful. It is subgroup of the
     /// multiplicative subgroup of the field.
-    type TargetField: Field + Serial;
+    type TargetField: Group;
+    type Result: MillerLoopResult<Gt = Self::TargetField>;
 
     /// Compute the miller loop on the given sequence of prepared points.
-    fn miller_loop<'a, I>(i: I) -> Self::TargetField
-    where
-        I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>;
+    fn miller_loop(
+        terms: &[(&Self::G1Prepared, &Self::G2Prepared)]
+    ) -> Self::Result;
 
     /// Check whether the pairing equation holds given the left and right-hand
     /// sides.
@@ -121,10 +125,10 @@ pub trait Pairing: Sized + 'static + Clone {
                 &Self::g2_prepare(g2y),
             ),
         ];
-        let res = Self::miller_loop(pairs.iter());
+        let res = Self::miller_loop(&pairs);
         if let Some(mut y) = Self::final_exponentiation(&res) {
-            y.sub_assign(&Self::TargetField::one());
-            y.is_zero()
+            y.sub_assign(&Self::TargetField::generator());
+            y.is_identity().into()
         } else {
             false
         }
@@ -141,11 +145,11 @@ pub trait Pairing: Sized + 'static + Clone {
             (&Self::g1_prepare(g1x), &Self::g2_prepare(g2x)),
             (&Self::g1_prepare(g1y), &Self::g2_prepare(g2y)),
         ];
-        let res = Self::miller_loop(pairs.iter());
+        let res = Self::miller_loop(&pairs);
         Self::final_exponentiation(&res)
     }
 
-    fn final_exponentiation(_: &Self::TargetField) -> Option<Self::TargetField>;
+    fn final_exponentiation(_: &Self::Result) -> Option<Self::TargetField>;
 
     fn g1_prepare(_: &Self::G1) -> Self::G1Prepared;
     fn g2_prepare(_: &Self::G2) -> Self::G2Prepared;
@@ -153,12 +157,12 @@ pub trait Pairing: Sized + 'static + Clone {
     fn pair(p: &Self::G1, q: &Self::G2) -> Self::TargetField {
         let g1p = Self::g1_prepare(p);
         let g2p = Self::g2_prepare(q);
-        let x = Self::miller_loop([(&g1p, &g2p)].iter());
-        if x.is_zero() {
-            panic!("Cannot perform final exponentiation on 0.")
-        } else {
+        let x = Self::miller_loop(&[(&g1p, &g2p)]);
+        // if x.is_identity().into() {
+        //     panic!("Cannot perform final exponentiation on 0.")
+        // } else {
             Self::final_exponentiation(&x).unwrap()
-        }
+        // }
     }
 
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
@@ -167,7 +171,7 @@ pub trait Pairing: Sized + 'static + Clone {
     fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField {
         loop {
             let s = Self::generate_scalar(rng);
-            if !s.is_zero() {
+            if !s.is_zero_vartime() {
                 return s;
             }
         }
@@ -232,14 +236,16 @@ pub fn multiexp_worker_given_table<C: Curve>(
     let mut wnaf = Vec::with_capacity(k);
     // 1 / 2 scalar
     let half = C::scalar_from_u64(2)
-        .inverse()
-        .expect("Field size must be at least 3.");
+        .invert()
+        .unwrap();
 
     for c in exps.iter() {
         let mut v = Vec::new();
         let mut c = *c;
-        while !c.is_zero() {
-            let limb = c.into_repr().as_ref()[0];
+        while !c.is_zero_vartime() {
+            let u8s = c.to_repr();
+            let u8a : [u8;8] = [u8s.as_ref()[0],u8s.as_ref()[1],u8s.as_ref()[2],u8s.as_ref()[3],u8s.as_ref()[4],u8s.as_ref()[5],u8s.as_ref()[6],u8s.as_ref()[7]];
+            let limb : u64 = u64::from_le_bytes(u8a);
             // if the first bit is set
             if limb & 1 == 1 {
                 let u = limb & mask;
@@ -301,7 +307,7 @@ pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize) -> V
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::G1;
+    use bls12_381::G1Projective as G1;
 
     #[test]
     pub fn test_multiscalar() {
@@ -325,4 +331,22 @@ mod tests {
             )
         }
     }
+
+    #[test]
+    pub fn test_scalar_bits() {
+        use bls12_381::Scalar as Fr;
+        use ff::PrimeFieldBits;
+        let a: [u64; 4] = [17,0,0,0];
+        let s = Fr::from_raw(a);
+        let bits = s.to_le_bits();
+        println!("As scalar: ");
+        println!("{:?}", a);
+        println!("As bits: ");
+        println!("{:?}", bits);
+        println!("As raw slice: ");
+        // let raw: &[u64] = bits.as_raw_slice();
+        println!("{:?}", bits.as_raw_slice());
+        println!("len={}", bits.len());
+    }
+
 }
