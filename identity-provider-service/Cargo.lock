@@ -36,6 +36,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98161a4e3e2184da77bb14f02184cdd111e83bbbcc9979dfee3c44b9a85f5602"
 
 [[package]]
+name = "arrayvec"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
+
+[[package]]
 name = "async-stream"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -234,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "base58check",
  "chrono",
@@ -242,7 +248,9 @@ dependencies = [
  "fnv",
  "hashbrown 0.11.2",
  "num-bigint 0.4.3",
+ "num-integer",
  "num-traits",
+ "rust_decimal",
  "serde",
  "serde_json",
  "thiserror",
@@ -1539,6 +1547,17 @@ checksum = "c1669d81dfabd1b5f8e2856b8bbe146c6192b0ba22162edc738ac0a5de18f054"
 dependencies = [
  "sha2 0.10.6",
  "walkdir",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
+dependencies = [
+ "arrayvec",
+ "num-traits",
+ "serde",
 ]
 
 [[package]]

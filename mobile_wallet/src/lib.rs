@@ -247,6 +247,22 @@ fn get_receive_schema(
                 None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
             }
         }
+        VersionedModuleSchema::V3(module_schema) => {
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            let entrypoint_parameter = contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .parameter();
+            match entrypoint_parameter {
+                Some(value) => value.clone(),
+                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
+            }
+        }
     };
     Ok(receive_schema)
 }
