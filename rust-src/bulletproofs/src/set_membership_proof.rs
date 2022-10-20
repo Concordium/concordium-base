@@ -84,7 +84,7 @@ fn a_L_a_R<F: Field>(v: &F, set_vec: &Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
 /// - v the value
 /// - gens - generators containing vectors G and H both of length nm
 /// - v_keys - commitment keys B and B_tilde
-/// - v_rand - the randomness used to commit to each v using v_keys
+/// - v_rand - the randomness used to commit to v using v_keys
 #[allow(non_snake_case)]
 pub fn prove<C: Curve, R: Rng>(
     transcript: &mut RandomOracle,
@@ -948,6 +948,194 @@ mod tests {
         Ok(())
     }
 
+    /// generates several values used in tests
+    fn generate_helper_values(n: usize) -> (Generators<G1>, CommitmentKey<G1>, Randomness<G1>) {
+        let rng = &mut thread_rng();
+        let gens = Generators::generate(n, rng);
+        let b = SomeCurve::generate(rng);
+        let b_tilde = SomeCurve::generate(rng);
+        let v_keys = CommitmentKey { g: b, h: b_tilde };
+        let v_rand = Randomness::generate(rng);
+
+        (gens, v_keys, v_rand)
+    }
+
+    /// Generates commitment to v given commitment key and randomness
+    fn get_v_com(v: u64, v_keys: CommitmentKey<G1>, v_rand: Randomness<G1>) -> Commitment<G1> {
+        let v_scalar = SomeCurve::scalar_from_u64(v);
+        let v_value = Value::<SomeCurve>::new(v_scalar);
+        let v_com = v_keys.hide(&v_value, &v_rand);
+
+        v_com
+    }
+
+    #[test]
+    /// Test whether verifying an honestly generated proof works
+    fn test_smp_prove_verify() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
+    }
+
+    /// Test that sets with sizes not a power of two are rejected by proof
+    #[test]
+    fn test_smp_prove_not_power_of_two() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 5] = [1, 7, 3, 5, 6];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(matches!(proof, Err(ProverError::SetSizeNotPowerOfTwo)));
+    }
+
+    /// Test that proof fails if element is not in set
+    #[test]
+    fn test_smp_prove_not_in_set() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 4;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(matches!(proof, Err(ProverError::CouldNotFindValueInSet)));
+    }
+
+    /// Test that verification fails if sets has size not a power of two
+    #[test]
+    fn test_smp_verify_not_power_of_two() {
+        let rng = &mut thread_rng();
+
+        // generate proof for set with correct size since otherwise proof generation
+        // fails
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // now define new set and try to verify
+        let invalid_set: [u64; 5] = [1, 7, 3, 5, 6];
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(
+            &mut transcript,
+            &invalid_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(matches!(
+            result,
+            Err(VerificationError::SetSizeNotPowerOfTwo)
+        ));
+    }
+
+    /// Test whether verifying a proof generated for a different v fails to
+    /// verify (even if the new v is still in the set). This should cause an
+    /// invalid T_0 error.
+    #[test]
+    fn test_smp_verify_different_value() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v = 5; // different v still in set
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(matches!(result, Err(VerificationError::InconsistentT0)));
+    }
+
+    #[test]
+    /// Test whether verifying with different set (still containing v) fails.
+    /// This should cause an Inconsistent T0.
+    fn test_smp_verify_different_set() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let new_set: [u64; 4] = [2, 7, 3, 5];
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &new_set, &v_com, &proof, &gens, &v_keys);
+        assert!(matches!(result, Err(VerificationError::InconsistentT0)));
+    }
+
+    #[test]
+    /// Test whether modifying inner proof causes invalid IP proof error.
+    fn test_smp_verify_invalid_inner_product() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let mut proof = proof.unwrap();
+
+        proof.ip_proof.a.negate(); // tamper with IP proof
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(matches!(
+            result,
+            Err(VerificationError::IPVerificationError)
+        ));
+    }
+
     #[test]
     fn test_smp_prover_against_naive_verification() {
         let rng = &mut thread_rng();
@@ -973,34 +1161,6 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let result = verify_naive(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_smp_verification() {
-        let rng = &mut thread_rng();
-        let mut transcript = RandomOracle::empty();
-
-        let the_set: [u64; 4] = [1, 7, 3, 5];
-        let v: u64 = 3;
-        let n = the_set.len();
-
-        let gens = Generators::generate(n, rng);
-        let b = SomeCurve::generate(rng);
-        let b_tilde = SomeCurve::generate(rng);
-        let v_keys = CommitmentKey { g: b, h: b_tilde };
-
-        let v_rand = Randomness::generate(rng);
-        let v_scalar = SomeCurve::scalar_from_u64(v);
-        let v_value = Value::<SomeCurve>::new(v_scalar);
-        let v_com = v_keys.hide(&v_value, &v_rand);
-
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-        assert!(proof.is_ok());
-        let proof = proof.unwrap();
-
-        let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
         assert!(result.is_ok());
     }
 
