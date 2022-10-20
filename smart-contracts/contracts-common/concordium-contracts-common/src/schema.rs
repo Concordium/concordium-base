@@ -299,208 +299,26 @@ impl FunctionV2 {
 /// V3 schemas. Differs from [`FunctionV2`] in that a schema for the events can
 /// be included.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FunctionV3 {
-    Param(Type),
-    /// Rv is short for Return value.
-    Rv(Type),
-    ParamRv {
-        parameter:    Type,
-        return_value: Type,
-    },
-    Error(Type),
-    ParamError {
-        parameter: Type,
-        error:     Type,
-    },
-    RvError {
-        return_value: Type,
-        error:        Type,
-    },
-    ParamRvError {
-        parameter:    Type,
-        return_value: Type,
-        error:        Type,
-    },
-    ParamEvent {
-        parameter: Type,
-        event:     Type,
-    },
-    RvEvent {
-        return_value: Type,
-        event:        Type,
-    },
-    ParamRvEvent {
-        parameter:    Type,
-        return_value: Type,
-        event:        Type,
-    },
-    ErrorEvent {
-        error: Type,
-        event: Type,
-    },
-    ParamErrorEvent {
-        parameter: Type,
-        error:     Type,
-        event:     Type,
-    },
-    RvErrorEvent {
-        return_value: Type,
-        error:        Type,
-        event:        Type,
-    },
-    ParamRvErrorEvent {
-        parameter:    Type,
-        return_value: Type,
-        error:        Type,
-        event:        Type,
-    },
-    Event(Type),
+pub struct FunctionV3 {
+    pub index:        u8,
+    pub parameter:    Option<Type>,
+    pub return_value: Option<Type>,
+    pub error:        Option<Type>,
+    pub event:        Option<Type>,
 }
 
 impl FunctionV3 {
     /// Extract the event schema if it exists.
-    pub fn event(&self) -> Option<&Type> {
-        match self {
-            FunctionV3::ParamEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::RvEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::ParamRvEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::ErrorEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::ParamErrorEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::RvErrorEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::ParamRvErrorEvent {
-                event,
-                ..
-            } => Some(event),
-            FunctionV3::Event(event) => Some(event),
-            _ => None,
-        }
-    }
+    pub fn event(&self) -> Option<&Type> { self.event.as_ref() }
 
     /// Extract the parameter schema if it exists.
-    pub fn parameter(&self) -> Option<&Type> {
-        match self {
-            FunctionV3::Param(ty) => Some(ty),
-            FunctionV3::ParamRv {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV3::ParamError {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV3::ParamRvError {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV3::ParamEvent {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV3::ParamRvEvent {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV3::ParamErrorEvent {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV3::ParamRvErrorEvent {
-                parameter,
-                ..
-            } => Some(parameter),
-            _ => None,
-        }
-    }
+    pub fn parameter(&self) -> Option<&Type> { self.parameter.as_ref() }
 
     /// Extract the return value schema if it exists.
-    pub fn return_value(&self) -> Option<&Type> {
-        match self {
-            FunctionV3::Rv(rv) => Some(rv),
-            FunctionV3::ParamRv {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV3::RvError {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV3::ParamRvError {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV3::RvEvent {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV3::ParamRvEvent {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV3::RvErrorEvent {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV3::ParamRvErrorEvent {
-                return_value,
-                ..
-            } => Some(return_value),
-            _ => None,
-        }
-    }
+    pub fn return_value(&self) -> Option<&Type> { self.return_value.as_ref() }
 
     /// Extract the error schema if it exists.
-    pub fn error(&self) -> Option<&Type> {
-        match self {
-            FunctionV3::Error(error) => Some(error),
-            FunctionV3::ParamError {
-                error,
-                ..
-            } => Some(error),
-            FunctionV3::RvError {
-                error,
-                ..
-            } => Some(error),
-            FunctionV3::ParamRvError {
-                error,
-                ..
-            } => Some(error),
-            FunctionV3::ErrorEvent {
-                error,
-                ..
-            } => Some(error),
-            FunctionV3::ParamErrorEvent {
-                error,
-                ..
-            } => Some(error),
-            FunctionV3::RvErrorEvent {
-                error,
-                ..
-            } => Some(error),
-            FunctionV3::ParamRvErrorEvent {
-                error,
-                ..
-            } => Some(error),
-            _ => None,
-        }
-    }
+    pub fn error(&self) -> Option<&Type> { self.error.as_ref() }
 }
 
 /// Schema for the fields of a struct or some enum variant.
@@ -1106,187 +924,83 @@ impl Deserial for FunctionV2 {
 
 impl Serial for FunctionV3 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            FunctionV3::Param(parameter) => {
-                out.write_u8(0)?;
-                parameter.serial(out)
-            }
-            FunctionV3::Rv(return_value) => {
-                out.write_u8(1)?;
-                return_value.serial(out)
-            }
-            FunctionV3::ParamRv {
-                parameter,
-                return_value,
-            } => {
-                out.write_u8(2)?;
-                parameter.serial(out)?;
-                return_value.serial(out)
-            }
-            FunctionV3::Error(error) => {
-                out.write_u8(3)?;
-                error.serial(out)
-            }
-            FunctionV3::ParamError {
-                parameter,
-                error,
-            } => {
-                out.write_u8(4)?;
-                parameter.serial(out)?;
-                error.serial(out)
-            }
-            FunctionV3::RvError {
-                return_value,
-                error,
-            } => {
-                out.write_u8(5)?;
-                return_value.serial(out)?;
-                error.serial(out)
-            }
-            FunctionV3::ParamRvError {
-                parameter,
-                return_value,
-                error,
-            } => {
-                out.write_u8(6)?;
-                parameter.serial(out)?;
-                return_value.serial(out)?;
-                error.serial(out)
-            }
-            FunctionV3::ParamEvent {
-                parameter,
-                event,
-            } => {
-                out.write_u8(7)?;
-                parameter.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::RvEvent {
-                return_value,
-                event,
-            } => {
-                out.write_u8(8)?;
-                return_value.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::ParamRvEvent {
-                parameter,
-                return_value,
-                event,
-            } => {
-                out.write_u8(9)?;
-                parameter.serial(out)?;
-                return_value.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::ErrorEvent {
-                error,
-                event,
-            } => {
-                out.write_u8(10)?;
-                error.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::ParamErrorEvent {
-                parameter,
-                error,
-                event,
-            } => {
-                out.write_u8(11)?;
-                parameter.serial(out)?;
-                error.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::RvErrorEvent {
-                return_value,
-                error,
-                event,
-            } => {
-                out.write_u8(12)?;
-                return_value.serial(out)?;
-                error.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::ParamRvErrorEvent {
-                parameter,
-                return_value,
-                error,
-                event,
-            } => {
-                out.write_u8(13)?;
-                parameter.serial(out)?;
-                return_value.serial(out)?;
-                error.serial(out)?;
-                event.serial(out)
-            }
-            FunctionV3::Event(event) => {
-                out.write_u8(14)?;
-                event.serial(out)
-            }
+        // This index encodes if each of the schemas is set or not.
+        // If the fourth last bit is set to 1, the parameter schema is set.
+        // If the third last bit is set to 1, the return_value schema is set.
+        // If the second last bit is set to 1, the error schema is set.
+        // If the last bit is set to 1, the event schema is set.
+
+        let mut index: u8 = 0;
+
+        if self.parameter.is_some() {
+            index = 8;
         }
+        if self.return_value.is_some() {
+            index += 4;
+        }
+        if self.error.is_some() {
+            index += 2;
+        }
+        if self.event.is_some() {
+            index += 1;
+        }
+
+        out.write_u8(index)?;
+
+        if self.parameter.is_some() {
+            self.parameter.serial(out)?;
+        }
+        if self.return_value.is_some() {
+            self.return_value.serial(out)?;
+        }
+        if self.error.is_some() {
+            self.error.serial(out)?;
+        }
+        if self.event.is_some() {
+            self.event.serial(out)?;
+        }
+
+        Ok(())
+    }
+}
+
+fn get_bit_at(input: u8, n: u8) -> bool {
+    if n < 8 {
+        input & (1 << n) != 0
+    } else {
+        false
     }
 }
 
 impl Deserial for FunctionV3 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let idx = source.read_u8()?;
-        match idx {
-            0 => Ok(FunctionV3::Param(source.get()?)),
-            1 => Ok(FunctionV3::Rv(source.get()?)),
-            2 => Ok(FunctionV3::ParamRv {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-            }),
-            3 => Ok(FunctionV3::Error(source.get()?)),
-            4 => Ok(FunctionV3::ParamError {
-                parameter: source.get()?,
-                error:     source.get()?,
-            }),
-            5 => Ok(FunctionV3::RvError {
-                return_value: source.get()?,
-                error:        source.get()?,
-            }),
-            6 => Ok(FunctionV3::ParamRvError {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-                error:        source.get()?,
-            }),
-            7 => Ok(FunctionV3::ParamEvent {
-                parameter: source.get()?,
-                event:     source.get()?,
-            }),
-            8 => Ok(FunctionV3::RvEvent {
-                return_value: source.get()?,
-                event:        source.get()?,
-            }),
-            9 => Ok(FunctionV3::ParamRvEvent {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-                event:        source.get()?,
-            }),
-            10 => Ok(FunctionV3::ErrorEvent {
-                error: source.get()?,
-                event: source.get()?,
-            }),
-            11 => Ok(FunctionV3::ParamErrorEvent {
-                parameter: source.get()?,
-                error:     source.get()?,
-                event:     source.get()?,
-            }),
-            12 => Ok(FunctionV3::RvErrorEvent {
-                return_value: source.get()?,
-                error:        source.get()?,
-                event:        source.get()?,
-            }),
-            13 => Ok(FunctionV3::ParamRvErrorEvent {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-                error:        source.get()?,
-                event:        source.get()?,
-            }),
-            14 => Ok(FunctionV3::Event(source.get()?)),
-            _ => Err(ParseError::default()),
+        let index = source.get()?;
+
+        let mut parameter = None;
+        let mut return_value = None;
+        let mut error = None;
+        let mut event = None;
+
+        if get_bit_at(index, 3) {
+            parameter = source.get()?;
         }
+        if get_bit_at(index, 2) {
+            return_value = source.get()?;
+        }
+        if get_bit_at(index, 1) {
+            error = source.get()?;
+        }
+        if get_bit_at(index, 0) {
+            event = source.get()?;
+        }
+
+        Ok(FunctionV3 {
+            index,
+            parameter,
+            return_value,
+            error,
+            event,
+        })
     }
 }
 
@@ -2045,103 +1759,19 @@ mod tests {
 
     #[test]
     fn test_function_v3_serial_deserial_is_id() {
-        let f1 = FunctionV3::Param(Type::String(SizeLength::U32));
-        let f2 = FunctionV3::Rv(Type::U128);
-        let f3 = FunctionV3::ParamRv {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            return_value: Type::ILeb128(3),
-        };
-        let f4 = FunctionV3::Error(Type::ByteList(SizeLength::U32));
-        let f5 = FunctionV3::ParamError {
-            parameter: Type::U8,
-            error:     Type::String(SizeLength::U8),
-        };
-        let f6 = FunctionV3::ParamRvError {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            return_value: Type::ILeb128(3),
-            error:        Type::Bool,
-        };
-        let f7 = FunctionV3::ParamEvent {
-            parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            event:     Type::EnumEvent(vec![(
+        let f1 = FunctionV3 {
+            index:        15,
+            parameter:    Some(Type::String(SizeLength::U32)),
+            return_value: Some(Type::String(SizeLength::U32)),
+            error:        Some(Type::String(SizeLength::U32)),
+            event:        Some(Type::EnumEvent(vec![(
                 String::from("EventOne"),
                 Fields::Named(vec![(String::from("index"), Type::U8)]),
                 0,
-            )]),
+            )])),
         };
-        let f8 = FunctionV3::RvEvent {
-            return_value: Type::ILeb128(3),
-            event:        Type::EnumEvent(vec![(
-                String::from("EventOne"),
-                Fields::Named(vec![(String::from("index"), Type::U8)]),
-                0,
-            )]),
-        };
-        let f9 = FunctionV3::ParamRvEvent {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            return_value: Type::ILeb128(3),
-            event:        Type::EnumEvent(vec![(
-                String::from("EventOne"),
-                Fields::Named(vec![(String::from("index"), Type::U8)]),
-                0,
-            )]),
-        };
-        let f10 = FunctionV3::ErrorEvent {
-            error: Type::Bool,
-            event: Type::EnumEvent(vec![(
-                String::from("EventOne"),
-                Fields::Named(vec![(String::from("index"), Type::U8)]),
-                0,
-            )]),
-        };
-        let f11 = FunctionV3::ParamErrorEvent {
-            parameter: Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            error:     Type::Bool,
-            event:     Type::EnumEvent(vec![(
-                String::from("EventOne"),
-                Fields::Named(vec![(String::from("index"), Type::U8)]),
-                0,
-            )]),
-        };
-        let f12 = FunctionV3::RvErrorEvent {
-            return_value: Type::ILeb128(3),
-            error:        Type::Bool,
-            event:        Type::EnumEvent(vec![(
-                String::from("EventOne"),
-                Fields::Named(vec![(String::from("index"), Type::U8)]),
-                0,
-            )]),
-        };
-        let f13 = FunctionV3::ParamRvErrorEvent {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            return_value: Type::ILeb128(3),
-            error:        Type::Bool,
-            event:        Type::EnumEvent(vec![(
-                String::from("EventOne"),
-                Fields::Named(vec![(String::from("index"), Type::U8)]),
-                0,
-            )]),
-        };
-        let f14 = Type::EnumEvent(vec![(
-            String::from("EventOne"),
-            Fields::Named(vec![(String::from("index"), Type::U8)]),
-            0,
-        )]);
 
         assert_eq!(serial_deserial(&f1), Ok(f1));
-        assert_eq!(serial_deserial(&f2), Ok(f2));
-        assert_eq!(serial_deserial(&f3), Ok(f3));
-        assert_eq!(serial_deserial(&f4), Ok(f4));
-        assert_eq!(serial_deserial(&f5), Ok(f5));
-        assert_eq!(serial_deserial(&f6), Ok(f6));
-        assert_eq!(serial_deserial(&f7), Ok(f7));
-        assert_eq!(serial_deserial(&f8), Ok(f8));
-        assert_eq!(serial_deserial(&f9), Ok(f9));
-        assert_eq!(serial_deserial(&f10), Ok(f10));
-        assert_eq!(serial_deserial(&f11), Ok(f11));
-        assert_eq!(serial_deserial(&f12), Ok(f12));
-        assert_eq!(serial_deserial(&f13), Ok(f13));
-        assert_eq!(serial_deserial(&f14), Ok(f14));
     }
 
     #[test]
@@ -2200,20 +1830,40 @@ mod tests {
     fn test_module_v3_serial_deserial_is_id() {
         let m = ModuleV3 {
             contracts: BTreeMap::from([("a".into(), ContractV3 {
-                init: Some(FunctionV3::ParamEvent {
-                    parameter: Type::U8,
-                    event:     Type::EnumEvent(vec![(
+                init: Some(FunctionV3 {
+                    index:        15,
+                    parameter:    Some(Type::String(SizeLength::U32)),
+                    return_value: Some(Type::String(SizeLength::U32)),
+                    error:        Some(Type::String(SizeLength::U32)),
+                    event:        Some(Type::EnumEvent(vec![(
                         String::from("EventOne"),
                         Fields::Named(vec![(String::from("index"), Type::U8)]),
                         0,
-                    )]),
+                    )])),
                 }),
 
                 receive: BTreeMap::from([
-                    ("b".into(), FunctionV3::Rv(Type::String(SizeLength::U32))),
-                    ("c".into(), FunctionV3::ParamRv {
-                        parameter:    Type::U8,
-                        return_value: Type::Bool,
+                    ("b".into(), FunctionV3 {
+                        index:        15,
+                        parameter:    Some(Type::String(SizeLength::U32)),
+                        return_value: Some(Type::String(SizeLength::U32)),
+                        error:        Some(Type::String(SizeLength::U32)),
+                        event:        Some(Type::EnumEvent(vec![(
+                            String::from("EventOne"),
+                            Fields::Named(vec![(String::from("index"), Type::U8)]),
+                            0,
+                        )])),
+                    }),
+                    ("c".into(), FunctionV3 {
+                        index:        15,
+                        parameter:    Some(Type::String(SizeLength::U32)),
+                        return_value: Some(Type::String(SizeLength::U32)),
+                        error:        Some(Type::String(SizeLength::U32)),
+                        event:        Some(Type::EnumEvent(vec![(
+                            String::from("EventOne"),
+                            Fields::Named(vec![(String::from("index"), Type::U8)]),
+                            0,
+                        )])),
                     }),
                 ]),
             })]),
