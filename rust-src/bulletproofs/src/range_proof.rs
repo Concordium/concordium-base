@@ -107,8 +107,8 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 /// - n - the number n such that v_i is in [0,2^n) for all i
 /// - m - the number of values that is proved to be in [0,2^n)
 /// - v_vec - the vector having v_1, ..., v_m as entrances
-/// - gens - generators containing vectors G and H both of length nm
-/// - v_keys - commitmentment keys B and B_tilde
+/// - gens - generators containing vectors G and H both of length at least nm
+/// - v_keys - commitment keys B and B_tilde
 /// - randomness - the randomness used to commit to each v_i using v_keys
 #[allow(clippy::many_single_char_names)]
 #[allow(non_snake_case)]
@@ -128,7 +128,9 @@ pub fn prove<C: Curve, T: Rng>(
     // A (their binary representation),
     // S (the blinding factors)
     let nm = usize::from(n) * usize::from(m);
+    // TODO: Check that v_vec has the same length as randomness
     // Check that we have enough generators for vector commitments
+    // TODO: Add proper error handling
     if gens.G_H.len() < nm {
         return None;
     }
@@ -150,7 +152,7 @@ pub fn prove<C: Curve, T: Rng>(
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     // Vectors for value commitments V_j
     let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
-    // Blinding factors for V_j,A_j,S_j committments
+    // Blinding factors for V_j,A_j,S_j commitments
     let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut a_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut s_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
@@ -160,7 +162,7 @@ pub fn prove<C: Curve, T: Rng>(
         a_L.extend(&a_L_j);
         a_R.extend(&a_R_j);
         // generate blinding factors
-        let v_j_tilde = &randomness[j]; // let v_j_tilde = Randomness::<C>::generate(csprng);
+        let v_j_tilde = &randomness[j];
         let a_j_tilde = Randomness::<C>::generate(csprng);
         let s_j_tilde = Randomness::<C>::generate(csprng);
         v_tilde_vec.push(*v_j_tilde.as_ref());
@@ -338,7 +340,7 @@ pub fn prove<C: Curve, T: Rng>(
     let mut l: Vec<C::Scalar> = Vec::with_capacity(nm);
     let mut r: Vec<C::Scalar> = Vec::with_capacity(nm);
 
-    // evalute l(x) and r(x)
+    // evaluate l(x) and r(x)
     for i in 0..nm {
         // l[i] <- l_0[i] + x* l_1[i]
         let mut l_i = l_1[i];
@@ -354,7 +356,7 @@ pub fn prove<C: Curve, T: Rng>(
 
     // evaluate t(x) at challenge point x,
     // compute blinding factor tx_tilde for t(x) evaluation committment,
-    // and compute bilding factor e_tilde for the inner product committment
+    // and compute blinding factor e_tilde for the inner product committment
     let mut tx: C::Scalar = C::Scalar::zero();
     let mut tx_tilde: C::Scalar = C::Scalar::zero();
     let mut e_tilde: C::Scalar = C::Scalar::zero();
@@ -580,7 +582,7 @@ pub fn verify_efficient<C: Curve>(
     //
     // Thus:
     // 1) Compute all scalars
-    // 2) Multiexponentiation to comptue the summands
+    // 2) Multiexponentiation to compute the summands
     // 3) Check that the sum is zero
     //
     let ip_proof = &proof.ip_proof;
@@ -652,6 +654,7 @@ pub fn verify_efficient<C: Curve>(
 
     // compute G_scalar[i] <- -z-a*s_i
     let mut G_scalars = Vec::with_capacity(G.len());
+    // Undo inversion of s vector
     s_inv.reverse();
     let s = s_inv;
     for si in s {
