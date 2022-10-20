@@ -437,7 +437,7 @@ pub fn prove<C: Curve, T: Rng>(
 
 /// The verifier does two checks. In case verification fails, it can be useful
 /// to know which of the checks led to failure.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
     /// Choice of randomness led to verification failure.
     DivisionError,

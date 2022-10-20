@@ -124,11 +124,11 @@ pub fn prove<C: Curve, R: Rng>(
     let B = v_keys.g;
     let B_tilde = v_keys.h;
     // Compute aL (indicator vector) and aR
-    let maybe_aLaR: Option<(Vec<C::Scalar>, Vec<C::Scalar>)> = a_L_a_R(&v_scalar, &set_vec);
+    let maybe_aLaR = a_L_a_R(&v_scalar, &set_vec);
     if maybe_aLaR.is_none() {
         return Err(ProverError::CouldNotFindValueInSet);
     }
-    let (a_L, a_R): (Vec<C::Scalar>, Vec<C::Scalar>) = maybe_aLaR.unwrap();
+    let (a_L, a_R) = maybe_aLaR.unwrap();
     // Setup blinding factors for a_L and a_R
     let mut s_L = Vec::with_capacity(n);
     let mut s_R = Vec::with_capacity(n);
