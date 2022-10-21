@@ -277,6 +277,28 @@ pub fn bench_set_membership_proof(c: &mut Criterion) {
             })
         });
 
+        // Bench fast prover
+        let the_set_p = the_set.clone();
+        let gens_p = gens.clone();
+        let v_keys_p = v_keys.clone();
+        let v_rand_p = v_rand.clone();
+        group.bench_function(BenchmarkId::new("Fast Prover", n), move |b| {
+            b.iter(|| {
+                let rng = &mut thread_rng();
+                let mut transcript = RandomOracle::empty();
+                prove_faster(
+                    &mut transcript,
+                    rng,
+                    &the_set_p,
+                    v,
+                    &gens_p,
+                    &v_keys_p,
+                    &v_rand_p,
+                )
+                .unwrap();
+            })
+        });
+
         // The proof for verification
         let mut transcript = RandomOracle::empty();
         let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);

@@ -334,6 +334,273 @@ pub fn prove<C: Curve, R: Rng>(
     Err(ProverError::InnerProductProofFailure)
 }
 
+#[allow(non_snake_case)]
+pub fn prove_faster<C: Curve, R: Rng>(
+    transcript: &mut RandomOracle,
+    csprng: &mut R,
+    the_set: &[u64],
+    v: u64,
+    gens: &Generators<C>,
+    v_keys: &CommitmentKey<C>,
+    v_rand: &Randomness<C>,
+) -> Result<SetMembershipProof<C>, ProverError> {
+    let n = the_set.len();
+    if !n.is_power_of_two() {
+        return Err(ProverError::SetSizeNotPowerOfTwo);
+    }
+    // Part 0: Add public inputs to transcript
+    // Domain separation
+    transcript.add_bytes(b"SetMembershipProof");
+    // Compute commitment V for v
+    let v_scalar = C::scalar_from_u64(v);
+    let v_value = Value::<C>::new(v_scalar);
+    let V = v_keys.hide(&v_value, v_rand);
+    // Append V to the transcript
+    transcript.append_message(b"V", &V.0);
+    // Convert the u64 set into a field element vector
+    let set_vec = get_set_vector::<C>(the_set);
+    // Append the set to the transcript
+    transcript.append_message(b"theSet", &set_vec);
+
+    // Part 1: Setup and generation of vector commitments
+    // Check that we have enough generators for vector commitments
+    if gens.G_H.len() < n {
+        return Err(ProverError::NotEnoughGenerators);
+    }
+
+    // find element in set
+    let mut v_index = None; // not found yet
+    for (i, si) in the_set.iter().enumerate() {
+        if *si == v {
+            v_index = Some(i);
+            break;
+        }
+    }
+    let v_index = match v_index {
+        Some(i) => i,
+        None => return Err(ProverError::CouldNotFindValueInSet),
+    };
+
+    // Select generators for commitments
+    let B = v_keys.g;
+    let B_tilde = v_keys.h;
+
+    let mut GH_B_tilde = Vec::with_capacity(n);
+    for gh in &gens.G_H {
+        GH_B_tilde.push(gh.0); // add G
+    }
+    for gh in &gens.G_H {
+        GH_B_tilde.push(gh.1); // add H
+    }
+    GH_B_tilde.push(B_tilde);
+    let G = &GH_B_tilde[0..n];
+    let H = &GH_B_tilde[n..2 * n];
+
+    // Commitment randomness for A
+    let a_tilde = C::generate_scalar(csprng);
+
+    // Let a_L = (0,...,0, 1, 0, ...0), with 1 in position v_index. Compute
+    // commitment A = multiexp(G, a_L) * multiexp(H, a_L - 1) * B_tilde^a_tilde
+    // Note the form a_L implies that multiexp(G, a_L) = G_{v_index} and multiexp(H,
+    // a_L - 1) = prod_i!=v_index H_i^-1
+    let mut A = G[v_index];
+    for (i, hi) in H.iter().enumerate() {
+        if i != v_index {
+            A = A.minus_point(hi);
+        }
+    }
+    let btat = B_tilde.mul_by_scalar(&a_tilde);
+    A = A.plus_point(&btat);
+
+    // generate random scalars (s_L,s_r,s_tilde) for S commitment
+    let mut S_scalars: Vec<C::Scalar> = Vec::with_capacity(2 * n + 1);
+    for _ in 0..2 * n {
+        S_scalars.push(C::generate_scalar(csprng));
+    }
+    let s_tilde = C::generate_scalar(csprng);
+    S_scalars.push(s_tilde);
+    let s_L = &S_scalars[0..n];
+    let s_R = &S_scalars[n..2 * n];
+
+    // compute S commitments using multi exponentiation
+    let S = multiexp(&GH_B_tilde, &S_scalars);
+
+    // append commitments A and S to transcript
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
+
+    // Part 2: Computation of vector polynomials l(x),r(x)
+    // get challenges y,z from transcript
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+
+    // y_n = (1,y,..,y^(n-1))
+    let y_n = z_vec(y, 0, n);
+    // powers of z
+    let z_sq = {
+        let mut z_sq = z;
+        z_sq.mul_assign(&z);
+        z_sq
+    };
+    let z_cb = {
+        let mut z_cb = z_sq;
+        z_cb.mul_assign(&z);
+        z_cb
+    };
+    // coefficients of l(x) and r(x)
+    // compute l_0 and l_1
+    let mut l_0 = Vec::with_capacity(n);
+    let mut l_1 = Vec::with_capacity(n);
+    for (i, s_L_i) in s_L.iter().enumerate() {
+        // l_0[i] <- a_L[i] - z
+        let mut l_0_i = match i == v_index {
+            true => C::Scalar::one(),
+            false => C::Scalar::zero(),
+        }; // = a_L[i];
+        l_0_i.sub_assign(&z);
+        l_0.push(l_0_i);
+        // l_1[i] <- s_L[i]
+        l_1.push(*s_L_i);
+    }
+    // compute r_0 and r_1
+    let mut r_0 = Vec::with_capacity(n);
+    let mut r_1 = Vec::with_capacity(n);
+    for i in 0..n {
+        // r_0[i] <- y_n[i] * (a_R[i] + z) + z^3 + z^2*set_vec[i]
+        // a_R[i] = a_L[i] - 1
+        let mut r_0_i = C::Scalar::zero();
+        if i != v_index {
+            // a_L[i] == 0
+            r_0_i.sub_assign(&C::Scalar::one());
+        }
+        r_0_i.add_assign(&z);
+        r_0_i.mul_assign(&y_n[i]);
+        r_0_i.add_assign(&z_cb);
+        let mut z_cb_si = z_sq;
+        z_cb_si.mul_assign(&set_vec[i]);
+        r_0_i.add_assign(&z_cb_si);
+        r_0.push(r_0_i);
+
+        // r_1[i] <- y_n[i] * s_R[i]
+        let mut r_1_i = y_n[i];
+        r_1_i.mul_assign(&s_R[i]);
+        r_1.push(r_1_i);
+    }
+
+    // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
+    // t_0 <- <l_0,r_0>
+    let t_0 = inner_product(&l_0, &r_0);
+    // t_2 <- <l_1,r_1>
+    let t_2 = inner_product(&l_1, &r_1);
+    // t_1 <- <l_0+l_1,r_0+r_1> - t_0 - t_1
+    let mut t_1 = C::Scalar::zero();
+    // add <l_0+l_1,r_0+r_1>
+    for i in 0..n {
+        let mut l_side = l_0[i];
+        l_side.add_assign(&l_1[i]);
+        let mut r_side = r_0[i];
+        r_side.add_assign(&r_1[i]);
+        let mut prod = l_side;
+        prod.mul_assign(&r_side);
+        t_1.add_assign(&prod);
+    }
+    // subtract t_0 and t_1
+    t_1.sub_assign(&t_0);
+    t_1.sub_assign(&t_2);
+
+    // Commit to t_1 and t_2
+    let t_1_tilde = C::generate_scalar(csprng);
+    let t_2_tilde = C::generate_scalar(csprng);
+    let T_1 = B
+        .mul_by_scalar(&t_1)
+        .plus_point(&B_tilde.mul_by_scalar(&t_1_tilde));
+    let T_2 = B
+        .mul_by_scalar(&t_2)
+        .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde));
+    // append T1, T2 commitments to transcript
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+
+    // Part 4: Evaluate l(.), r(.), and t(.) at challenge point x
+    // get challenge x from transcript
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    let mut x_sq = x;
+    x_sq.mul_assign(&x);
+    // Compute l(x) and r(x)
+    let mut lx = Vec::with_capacity(n);
+    let mut rx = Vec::with_capacity(n);
+    for i in 0..n {
+        // l[i] <- l_0[i] + x* l_1[i]
+        let mut lx_i = l_1[i];
+        lx_i.mul_assign(&x);
+        lx_i.add_assign(&l_0[i]);
+        lx.push(lx_i);
+        // r[i] = r_0[i] + x* r_1[i]
+        let mut rx_i = r_1[i];
+        rx_i.mul_assign(&x);
+        rx_i.add_assign(&r_0[i]);
+        rx.push(rx_i);
+    }
+    // Compute t(x)
+    // tx <- t_0 + t_1*x + t_2*x^2
+    let mut tx = t_0;
+    let mut tx_1 = t_1;
+    tx_1.mul_assign(&x);
+    tx.add_assign(&tx_1);
+    let mut tx_2 = t_2;
+    tx_2.mul_assign(&x_sq);
+    tx.add_assign(&tx_2);
+    // Compute the blinding t_x_tilde
+    // t_x_tilde <- z^2*v_rand + t_1_tilde*x + t_2_tilde*x^2
+    let mut tx_tilde = z_sq;
+    tx_tilde.mul_assign(v_rand);
+    let mut tx_s1 = t_1_tilde;
+    tx_s1.mul_assign(&x);
+    tx_tilde.add_assign(&tx_s1);
+    let mut tx_s2 = t_2_tilde;
+    tx_s2.mul_assign(&x_sq);
+    tx_tilde.add_assign(&tx_s2);
+    // Compute blinding e_tilde
+    // e_tilde <- a_tilde + s_tilde * x
+    let mut e_tilde = s_tilde;
+    e_tilde.mul_assign(&x);
+    e_tilde.add_assign(&a_tilde);
+    // append tx, tx_tilde, e_tilde to transcript
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+
+    // Part 5: Inner product proof for tx = <lx,rx>
+    // get challenge w from transcript
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    // get generator q
+    let Q = B.mul_by_scalar(&w);
+    // compute scalars c such that c*H = H', that is H_prime_scalars = (1, y^-1,..,
+    // y^-(n-1))
+    let y_inv = match y.inverse() {
+        Some(inv) => inv,
+        None => return Err(ProverError::DivisionError),
+    };
+    let H_prime_scalars = z_vec(y_inv, 0, n);
+    // compute inner product proof
+    let proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, &lx, &rx);
+
+    // return range proof
+    if let Some(ip_proof) = proof {
+        return Ok(SetMembershipProof {
+            A,
+            S,
+            T_1,
+            T_2,
+            tx,
+            tx_tilde,
+            e_tilde,
+            ip_proof,
+        });
+    }
+    Err(ProverError::InnerProductProofFailure)
+}
+
 /// Error messages detailing why proof verification failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
