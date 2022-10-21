@@ -1315,7 +1315,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
 #[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
-    pv: ProtocolVersion,
+    support_upgrade: bool,
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -1326,7 +1326,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
-            pv,
+            support_upgrade,
         },
         source_bytes,
     )?;
@@ -1338,7 +1338,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
 #[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
-    pv: ProtocolVersion,
+    support_upgrade: bool,
     source_bytes: &[u8],
     amount: u64,
     init_ctx: impl v0::HasInitContext,
@@ -1349,7 +1349,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
-            pv,
+            support_upgrade
         },
         source_bytes,
     )?;
@@ -1600,7 +1600,7 @@ pub fn invoke_receive_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    pv: ProtocolVersion,
+    support_upgrade: bool,
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
@@ -1611,7 +1611,7 @@ pub fn invoke_receive_from_source<
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
-            pv,
+            support_upgrade
         },
         source_bytes,
     )?;
@@ -1635,7 +1635,7 @@ pub fn invoke_receive_with_metering_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    pv: ProtocolVersion,
+    support_upgrade: bool,
     source_bytes: &[u8],
     amount: u64,
     receive_ctx: Ctx1,
@@ -1646,7 +1646,7 @@ pub fn invoke_receive_with_metering_from_source<
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
-            pv,
+            support_upgrade,
         },
         source_bytes,
     )?;

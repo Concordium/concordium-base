@@ -23,7 +23,6 @@ use concordium_contracts_common::OwnedReceiveName;
 use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
 use sha2::Digest;
-use std::convert::TryInto;
 use wasm_transform::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
@@ -336,8 +335,8 @@ unsafe extern "C" fn call_receive_v1(
 /// This function is safe provided all the supplied pointers are not null and
 /// the `wasm_bytes_ptr` points to an array of length at least `wasm_bytes_len`.
 unsafe extern "C" fn validate_and_process_v1(
-    // The current protocol version.
-    protocol_version: u64,
+    // Whether the current protocol version supports smart contract upgrades.
+    support_upgrade: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
@@ -349,44 +348,37 @@ unsafe extern "C" fn validate_and_process_v1(
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
-    // We fail if the the protocol version supplied is not valid.
-    if let Ok(pv) = protocol_version.try_into() {
-        match utils::instantiate_with_metering::<ProcessedImports, _>(
-            &ConcordiumAllowedImports {
-                pv,
-            },
-            wasm_bytes,
-        ) {
-            Ok(artifact) => {
-                let mut out_buf = Vec::new();
-                let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
-                out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
-                for name in artifact.export.keys() {
-                    let len = name.as_ref().as_bytes().len();
-                    out_buf.extend_from_slice(&(len as u16).to_be_bytes());
-                    out_buf.extend_from_slice(name.as_ref().as_bytes());
-                }
-
-                out_buf.shrink_to_fit();
-                *output_len = out_buf.len() as size_t;
-                let ptr = out_buf.as_mut_ptr();
-                std::mem::forget(out_buf);
-
-                let mut artifact_bytes = Vec::new();
-                artifact
-                    .output(&mut artifact_bytes)
-                    .expect("Artifact serialization does not fail.");
-                artifact_bytes.shrink_to_fit();
-                *output_artifact_len = artifact_bytes.len() as size_t;
-                *output_artifact_bytes = artifact_bytes.as_mut_ptr();
-                std::mem::forget(artifact_bytes);
-
-                ptr
+    match utils::instantiate_with_metering::<ProcessedImports, _>(
+        &ConcordiumAllowedImports {
+            support_upgrade: support_upgrade == 1,
+        },
+        wasm_bytes,
+    ) {
+        Ok(artifact) => {
+            let mut out_buf = Vec::new();
+            let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
+            out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
+            for name in artifact.export.keys() {
+                let len = name.as_ref().as_bytes().len();
+                out_buf.extend_from_slice(&(len as u16).to_be_bytes());
+                out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
-            Err(_) => std::ptr::null_mut(),
+
+            out_buf.shrink_to_fit();
+            *output_len = out_buf.len() as size_t;
+            let ptr = out_buf.as_mut_ptr();
+            std::mem::forget(out_buf);
+
+            let mut artifact_bytes = Vec::new();
+            artifact.output(&mut artifact_bytes).expect("Artifact serialization does not fail.");
+            artifact_bytes.shrink_to_fit();
+            *output_artifact_len = artifact_bytes.len() as size_t;
+            *output_artifact_bytes = artifact_bytes.as_mut_ptr();
+            std::mem::forget(artifact_bytes);
+
+            ptr
         }
-    } else {
-        std::ptr::null_mut()
+        Err(_) => std::ptr::null_mut(),
     }
 }
 

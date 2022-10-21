@@ -68,7 +68,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let module = {
         let mut module = validate::validate_module(
             &ConcordiumAllowedImports {
-                pv: wasm_chain_integration::v1::ProtocolVersion::V5,
+                support_upgrade: true,
             },
             &skeleton,
         )

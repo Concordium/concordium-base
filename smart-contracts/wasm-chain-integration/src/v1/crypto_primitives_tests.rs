@@ -57,7 +57,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
     let module = {
         let mut module = validate::validate_module(
             &ConcordiumAllowedImports {
-                pv: crate::v1::types::ProtocolVersion::V5,
+                support_upgrade: true,
             },
             &skeleton,
         )
