@@ -1349,7 +1349,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
-            support_upgrade
+            support_upgrade,
         },
         source_bytes,
     )?;
@@ -1611,7 +1611,7 @@ pub fn invoke_receive_from_source<
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
-            support_upgrade
+            support_upgrade,
         },
         source_bytes,
     )?;

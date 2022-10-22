@@ -1991,13 +1991,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | PoolWouldBecomeOverDelegated
                   -- |The pool is not open to delegators.
                   | PoolClosed
-                  -- |The module reference provided for the contract upgrade did not
-                  -- point to a deployed module.
-                  | UpgradeInvalidModuleReference !ModuleRef
-                  -- |The module for upgrading to did not contain a contract name of the one upgrading from.
-                  | UpgradeInvalidContractName !ModuleRef !Wasm.InitName
-                  -- |The module for upgrading to is not a supported smart contract version.
-                  | UpgradeInvalidVersion !ModuleRef !Wasm.WasmVersion
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2069,9 +2062,6 @@ instance S.Serialize RejectReason where
     StakeOverMaximumThresholdForPool -> S.putWord8 52
     PoolWouldBecomeOverDelegated -> S.putWord8 53
     PoolClosed -> S.putWord8 54
-    UpgradeInvalidModuleReference moduleRef -> S.putWord8 55 <> S.put moduleRef
-    UpgradeInvalidContractName moduleRef initName -> S.putWord8 56 <> S.put moduleRef <> S.put initName
-    UpgradeInvalidVersion moduleRef wasmVersion -> S.putWord8 57 <> S.put moduleRef <> S.put wasmVersion
 
   get = S.getWord8 >>= \case
     0 -> return ModuleNotWF
@@ -2135,9 +2125,6 @@ instance S.Serialize RejectReason where
     52 -> return StakeOverMaximumThresholdForPool
     53 -> return PoolWouldBecomeOverDelegated
     54 -> return PoolClosed
-    55 -> UpgradeInvalidModuleReference <$> S.get
-    56 -> UpgradeInvalidContractName <$> S.get <*> S.get
-    57 -> UpgradeInvalidVersion <$> S.get <*> S.get
     n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason

@@ -547,8 +547,9 @@ genEvent spv =
               genTransferredWithSchedule,
               genCredentialsUpdated,
               DataRegistered <$> genRegisteredData
-            ] ++ maybeMemo ++ maybeV1ContractEvents ++ maybeDelegationEvents)
+            ] ++ maybeMemo ++ maybeV1ContractEvents ++ maybeDelegationEvents ++ maybeUpgrade)
       where
+        maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genModuleRef <*> genModuleRef] else []
         maybeMemo = if supportsMemo spv then [TransferMemo <$> genMemo] else []
         maybeV1ContractEvents =
                 if supportsV1Contracts spv then

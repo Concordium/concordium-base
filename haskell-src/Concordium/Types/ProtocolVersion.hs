@@ -305,7 +305,7 @@ supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
 
 -- |Whether the protocol version supports upgradable smart contracts.
--- (Supported in 'P5' onwards)
+-- (Supported in 'P5' and onwards)
 supportsUpgradableContracts :: SProtocolVersion pv -> Bool
 supportsUpgradableContracts spv = case spv of
   SP1 -> False
