@@ -45,9 +45,6 @@ pub enum Interrupt {
     },
 }
 
-// TODO: Move to contracts common
-pub const MODULE_REFERENCE_SIZE: usize = 32;
-
 impl Interrupt {
     pub fn to_bytes(&self, out: &mut Vec<u8>) -> anyhow::Result<()> {
         match self {
@@ -783,9 +780,9 @@ mod host {
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<Option<Interrupt>> {
         let module_ref_start = unsafe { stack.pop_u32() } as usize;
-        let module_ref_end = module_ref_start + MODULE_REFERENCE_SIZE as usize;
+        let module_ref_end = module_ref_start + 32;
         ensure!(module_ref_end <= memory.len(), "Illegal memory access.");
-        let mut module_reference_bytes = [0u8; MODULE_REFERENCE_SIZE];
+        let mut module_reference_bytes = [0u8; 32];
         module_reference_bytes.copy_from_slice(&memory[module_ref_start..module_ref_end]);
         let module_ref = ModuleReference::from(module_reference_bytes);
         // We tick a base action cost here and
@@ -1101,7 +1098,7 @@ pub type ParameterVec = Vec<u8>;
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
-    amount: u64,
+    amount: Amount,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
@@ -1120,7 +1117,8 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
         parameter,
         init_ctx,
     };
-    let result = artifact.borrow().run(&mut host, init_name, &[Value::I64(amount as i64)]);
+    let result =
+        artifact.borrow().run(&mut host, init_name, &[Value::I64(amount.micro_ccd() as i64)]);
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
     let logs = std::mem::take(&mut host.logs);
@@ -1296,64 +1294,83 @@ impl InvokeResponse {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+/// Common data used by the `invoke_*_from_artifact` family of functions.
+pub struct InvokeFromArtifactCtx<'a> {
+    /// The source of the artifact, serialized in the format specified by the
+    /// `wasm_transform` crate.
+    pub artifact:  &'a [u8],
+    /// Amount to invoke with.
+    pub amount:    Amount,
+    /// Parameter to supply to the call.
+    pub parameter: ParameterRef<'a>,
+    /// Energy to allow for execution.
+    pub energy:    InterpreterEnergy,
+}
+
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
-    artifact_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromArtifactCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    let artifact = utils::parse_artifact(ctx.artifact)?;
+    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
+}
+
+#[derive(Copy, Clone, Debug)]
+/// Common data used by the `invoke_*_from_source` family of functions.
+pub struct InvokeFromSourceCtx<'a> {
+    /// The source Wasm module.
+    pub source:          &'a [u8],
+    /// Amount to invoke with.
+    pub amount:          Amount,
+    /// Parameter to supply to the call.
+    pub parameter:       ParameterRef<'a>,
+    /// Energy to allow for execution.
+    pub energy:          InterpreterEnergy,
+    /// Whether the module should be processed to allow upgrades or not.
+    /// Upgrades are only allowed in protocol P5 and later. If this is set to
+    /// `false` then parsing and validation will reject modules that use the
+    /// `upgrade` function.
+    pub support_upgrade: bool,
 }
 
 /// Invokes an init-function from Wasm module bytes
-#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
-    support_upgrade: bool,
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
-            support_upgrade,
+            support_upgrade: ctx.support_upgrade,
         },
-        source_bytes,
+        ctx.source,
     )?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
-#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
-    support_upgrade: bool,
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
-            support_upgrade,
+            support_upgrade: ctx.support_upgrade,
         },
-        source_bytes,
+        ctx.source,
     )?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
 }
 
 fn process_receive_result<
@@ -1450,7 +1467,7 @@ pub fn invoke_receive<
     Ctx2: From<Ctx1>,
 >(
     artifact: Art,
-    amount: u64,
+    amount: Amount,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     param: ParameterRef,
@@ -1471,7 +1488,7 @@ pub fn invoke_receive<
 
     let result = artifact
         .borrow()
-        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
+        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount.micro_ccd() as i64)]);
     process_receive_result(artifact, host, result)
 }
 
@@ -1572,91 +1589,78 @@ pub fn invoke_receive_from_artifact<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    artifact_bytes: &'a [u8],
-    amount: u64,
+    ctx: InvokeFromArtifactCtx<'a>,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
-    let artifact = utils::parse_artifact(artifact_bytes)?;
+    let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_receive(
         Arc::new(artifact),
-        amount,
+        ctx.amount,
         receive_ctx,
         receive_name,
-        parameter,
-        energy,
+        ctx.parameter,
+        ctx.energy,
         instance_state,
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes
-#[allow(clippy::too_many_arguments)]
+/// Invokes an receive-function from Wasm module bytes.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    support_upgrade: bool,
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
-            support_upgrade,
+            support_upgrade: ctx.support_upgrade,
         },
-        source_bytes,
+        ctx.source,
     )?;
     invoke_receive(
         Arc::new(artifact),
-        amount,
+        ctx.amount,
         receive_ctx,
         receive_name,
-        parameter,
-        energy,
+        ctx.parameter,
+        ctx.energy,
         instance_state,
     )
 }
 
 /// Invokes an receive-function from Wasm module bytes, injects the module with
 /// metering.
-#[allow(clippy::too_many_arguments)]
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    support_upgrade: bool,
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
-            support_upgrade,
+            support_upgrade: ctx.support_upgrade,
         },
-        source_bytes,
+        ctx.source,
     )?;
     invoke_receive(
         Arc::new(artifact),
-        amount,
+        ctx.amount,
         receive_ctx,
         receive_name,
-        parameter,
-        energy,
+        ctx.parameter,
+        ctx.energy,
         instance_state,
     )
 }

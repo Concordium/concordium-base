@@ -131,7 +131,15 @@ unsafe extern "C" fn call_init_v1(
         .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(&artifact, amount, init_ctx, name, parameter, energy, loader);
+                let res = invoke_init(
+                    &artifact,
+                    Amount::from_micro_ccd(amount),
+                    init_ctx,
+                    name,
+                    parameter,
+                    energy,
+                    loader,
+                );
                 match res {
                     Ok(result) => {
                         let (mut out, initial_state, return_value) = result.extract();
@@ -257,7 +265,7 @@ unsafe extern "C" fn call_receive_v1(
 
                 let res = invoke_receive(
                     artifact,
-                    amount,
+                    Amount::from_micro_ccd(amount),
                     receive_ctx,
                     actual_name.as_receive_name(),
                     parameter,
