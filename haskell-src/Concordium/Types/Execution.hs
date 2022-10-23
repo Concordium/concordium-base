@@ -1035,6 +1035,8 @@ data Event =
            }
            -- |The contract was upgraded.
            | Upgraded {
+               euAddress :: !ContractAddress,
+               -- ^The contract that was upgraded.
                euFrom :: !ModuleRef,
                -- ^The old 'ModuleRef'.
                euTo :: !ModuleRef
@@ -1220,6 +1222,7 @@ putEvent = \case ModuleDeployed mref ->
                    S.put edrAccount
                  Upgraded{..} ->
                    S.putWord8 35 <>
+                   S.put euAddress <>
                    S.put euFrom <>
                    S.put euTo
 
@@ -1402,6 +1405,7 @@ getEvent spv =
         edrAccount <- S.get
         return DelegationRemoved{..}
     35 -> do
+        euAddress <- S.get
         euFrom <- S.get
         euTo <- S.get
         return Upgraded{..}
@@ -1802,6 +1806,7 @@ instance AE.FromJSON Event where
         edrAccount <- obj .: "account"
         return DelegationRemoved {..}
       "Upgraded" -> do
+        euAddress <- obj .: "address"
         euFrom <- obj .: "from"
         euTo <- obj .: "to"
         return Upgraded {..}

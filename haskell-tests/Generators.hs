@@ -549,7 +549,7 @@ genEvent spv =
               DataRegistered <$> genRegisteredData
             ] ++ maybeMemo ++ maybeV1ContractEvents ++ maybeDelegationEvents ++ maybeUpgrade)
       where
-        maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genModuleRef <*> genModuleRef] else []
+        maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
         maybeMemo = if supportsMemo spv then [TransferMemo <$> genMemo] else []
         maybeV1ContractEvents =
                 if supportsV1Contracts spv then
