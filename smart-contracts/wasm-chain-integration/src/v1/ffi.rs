@@ -319,7 +319,7 @@ unsafe extern "C" fn call_receive_v1(
 /// [call_init](./fn.call_init.html).
 ///
 /// The arguments are as follows
-/// - `protocol_version` the current protocol that the node is running.
+/// - `support_upgrade` whether to allow (1) the `upgrade` host call or not (0).
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`

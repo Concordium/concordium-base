@@ -481,9 +481,11 @@ impl Output for ProcessedImports {
     }
 }
 
-/// Allowed imports parameterized by the current protocol
-/// version on chain.
+/// Allowed imports for V1 modules. Whether some imports are allowed
+/// depends on the protocol version that is used to validate the module.
 pub struct ConcordiumAllowedImports {
+    /// Whether to allow the `upgrade` function. This is supported in protocol
+    /// P5 and up, but not before.
     pub support_upgrade: bool,
 }
 
