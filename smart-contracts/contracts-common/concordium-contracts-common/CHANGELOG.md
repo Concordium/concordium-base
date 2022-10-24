@@ -3,7 +3,7 @@
 ## Unreleased changes
 
 - Add type `ModuleReference` representing a module reference.
-- Implement `SchemaType` for `OwnedEntrypointName`.
+- Implement `SchemaType` for `OwnedEntrypointName` and `OwnedParameter`.
 
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
