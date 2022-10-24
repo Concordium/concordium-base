@@ -131,7 +131,15 @@ unsafe extern "C" fn call_init_v1(
         .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(&artifact, amount, init_ctx, name, parameter, energy, loader);
+                let res = invoke_init(
+                    &artifact,
+                    Amount::from_micro_ccd(amount),
+                    init_ctx,
+                    name,
+                    parameter,
+                    energy,
+                    loader,
+                );
                 match res {
                     Ok(result) => {
                         let (mut out, initial_state, return_value) = result.extract();
@@ -257,7 +265,7 @@ unsafe extern "C" fn call_receive_v1(
 
                 let res = invoke_receive(
                     artifact,
-                    amount,
+                    Amount::from_micro_ccd(amount),
                     receive_ctx,
                     actual_name.as_receive_name(),
                     parameter,
@@ -311,6 +319,7 @@ unsafe extern "C" fn call_receive_v1(
 /// [call_init](./fn.call_init.html).
 ///
 /// The arguments are as follows
+/// - `support_upgrade` whether to allow (1) the `upgrade` host call or not (0).
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
@@ -334,16 +343,23 @@ unsafe extern "C" fn call_receive_v1(
 /// This function is safe provided all the supplied pointers are not null and
 /// the `wasm_bytes_ptr` points to an array of length at least `wasm_bytes_len`.
 unsafe extern "C" fn validate_and_process_v1(
+    // Whether the current protocol version supports smart contract upgrades.
+    support_upgrade: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
-    output_len: *mut size_t, // this is the total length of the output byte array
-    output_artifact_len: *mut size_t, // the length of the artifact byte array
-    output_artifact_bytes: *mut *const u8, /* location where the pointer to the artifact will
-                              * be written. */
+    // this is the total length of the output byte array
+    output_len: *mut size_t,
+    // the length of the artifact byte array
+    output_artifact_len: *mut size_t,
+    /* location where the pointer to the artifact will
+     * be written. */
+    output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
-        &ConcordiumAllowedImports,
+        &ConcordiumAllowedImports {
+            support_upgrade: support_upgrade == 1,
+        },
         wasm_bytes,
     ) {
         Ok(artifact) => {
@@ -355,6 +371,7 @@ unsafe extern "C" fn validate_and_process_v1(
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
+
             out_buf.shrink_to_fit();
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();

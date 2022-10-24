@@ -55,7 +55,13 @@ fn test_crypto_prims() -> anyhow::Result<()> {
 
     let skeleton = parse::parse_skeleton(CONTRACT_BYTES).unwrap();
     let module = {
-        let mut module = validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+        let mut module = validate::validate_module(
+            &ConcordiumAllowedImports {
+                support_upgrade: true,
+            },
+            &skeleton,
+        )
+        .unwrap();
         module.inject_metering().expect("Metering injection should succeed.");
         module
     };

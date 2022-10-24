@@ -12,7 +12,7 @@ use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
-    OwnedEntrypointName, ReceiveName,
+    ModuleReference, OwnedEntrypointName, ReceiveName,
 };
 use machine::Value;
 use sha3::Digest;
@@ -26,7 +26,8 @@ use wasm_transform::{
 };
 
 /// Interrupt triggered by the smart contract to execute an instruction on the
-/// host, either an account transfer or a smart contract call.
+/// host, either an account transfer, a smart contract call or an upgrade
+/// instruction.
 #[derive(Debug)]
 pub enum Interrupt {
     Transfer {
@@ -38,6 +39,9 @@ pub enum Interrupt {
         parameter: ParameterVec,
         name:      OwnedEntrypointName,
         amount:    Amount,
+    },
+    Upgrade {
+        module_ref: ModuleReference,
     },
 }
 
@@ -68,6 +72,13 @@ impl Interrupt {
                 out.write_all(&(name_str.as_bytes().len() as u16).to_be_bytes())?;
                 out.write_all(name_str.as_bytes())?;
                 out.write_all(&amount.micro_ccd.to_be_bytes())?;
+                Ok(())
+            }
+            Interrupt::Upgrade {
+                module_ref,
+            } => {
+                out.push(2u8);
+                out.write_all(module_ref.as_ref().as_slice())?;
                 Ok(())
             }
         }
@@ -760,6 +771,28 @@ mod host {
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
     }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+    /// Handle the `upgrade` host function.
+    pub fn upgrade(
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<Option<Interrupt>> {
+        let module_ref_start = unsafe { stack.pop_u32() } as usize;
+        let module_ref_end = module_ref_start + 32;
+        ensure!(module_ref_end <= memory.len(), "Illegal memory access.");
+        let mut module_reference_bytes = [0u8; 32];
+        module_reference_bytes.copy_from_slice(&memory[module_ref_start..module_ref_end]);
+        let module_ref = ModuleReference::from(module_reference_bytes);
+        // We tick a base action cost here and
+        // tick the remaining cost in the 'Scheduler' as it knows the size
+        // of the new module.
+        energy.tick_energy(constants::INVOKE_BASE_COST)?;
+        Ok(Some(Interrupt::Upgrade {
+            module_ref,
+        }))
+    }
 }
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
@@ -1041,6 +1074,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     stack,
                     self.stateless.receive_ctx.entrypoint()?,
                 ),
+                ReceiveOnlyFunc::Upgrade => {
+                    return host::upgrade(memory, stack, &mut self.energy);
+                }
             }?,
             ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
                 bail!("Not implemented for receive.");
@@ -1062,7 +1098,7 @@ pub type ParameterVec = Vec<u8>;
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
-    amount: u64,
+    amount: Amount,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     parameter: ParameterRef,
@@ -1081,7 +1117,8 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
         parameter,
         init_ctx,
     };
-    let result = artifact.borrow().run(&mut host, init_name, &[Value::I64(amount as i64)]);
+    let result =
+        artifact.borrow().run(&mut host, init_name, &[Value::I64(amount.micro_ccd() as i64)]);
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
     let logs = std::mem::take(&mut host.logs);
@@ -1133,7 +1170,8 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
 }
 
 #[derive(Debug, Clone)]
-/// The kind of errors that may occur during handling of contract invoke.
+/// The kind of errors that may occur during handling of contract `invoke` or
+/// `upgrade`.
 pub enum InvokeFailure {
     /// The V1 contract rejected the call with the specific code. The code is
     /// always negative.
@@ -1154,6 +1192,9 @@ pub enum InvokeFailure {
     SendingV0Failed,
     /// Invoking a contract failed with a runtime error.
     RuntimeError,
+    UpgradeInvalidModuleRef,
+    UpgradeInvalidContractName,
+    UpgradeInvalidVersion,
 }
 
 impl InvokeFailure {
@@ -1179,6 +1220,9 @@ impl InvokeFailure {
             InvokeFailure::NonExistentEntrypoint => 0x04_0000_0000,
             InvokeFailure::SendingV0Failed => 0x05_0000_0000,
             InvokeFailure::RuntimeError => 0x06_0000_0000,
+            InvokeFailure::UpgradeInvalidModuleRef => 0x07_0000_0000,
+            InvokeFailure::UpgradeInvalidContractName => 0x08_0000_0000,
+            InvokeFailure::UpgradeInvalidVersion => 0x09_0000_0000,
         })
     }
 }
@@ -1232,6 +1276,9 @@ impl InvokeResponse {
                 0x0000_0004_0000_0000 => InvokeFailure::NonExistentEntrypoint,
                 0x0000_0005_0000_0000 => InvokeFailure::SendingV0Failed,
                 0x0000_0006_0000_0000 => InvokeFailure::RuntimeError,
+                0x0000_0007_0000_0000 => InvokeFailure::UpgradeInvalidModuleRef,
+                0x0000_0008_0000_0000 => InvokeFailure::UpgradeInvalidContractName,
+                0x0000_0009_0000_0000 => InvokeFailure::UpgradeInvalidVersion,
                 x => bail!("Unrecognized error code: {}", x),
             };
             InvokeResponse::Failure {
@@ -1247,50 +1294,83 @@ impl InvokeResponse {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+/// Common data used by the `invoke_*_from_artifact` family of functions.
+pub struct InvokeFromArtifactCtx<'a> {
+    /// The source of the artifact, serialized in the format specified by the
+    /// `wasm_transform` crate.
+    pub artifact:  &'a [u8],
+    /// Amount to invoke with.
+    pub amount:    Amount,
+    /// Parameter to supply to the call.
+    pub parameter: ParameterRef<'a>,
+    /// Energy to allow for execution.
+    pub energy:    InterpreterEnergy,
+}
+
 /// Invokes an init-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
-    artifact_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromArtifactCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    let artifact = utils::parse_artifact(ctx.artifact)?;
+    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
+}
+
+#[derive(Copy, Clone, Debug)]
+/// Common data used by the `invoke_*_from_source` family of functions.
+pub struct InvokeFromSourceCtx<'a> {
+    /// The source Wasm module.
+    pub source:          &'a [u8],
+    /// Amount to invoke with.
+    pub amount:          Amount,
+    /// Parameter to supply to the call.
+    pub parameter:       ParameterRef<'a>,
+    /// Energy to allow for execution.
+    pub energy:          InterpreterEnergy,
+    /// Whether the module should be processed to allow upgrades or not.
+    /// Upgrades are only allowed in protocol P5 and later. If this is set to
+    /// `false` then parsing and validation will reject modules that use the
+    /// `upgrade` function.
+    pub support_upgrade: bool,
 }
 
 /// Invokes an init-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    let artifact = utils::instantiate(
+        &ConcordiumAllowedImports {
+            support_upgrade: ctx.support_upgrade,
+        },
+        ctx.source,
+    )?;
+    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     loader: BackingStore,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy, loader)
+    let artifact = utils::instantiate_with_metering(
+        &ConcordiumAllowedImports {
+            support_upgrade: ctx.support_upgrade,
+        },
+        ctx.source,
+    )?;
+    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
 }
 
 fn process_receive_result<
@@ -1387,7 +1467,7 @@ pub fn invoke_receive<
     Ctx2: From<Ctx1>,
 >(
     artifact: Art,
-    amount: u64,
+    amount: Amount,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     param: ParameterRef,
@@ -1408,7 +1488,7 @@ pub fn invoke_receive<
 
     let result = artifact
         .borrow()
-        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount as i64)]);
+        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount.micro_ccd() as i64)]);
     process_receive_result(artifact, host, result)
 }
 
@@ -1509,49 +1589,48 @@ pub fn invoke_receive_from_artifact<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    artifact_bytes: &'a [u8],
-    amount: u64,
+    ctx: InvokeFromArtifactCtx<'a>,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
-    let artifact = utils::parse_artifact(artifact_bytes)?;
+    let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_receive(
         Arc::new(artifact),
-        amount,
+        ctx.amount,
         receive_ctx,
         receive_name,
-        parameter,
-        energy,
+        ctx.parameter,
+        ctx.energy,
         instance_state,
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes
+/// Invokes an receive-function from Wasm module bytes.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate(
+        &ConcordiumAllowedImports {
+            support_upgrade: ctx.support_upgrade,
+        },
+        ctx.source,
+    )?;
     invoke_receive(
         Arc::new(artifact),
-        amount,
+        ctx.amount,
         receive_ctx,
         receive_name,
-        parameter,
-        energy,
+        ctx.parameter,
+        ctx.energy,
         instance_state,
     )
 }
@@ -1564,22 +1643,24 @@ pub fn invoke_receive_with_metering_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
-    source_bytes: &[u8],
-    amount: u64,
+    ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
     instance_state: InstanceState<BackingStore>,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        &ConcordiumAllowedImports {
+            support_upgrade: ctx.support_upgrade,
+        },
+        ctx.source,
+    )?;
     invoke_receive(
         Arc::new(artifact),
-        amount,
+        ctx.amount,
         receive_ctx,
         receive_name,
-        parameter,
-        energy,
+        ctx.parameter,
+        ctx.energy,
         instance_state,
     )
 }
