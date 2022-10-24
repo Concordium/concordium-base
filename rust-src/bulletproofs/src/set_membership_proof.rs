@@ -86,7 +86,7 @@ fn a_L_a_R<F: Field>(v: &F, set_vec: &Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
 /// - `v` the value
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
 ///   `n`
-/// - `v_keys` - commitment keys `B` and `B_tilde`
+/// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case)]
 pub fn prove<C: Curve, R: Rng>(
@@ -321,7 +321,7 @@ pub fn prove<C: Curve, R: Rng>(
     let proof =
         prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
 
-    // return range proof
+    // return set membership proof
     if let Some(ip_proof) = proof {
         Ok(SetMembershipProof {
             A,
@@ -401,7 +401,7 @@ pub fn verify<C: Curve>(
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
 
-    // define the commitments A,S
+    // define the commitments T1, T2
     let T_1 = proof.T_1;
     let T_2 = proof.T_2;
     // append T1, T2 commitments to transcript
@@ -413,7 +413,7 @@ pub fn verify<C: Curve>(
 
     // define polynomial evaluation value
     let tx = proof.tx;
-    // define blinding factors for tx and i.p. proof
+    // define blinding factors for tx and IP proof
     let tx_tilde = proof.tx_tilde;
     let e_tilde = proof.e_tilde;
     // append tx, tx_tilde, e_tilde to transcript
