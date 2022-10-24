@@ -9,6 +9,8 @@ use rand::*;
 use random_oracle::RandomOracle;
 use std::iter::once;
 
+pub use crate::utils::Generators;
+
 /// Bulletproof style range proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
