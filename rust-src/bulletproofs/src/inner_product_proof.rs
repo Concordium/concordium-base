@@ -1,4 +1,5 @@
-//! Logarithmic sized inner product proof used as base for the other proofs in this crate
+//! Logarithmic sized inner product proof used as base for the other proofs in
+//! this crate
 use crate::utils::*;
 use crypto_common::*;
 use crypto_common_derive::*;
