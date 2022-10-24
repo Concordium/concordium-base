@@ -92,28 +92,11 @@ pub fn bench_set_membership_proof(c: &mut Criterion) {
                 .unwrap();
             })
         });
-
-        // Bench ultra verification
-        group.bench_function(BenchmarkId::new("Ultra Verification", n), move |b| {
-            b.iter(|| {
-                let mut transcript = RandomOracle::empty();
-                verify_ultra_efficient(
-                    &mut transcript,
-                    rng,
-                    &the_set,
-                    &v_com,
-                    &proof,
-                    &gens,
-                    &v_keys,
-                )
-                .unwrap();
-            })
-        });
     }
 }
 
 criterion_group!(
-    name = smp_bench; 
+    name = smp_bench;
     config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
     targets = bench_set_membership_proof);
 criterion_main!(smp_bench);
