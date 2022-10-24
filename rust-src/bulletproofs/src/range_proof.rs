@@ -1,3 +1,4 @@
+//! Implementation of range proofs along the lines of bulletproofs
 use crate::{inner_product_proof::*, utils::*};
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -8,18 +9,19 @@ use rand::*;
 use random_oracle::RandomOracle;
 use std::iter::once;
 
+/// Bulletproof style range proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     /// Commitment to the bits of the value
     A:        C,
-    /// Commitment to the blinding factors in s_L and s_R
+    /// Commitment to the blinding factors in `s_L` and `s_R`
     S:        C,
-    /// Commitment to the t_1 coefficient of polynomial t(x)
+    /// Commitment to the `t_1` coefficient of polynomial `t(x)`
     T_1:      C,
-    /// Commitment to the t_2 coefficient of polynomial t(x)
+    /// Commitment to the `t_2` coefficient of polynomial `t(x)`
     T_2:      C,
-    /// Evaluation of t(x) at the challenge point x
+    /// Evaluation of `t(x)` at the challenge point `x`
     tx:       C::Scalar,
     /// Blinding factor for the commitment to tx
     tx_tilde: C::Scalar,
@@ -29,12 +31,12 @@ pub struct RangeProof<C: Curve> {
     ip_proof: InnerProductProof<C>,
 }
 
-/// Determine whether the i-th bit (counting from least significant) is set in
+/// Determine whether the `i`-th bit (counting from least significant) is set in
 /// the given u64 value.
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 
-/// This function computes the n-bit binary representation a_L of input value v
-/// The vector a_R is the bit-wise negation of a_L
+/// This function computes the n-bit binary representation `a_L` of input value
+/// `v` The vector `a_R` is the bit-wise negation of `a_L`
 #[allow(non_snake_case)]
 fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
     let mut a_L = Vec::with_capacity(usize::from(n));

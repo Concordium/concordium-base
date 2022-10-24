@@ -1,3 +1,4 @@
+//! Shared functions used by the proofs in this crate
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
@@ -28,6 +29,8 @@ impl<C: Curve> Generators<C> {
         Self { G_H: gh }
     }
 
+    /// Returns the prefix of length nm of a given generator.
+    /// This function panics if nm > length of the generator.
     pub fn take(&self, nm: usize) -> Self {
         Self {
             G_H: self.G_H[0..nm].to_vec(),
@@ -68,9 +71,13 @@ pub fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
     s_vec
 }
 
-/// Pads a field vector two a power of two length by repeating the last element
+/// Pads a non-empty field vector to a power of two length by repeating the last
+/// element For empty vectors the function is the identity.
 pub fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
     let n = vec.len();
+    if n == 0 {
+        return;
+    }
     let k = n.next_power_of_two();
     if let Some(last) = vec.last().cloned() {
         let d = k - n;
@@ -82,12 +89,11 @@ pub fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
 
 #[cfg(test)]
 mod tests {
+
+    use super::{pad_vector_to_power_of_two, z_vec};
     use ff::Field;
     use rand::thread_rng;
 
-    use super::{pad_vector_to_power_of_two, z_vec};
-
-    // type SomeCurve = pairing::bls12_381::G1;
     type SomeField = pairing::bls12_381::Fq;
 
     #[test]

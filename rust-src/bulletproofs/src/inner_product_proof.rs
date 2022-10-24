@@ -1,3 +1,4 @@
+//! Logarithmic sized inner product proof used as base for the other proofs in this crate
 use crate::utils::*;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -5,6 +6,7 @@ use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::RandomOracle;
 
+/// Inner product proof
 #[derive(Clone, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
