@@ -106,14 +106,14 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 }
 
 /// This function produces a range proof, i.e. a proof of knowledge
-/// of value v_1, v_2, ..., v_m that are all in [0, 2^n) that are consistent
+/// of value `v_1, v_2, ..., v_m` that are all in `[0, 2^n)` that are consistent
 /// with commitments V_i to v_i. The arguments are
-/// - n - the number n such that v_i is in [0,2^n) for all i
-/// - m - the number of values that is proved to be in [0,2^n)
-/// - v_vec - the vector having v_1, ..., v_m as entrances
-/// - gens - generators containing vectors G and H both of length at least nm
-/// - v_keys - commitment keys B and B_tilde
-/// - randomness - the randomness used to commit to each v_i using v_keys
+/// - `n` - the number n such that `v_i` is in `[0,2^n)` for all `i`
+/// - `m` - the number of values that is proved to be in `[0,2^n)`
+/// - `v_vec` - the vector having `v_1, ..., v_m` as entrances
+/// - `gens` - generators containing vectors `G` and `H` both of length at least `nm`
+/// - `v_keys` - commitment keys `B` and `B_tilde`
+/// - `randomness` - the randomness used to commit to each `v_i` using `v_keys`
 #[allow(clippy::many_single_char_names)]
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
@@ -132,9 +132,11 @@ pub fn prove<C: Curve, T: Rng>(
     // A (their binary representation),
     // S (the blinding factors)
     let nm = usize::from(n) * usize::from(m);
-    // TODO: Check that v_vec has the same length as randomness
-    // Check that we have enough generators for vector commitments
-    // TODO: Add proper error handling
+    
+    if v_vec.len() != randomness.len() { 
+        return None;
+    }
+
     if gens.G_H.len() < nm {
         return None;
     }
