@@ -463,6 +463,10 @@ impl SchemaType for OwnedEntrypointName {
     fn get_type() -> Type { Type::String(SizeLength::U16) }
 }
 
+impl SchemaType for OwnedParameter {
+    fn get_type() -> Type { Type::ByteList(SizeLength::U16) }
+}
+
 impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
     fn get_type() -> Type { Type::Array(N.try_into().unwrap(), Box::new(A::get_type())) }
 }
