@@ -623,12 +623,12 @@ impl BakerKeyPairs {
 ///
 /// Note: This type contains unencrypted secret keys and should be treated
 /// carefully.
-#[derive(SerdeSerialize)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BakerCredentials {
-    baker_id: BakerId,
+    pub baker_id: BakerId,
     #[serde(flatten)]
-    keys:     BakerKeyPairs,
+    pub keys:     BakerKeyPairs,
 }
 
 impl BakerCredentials {
@@ -718,6 +718,10 @@ impl From<UpdateKeysThreshold> for u16 {
     fn from(u: UpdateKeysThreshold) -> Self { u.threshold.get() }
 }
 
+impl std::fmt::Display for UpdateKeysThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.threshold.get().fmt(f) }
+}
+
 #[derive(Debug, Error)]
 #[error("Signature threshold cannot be 0.")]
 /// An error type that indicates that a 0 attempted to be used as a signature
@@ -754,6 +758,10 @@ impl TryFrom<u16> for UpdateKeysThreshold {
 /// identifies keys that correspond to the signatures.
 pub struct UpdateKeysIndex {
     pub index: u16,
+}
+
+impl std::fmt::Display for UpdateKeysIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.index.fmt(f) }
 }
 
 #[repr(transparent)]
