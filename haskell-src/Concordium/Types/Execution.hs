@@ -1626,6 +1626,7 @@ instance AE.ToJSON Event where
       ]
     Upgraded {..} -> AE.object [
         "tag" .= AE.String "Upgraded",
+        "address" .= euAddress,
         "from" .= euFrom,
         "to" .= euTo
       ]
