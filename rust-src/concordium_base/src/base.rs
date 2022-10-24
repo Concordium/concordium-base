@@ -363,6 +363,12 @@ pub enum ProtocolVersion {
     /// Protocol `P4` is a major upgrade that adds support for delegation,
     /// baking pools, and V1 smart contracts.
     P4,
+    #[display(fmt = "P5")]
+    /// Protocol `P5` is a minor upgrade that adds support for smart contract
+    /// upgradability, smart contract queries, relaxes some limitations and
+    /// improves the structure of internal node datastructures related to
+    /// accounts.
+    P5,
 }
 
 #[derive(Debug, Error, Display)]
@@ -382,6 +388,7 @@ impl TryFrom<u64> for ProtocolVersion {
             2 => Ok(ProtocolVersion::P2),
             3 => Ok(ProtocolVersion::P3),
             4 => Ok(ProtocolVersion::P4),
+            5 => Ok(ProtocolVersion::P5),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -394,6 +401,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P2 => 2,
             ProtocolVersion::P3 => 3,
             ProtocolVersion::P4 => 4,
+            ProtocolVersion::P5 => 5,
         }
     }
 }
