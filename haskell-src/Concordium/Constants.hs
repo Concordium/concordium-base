@@ -25,8 +25,22 @@ maxPayloadSize SP5 = maxPayloadSize SP4
 -- * Web assembly related constants
 
 -- |Maximum length of the parameter to init and receive methods.
-maxParameterLen :: Word16
-maxParameterLen = 1024
+-- The limit was changed from `1024` to `65535` in P5.
+maxParameterLen :: SProtocolVersion pv -> Word16
+maxParameterLen SP1 = 1024
+maxParameterLen SP2 = 1024
+maxParameterLen SP3 = 1024
+maxParameterLen SP4 = 1024
+maxParameterLen _ = 65535
+
+-- |Whether the number of logs and size of return values should be limited.
+-- The limits have been removed in P5 and onward.
+limitLogsAndReturnValues :: SProtocolVersion pv -> Bool
+limitLogsAndReturnValues SP1 = True
+limitLogsAndReturnValues SP2 = True
+limitLogsAndReturnValues SP3 = True
+limitLogsAndReturnValues SP4 = True
+limitLogsAndReturnValues _ = False
 
 -- |Maximum module size of a V0 module.
 maxWasmModuleSizeV0 :: Word32

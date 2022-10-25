@@ -26,9 +26,9 @@ impl Logs {
     /// - 0 if data was not logged because it would exceed maximum number of
     ///   logs
     /// - 1 if data was logged.
-    pub fn log_event(&mut self, event: Vec<u8>) -> i32 {
+    pub fn log_event(&mut self, event: Vec<u8>, limit_num_logs: bool) -> i32 {
         let cur_len = self.logs.len();
-        if cur_len < constants::MAX_NUM_LOGS {
+        if !limit_num_logs || cur_len < constants::MAX_NUM_LOGS {
             self.logs.push_back(event);
             1
         } else {
@@ -86,6 +86,7 @@ impl Outcome {
         receive_name_bytes: &[u8],
         amount: u64,
         parameter_bytes: &[u8],
+        max_parameter_size: usize,
     ) -> ExecResult<u32> {
         let response = self.cur_state.len();
 
@@ -93,10 +94,7 @@ impl Outcome {
         ensure!(ReceiveName::is_valid_receive_name(name_str).is_ok(), "Not a valid receive name.");
         let name = receive_name_bytes.to_vec();
 
-        ensure!(
-            parameter_bytes.len() <= constants::MAX_PARAMETER_SIZE,
-            "Parameter exceeds max size."
-        );
+        ensure!(parameter_bytes.len() <= max_parameter_size, "Parameter exceeds max size.");
 
         let parameter = parameter_bytes.to_vec();
 
@@ -192,36 +190,44 @@ impl State {
 
 pub struct InitHost<ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy:            InterpreterEnergy,
+    pub energy:                   InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames: u32,
+    pub activation_frames:        u32,
     /// Logs produced during execution.
-    pub logs:              Logs,
+    pub logs:                     Logs,
     /// The contract's state.
-    pub state:             State,
+    pub state:                    State,
     /// The parameter to the init method.
-    pub param:             ParamType,
+    pub param:                    ParamType,
     /// The init context for this invocation.
-    pub init_ctx:          Ctx,
+    pub init_ctx:                 Ctx,
+    /// Whether there is a limit on the number of logs and sizes of return
+    /// values. Limit removed in P5.
+    limit_logs_and_return_values: bool,
 }
 
 pub struct ReceiveHost<ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy:            InterpreterEnergy,
+    pub energy:                   InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames: u32,
+    pub activation_frames:        u32,
     /// Logs produced during execution.
-    pub logs:              Logs,
+    pub logs:                     Logs,
     /// The contract's state.
-    pub state:             State,
+    pub state:                    State,
     /// The parameter to the receive method.
-    pub param:             ParamType,
+    pub param:                    ParamType,
     /// Outcomes of the execution, i.e., the actions tree.
-    pub outcomes:          Outcome,
+    pub outcomes:                 Outcome,
     /// The receive context for this call.
-    pub receive_ctx:       Ctx,
+    pub receive_ctx:              Ctx,
+    /// The maximum parameter size. Is constant for a given protocol version.
+    max_parameter_size:           usize,
+    /// Whether there is a limit on the number of logs and sizes of return
+    /// values. Limit removed in P5.
+    limit_logs_and_return_values: bool,
 }
 
 /// Types which can act as init contexts.
@@ -363,7 +369,7 @@ pub(crate) mod host {
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
-        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        energy.tick_energy(constants::copy_parameter_cost(length))?;
         let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
         ensure!(write_end <= memory.len(), "Illegal memory access.");
         let end = std::cmp::min(offset + length as usize, param.len());
@@ -401,6 +407,7 @@ pub(crate) mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         logs: &mut Logs,
+        limit_num_logs: bool,
     ) -> machine::RunResult<()> {
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
@@ -409,7 +416,7 @@ pub(crate) mod host {
         if length <= constants::MAX_LOG_SIZE {
             // only charge if we actually log something.
             energy.tick_energy(constants::log_event_cost(length))?;
-            stack.push_value(logs.log_event(memory[start..end].to_vec()))
+            stack.push_value(logs.log_event(memory[start..end].to_vec(), limit_num_logs))
         } else {
             // otherwise the cost is adequately reflected by just the cost of a function
             // call.
@@ -542,6 +549,7 @@ pub(crate) mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         outcomes: &mut Outcome,
+        max_parameter_size: usize,
     ) -> machine::RunResult<()> {
         // all `as usize` are safe on 64-bit systems since we are converging from a u32
         let parameter_len = unsafe { stack.pop_u32() };
@@ -564,6 +572,7 @@ pub(crate) mod host {
             &memory[receive_name_start..receive_name_end],
             amount,
             &memory[parameter_start..parameter_end],
+            max_parameter_size,
         )?;
         stack.push_value(res);
         Ok(())
@@ -718,9 +727,13 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
                     &mut self.energy,
                     self.init_ctx.sender_policies(),
                 ),
-                CommonFunc::LogEvent => {
-                    host::log_event(memory, stack, &mut self.energy, &mut self.logs)
-                }
+                CommonFunc::LogEvent => host::log_event(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &mut self.logs,
+                    self.limit_logs_and_return_values,
+                ),
                 CommonFunc::LoadState => {
                     host::load_state(memory, stack, &mut self.energy, &mut self.state)
                 }
@@ -782,9 +795,13 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
                     &mut self.energy,
                     self.receive_ctx.sender_policies(),
                 ),
-                CommonFunc::LogEvent => {
-                    host::log_event(memory, stack, &mut self.energy, &mut self.logs)
-                }
+                CommonFunc::LogEvent => host::log_event(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &mut self.logs,
+                    self.limit_logs_and_return_values,
+                ),
                 CommonFunc::LoadState => {
                     host::load_state(memory, stack, &mut self.energy, &mut self.state)
                 }
@@ -804,9 +821,13 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
                 ReceiveOnlyFunc::SimpleTransfer => {
                     host::simple_transfer(memory, stack, &mut self.energy, &mut self.outcomes)
                 }
-                ReceiveOnlyFunc::Send => {
-                    host::send(memory, stack, &mut self.energy, &mut self.outcomes)
-                }
+                ReceiveOnlyFunc::Send => host::send(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &mut self.outcomes,
+                    self.max_parameter_size,
+                ),
                 ReceiveOnlyFunc::CombineAnd => {
                     host::combine_and(stack, &mut self.energy, &mut self.outcomes)
                 }
@@ -844,6 +865,7 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     param: Parameter,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
@@ -852,6 +874,7 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
         logs: Logs::new(),
         state: State::new(None),
         param,
+        limit_logs_and_return_values,
         init_ctx,
     };
 
@@ -903,10 +926,19 @@ pub fn invoke_init_from_artifact<Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     parameter: Parameter,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(
+        &artifact,
+        amount,
+        init_ctx,
+        init_name,
+        parameter,
+        limit_logs_and_return_values,
+        energy,
+    )
 }
 
 /// Invokes an init-function from Wasm module bytes
@@ -917,10 +949,19 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     parameter: Parameter,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(
+        &artifact,
+        amount,
+        init_ctx,
+        init_name,
+        parameter,
+        limit_logs_and_return_values,
+        energy,
+    )
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
@@ -932,10 +973,19 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     init_ctx: Ctx,
     init_name: &str,
     parameter: Parameter,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_init(&artifact, amount, init_ctx, init_name, parameter, energy)
+    invoke_init(
+        &artifact,
+        amount,
+        init_ctx,
+        init_name,
+        parameter,
+        limit_logs_and_return_values,
+        energy,
+    )
 }
 
 /// Invokes an receive-function from a given artifact
@@ -946,6 +996,8 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
+    max_parameter_size: usize,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let mut host = ReceiveHost {
@@ -954,6 +1006,8 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
         logs: Logs::new(),
         state: State::new(Some(current_state)),
         param: &parameter,
+        max_parameter_size,
+        limit_logs_and_return_values,
         receive_ctx,
         outcomes: Outcome::new(),
     };
@@ -1025,10 +1079,22 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
+    max_parameter_size: usize,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
-    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(
+        &artifact,
+        amount,
+        receive_ctx,
+        current_state,
+        receive_name,
+        parameter,
+        max_parameter_size,
+        limit_logs_and_return_values,
+        energy,
+    )
 }
 
 /// Invokes an receive-function from Wasm module bytes
@@ -1040,10 +1106,22 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
+    max_parameter_size: usize,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(
+        &artifact,
+        amount,
+        receive_ctx,
+        current_state,
+        receive_name,
+        parameter,
+        max_parameter_size,
+        limit_logs_and_return_values,
+        energy,
+    )
 }
 
 /// Invokes an receive-function from Wasm module bytes, injects the module with
@@ -1056,8 +1134,20 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
+    max_parameter_size: usize,
+    limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
-    invoke_receive(&artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+    invoke_receive(
+        &artifact,
+        amount,
+        receive_ctx,
+        current_state,
+        receive_name,
+        parameter,
+        max_parameter_size,
+        limit_logs_and_return_values,
+        energy,
+    )
 }
