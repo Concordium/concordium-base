@@ -7,7 +7,6 @@ use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
-use std::iter::once;
 
 /// Bulletproof style set-non-membership proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
@@ -90,11 +89,22 @@ pub fn prove<C: Curve, R: Rng>(
     if gens.G_H.len() < n {
         return Err(ProverError::NotEnoughGenerators);
     }
-    // Select generators for vector commitments
-    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
+
+    // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
+    let mut GH_B_tilde: Vec<C> = Vec::with_capacity(2 * n + 1);
+    let (mut G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
+    GH_B_tilde.append(&mut G);
+    GH_B_tilde.append(&mut H);
+
     // Generators for single commitments and blinding
     let B = v_keys.g;
     let B_tilde = v_keys.h;
+    GH_B_tilde.push(B_tilde);
+
+    // define aliases to amek G and H available again
+    let G = &GH_B_tilde[0..n];
+    let H = &GH_B_tilde[n..2 * n];
+
     // Compute A_scalars, that is a_L, a_R and a_tilde
     let mut A_scalars = Vec::with_capacity(2 * n + 1);
     // Compute a_L_i <- (v - si)^-1
@@ -127,13 +137,7 @@ pub fn prove<C: Curve, R: Rng>(
     let s_L = &S_scalars[0..n];
     let s_R = &S_scalars[n..2 * n];
     let s_tilde = &S_scalars[2 * n];
-    // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
-    let GH_B_tilde: Vec<C> = G
-        .iter()
-        .chain(H.iter())
-        .copied()
-        .chain(once(B_tilde))
-        .collect();
+
     // Compute A and S commitments using multi exponentiation
     let window_size = 4;
     let table = multiexp_table(&GH_B_tilde, window_size);
@@ -279,8 +283,7 @@ pub fn prove<C: Curve, R: Rng>(
     };
     let H_prime_scalars = z_vec(y_inv, 0, n);
     // compute inner product proof
-    let proof =
-        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
+    let proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, &lx, &rx);
 
     // return set membership proof
     if let Some(ip_proof) = proof {
