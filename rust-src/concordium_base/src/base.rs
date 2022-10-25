@@ -10,6 +10,7 @@ use crypto_common::{
 };
 use derive_more::{Add, Display, From, FromStr, Into};
 use id::types::VerifyKey;
+use num::Integer;
 use rand::{CryptoRng, Rng};
 use random_oracle::RandomOracle;
 use std::{
@@ -705,7 +706,7 @@ impl From<&UpdateKeyPair> for UpdatePublicKey {
     fn from(kp: &UpdateKeyPair) -> Self { kp.public.clone() }
 }
 
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into)]
+#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into, Display)]
 #[serde(transparent)]
 /// A lower bound on the number of signatures needed to sign a valid update
 /// message of a particular type. This is never 0.
@@ -881,9 +882,10 @@ impl<T: Ord> InclusiveRange<T> {
     pub fn contains(&self, x: &T) -> bool { &self.min <= x && x <= &self.max }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy)]
 /// An exchange rate between two quantities. This is never 0, and the exchange
 /// rate should also never be infinite.
+#[derive(PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Copy)]
+#[serde(try_from = "exchange_rate_json::ExchangeRateJSON")]
 pub struct ExchangeRate {
     #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
     pub numerator:   u64,
@@ -903,6 +905,74 @@ impl ExchangeRate {
             })
         } else {
             None
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+/// An error that may occur when converting from a string to an exchange rate.
+pub enum ExchangeRateConversionError {
+    #[error("Could not convert from decimal: {0}")]
+    FromDecimal(#[from] rust_decimal::Error),
+    #[error("Exchange rate must be strictly positive.")]
+    NotStrictlyPositive,
+    #[error("Exchange rate is not representable, either it is too large or has too many digits.")]
+    Unrepresentable,
+}
+
+impl FromStr for ExchangeRate {
+    type Err = ExchangeRateConversionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut decimal = rust_decimal::Decimal::from_str_exact(s)?;
+        decimal.normalize_assign();
+        if decimal.is_zero() || decimal.is_sign_negative() {
+            return Err(ExchangeRateConversionError::NotStrictlyPositive);
+        }
+        let mantissa = decimal.mantissa();
+        let scale = decimal.scale();
+        let denominator = 10u64
+            .checked_pow(scale)
+            .ok_or(ExchangeRateConversionError::Unrepresentable)?;
+        let numerator: u64 = mantissa
+            .try_into()
+            .map_err(|_| ExchangeRateConversionError::Unrepresentable)?;
+        let g = numerator.gcd(&denominator);
+        Ok(ExchangeRate {
+            numerator:   numerator / g,
+            denominator: denominator / g,
+        })
+    }
+}
+
+mod exchange_rate_json {
+    use super::*;
+    #[derive(SerdeDeserialize)]
+    #[serde(untagged)]
+    pub enum ExchangeRateJSON {
+        String(String),
+        Num(f64),
+        Object { numerator: u64, denominator: u64 },
+    }
+
+    impl TryFrom<ExchangeRateJSON> for ExchangeRate {
+        type Error = ExchangeRateConversionError;
+
+        fn try_from(value: ExchangeRateJSON) -> Result<Self, Self::Error> {
+            match value {
+                ExchangeRateJSON::String(value) => value.parse(),
+                ExchangeRateJSON::Num(v) => v.to_string().parse(),
+                ExchangeRateJSON::Object {
+                    numerator,
+                    denominator,
+                } => {
+                    let g = numerator.gcd(&denominator);
+                    Ok(ExchangeRate {
+                        numerator:   numerator / g,
+                        denominator: denominator / g,
+                    })
+                }
+            }
         }
     }
 }
@@ -1313,5 +1383,41 @@ mod tests {
             "Case 4."
         );
         assert!(serde_json::from_str::<PartsPerHundredThousands>("0.123456").is_err());
+    }
+
+    #[test]
+    fn test_exchange_rate_json() {
+        let data = ExchangeRate {
+            numerator:   1,
+            denominator: 100,
+        };
+        assert_eq!(
+            data,
+            serde_json::from_str("{\"numerator\": 1, \"denominator\": 100}").unwrap(),
+            "Exchange rate: case 1"
+        );
+        assert_eq!(
+            data,
+            serde_json::from_value(serde_json::from_str("0.01").unwrap()).unwrap(),
+            "Exchange rate: case 2"
+        );
+        let data2 = ExchangeRate {
+            numerator:   10,
+            denominator: 1,
+        };
+        assert_eq!(
+            data2,
+            serde_json::from_str("10").unwrap(),
+            "Exchange rate: case 3"
+        );
+        let data3 = ExchangeRate {
+            numerator:   17,
+            denominator: 39,
+        };
+        assert_eq!(
+            data3,
+            serde_json::from_str(&serde_json::to_string(&data3).unwrap()).unwrap(),
+            "Exchange rate: case 4"
+        );
     }
 }
