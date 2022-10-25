@@ -50,5 +50,5 @@ name = "smp_bench"
 harness = false
 
 [[bench]]
-name = "snmp_bench"
+name = "set_proof_bench"
 harness = false
