@@ -250,7 +250,7 @@ pub fn prove<C: Curve, R: Rng>(
     // t_x_tilde <- z*<1,y^n>*v_rand + t_1_tilde*x + t_2_tilde*x^2
     let mut tx_tilde = z;
     tx_tilde.mul_assign(&ip_y_n);
-    tx_tilde.mul_assign(&v_rand);
+    tx_tilde.mul_assign(v_rand);
     let mut tx_s1 = t_1_tilde;
     tx_s1.mul_assign(&x);
     tx_tilde.add_assign(&tx_s1);
@@ -261,7 +261,7 @@ pub fn prove<C: Curve, R: Rng>(
     // e_tilde <- a_tilde + s_tilde * x
     let mut e_tilde = *s_tilde;
     e_tilde.mul_assign(&x);
-    e_tilde.add_assign(&a_tilde);
+    e_tilde.add_assign(a_tilde);
     // append tx, tx_tilde, e_tilde to transcript
     transcript.append_message(b"tx", &tx);
     transcript.append_message(b"tx_tilde", &tx_tilde);
