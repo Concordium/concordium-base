@@ -20,7 +20,7 @@ impl<C: Curve> Generators<C> {
     /// discrete logarithms between different generators are not known, which is
     /// not guaranteed by this function.
     #[cfg(test)]
-    pub fn generate(n: usize, csprng: &mut impl Rng) -> Self {
+    pub(crate) fn generate(n: usize, csprng: &mut impl Rng) -> Self {
         let mut gh = Vec::with_capacity(n);
         for _ in 0..n {
             let x = C::generate(csprng);
