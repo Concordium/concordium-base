@@ -513,7 +513,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// Test that sets with sizes not a power of two are rejected by proof
+    /// Test that sets with sizes not a power of two are rejected by prove
     #[test]
     fn test_smp_prove_not_power_of_two() {
         let rng = &mut thread_rng();
@@ -543,7 +543,7 @@ mod tests {
         assert!(matches!(proof, Err(ProverError::CouldFindValueInSet)));
     }
 
-    /// Test that verification fails if sets has size not a power of two
+    /// Test that verification fails if set has size not a power of two
     #[test]
     fn test_smp_verify_not_power_of_two() {
         let rng = &mut thread_rng();
@@ -580,7 +580,7 @@ mod tests {
 
     /// Test whether verifying a proof generated for a different v fails to
     /// verify (even if the new v is still not in the set). This should cause an
-    /// invalid T_0 error.
+    /// inconsistent T0 error.
     #[test]
     fn test_smp_verify_different_value() {
         let rng = &mut thread_rng();
@@ -605,8 +605,8 @@ mod tests {
     }
 
     #[test]
-    /// Test whether verifying with different set (still containing v) fails.
-    /// This should cause an Inconsistent T0.
+    /// Test whether verifying with different set (still not containing v)
+    /// fails. This should cause an inconsistent T0 error.
     fn test_smp_verify_different_set() {
         let rng = &mut thread_rng();
 
@@ -630,7 +630,8 @@ mod tests {
     }
 
     #[test]
-    /// Test whether modifying inner proof causes invalid IP proof error.
+    /// Test whether modifying inner product proof causes invalid IP proof
+    /// error.
     fn test_smp_verify_invalid_inner_product() {
         let rng = &mut thread_rng();
 
