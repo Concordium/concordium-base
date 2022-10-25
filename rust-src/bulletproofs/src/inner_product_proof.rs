@@ -336,24 +336,27 @@ pub fn verify_inner_product<C: Curve>(
 }
 
 /// This function is an optimized variant of the above.
-/// It is verified whether P'=<a,G>+<b,H'>+<a,b>Q for P' =
-/// multiexp(P_prime_bases, P_prime_exponents) and H'_i =
-/// H_i^H_exponents_i. Arguments:
-/// - transcript - the proof transcript
-/// - gens - generators containing vectors G and H both of length n
-/// - H_exponents - slice of scalars to whose powers the H_i are raised
-/// - P_prime_bases - slice of points for computing curve point P'. It is
-///   assumed that the the first base points are G | H, which are implicit and
-///   omitted from P_prime_bases
-/// - P_prime_exponents - slice of scalars to whose powers the elements
+/// It is verified whether `P'=<a,G>+<b,H'>+<a,b>Q` for `P' =
+/// multiexp(P_prime_bases, P_prime_exponents)` and `H'_i =
+/// H_i^H_exponents_i`.
+///
+/// Arguments:
+/// - `transcript` - the proof transcript
+/// - `gens` - generators containing vectors G and H both of length n
+/// - `H_exponents` - slice of scalars to whose powers the H_i are raised
+/// - `P_prime_bases` - slice of points for computing curve point P'. It is
+///   assumed that the first base points are `G | H`, which are implicit and
+///   omitted from `P_prime_bases`
+/// - `P_prime_exponents` - slice of scalars to whose powers the elements
 ///   P_prime_bases are raised
-/// - Q - the elliptic curve point Q
-/// - proof - the inner product proof
+/// - `Q` - the elliptic curve point `Q`
+/// - `proof` - the inner product proof
+///
 /// Precondictions:
-/// G, H, and H_exponents should all be of the same length n, and this
-/// length must a power of 2. Furthermore, the length of P_prime_exponents is
-/// equal to the length of P_prime_bases plus of 2n (since G and H are omitted
-/// from P_prime_bases).
+/// `G`, `H`, and `H_exponents` should all be of the same length `n`, and this
+/// length must a power of 2. Furthermore, the length of `P_prime_exponents` is
+/// equal to the length of `P_prime_bases` plus of `2n` (since `G` and `H` are
+/// omitted from `P_prime_bases`).
 #[allow(non_snake_case)]
 pub fn verify_inner_product_with_scalars<C: Curve>(
     transcript: &mut RandomOracle,
