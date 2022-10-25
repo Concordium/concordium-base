@@ -4,7 +4,7 @@
 
 - Add type `ModuleReference` representing a module reference.
 - Implement `SchemaType` for `OwnedEntrypointName`.
-- Make the following functions compile-time evaluable (`const`): `Duration::from_millis`, `Duration::from_seconds`, `Duration::from_minutes`, `Duration::from_hours` and `Duration::from_days`.
+- Make the following functions `const`: `Duration::from_millis`, `Duration::from_seconds`, `Duration::from_minutes`, `Duration::from_hours` and `Duration::from_days`.
 
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
