@@ -15,9 +15,10 @@ pub struct Generators<C: Curve> {
 
 impl<C: Curve> Generators<C> {
     /// **Warning** do not use in production!
-    /// This **unsafely** generates a list of generators of a given size for
-    /// testing purposes. For production, generator must be created with
-    /// care.
+    /// This generates a list of generators of a given size for
+    /// testing purposes. For production, generators must be created such that
+    /// discrete logarithms between different generators are not known, which is
+    /// not guaranteed by this function.
     #[cfg(test)]
     pub fn generate(n: usize, csprng: &mut impl Rng) -> Self {
         let mut gh = Vec::with_capacity(n);
