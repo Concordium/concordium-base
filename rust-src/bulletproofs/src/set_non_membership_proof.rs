@@ -656,5 +656,4 @@ mod tests {
             Err(VerificationError::IPVerificationError)
         ));
     }
-
 }
