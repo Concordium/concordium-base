@@ -137,6 +137,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             receive_ctx,
                             return_value: Vec::new(),
                             parameters,
+                            support_queries: false,
                         },
                         state,
                     };
@@ -282,6 +283,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             receive_ctx,
                             return_value: Vec::new(),
                             parameters,
+                            support_queries: false
                         },
                         state,
                     };
@@ -383,6 +385,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             receive_ctx,
                             return_value: Vec::new(),
                             parameters,
+                            support_queries: false,
                         },
                         state,
                     };
