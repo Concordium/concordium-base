@@ -1,4 +1,4 @@
-//! Benchmarks for the set-non-membership proofs
+//! Benchmarks for the set-membership and set-non-membership proofs
 #[macro_use]
 extern crate criterion;
 
@@ -13,7 +13,7 @@ use std::time::Duration;
 
 #[allow(non_snake_case)]
 pub fn bench_set_proofs(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Set Proofs Bench");
+    let mut group = c.benchmark_group("Set Proofs");
 
     for i in 0..13 {
         let rng = &mut thread_rng();
@@ -58,33 +58,12 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         }
         let gens = Generators { G_H: gh };
 
-        // Bench prover
-        let the_set_p = the_set.clone();
-        let gens_p = gens.clone();
-        let v_keys_p = v_keys.clone();
-        let v_rand_p = v_rand.clone();
-        group.bench_function(BenchmarkId::new("SNM Prover", n), move |b| {
-            b.iter(|| {
-                let rng = &mut thread_rng();
-                let mut transcript = RandomOracle::empty();
-                set_non_membership_proof::prove(
-                    &mut transcript,
-                    rng,
-                    &the_set_p,
-                    v,
-                    &gens_p,
-                    &v_keys_p,
-                    &v_rand_p,
-                )
-                .unwrap();
-            })
-        });
-
+        // Bench prover for set membership
         let the_set_p = the_set.clone();
         let gens_p = gens.clone();
         let v_keys_p = v_keys.clone();
         let w_rand_p = v_rand.clone();
-        group.bench_function(BenchmarkId::new("SM Prover", n), move |b| {
+        group.bench_function(BenchmarkId::new("SM Prove", n), move |b| {
             b.iter(|| {
                 let rng = &mut thread_rng();
                 let mut transcript = RandomOracle::empty();
@@ -101,7 +80,29 @@ pub fn bench_set_proofs(c: &mut Criterion) {
             })
         });
 
-        // The proofs for verification
+        // Bench prover for set non-membership
+        let the_set_p = the_set.clone();
+        let gens_p = gens.clone();
+        let v_keys_p = v_keys.clone();
+        let v_rand_p = v_rand.clone();
+        group.bench_function(BenchmarkId::new("SNM Prove", n), move |b| {
+            b.iter(|| {
+                let rng = &mut thread_rng();
+                let mut transcript = RandomOracle::empty();
+                set_non_membership_proof::prove(
+                    &mut transcript,
+                    rng,
+                    &the_set_p,
+                    v,
+                    &gens_p,
+                    &v_keys_p,
+                    &v_rand_p,
+                )
+                .unwrap();
+            })
+        });
+
+        // Generate valid proofs for verification
         let mut transcript = RandomOracle::empty();
         let snm_proof = set_non_membership_proof::prove(
             &mut transcript,
@@ -120,26 +121,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         assert!(sm_proof.is_ok());
         let sm_proof = sm_proof.unwrap();
 
-        // Bench verification
-        let the_set_p = the_set.clone();
-        let v_com_p = v_com.clone();
-        let gens_p = gens.clone();
-        let v_keys_p = v_keys.clone();
-        let snm_proof_p = snm_proof.clone();
-        group.bench_function(BenchmarkId::new("SNM Verify", n), move |b| {
-            b.iter(|| {
-                let mut transcript = RandomOracle::empty();
-                set_non_membership_proof::verify(
-                    &mut transcript,
-                    &the_set_p,
-                    &v_com_p,
-                    &snm_proof_p,
-                    &gens_p,
-                    &v_keys_p,
-                )
-                .unwrap();
-            })
-        });
+        // Bench verification for set membership
         let the_set_p = the_set.clone();
         let w_com_p = w_com.clone();
         let gens_p = gens.clone();
@@ -153,6 +135,27 @@ pub fn bench_set_proofs(c: &mut Criterion) {
                     &the_set_p,
                     &w_com_p,
                     &sm_proof_p,
+                    &gens_p,
+                    &v_keys_p,
+                )
+                .unwrap();
+            })
+        });
+
+        // Bench verification for set non-membership
+        let the_set_p = the_set.clone();
+        let v_com_p = v_com.clone();
+        let gens_p = gens.clone();
+        let v_keys_p = v_keys.clone();
+        let snm_proof_p = snm_proof.clone();
+        group.bench_function(BenchmarkId::new("SNM Verify", n), move |b| {
+            b.iter(|| {
+                let mut transcript = RandomOracle::empty();
+                set_non_membership_proof::verify(
+                    &mut transcript,
+                    &the_set_p,
+                    &v_com_p,
+                    &snm_proof_p,
                     &gens_p,
                     &v_keys_p,
                 )
