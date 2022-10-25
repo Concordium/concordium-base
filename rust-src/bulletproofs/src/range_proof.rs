@@ -111,7 +111,8 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 /// - `n` - the number n such that `v_i` is in `[0,2^n)` for all `i`
 /// - `m` - the number of values that is proved to be in `[0,2^n)`
 /// - `v_vec` - the vector having `v_1, ..., v_m` as entrances
-/// - `gens` - generators containing vectors `G` and `H` both of length at least `nm`
+/// - `gens` - generators containing vectors `G` and `H` both of length at least
+///   `nm`
 /// - `v_keys` - commitment keys `B` and `B_tilde`
 /// - `randomness` - the randomness used to commit to each `v_i` using `v_keys`
 #[allow(clippy::many_single_char_names)]
@@ -132,8 +133,8 @@ pub fn prove<C: Curve, T: Rng>(
     // A (their binary representation),
     // S (the blinding factors)
     let nm = usize::from(n) * usize::from(m);
-    
-    if v_vec.len() != randomness.len() { 
+
+    if v_vec.len() != randomness.len() {
         return None;
     }
 

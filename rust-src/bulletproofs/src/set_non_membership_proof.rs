@@ -84,8 +84,8 @@ pub fn prove<C: Curve, R: Rng>(
     // Convert the u64 set into a field element vector
     let set_vec = get_set_vector::<C>(the_set);
     // Append the set to the transcript
-    transcript.append_message(b"theSet", &set_vec); 
-    
+    transcript.append_message(b"theSet", &set_vec);
+
     // Part 1: Setup and generation of vector commitments
     // Check that we have enough generators for vector commitments
     if gens.G_H.len() < n {
@@ -97,15 +97,15 @@ pub fn prove<C: Curve, R: Rng>(
     let B = v_keys.g;
     let B_tilde = v_keys.h;
     // Compute A_scalars, that is a_L, a_R and a_tilde
-    let mut A_scalars = Vec::with_capacity(2*n+1);
+    let mut A_scalars = Vec::with_capacity(2 * n + 1);
     // Compute a_L_i <- (v - si)^-1
     for si in &set_vec {
         let mut v_minus_si = v_scalar;
         v_minus_si.sub_assign(si);
-        //inverse not defined => difference==0 => v in set
+        // inverse not defined => difference==0 => v in set
         let v_minus_si_inv = match v_minus_si.inverse() {
             Some(inv) => inv,
-            None => return Err(ProverError::CouldFindValueInSet),        
+            None => return Err(ProverError::CouldFindValueInSet),
         };
         A_scalars.push(v_minus_si_inv);
     }
@@ -117,24 +117,24 @@ pub fn prove<C: Curve, R: Rng>(
     A_scalars.push(C::generate_scalar(csprng));
     // Aliases
     let a_L = &A_scalars[0..n];
-    let a_R = &A_scalars[n..2*n];
-    let a_tilde = &A_scalars[2*n];
-    // Compute S_scalars, i.e., the blinding factors 
-    let mut S_scalars = Vec::with_capacity(2*n+1);
-    for _ in 0..2*n+1 {
+    let a_R = &A_scalars[n..2 * n];
+    let a_tilde = &A_scalars[2 * n];
+    // Compute S_scalars, i.e., the blinding factors
+    let mut S_scalars = Vec::with_capacity(2 * n + 1);
+    for _ in 0..2 * n + 1 {
         S_scalars.push(C::generate_scalar(csprng));
     }
     // Aliases
     let s_L = &S_scalars[0..n];
-    let s_R = &S_scalars[n..2*n];
-    let s_tilde = &S_scalars[2*n]; 
+    let s_R = &S_scalars[n..2 * n];
+    let s_tilde = &S_scalars[2 * n];
     // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
     let GH_B_tilde: Vec<C> = G
-    .iter()
-    .chain(H.iter())
-    .copied()
-    .chain(once(B_tilde))
-    .collect();
+        .iter()
+        .chain(H.iter())
+        .copied()
+        .chain(once(B_tilde))
+        .collect();
     // Compute A and S commitments using multi exponentiation
     let window_size = 4;
     let table = multiexp_table(&GH_B_tilde, window_size);
@@ -147,7 +147,7 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 2: Computation of vector polynomials l(x),r(x)
     // get challenges y,z from transcript
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");    
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
     // y_n = (1,y,..,y^(n-1))
     let y_n = z_vec(y, 0, n);
     // ip_y_n = <1,y_n>
@@ -181,7 +181,7 @@ pub fn prove<C: Curve, R: Rng>(
         let mut r_1_i = y_n[i];
         r_1_i.mul_assign(&s_R[i]);
         r_1.push(r_1_i);
-    } 
+    }
 
     // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
     // t_0 <- <l_0,r_0>
@@ -216,7 +216,7 @@ pub fn prove<C: Curve, R: Rng>(
     // append T1, T2 commitments to transcript
     transcript.append_message(b"T1", &T_1);
     transcript.append_message(b"T2", &T_2);
-    
+
     // Part 4: Evaluate l(.), r(.), and t(.) at challenge point x
     // get challenge x from transcript
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
@@ -236,7 +236,7 @@ pub fn prove<C: Curve, R: Rng>(
         rx_i.mul_assign(&x);
         rx_i.add_assign(&r_0[i]);
         rx.push(rx_i);
-    }    
+    }
     // Compute t(x)
     // tx <- t_0 + t_1*x + t_2*x^2
     let mut tx = t_0;
