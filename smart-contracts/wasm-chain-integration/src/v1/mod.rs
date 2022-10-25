@@ -30,19 +30,32 @@ use wasm_transform::{
 /// instruction.
 #[derive(Debug)]
 pub enum Interrupt {
+    /// Transfer an amount of tokens to the **account**.
     Transfer {
         to:     AccountAddress,
         amount: Amount,
     },
+    /// Invoke an entrypoint on the given contract.
     Call {
         address:   ContractAddress,
         parameter: ParameterVec,
         name:      OwnedEntrypointName,
         amount:    Amount,
     },
+    /// Upgrade the smart contract code to the provided module.
     Upgrade {
         module_ref: ModuleReference,
     },
+    /// Query the balance and staked balance of an account.
+    QueryAccountBalance {
+        address: AccountAddress,
+    },
+    /// Query the balance of a contract.
+    QueryContractBalance {
+        address: ContractAddress,
+    },
+    /// Query the CCD/EUR and EUR/NRG exchange rates.
+    QueryExchangeRates,
 }
 
 impl Interrupt {
@@ -79,6 +92,24 @@ impl Interrupt {
             } => {
                 out.push(2u8);
                 out.write_all(module_ref.as_ref().as_slice())?;
+                Ok(())
+            }
+            Interrupt::QueryAccountBalance {
+                address,
+            } => {
+                out.push(3u8);
+                out.write_all(address.as_ref())?;
+                Ok(())
+            }
+            Interrupt::QueryContractBalance {
+                address,
+            } => {
+                out.push(4u8);
+                out.write_all(address.as_ref())?;
+                Ok(())
+            }
+            Interrupt::QueryExchangeRates => {
+                out.push(5u8);
                 Ok(())
             }
         }
@@ -135,9 +166,12 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
 pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
-    pub energy:    InterpreterEnergy,
-    pub stateless: StateLessReceiveHost<ParamType, Ctx>,
-    pub state:     InstanceState<'a, BackingStore>,
+    pub energy:          InterpreterEnergy,
+    pub stateless:       StateLessReceiveHost<ParamType, Ctx>,
+    pub state:           InstanceState<'a, BackingStore>,
+    /// Whether the host should support queries or not. Queries
+    /// are introduced in protocol version 5.
+    pub support_queries: bool,
 }
 
 #[derive(Debug)]
@@ -197,6 +231,9 @@ mod host {
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
+    const QUERY_ACCOUNT_BALANCE_TAG: u32 = 2;
+    const QUERY_CONTRACT_BALANCE_TAG: u32 = 3;
+    const QUERY_EXCHANGE_RATE_TAG: u32 = 3;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -278,6 +315,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `invoke` host function.
     pub fn invoke(
+        support_queries: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -319,6 +357,52 @@ mod host {
                     Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
                     Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
+            }
+            QUERY_ACCOUNT_BALANCE_TAG if support_queries => {
+                ensure!(
+                    length == ACCOUNT_ADDRESS_SIZE,
+                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
+                Ok(Interrupt::QueryAccountBalance {
+                    address,
+                }
+                .into())
+            }
+            QUERY_CONTRACT_BALANCE_TAG if support_queries => {
+                ensure!(
+                    length == 8 + 8,
+                    "Contract balance queries must have exactly 16 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut buf = [0u8; 8];
+                buf.copy_from_slice(&memory[start..start + 8]);
+                let index = u64::from_le_bytes(buf);
+                buf.copy_from_slice(&memory[start + 8..start + 16]);
+                let subindex = u64::from_le_bytes(buf);
+                let address = ContractAddress {
+                    index,
+                    subindex,
+                };
+                Ok(Interrupt::QueryContractBalance {
+                    address,
+                }
+                .into())
+            }
+            QUERY_EXCHANGE_RATE_TAG if support_queries => {
+                ensure!(
+                    length == 0,
+                    "Exchange rate query must have no payload, but was {}",
+                    length
+                );
+                Ok(Interrupt::QueryExchangeRates.into())
             }
             c => bail!("Illegal instruction code {}.", c),
         }
@@ -1043,7 +1127,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
-                    return host::invoke(memory, stack, &mut self.energy);
+                    return host::invoke(self.support_queries, memory, stack, &mut self.energy);
                 }
                 ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
                     memory,
