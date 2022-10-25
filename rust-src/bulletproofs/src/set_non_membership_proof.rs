@@ -67,7 +67,7 @@ pub fn prove<C: Curve, R: Rng>(
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
     v_rand: &Randomness<C>,
-) -> Result<SetMembershipProof<C>, ProverError> {
+) -> Result<SetNonMembershipProof<C>, ProverError> {
     let n = the_set.len();
     if !n.is_power_of_two() {
         return Err(ProverError::SetSizeNotPowerOfTwo);
@@ -99,8 +99,8 @@ pub fn prove<C: Curve, R: Rng>(
     // Compute A_scalars, that is a_L, a_R and a_tilde
     let mut A_scalars = Vec::with_capacity(2*n+1);
     // Compute a_L_i <- (v - si)^-1
-    for si in set_vec {
-        let mut v_minus_si = v;
+    for si in &set_vec {
+        let mut v_minus_si = v_scalar;
         v_minus_si.sub_assign(si);
         //inverse not defined => difference==0 => v in set
         let v_minus_si_inv = match v_minus_si.inverse() {
@@ -111,7 +111,7 @@ pub fn prove<C: Curve, R: Rng>(
     }
     // Compute a_R_i = v
     for _ in 0..n {
-        A_scalars.push(v);
+        A_scalars.push(v_scalar);
     }
     // Compute a_tilde
     A_scalars.push(C::generate_scalar(csprng));
@@ -151,8 +151,8 @@ pub fn prove<C: Curve, R: Rng>(
     // y_n = (1,y,..,y^(n-1))
     let y_n = z_vec(y, 0, n);
     // ip_y_n = <1,y_n>
-    let mut ip_y_n = 0;
-    for y_i in y_n {
+    let mut ip_y_n = C::Scalar::zero();
+    for y_i in &y_n {
         ip_y_n.add_assign(y_i);
     }
     // coefficients of l(x) and r(x)
@@ -259,7 +259,7 @@ pub fn prove<C: Curve, R: Rng>(
     tx_tilde.add_assign(&tx_s2);
     // Compute blinding e_tilde
     // e_tilde <- a_tilde + s_tilde * x
-    let mut e_tilde = s_tilde;
+    let mut e_tilde = *s_tilde;
     e_tilde.mul_assign(&x);
     e_tilde.add_assign(&a_tilde);
     // append tx, tx_tilde, e_tilde to transcript
@@ -285,7 +285,7 @@ pub fn prove<C: Curve, R: Rng>(
 
     // return set membership proof
     if let Some(ip_proof) = proof {
-        Ok(SetMembershipProof {
+        Ok(SetNonMembershipProof {
             A,
             S,
             T_1,
