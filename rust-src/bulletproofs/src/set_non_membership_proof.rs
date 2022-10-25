@@ -513,4 +513,148 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    /// Test that sets with sizes not a power of two are rejected by proof
+    #[test]
+    fn test_smp_prove_not_power_of_two() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 5] = [1, 7, 3, 5, 6];
+        let n = the_set.len();
+        let v = 2;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(matches!(proof, Err(ProverError::SetSizeNotPowerOfTwo)));
+    }
+
+    /// Test that proof fails if element is in the set
+    #[test]
+    fn test_smp_prove_in_set() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 3;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(matches!(proof, Err(ProverError::CouldFindValueInSet)));
+    }
+
+    /// Test that verification fails if sets has size not a power of two
+    #[test]
+    fn test_smp_verify_not_power_of_two() {
+        let rng = &mut thread_rng();
+
+        // generate proof for set with correct size since otherwise proof generation
+        // fails
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 2;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // now define new set and try to verify
+        let invalid_set: [u64; 5] = [1, 7, 3, 5, 6];
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(
+            &mut transcript,
+            &invalid_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(matches!(
+            result,
+            Err(VerificationError::SetSizeNotPowerOfTwo)
+        ));
+    }
+
+    /// Test whether verifying a proof generated for a different v fails to
+    /// verify (even if the new v is still not in the set). This should cause an
+    /// invalid T_0 error.
+    #[test]
+    fn test_smp_verify_different_value() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 2;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v = 4; // different v still not in the set
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(matches!(result, Err(VerificationError::InconsistentT0)));
+    }
+
+    #[test]
+    /// Test whether verifying with different set (still containing v) fails.
+    /// This should cause an Inconsistent T0.
+    fn test_smp_verify_different_set() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 17;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let new_set: [u64; 4] = [2, 7, 3, 5];
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &new_set, &v_com, &proof, &gens, &v_keys);
+        assert!(matches!(result, Err(VerificationError::InconsistentT0)));
+    }
+
+    #[test]
+    /// Test whether modifying inner proof causes invalid IP proof error.
+    fn test_smp_verify_invalid_inner_product() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 42;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let mut proof = proof.unwrap();
+
+        proof.ip_proof.a.negate(); // tamper with IP proof
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(matches!(
+            result,
+            Err(VerificationError::IPVerificationError)
+        ));
+    }
+
 }
