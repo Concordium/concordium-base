@@ -381,18 +381,18 @@ pub fn prove_faster<C: Curve, R: Rng>(
         None => return Err(ProverError::CouldNotFindValueInSet),
     };
 
+    // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
+    let mut GH_B_tilde: Vec<C> = Vec::with_capacity(2 * n + 1);
+    let (mut G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
+    GH_B_tilde.append(&mut G);
+    GH_B_tilde.append(&mut H);
+
     // Select generators for commitments
     let B = v_keys.g;
     let B_tilde = v_keys.h;
-
-    let mut GH_B_tilde = Vec::with_capacity(n);
-    for gh in &gens.G_H {
-        GH_B_tilde.push(gh.0); // add G
-    }
-    for gh in &gens.G_H {
-        GH_B_tilde.push(gh.1); // add H
-    }
     GH_B_tilde.push(B_tilde);
+
+    // Add aliases to make G and H available again
     let G = &GH_B_tilde[0..n];
     let H = &GH_B_tilde[n..2 * n];
 
