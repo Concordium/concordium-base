@@ -48,3 +48,7 @@ harness = false
 [[bench]]
 name = "smp_bench"
 harness = false
+
+[[bench]]
+name = "snmp_bench"
+harness = false
