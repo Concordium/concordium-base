@@ -462,3 +462,55 @@ pub fn verify<C: Curve>(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::G1;
+    type SomeCurve = G1;
+
+    /// generates several values used in tests
+    fn generate_helper_values(n: usize) -> (Generators<G1>, CommitmentKey<G1>, Randomness<G1>) {
+        let rng = &mut thread_rng();
+        let gens = Generators::generate(n, rng);
+        let b = SomeCurve::generate(rng);
+        let b_tilde = SomeCurve::generate(rng);
+        let v_keys = CommitmentKey { g: b, h: b_tilde };
+        let v_rand = Randomness::generate(rng);
+
+        (gens, v_keys, v_rand)
+    }
+
+    /// Generates commitment to v given commitment key and randomness
+    fn get_v_com(v: u64, v_keys: CommitmentKey<G1>, v_rand: Randomness<G1>) -> Commitment<G1> {
+        let v_scalar = SomeCurve::scalar_from_u64(v);
+        let v_value = Value::<SomeCurve>::new(v_scalar);
+        let v_com = v_keys.hide(&v_value, &v_rand);
+
+        v_com
+    }
+
+    #[test]
+    /// Test whether verifying an honestly generated proof works
+    fn test_smp_prove_verify() {
+        let rng = &mut thread_rng();
+
+        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let n = the_set.len();
+        let v = 2;
+        let (gens, v_keys, v_rand) = generate_helper_values(n);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
+    }
+
+}
