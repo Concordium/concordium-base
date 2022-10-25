@@ -38,7 +38,7 @@ pub enum ProverError {
     SetSizeNotPowerOfTwo,
     /// The length of the generator vector `gens` was less than `|the_set|`
     NotEnoughGenerators,
-    /// Could not find the value `v` in the given set
+    /// Could find the value `v` in the given set
     CouldFindValueInSet,
     /// Could not generate inner product proof
     InnerProductProofFailure,
@@ -46,9 +46,9 @@ pub enum ProverError {
     DivisionError,
 }
 
-/// This function produces a set membership proof, i.e. a proof of knowledge
-/// of a value v that is in a given set `the_set` and that is consistent with
-/// the commitment `V` to `v`. The arguments are
+/// This function produces a set-non-membership proof, i.e., a proof of
+/// knowledge of a value v that is not in a given set `the_set` and that is
+/// consistent with the commitment `V` to `v`. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
 /// - `csprng` - cryptographic safe randomness generator
 /// - `the_set` - the set as a vector
@@ -112,7 +112,7 @@ pub fn prove<C: Curve, R: Rng>(
     for _ in 0..n {
         A_scalars.push(v_scalar);
     }
-    // Compute a_tilde
+    // generate a_tilde
     A_scalars.push(C::generate_scalar(csprng));
     // Aliases
     let a_L = &A_scalars[0..n];
