@@ -1,8 +1,13 @@
 //! Implementation of set-non-membership proof along the lines of bulletproofs
-use std::ops::{SubAssign, AddAssign};
-
-use curve_arithmetic::Curve;
+use crate::{inner_product_proof::*, utils::*};
+use crypto_common::*;
+use crypto_common_derive::*;
+use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve};
 use ff::Field;
+use pedersen_scheme::*;
+use rand::*;
+use random_oracle::RandomOracle;
+use std::{convert::TryInto, iter::once};
 
 use crate::inner_product_proof::InnerProductProof;
 /// Bulletproof style set-non-membership proof
@@ -244,8 +249,8 @@ pub fn prove<C: Curve, R: Rng>(
     // Compute the blinding t_x_tilde
     // t_x_tilde <- z*<1,y^n>*v_rand + t_1_tilde*x + t_2_tilde*x^2
     let mut tx_tilde = z;
-    tx_tilde.mul_assign(ip_y_n);
-    tx_tilde.mul_assign(v_rand);
+    tx_tilde.mul_assign(&ip_y_n);
+    tx_tilde.mul_assign(&v_rand);
     let mut tx_s1 = t_1_tilde;
     tx_s1.mul_assign(&x);
     tx_tilde.add_assign(&tx_s1);
