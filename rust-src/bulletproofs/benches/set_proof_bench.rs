@@ -2,7 +2,7 @@
 #[macro_use]
 extern crate criterion;
 
-use bulletproofs::{*, utils::Generators};
+use bulletproofs::{utils::Generators, *};
 use criterion::{BenchmarkId, Criterion};
 use curve_arithmetic::*;
 use pairing::bls12_381::G1;
@@ -103,11 +103,20 @@ pub fn bench_set_proofs(c: &mut Criterion) {
 
         // The proofs for verification
         let mut transcript = RandomOracle::empty();
-        let snm_proof = set_non_membership_proof::prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let snm_proof = set_non_membership_proof::prove(
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(snm_proof.is_ok());
         let snm_proof = snm_proof.unwrap();
         let mut transcript = RandomOracle::empty();
-        let sm_proof = set_membership_proof::prove(&mut transcript, rng, &the_set, w, &gens, &v_keys, &w_rand);
+        let sm_proof =
+            set_membership_proof::prove(&mut transcript, rng, &the_set, w, &gens, &v_keys, &w_rand);
         assert!(sm_proof.is_ok());
         let sm_proof = sm_proof.unwrap();
 
@@ -150,8 +159,6 @@ pub fn bench_set_proofs(c: &mut Criterion) {
                 .unwrap();
             })
         });
-
-
     }
 }
 
