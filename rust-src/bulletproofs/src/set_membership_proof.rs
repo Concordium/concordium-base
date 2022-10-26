@@ -583,7 +583,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// Test that sets with sizes not a power of two are rejected by proof
+    /// Test that sets with sizes not a power of two work
     #[test]
     fn test_smp_prove_not_power_of_two() {
         let rng = &mut thread_rng();
