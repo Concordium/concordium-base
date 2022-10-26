@@ -313,3 +313,13 @@ supportsUpgradableContracts spv = case spv of
   SP3 -> False
   SP4 -> False
   SP5 -> True
+
+-- |Whether the protocol version supports chain queries in smart contracts.
+-- (Supported in 'P5' and onwards)
+supportsChainQueryContracts :: SProtocolVersion pv -> Bool
+supportsChainQueryContracts spv = case spv of
+  SP1 -> False
+  SP2 -> False
+  SP3 -> False
+  SP4 -> False
+  SP5 -> True
