@@ -342,7 +342,8 @@ pub fn verify_inner_product<C: Curve>(
 ///
 /// Arguments:
 /// - `transcript` - the proof transcript
-/// - `gens` - generators containing vectors G and H both of length at least `n`
+/// - `gens` - generators containing vectors `G` and `H` both of length at least
+///   `n`
 /// - `H_exponents` - slice of scalars to whose powers the `H_i` are raised
 /// - `P_prime_bases` - slice of points for computing curve point `P'`. It is
 ///   assumed that the first base points are `G | H, Q`, which are implicit and
