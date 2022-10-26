@@ -89,8 +89,8 @@ fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
 pub fn prove<C: Curve, R: Rng>(
     transcript: &mut RandomOracle,
     csprng: &mut R,
-    the_set: &[u64],
-    v: u64,
+    the_set: &[C::Scalar],
+    v: C::Scalar,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
     v_rand: &Randomness<C>,
@@ -99,14 +99,13 @@ pub fn prove<C: Curve, R: Rng>(
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
     // Compute commitment V for v
-    let v_scalar = C::scalar_from_u64(v);
-    let v_value = Value::<C>::new(v_scalar);
+    let v_value = Value::<C>::new(v);
     let V = v_keys.hide(&v_value, v_rand);
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
-    // Convert the u64 set into a field element vector
-    let mut set_vec = get_set_vector::<C>(the_set);
+
     // Pad set if not power of two
+    let mut set_vec = the_set.to_vec();
     pad_vector_to_power_of_two(&mut set_vec);
     let n = set_vec.len();
     // Append the set to the transcript
@@ -123,7 +122,7 @@ pub fn prove<C: Curve, R: Rng>(
     let B = v_keys.g;
     let B_tilde = v_keys.h;
     // Compute aL (indicator vector) and aR
-    let (a_L, a_R) = a_L_a_R(&v_scalar, &set_vec).ok_or(ProverError::CouldNotFindValueInSet)?;
+    let (a_L, a_R) = a_L_a_R(&v, &set_vec).ok_or(ProverError::CouldNotFindValueInSet)?;
     // Setup blinding factors for a_L and a_R
     let mut s_L = Vec::with_capacity(n);
     let mut s_R = Vec::with_capacity(n);
@@ -359,7 +358,7 @@ pub enum VerificationError {
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
     transcript: &mut RandomOracle,
-    the_set: &[u64],
+    the_set: &[C::Scalar],
     V: &Commitment<C>,
     proof: &SetMembershipProof<C>,
     gens: &Generators<C>,
@@ -367,9 +366,9 @@ pub fn verify<C: Curve>(
 ) -> Result<(), VerificationError> {
     // Part 1: Setup
     // Pad set if not power of two
-    let mut the_set_vec = get_set_vector::<C>(the_set);
-    pad_vector_to_power_of_two(&mut the_set_vec);
-    let n = the_set_vec.len();
+    let mut set_vec = the_set.to_vec();
+    pad_vector_to_power_of_two(&mut set_vec);
+    let n = set_vec.len();
     if gens.G_H.len() < n {
         return Err(VerificationError::NotEnoughGenerators);
     }
@@ -378,7 +377,7 @@ pub fn verify<C: Curve>(
     transcript.add_bytes(b"SetMembershipProof");
     // append commitment V to transcript
     transcript.append_message(b"V", &V.0);
-    transcript.append_message(b"theSet", &the_set_vec);
+    transcript.append_message(b"theSet", &set_vec);
 
     // define the commitments A,S
     let A = proof.A;
@@ -437,7 +436,7 @@ pub fn verify<C: Curve>(
 
     // compute ip_1_s = <1,s>
     let mut ip_1_s = C::Scalar::zero();
-    for si in &the_set_vec {
+    for si in &set_vec {
         ip_1_s.add_assign(si);
     }
 
@@ -497,7 +496,7 @@ pub fn verify<C: Curve>(
         let mut hexp = z;
         let mut z2ynisi = z2;
         z2ynisi.mul_assign(&y_inv_n[i]);
-        z2ynisi.mul_assign(&the_set_vec[i]);
+        z2ynisi.mul_assign(&set_vec[i]);
         hexp.add_assign(&z2ynisi);
         let mut z3yni = z3;
         z3yni.mul_assign(&y_inv_n[i]);
@@ -538,6 +537,17 @@ mod tests {
     use pairing::bls12_381::G1;
     type SomeCurve = G1;
 
+    /// Converts the u64 set vector into a vector over the field
+    fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
+        let n = the_set.len();
+        let mut s_vec = Vec::with_capacity(n);
+        for elem_i in the_set {
+            let s_i = C::scalar_from_u64(*elem_i);
+            s_vec.push(s_i);
+        }
+        s_vec
+    }
+
     /// generates several values used in tests
     fn generate_helper_values(n: usize) -> (Generators<G1>, CommitmentKey<G1>, Randomness<G1>) {
         let rng = &mut thread_rng();
@@ -551,9 +561,12 @@ mod tests {
     }
 
     /// Generates commitment to v given commitment key and randomness
-    fn get_v_com(v: u64, v_keys: CommitmentKey<G1>, v_rand: Randomness<G1>) -> Commitment<G1> {
-        let v_scalar = SomeCurve::scalar_from_u64(v);
-        let v_value = Value::<SomeCurve>::new(v_scalar);
+    fn get_v_com(
+        v: <SomeCurve as Curve>::Scalar,
+        v_keys: CommitmentKey<G1>,
+        v_rand: Randomness<G1>,
+    ) -> Commitment<G1> {
+        let v_value = Value::<SomeCurve>::new(v);
         let v_com = v_keys.hide(&v_value, &v_rand);
 
         v_com
@@ -564,9 +577,9 @@ mod tests {
     fn test_smp_prove_verify() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
-        let v = 3;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -587,9 +600,9 @@ mod tests {
     fn test_smp_prove_not_power_of_two() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 5] = [1, 7, 3, 5, 6];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5, 6]);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
-        let v = 3;
         let k = n.next_power_of_two();
         let (gens, v_keys, v_rand) = generate_helper_values(k);
 
@@ -610,9 +623,9 @@ mod tests {
     fn test_smp_prove_not_in_set() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
-        let v = 4;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         let mut transcript = RandomOracle::empty();
@@ -627,9 +640,9 @@ mod tests {
     fn test_smp_verify_different_value() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
-        let v = 3;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -639,7 +652,7 @@ mod tests {
         let proof = proof.unwrap();
 
         // verify
-        let v = 5; // different v still in set
+        let v = SomeCurve::scalar_from_u64(5); // different v still in set
         let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
@@ -652,9 +665,9 @@ mod tests {
     fn test_smp_verify_different_set() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
-        let v = 3;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -664,7 +677,7 @@ mod tests {
         let proof = proof.unwrap();
 
         // verify
-        let new_set: [u64; 4] = [2, 7, 3, 5];
+        let new_set = get_set_vector::<SomeCurve>(&[2, 7, 3, 5]);
         let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(&mut transcript, &new_set, &v_com, &proof, &gens, &v_keys);
@@ -676,9 +689,9 @@ mod tests {
     fn test_smp_verify_invalid_inner_product() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
-        let v = 3;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove

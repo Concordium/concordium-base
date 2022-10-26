@@ -18,10 +18,10 @@ pub fn bench_set_membership_proof(c: &mut Criterion) {
         let rng = &mut thread_rng();
         // Instance
         let n = 2_usize.pow(i);
-        let mut the_set = Vec::<u64>::with_capacity(n);
+        let mut the_set = Vec::<<G1 as Curve>::Scalar>::with_capacity(n);
         // Technically generates a multi-set, but this is fine
         for _ in 0..n {
-            the_set.push(rng.next_u64())
+            the_set.push(G1::generate_scalar(rng));
         }
         let v_index = rng.gen_range(0, n);
         let v = the_set[v_index];
@@ -31,8 +31,7 @@ pub fn bench_set_membership_proof(c: &mut Criterion) {
         let B_tilde = G1::generate(rng);
         let v_keys = CommitmentKey { g: B, h: B_tilde };
         let v_rand = Randomness::generate(rng);
-        let v_scalar = G1::scalar_from_u64(v);
-        let v_value = Value::<G1>::new(v_scalar);
+        let v_value = Value::<G1>::new(v);
         let v_com = v_keys.hide(&v_value, &v_rand);
 
         // Get some generators
