@@ -43,6 +43,8 @@ import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.BlsSignature as Bls
+import qualified Concordium.Crypto.SHA256 as H
+import Concordium.Types.HashableTo
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -1851,13 +1853,32 @@ data TransactionSummary' a = TransactionSummary {
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
 
+-- |TODO DOC and suffix with v0?
 type TransactionSummary = TransactionSummary' ValidResult
+
+-- |We create a wrapper here so we can
+-- derive another 'HashableTo' instance which omits
+-- the exact 'RejectReason' in the resulting hash.
+newtype TransactionSummaryV1 = TransactionSummaryV1 (TransactionSummary' ValidResult)
+
+-- |TODO implement and doc.
+instance HashableTo H.Hash TransactionSummaryV1 where
+  getHash (TransactionSummaryV1 summary) = H.hash $! S.runPut $!
+      putMaybe S.put (tsSender summary) <>
+      S.put (tsHash summary) <>
+      S.put (tsCost summary) <>
+      S.put (tsEnergyCost summary) <>
+      S.put (tsType summary) <>
+      -- |We simply put a '1' indicating a failure.
+      S.putWord8 1 <>
+      S.put (tsIndex summary)
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
 -- We also record the cost of the transaction.
 data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
   deriving(Show, Generic, Eq)
+
 
 putValidResult :: S.Putter ValidResult
 putValidResult TxSuccess{..} = S.putWord8 0 <> putListOf putEvent vrEvents

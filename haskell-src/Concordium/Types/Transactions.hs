@@ -17,7 +17,6 @@ import qualified Data.Sequence as Seq
 import Data.Aeson(FromJSON(..), ToJSON(..))
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
-import Data.Hashable (Hashable (..))
 import qualified Data.Serialize as S
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
@@ -820,121 +819,58 @@ data TransactionOutcomesVersion
      | TOV1
 
 -- |Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
-type family TransactionOutcomesHashVersionFor (pv :: ProtocolVersion) :: TransactionOutcomesVersion where
-    TransactionOutcomesHashVersionFor 'P1 = 'TOV0
-    TransactionOutcomesHashVersionFor 'P2 = 'TOV0
-    TransactionOutcomesHashVersionFor 'P3 = 'TOV0
-    TransactionOutcomesHashVersionFor 'P4 = 'TOV0
-    TransactionOutcomesHashVersionFor 'P5 = 'TOV1
+type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: TransactionOutcomesVersion where
+    TransactionOutcomesVersionFor 'P1 = 'TOV0
+    TransactionOutcomesVersionFor 'P2 = 'TOV0
+    TransactionOutcomesVersionFor 'P3 = 'TOV0
+    TransactionOutcomesVersionFor 'P4 = 'TOV0
+    TransactionOutcomesVersionFor 'P5 = 'TOV1
 
 -- |TODO doc
-data TransactionOutcomesV0 (tov :: TransactionOutcomesVersion)  = TransactionOutcomesV0 {
+-- TODO: suffix with V0?
+data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
-    }
+}
+makeLenses ''TransactionOutcomes
 
-makeLenses ''TransactionOutcomesV0
-
-instance Show (TransactionOutcomesV0 'TOV0) where
-    show (TransactionOutcomesV0 v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
-
--- |Transaction outcome types.
-data TransactionOutcomeT
-    = TransactionSummary
-    -- ^Outcome of normal transactions.
-    | SpecialTransactionOutcome
-    -- ^Outcome of a special transaction.    
-
--- |Transaction outcomes from P5 and onwards.
--- The transaction outcomes are hashed as a binary merkle tree.
-newtype TransactionOutcomesV1 (tov :: TransactionOutcomesVersion) =  TransactionOutcomesV1 { tosGetTree:: MerkleTree TransactionOutcomeT }
+instance Show TransactionOutcomes where
+    show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
 
 -- |Serialization of the V0 transaction outcomes used in P1-P4.
-putTransactionOutcomesV0 :: S.Putter (TransactionOutcomesV0 'TOV0)
-putTransactionOutcomesV0 TransactionOutcomesV0{..} = do
+-- TODO: RENAME?
+putTransactionOutcomes :: S.Putter TransactionOutcomes
+putTransactionOutcomes TransactionOutcomes{..} = do
     putListOf putTransactionSummary (Vec.toList outcomeValues)
     S.put _outcomeSpecial
 
--- |Serialization of the V1 transaction outcomes used in P5 and onwards.
-putTransactionOutcomesV1 :: S.Putter (TransactionOutcomesV1 'TOV1)
-putTransactionOutcomesV1 TransactionOutcomesV1{..} = do
-    putMerkleTree tosGetTree
+-- |TODO DOC and move to node? (Same with 'TransactionOutcomes') 
+getTransactionOutcomes :: SProtocolVersion pv -> S.Get TransactionOutcomes
+getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
 
-putMerkleTree :: S.Putter (MerkleTree a)
-putMerkleTree = undefined
-
-getTransactionOutcomes :: SProtocolVersion pv -> S.Get (TransactionOutcomesV0 'TOV0)
-getTransactionOutcomes spv = TransactionOutcomesV0 <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
-
--- TODO: fix this to use an lfmb tree. Potentially change storage type to the tree in blockstate too.
--- Does this need to be domain seperated? (Would require serialisation changes?)
---instance HashableTo TransactionOutcomesHashV0 TransactionOutcomes where
---    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
+instance HashableTo TransactionOutcomesHash TransactionOutcomes where
+    getHash transactionoutcomes = TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
 -- |A simple wrapper around a `Hash`.
 -- No matter the strategy for deriving the TrasactionOutcomeHash we will
 -- always end up with a value of this type.
 newtype TransactionOutcomesHash = TransactionOutcomesHash { tohGet :: H.Hash}
 
-instance HashableTo TransactionOutcomesHash (TransactionOutcomes tov) where
-  getHash :: TransactionOutcomes tov -> TransactionOutcomesHash
-  getHash = \case                     
-    TOHV0 tos -> TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomesV0 tos
-    TOHV1 tos -> TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomesV1 tos
+emptyTransactionOutcomesV0 :: TransactionOutcomes
+emptyTransactionOutcomesV0 = TransactionOutcomes Vec.empty Seq.empty
 
-
--- |A binary merkle tree
--- It can either be empty or not empty.
--- See `BMT`` for the non empty case.
-data MerkleTree v
-    = Empty
-    | NonEmpty (BMT v)
-
--- |A simple non-empty binary merkle tree
-data BMT' h v
-    = Leaf h v
-    | Node h (BMT' h v) (BMT' h v)
-
-newtype BMT v = BMT' H.Hash
-
-merkleTreeFromAscList :: [a] -> MerkleTree a
-merkleTreeFromAscList = undefined
-
--- |Compute and get the transaction outcomes hash based on the supplied protocol version @pv@. 
--- For PV 1-4 the hash will be a hash list based on the the full transaction outcome per transaction i.e. including the exact
--- `RejectReason` for failed transactions.
--- For PV5 and onwards the hash is computed as a merkle tree and omitting the exact `RejectReason`.
---getTransactionOutcomesHash :: ProtocolVersion -> TransactionOutcomes -> TransactionOutcomesHash
---getTransactionOutcomesHash pv outcomes =
---    if pv < P5 then
---      getHash outcomes
---    else
---      getNewHash outcomes
---  where
---    getNewHash :: TransactionOutcomes -> H.Hash
---    getNewHash outcomes = undefined
-    
-
-emptyTransactionOutcomesV0 :: (TransactionOutcomesV0 'TOV0)
-emptyTransactionOutcomesV0 = TransactionOutcomesV0 Vec.empty Seq.empty
-
-transactionOutcomesV0FromList :: [TransactionSummary] -> TransactionOutcomesV0 'TOV0
+transactionOutcomesV0FromList :: [TransactionSummary] -> TransactionOutcomes
 transactionOutcomesV0FromList l =
   let outcomeValues = Vec.fromList l
       _outcomeSpecial = Seq.empty
-  in TransactionOutcomesV0{..}
+  in TransactionOutcomes{..}
 
-type instance Index (TransactionOutcomesV0 'TOV0) = TransactionIndex
-type instance IxValue (TransactionOutcomesV0 'TOV0) = TransactionSummary
+type instance Index TransactionOutcomes = TransactionIndex
+type instance IxValue TransactionOutcomes = TransactionSummary
 
-instance Ixed (TransactionOutcomesV0 'TOV0) where
-  ix idx f outcomes@TransactionOutcomesV0{..} =
+instance Ixed TransactionOutcomes where
+  ix idx f outcomes@TransactionOutcomes{..} =
     let x = fromIntegral idx
     in if x >= length outcomeValues then pure outcomes
-       else ix x f outcomeValues <&> (\ov -> TransactionOutcomesV0{outcomeValues=ov,..})
+       else ix x f outcomeValues <&> (\ov -> TransactionOutcomes{outcomeValues=ov,..})
 
-
-data TransactionOutcomes (tov :: TransactionOutcomesVersion) where
-    TOHV0 :: TransactionOutcomesV0 'TOV0 -> TransactionOutcomes 'TOV0
-    TOHV1 :: TransactionOutcomesV1 'TOV1 -> TransactionOutcomes 'TOV1
---  deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
