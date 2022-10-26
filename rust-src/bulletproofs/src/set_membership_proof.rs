@@ -539,13 +539,7 @@ mod tests {
 
     /// Converts the u64 set vector into a vector over the field
     fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
-        let n = the_set.len();
-        let mut s_vec = Vec::with_capacity(n);
-        for elem_i in the_set {
-            let s_i = C::scalar_from_u64(*elem_i);
-            s_vec.push(s_i);
-        }
-        s_vec
+        the_set.iter().copied().map(C::scalar_from_u64).collect()
     }
 
     /// generates several values used in tests
