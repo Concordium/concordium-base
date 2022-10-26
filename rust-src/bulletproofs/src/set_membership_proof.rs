@@ -513,7 +513,7 @@ pub fn verify<C: Curve>(
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    let P_prime_bases = vec![g_hat, v_keys.h, A, S];
+    let P_prime_bases = vec![v_keys.h, A, S];
 
     // Finally verify inner product
     let ip_verification = verify_inner_product_with_scalars(
