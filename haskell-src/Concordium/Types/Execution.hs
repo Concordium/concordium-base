@@ -1860,6 +1860,7 @@ type TransactionSummary = TransactionSummary' ValidResult
 -- derive another 'HashableTo' instance which omits
 -- the exact 'RejectReason' in the resulting hash.
 newtype TransactionSummaryV1 = TransactionSummaryV1 (TransactionSummary' ValidResult)
+    deriving(Eq, Show, Generic)
 
 -- |TODO implement and doc.
 instance HashableTo H.Hash TransactionSummaryV1 where
