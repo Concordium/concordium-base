@@ -45,22 +45,21 @@ pub enum ProverError {
     DivisionError,
 }
 
-/// This function takes a set (as a vector) and a value v as input.
-/// If v in S the function computes bit vectors aL and aR where
+/// This function takes a set (as a slice) and a value v as input.
+/// If v in S, the function computes bit vectors aL and aR where
 /// aL_i = 1 <=> s_i = v
 /// and a_R is the bit-wise negation of a_L
-/// Note: For multi sets this function only sets the first hit to one, to allow
-/// set membership proofs in multi sets.
+/// Note: For multisets this function only sets the first hit to one, to allow
+/// set membership proofs in multisets.
 #[allow(non_snake_case)]
-fn a_L_a_R<F: Field>(v: &F, set_vec: &Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
-    let n = set_vec.len();
+fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
+    let n = set_slice.len();
     let mut a_L = Vec::with_capacity(n);
     let mut a_R = Vec::with_capacity(n);
     let mut found_element = false;
-    for i in 0..n {
+    for si in set_slice {
         let mut bit = F::zero();
-        let s_i = set_vec.get(i)?;
-        if (!found_element) && (v == s_i) {
+        if (!found_element) && (v == si) {
             bit = F::one();
             found_element = true;
         }
