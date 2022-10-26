@@ -17,6 +17,7 @@ import qualified Data.Sequence as Seq
 import Data.Aeson(FromJSON(..), ToJSON(..))
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
+import Data.Hashable
 import qualified Data.Serialize as S
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
@@ -855,6 +856,7 @@ instance HashableTo TransactionOutcomesHash TransactionOutcomes where
 -- No matter the strategy for deriving the TrasactionOutcomeHash we will
 -- always end up with a value of this type.
 newtype TransactionOutcomesHash = TransactionOutcomesHash { tohGet :: H.Hash}
+ deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
 emptyTransactionOutcomesV0 :: TransactionOutcomes
 emptyTransactionOutcomesV0 = TransactionOutcomes Vec.empty Seq.empty
