@@ -330,6 +330,7 @@ pub enum ReceiveOnlyFunc {
     GetReceiveOwner,
     GetReceiveEntrypointSize,
     GetReceiveEntryPoint,
+    Upgrade,
 }
 
 #[repr(u8)]
@@ -395,6 +396,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             34 => Ok(ImportFunc::Common(CommonFunc::HashSHA2_256)),
             35 => Ok(ImportFunc::Common(CommonFunc::HashSHA3_256)),
             36 => Ok(ImportFunc::Common(CommonFunc::HashKeccak256)),
+            37 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
     }
@@ -445,6 +447,7 @@ impl Output for ImportFunc {
                 ReceiveOnlyFunc::GetReceiveEntrypointSize => 29,
                 ReceiveOnlyFunc::GetReceiveEntryPoint => 30,
                 ReceiveOnlyFunc::Invoke => 31,
+                ReceiveOnlyFunc::Upgrade => 37,
             },
         };
         tag.output(out)
@@ -478,7 +481,13 @@ impl Output for ProcessedImports {
     }
 }
 
-pub struct ConcordiumAllowedImports;
+/// Allowed imports for V1 modules. Whether some imports are allowed
+/// depends on the protocol version that is used to validate the module.
+pub struct ConcordiumAllowedImports {
+    /// Whether to allow the `upgrade` function. This is supported in protocol
+    /// P5 and up, but not before.
+    pub support_upgrade: bool,
+}
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
     fn validate_import_function(
@@ -529,6 +538,8 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "hash_sha2_256" => type_matches!(ty => [I32, I32, I32]),
                 "hash_sha3_256" => type_matches!(ty => [I32, I32, I32]),
                 "hash_keccak_256" => type_matches!(ty => [I32, I32, I32]),
+                // Upgrade is only available from P5.
+                "upgrade" => self.support_upgrade && type_matches!(ty => [I32]; I64),
                 _ => false,
             }
         } else {
@@ -630,6 +641,7 @@ impl TryFromImport for ProcessedImports {
                 "hash_sha2_256" => ImportFunc::Common(CommonFunc::HashSHA2_256),
                 "hash_sha3_256" => ImportFunc::Common(CommonFunc::HashSHA3_256),
                 "hash_keccak_256" => ImportFunc::Common(CommonFunc::HashKeccak256),
+                "upgrade" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {
