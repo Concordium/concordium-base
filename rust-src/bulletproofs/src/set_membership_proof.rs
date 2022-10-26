@@ -35,8 +35,6 @@ pub struct SetMembershipProof<C: Curve> {
 /// Error messages detailing why proof generation failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProverError {
-    /// The set must have a size of a power of two
-    SetSizeNotPowerOfTwo,
     /// The length of the generator vector `gens` was less than `|the_set|`
     NotEnoughGenerators,
     /// Could not find the value `v` in the given set
@@ -85,7 +83,7 @@ fn a_L_a_R<F: Field>(v: &F, set_vec: &Vec<F>) -> Option<(Vec<F>, Vec<F>)> {
 /// - `the_set` - the set as a vector
 /// - `v` the value
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
-///   `n`
+///   `k` where k is the smallest power of two >= `n`
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case)]
@@ -98,10 +96,6 @@ pub fn prove<C: Curve, R: Rng>(
     v_keys: &CommitmentKey<C>,
     v_rand: &Randomness<C>,
 ) -> Result<SetMembershipProof<C>, ProverError> {
-    let n = the_set.len();
-    if !n.is_power_of_two() {
-        return Err(ProverError::SetSizeNotPowerOfTwo);
-    }
     // Part 0: Add public inputs to transcript
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -112,7 +106,10 @@ pub fn prove<C: Curve, R: Rng>(
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
     // Convert the u64 set into a field element vector
-    let set_vec = get_set_vector::<C>(the_set);
+    let mut set_vec = get_set_vector::<C>(the_set);
+    // Pad set if not power of two
+    pad_vector_to_power_of_two(&mut set_vec);
+    let n = set_vec.len();
     // Append the set to the transcript
     transcript.append_message(b"theSet", &set_vec);
 
@@ -339,8 +336,6 @@ pub fn prove<C: Curve, R: Rng>(
 pub enum VerificationError {
     /// The set size must be representable by an unsigned 64-bit integer
     SetTooLarge,
-    /// The set must have a size of a power of two
-    SetSizeNotPowerOfTwo,
     /// The length of `gens` was less than `|the_set|`
     NotEnoughGenerators,
     /// The consistency check for `t_0` failed
@@ -359,7 +354,8 @@ pub enum VerificationError {
 /// - `V` - commitment to `v`
 /// - `proof` - the set membership proof to verify
 /// - `gens` - generators containing vectors `G` and `H` both of length at least
-///   `|the_set|` (bold **g**,**h** in bluepaper)
+///   `k` where k is the smallest power of two >= `|the_set|`(bold **g**,**h**
+///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
@@ -371,14 +367,13 @@ pub fn verify<C: Curve>(
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
     // Part 1: Setup
-    let n = the_set.len();
-    if !n.is_power_of_two() {
-        return Err(VerificationError::SetSizeNotPowerOfTwo);
-    }
+    // Pad set if not power of two
+    let mut the_set_vec = get_set_vector::<C>(the_set);
+    pad_vector_to_power_of_two(&mut the_set_vec);
+    let n = the_set_vec.len();
     if gens.G_H.len() < n {
         return Err(VerificationError::NotEnoughGenerators);
     }
-    let the_set_vec = get_set_vector::<C>(the_set);
 
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -596,11 +591,19 @@ mod tests {
         let the_set: [u64; 5] = [1, 7, 3, 5, 6];
         let n = the_set.len();
         let v = 3;
-        let (gens, v_keys, v_rand) = generate_helper_values(n);
+        let k = n.next_power_of_two();
+        let (gens, v_keys, v_rand) = generate_helper_values(k);
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-        assert!(matches!(proof, Err(ProverError::SetSizeNotPowerOfTwo)));
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
     }
 
     /// Test that proof fails if element is not in set
@@ -616,41 +619,6 @@ mod tests {
         let mut transcript = RandomOracle::empty();
         let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
         assert!(matches!(proof, Err(ProverError::CouldNotFindValueInSet)));
-    }
-
-    /// Test that verification fails if sets has size not a power of two
-    #[test]
-    fn test_smp_verify_not_power_of_two() {
-        let rng = &mut thread_rng();
-
-        // generate proof for set with correct size since otherwise proof generation
-        // fails
-        let the_set: [u64; 4] = [1, 7, 3, 5];
-        let n = the_set.len();
-        let v = 3;
-        let (gens, v_keys, v_rand) = generate_helper_values(n);
-
-        let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-        assert!(proof.is_ok());
-        let proof = proof.unwrap();
-
-        // now define new set and try to verify
-        let invalid_set: [u64; 5] = [1, 7, 3, 5, 6];
-        let v_com = get_v_com(v, v_keys, v_rand);
-        let mut transcript = RandomOracle::empty();
-        let result = verify(
-            &mut transcript,
-            &invalid_set,
-            &v_com,
-            &proof,
-            &gens,
-            &v_keys,
-        );
-        assert!(matches!(
-            result,
-            Err(VerificationError::SetSizeNotPowerOfTwo)
-        ));
     }
 
     /// Test whether verifying a proof generated for a different v fails to
