@@ -276,64 +276,17 @@ pub fn prove<C: Curve, T: Rng>(
     }
 
     // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
-    // coefficients of polynomials t_j(x)
-    let mut t_0 = Vec::with_capacity(usize::from(m));
-    let mut t_1 = Vec::with_capacity(usize::from(m));
-    let mut t_2 = Vec::with_capacity(usize::from(m));
-    // blinding factors for upper coefficients of t_j(x)
-    let mut t_1_tilde = Vec::with_capacity(usize::from(m));
-    let mut t_2_tilde = Vec::with_capacity(usize::from(m));
+    let (t_0, t_1, t_2) = compute_tx_polynomial(&l_0, &l_1, &r_0, &r_1);
 
-    // for each t_j(x)
-    for j in 0..usize::from(m) {
-        let n = usize::from(n);
-        // compute coefficients of t_j(x)
-        // t_0,j <- <l_{0,j},r_{0,j}>
-        let t_0_j = inner_product(&l_0[j * n..(j + 1) * n], &r_0[j * n..(j + 1) * n]);
-        // t_2,j <- <l_{1,j},r_{1,j}>
-        let t_2_j = inner_product(&l_1[j * n..(j + 1) * n], &r_1[j * n..(j + 1) * n]);
-        // t_1,j <- <l_{0,j}+l_{1,j},r_{0,j}+r_{1,j}> - t_0,j - t_2,j
-        let mut t_1_j: C::Scalar = C::Scalar::zero();
-        for i in 0..n {
-            let mut l_0_j_l_1_j = l_0[j * n + i];
-            l_0_j_l_1_j.add_assign(&l_1[j * n + i]);
-            let mut r_0_j_r_1_j = r_0[j * n + i];
-            r_0_j_r_1_j.add_assign(&r_1[j * n + i]);
-            let mut prod = l_0_j_l_1_j;
-            prod.mul_assign(&r_0_j_r_1_j);
-            t_1_j.add_assign(&prod);
-        }
-        t_1_j.sub_assign(&t_0_j);
-        t_1_j.sub_assign(&t_2_j);
-
-        t_0.push(t_0_j);
-        t_1.push(t_1_j);
-        t_2.push(t_2_j);
-
-        // compute blinding factors
-        let t_1_j_tilde = Randomness::<C>::generate(csprng);
-        let t_2_j_tilde = Randomness::<C>::generate(csprng);
-        t_1_tilde.push(t_1_j_tilde);
-        t_2_tilde.push(t_2_j_tilde);
-    }
-
-    // compute commitments T_1 and T_2 for upper coefficents
-    let mut t_1_sum = C::Scalar::zero();
-    let mut t_1_tilde_sum = C::Scalar::zero();
-    let mut t_2_sum = C::Scalar::zero();
-    let mut t_2_tilde_sum = C::Scalar::zero();
-    for i in 0..t_1.len() {
-        t_1_sum.add_assign(&t_1[i]);
-        t_1_tilde_sum.add_assign(&t_1_tilde[i]);
-        t_2_sum.add_assign(&t_2[i]);
-        t_2_tilde_sum.add_assign(&t_2_tilde[i]);
-    }
+    // Commit to t_1 and t_2
+    let t_1_tilde = C::generate_scalar(csprng);
+    let t_2_tilde = C::generate_scalar(csprng);
     let T_1 = B
-        .mul_by_scalar(&t_1_sum)
-        .plus_point(&B_tilde.mul_by_scalar(&t_1_tilde_sum));
+        .mul_by_scalar(&t_1)
+        .plus_point(&B_tilde.mul_by_scalar(&t_1_tilde));
     let T_2 = B
-        .mul_by_scalar(&t_2_sum)
-        .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde_sum));
+        .mul_by_scalar(&t_2)
+        .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde));
     // append T1, T2 commitments to transcript
     transcript.append_message(b"T1", &T_1);
     transcript.append_message(b"T2", &T_2);
@@ -341,56 +294,19 @@ pub fn prove<C: Curve, T: Rng>(
     // Part 4: Evaluate l(x), r(x), and t(x) at challenge point x
     // get challenge x from transcript
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
-    // println!("prover's x = {:?}", x);
-    let mut x2 = x;
-    x2.mul_assign(&x);
-    let mut l: Vec<C::Scalar> = Vec::with_capacity(nm);
-    let mut r: Vec<C::Scalar> = Vec::with_capacity(nm);
 
-    // evaluate l(x) and r(x)
-    for i in 0..nm {
-        // l[i] <- l_0[i] + x* l_1[i]
-        let mut l_i = l_1[i];
-        l_i.mul_assign(&x);
-        l_i.add_assign(&l_0[i]);
-        // r[i] = r_0[i] + x* r_1[i]
-        let mut r_i = r_1[i];
-        r_i.mul_assign(&x);
-        r_i.add_assign(&r_0[i]);
-        l.push(l_i);
-        r.push(r_i);
-    }
+    // Compute l(x), r(x), and t(x)
+    let (lx, rx, tx) = evaluate_lx_rx_tx(x, &l_0, &l_1, &r_0, &r_1, t_0, t_1, t_2);
 
-    // evaluate t(x) at challenge point x,
     // compute blinding factor tx_tilde for t(x) evaluation committment,
     // and compute blinding factor e_tilde for the inner product committment
-    let mut tx: C::Scalar = C::Scalar::zero();
     let mut tx_tilde: C::Scalar = C::Scalar::zero();
     let mut e_tilde: C::Scalar = C::Scalar::zero();
     for j in 0..usize::from(m) {
-        // Around 1 ms
-        // tx_j <- t_0[j] + t_1[j]*x + t_2[j]*x^2
-        let mut t1jx = t_1[j];
-        t1jx.mul_assign(&x);
-        let mut t2jx2 = t_2[j];
-        t2jx2.mul_assign(&x2);
-        let mut tjx = t_0[j];
-        tjx.add_assign(&t1jx);
-        tjx.add_assign(&t2jx2);
-        tx.add_assign(&tjx);
-
-        // tx_j_tilde <- z^2*z_j*v_j_tilde + t_1_j_tilde*x + t_2_j_tilde*x^2
-        let mut z2vj_tilde = z_sq;
-        z2vj_tilde.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation (https://doc-internal.dalek.rs/bulletproofs/range_proof/index.html), but shows in https://doc-internal.dalek.rs/bulletproofs/notes/range_proof/index.html
+        // z2vj_tilde <- z_j*v_j_tilde
+        let mut z2vj_tilde = z_m[j]; // This line is MISSING in the Bulletproof documentation (https://doc-internal.dalek.rs/bulletproofs/range_proof/index.html), but shows in https://doc-internal.dalek.rs/bulletproofs/notes/range_proof/index.html
         z2vj_tilde.mul_assign(&v_tilde_vec[j]);
-        let mut xt1j_tilde = x;
-        xt1j_tilde.mul_assign(&t_1_tilde[j]);
-        let mut x2t2j_tilde = x2;
-        x2t2j_tilde.mul_assign(&t_2_tilde[j]);
-        let mut txj_tilde = z2vj_tilde;
-        txj_tilde.add_assign(&xt1j_tilde);
-        txj_tilde.add_assign(&x2t2j_tilde);
-        tx_tilde.add_assign(&txj_tilde);
+        tx_tilde.add_assign(&z2vj_tilde);
 
         // e_tilde_j <- a_tilde_j + s_tilde_j * x
         let mut ej_tilde = x;
@@ -398,6 +314,15 @@ pub fn prove<C: Curve, T: Rng>(
         ej_tilde.add_assign(&a_tilde_vec[j]);
         e_tilde.add_assign(&ej_tilde);
     }
+    tx_tilde.mul_assign(&z_sq); // tx_tilde <- z^2*sum z_j*v_j_tilde + ...
+    let mut tx_s1 = t_1_tilde;
+    tx_s1.mul_assign(&x);
+    tx_tilde.add_assign(&tx_s1);
+    let mut tx_s2 = t_2_tilde;
+    tx_s2.mul_assign(&x);
+    tx_s2.mul_assign(&x);
+    tx_tilde.add_assign(&tx_s2);
+
     // append tx, tx_tilde, e_tilde to transcript
     transcript.append_message(b"tx", &tx);
     transcript.append_message(b"tx_tilde", &tx_tilde);
@@ -412,19 +337,14 @@ pub fn prove<C: Curve, T: Rng>(
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
     // compute scalars such that c*H = H', that is H_prime_scalars = (1, y^-1,
     // \dots, y^-(nm-1))
-    let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
     let y_inv = match y.inverse() {
         Some(inv) => inv,
         None => return None,
     };
-    let mut y_inv_i = C::Scalar::one();
-    for _i in 0..nm {
-        // H_prime.push(H[i].mul_by_scalar(&y_inv_i));
-        H_prime_scalars.push(y_inv_i);
-        y_inv_i.mul_assign(&y_inv);
-    }
+    let H_prime_scalars = z_vec(y_inv, 0, nm);
     // compute inner product proof
-    let proof = prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
+    let proof =
+        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
 
     // return range proof
     if let Some(ip_proof) = proof {
