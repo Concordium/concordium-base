@@ -302,8 +302,8 @@ pub fn verify_inner_product<C: Curve>(
     let n = G_vec.len();
     let H_exponents = vec![C::Scalar::one(); n];
     // P_prime is also given directly, so set P_prime_bases to P_prime with exponent
-    // 1. Since it is assumed that P_prime_bases starts with contains G, H and Q,
-    // set the first 2n+1 exponents to 0.
+    // 1. Since it is assumed that P_prime_bases starts with G, H and Q, add those
+    // first and set the first 2n+1 exponents to 0.
     let mut P_prime_bases = Vec::with_capacity(2 * n + 2);
     P_prime_bases.extend(G_vec);
     P_prime_bases.extend(H_vec);
@@ -329,8 +329,6 @@ pub fn verify_inner_product<C: Curve>(
 ///
 /// Arguments:
 /// - `transcript` - the proof transcript
-/// - `G_slice` - slice `G` of `n` elliptic curve points
-/// - `H_slice` - slice `H` of `n` elliptic curve points
 /// - `H_exponents` - slice of scalars to whose powers the `H_i` are raised
 /// - `P_prime_bases` - slice of points for computing curve point `P'`. It is
 ///   assumed that the first base points are `G | H, Q`
@@ -342,7 +340,7 @@ pub fn verify_inner_product<C: Curve>(
 /// - `H_exponents` must have length `n`, which is a power of 2.
 /// - `G_slice` and `H_slice` each contain `n` generators.
 /// - `P_prime_bases` contains `G` and `H`, each consisting of `n` curve points,
-///   followed by a curve point `Q` and may contain additional curve points.
+///   followed by a curve point `Q`, and may contain additional curve points.
 /// - The length of `P_prime_exponents` is equal to the length of
 ///   `P_prime_bases`
 #[allow(non_snake_case)]
@@ -354,10 +352,6 @@ pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
     proof: &InnerProductProof<C>,
 ) -> bool {
     let n = H_exponents.len();
-    let G_slice = &P_prime_bases[0..n];
-    let H_slice = &P_prime_bases[n..2 * n];
-    let Q = P_prime_bases[2 * n];
-
     let L_R = &proof.lr_vec;
     let a = proof.a;
     let b = proof.b;
@@ -396,13 +390,13 @@ pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
         ge.mul_assign(&a);
     }
 
+    // Prepare bases and exponents for computation of RHS and leave space for
+    // additional P' computation
     let mut rhs_bases = Vec::with_capacity(nsum_bases.len() + P_prime_bases.len());
-    // Add G and H to rhs_bases
-    rhs_bases.extend(G_slice);
-    rhs_bases.extend(H_slice);
+    // Add G, H, and Q to rhs_bases
+    rhs_bases.extend(&P_prime_bases[0..2 * n + 1]);
 
     // add further elements to rhs_bases
-    rhs_bases.push(Q);
     rhs_bases.append(&mut nsum_bases);
     rhs_bases.extend(&P_prime_bases[2 * n + 1..]);
 
@@ -420,20 +414,22 @@ pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
     rhs_exps.append(&mut nsum_exps);
 
     // check whether P' = RHS <=> 0 = RHS P'^-1
-    // add first exponents to beginning since they belong to G, H, and Q
+    // add negation of first 2n + 1 exponents to first elements in rhs_exps since
+    // they belong to G, H, and Q
     for i in 0..2 * n + 1 {
         rhs_exps[i].sub_assign(&P_prime_exponents[i]);
     }
 
-    // negate remaining elements of P_prime_exponents and add them to rhs_exps
+    // negate remaining elements of P_prime_exponents and append them to rhs_exps
     let mut nppexps = P_prime_exponents[2 * n + 1..].to_vec();
     for nppe in &mut nppexps {
         nppe.negate();
     }
     rhs_exps.append(&mut nppexps);
 
-    let RHS = multiexp(&rhs_bases, &rhs_exps);
-    RHS.is_zero_point()
+    // Finally compute RHS P'^-1 and check whether it is 0
+    let rhs_p_inv = multiexp(&rhs_bases, &rhs_exps);
+    rhs_p_inv.is_zero_point()
 }
 
 /// This function calculates the inner product between two vectors over any
