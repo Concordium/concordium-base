@@ -221,11 +221,12 @@ unsafe extern "C" fn call_receive_v1(
     param_bytes: *const u8, // parameters to the entrypoint
     param_bytes_len: size_t,
     max_parameter_size: size_t,
-    limit_logs_and_return_values: u8,
+    limit_logs_and_return_values: u8, // non-zero means to limit
     energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
+    support_queries_tag: u8, // non-zero to enable support of chain queries.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -269,16 +270,21 @@ unsafe extern "C" fn call_receive_v1(
                     entrypoint,
                 };
 
+                let support_queries = support_queries_tag != 0;
+
                 let res = invoke_receive(
                     artifact,
-                    Amount::from_micro_ccd(amount),
                     receive_ctx,
-                    actual_name.as_receive_name(),
-                    parameter,
+                    ReceiveInvocation {
+                        amount: Amount::from_micro_ccd(amount),
+                        energy,
+                        receive_name: actual_name.as_receive_name(),
+                        parameter,
+                    },
+                    instance_state,
+                    support_queries,
                     max_parameter_size,
                     limit_logs_and_return_values,
-                    energy,
-                    instance_state,
                 );
                 match res {
                     Ok(result) => {
@@ -359,8 +365,8 @@ unsafe extern "C" fn validate_and_process_v1(
     output_len: *mut size_t,
     // the length of the artifact byte array
     output_artifact_len: *mut size_t,
-    /* location where the pointer to the artifact will
-     * be written. */
+    // location where the pointer to the artifact will
+    // be written.
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
