@@ -347,6 +347,17 @@ pub fn generate_contract_schema_v3(
     let mut contract_schemas = BTreeMap::new();
 
     for name in artifact.export.keys() {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_event_schema_") {
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                let function_schema_event = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV3::default);
+                contract_schema.event = function_schema_event;
+            }
+        }
+
         if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
                 let function_schema = generate_schema_run(&artifact, name.as_ref())?;
