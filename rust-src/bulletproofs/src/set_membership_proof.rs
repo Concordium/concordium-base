@@ -80,7 +80,7 @@ fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
 /// - `transcript` - the random oracle for Fiat Shamir
 /// - `csprng` - cryptographic safe randomness generator
 /// - `the_set` - the set as a vector of scalars
-/// - `v` the value, a scalar 
+/// - `v` the value, a scalar
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
 ///   `k` where k is the smallest power of two >= `n`
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
