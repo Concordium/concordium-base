@@ -1,4 +1,5 @@
 //! Shared functions used by the proofs in this crate
+use crate::inner_product_proof::inner_product;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
@@ -70,6 +71,102 @@ pub(crate) fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
             vec.push(last)
         }
     }
+}
+
+/// This function calculates the inner product `t(X)` of degree-1 vector
+/// polynomials `l(X)` and `r(X)` The arguments are
+/// - `l_0` - first coefficient of `l(X)`, a vector of field elements
+/// - `l_1` - second coefficient of `l(X)`, a vector of field elements
+/// - `r_0` - first coefficient of `r(X)`, a vector of field elements
+/// - `r_1` - second coefficient of `r(X)`, a vector of field elements
+///
+/// The output is `(t_0,t_1,t_2)` where
+/// `t(X) = t_0+X*t_1+X^2*t_2 = <l(X), r(X)>
+///
+/// Precondition:
+/// all input vectors should have the same length. This function may panic if
+/// this is not the case
+pub(crate) fn compute_tx_polynomial<F: Field>(
+    l_0: &[F],
+    l_1: &[F],
+    r_0: &[F],
+    r_1: &[F],
+) -> (F, F, F) {
+    // t_0 <- <l_0,r_0>
+    let t_0 = inner_product(l_0, r_0);
+    // t_2 <- <l_1,r_1>
+    let t_2 = inner_product(l_1, r_1);
+    // t_1 <- <l_0+l_1,r_0+r_1> - t_0 - t_1
+    let mut t_1 = F::zero();
+    // add <l_0+l_1,r_0+r_1>
+    for i in 0..l_0.len() {
+        let mut l_side = l_0[i];
+        l_side.add_assign(&l_1[i]);
+        let mut r_side = r_0[i];
+        r_side.add_assign(&r_1[i]);
+        let mut prod = l_side;
+        prod.mul_assign(&r_side);
+        t_1.add_assign(&prod);
+    }
+    // subtract t_0 and t_1
+    t_1.sub_assign(&t_0);
+    t_1.sub_assign(&t_2);
+
+    (t_0, t_1, t_2)
+}
+
+/// This function evaluates polynomials `l(X)`, `r(X)`, `t(X)` at `x`.
+/// - `x` - evaluation point, a field element
+/// - `l_0` - first coefficient of `l(X)`, a vector of field elements
+/// - `l_1` - second coefficient of `l(X)`, a vector of field elements
+/// - `r_0` - first coefficient of `r(X)`, a vector of field elements
+/// - `r_1` - second coefficient of `r(X)`, a vector of field elements
+/// - `t_0, t_1, t_2` coefficients of `t(X)`, each a field element
+///
+/// The output is `l(x), r(x), t(x)`
+///
+/// Precondition:
+/// the input vectors `l_0,l_1,r_0,r_1` should have the same length. This function may panic if
+/// this is not the case
+pub(crate) fn evaluate_lx_rx_tx<F: Field>(
+    x: F,
+    l_0: &[F],
+    l_1: &[F],
+    r_0: &[F],
+    r_1: &[F],
+    t_0: F,
+    t_1: F,
+    t_2: F,
+) -> (Vec<F>, Vec<F>, F) {
+    let n = l_0.len();
+    let mut x_sq = x;
+    x_sq.mul_assign(&x);
+    // Compute l(x) and r(x)
+    let mut lx = Vec::with_capacity(n);
+    let mut rx = Vec::with_capacity(n);
+    for i in 0..n {
+        // l[i] <- l_0[i] + x* l_1[i]
+        let mut lx_i = l_1[i];
+        lx_i.mul_assign(&x);
+        lx_i.add_assign(&l_0[i]);
+        lx.push(lx_i);
+        // r[i] = r_0[i] + x* r_1[i]
+        let mut rx_i = r_1[i];
+        rx_i.mul_assign(&x);
+        rx_i.add_assign(&r_0[i]);
+        rx.push(rx_i);
+    }
+    // Compute t(x)
+    // tx <- t_0 + t_1*x + t_2*x^2
+    let mut tx = t_0;
+    let mut tx_1 = t_1;
+    tx_1.mul_assign(&x);
+    tx.add_assign(&tx_1);
+    let mut tx_2 = t_2;
+    tx_2.mul_assign(&x_sq);
+    tx.add_assign(&tx_2);
+    
+    (lx,rx,tx)
 }
 
 #[cfg(test)]

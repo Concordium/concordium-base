@@ -214,25 +214,7 @@ pub fn prove<C: Curve, R: Rng>(
     }
 
     // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
-    // t_0 <- <l_0,r_0>
-    let t_0 = inner_product(&l_0, &r_0);
-    // t_2 <- <l_1,r_1>
-    let t_2 = inner_product(&l_1, &r_1);
-    // t_1 <- <l_0+l_1,r_0+r_1> - t_0 - t_1
-    let mut t_1 = C::Scalar::zero();
-    // add <l_0+l_1,r_0+r_1>
-    for i in 0..n {
-        let mut l_side = l_0[i];
-        l_side.add_assign(&l_1[i]);
-        let mut r_side = r_0[i];
-        r_side.add_assign(&r_1[i]);
-        let mut prod = l_side;
-        prod.mul_assign(&r_side);
-        t_1.add_assign(&prod);
-    }
-    // subtract t_0 and t_1
-    t_1.sub_assign(&t_0);
-    t_1.sub_assign(&t_2);
+    let (t_0, t_1, t_2) = compute_tx_polynomial(&l_0, &l_1, &r_0, &r_1);
 
     // Commit to t_1 and t_2
     let t_1_tilde = C::generate_scalar(csprng);
@@ -250,32 +232,8 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 4: Evaluate l(.), r(.), and t(.) at challenge point x
     // get challenge x from transcript
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
-    let mut x_sq = x;
-    x_sq.mul_assign(&x);
-    // Compute l(x) and r(x)
-    let mut lx = Vec::with_capacity(n);
-    let mut rx = Vec::with_capacity(n);
-    for i in 0..n {
-        // l[i] <- l_0[i] + x* l_1[i]
-        let mut lx_i = l_1[i];
-        lx_i.mul_assign(&x);
-        lx_i.add_assign(&l_0[i]);
-        lx.push(lx_i);
-        // r[i] = r_0[i] + x* r_1[i]
-        let mut rx_i = r_1[i];
-        rx_i.mul_assign(&x);
-        rx_i.add_assign(&r_0[i]);
-        rx.push(rx_i);
-    }
-    // Compute t(x)
-    // tx <- t_0 + t_1*x + t_2*x^2
-    let mut tx = t_0;
-    let mut tx_1 = t_1;
-    tx_1.mul_assign(&x);
-    tx.add_assign(&tx_1);
-    let mut tx_2 = t_2;
-    tx_2.mul_assign(&x_sq);
-    tx.add_assign(&tx_2);
+    // Compute l(x), r(x), and t(x)
+    let (lx,rx,tx) = evaluate_lx_rx_tx(x, &l_0, &l_1, &r_0, &r_1, t_0, t_1, t_2);
     // Compute the blinding t_x_tilde
     // t_x_tilde <- z^2*v_rand + t_1_tilde*x + t_2_tilde*x^2
     let mut tx_tilde = z_sq;
@@ -284,7 +242,8 @@ pub fn prove<C: Curve, R: Rng>(
     tx_s1.mul_assign(&x);
     tx_tilde.add_assign(&tx_s1);
     let mut tx_s2 = t_2_tilde;
-    tx_s2.mul_assign(&x_sq);
+    tx_s2.mul_assign(&x);
+    tx_s2.mul_assign(&x);
     tx_tilde.add_assign(&tx_s2);
     // Compute blinding e_tilde
     // e_tilde <- a_tilde + s_tilde * x
