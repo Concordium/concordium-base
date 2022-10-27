@@ -79,8 +79,8 @@ fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
 /// the commitment `V` to `v`. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
 /// - `csprng` - cryptographic safe randomness generator
-/// - `the_set` - the set as a vector
-/// - `v` the value
+/// - `the_set` - the set as a vector of scalars
+/// - `v` the value, a scalar 
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
 ///   `k` where k is the smallest power of two >= `n`
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
@@ -348,7 +348,7 @@ pub enum VerificationError {
 /// of value v that is in a set S and that is consistent
 /// with a commitment V to v. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
-/// - `the_set` - the set as a vector
+/// - `the_set` - the set as a vector of scalars
 /// - `V` - commitment to `v`
 /// - `proof` - the set membership proof to verify
 /// - `gens` - generators containing vectors `G` and `H` both of length at least
