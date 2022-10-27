@@ -712,6 +712,9 @@ data SpecialTransactionOutcome =
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
 
+instance HashableTo H.Hash SpecialTransactionOutcome where
+  getHash = H.hash . S.encode
+
 instance S.Serialize SpecialTransactionOutcome where
     put BakingRewards{..} = do
       S.putWord8 0
