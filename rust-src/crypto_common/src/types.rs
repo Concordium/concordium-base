@@ -5,7 +5,7 @@ use crate::{
     SerdeSerialize, Serial,
 };
 use byteorder::{BigEndian, ReadBytesExt};
-pub use concordium_contracts_common::{AccountAddress, Amount, ACCOUNT_ADDRESS_SIZE};
+pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
     ContractAddress, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
 };
@@ -51,6 +51,31 @@ impl Deserial for Amount {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let micro_ccd = source.get()?;
         Ok(Amount::from_micro_ccd(micro_ccd))
+    }
+}
+
+impl Serial for Address {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Address::Account(acc) => {
+                0u8.serial(out);
+                acc.serial(out)
+            }
+            Address::Contract(ca) => {
+                1u8.serial(out);
+                ca.serial(out)
+            }
+        }
+    }
+}
+
+impl Deserial for Address {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => Ok(Self::Account(source.get()?)),
+            1u8 => Ok(Self::Contract(source.get()?)),
+            _ => anyhow::bail!("Unsupported address type."),
+        }
     }
 }
 

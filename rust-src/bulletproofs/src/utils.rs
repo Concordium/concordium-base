@@ -15,11 +15,12 @@ pub struct Generators<C: Curve> {
 
 impl<C: Curve> Generators<C> {
     /// **Warning** do not use in production!
-    /// This **unsafely** generates a list of generators of a given size for
-    /// testing purposes. For production, generator must be created with
-    /// care.
+    /// This generates a list of generators of a given size for
+    /// testing purposes. For production, generators must be created such that
+    /// discrete logarithms between different generators are not known, which is
+    /// not guaranteed by this function.
     #[cfg(test)]
-    pub fn generate(n: usize, csprng: &mut impl Rng) -> Self {
+    pub(crate) fn generate(n: usize, csprng: &mut impl Rng) -> Self {
         let mut gh = Vec::with_capacity(n);
         for _ in 0..n {
             let x = C::generate(csprng);
@@ -73,7 +74,7 @@ pub fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
 
 /// Pads a non-empty field vector to a power of two length by repeating the last
 /// element For empty vectors the function is the identity.
-pub fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
+pub(crate) fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
     let n = vec.len();
     if n == 0 {
         return;
@@ -123,6 +124,24 @@ mod tests {
                 )
             }
         }
+    }
+
+    #[test]
+    fn test_vector_padding_with_empty() {
+        let mut vec: Vec<SomeField> = Vec::with_capacity(42);
+        pad_vector_to_power_of_two(&mut vec);
+        assert_eq!(vec.len(), 0, "Vector should still have length 0.");
+    }
+
+    #[test]
+    fn test_vector_padding_with_power_of_two() {
+        let n = 16;
+        let mut vec = Vec::with_capacity(n);
+        for _ in 0..n {
+            vec.push(SomeField::one())
+        }
+        pad_vector_to_power_of_two(&mut vec);
+        assert_eq!(vec.len(), n, "Vector should still have length n.");
     }
 
     #[test]

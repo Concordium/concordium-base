@@ -336,26 +336,31 @@ pub fn verify_inner_product<C: Curve>(
 }
 
 /// This function is an optimized variant of the above.
-/// It is verified whether P'=<a,G>+<b,H'>+<a,b>Q for P' =
-/// multiexp(P_prime_bases, P_prime_exponents) and H'_i =
-/// H_i^H_exponents_i. Arguments:
-/// - transcript - the proof transcript
-/// - gens - generators containing vectors G and H both of length n
-/// - H_exponents - slice of scalars to whose powers the H_i are raised
-/// - P_prime_bases - slice of points for computing curve point P'. It is
-///   assumed that the the first base points are G | H, which are implicit and
-///   omitted from P_prime_bases
-/// - P_prime_exponents - slice of scalars to whose powers the elements
-///   P_prime_bases are raised
-/// - Q - the elliptic curve point Q
-/// - proof - the inner product proof
-/// Precondictions:
-/// G, H, and H_exponents should all be of the same length n, and this
-/// length must a power of 2. Furthermore, the length of P_prime_exponents is
-/// equal to the length of P_prime_bases plus of 2n (since G and H are omitted
-/// from P_prime_bases).
+/// It is verified whether `P'=<a,G>+<b,H'>+<a,b>Q` for `P' =
+/// multiexp(P_prime_bases, P_prime_exponents)` and `H'_i =
+/// H_i^H_exponents_i`.
+///
+/// Arguments:
+/// - `transcript` - the proof transcript
+/// - `gens` - generators containing vectors `G` and `H` both of length at least
+///   `n`
+/// - `H_exponents` - slice of scalars to whose powers the `H_i` are raised
+/// - `P_prime_bases` - slice of points for computing curve point `P'`. It is
+///   assumed that the first base points are `G | H, Q`, which are implicit and
+///   omitted from `P_prime_bases`
+/// - `P_prime_exponents` - slice of scalars to whose powers the elements
+///   `P_prime_bases` are raised
+/// - `Q` - the elliptic curve point `Q`
+/// - `proof` - the inner product proof
+///
+/// Preconditions:
+/// - `H_exponents` must have length `n`, which is a power of 2.
+/// - `gens` contain at least `n` pairs of generators.
+/// - The length of `P_prime_exponents` is equal to the length of
+///   `P_prime_bases` plus of `2n + 1` (since `G`, `H`, and `Q` are
+/// omitted from `P_prime_bases`).
 #[allow(non_snake_case)]
-pub fn verify_inner_product_with_scalars<C: Curve>(
+pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
     transcript: &mut RandomOracle,
     gens: &Generators<C>,
     H_exponents: &[C::Scalar],
@@ -431,13 +436,13 @@ pub fn verify_inner_product_with_scalars<C: Curve>(
     rhs_exps.append(&mut nsum_exps);
 
     // check whether P' = RHS <=> 0 = RHS P'^-1
-    // add first exponents to beginning since they belong to G_vec and H_vec
-    for i in 0..2 * n {
+    // add first exponents to beginning since they belong to G, H, and Q
+    for i in 0..2 * n + 1 {
         rhs_exps[i].sub_assign(&P_prime_exponents[i]);
     }
 
     // negate remaining elements of P_prime_exponents and add them to rhs_exps
-    let mut nppexps = P_prime_exponents[2 * n..].to_vec();
+    let mut nppexps = P_prime_exponents[2 * n + 1..].to_vec();
     for nppe in &mut nppexps {
         nppe.negate();
     }

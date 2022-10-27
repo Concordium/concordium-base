@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.0
+- Added a function for signing any account transaction.
+- Added a function for signing a message.
+- Added a function for converting a serialized account transaction (as bytes) into JSON.
+
 ## 0.16.0
 - Updated version of `key_derivation` library to `1.1.0` and started using the index of the identity provider for key derivation.
 
