@@ -233,7 +233,7 @@ pub fn prove<C: Curve, R: Rng>(
     // get challenge x from transcript
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     // Compute l(x), r(x), and t(x)
-    let (lx,rx,tx) = evaluate_lx_rx_tx(x, &l_0, &l_1, &r_0, &r_1, t_0, t_1, t_2);
+    let (lx, rx, tx) = evaluate_lx_rx_tx(x, &l_0, &l_1, &r_0, &r_1, t_0, t_1, t_2);
     // Compute the blinding t_x_tilde
     // t_x_tilde <- z^2*v_rand + t_1_tilde*x + t_2_tilde*x^2
     let mut tx_tilde = z_sq;

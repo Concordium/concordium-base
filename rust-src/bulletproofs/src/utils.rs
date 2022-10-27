@@ -126,8 +126,9 @@ pub(crate) fn compute_tx_polynomial<F: Field>(
 /// The output is `l(x), r(x), t(x)`
 ///
 /// Precondition:
-/// the input vectors `l_0,l_1,r_0,r_1` should have the same length. This function may panic if
-/// this is not the case
+/// the input vectors `l_0,l_1,r_0,r_1` should have the same length. This
+/// function may panic if this is not the case
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn evaluate_lx_rx_tx<F: Field>(
     x: F,
     l_0: &[F],
@@ -165,8 +166,8 @@ pub(crate) fn evaluate_lx_rx_tx<F: Field>(
     let mut tx_2 = t_2;
     tx_2.mul_assign(&x_sq);
     tx.add_assign(&tx_2);
-    
-    (lx,rx,tx)
+
+    (lx, rx, tx)
 }
 
 #[cfg(test)]
