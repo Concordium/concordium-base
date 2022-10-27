@@ -1548,10 +1548,16 @@ where
     }
 }
 
+/// Collection of information relevant to invoke a receive-function.
+#[derive(Debug)]
 pub struct ReceiveInvocation<'a> {
+    /// The amount included in the transaction.
     pub amount:       Amount,
+    /// The name of the receive function to invoke.
     pub receive_name: ReceiveName<'a>,
+    /// A parameter to provide the receive function.
     pub parameter:    ParameterRef<'a>,
+    /// The limit on the energy to be used for execution.
     pub energy:       InterpreterEnergy,
 }
 
