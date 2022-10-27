@@ -120,6 +120,8 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                 return_value: Vec::new(),
                 parameters,
                 support_queries: false,
+                max_parameter_size: usize::from(u16::MAX),
+                limit_logs_and_return_values: false,
             },
             state,
         };

@@ -465,7 +465,7 @@ putParameter = putShortByteStringWord16 . parameter
 getParameter :: SProtocolVersion pv -> Get Parameter
 getParameter spv = do
     len <- getWord16be
-    unless (len <= maxParameterLen spv) $ fail "Parameter size exceeds limits."
+    unless (len <= maxParameterLen spv) $ fail "Parameter size exceeds the limit."
     Parameter <$> getShortByteString (fromIntegral len)
 
 -- |Get (deserialize) a @Parameter@ *without checking that its size is valid*. This should only be used when
@@ -680,7 +680,7 @@ getActionsTree' size = go HM.empty 0
                            erAddr <- get
                            erName <- get
                            erAmount <- get
-                           erParameter <- getParameterUnchecked -- TODO: Ensure interpreter checks the length.
+                           erParameter <- getParameterUnchecked
                            let action = TSend{..}
                            go (HM.insert n action acc) (n+1)
                          1 -> do

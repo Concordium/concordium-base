@@ -197,8 +197,9 @@ pub struct StateLessReceiveHost<ParamType, Ctx> {
     /// Whether the host should support queries or not. Queries are introduced
     /// in protocol version 5.
     pub support_queries:          bool,
-    /// The maximum parameter size allowed. Is constant for a given protocol
-    /// version.
+    /// The maximum parameter size allowed.
+    /// In P1-P4 it was 1024.
+    /// In P5+ it is 65535.
     max_parameter_size:           usize,
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in protocol version 5.
@@ -292,24 +293,23 @@ mod host {
         limit_return_value_size: bool,
     ) -> ExecResult<u32> {
         let length = bytes.len();
-        ensure!(offset as usize <= rv.len(), "Cannot write past the offset.");
         let offset = offset as usize;
+        ensure!(offset <= rv.len(), "Cannot write past the offset.");
         let end = offset
             .checked_add(length)
-            .ok_or_else(|| anyhow::anyhow!("Writing past the end of memory."))?
-            as usize;
+            .ok_or_else(|| anyhow::anyhow!("Writing past the end of memory."))?;
         let end = if limit_return_value_size {
-            std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32
+            std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize)
         } else {
-            end as u32
+            end
         };
-        if rv.len() < end as usize {
+        if rv.len() < end {
             energy.tick_energy(constants::additional_output_size_cost(
-                u64::from(end) - rv.len() as u64,
+                end as u64 - rv.len() as u64,
             ))?;
-            rv.resize(end as usize, 0u8);
+            rv.resize(end, 0u8);
         }
-        let written = (&mut rv[offset..end as usize]).write(bytes)?;
+        let written = (&mut rv[offset..end]).write(bytes)?;
         Ok(written as u32)
     }
 

@@ -31,7 +31,7 @@ maxParameterLen SP1 = 1024
 maxParameterLen SP2 = 1024
 maxParameterLen SP3 = 1024
 maxParameterLen SP4 = 1024
-maxParameterLen _ = 65535
+maxParameterLen SP5 = 65535
 
 -- |Whether the number of logs and size of return values should be limited.
 -- The limits have been removed in P5 and onward.
@@ -40,7 +40,7 @@ limitLogsAndReturnValues SP1 = True
 limitLogsAndReturnValues SP2 = True
 limitLogsAndReturnValues SP3 = True
 limitLogsAndReturnValues SP4 = True
-limitLogsAndReturnValues _ = False
+limitLogsAndReturnValues SP5 = False
 
 -- |Maximum module size of a V0 module.
 maxWasmModuleSizeV0 :: Word32

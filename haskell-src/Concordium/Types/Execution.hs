@@ -2088,8 +2088,9 @@ instance S.Serialize RejectReason where
       rejectReason <- S.getInt32be
       contractAddress <- S.get
       receiveName <- S.get
-      -- Get the parameter without validating its length. This is OK here, because the length has been checked before reaching this point.
-      -- Checking requires the protocol version as input, which is why it is skipped here.
+      -- We only ever deserialize valid transactions, which means that the parameter size is known to be valid.
+      -- This allows us to skip the size check, which is useful because checking requires the protocol version,
+      -- which we do not currently have access to here.
       parameter <- Wasm.getParameterUnchecked
       return RejectedReceive {..}
     14 -> return InvalidProof

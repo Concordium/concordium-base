@@ -28,7 +28,7 @@ impl Logs {
     /// - 1 if data was logged.
     pub fn log_event(&mut self, event: Vec<u8>, limit_num_logs: bool) -> i32 {
         let cur_len = self.logs.len();
-        if !limit_num_logs || cur_len < constants::MAX_NUM_LOGS {
+        if (!limit_num_logs && cur_len < u32::MAX as usize) || cur_len < constants::MAX_NUM_LOGS {
             self.logs.push_back(event);
             1
         } else {
@@ -223,7 +223,9 @@ pub struct ReceiveHost<ParamType, Ctx> {
     pub outcomes:                 Outcome,
     /// The receive context for this call.
     pub receive_ctx:              Ctx,
-    /// The maximum parameter size. Is constant for a given protocol version.
+    /// The maximum parameter size.
+    /// In P1-P4 it was 1024.
+    /// In P5+ it is 65535.
     max_parameter_size:           usize,
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
