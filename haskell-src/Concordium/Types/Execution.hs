@@ -1817,7 +1817,7 @@ instance AE.FromJSON Event where
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
-    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
+    deriving(Eq, Ord, Enum, Bits, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
 -- |The 'Maybe TransactionType' is to cover the case of a transaction payload
 -- that cannot be deserialized. A transaction is still included in a block, but
@@ -1859,7 +1859,7 @@ type TransactionSummary = TransactionSummary' ValidResult
 -- |We create a wrapper here so we can
 -- derive another 'HashableTo' instance which omits
 -- the exact 'RejectReason' in the resulting hash.
-newtype TransactionSummaryV1 = TransactionSummaryV1 (TransactionSummary' ValidResult)
+newtype TransactionSummaryV1 = TransactionSummaryV1 {_transactionSummaryV1 :: TransactionSummary' ValidResult}
     deriving(Eq, Show, Generic)
 
 -- |TODO implement and doc.
