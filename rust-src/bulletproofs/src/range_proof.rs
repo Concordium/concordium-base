@@ -457,18 +457,15 @@ pub enum VerificationError {
 }
 
 /// This function verifies a range proof, i.e. a proof of knowledge
-/// of value v_1, v_2, ..., v_m that are all in [0, 2^n) that are consistent
-/// with commitments V_i to v_i. The arguments are
-/// - n - the number n such that each v_i is claimed to be in [0, 2^n) by the
-///   prover
-/// - commitments - commitments V_i to each v_i
-/// - proof - the range proof
-/// - gens - generators containing vectors G and H both of length nm
-/// - v_keys - commitment keys B and B_tilde
-///
-/// This function is more efficient than the naive_verify since it
-/// unfolds what the inner product proof verifier does using the verification
-/// scalars.
+/// of values `v_1, v_2, ..., v_m` in `[0, 2^n)` that are consistent
+/// with commitments `V_i` to `v_i`. The arguments are
+/// - `n` - the number `n` such that each `v_i` is claimed to be in `[0, 2^n)`
+///   by the prover
+/// - commitments - commitments `V_i` to each `v_i`
+/// - `proof` - the range proof
+/// - `gens` - generators containing vectors `G` and `H` both of length at least
+///   `nm` (bold **g**,**h** in bluepaper)
+/// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
@@ -531,7 +528,7 @@ pub fn verify_efficient<C: Curve>(
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
 
     // Part 2: Check verification equation 1
-    // Calculate delta(x,y) <- (z-z^2)*<1,y_nm> -  <1,2_nm> * sum_j=0^m-1 z^(j+3)
+    // Calculate delta(x,y) <- (z-z^2)*<1,y_nm> - <1,2_nm> * sum_j=0^m-1 z^(j+3)
     // ip_1_y_nm <- <1,y_nm>
     let mut ip_1_y_nm = C::Scalar::zero();
     let mut yi = C::Scalar::one();
@@ -583,116 +580,70 @@ pub fn verify_efficient<C: Curve>(
         return Err(VerificationError::First);
     }
 
-    // Part 2: Check verification equation 2
-    //
-    // Equation 2 is of the form: scalar_G * G + scalar_H * H + ...
-    //
-    // Thus:
-    // 1) Compute all scalars
-    // 2) Multiexponentiation to compute the summands
-    // 3) Check that the sum is zero
-    //
-    let ip_proof = &proof.ip_proof;
-    // compute vectors u^2,u^-2,s
-    let verification_scalars = verify_scalars(transcript, G.len(), ip_proof);
-    if verification_scalars.is_none() {
-        return Err(VerificationError::DivisionError);
-    }
-    let verification_scalars = verification_scalars.unwrap();
-    let (u_sq, u_inv_sq, s) = (
-        verification_scalars.u_sq,
-        verification_scalars.u_inv_sq,
-        verification_scalars.s,
-    );
-    let a = ip_proof.a;
-    let b = ip_proof.b;
-    let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
-    // (z^2,...,z^(m+2-1))
-    let z_2_m = z_vec(z, 2, m);
-    // (s_0^-1,s_1^-1,...)
-    let mut s_inv = s;
-    s_inv.reverse(); // the inverses of s is the reversed list
-                     // (1,2,...,2^(n-1))
-    let two_n: Vec<C::Scalar> = two_n_vec(n);
-
-    // compute scalar H_scalars[j] <- z+y^-j*(z^(2+j//n)*2^(j%n)-b*s_j^-1)
-    let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
-    let mut y_i = C::Scalar::one();
+    // Part 2: Verify inner-product proof
+    // First compute helper variables g_hat, h_prime, and P_prime
+    // g_hat = g^w (= B^w)
+    let g_hat = B.mul_by_scalar(&w);
+    // h_prime = multiexp(h, y^-n); compute exponents and calculate in
+    // verify_inner_product_with_scalars
     let y_inv = match y.inverse() {
         Some(inv) => inv,
         None => return Err(VerificationError::DivisionError),
     };
-    for i in 0..G.len() {
-        let j = i / usize::from(n);
-        let mut H_scalar = two_n[i % usize::from(n)];
-        H_scalar.mul_assign(&z_2_m[j]);
-        let mut bs_inv = b;
-        bs_inv.mul_assign(&s_inv[i]);
-        H_scalar.sub_assign(&bs_inv);
-        H_scalar.mul_assign(&y_i);
-        y_i.mul_assign(&y_inv);
+    let y_inv_nm = z_vec(y_inv, 0, H.len());
+
+    // P_prime = g_hat^t_x * h^-e_tilde * A * S^x * multiexp(G, -z1) * multiexp(H,
+    // PH_scalars), where H_scalars[j] = z + y^-j * z^(2+j//n) * 2^(j%n)
+    let mut P_prime_exps = Vec::with_capacity(2 * nm + 4);
+    let mut minus_z = z;
+    minus_z.negate();
+    let mut minus_z_vec = vec![minus_z; G.len()];
+    P_prime_exps.append(&mut minus_z_vec);
+
+    // compute PH_scalars and add to P_prime_exps
+    let two_n: Vec<C::Scalar> = two_n_vec(n); // 1, 2, 4, 8, ...
+    let z_2_m = z_vec(z, 2, m); // z^2, z^3, ...
+    for j in 0..H.len() {
+        let mut H_scalar = y_inv_nm[j];
+        H_scalar.mul_assign(&z_2_m[j / usize::from(n)]);
+        H_scalar.mul_assign(&two_n[j % usize::from(n)]);
         H_scalar.add_assign(&z);
-        H_scalars.push(H_scalar);
+        P_prime_exps.push(H_scalar);
     }
-    // compute H_term
-    let H_term = multiexp(&H, &H_scalars); // Expensive!
 
-    // compute L,R, A, and S terms
-    let A_term = A;
-    let S_term = S.mul_by_scalar(&x);
-    let L_term = multiexp(&L, &u_sq); // Expensive!
-    let R_term = multiexp(&R, &u_inv_sq); // Expensive!
-
-    // compute B_scalar <- w*(t_x-ab)
-    let mut B_scalar = tx;
-    let mut ab = a;
-    ab.mul_assign(&b);
-    B_scalar.sub_assign(&ab);
-    B_scalar.mul_assign(&w);
-    // compute B term
-    let B_term = B.mul_by_scalar(&B_scalar);
-
-    // compute B_tilde_scalar <- -e_tilde
+    // add remaining exponents
+    P_prime_exps.push(tx);
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
-    let B_tilde_scalar = minus_e_tilde;
-    // compute B_tilde term
-    let B_tilde_term = B_tilde.mul_by_scalar(&B_tilde_scalar);
+    P_prime_exps.push(minus_e_tilde);
+    P_prime_exps.push(C::Scalar::one());
+    P_prime_exps.push(x);
 
-    // compute G_scalar[i] <- -z-a*s_i
-    let mut G_scalars = Vec::with_capacity(G.len());
-    // Undo inversion of s vector
-    s_inv.reverse();
-    let s = s_inv;
-    for si in s {
-        let mut G_scalar = z;
-        G_scalar.negate();
-        let mut sa = si;
-        sa.mul_assign(&a);
-        G_scalar.sub_assign(&sa);
-        G_scalars.push(G_scalar);
-    }
-    // compute G_term
-    let G_term = multiexp(&G, &G_scalars); // Expensive!
+    // P_prime_bases starts with G, H, and Q = g_hat
+    let mut P_prime_bases = Vec::with_capacity(2 * nm + 4);
+    P_prime_bases.extend(G);
+    P_prime_bases.extend(H);
+    P_prime_bases.push(g_hat);
 
-    // compute sum for equation 2
-    let sum = A_term
-        .plus_point(&S_term)
-        .plus_point(&B_term)
-        .plus_point(&B_tilde_term)
-        .plus_point(&G_term)
-        .plus_point(&H_term)
-        .plus_point(&L_term)
-        .plus_point(&R_term);
-    // sum ?= 0
-    let second = sum.is_zero_point();
-    if first && second {
-        Ok(())
-    } else {
-        // We know now the second check failed since we would have terminated
-        // early if the first one had failed.
-        Err(VerificationError::Second)
+    // add remaining bases
+    P_prime_bases.push(B_tilde);
+    P_prime_bases.push(A);
+    P_prime_bases.push(S);
+
+    // Finally verify inner product
+    let second = verify_inner_product_with_scalars(
+        transcript,
+        &y_inv_nm,
+        &P_prime_bases,
+        &P_prime_exps,
+        &proof.ip_proof,
+    );
+
+    if !second {
+        return Err(VerificationError::Second);
     }
+
+    Ok(())
 }
 
 /// For proving that a <= b for integers a,b
@@ -740,6 +691,187 @@ pub fn verify_less_than_or_equal<C: Curve>(
         key,
     )
     .is_ok()
+}
+
+/// This function does the same as verify_efficient. It groups
+/// some of the verification checks a bit more and could be more efficient,
+/// but it seems in practice that the difference in efficiency is small.
+#[allow(non_snake_case)]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::many_single_char_names)]
+pub fn verify_more_efficient<C: Curve>(
+    transcript: &mut RandomOracle,
+    n: u8,
+    commitments: &[Commitment<C>],
+    proof: &RangeProof<C>,
+    gens: &Generators<C>,
+    v_keys: &CommitmentKey<C>,
+) -> bool {
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let B = v_keys.g;
+    let B_tilde = v_keys.h;
+    let m = commitments.len();
+    for V in commitments {
+        transcript.append_message(b"Vj", &V.0);
+    }
+    let A = proof.A;
+    let S = proof.S;
+    let T_1 = proof.T_1;
+    let T_2 = proof.T_2;
+    let tx = proof.tx;
+    let tx_tilde = proof.tx_tilde;
+    let e_tilde = proof.e_tilde;
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
+    let mut z2 = z;
+    z2.mul_assign(&z);
+    let mut z3 = z2;
+    z3.mul_assign(&z);
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    let mut x2 = x;
+    x2.mul_assign(&x);
+    // println!("verifier's x = {:?}", x);
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    // Calculate delta(x,y):
+    let mut ip_1_y_nm = C::Scalar::zero();
+    let mut yi = C::Scalar::one();
+    for _ in 0..G.len() {
+        ip_1_y_nm.add_assign(&yi);
+        yi.mul_assign(&y);
+    }
+    let mut ip_1_2_n = C::Scalar::zero();
+    let mut two_i = C::Scalar::one();
+    for _ in 0..usize::from(n) {
+        ip_1_2_n.add_assign(&two_i);
+        two_i.double();
+    }
+    let mut sum = C::Scalar::zero();
+    let mut zj3 = z3;
+    for _ in 0..m {
+        sum.add_assign(&zj3);
+        zj3.mul_assign(&z);
+    }
+    sum.mul_assign(&ip_1_2_n);
+    let mut delta_yz = z;
+    delta_yz.sub_assign(&z2);
+    delta_yz.mul_assign(&ip_1_y_nm);
+    delta_yz.sub_assign(&sum);
+    // println!("--------------- VERIFICATION ----------------");
+
+    let ip_proof = &proof.ip_proof;
+    let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
+    let mut y_i = C::Scalar::one();
+    let z_2_m = z_vec(z, 2, m);
+    let verification_scalars = verify_scalars(transcript, G.len(), ip_proof);
+    if verification_scalars.is_none() {
+        return false;
+    }
+    let verification_scalars = verification_scalars.unwrap();
+    let (u_sq, u_inv_sq, s) = (
+        verification_scalars.u_sq,
+        verification_scalars.u_inv_sq,
+        verification_scalars.s,
+    );
+    let a = ip_proof.a;
+    let b = ip_proof.b;
+    let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
+    let mut s_inv = s.clone();
+    s_inv.reverse();
+    let y_inv = match y.inverse() {
+        Some(inv) => inv,
+        None => return false,
+    };
+    let two_n: Vec<C::Scalar> = two_n_vec(n);
+    for i in 0..G.len() {
+        let j = i / usize::from(n);
+        let mut H_scalar = two_n[i % usize::from(n)];
+        H_scalar.mul_assign(&z_2_m[j]);
+        let mut bs_inv = b;
+        bs_inv.mul_assign(&s_inv[i]);
+        H_scalar.sub_assign(&bs_inv);
+        H_scalar.mul_assign(&y_i);
+        y_i.mul_assign(&y_inv);
+        H_scalar.add_assign(&z);
+        H_scalars.push(H_scalar);
+    }
+    let A_scalar = C::Scalar::one();
+    let S_scalar = x;
+    let c = w; // TODO: Shuld be generated randomly
+    let mut T_1_scalar = c;
+    T_1_scalar.mul_assign(&x);
+    let mut T_2_scalar = T_1_scalar;
+    T_2_scalar.mul_assign(&x);
+
+    let mut V_scalars = Vec::with_capacity(m);
+    let mut cz_i = c;
+    cz_i.mul_assign(&z);
+    cz_i.mul_assign(&z);
+    for _ in 0..m {
+        V_scalars.push(cz_i);
+        cz_i.mul_assign(&z);
+    }
+
+    let mut B_scalar = tx;
+    let mut ab = a;
+    ab.mul_assign(&b);
+    B_scalar.sub_assign(&ab);
+    B_scalar.mul_assign(&w);
+    let mut c_delta_minus_tx = delta_yz;
+    c_delta_minus_tx.sub_assign(&tx);
+    c_delta_minus_tx.mul_assign(&c);
+    B_scalar.add_assign(&c_delta_minus_tx);
+    let mut minus_e_tilde = e_tilde;
+    minus_e_tilde.negate();
+    let mut B_tilde_scalar = minus_e_tilde;
+    let mut ctx_tilde = tx_tilde;
+    ctx_tilde.mul_assign(&c);
+    B_tilde_scalar.sub_assign(&ctx_tilde);
+    let mut G_scalars = Vec::with_capacity(G.len());
+    for si in s {
+        let mut G_scalar = z;
+        G_scalar.negate();
+        let mut sa = si;
+        sa.mul_assign(&a);
+        G_scalar.sub_assign(&sa);
+        G_scalars.push(G_scalar);
+    }
+    let mut Vjs: Vec<C> = commitments.iter().map(|x| x.0).collect();
+    let mut all_scalars = vec![A_scalar];
+    all_scalars.push(S_scalar);
+    all_scalars.push(T_1_scalar);
+    all_scalars.push(T_2_scalar);
+    all_scalars.push(B_scalar);
+    all_scalars.push(B_tilde_scalar);
+    all_scalars.append(&mut V_scalars);
+    all_scalars.append(&mut G_scalars);
+    all_scalars.append(&mut H_scalars);
+    let mut L_scalars = u_sq;
+    let mut R_scalars = u_inv_sq;
+    all_scalars.append(&mut L_scalars);
+    all_scalars.append(&mut R_scalars);
+    let mut all_points = vec![A];
+    all_points.push(S);
+    all_points.push(T_1);
+    all_points.push(T_2);
+    all_points.push(B);
+    all_points.push(B_tilde);
+    all_points.append(&mut Vjs);
+    all_points.extend_from_slice(&G);
+    all_points.extend_from_slice(&H);
+    all_points.extend_from_slice(&L);
+    all_points.extend_from_slice(&R);
+
+    let sum2 = multiexp(&all_points, &all_scalars);
+
+    let b: bool = sum2.is_zero_point();
+    b
 }
 
 #[cfg(test)]
@@ -882,341 +1014,6 @@ mod tests {
         (V_vec, rangeproof)
     }
 
-    /// This function verifies a range proof, i.e. a proof of knowledge
-    /// of values v_1, v_2, ..., v_m that are all in [0, 2^n) that are
-    /// consistent with commitments V_i to v_i. The arguments are
-    /// - n - the number n such that each v_i is claimed to be in [0, 2^n) by
-    ///   the prover
-    /// - commitments - commitments V_i to each v_i
-    /// - gens - generators containing vectors G and H both of length nm
-    /// - v_keys - commitmentment keys B and B_tilde
-    /// It uses the inner product proof verifier.
-    #[allow(non_snake_case)]
-    #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::many_single_char_names)]
-    fn naive_verify<C: Curve>(
-        transcript: &mut RandomOracle,
-        n: u8,
-        commitments: &[Commitment<C>],
-        proof: &RangeProof<C>,
-        gens: &Generators<C>,
-        v_keys: &CommitmentKey<C>,
-    ) -> bool {
-        let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-        let B = v_keys.g;
-        let B_tilde = v_keys.h;
-        let m = commitments.len();
-        for V in commitments {
-            transcript.append_message(b"Vj", &V.0);
-        }
-        let A = proof.A;
-        let S = proof.S;
-        let T_1 = proof.T_1;
-        let T_2 = proof.T_2;
-        let tx = proof.tx;
-        let tx_tilde = proof.tx_tilde;
-        let e_tilde = proof.e_tilde;
-        transcript.append_message(b"A", &A);
-        transcript.append_message(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
-        let mut z2 = z;
-        z2.mul_assign(&z);
-        let mut z3 = z2;
-        z3.mul_assign(&z);
-        transcript.append_message(b"T1", &T_1);
-        transcript.append_message(b"T2", &T_2);
-        let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
-        let mut x2 = x;
-        x2.mul_assign(&x);
-        // println!("verifier's x = {:?}", x);
-        transcript.append_message(b"tx", &tx);
-        transcript.append_message(b"tx_tilde", &tx_tilde);
-        transcript.append_message(b"e_tilde", &e_tilde);
-        let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
-        // Calculate delta(x,y):
-        let mut ip_1_y_nm = C::Scalar::zero();
-        let mut yi = C::Scalar::one();
-        for _ in 0..G.len() {
-            ip_1_y_nm.add_assign(&yi);
-            yi.mul_assign(&y);
-        }
-        let mut ip_1_2_n = C::Scalar::zero();
-        let mut two_i = C::Scalar::one();
-        for _ in 0..usize::from(n) {
-            ip_1_2_n.add_assign(&two_i);
-            two_i.double();
-        }
-        let mut sum = C::Scalar::zero();
-        let mut zj3 = z3;
-        for _ in 0..m {
-            sum.add_assign(&zj3);
-            zj3.mul_assign(&z);
-        }
-        sum.mul_assign(&ip_1_2_n);
-        let mut delta_yz = z;
-        delta_yz.sub_assign(&z2);
-        delta_yz.mul_assign(&ip_1_y_nm);
-        delta_yz.sub_assign(&sum);
-
-        // LHS of check equation 1:
-        let LHS = B
-            .mul_by_scalar(&tx)
-            .plus_point(&B_tilde.mul_by_scalar(&tx_tilde));
-        let mut RHS = C::zero_point();
-        let mut zj2 = z2;
-        for com in commitments {
-            let Vj = com.0;
-            // println!("V_{:?} = {:?}", j, Vj);
-            RHS = RHS.plus_point(&Vj.mul_by_scalar(&zj2));
-            zj2.mul_assign(&z);
-        }
-        RHS = RHS
-            .plus_point(&B.mul_by_scalar(&delta_yz))
-            .plus_point(&T_1.mul_by_scalar(&x))
-            .plus_point(&T_2.mul_by_scalar(&x2));
-
-        // println!("--------------- VERIFICATION ----------------");
-        // println!("LHS = {:?}", LHS);
-        // println!("RHS = {:?}", RHS);
-        // println!("Are they equal? {:?}", LHS == RHS);
-        let first = LHS.minus_point(&RHS).is_zero_point();
-        if !first {
-            return false;
-        }
-        // println!("First check = {:?}", first);
-
-        let ip_proof = &proof.ip_proof;
-        let mut z_2_nm: Vec<C::Scalar> = Vec::with_capacity(G.len());
-        let mut y_i = C::Scalar::one();
-        let z_2_m = z_vec(z, 2, m);
-        let y_inv = match y.inverse() {
-            Some(inv) => inv,
-            None => return false,
-        };
-        let two_n: Vec<C::Scalar> = two_n_vec(n);
-        for i in 0..G.len() {
-            let j = i / usize::from(n);
-            let mut prod = two_n[i % usize::from(n)];
-            prod.mul_assign(&z_2_m[j]);
-            prod.mul_assign(&y_i);
-            y_i.mul_assign(&y_inv);
-            z_2_nm.push(prod);
-        }
-        let one = C::Scalar::one();
-        let ip1z = multiexp(&G, &vec![one; G.len()]).mul_by_scalar(&z);
-        let ip2z = multiexp(&H, &vec![one; H.len()]).mul_by_scalar(&z);
-        // println!("len = {}", H.len());
-        let ip3 = multiexp(&H, &z_2_nm); // Expensive!
-        let P = A
-            .plus_point(&S.mul_by_scalar(&x))
-            .minus_point(&B_tilde.mul_by_scalar(&e_tilde))
-            .minus_point(&ip1z)
-            .plus_point(&ip2z)
-            .plus_point(&ip3);
-        let mut txw = tx;
-        txw.mul_assign(&w);
-        let Q = B.mul_by_scalar(&w);
-        let P_prime = P.plus_point(&Q.mul_by_scalar(&tx));
-        // let (u_sq, u_inv_sq, s) = verify_scalars(transcript, usize::from(n),
-        // ip_proof);
-        let mut H_prime: Vec<C> = Vec::with_capacity(m * usize::from(n));
-        let y_inv = match y.inverse() {
-            Some(inv) => inv,
-            None => return false,
-        };
-        let mut y_inv_i = C::Scalar::one();
-        for x in H {
-            H_prime.push(x.mul_by_scalar(&y_inv_i)); // Expensive!
-            y_inv_i.mul_assign(&y_inv);
-        }
-
-        // println!("Verifier's P' = {:?}", P_prime);
-        let second: bool = verify_inner_product(transcript, &G, &H_prime, &P_prime, &Q, ip_proof); // Very expensive
-        second
-    }
-
-    /// This function does the same as verify_efficient. It groups
-    /// some of the verification checks a bit more and could be more efficient,
-    /// but it seems in practice that the difference in efficieny is small.
-    #[allow(non_snake_case)]
-    #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::many_single_char_names)]
-    pub fn verify_more_efficient<C: Curve>(
-        transcript: &mut RandomOracle,
-        n: u8,
-        commitments: &[Commitment<C>],
-        proof: &RangeProof<C>,
-        gens: &Generators<C>,
-        v_keys: &CommitmentKey<C>,
-    ) -> bool {
-        let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-        let B = v_keys.g;
-        let B_tilde = v_keys.h;
-        let m = commitments.len();
-        for V in commitments {
-            transcript.append_message(b"Vj", &V.0);
-        }
-        let A = proof.A;
-        let S = proof.S;
-        let T_1 = proof.T_1;
-        let T_2 = proof.T_2;
-        let tx = proof.tx;
-        let tx_tilde = proof.tx_tilde;
-        let e_tilde = proof.e_tilde;
-        transcript.append_message(b"A", &A);
-        transcript.append_message(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
-        let mut z2 = z;
-        z2.mul_assign(&z);
-        let mut z3 = z2;
-        z3.mul_assign(&z);
-        transcript.append_message(b"T1", &T_1);
-        transcript.append_message(b"T2", &T_2);
-        let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
-        let mut x2 = x;
-        x2.mul_assign(&x);
-        // println!("verifier's x = {:?}", x);
-        transcript.append_message(b"tx", &tx);
-        transcript.append_message(b"tx_tilde", &tx_tilde);
-        transcript.append_message(b"e_tilde", &e_tilde);
-        let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
-        // Calculate delta(x,y):
-        let mut ip_1_y_nm = C::Scalar::zero();
-        let mut yi = C::Scalar::one();
-        for _ in 0..G.len() {
-            ip_1_y_nm.add_assign(&yi);
-            yi.mul_assign(&y);
-        }
-        let mut ip_1_2_n = C::Scalar::zero();
-        let mut two_i = C::Scalar::one();
-        for _ in 0..usize::from(n) {
-            ip_1_2_n.add_assign(&two_i);
-            two_i.double();
-        }
-        let mut sum = C::Scalar::zero();
-        let mut zj3 = z3;
-        for _ in 0..m {
-            sum.add_assign(&zj3);
-            zj3.mul_assign(&z);
-        }
-        sum.mul_assign(&ip_1_2_n);
-        let mut delta_yz = z;
-        delta_yz.sub_assign(&z2);
-        delta_yz.mul_assign(&ip_1_y_nm);
-        delta_yz.sub_assign(&sum);
-        // println!("--------------- VERIFICATION ----------------");
-
-        let ip_proof = &proof.ip_proof;
-        let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
-        let mut y_i = C::Scalar::one();
-        let z_2_m = z_vec(z, 2, m);
-        let verification_scalars = verify_scalars(transcript, G.len(), ip_proof);
-        if verification_scalars.is_none() {
-            return false;
-        }
-        let verification_scalars = verification_scalars.unwrap();
-        let (u_sq, u_inv_sq, s) = (
-            verification_scalars.u_sq,
-            verification_scalars.u_inv_sq,
-            verification_scalars.s,
-        );
-        let a = ip_proof.a;
-        let b = ip_proof.b;
-        let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
-        let mut s_inv = s.clone();
-        s_inv.reverse();
-        let y_inv = match y.inverse() {
-            Some(inv) => inv,
-            None => return false,
-        };
-        let two_n: Vec<C::Scalar> = two_n_vec(n);
-        for i in 0..G.len() {
-            let j = i / usize::from(n);
-            let mut H_scalar = two_n[i % usize::from(n)];
-            H_scalar.mul_assign(&z_2_m[j]);
-            let mut bs_inv = b;
-            bs_inv.mul_assign(&s_inv[i]);
-            H_scalar.sub_assign(&bs_inv);
-            H_scalar.mul_assign(&y_i);
-            y_i.mul_assign(&y_inv);
-            H_scalar.add_assign(&z);
-            H_scalars.push(H_scalar);
-        }
-        let A_scalar = C::Scalar::one();
-        let S_scalar = x;
-        let c = w; // TODO: Shuld be generated randomly
-        let mut T_1_scalar = c;
-        T_1_scalar.mul_assign(&x);
-        let mut T_2_scalar = T_1_scalar;
-        T_2_scalar.mul_assign(&x);
-
-        let mut V_scalars = Vec::with_capacity(m);
-        let mut cz_i = c;
-        cz_i.mul_assign(&z);
-        cz_i.mul_assign(&z);
-        for _ in 0..m {
-            V_scalars.push(cz_i);
-            cz_i.mul_assign(&z);
-        }
-
-        let mut B_scalar = tx;
-        let mut ab = a;
-        ab.mul_assign(&b);
-        B_scalar.sub_assign(&ab);
-        B_scalar.mul_assign(&w);
-        let mut c_delta_minus_tx = delta_yz;
-        c_delta_minus_tx.sub_assign(&tx);
-        c_delta_minus_tx.mul_assign(&c);
-        B_scalar.add_assign(&c_delta_minus_tx);
-        let mut minus_e_tilde = e_tilde;
-        minus_e_tilde.negate();
-        let mut B_tilde_scalar = minus_e_tilde;
-        let mut ctx_tilde = tx_tilde;
-        ctx_tilde.mul_assign(&c);
-        B_tilde_scalar.sub_assign(&ctx_tilde);
-        let mut G_scalars = Vec::with_capacity(G.len());
-        for si in s {
-            let mut G_scalar = z;
-            G_scalar.negate();
-            let mut sa = si;
-            sa.mul_assign(&a);
-            G_scalar.sub_assign(&sa);
-            G_scalars.push(G_scalar);
-        }
-        let mut Vjs: Vec<C> = commitments.iter().map(|x| x.0).collect();
-        let mut all_scalars = vec![A_scalar];
-        all_scalars.push(S_scalar);
-        all_scalars.push(T_1_scalar);
-        all_scalars.push(T_2_scalar);
-        all_scalars.push(B_scalar);
-        all_scalars.push(B_tilde_scalar);
-        all_scalars.append(&mut V_scalars);
-        all_scalars.append(&mut G_scalars);
-        all_scalars.append(&mut H_scalars);
-        let mut L_scalars = u_sq;
-        let mut R_scalars = u_inv_sq;
-        all_scalars.append(&mut L_scalars);
-        all_scalars.append(&mut R_scalars);
-        let mut all_points = vec![A];
-        all_points.push(S);
-        all_points.push(T_1);
-        all_points.push(T_2);
-        all_points.push(B);
-        all_points.push(B_tilde);
-        all_points.append(&mut Vjs);
-        all_points.extend_from_slice(&G);
-        all_points.extend_from_slice(&H);
-        all_points.extend_from_slice(&L);
-        all_points.extend_from_slice(&R);
-
-        let sum2 = multiexp(&all_points, &all_scalars);
-
-        let b: bool = sum2.is_zero_point();
-        b
-    }
-
     #[allow(non_snake_case)]
     #[test]
     fn test_prove() {
@@ -1278,17 +1075,8 @@ mod tests {
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
-        let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
-
-        let mut transcript = RandomOracle::empty();
-        let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-
-        // Testing the even more efficient verifier:
-        let mut transcript = RandomOracle::empty();
-        let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        assert!(b1);
-        assert!(b2.is_ok());
-        assert!(b3);
+        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        assert!(result.is_ok());
     }
 
     #[allow(non_snake_case)]
@@ -1351,18 +1139,10 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = RandomOracle::empty();
-        let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
         let mut transcript = RandomOracle::empty();
-        let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-
-        // Testing the even more efficient verifier:
-        let mut transcript = RandomOracle::empty();
-        let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        assert!(b1);
-        assert!(b2.is_ok());
-        assert!(b3);
+        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        assert!(result.is_ok());
     }
 
     #[allow(non_snake_case)]
@@ -1465,14 +1245,11 @@ mod tests {
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
-        let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        let mut transcript = RandomOracle::empty();
-        let b2 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert_eq!(
-            b1,
+            result,
             Err(VerificationError::Second),
             "The first check should have succeeded, and the second one failed."
         );
-        assert!(!b2);
     }
 }

@@ -1,6 +1,5 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
-use crate::utils::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
@@ -29,7 +28,7 @@ pub struct InnerProductProof<C: Curve> {
 /// - Q - the elliptic curve point Q
 /// - a_slice - a slice to the vector a of scalars
 /// - b_slice - a slice to the vector b of scalars
-/// Precondictions:
+/// Preconditions:
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
@@ -276,15 +275,18 @@ pub fn verify_scalars<C: Curve>(
 }
 
 /// This function verifies an inner product proof,
-/// i.e. a proof of knowledge of vectors a and b such that
-/// P'=<a,G>+<b,H>+<a,b>Q. The arguments are
-/// - G_vec - the vector G of elliptic curve points
-/// - H_vec - the vector H of elliptic curve points
-/// - P_prime - the elliptic curve point P'
-/// - Q - the elliptic curve point Q
-/// - proof - the inner product proof
-/// Precondictions:
-/// G_vec, H_vec should all be of the same length, and this length must a power
+/// i.e., a proof of knowledge of vectors `a` and `b` such that
+/// `P'=<a,G>+<b,H>+<a,b>Q`.
+///
+/// Arguments:
+/// - `G_vec` - slice `G` of elliptic curve points
+/// - `H_vec` - slice `H` of elliptic curve points
+/// - `P_prime` - the elliptic curve point `P'`
+/// - `Q` - the elliptic curve point `Q`
+/// - `proof` - the inner product proof
+///
+/// Preconditions:
+/// `G_vec` and `H_vec` must be of the same length, and this length must a power
 /// of 2.
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
@@ -295,44 +297,29 @@ pub fn verify_inner_product<C: Curve>(
     Q: &C,
     proof: &InnerProductProof<C>,
 ) -> bool {
+    // call verify_inner_product_with_scalars
+    // Since H is directly given, set all exponents for H to 1
     let n = G_vec.len();
-    let L_R = &proof.lr_vec;
-    let a = proof.a;
-    let b = proof.b;
-    let mut ab = a;
-    ab.mul_assign(&b);
+    let H_exponents = vec![C::Scalar::one(); n];
+    // P_prime is also given directly, so set P_prime_bases to P_prime with exponent
+    // 1. Since it is assumed that P_prime_bases starts with contains G, H and Q,
+    // set the first 2n+1 exponents to 0.
+    let mut P_prime_bases = Vec::with_capacity(2 * n + 2);
+    P_prime_bases.extend(G_vec);
+    P_prime_bases.extend(H_vec);
+    P_prime_bases.push(*Q);
+    P_prime_bases.push(*P_prime);
+    let mut P_prime_exponents = Vec::with_capacity(2 * n + 2);
+    P_prime_exponents.extend(vec![C::Scalar::zero(); 2 * n + 1]);
+    P_prime_exponents.push(C::Scalar::one());
 
-    let verification_scalars = match verify_scalars(transcript, n, proof) {
-        None => return false,
-        Some(scalars) => scalars,
-    };
-    let (u_sq, u_inv_sq, s) = (
-        verification_scalars.u_sq,
-        verification_scalars.u_inv_sq,
-        verification_scalars.s,
-    );
-
-    let G = multiexp(G_vec, &s);
-    let mut s_inv = s;
-    s_inv.reverse();
-    let H = multiexp(H_vec, &s_inv);
-
-    let mut sum = C::zero_point();
-    for j in 0..L_R.len() {
-        sum = sum.plus_point(
-            &(L_R[j]
-                .0
-                .mul_by_scalar(&u_sq[j])
-                .plus_point(&(L_R[j].1.mul_by_scalar(&u_inv_sq[j])))),
-        );
-    }
-
-    let RHS = G
-        .mul_by_scalar(&a)
-        .plus_point(&H.mul_by_scalar(&b))
-        .plus_point(&Q.mul_by_scalar(&ab))
-        .minus_point(&sum);
-    P_prime.minus_point(&RHS).is_zero_point()
+    verify_inner_product_with_scalars(
+        transcript,
+        &H_exponents,
+        &P_prime_bases,
+        &P_prime_exponents,
+        proof,
+    )
 }
 
 /// This function is an optimized variant of the above.
@@ -342,34 +329,35 @@ pub fn verify_inner_product<C: Curve>(
 ///
 /// Arguments:
 /// - `transcript` - the proof transcript
-/// - `gens` - generators containing vectors `G` and `H` both of length at least
-///   `n`
+/// - `G_slice` - slice `G` of `n` elliptic curve points
+/// - `H_slice` - slice `H` of `n` elliptic curve points
 /// - `H_exponents` - slice of scalars to whose powers the `H_i` are raised
 /// - `P_prime_bases` - slice of points for computing curve point `P'`. It is
-///   assumed that the first base points are `G | H, Q`, which are implicit and
-///   omitted from `P_prime_bases`
+///   assumed that the first base points are `G | H, Q`
 /// - `P_prime_exponents` - slice of scalars to whose powers the elements
 ///   `P_prime_bases` are raised
-/// - `Q` - the elliptic curve point `Q`
 /// - `proof` - the inner product proof
 ///
 /// Preconditions:
 /// - `H_exponents` must have length `n`, which is a power of 2.
-/// - `gens` contain at least `n` pairs of generators.
+/// - `G_slice` and `H_slice` each contain `n` generators.
+/// - `P_prime_bases` contains `G` and `H`, each consisting of `n` curve points,
+///   followed by a curve point `Q` and may contain additional curve points.
 /// - The length of `P_prime_exponents` is equal to the length of
-///   `P_prime_bases` plus of `2n + 1` (since `G`, `H`, and `Q` are
-/// omitted from `P_prime_bases`).
+///   `P_prime_bases`
 #[allow(non_snake_case)]
 pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
     transcript: &mut RandomOracle,
-    gens: &Generators<C>,
     H_exponents: &[C::Scalar],
     P_prime_bases: &[C],
     P_prime_exponents: &[C::Scalar],
-    Q: &C,
     proof: &InnerProductProof<C>,
 ) -> bool {
-    let n = gens.G_H.len();
+    let n = H_exponents.len();
+    let G_slice = &P_prime_bases[0..n];
+    let H_slice = &P_prime_bases[n..2 * n];
+    let Q = P_prime_bases[2 * n];
+
     let L_R = &proof.lr_vec;
     let a = proof.a;
     let b = proof.b;
@@ -408,19 +396,15 @@ pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
         ge.mul_assign(&a);
     }
 
-    let mut rhs_bases = Vec::with_capacity(2 * n + 1 + nsum_bases.len() + P_prime_bases.len());
-    // Add G and H from gens to rhs_bases
-    for i in 0..n {
-        rhs_bases.push(gens.G_H[i].0);
-    }
-    for i in 0..n {
-        rhs_bases.push(gens.G_H[i].1);
-    }
+    let mut rhs_bases = Vec::with_capacity(nsum_bases.len() + P_prime_bases.len());
+    // Add G and H to rhs_bases
+    rhs_bases.extend(G_slice);
+    rhs_bases.extend(H_slice);
 
     // add further elements to rhs_bases
-    rhs_bases.push(*Q);
+    rhs_bases.push(Q);
     rhs_bases.append(&mut nsum_bases);
-    rhs_bases.extend(P_prime_bases);
+    rhs_bases.extend(&P_prime_bases[2 * n + 1..]);
 
     let mut rhs_exps = Vec::with_capacity(rhs_bases.len());
     rhs_exps.append(&mut G_exps);

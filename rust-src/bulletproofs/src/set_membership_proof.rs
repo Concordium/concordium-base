@@ -352,7 +352,7 @@ pub enum VerificationError {
 /// - `V` - commitment to `v`
 /// - `proof` - the set membership proof to verify
 /// - `gens` - generators containing vectors `G` and `H` both of length at least
-///   `k` where k is the smallest power of two >= `|the_set|`(bold **g**,**h**
+///   `k` where k is the smallest power of two >= `|the_set|` (bold **g**,**h**
 ///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
@@ -372,6 +372,8 @@ pub fn verify<C: Curve>(
     if gens.G_H.len() < n {
         return Err(VerificationError::NotEnoughGenerators);
     }
+    // Select generators for vector commitments
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -511,16 +513,23 @@ pub fn verify<C: Curve>(
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    let P_prime_bases = vec![v_keys.h, A, S];
+    // P_prime_bases starts with G, H, and Q = g_hat
+    let mut P_prime_bases = Vec::with_capacity(2 * n + 4);
+    P_prime_bases.extend(G);
+    P_prime_bases.extend(H);
+    P_prime_bases.push(g_hat);
+
+    // add remaining bases
+    P_prime_bases.push(v_keys.h);
+    P_prime_bases.push(A);
+    P_prime_bases.push(S);
 
     // Finally verify inner product
     let ip_verification = verify_inner_product_with_scalars(
         transcript,
-        gens,
         &y_inv_n,
         &P_prime_bases,
         &P_prime_exps,
-        &g_hat,
         &proof.ip_proof,
     );
 

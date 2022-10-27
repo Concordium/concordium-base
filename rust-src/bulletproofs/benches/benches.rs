@@ -19,6 +19,8 @@ type SomeCurve = G1;
 type SomeField = Fr;
 
 pub fn prove_verify_benchmarks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Range Proof");
+
     let rng = &mut thread_rng();
     let n: u8 = 32;
     let m: u8 = 16;
@@ -66,7 +68,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let gens_p = gens.clone();
     let randomness_p = randomness.clone();
     let mut transcript = RandomOracle::empty();
-    c.bench_function("Prover.", move |b| {
+    group.bench_function("Prove", move |b| {
         b.iter(|| {
             prove(
                 &mut transcript,
@@ -94,18 +96,42 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
         &randomness,
     );
     let proof = proof.unwrap();
-    c.bench_function("Verifier.", move |b| {
+
+    let commitments_p = commitments.clone();
+    let proof_p = proof.clone();
+    let gens_p = gens.clone();
+    group.bench_function("Verify Efficient", move |b| {
         b.iter(|| {
             let mut transcript = RandomOracle::empty();
             assert!(
-                verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys).is_ok()
+                verify_efficient(&mut transcript, n, &commitments_p, &proof_p, &gens_p, &keys)
+                    .is_ok()
             );
+        })
+    });
+
+    let commitments_p = commitments.clone();
+    let proof_p = proof.clone();
+    let gens_p = gens.clone();
+    group.bench_function("Verify More Efficient", move |b| {
+        b.iter(|| {
+            let mut transcript = RandomOracle::empty();
+            assert!(verify_more_efficient(
+                &mut transcript,
+                n,
+                &commitments_p,
+                &proof_p,
+                &gens_p,
+                &keys
+            ));
         })
     });
 }
 
 #[allow(non_snake_case)]
 fn compare_inner_product_proof(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Inner-Product Proof");
+
     // Testing with n = 4
     let rng = &mut thread_rng();
     let n = 32 * 16;
@@ -136,7 +162,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
     let H_vec_p = H_vec.clone();
     let a_vec_p = a_vec.clone();
     let b_vec_p = b_vec.clone();
-    c.bench_function("Naive inner product proof.", move |b| {
+    group.bench_function("Naive inner product proof", move |b| {
         b.iter(|| {
             let mut y_inv_i = SomeField::one();
             for h in H.iter().take(n) {
@@ -147,7 +173,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
         })
     });
     let mut transcript = RandomOracle::empty();
-    c.bench_function("Better inner product proof with scalars.", move |b| {
+    group.bench_function("Better inner product proof with scalars", move |b| {
         b.iter(|| {
             let mut y_inv_i = SomeField::one();
             for _ in 0..n {
