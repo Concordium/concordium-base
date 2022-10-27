@@ -817,7 +817,13 @@ instance S.Serialize SpecialTransactionOutcome where
       _ -> fail "Invalid SpecialTransactionOutcome type"
 
 
--- |TODO DOC
+-- |Transaction outcomes versions.
+-- The difference between the two versions are only related
+-- to the hashing scheme.
+-- * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+-- All the contents of the transaction summaries are used for computing the hash.
+-- * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+-- exact reject reasons for failed transactions are omitted from the hash. 
 data TransactionOutcomesVersion
      = TOV0
      | TOV1
@@ -830,15 +836,14 @@ type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: Transaction
     TransactionOutcomesVersionFor 'P4 = 'TOV0
     TransactionOutcomesVersionFor 'P5 = 'TOV1
 
--- |todo doc
+-- |Supporting type for bringing the 'TransactionOutcomesVersion' to the term level.
 data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
     STOV0 :: STransactionOutcomesVersion 'TOV0
     STOV1 :: STransactionOutcomesVersion 'TOV1
 
--- |todo DOC
 class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion)
     where
-    -- |The singleton associated with the protocol version.
+    -- |The singleton associated with the outcomes version.
     transactionOutcomesVersion :: STransactionOutcomesVersion tov
 
 -- |TODO doc
@@ -867,7 +872,7 @@ instance HashableTo TransactionOutcomesHash TransactionOutcomes where
     getHash transactionoutcomes = TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
 -- |A simple wrapper around a `Hash`.
--- No matter the strategy for deriving the TrasactionOutcomeHash we will
+-- No matter the strategy for deriving the 'TrasactionOutcomeHash' we will
 -- always end up with a value of this type.
 newtype TransactionOutcomesHash = TransactionOutcomesHash { tohGet :: H.Hash}
  deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
