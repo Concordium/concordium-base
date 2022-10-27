@@ -1853,7 +1853,8 @@ data TransactionSummary' a = TransactionSummary {
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
 
--- |TODO DOC and suffix with v0?
+-- |A transaction summary parameterized with the an outcome
+-- of a valid transaction containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
 -- |We create a wrapper here so we can
@@ -1862,7 +1863,9 @@ type TransactionSummary = TransactionSummary' ValidResult
 newtype TransactionSummaryV1 = TransactionSummaryV1 {_transactionSummaryV1 :: TransactionSummary' ValidResult}
     deriving(Eq, Show, Generic)
 
--- |TODO implement and doc.
+-- |A 'HashableTo' instance for a 'TransactionSummary'' which
+-- omits the exact reject reason.
+-- Failures are simply tagged with a '0x1' byte.
 instance HashableTo H.Hash TransactionSummaryV1 where
   getHash (TransactionSummaryV1 summary) = H.hash $! S.runPut $!
       putMaybe S.put (tsSender summary) <>
