@@ -827,6 +827,17 @@ type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: Transaction
     TransactionOutcomesVersionFor 'P4 = 'TOV0
     TransactionOutcomesVersionFor 'P5 = 'TOV1
 
+-- |todo doc
+data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
+    STOV0 :: STransactionOutcomesVersion 'TOV0
+    STOV1 :: STransactionOutcomesVersion 'TOV1
+
+-- |todo DOC
+class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion)
+    where
+    -- |The singleton associated with the protocol version.
+    transactionOutcomesVersion :: STransactionOutcomesVersion tov
+
 -- |TODO doc
 -- TODO: suffix with V0?
 data TransactionOutcomes = TransactionOutcomes {
