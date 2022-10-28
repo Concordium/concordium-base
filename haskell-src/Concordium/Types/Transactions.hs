@@ -819,8 +819,8 @@ instance S.Serialize SpecialTransactionOutcome where
         return PaydayPoolReward{..}
       _ -> fail "Invalid SpecialTransactionOutcome type"
 
--- |TODO doc
--- TODO: suffix with V0?
+-- |Outcomes of transactions. The vector of outcomes must have the same size as the
+-- number of transactions in the block, and ordered in the same way.
 data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
@@ -830,14 +830,11 @@ makeLenses ''TransactionOutcomes
 instance Show TransactionOutcomes where
     show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
 
--- |Serialization of the V0 transaction outcomes used in P1-P4.
--- TODO: RENAME?
 putTransactionOutcomes :: S.Putter TransactionOutcomes
 putTransactionOutcomes TransactionOutcomes{..} = do
     putListOf putTransactionSummary (Vec.toList outcomeValues)
     S.put _outcomeSpecial
 
--- |TODO DOC and move to node? (Same with 'TransactionOutcomes') 
 getTransactionOutcomes :: SProtocolVersion pv -> S.Get TransactionOutcomes
 getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
 
