@@ -1223,32 +1223,43 @@ pub type ParameterRef<'a> = &'a [u8];
 /// on Vec<u8>.
 pub type ParameterVec = Vec<u8>;
 
+/// Collection of information relevant to invoke a init-function.
+#[derive(Debug)]
+pub struct InitInvocation<'a> {
+    /// The amount included in the transaction.
+    pub amount:    Amount,
+    /// The name of the init function to invoke.
+    pub init_name: &'a str,
+    /// A parameter to provide the init function.
+    pub parameter: ParameterRef<'a>,
+    /// The limit on the energy to be used for execution.
+    pub energy:    InterpreterEnergy,
+}
+
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
-    amount: Amount,
     init_ctx: impl v0::HasInitContext,
-    init_name: &str,
-    parameter: ParameterRef,
+    init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
-    energy: InterpreterEnergy,
     mut loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let mut initial_state = trie::MutableState::initial_state();
     let inner = initial_state.get_inner(&mut loader);
     let state_ref = InstanceState::new(loader, inner);
     let mut host = InitHost {
-        energy,
+        energy: init_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
         state: state_ref,
         return_value: Vec::new(),
-        parameter,
+        parameter: init_invocation.parameter,
         limit_logs_and_return_values,
         init_ctx,
     };
-    let result =
-        artifact.borrow().run(&mut host, init_name, &[Value::I64(amount.micro_ccd() as i64)]);
+    let result = artifact.borrow().run(&mut host, init_invocation.init_name, &[Value::I64(
+        init_invocation.amount.micro_ccd() as i64,
+    )]);
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
     let logs = std::mem::take(&mut host.logs);
@@ -1450,12 +1461,14 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
     let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_init(
         artifact,
-        ctx.amount,
         init_ctx,
-        init_name,
-        ctx.parameter,
+        InitInvocation {
+            amount: ctx.amount,
+            init_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         limit_logs_and_return_values,
-        ctx.energy,
         loader,
     )
 }
@@ -1495,12 +1508,14 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     )?;
     invoke_init(
         artifact,
-        ctx.amount,
         init_ctx,
-        init_name,
-        ctx.parameter,
+        InitInvocation {
+            amount: ctx.amount,
+            init_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         limit_logs_and_return_values,
-        ctx.energy,
         loader,
     )
 }
@@ -1523,12 +1538,14 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     )?;
     invoke_init(
         artifact,
-        ctx.amount,
         init_ctx,
-        init_name,
-        ctx.parameter,
+        InitInvocation {
+            amount: ctx.amount,
+            init_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         limit_logs_and_return_values,
-        ctx.energy,
         loader,
     )
 }

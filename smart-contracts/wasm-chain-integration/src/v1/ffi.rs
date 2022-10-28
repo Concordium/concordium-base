@@ -135,12 +135,14 @@ unsafe extern "C" fn call_init_v1(
             Ok(name) => {
                 let res = invoke_init(
                     &artifact,
-                    Amount::from_micro_ccd(amount),
                     init_ctx,
-                    name,
-                    parameter,
+                    InitInvocation {
+                        amount: Amount::from_micro_ccd(amount),
+                        init_name: name,
+                        parameter,
+                        energy,
+                    },
                     limit_logs_and_return_values,
-                    energy,
                     loader,
                 );
                 match res {

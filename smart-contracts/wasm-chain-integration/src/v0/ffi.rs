@@ -43,12 +43,14 @@ unsafe extern "C" fn call_init_v0(
             Ok(name) => {
                 let res = invoke_init(
                     &artifact,
-                    amount,
                     init_ctx,
-                    name,
-                    parameter.into(),
+                    InitInvocation {
+                        amount,
+                        init_name: name,
+                        parameter: parameter.into(),
+                        energy,
+                    },
                     limit_logs_and_return_values,
-                    energy,
                 );
                 match res {
                     Ok(result) => {
@@ -108,14 +110,16 @@ unsafe extern "C" fn call_receive_v0(
             Ok(name) => {
                 let res = invoke_receive(
                     &artifact,
-                    amount,
                     receive_ctx,
+                    ReceiveInvocation {
+                        amount,
+                        receive_name: name,
+                        parameter: parameter.into(),
+                        energy,
+                    },
                     state,
-                    name,
-                    parameter.into(),
                     max_parameter_size,
                     limit_logs_and_return_values,
-                    energy,
                 );
                 match res {
                     Ok(result) => {

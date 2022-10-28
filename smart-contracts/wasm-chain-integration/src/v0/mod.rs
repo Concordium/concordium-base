@@ -860,27 +860,39 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
     }
 }
 
+/// Collection of information relevant to invoke an init-function.
+#[derive(Debug)]
+pub struct InitInvocation<'a> {
+    /// The amount included in the transaction.
+    pub amount:    u64,
+    /// The name of the init function to invoke.
+    pub init_name: &'a str,
+    /// A parameter to provide the init function.
+    pub parameter: Parameter<'a>,
+    /// The limit on the energy to be used for execution.
+    pub energy:    InterpreterEnergy,
+}
+
 /// Invokes an init-function from a given artifact.
 pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     artifact: &Artifact<ProcessedImports, C>,
-    amount: u64,
     init_ctx: Ctx,
-    init_name: &str,
-    param: Parameter,
+    init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
-    energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
-        energy,
+        energy: init_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: Logs::new(),
         state: State::new(None),
-        param,
+        param: init_invocation.parameter,
         limit_logs_and_return_values,
         init_ctx,
     };
 
-    let res = match artifact.run(&mut host, init_name, &[Value::I64(amount as i64)]) {
+    let res = match artifact
+        .run(&mut host, init_invocation.init_name, &[Value::I64(init_invocation.amount as i64)])
+    {
         Ok(ExecutionOutcome::Success {
             result,
             ..
@@ -934,12 +946,14 @@ pub fn invoke_init_from_artifact<Ctx: HasInitContext>(
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_init(
         &artifact,
-        amount,
         init_ctx,
-        init_name,
-        parameter,
+        InitInvocation {
+            amount,
+            init_name,
+            parameter,
+            energy,
+        },
         limit_logs_and_return_values,
-        energy,
     )
 }
 
@@ -957,12 +971,14 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(
         &artifact,
-        amount,
         init_ctx,
-        init_name,
-        parameter,
+        InitInvocation {
+            amount,
+            init_name,
+            parameter,
+            energy,
+        },
         limit_logs_and_return_values,
-        energy,
     )
 }
 
@@ -981,40 +997,54 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(
         &artifact,
-        amount,
         init_ctx,
-        init_name,
-        parameter,
+        InitInvocation {
+            amount,
+            init_name,
+            parameter,
+            energy,
+        },
         limit_logs_and_return_values,
-        energy,
     )
+}
+
+/// Collection of information relevant to invoke a receive-function.
+#[derive(Debug)]
+pub struct ReceiveInvocation<'a> {
+    /// The amount included in the transaction.
+    pub amount:       u64,
+    /// The name of the receive function to invoke.
+    pub receive_name: &'a str,
+    /// A parameter to provide the receive function.
+    pub parameter:    Parameter<'a>,
+    /// The limit on the energy to be used for execution.
+    pub energy:       InterpreterEnergy,
 }
 
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     artifact: &Artifact<ProcessedImports, C>,
-    amount: u64,
     receive_ctx: Ctx,
+    receive_invocation: ReceiveInvocation,
     current_state: &[u8],
-    receive_name: &str,
-    parameter: Parameter,
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
-    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let mut host = ReceiveHost {
-        energy,
+        energy: receive_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: Logs::new(),
         state: State::new(Some(current_state)),
-        param: &parameter,
+        param: &receive_invocation.parameter,
         max_parameter_size,
         limit_logs_and_return_values,
         receive_ctx,
         outcomes: Outcome::new(),
     };
 
-    let res = match artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)]) {
+    let res = match artifact.run(&mut host, receive_invocation.receive_name, &[Value::I64(
+        receive_invocation.amount as i64,
+    )]) {
         Ok(ExecutionOutcome::Success {
             result,
             ..
@@ -1076,26 +1106,20 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     artifact_bytes: &[u8],
-    amount: u64,
     receive_ctx: Ctx,
+    receive_invocation: ReceiveInvocation,
     current_state: &[u8],
-    receive_name: &str,
-    parameter: Parameter,
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
-    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(
         &artifact,
-        amount,
         receive_ctx,
+        receive_invocation,
         current_state,
-        receive_name,
-        parameter,
         max_parameter_size,
         limit_logs_and_return_values,
-        energy,
     )
 }
 
@@ -1103,26 +1127,20 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     source_bytes: &[u8],
-    amount: u64,
     receive_ctx: Ctx,
+    receive_invocation: ReceiveInvocation,
     current_state: &[u8],
-    receive_name: &str,
-    parameter: Parameter,
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
-    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
         &artifact,
-        amount,
         receive_ctx,
+        receive_invocation,
         current_state,
-        receive_name,
-        parameter,
         max_parameter_size,
         limit_logs_and_return_values,
-        energy,
     )
 }
 
@@ -1131,25 +1149,19 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     source_bytes: &[u8],
-    amount: u64,
     receive_ctx: Ctx,
+    receive_invocation: ReceiveInvocation,
     current_state: &[u8],
-    receive_name: &str,
-    parameter: Parameter,
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
-    energy: InterpreterEnergy,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(
         &artifact,
-        amount,
         receive_ctx,
+        receive_invocation,
         current_state,
-        receive_name,
-        parameter,
         max_parameter_size,
         limit_logs_and_return_values,
-        energy,
     )
 }
