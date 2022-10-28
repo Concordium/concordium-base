@@ -119,9 +119,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                 receive_ctx,
                 return_value: Vec::new(),
                 parameters,
-                support_queries: false,
-                max_parameter_size: usize::from(u16::MAX),
-                limit_logs_and_return_values: false,
+                params: super::ReceiveParams::new_p5(),
             },
             state,
         };

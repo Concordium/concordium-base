@@ -184,26 +184,18 @@ pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
 pub struct StateLessReceiveHost<ParamType, Ctx> {
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames:        u32,
+    pub activation_frames: u32,
     /// Logs produced during execution.
-    pub logs:                     v0::Logs,
+    pub logs:              v0::Logs,
     /// Return value from execution.
-    pub return_value:             ReturnValue,
+    pub return_value:      ReturnValue,
     /// The parameter to the receive method, as well as any responses from
     /// calls to other contracts during execution.
-    pub parameters:               Vec<ParamType>,
+    pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
-    pub receive_ctx:              Ctx,
-    /// Whether the host should support queries or not. Queries are introduced
-    /// in protocol version 5.
-    pub support_queries:          bool,
-    /// The maximum parameter size allowed.
-    /// In P1-P4 it was 1024.
-    /// In P5+ it is 65535.
-    max_parameter_size:           usize,
-    /// Whether there is a limit on the number of logs and sizes of return
-    /// values. Limit removed in protocol version 5.
-    limit_logs_and_return_values: bool,
+    pub receive_ctx:       Ctx,
+    /// Configuration determining which options are allowed at runtime.
+    pub params:            ReceiveParams,
 }
 
 impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx1>>
@@ -212,13 +204,11 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
     fn from(host: StateLessReceiveHost<ParameterRef<'a>, Ctx1>) -> Self {
         Self {
             activation_frames: host.activation_frames,
-            logs: host.logs,
-            return_value: host.return_value,
-            parameters: host.parameters.into_iter().map(|x| x.to_vec()).collect(),
-            receive_ctx: host.receive_ctx.into(),
-            support_queries: host.support_queries,
-            max_parameter_size: host.max_parameter_size,
-            limit_logs_and_return_values: host.limit_logs_and_return_values,
+            logs:              host.logs,
+            return_value:      host.return_value,
+            parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
+            receive_ctx:       host.receive_ctx.into(),
+            params:            host.params,
         }
     }
 }
@@ -1087,7 +1077,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     stack,
                     &mut self.energy,
                     &mut self.stateless.return_value,
-                    self.stateless.limit_logs_and_return_values,
+                    self.stateless.params.limit_logs_and_return_values,
                 ),
                 CommonFunc::GetParameterSize => {
                     host::get_parameter_size(stack, &self.stateless.parameters)
@@ -1109,7 +1099,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     stack,
                     &mut self.energy,
                     &mut self.stateless.logs,
-                    self.stateless.limit_logs_and_return_values,
+                    self.stateless.params.limit_logs_and_return_values,
                 ),
                 CommonFunc::GetSlotTime => {
                     v0::host::get_slot_time(stack, self.stateless.receive_ctx.metadata())
@@ -1166,11 +1156,11 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
                     return host::invoke(
-                        self.stateless.support_queries,
+                        self.stateless.params.support_queries,
                         memory,
                         stack,
                         &mut self.energy,
-                        self.stateless.max_parameter_size,
+                        self.stateless.params.max_parameter_size,
                     );
                 }
                 ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
@@ -1634,6 +1624,40 @@ where
     }
 }
 
+/// Runtime parameters that affect the limits placed on the
+/// entrypoint execution.
+#[derive(Debug, Clone, Copy)]
+pub struct ReceiveParams {
+    /// Maximum size of a parameter that an `invoke` operation can have.
+    pub max_parameter_size:           usize,
+    /// Whether the amount of logs a contract may produce, and the size of the
+    /// logs, is limited.
+    pub limit_logs_and_return_values: bool,
+    /// Whether queries should be supported or not. Queries were introduced in
+    /// protocol 5.
+    pub support_queries:              bool,
+}
+
+impl ReceiveParams {
+    /// Parameters that are in effect in protocol version 4.
+    pub fn new_p4() -> Self {
+        Self {
+            max_parameter_size:           1024,
+            limit_logs_and_return_values: true,
+            support_queries:              false,
+        }
+    }
+
+    /// Parameters that are in effect in protocol version 5 and up.
+    pub fn new_p5() -> Self {
+        Self {
+            max_parameter_size:           u16::MAX.into(),
+            limit_logs_and_return_values: false,
+            support_queries:              true,
+        }
+    }
+}
+
 /// Collection of information relevant to invoke a receive-function.
 #[derive(Debug)]
 pub struct ReceiveInvocation<'a> {
@@ -1660,9 +1684,7 @@ pub fn invoke_receive<
     receive_ctx: Ctx1,
     receive_invocation: ReceiveInvocation,
     instance_state: InstanceState<BackingStore>,
-    support_queries: bool,
-    max_parameter_size: usize,
-    limit_logs_and_return_values: bool,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<R2, Ctx2>> {
     let mut host = ReceiveHost {
         energy:    receive_invocation.energy,
@@ -1672,9 +1694,7 @@ pub fn invoke_receive<
             return_value: Vec::new(),
             parameters: vec![receive_invocation.parameter],
             receive_ctx,
-            support_queries,
-            max_parameter_size,
-            limit_logs_and_return_values,
+            params,
         },
         state:     instance_state,
     };
@@ -1787,9 +1807,7 @@ pub fn invoke_receive_from_artifact<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
-    support_queries: bool,
-    max_parameter_size: usize,
-    limit_logs_and_return_values: bool,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_receive(
@@ -1802,9 +1820,7 @@ pub fn invoke_receive_from_artifact<
             amount: ctx.amount,
         },
         instance_state,
-        support_queries,
-        max_parameter_size,
-        limit_logs_and_return_values,
+        params,
     )
 }
 
@@ -1819,9 +1835,7 @@ pub fn invoke_receive_from_source<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
-    support_queries: bool,
-    max_parameter_size: usize,
-    limit_logs_and_return_values: bool,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
@@ -1839,9 +1853,7 @@ pub fn invoke_receive_from_source<
             energy: ctx.energy,
         },
         instance_state,
-        support_queries,
-        max_parameter_size,
-        limit_logs_and_return_values,
+        params,
     )
 }
 
@@ -1857,9 +1869,7 @@ pub fn invoke_receive_with_metering_from_source<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
-    support_queries: bool,
-    max_parameter_size: usize,
-    limit_logs_and_return_values: bool,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
@@ -1877,8 +1887,6 @@ pub fn invoke_receive_with_metering_from_source<
             energy: ctx.energy,
         },
         instance_state,
-        support_queries,
-        max_parameter_size,
-        limit_logs_and_return_values,
+        params,
     )
 }

@@ -190,46 +190,46 @@ impl State {
 
 pub struct InitHost<ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy:                   InterpreterEnergy,
+    pub energy: InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames:        u32,
+    pub activation_frames: u32,
     /// Logs produced during execution.
-    pub logs:                     Logs,
+    pub logs: Logs,
     /// The contract's state.
-    pub state:                    State,
+    pub state: State,
     /// The parameter to the init method.
-    pub param:                    ParamType,
+    pub param: ParamType,
     /// The init context for this invocation.
-    pub init_ctx:                 Ctx,
+    pub init_ctx: Ctx,
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
-    limit_logs_and_return_values: bool,
+    pub limit_logs_and_return_values: bool,
 }
 
 pub struct ReceiveHost<ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy:                   InterpreterEnergy,
+    pub energy: InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames:        u32,
+    pub activation_frames: u32,
     /// Logs produced during execution.
-    pub logs:                     Logs,
+    pub logs: Logs,
     /// The contract's state.
-    pub state:                    State,
+    pub state: State,
     /// The parameter to the receive method.
-    pub param:                    ParamType,
+    pub param: ParamType,
     /// Outcomes of the execution, i.e., the actions tree.
-    pub outcomes:                 Outcome,
+    pub outcomes: Outcome,
     /// The receive context for this call.
-    pub receive_ctx:              Ctx,
+    pub receive_ctx: Ctx,
     /// The maximum parameter size.
     /// In P1-P4 it was 1024.
     /// In P5+ it is 65535.
-    max_parameter_size:           usize,
+    pub max_parameter_size: usize,
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
-    limit_logs_and_return_values: bool,
+    pub limit_logs_and_return_values: bool,
 }
 
 /// Types which can act as init contexts.

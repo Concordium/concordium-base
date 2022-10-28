@@ -274,6 +274,12 @@ unsafe extern "C" fn call_receive_v1(
 
                 let support_queries = support_queries_tag != 0;
 
+                let params = ReceiveParams {
+                    max_parameter_size,
+                    limit_logs_and_return_values,
+                    support_queries,
+                };
+
                 let res = invoke_receive(
                     artifact,
                     receive_ctx,
@@ -284,9 +290,7 @@ unsafe extern "C" fn call_receive_v1(
                         parameter,
                     },
                     instance_state,
-                    support_queries,
-                    max_parameter_size,
-                    limit_logs_and_return_values,
+                    params,
                 );
                 match res {
                     Ok(result) => {
