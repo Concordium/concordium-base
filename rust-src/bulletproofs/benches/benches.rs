@@ -97,33 +97,12 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     );
     let proof = proof.unwrap();
 
-    let commitments_p = commitments.clone();
-    let proof_p = proof.clone();
-    let gens_p = gens.clone();
     group.bench_function("Verify Efficient", move |b| {
         b.iter(|| {
             let mut transcript = RandomOracle::empty();
             assert!(
-                verify_efficient(&mut transcript, n, &commitments_p, &proof_p, &gens_p, &keys)
-                    .is_ok()
+                verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys).is_ok()
             );
-        })
-    });
-
-    let commitments_p = commitments.clone();
-    let proof_p = proof.clone();
-    let gens_p = gens.clone();
-    group.bench_function("Verify More Efficient", move |b| {
-        b.iter(|| {
-            let mut transcript = RandomOracle::empty();
-            assert!(verify_more_efficient(
-                &mut transcript,
-                n,
-                &commitments_p,
-                &proof_p,
-                &gens_p,
-                &keys
-            ));
         })
     });
 }
