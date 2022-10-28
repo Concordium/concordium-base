@@ -322,10 +322,10 @@ pub fn verify_inner_product<C: Curve>(
     )
 }
 
-/// This function is an optimized variant of the above.
-/// It is verified whether `P'=<a,G>+<b,H'>+<a,b>Q` for `P' =
-/// multiexp(P_prime_bases, P_prime_exponents)` and `H'_i =
-/// H_i^H_exponents_i`.
+/// This function is the actual verification function used at the core of the
+/// function `verify_inner_product`. It is verified whether
+/// `P'=<a,G>+<b,H'>+<a,b>Q` for `P' = multiexp(P_prime_bases,
+/// P_prime_exponents)` and `H'_i = H_i^H_exponents_i`.
 ///
 /// Arguments:
 /// - `transcript` - the proof transcript
@@ -338,7 +338,6 @@ pub fn verify_inner_product<C: Curve>(
 ///
 /// Preconditions:
 /// - `H_exponents` must have length `n`, which is a power of 2.
-/// - `G_slice` and `H_slice` each contain `n` generators.
 /// - `P_prime_bases` contains `G` and `H`, each consisting of `n` curve points,
 ///   followed by a curve point `Q`, and may contain additional curve points.
 /// - The length of `P_prime_exponents` is equal to the length of
