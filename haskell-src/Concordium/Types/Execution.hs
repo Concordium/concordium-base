@@ -1851,8 +1851,8 @@ data TransactionSummary' a = TransactionSummary {
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
 
--- |A transaction summary parameterized with the an outcome
--- of a valid transaction containing either a 'TxSuccess' or 'TxReject'.
+-- |A transaction summary parameterized with an outcome of a valid transaction
+-- containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
