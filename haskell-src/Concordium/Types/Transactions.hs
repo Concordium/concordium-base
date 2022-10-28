@@ -715,6 +715,9 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialT
 instance HashableTo H.Hash SpecialTransactionOutcome where
   getHash = H.hash . S.encode
 
+-- Generic instance based on the HashableTo instance
+instance Monad m => MHashableTo m H.Hash SpecialTransactionOutcome
+
 instance S.Serialize SpecialTransactionOutcome where
     put BakingRewards{..} = do
       S.putWord8 0
@@ -815,36 +818,6 @@ instance S.Serialize SpecialTransactionOutcome where
         stoFinalizationReward <- S.get
         return PaydayPoolReward{..}
       _ -> fail "Invalid SpecialTransactionOutcome type"
-
-
--- |Transaction outcomes versions.
--- The difference between the two versions are only related
--- to the hashing scheme.
--- * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
--- All the contents of the transaction summaries are used for computing the hash.
--- * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
--- exact reject reasons for failed transactions are omitted from the hash. 
-data TransactionOutcomesVersion
-     = TOV0
-     | TOV1
-
--- |Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
-type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: TransactionOutcomesVersion where
-    TransactionOutcomesVersionFor 'P1 = 'TOV0
-    TransactionOutcomesVersionFor 'P2 = 'TOV0
-    TransactionOutcomesVersionFor 'P3 = 'TOV0
-    TransactionOutcomesVersionFor 'P4 = 'TOV0
-    TransactionOutcomesVersionFor 'P5 = 'TOV1
-
--- |Supporting type for bringing the 'TransactionOutcomesVersion' to the term level.
-data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
-    STOV0 :: STransactionOutcomesVersion 'TOV0
-    STOV1 :: STransactionOutcomesVersion 'TOV1
-
-class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion)
-    where
-    -- |The singleton associated with the outcomes version.
-    transactionOutcomesVersion :: STransactionOutcomesVersion tov
 
 -- |TODO doc
 -- TODO: suffix with V0?

@@ -1857,26 +1857,6 @@ data TransactionSummary' a = TransactionSummary {
 -- of a valid transaction containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
--- |We create a wrapper here so we can
--- derive another 'HashableTo' instance which omits
--- the exact 'RejectReason' in the resulting hash.
-newtype TransactionSummaryV1 = TransactionSummaryV1 {_transactionSummaryV1 :: TransactionSummary' ValidResult}
-    deriving(Eq, Show, Generic)
-
--- |A 'HashableTo' instance for a 'TransactionSummary'' which
--- omits the exact reject reason.
--- Failures are simply tagged with a '0x1' byte.
-instance HashableTo H.Hash TransactionSummaryV1 where
-  getHash (TransactionSummaryV1 summary) = H.hash $! S.runPut $!
-      putMaybe S.put (tsSender summary) <>
-      S.put (tsHash summary) <>
-      S.put (tsCost summary) <>
-      S.put (tsEnergyCost summary) <>
-      S.put (tsType summary) <>
-      -- |We simply put a '1' indicating a failure.
-      S.putWord8 1 <>
-      S.put (tsIndex summary)
-
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
 -- We also record the cost of the transaction.
