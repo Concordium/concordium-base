@@ -490,6 +490,7 @@ accountStakeNoneHashV2 :: AccountStakeHash 'AccountV2
 accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "A2NoStake"
 
 -- |The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+-- This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
     getHash AccountStakeNone = accountStakeNoneHashV2
     getHash (AccountStakeBaker AccountBaker{..}) =
