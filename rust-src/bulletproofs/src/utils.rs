@@ -93,7 +93,7 @@ struct TPolynomial<F: Field>(F, F, F);
 
 /// This function calculates the inner product `t(X)` of degree-1 vector
 /// polynomials `l(X)` and `r(X)` The arguments are
-/// - `lr` - the coeffcients of `l(X)` and `r(X)`
+/// - `lr` - the coefficients of `l(X)` and `r(X)`
 /// The output is the coefficients of t(X) where
 /// `t(X) = t_0+X*t_1+X^2*t_2 = <l(X), r(X)>
 /// Precondition:
@@ -126,7 +126,7 @@ fn compute_tx_polynomial<F: Field>(lr: &LeftRightPolynomials<F>) -> TPolynomial<
 
 /// This function evaluates polynomials `l(X)`, `r(X)`, `t(X)` at `x`.
 /// - `x` - evaluation point, a field element
-/// - `lr` - the coeffcients of `l(X)` and `r(X)`
+/// - `lr` - the coefficients of `l(X)` and `r(X)`
 /// - `t_poly coefficients of `t(X)`, each a field element
 ///
 /// The output is `l(x), r(x), t(x)`
