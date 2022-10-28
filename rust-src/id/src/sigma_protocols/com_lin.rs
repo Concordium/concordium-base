@@ -404,7 +404,7 @@ mod tests {
             let h = G1::generate(rng);
             G_H.push((g, h));
         }
-        let gens = bulletproofs::range_proof::Generators { G_H };
+        let gens = bulletproofs::utils::Generators { G_H };
         let proof = bulletproofs::range_proof::prove_given_scalars(
             &mut ro.split(),
             rng,

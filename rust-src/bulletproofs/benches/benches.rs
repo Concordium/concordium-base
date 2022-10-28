@@ -13,7 +13,7 @@ use random_oracle::RandomOracle;
 
 use std::time::Duration;
 
-use bulletproofs::{inner_product_proof::*, range_proof::*};
+use bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators};
 
 type SomeCurve = G1;
 type SomeField = Fr;
