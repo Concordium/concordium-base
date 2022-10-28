@@ -598,8 +598,8 @@ pub fn verify_efficient<C: Curve>(
     };
     let y_inv_nm = z_vec(y_inv, 0, H.len());
 
-    // P_prime = g_hat^t_x * h^-e_tilde * A * S^x * multiexp(G, -z1) * multiexp(H,
-    // PH_scalars), where H_scalars[j] = z + y^-j * z^(2+j//n) * 2^(j%n)
+    // P' = multiexp(G, -z1) multiexp(H, PH_scalars) g_hat^t_x * h^-e_tilde * A S^x,
+    // where H_scalars[j] = z + y^-j * z^(2+j//n) * 2^(j%n)
     let mut P_prime_exps = Vec::with_capacity(2 * nm + 4);
     let mut minus_z = z;
     minus_z.negate();
@@ -618,12 +618,12 @@ pub fn verify_efficient<C: Curve>(
     }
 
     // add remaining exponents
-    P_prime_exps.push(tx);
+    P_prime_exps.push(tx); // exponent for g_hat
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
-    P_prime_exps.push(minus_e_tilde);
-    P_prime_exps.push(C::Scalar::one());
-    P_prime_exps.push(x);
+    P_prime_exps.push(minus_e_tilde); // exponent for h = B_tilde
+    P_prime_exps.push(C::Scalar::one()); // exponent for A
+    P_prime_exps.push(x); // exponent for S
 
     // P_prime_bases starts with G, H, and Q = g_hat
     let mut P_prime_bases = Vec::with_capacity(2 * nm + 4);
