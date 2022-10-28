@@ -28,7 +28,7 @@ impl Logs {
     /// - 1 if data was logged.
     pub fn log_event(&mut self, event: Vec<u8>, limit_num_logs: bool) -> i32 {
         let cur_len = self.logs.len();
-        if (!limit_num_logs && cur_len < u32::MAX as usize) || cur_len < constants::MAX_NUM_LOGS {
+        if (!limit_num_logs && cur_len <= u32::MAX as usize) || cur_len < constants::MAX_NUM_LOGS {
             self.logs.push_back(event);
             1
         } else {
