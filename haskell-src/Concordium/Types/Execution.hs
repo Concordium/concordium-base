@@ -43,8 +43,6 @@ import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.BlsSignature as Bls
-import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Types.HashableTo
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
