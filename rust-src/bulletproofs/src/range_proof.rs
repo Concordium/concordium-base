@@ -275,66 +275,32 @@ pub fn prove<C: Curve, T: Rng>(
         r_1.push(r_1_i);
     }
 
-    // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
-    let (t_0, t_1, t_2) = compute_tx_polynomial(&l_0, &l_1, &r_0, &r_1);
-
-    // Commit to t_1 and t_2
-    let t_1_tilde = C::generate_scalar(csprng);
-    let t_2_tilde = C::generate_scalar(csprng);
-    let T_1 = B
-        .mul_by_scalar(&t_1)
-        .plus_point(&B_tilde.mul_by_scalar(&t_1_tilde));
-    let T_2 = B
-        .mul_by_scalar(&t_2)
-        .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde));
-    // append T1, T2 commitments to transcript
-    transcript.append_message(b"T1", &T_1);
-    transcript.append_message(b"T2", &T_2);
-
-    // Part 4: Evaluate l(x), r(x), and t(x) at challenge point x
-    // get challenge x from transcript
-    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
-
-    // Compute l(x), r(x), and t(x)
-    let (lx, rx, tx) = evaluate_lx_rx_tx(x, &l_0, &l_1, &r_0, &r_1, t_0, t_1, t_2);
-
-    // compute blinding factor tx_tilde for t(x) evaluation committment,
-    // and compute blinding factor e_tilde for the inner product committment
-    let mut tx_tilde: C::Scalar = C::Scalar::zero();
-    let mut e_tilde: C::Scalar = C::Scalar::zero();
+    // Compute blinded inner product proof
+    let mut t_0_tilde = C::Scalar::zero();
+    let mut a_tilde = C::Scalar::zero();
+    let mut s_tilde = C::Scalar::zero();
     for j in 0..usize::from(m) {
         // z2vj_tilde <- z_j*v_j_tilde
         let mut z2vj_tilde = z_m[j]; // This line is MISSING in the Bulletproof documentation (https://doc-internal.dalek.rs/bulletproofs/range_proof/index.html), but shows in https://doc-internal.dalek.rs/bulletproofs/notes/range_proof/index.html
         z2vj_tilde.mul_assign(&v_tilde_vec[j]);
-        tx_tilde.add_assign(&z2vj_tilde);
+        t_0_tilde.add_assign(&z2vj_tilde);
 
-        // e_tilde_j <- a_tilde_j + s_tilde_j * x
-        let mut ej_tilde = x;
-        ej_tilde.mul_assign(&s_tilde_vec[j]);
-        ej_tilde.add_assign(&a_tilde_vec[j]);
-        e_tilde.add_assign(&ej_tilde);
+        a_tilde.add_assign(&a_tilde_vec[j]);
+        s_tilde.add_assign(&s_tilde_vec[j]);
     }
-    tx_tilde.mul_assign(&z_sq); // tx_tilde <- z^2*sum z_j*v_j_tilde + ...
-    let mut tx_s1 = t_1_tilde;
-    tx_s1.mul_assign(&x);
-    tx_tilde.add_assign(&tx_s1);
-    let mut tx_s2 = t_2_tilde;
-    tx_s2.mul_assign(&x);
-    tx_s2.mul_assign(&x);
-    tx_tilde.add_assign(&tx_s2);
-
-    // append tx, tx_tilde, e_tilde to transcript
-    transcript.append_message(b"tx", &tx);
-    transcript.append_message(b"tx_tilde", &tx_tilde);
-    transcript.append_message(b"e_tilde", &e_tilde);
-
-    // Part 5: Inner product proof for t(x) = <l(x),r(x)>
-    // get challenge w from transcript
-    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
-    // get generator q
-    let Q = B.mul_by_scalar(&w);
-
-    // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
+    t_0_tilde.mul_assign(&z_sq);
+    let lr = LeftRightPolynomials {
+        l_0: &l_0,
+        l_1: &l_1,
+        r_0: &r_0,
+        r_1: &r_1,
+    };
+    let com_gens = VecComGens {
+        B,
+        B_tilde,
+        G: &G,
+        H: &H,
+    };
     // compute scalars such that c*H = H', that is H_prime_scalars = (1, y^-1,
     // \dots, y^-(nm-1))
     let y_inv = match y.inverse() {
@@ -342,24 +308,32 @@ pub fn prove<C: Curve, T: Rng>(
         None => return None,
     };
     let H_prime_scalars = z_vec(y_inv, 0, nm);
-    // compute inner product proof
-    let proof =
-        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
+    let proof = prove_blinded_inner_product(
+        transcript,
+        csprng,
+        t_0_tilde,
+        a_tilde,
+        s_tilde,
+        lr,
+        com_gens,
+        &H_prime_scalars,
+    );
 
-    // return range proof
-    if let Some(ip_proof) = proof {
-        return Some(RangeProof {
+    // return set membership proof
+    if let Some(bip_proof) = proof {
+        Some(RangeProof {
             A,
             S,
-            T_1,
-            T_2,
-            tx,
-            tx_tilde,
-            e_tilde,
-            ip_proof,
-        });
+            T_1: bip_proof.T_1,
+            T_2: bip_proof.T_2,
+            tx: bip_proof.tx,
+            tx_tilde: bip_proof.tx_tilde,
+            e_tilde: bip_proof.e_tilde,
+            ip_proof: bip_proof.ip_proof,
+        })
+    } else {
+        None
     }
-    None
 }
 
 /// The verifier does two checks. In case verification fails, it can be useful

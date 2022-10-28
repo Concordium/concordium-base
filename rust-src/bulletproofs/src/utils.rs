@@ -1,11 +1,14 @@
 //! Shared functions used by the proofs in this crate
-use crate::inner_product_proof::inner_product;
+use crate::inner_product_proof::{
+    inner_product, prove_inner_product_with_scalars, InnerProductProof,
+};
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 use ff::Field;
-#[cfg(test)]
 use rand::Rng;
+use random_oracle::RandomOracle;
+
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
@@ -73,25 +76,31 @@ pub(crate) fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
     }
 }
 
+/// Degree-`1` polynomials l(X), r(X) describes by their coefficients
+pub(crate) struct LeftRightPolynomials<'a, F: Field> {
+    /// `l_0` - first coefficient of `l(X)`, a vector of field elements
+    pub l_0: &'a [F],
+    /// `l_1` - second coefficient of `l(X)`, a vector of field elements
+    pub l_1: &'a [F],
+    /// `r_0` - first coefficient of `r(X)`, a vector of field elements
+    pub r_0: &'a [F],
+    /// `r_1` - second coefficient of `r(X)`, a vector of field elements
+    pub r_1: &'a [F],
+}
+
+/// Degree-`2` polynomial t(X) described by its coefficients
+struct TPolynomial<F: Field>(F, F, F);
+
 /// This function calculates the inner product `t(X)` of degree-1 vector
 /// polynomials `l(X)` and `r(X)` The arguments are
-/// - `l_0` - first coefficient of `l(X)`, a vector of field elements
-/// - `l_1` - second coefficient of `l(X)`, a vector of field elements
-/// - `r_0` - first coefficient of `r(X)`, a vector of field elements
-/// - `r_1` - second coefficient of `r(X)`, a vector of field elements
-///
-/// The output is `(t_0,t_1,t_2)` where
+/// - `lr` - the coeffcients of `l(X)` and `r(X)`
+/// The output is the coefficients of t(X) where
 /// `t(X) = t_0+X*t_1+X^2*t_2 = <l(X), r(X)>
-///
 /// Precondition:
-/// all input vectors should have the same length. This function may panic if
+/// all vectors in `lr` should have the same length. This function may panic if
 /// this is not the case
-pub(crate) fn compute_tx_polynomial<F: Field>(
-    l_0: &[F],
-    l_1: &[F],
-    r_0: &[F],
-    r_1: &[F],
-) -> (F, F, F) {
+fn compute_tx_polynomial<F: Field>(lr: &LeftRightPolynomials<F>) -> TPolynomial<F> {
+    let (l_0, l_1, r_0, r_1) = (lr.l_0, lr.l_1, lr.r_0, lr.r_1);
     // t_0 <- <l_0,r_0>
     let t_0 = inner_product(l_0, r_0);
     // t_2 <- <l_1,r_1>
@@ -112,7 +121,7 @@ pub(crate) fn compute_tx_polynomial<F: Field>(
     t_1.sub_assign(&t_0);
     t_1.sub_assign(&t_2);
 
-    (t_0, t_1, t_2)
+    TPolynomial(t_0, t_1, t_2)
 }
 
 /// This function evaluates polynomials `l(X)`, `r(X)`, `t(X)` at `x`.
@@ -129,45 +138,144 @@ pub(crate) fn compute_tx_polynomial<F: Field>(
 /// the input vectors `l_0,l_1,r_0,r_1` should have the same length. This
 /// function may panic if this is not the case
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn evaluate_lx_rx_tx<F: Field>(
+fn evaluate_lx_rx_tx<F: Field>(
     x: F,
-    l_0: &[F],
-    l_1: &[F],
-    r_0: &[F],
-    r_1: &[F],
-    t_0: F,
-    t_1: F,
-    t_2: F,
+    lr: &LeftRightPolynomials<F>,
+    t_poly: &TPolynomial<F>,
 ) -> (Vec<F>, Vec<F>, F) {
-    let n = l_0.len();
     let mut x_sq = x;
     x_sq.mul_assign(&x);
+    // c = a+b*x
+    let eval_x = |(a, b): (&F, &F)| {
+        let mut c: F = *b;
+        c.mul_assign(&x);
+        c.add_assign(a);
+        c
+    };
     // Compute l(x) and r(x)
-    let mut lx = Vec::with_capacity(n);
-    let mut rx = Vec::with_capacity(n);
-    for i in 0..n {
-        // l[i] <- l_0[i] + x* l_1[i]
-        let mut lx_i = l_1[i];
-        lx_i.mul_assign(&x);
-        lx_i.add_assign(&l_0[i]);
-        lx.push(lx_i);
-        // r[i] = r_0[i] + x* r_1[i]
-        let mut rx_i = r_1[i];
-        rx_i.mul_assign(&x);
-        rx_i.add_assign(&r_0[i]);
-        rx.push(rx_i);
-    }
+    let lx = lr.l_0.iter().zip(lr.l_1.iter()).map(eval_x).collect();
+    let rx = lr.r_0.iter().zip(lr.r_1.iter()).map(eval_x).collect();
     // Compute t(x)
     // tx <- t_0 + t_1*x + t_2*x^2
-    let mut tx = t_0;
-    let mut tx_1 = t_1;
+    let mut tx = t_poly.0;
+    let mut tx_1 = t_poly.1;
     tx_1.mul_assign(&x);
     tx.add_assign(&tx_1);
-    let mut tx_2 = t_2;
+    let mut tx_2 = t_poly.2;
     tx_2.mul_assign(&x_sq);
     tx.add_assign(&tx_2);
 
     (lx, rx, tx)
+}
+
+/// Generators used by `prove_blinded_inner_product`
+#[allow(non_snake_case)]
+pub(crate) struct VecComGens<'a, C: Curve> {
+    pub B:       C,
+    pub B_tilde: C,
+    pub G:       &'a [C],
+    pub H:       &'a [C],
+}
+
+#[allow(non_snake_case)]
+pub(crate) struct BlindedInnerProof<C: Curve> {
+    /// Commitment to the t_1 coefficient of polynomial `t(x)`
+    pub T_1:      C,
+    /// Commitment to the t_2 coefficient of polynomial `t(x)`
+    pub T_2:      C,
+    /// Evaluation of t(x) at the challenge point `x`
+    pub tx:       C::Scalar,
+    /// Blinding factor for the commitment to `tx`
+    pub tx_tilde: C::Scalar,
+    /// Blinding factor for the commitment to the inner-product arguments
+    pub e_tilde:  C::Scalar,
+    /// Inner product proof
+    pub ip_proof: InnerProductProof<C>,
+}
+
+/// This function takes care of computing the blinded inner product as required
+/// by range or set-(non)-membership proofs. The arguments are:
+/// - `transcript` - the random oracle for Fiat Shamir
+/// - `csprng` - cryptographic safe randomness generator
+/// - `t_0_tilde` - the randomness for the commitment to `t_0`
+/// - `a_tilde` - the randomness of commitment `A`
+/// - `s_tilde` - the randomness of commitment `S`
+/// - `lr` - the l(X) and r(X) polynomials defined by their coefficients `gens`
+///   - the generators used for (vector) commitments, among them `H`.
+/// - `H_prime_scalars` - the scalars used to compute `H'` from `H`
+/// This function assumes that `lr`, `gens`, and `H_prime_scalars` parts have
+/// consistent length, it may panic otherwise
+#[allow(non_snake_case)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prove_blinded_inner_product<C: Curve, R: Rng>(
+    transcript: &mut RandomOracle,
+    csprng: &mut R,
+    t_0_tilde: C::Scalar,
+    a_tilde: C::Scalar,
+    s_tilde: C::Scalar,
+    lr: LeftRightPolynomials<C::Scalar>,
+    gens: VecComGens<C>,
+    H_prime_scalars: &[C::Scalar],
+) -> Option<BlindedInnerProof<C>> {
+    // Part 3: Computation of polynomial t(x) = <l(x),r(x)>
+    let t_poly = compute_tx_polynomial(&lr);
+
+    // Commit to t_1 and t_2
+    let t_1_tilde = C::generate_scalar(csprng);
+    let t_2_tilde = C::generate_scalar(csprng);
+    let T_1 = gens
+        .B
+        .mul_by_scalar(&t_poly.1)
+        .plus_point(&gens.B_tilde.mul_by_scalar(&t_1_tilde));
+    let T_2 = gens
+        .B
+        .mul_by_scalar(&t_poly.2)
+        .plus_point(&gens.B_tilde.mul_by_scalar(&t_2_tilde));
+    // append T1, T2 commitments to transcript
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+
+    // Part 4: Evaluate l(.), r(.), and t(.) at challenge point x
+    // get challenge x from transcript
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
+    // Compute l(x), r(x), and t(x)
+    let (lx, rx, tx) = evaluate_lx_rx_tx(x, &lr, &t_poly);
+    // Compute the blinding t_x_tilde
+    // t_x_tilde <- t_0_tilde + t_1_tilde*x + t_2_tilde*x^2
+    let mut tx_tilde = t_0_tilde;
+    let mut tx_s1 = t_1_tilde;
+    tx_s1.mul_assign(&x);
+    tx_tilde.add_assign(&tx_s1);
+    let mut tx_s2 = t_2_tilde;
+    tx_s2.mul_assign(&x);
+    tx_s2.mul_assign(&x);
+    tx_tilde.add_assign(&tx_s2);
+    // Compute blinding e_tilde
+    // e_tilde <- a_tilde + s_tilde * x
+    let mut e_tilde = s_tilde;
+    e_tilde.mul_assign(&x);
+    e_tilde.add_assign(&a_tilde);
+    // append tx, tx_tilde, e_tilde to transcript
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+
+    // Part 5: Inner product proof for tx = <lx,rx>
+    // get challenge w from transcript
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
+    // get generator q
+    let Q = gens.B.mul_by_scalar(&w);
+    // compute inner product proof
+    let proof =
+        prove_inner_product_with_scalars(transcript, gens.G, gens.H, H_prime_scalars, &Q, &lx, &rx);
+    proof.map(|ip_proof| BlindedInnerProof {
+        T_1,
+        T_2,
+        tx,
+        tx_tilde,
+        e_tilde,
+        ip_proof,
+    })
 }
 
 #[cfg(test)]
