@@ -37,6 +37,7 @@ module Concordium.Wasm (
   maxParameterLen,
   maxWasmModuleSizeV0,
   maxWasmModuleSizeV1,
+  limitLogsAndReturnValues,
 
   -- * Modules
   -- ** Binary module
@@ -77,6 +78,9 @@ module Concordium.Wasm (
   uncheckedMakeReceiveName,
   Parameter(..),
   emptyParameter,
+  getParameter,
+  getParameterUnchecked,
+  putParameter,
 
   -- *** Contract state
   ContractState(..),
@@ -469,11 +473,22 @@ newtype Parameter = Parameter { parameter :: ShortByteString }
 emptyParameter :: Parameter
 emptyParameter = Parameter BSS.empty
 
-instance Serialize Parameter where
-  put = putShortByteStringWord16 . parameter
-  get = do
+-- |Put (serialize) a @Parameter@.
+putParameter :: Putter Parameter
+putParameter = putShortByteStringWord16 . parameter
+
+-- |Get (deserialize) a @Parameter@ and ensure that its size is valid. The size limit depends on the protocol version.
+getParameter :: SProtocolVersion pv -> Get Parameter
+getParameter spv = do
     len <- getWord16be
-    unless (len <= maxParameterLen) $ fail "Parameter size exceeds limits."
+    unless (len <= maxParameterLen spv) $ fail "Parameter size exceeds the limit."
+    Parameter <$> getShortByteString (fromIntegral len)
+
+-- |Get (deserialize) a @Parameter@ *without checking that its size is valid*. This should only be used when
+-- we know for a fact that the parameter size is within the valid bounds for the given protocol version.
+getParameterUnchecked :: Get Parameter
+getParameterUnchecked = do
+    len <- getWord16be
     Parameter <$> getShortByteString (fromIntegral len)
 
 --------------------------------------------------------------------------------
@@ -681,7 +696,7 @@ getActionsTree' size = go HM.empty 0
                            erAddr <- get
                            erName <- get
                            erAmount <- get
-                           erParameter <- get
+                           erParameter <- getParameterUnchecked
                            let action = TSend{..}
                            go (HM.insert n action acc) (n+1)
                          1 -> do

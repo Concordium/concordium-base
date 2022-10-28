@@ -108,6 +108,7 @@ unsafe extern "C" fn call_init_v1(
     init_name_len: size_t,
     param_bytes: *const u8, // parameters to the init method
     param_bytes_len: size_t,
+    limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
     output_len: *mut size_t,
@@ -124,6 +125,7 @@ unsafe extern "C" fn call_init_v1(
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let limit_logs_and_return_values = limit_logs_and_return_values != 0;
         let init_ctx = v0::deserial_init_context(slice_from_c_bytes!(
             init_ctx_bytes,
             init_ctx_bytes_len as usize
@@ -133,11 +135,14 @@ unsafe extern "C" fn call_init_v1(
             Ok(name) => {
                 let res = invoke_init(
                     &artifact,
-                    Amount::from_micro_ccd(amount),
                     init_ctx,
-                    name,
-                    parameter,
-                    energy,
+                    InitInvocation {
+                        amount: Amount::from_micro_ccd(amount),
+                        init_name: name,
+                        parameter,
+                        energy,
+                    },
+                    limit_logs_and_return_values,
                     loader,
                 );
                 match res {
@@ -217,6 +222,8 @@ unsafe extern "C" fn call_receive_v1(
     state_ptr_ptr: *mut *mut MutableState,
     param_bytes: *const u8, // parameters to the entrypoint
     param_bytes_len: size_t,
+    max_parameter_size: size_t,
+    limit_logs_and_return_values: u8, // non-zero means to limit
     energy: InterpreterEnergy,
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedStateV1,
@@ -239,6 +246,7 @@ unsafe extern "C" fn call_receive_v1(
         .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let limit_logs_and_return_values = limit_logs_and_return_values != 0;
         let state_ptr = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         let mut loader = loader;
         let mut state = (&mut *state_ptr).make_fresh_generation(&mut loader);
@@ -266,6 +274,12 @@ unsafe extern "C" fn call_receive_v1(
 
                 let support_queries = support_queries_tag != 0;
 
+                let params = ReceiveParams {
+                    max_parameter_size,
+                    limit_logs_and_return_values,
+                    support_queries,
+                };
+
                 let res = invoke_receive(
                     artifact,
                     receive_ctx,
@@ -276,7 +290,7 @@ unsafe extern "C" fn call_receive_v1(
                         parameter,
                     },
                     instance_state,
-                    support_queries,
+                    params,
                 );
                 match res {
                     Ok(result) => {
