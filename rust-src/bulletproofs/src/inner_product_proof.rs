@@ -1,9 +1,13 @@
+//! Logarithmic sized inner product proof used as base for the other proofs in
+//! this crate
+use crate::utils::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::RandomOracle;
 
+/// Inner product proof
 #[derive(Clone, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
@@ -329,6 +333,123 @@ pub fn verify_inner_product<C: Curve>(
         .plus_point(&Q.mul_by_scalar(&ab))
         .minus_point(&sum);
     P_prime.minus_point(&RHS).is_zero_point()
+}
+
+/// This function is an optimized variant of the above.
+/// It is verified whether `P'=<a,G>+<b,H'>+<a,b>Q` for `P' =
+/// multiexp(P_prime_bases, P_prime_exponents)` and `H'_i =
+/// H_i^H_exponents_i`.
+///
+/// Arguments:
+/// - `transcript` - the proof transcript
+/// - `gens` - generators containing vectors `G` and `H` both of length at least
+///   `n`
+/// - `H_exponents` - slice of scalars to whose powers the `H_i` are raised
+/// - `P_prime_bases` - slice of points for computing curve point `P'`. It is
+///   assumed that the first base points are `G | H, Q`, which are implicit and
+///   omitted from `P_prime_bases`
+/// - `P_prime_exponents` - slice of scalars to whose powers the elements
+///   `P_prime_bases` are raised
+/// - `Q` - the elliptic curve point `Q`
+/// - `proof` - the inner product proof
+///
+/// Preconditions:
+/// - `H_exponents` must have length `n`, which is a power of 2.
+/// - `gens` contain at least `n` pairs of generators.
+/// - The length of `P_prime_exponents` is equal to the length of
+///   `P_prime_bases` plus of `2n + 1` (since `G`, `H`, and `Q` are
+/// omitted from `P_prime_bases`).
+#[allow(non_snake_case)]
+pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
+    transcript: &mut RandomOracle,
+    gens: &Generators<C>,
+    H_exponents: &[C::Scalar],
+    P_prime_bases: &[C],
+    P_prime_exponents: &[C::Scalar],
+    Q: &C,
+    proof: &InnerProductProof<C>,
+) -> bool {
+    let n = gens.G_H.len();
+    let L_R = &proof.lr_vec;
+    let a = proof.a;
+    let b = proof.b;
+    let mut ab = a;
+    ab.mul_assign(&b);
+
+    let verification_scalars = match verify_scalars(transcript, n, proof) {
+        None => return false,
+        Some(scalars) => scalars,
+    };
+    let (u_sq, u_inv_sq, s) = (
+        verification_scalars.u_sq,
+        verification_scalars.u_inv_sq,
+        verification_scalars.s,
+    );
+
+    // nsum = sum^-1 = prod_j L_R[j].0 ^ -u_sq[j] * L_R[j].1 ^ -u_inv_sq[j]
+    let mut nsum_bases = Vec::with_capacity(2 * L_R.len());
+    let mut nsum_exps = Vec::with_capacity(2 * L_R.len());
+    for j in 0..L_R.len() {
+        nsum_bases.push(L_R[j].0);
+        nsum_bases.push(L_R[j].1);
+        let mut musq = u_sq[j];
+        let mut muisq = u_inv_sq[j];
+        musq.negate();
+        muisq.negate();
+        nsum_exps.push(musq);
+        nsum_exps.push(muisq);
+    }
+
+    // RHS = prod_i G_i^(s_i*a) H_i^(H_exponents_i * s_i^-1 * b) * Q^{ab} * nsum
+    let mut s_inv = s.clone();
+    s_inv.reverse();
+    let mut G_exps = s;
+    for ge in &mut G_exps {
+        ge.mul_assign(&a);
+    }
+
+    let mut rhs_bases = Vec::with_capacity(2 * n + 1 + nsum_bases.len() + P_prime_bases.len());
+    // Add G and H from gens to rhs_bases
+    for i in 0..n {
+        rhs_bases.push(gens.G_H[i].0);
+    }
+    for i in 0..n {
+        rhs_bases.push(gens.G_H[i].1);
+    }
+
+    // add further elements to rhs_bases
+    rhs_bases.push(*Q);
+    rhs_bases.append(&mut nsum_bases);
+    rhs_bases.extend(P_prime_bases);
+
+    let mut rhs_exps = Vec::with_capacity(rhs_bases.len());
+    rhs_exps.append(&mut G_exps);
+
+    // Compute H_exps_i = H_exponents_i * s_i^-1 * b and add to rhs_exps
+    for i in 0..H_exponents.len() {
+        let mut hi = H_exponents[i];
+        hi.mul_assign(&s_inv[i]);
+        hi.mul_assign(&b);
+        rhs_exps.push(hi);
+    }
+    rhs_exps.push(ab);
+    rhs_exps.append(&mut nsum_exps);
+
+    // check whether P' = RHS <=> 0 = RHS P'^-1
+    // add first exponents to beginning since they belong to G, H, and Q
+    for i in 0..2 * n + 1 {
+        rhs_exps[i].sub_assign(&P_prime_exponents[i]);
+    }
+
+    // negate remaining elements of P_prime_exponents and add them to rhs_exps
+    let mut nppexps = P_prime_exponents[2 * n + 1..].to_vec();
+    for nppe in &mut nppexps {
+        nppe.negate();
+    }
+    rhs_exps.append(&mut nppexps);
+
+    let RHS = multiexp(&rhs_bases, &rhs_exps);
+    RHS.is_zero_point()
 }
 
 /// This function calculates the inner product between two vectors over any

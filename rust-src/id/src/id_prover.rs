@@ -1,5 +1,8 @@
 use crate::types::*;
-use bulletproofs::range_proof::{prove_given_scalars, Generators, RangeProof};
+use bulletproofs::{
+    range_proof::{prove_given_scalars, RangeProof},
+    utils::Generators,
+};
 use curve_arithmetic::Curve;
 use ed25519_dalek as ed25519;
 use ff::Field;

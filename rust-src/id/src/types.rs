@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail};
-use bulletproofs::range_proof::{Generators, RangeProof};
+use bulletproofs::{range_proof::RangeProof, utils::Generators};
 use byteorder::ReadBytesExt;
 pub use crypto_common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crypto_common::{
