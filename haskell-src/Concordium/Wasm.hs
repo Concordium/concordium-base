@@ -114,7 +114,8 @@ module Concordium.Wasm (
   InstanceInfo(..),
 
   -- *Miscelaneous helpers.
-  putAmountLE
+  putAmountLE,
+  putExchangeRateLE
   ) where
 
 import Control.Monad
@@ -138,6 +139,7 @@ import qualified Data.Text.Encoding as Text
 import Data.Time
 import Data.Word
 import Foreign.C (CStringLen)
+import Data.Ratio (numerator, denominator)
 
 import Concordium.Common.Time
 import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
@@ -350,6 +352,12 @@ instance Serialize InitName where
 -- contracts.
 putAmountLE :: Amount -> Put
 putAmountLE (Amount a) = putWord64le a
+
+-- |Serialize an exchange rate in little endian for use by passing data to smart
+-- contracts.
+putExchangeRateLE :: ExchangeRate -> Put
+putExchangeRateLE (ExchangeRate ratio) = do putWord64le $ fromIntegral $ numerator ratio
+                                            putWord64le $ fromIntegral $ denominator ratio
 
 -- |Name of a receive method inside a module.
 newtype ReceiveName = ReceiveName { receiveName :: Text }
