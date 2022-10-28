@@ -30,19 +30,32 @@ use wasm_transform::{
 /// instruction.
 #[derive(Debug)]
 pub enum Interrupt {
+    /// Transfer an amount of tokens to the **account**.
     Transfer {
         to:     AccountAddress,
         amount: Amount,
     },
+    /// Invoke an entrypoint on the given contract.
     Call {
         address:   ContractAddress,
         parameter: ParameterVec,
         name:      OwnedEntrypointName,
         amount:    Amount,
     },
+    /// Upgrade the smart contract code to the provided module.
     Upgrade {
         module_ref: ModuleReference,
     },
+    /// Query the balance and staked balance of an account.
+    QueryAccountBalance {
+        address: AccountAddress,
+    },
+    /// Query the balance of a contract.
+    QueryContractBalance {
+        address: ContractAddress,
+    },
+    /// Query the CCD/EUR and EUR/NRG exchange rates.
+    QueryExchangeRates,
 }
 
 impl Interrupt {
@@ -79,6 +92,25 @@ impl Interrupt {
             } => {
                 out.push(2u8);
                 out.write_all(module_ref.as_ref().as_slice())?;
+                Ok(())
+            }
+            Interrupt::QueryAccountBalance {
+                address,
+            } => {
+                out.push(3u8);
+                out.write_all(address.as_ref())?;
+                Ok(())
+            }
+            Interrupt::QueryContractBalance {
+                address,
+            } => {
+                out.push(4u8);
+                out.write_all(&address.index.to_be_bytes())?;
+                out.write_all(&address.subindex.to_be_bytes())?;
+                Ok(())
+            }
+            Interrupt::QueryExchangeRates => {
+                out.push(5u8);
                 Ok(())
             }
         }
@@ -158,6 +190,9 @@ pub struct StateLessReceiveHost<ParamType, Ctx> {
     pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
     pub receive_ctx:       Ctx,
+    /// Whether the host should support queries or not. Queries are introduced
+    /// in protocol version 5.
+    pub support_queries:   bool,
 }
 
 impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx1>>
@@ -170,6 +205,7 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
             return_value:      host.return_value,
             parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
             receive_ctx:       host.receive_ctx.into(),
+            support_queries:   host.support_queries,
         }
     }
 }
@@ -197,6 +233,9 @@ mod host {
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
+    const QUERY_ACCOUNT_BALANCE_TAG: u32 = 2;
+    const QUERY_CONTRACT_BALANCE_TAG: u32 = 3;
+    const QUERY_EXCHANGE_RATE_TAG: u32 = 4;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -278,6 +317,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `invoke` host function.
     pub fn invoke(
+        support_queries: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -319,6 +359,52 @@ mod host {
                     Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
                     Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
+            }
+            QUERY_ACCOUNT_BALANCE_TAG if support_queries => {
+                ensure!(
+                    length == ACCOUNT_ADDRESS_SIZE,
+                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
+                Ok(Interrupt::QueryAccountBalance {
+                    address,
+                }
+                .into())
+            }
+            QUERY_CONTRACT_BALANCE_TAG if support_queries => {
+                ensure!(
+                    length == 8 + 8,
+                    "Contract balance queries must have exactly 16 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut buf = [0u8; 8];
+                buf.copy_from_slice(&memory[start..start + 8]);
+                let index = u64::from_le_bytes(buf);
+                buf.copy_from_slice(&memory[start + 8..start + 16]);
+                let subindex = u64::from_le_bytes(buf);
+                let address = ContractAddress {
+                    index,
+                    subindex,
+                };
+                Ok(Interrupt::QueryContractBalance {
+                    address,
+                }
+                .into())
+            }
+            QUERY_EXCHANGE_RATE_TAG if support_queries => {
+                ensure!(
+                    length == 0,
+                    "Exchange rate query must have no payload, but was {}",
+                    length
+                );
+                Ok(Interrupt::QueryExchangeRates.into())
             }
             c => bail!("Illegal instruction code {}.", c),
         }
@@ -1043,7 +1129,12 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
-                    return host::invoke(memory, stack, &mut self.energy);
+                    return host::invoke(
+                        self.stateless.support_queries,
+                        memory,
+                        stack,
+                        &mut self.energy,
+                    );
                 }
                 ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
                     memory,
@@ -1457,6 +1548,19 @@ where
     }
 }
 
+/// Collection of information relevant to invoke a receive-function.
+#[derive(Debug)]
+pub struct ReceiveInvocation<'a> {
+    /// The amount included in the transaction.
+    pub amount:       Amount,
+    /// The name of the receive function to invoke.
+    pub receive_name: ReceiveName<'a>,
+    /// A parameter to provide the receive function.
+    pub parameter:    ParameterRef<'a>,
+    /// The limit on the energy to be used for execution.
+    pub energy:       InterpreterEnergy,
+}
+
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<
     BackingStore: BackingStoreLoad,
@@ -1467,28 +1571,28 @@ pub fn invoke_receive<
     Ctx2: From<Ctx1>,
 >(
     artifact: Art,
-    amount: Amount,
     receive_ctx: Ctx1,
-    receive_name: ReceiveName,
-    param: ParameterRef,
-    energy: InterpreterEnergy,
+    receive_invocation: ReceiveInvocation,
     instance_state: InstanceState<BackingStore>,
+    support_queries: bool,
 ) -> ExecResult<ReceiveResult<R2, Ctx2>> {
     let mut host = ReceiveHost {
-        energy,
+        energy:    receive_invocation.energy,
         stateless: StateLessReceiveHost {
             activation_frames: constants::MAX_ACTIVATION_FRAMES,
             logs: v0::Logs::new(),
             return_value: Vec::new(),
-            parameters: vec![param],
+            parameters: vec![receive_invocation.parameter],
             receive_ctx,
+            support_queries,
         },
-        state: instance_state,
+        state:     instance_state,
     };
 
-    let result = artifact
-        .borrow()
-        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount.micro_ccd() as i64)]);
+    let result =
+        artifact.borrow().run(&mut host, receive_invocation.receive_name.get_chain_name(), &[
+            Value::I64(receive_invocation.amount.micro_ccd() as i64),
+        ]);
     process_receive_result(artifact, host, result)
 }
 
@@ -1593,16 +1697,20 @@ pub fn invoke_receive_from_artifact<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
+    support_queries: bool,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_receive(
         Arc::new(artifact),
-        ctx.amount,
         receive_ctx,
-        receive_name,
-        ctx.parameter,
-        ctx.energy,
+        ReceiveInvocation {
+            energy: ctx.energy,
+            parameter: ctx.parameter,
+            receive_name,
+            amount: ctx.amount,
+        },
         instance_state,
+        support_queries,
     )
 }
 
@@ -1617,6 +1725,7 @@ pub fn invoke_receive_from_source<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
+    support_queries: bool,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
@@ -1626,12 +1735,15 @@ pub fn invoke_receive_from_source<
     )?;
     invoke_receive(
         Arc::new(artifact),
-        ctx.amount,
         receive_ctx,
-        receive_name,
-        ctx.parameter,
-        ctx.energy,
+        ReceiveInvocation {
+            amount: ctx.amount,
+            receive_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         instance_state,
+        support_queries,
     )
 }
 
@@ -1647,6 +1759,7 @@ pub fn invoke_receive_with_metering_from_source<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
+    support_queries: bool,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
@@ -1656,11 +1769,14 @@ pub fn invoke_receive_with_metering_from_source<
     )?;
     invoke_receive(
         Arc::new(artifact),
-        ctx.amount,
         receive_ctx,
-        receive_name,
-        ctx.parameter,
-        ctx.energy,
+        ReceiveInvocation {
+            amount: ctx.amount,
+            receive_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         instance_state,
+        support_queries,
     )
 }
