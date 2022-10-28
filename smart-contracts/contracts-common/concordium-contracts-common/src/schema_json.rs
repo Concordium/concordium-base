@@ -251,6 +251,24 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON Object with one field required for an Enum")
             }
         }
+        Type::EnumTag(variants_ty) => {
+            if let Value::Object(fields) = json {
+                ensure!(fields.len() == 1, "Only one variant allowed.");
+                let (variant_name, fields_value) = fields.iter().next().unwrap(); // Safe since we already checked the length
+                let schema_fields_opt = variants_ty
+                    .iter()
+                    .find(|(_, (variant_name_schema, _))| variant_name_schema == variant_name);
+                if let Some((&i, (_, variant_fields))) = schema_fields_opt {
+                    out.write_u8(i).map_err(|_| anyhow!("Failed writing"))?;
+                    write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                } else {
+                    // Non-existing variant
+                    bail!("Unknown variant: {}", variant_name);
+                }
+            } else {
+                bail!("JSON Object required for an EnumTag")
+            }
+        }
         Type::String(size_len) => {
             if let Value::String(string) = json {
                 let len = string.len();
