@@ -71,44 +71,6 @@ pub fn get_versioned_module_schema(
     Ok(versioned_module_schema)
 }
 
-/// Returns the return value schema from a versioned module schema.
-pub fn get_return_value_schema(
-    versioned_module_schema: &VersionedModuleSchema,
-    contract_name: &str,
-    function_name: &str,
-) -> Result<Type> {
-    let versioned_contract_schema =
-        get_versioned_contract_schema(versioned_module_schema, contract_name)?;
-    let return_value_schema = match versioned_contract_schema {
-        VersionedContractSchema::V0(_) => {
-            return Err(anyhow!("Return values are not supported V0 smart contracts."))
-        }
-        VersionedContractSchema::V1(contract_schema) => contract_schema
-            .receive
-            .get(function_name)
-            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
-            .return_value()
-            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
-            .clone(),
-        VersionedContractSchema::V2(contract_schema) => contract_schema
-            .receive
-            .get(function_name)
-            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
-            .return_value()
-            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
-            .clone(),
-        VersionedContractSchema::V3(contract_schema) => contract_schema
-            .receive
-            .get(function_name)
-            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
-            .return_value()
-            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
-            .clone(),
-    };
-
-    Ok(return_value_schema)
-}
-
 /// Returns a receive function's parameter schema from a versioned module schema
 pub fn get_receive_param_schema(
     versioned_module_schema: &VersionedModuleSchema,
@@ -148,7 +110,7 @@ pub fn get_receive_param_schema(
     Ok(param_schema)
 }
 
-/// Returns a init function's parameter schema from a versioned module schema
+/// Returns an init function's parameter schema from a versioned module schema
 pub fn get_init_param_schema(
     versioned_module_schema: &VersionedModuleSchema,
     contract_name: &str,
@@ -186,13 +148,116 @@ pub fn get_init_param_schema(
     Ok(param_schema)
 }
 
+/// Returns a receive function's error schema from a versioned module schema
+pub fn get_receive_error_schema(
+    versioned_module_schema: &VersionedModuleSchema,
+    contract_name: &str,
+    function_name: &str,
+) -> anyhow::Result<Type> {
+    let versioned_contract_schema =
+        get_versioned_contract_schema(versioned_module_schema, contract_name)?;
+    let param_schema = match versioned_contract_schema {
+        VersionedContractSchema::V0(_) => {
+            return Err(anyhow!("Error types are not supported V0 smart contracts."))
+        }
+        VersionedContractSchema::V1(_) => {
+            return Err(anyhow!("Error types are not supported V1 smart contracts."))
+        }
+        VersionedContractSchema::V2(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function schema not found in contract schema"))?
+            .error()
+            .ok_or_else(|| anyhow!("Receive function schema does not contain an error schema"))?
+            .clone(),
+        VersionedContractSchema::V3(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function schema not found in contract schema"))?
+            .error()
+            .ok_or_else(|| anyhow!("Receive function schema does not contain an error schema"))?
+            .clone(),
+    };
+    Ok(param_schema)
+}
+
+/// Returns an init function's error schema from a versioned module schema
+pub fn get_init_error_schema(
+    versioned_module_schema: &VersionedModuleSchema,
+    contract_name: &str,
+) -> anyhow::Result<Type> {
+    let versioned_contract_schema =
+        get_versioned_contract_schema(versioned_module_schema, contract_name)?;
+    let param_schema = match versioned_contract_schema {
+        VersionedContractSchema::V0(_) => {
+            return Err(anyhow!("Error types are not supported V0 smart contracts."))
+        }
+        VersionedContractSchema::V1(_) => {
+            return Err(anyhow!("Error types are not supported V1 smart contracts."))
+        }
+        VersionedContractSchema::V2(contract_schema) => contract_schema
+            .init
+            .as_ref()
+            .ok_or_else(|| anyhow!("Init function schema not found in contract schema"))?
+            .error()
+            .ok_or_else(|| anyhow!("Init function schema does not contain an error schema"))?
+            .clone(),
+        VersionedContractSchema::V3(contract_schema) => contract_schema
+            .init
+            .as_ref()
+            .ok_or_else(|| anyhow!("Init function schema not found in contract schema"))?
+            .error()
+            .ok_or_else(|| anyhow!("Init function schema does not contain an error schema"))?
+            .clone(),
+    };
+    Ok(param_schema)
+}
+
+/// Returns the return value schema from a versioned module schema.
+pub fn get_receive_return_value_schema(
+    versioned_module_schema: &VersionedModuleSchema,
+    contract_name: &str,
+    function_name: &str,
+) -> Result<Type> {
+    let versioned_contract_schema =
+        get_versioned_contract_schema(versioned_module_schema, contract_name)?;
+    let return_value_schema = match versioned_contract_schema {
+        VersionedContractSchema::V0(_) => {
+            return Err(anyhow!("Return values are not supported V0 smart contracts."))
+        }
+        VersionedContractSchema::V1(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
+            .return_value()
+            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
+            .clone(),
+        VersionedContractSchema::V2(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
+            .return_value()
+            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
+            .clone(),
+        VersionedContractSchema::V3(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
+            .return_value()
+            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
+            .clone(),
+    };
+
+    Ok(return_value_schema)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn module_schema() -> VersionedModuleSchema {
         let module_bytes = hex::decode(
-            "ffff02010000000c00000054657374436f6e74726163740100020100000010000000726563656976655f66756e6374696f6e020304",
+            "ffff02010000000c00000054657374436f6e7472616374010402030100000010000000726563656976655f66756e6374696f6e06060807",
         )
         .unwrap();
         get_versioned_module_schema(&module_bytes, &None).unwrap()
@@ -208,13 +273,27 @@ mod tests {
     fn getting_receive_param_schema() {
         let extracted_type =
             get_receive_param_schema(&module_schema(), "TestContract", "receive_function").unwrap();
+        assert_eq!(extracted_type, Type::I8)
+    }
+
+    #[test]
+    fn getting_init_error_schema() {
+        let extracted_type =
+            get_init_error_schema(&module_schema(), "TestContract").unwrap();
         assert_eq!(extracted_type, Type::U16)
     }
 
     #[test]
-    fn getting_return_value_schema() {
+    fn getting_receive_error_schema() {
         let extracted_type =
-            get_return_value_schema(&module_schema(), "TestContract", "receive_function").unwrap();
-        assert_eq!(extracted_type, Type::U32)
+            get_receive_error_schema(&module_schema(), "TestContract", "receive_function").unwrap();
+        assert_eq!(extracted_type, Type::I16)
+    }
+
+    #[test]
+    fn getting_receive_return_value_schema() {
+        let extracted_type =
+            get_receive_return_value_schema(&module_schema(), "TestContract", "receive_function").unwrap();
+        assert_eq!(extracted_type, Type::I32)
     }
 }
