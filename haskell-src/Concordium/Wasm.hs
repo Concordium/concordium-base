@@ -111,7 +111,10 @@ module Concordium.Wasm (
   ContractExecutionFailure(..),
 
   -- |Instance queries
-  InstanceInfo(..)
+  InstanceInfo(..),
+
+  -- *Miscelaneous helpers.
+  putAmountLE
   ) where
 
 import Control.Monad
@@ -342,6 +345,11 @@ instance Serialize InitName where
       Left _ -> fail "Not a valid utf-8 encoding."
       Right t | isValidInitName t -> return (InitName t)
               | otherwise -> fail "Not a valid init name."
+
+-- |Serialize an amount in little endian for use by passing data to smart
+-- contracts.
+putAmountLE :: Amount -> Put
+putAmountLE (Amount a) = putWord64le a
 
 -- |Name of a receive method inside a module.
 newtype ReceiveName = ReceiveName { receiveName :: Text }
