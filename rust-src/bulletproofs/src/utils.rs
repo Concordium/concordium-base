@@ -126,16 +126,13 @@ fn compute_tx_polynomial<F: Field>(lr: &LeftRightPolynomials<F>) -> TPolynomial<
 
 /// This function evaluates polynomials `l(X)`, `r(X)`, `t(X)` at `x`.
 /// - `x` - evaluation point, a field element
-/// - `l_0` - first coefficient of `l(X)`, a vector of field elements
-/// - `l_1` - second coefficient of `l(X)`, a vector of field elements
-/// - `r_0` - first coefficient of `r(X)`, a vector of field elements
-/// - `r_1` - second coefficient of `r(X)`, a vector of field elements
-/// - `t_0, t_1, t_2` coefficients of `t(X)`, each a field element
+/// - `lr` - the coeffcients of `l(X)` and `r(X)`
+/// - `t_poly coefficients of `t(X)`, each a field element
 ///
 /// The output is `l(x), r(x), t(x)`
 ///
 /// Precondition:
-/// the input vectors `l_0,l_1,r_0,r_1` should have the same length. This
+/// the input vectors in `lr` should have the same length. This
 /// function may panic if this is not the case
 #[allow(clippy::too_many_arguments)]
 fn evaluate_lx_rx_tx<F: Field>(
