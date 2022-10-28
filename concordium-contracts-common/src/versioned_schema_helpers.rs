@@ -5,6 +5,7 @@ enum VersionedContractSchema {
     V0(ContractV0),
     V1(ContractV1),
     V2(ContractV2),
+    V3(ContractV3),
 }
 
 /// Unpacks a versioned contract schema from a versioned module schema
@@ -37,6 +38,14 @@ fn get_versioned_contract_schema(
                 .clone();
             VersionedContractSchema::V2(contract_schema)
         }
+        VersionedModuleSchema::V3(module_schema) => {
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow!("Unable to find contract schema in module schema"))?
+                .clone();
+            VersionedContractSchema::V3(contract_schema)
+        }
     };
 
     Ok(versioned_contract_schema)
@@ -54,6 +63,7 @@ pub fn get_versioned_module_schema(
             Some(0) => VersionedModuleSchema::V0(from_bytes(schema_bytes)?),
             Some(1) => VersionedModuleSchema::V1(from_bytes(schema_bytes)?),
             Some(2) => VersionedModuleSchema::V2(from_bytes(schema_bytes)?),
+            Some(3) => VersionedModuleSchema::V3(from_bytes(schema_bytes)?),
             Some(_) => return Err(anyhow!("Invalid schema version")),
             None => return Err(anyhow!("Missing schema version")),
         },
@@ -81,6 +91,13 @@ pub fn get_return_value_schema(
             .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
             .clone(),
         VersionedContractSchema::V2(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
+            .return_value()
+            .ok_or_else(|| anyhow!("Receive function schema has no return value schema"))?
+            .clone(),
+        VersionedContractSchema::V3(contract_schema) => contract_schema
             .receive
             .get(function_name)
             .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
@@ -120,6 +137,13 @@ pub fn get_receive_param_schema(
             .parameter()
             .ok_or_else(|| anyhow!("Receive function schema does not contain a parameter schema"))?
             .clone(),
+        VersionedContractSchema::V3(contract_schema) => contract_schema
+            .receive
+            .get(function_name)
+            .ok_or_else(|| anyhow!("Receive function could not be found in the contract schema"))?
+            .parameter()
+            .ok_or_else(|| anyhow!("Receive function schema does not contain a parameter schema"))?
+            .clone(),
     };
     Ok(param_schema)
 }
@@ -145,6 +169,13 @@ pub fn get_init_param_schema(
             .ok_or_else(|| anyhow!("Init function schema does not contain a parameter schema"))?
             .clone(),
         VersionedContractSchema::V2(contract_schema) => contract_schema
+            .init
+            .as_ref()
+            .ok_or_else(|| anyhow!("Init function schema not found in contract schema"))?
+            .parameter()
+            .ok_or_else(|| anyhow!("Init function schema does not contain a parameter schema"))?
+            .clone(),
+        VersionedContractSchema::V3(contract_schema) => contract_schema
             .init
             .as_ref()
             .ok_or_else(|| anyhow!("Init function schema not found in contract schema"))?
