@@ -850,6 +850,20 @@ newtype TransactionOutcomesHash = TransactionOutcomesHash { tohGet :: H.Hash}
 emptyTransactionOutcomesV0 :: TransactionOutcomes
 emptyTransactionOutcomesV0 = TransactionOutcomes Vec.empty Seq.empty
 
+{-# NOINLINE emptyTransactionOutcomesHashV1 #-}
+-- |Hash of the empty V1 transaction outcomes structure. This transaction outcomes
+-- structure is used starting in protocol version 5.
+--
+-- This is not the ideal location here, since the merkle structures that define
+-- it are defined in the global state modules, however any other place leads to
+-- problematic module dependencies. We should ideally restructure those so that
+-- we do not have this duplication here.
+emptyTransactionOutcomesHashV1 :: TransactionOutcomesHash
+emptyTransactionOutcomesHashV1 = TransactionOutcomesHash $ H.hashShort
+    ("TransactionOutcomesV1" <>
+     H.hashToShortByteString (H.hash "EmptyLFMBTree") <>
+     H.hashToShortByteString (H.hash "EmptyLFMBTree"))
+
 transactionOutcomesV0FromList :: [TransactionSummary] -> TransactionOutcomes
 transactionOutcomesV0FromList l =
   let outcomeValues = Vec.fromList l
