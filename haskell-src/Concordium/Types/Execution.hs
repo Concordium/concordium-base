@@ -1815,7 +1815,7 @@ instance AE.FromJSON Event where
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
-    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
+    deriving(Eq, Ord, Enum, Bits, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
 -- |The 'Maybe TransactionType' is to cover the case of a transaction payload
 -- that cannot be deserialized. A transaction is still included in a block, but
@@ -1851,6 +1851,8 @@ data TransactionSummary' a = TransactionSummary {
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
 
+-- |A transaction summary parameterized with an outcome of a valid transaction
+-- containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
@@ -1858,6 +1860,7 @@ type TransactionSummary = TransactionSummary' ValidResult
 -- We also record the cost of the transaction.
 data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
   deriving(Show, Generic, Eq)
+
 
 putValidResult :: S.Putter ValidResult
 putValidResult TxSuccess{..} = S.putWord8 0 <> putListOf putEvent vrEvents
