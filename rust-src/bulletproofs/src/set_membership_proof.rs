@@ -714,4 +714,27 @@ mod tests {
             Err(VerificationError::IPVerificationError)
         ));
     }
+
+    #[test]
+    /// Test honest proof supplying more generators than needed
+    fn test_smp_prove_many_generators() {
+        let rng = &mut thread_rng();
+
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
+        let num_gens = 2112;
+        let (gens, v_keys, v_rand) = generate_helper_values(num_gens);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
+    }
 }

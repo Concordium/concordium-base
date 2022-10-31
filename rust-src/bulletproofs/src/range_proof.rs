@@ -1077,4 +1077,54 @@ mod tests {
             "The first check should have succeeded, and the second one failed."
         );
     }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn test_many_generators() {
+        // Test supplying more generators than needed
+        let rng = &mut thread_rng();
+        let n = 32;
+        let m = 1;
+        let num_gens = 2112;
+        let mut G_H = Vec::with_capacity(num_gens);
+        let mut randomness = Vec::with_capacity(usize::from(m));
+        let mut commitments = Vec::with_capacity(usize::from(m));
+
+        for _i in 0..(num_gens) {
+            let g = SomeCurve::generate(rng);
+            let h = SomeCurve::generate(rng);
+            G_H.push((g, h));
+        }
+
+        let gens = Generators { G_H };
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let keys = CommitmentKey { g: B, h: B_tilde };
+
+        let v_vec = vec![255]; // < 2^n
+        let r = Randomness::generate(rng);
+        let v_scalar = SomeCurve::scalar_from_u64(v_vec[0]);
+        let v_value = Value::<SomeCurve>::new(v_scalar);
+        let com = keys.hide(&v_value, &r);
+        randomness.push(r);
+        commitments.push(com);
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &keys,
+            &randomness,
+        );
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
+
+        let mut transcript = RandomOracle::empty();
+        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        assert!(result.is_ok());
+    }
 }
