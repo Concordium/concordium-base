@@ -667,6 +667,4 @@ mod tests {
         let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
         assert!(result.is_ok());
     }
-
-
 }
