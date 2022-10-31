@@ -12,17 +12,17 @@ use random_oracle::RandomOracle;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetNonMembershipProof<C: Curve> {
-    /// Commitment to the multiplicative inverse of (v-s_i) for each i
+    /// Commitment to the multiplicative inverse of `v-s_i` for each `i`
     A:        C,
-    /// Commitment to the blinding factors in s_L and s_R
+    /// Commitment to the blinding factors in `s_L` and `s_R`
     S:        C,
-    /// Commitment to the t_1 coefficient of polynomial t(x)
+    /// Commitment to the `t_1` coefficient of polynomial `t(X)`
     T_1:      C,
-    /// Commitment to the t_2 coefficient of polynomial t(x)
+    /// Commitment to the `t_2` coefficient of polynomial `t(X)`
     T_2:      C,
-    /// Evaluation of t(x) at the challenge point x
+    /// Evaluation of `t(X)` at the challenge point `x`
     tx:       C::Scalar,
-    /// Blinding factor for the commitment to tx
+    /// Blinding factor for the commitment to `tx`
     tx_tilde: C::Scalar,
     /// Blinding factor for the commitment to the inner-product arguments
     e_tilde:  C::Scalar,
@@ -33,9 +33,7 @@ pub struct SetNonMembershipProof<C: Curve> {
 /// Error messages detailing why proof generation failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProverError {
-    /// The set must have a size of a power of two
-    SetSizeNotPowerOfTwo,
-    /// The length of the generator vector `gens` was less than `|the_set|`
+    /// The length of the generator vector `gens` was too short
     NotEnoughGenerators,
     /// Could find the value `v` in the given set
     CouldFindValueInSet,
@@ -53,7 +51,7 @@ pub enum ProverError {
 /// - `the_set` - the set as a vector
 /// - `v` the value
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
-///   `n`
+///   `k` where k is the smallest power of two >= `|the_set|`
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case)]

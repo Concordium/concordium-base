@@ -35,7 +35,7 @@ pub struct SetMembershipProof<C: Curve> {
 /// Error messages detailing why proof generation failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProverError {
-    /// The length of the generator vector `gens` was less than `|the_set|`
+    /// The length of the generator vector `gens` was too short
     NotEnoughGenerators,
     /// Could not find the value `v` in the given set
     CouldNotFindValueInSet,
@@ -82,7 +82,7 @@ fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
 /// - `the_set` - the set as a vector of scalars
 /// - `v` the value, a scalar
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
-///   `k` where k is the smallest power of two >= `n`
+///   `k` where k is the smallest power of two >= `|the_set|`
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case)]
