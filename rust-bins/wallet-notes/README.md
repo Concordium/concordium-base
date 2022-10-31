@@ -641,28 +641,30 @@ The returned value is a JSON object containing a list with signatures of the mes
 An example input to this request is in the file [sign_message-input.json](files/sign_message-input.json).
 An example output to this request is in the file [sign_message-output.json](files/sign_message-output.json).
 
-## transaction_to_json
-Semantics: Converts a serialized transaction (as bytes) into JSON.
+## parameters_to_json
+Semantics: Converts serialized parameters for a contract update (as bytes) into JSON.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
-- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
+- `"parameters"` ... a hex encoding of the serialized parameters.
 
-- `"schema"` ... optional, required for update smart contract transactions, hex encoded schema for the corresponding smart contract.
+- `"receiveName"` ... the name of the receive function that the parameters are for.
+
+- `"schema"` ... hex encoded schema for the corresponding smart contract.
 
 - `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 
-The returned value is a JSON object with the following fields:
+The returned value is a JSON representation of the parameters.
 
-- `"hashToSign"` ... hex encoding of the hash of the transaction
+- `"parameters"` ... hex encoding of the hash of the transaction
 
 - `"header"` ... the transaction header
 
 - `"payload"` ... the transaction payload, the exact contents is dependent on the transaction type. For smart contract updates the `message` field is replaced with a JSON view of the paramaters instead of the hex encoded bytes.
 
-An example input to this request is in the file [transaction_to_json-input.json](files/sign_transaction-input.json).
-An example output to this request is in the file [transaction_to_json-output.json](files/sign_transaction-output.json).
+An example input to this request is in the file [parameters_to_json-input.json](files/sign_transaction-input.json).
+An example output to this request is in the file [parameters_to_json-output.json](files/sign_transaction-output.json).
 
 
 ## Example

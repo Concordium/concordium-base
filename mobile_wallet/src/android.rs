@@ -273,7 +273,7 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_generate
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_transaction_1to_1json(
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_parameters_1to_1json(
     env: JNIEnv,
     _: JClass,
     input: JString,
@@ -294,7 +294,7 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_transact
 
     let mut success: u8 = 127;
     let cstr_res = unsafe {
-        let unsafe_res_ptr = transaction_to_json(input_str.as_ptr(), &mut success);
+        let unsafe_res_ptr = parameters_to_json(input_str.as_ptr(), &mut success);
         if unsafe_res_ptr.is_null() {
             return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
         }

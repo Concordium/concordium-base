@@ -20,7 +20,7 @@ external fun link_check(input: String) : String
 external fun get_identity_keys_and_randomness(input: String) : ReturnValue
 external fun get_account_keys_and_randomness(input: String) : ReturnValue
 external fun sign_transaction(input: String) : ReturnValue
-external fun transaction_to_json(input: String) : ReturnValue
+external fun parameters_to_json(input: String) : ReturnValue
 external fun sign_message(input: String) : ReturnValue
 
 fun loadWalletLib() {
