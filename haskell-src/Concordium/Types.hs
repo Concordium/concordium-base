@@ -116,8 +116,6 @@ module Concordium.Types (
   BlockNonce,
   BlockSignature,
   BlockProof,
-  TransactionOutcomesHashV0(..),
-  TransactionOutcomesHash,
   StateHashV0(..),
   StateHash,
   BlockHash(..),
@@ -1028,14 +1026,10 @@ type TransactionHash = TransactionHashV0
 newtype BlockHash = BlockHash {blockHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
-newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutcomesHash :: Hash.Hash}
-  deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
-
 newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 type StateHash = StateHashV0
-type TransactionOutcomesHash = TransactionOutcomesHashV0
 
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
