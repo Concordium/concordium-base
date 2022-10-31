@@ -533,14 +533,15 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<PolicyBytes<'_>>> {
             InitHost {
-                energy:            InterpreterEnergy {
+                energy: InterpreterEnergy {
                     energy: nrg * 1000,
                 },
                 activation_frames: MAX_ACTIVATION_FRAMES,
-                logs:              Logs::new(),
-                state:             State::new(None),
-                param:             Parameter::from(&[] as &[u8]),
-                init_ctx:          &init_ctx,
+                logs: Logs::new(),
+                state: State::new(None),
+                param: Parameter::from(&[] as &[u8]),
+                init_ctx: &init_ctx,
+                limit_logs_and_return_values: false,
             }
         };
 
@@ -556,6 +557,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     param,
                     outcomes: Outcome::new(),
                     receive_ctx: &receive_ctx,
+                    max_parameter_size: u16::MAX.into(),
+                    limit_logs_and_return_values: false,
                 }
             };
 

@@ -410,13 +410,13 @@ putPayload InitContract{..} =
       S.put icAmount <>
       S.put icModRef <>
       S.put icInitName <>
-      S.put icParam
+      Wasm.putParameter icParam
 putPayload Update{..} =
     P.putWord8 2 <>
     S.put uAmount <>
     S.put uAddress <>
     S.put uReceiveName <>
-    S.put uMessage
+    Wasm.putParameter uMessage
 putPayload Transfer{..} =
     P.putWord8 3 <>
     S.put tToAddress <>
@@ -560,13 +560,13 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               icAmount <- S.get
               icModRef <- S.get
               icInitName <- S.get
-              icParam <- S.get
+              icParam <- Wasm.getParameter spv
               return InitContract{..}
             2 -> do
               uAmount <- S.get
               uAddress <- S.get
               uReceiveName <- S.get
-              uMessage <- S.get
+              uMessage <- Wasm.getParameter spv
               return Update{..}
             3 -> do
               tToAddress <- S.get
@@ -1062,7 +1062,7 @@ putEvent = \case ModuleDeployed mref ->
                    S.put euAddress <>
                    S.put euInstigator <>
                    S.put euAmount <>
-                   S.put euMessage <>
+                   Wasm.putParameter euMessage <>
                    S.put euReceiveName <>
                    S.put euContractVersion <>
                    S.putWord32be (fromIntegral (length euEvents)) <>
@@ -1245,7 +1245,7 @@ getEvent spv =
       euAddress <- S.get
       euInstigator <- S.get
       euAmount <- S.get
-      euMessage <- S.get
+      euMessage <- Wasm.getParameter spv
       euReceiveName <- S.get
       euContractVersion <- S.get
       euEventsLength <- fromIntegral <$> S.getWord32be
@@ -1815,7 +1815,7 @@ instance AE.FromJSON Event where
 
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
-    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
+    deriving(Eq, Ord, Enum, Bits, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
 -- |The 'Maybe TransactionType' is to cover the case of a transaction payload
 -- that cannot be deserialized. A transaction is still included in a block, but
@@ -1851,6 +1851,8 @@ data TransactionSummary' a = TransactionSummary {
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
 
+-- |A transaction summary parameterized with an outcome of a valid transaction
+-- containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
@@ -1858,6 +1860,7 @@ type TransactionSummary = TransactionSummary' ValidResult
 -- We also record the cost of the transaction.
 data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
   deriving(Show, Generic, Eq)
+
 
 putValidResult :: S.Putter ValidResult
 putValidResult TxSuccess{..} = S.putWord8 0 <> putListOf putEvent vrEvents
@@ -2026,7 +2029,7 @@ instance S.Serialize RejectReason where
       S.putInt32be rejectReason <>
       S.put contractAddress <>
       S.put receiveName <>
-      S.put parameter
+      Wasm.putParameter parameter
     InvalidProof -> S.putWord8 14
     AlreadyABaker bid -> S.putWord8 15 <> S.put bid
     NotABaker addr -> S.putWord8 16 <> S.put addr
@@ -2088,7 +2091,10 @@ instance S.Serialize RejectReason where
       rejectReason <- S.getInt32be
       contractAddress <- S.get
       receiveName <- S.get
-      parameter <- S.get
+      -- We only ever deserialize valid transactions, which means that the parameter size is known to be valid.
+      -- This allows us to skip the size check, which is useful because checking requires the protocol version,
+      -- which we do not currently have access to here.
+      parameter <- Wasm.getParameterUnchecked
       return RejectedReceive {..}
     14 -> return InvalidProof
     15 -> AlreadyABaker <$> S.get

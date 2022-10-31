@@ -37,6 +37,7 @@ module Concordium.Wasm (
   maxParameterLen,
   maxWasmModuleSizeV0,
   maxWasmModuleSizeV1,
+  limitLogsAndReturnValues,
 
   -- * Modules
   -- ** Binary module
@@ -77,6 +78,9 @@ module Concordium.Wasm (
   uncheckedMakeReceiveName,
   Parameter(..),
   emptyParameter,
+  getParameter,
+  getParameterUnchecked,
+  putParameter,
 
   -- *** Contract state
   ContractState(..),
@@ -111,7 +115,11 @@ module Concordium.Wasm (
   ContractExecutionFailure(..),
 
   -- |Instance queries
-  InstanceInfo(..)
+  InstanceInfo(..),
+
+  -- *Miscelaneous helpers.
+  putAmountLE,
+  putExchangeRateLE
   ) where
 
 import Control.Monad
@@ -135,6 +143,7 @@ import qualified Data.Text.Encoding as Text
 import Data.Time
 import Data.Word
 import Foreign.C (CStringLen)
+import Data.Ratio (numerator, denominator)
 
 import Concordium.Common.Time
 import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
@@ -343,6 +352,17 @@ instance Serialize InitName where
       Right t | isValidInitName t -> return (InitName t)
               | otherwise -> fail "Not a valid init name."
 
+-- |Serialize an amount in little endian for use by passing data to smart
+-- contracts.
+putAmountLE :: Amount -> Put
+putAmountLE (Amount a) = putWord64le a
+
+-- |Serialize an exchange rate in little endian for use by passing data to smart
+-- contracts.
+putExchangeRateLE :: ExchangeRate -> Put
+putExchangeRateLE (ExchangeRate ratio) = do putWord64le $ fromIntegral $ numerator ratio
+                                            putWord64le $ fromIntegral $ denominator ratio
+
 -- |Name of a receive method inside a module.
 newtype ReceiveName = ReceiveName { receiveName :: Text }
     deriving (Eq, Ord)
@@ -453,11 +473,22 @@ newtype Parameter = Parameter { parameter :: ShortByteString }
 emptyParameter :: Parameter
 emptyParameter = Parameter BSS.empty
 
-instance Serialize Parameter where
-  put = putShortByteStringWord16 . parameter
-  get = do
+-- |Put (serialize) a @Parameter@.
+putParameter :: Putter Parameter
+putParameter = putShortByteStringWord16 . parameter
+
+-- |Get (deserialize) a @Parameter@ and ensure that its size is valid. The size limit depends on the protocol version.
+getParameter :: SProtocolVersion pv -> Get Parameter
+getParameter spv = do
     len <- getWord16be
-    unless (len <= maxParameterLen) $ fail "Parameter size exceeds limits."
+    unless (len <= maxParameterLen spv) $ fail "Parameter size exceeds the limit."
+    Parameter <$> getShortByteString (fromIntegral len)
+
+-- |Get (deserialize) a @Parameter@ *without checking that its size is valid*. This should only be used when
+-- we know for a fact that the parameter size is within the valid bounds for the given protocol version.
+getParameterUnchecked :: Get Parameter
+getParameterUnchecked = do
+    len <- getWord16be
     Parameter <$> getShortByteString (fromIntegral len)
 
 --------------------------------------------------------------------------------
@@ -665,7 +696,7 @@ getActionsTree' size = go HM.empty 0
                            erAddr <- get
                            erName <- get
                            erAmount <- get
-                           erParameter <- get
+                           erParameter <- getParameterUnchecked
                            let action = TSend{..}
                            go (HM.insert n action acc) (n+1)
                          1 -> do

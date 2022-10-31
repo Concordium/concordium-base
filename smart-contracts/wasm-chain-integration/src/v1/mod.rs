@@ -30,19 +30,32 @@ use wasm_transform::{
 /// instruction.
 #[derive(Debug)]
 pub enum Interrupt {
+    /// Transfer an amount of tokens to the **account**.
     Transfer {
         to:     AccountAddress,
         amount: Amount,
     },
+    /// Invoke an entrypoint on the given contract.
     Call {
         address:   ContractAddress,
         parameter: ParameterVec,
         name:      OwnedEntrypointName,
         amount:    Amount,
     },
+    /// Upgrade the smart contract code to the provided module.
     Upgrade {
         module_ref: ModuleReference,
     },
+    /// Query the balance and staked balance of an account.
+    QueryAccountBalance {
+        address: AccountAddress,
+    },
+    /// Query the balance of a contract.
+    QueryContractBalance {
+        address: ContractAddress,
+    },
+    /// Query the CCD/EUR and EUR/NRG exchange rates.
+    QueryExchangeRates,
 }
 
 impl Interrupt {
@@ -81,6 +94,25 @@ impl Interrupt {
                 out.write_all(module_ref.as_ref().as_slice())?;
                 Ok(())
             }
+            Interrupt::QueryAccountBalance {
+                address,
+            } => {
+                out.push(3u8);
+                out.write_all(address.as_ref())?;
+                Ok(())
+            }
+            Interrupt::QueryContractBalance {
+                address,
+            } => {
+                out.push(4u8);
+                out.write_all(&address.index.to_be_bytes())?;
+                out.write_all(&address.subindex.to_be_bytes())?;
+                Ok(())
+            }
+            Interrupt::QueryExchangeRates => {
+                out.push(5u8);
+                Ok(())
+            }
         }
     }
 }
@@ -94,20 +126,23 @@ impl Interrupt {
 /// allocated energy.
 pub struct InitHost<'a, BackingStore, ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy:            InterpreterEnergy,
+    pub energy:                   InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames: u32,
+    pub activation_frames:        u32,
     /// Logs produced during execution.
-    pub logs:              v0::Logs,
+    pub logs:                     v0::Logs,
     /// The contract's state.
-    pub state:             InstanceState<'a, BackingStore>,
+    pub state:                    InstanceState<'a, BackingStore>,
     /// The response from the call.
-    pub return_value:      ReturnValue,
+    pub return_value:             ReturnValue,
     /// The parameter to the init method.
-    pub parameter:         ParamType,
+    pub parameter:                ParamType,
     /// The init context for this invocation.
-    pub init_ctx:          Ctx,
+    pub init_ctx:                 Ctx,
+    /// Whether there is a limit on the number of logs and sizes of return
+    /// values. Limit removed in P5.
+    limit_logs_and_return_values: bool,
 }
 
 impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
@@ -116,13 +151,14 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
 {
     fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>) -> Self {
         Self {
-            energy:            host.energy,
+            energy: host.energy,
             activation_frames: host.activation_frames,
-            logs:              host.logs,
-            state:             host.state,
-            return_value:      host.return_value,
-            parameter:         host.parameter.into(),
-            init_ctx:          host.init_ctx.into(),
+            logs: host.logs,
+            state: host.state,
+            return_value: host.return_value,
+            parameter: host.parameter.into(),
+            init_ctx: host.init_ctx.into(),
+            limit_logs_and_return_values: host.limit_logs_and_return_values,
         }
     }
 }
@@ -158,6 +194,8 @@ pub struct StateLessReceiveHost<ParamType, Ctx> {
     pub parameters:        Vec<ParamType>,
     /// The receive context for this call.
     pub receive_ctx:       Ctx,
+    /// Configuration determining which options are allowed at runtime.
+    pub params:            ReceiveParams,
 }
 
 impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx1>>
@@ -170,6 +208,7 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
             return_value:      host.return_value,
             parameters:        host.parameters.into_iter().map(|x| x.to_vec()).collect(),
             receive_ctx:       host.receive_ctx.into(),
+            params:            host.params,
         }
     }
 }
@@ -197,6 +236,9 @@ mod host {
 
     const TRANSFER_TAG: u32 = 0;
     const CALL_TAG: u32 = 1;
+    const QUERY_ACCOUNT_BALANCE_TAG: u32 = 2;
+    const QUERY_CONTRACT_BALANCE_TAG: u32 = 3;
+    const QUERY_EXCHANGE_RATE_TAG: u32 = 4;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -205,13 +247,14 @@ mod host {
     fn parse_call_args(
         energy: &mut InterpreterEnergy,
         cursor: &mut Cursor<&[u8]>,
+        max_parameter_size: usize,
     ) -> ParseResult<Result<Interrupt, OutOfEnergy>> {
         let address = cursor.get()?;
         let parameter_len: u16 = cursor.get()?;
-        if usize::from(parameter_len) > constants::MAX_PARAMETER_SIZE {
+        if usize::from(parameter_len) > max_parameter_size {
             return Err(ParseError {});
         }
-        if energy.tick_energy(constants::copy_to_host_cost(parameter_len.into())).is_err() {
+        if energy.tick_energy(constants::copy_parameter_cost(parameter_len.into())).is_err() {
             return Ok(Err(OutOfEnergy));
         }
         let start = cursor.offset;
@@ -237,22 +280,26 @@ mod host {
         energy: &mut InterpreterEnergy,
         offset: u32,
         bytes: &[u8],
+        limit_return_value_size: bool,
     ) -> ExecResult<u32> {
         let length = bytes.len();
-        ensure!(offset as usize <= rv.len(), "Cannot write past the offset.");
         let offset = offset as usize;
+        ensure!(offset <= rv.len(), "Cannot write past the offset.");
         let end = offset
             .checked_add(length)
-            .ok_or_else(|| anyhow::anyhow!("Writing past the end of memory."))?
-            as usize;
-        let end = std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32;
-        if rv.len() < end as usize {
+            .ok_or_else(|| anyhow::anyhow!("Writing past the end of memory."))?;
+        let end = if limit_return_value_size {
+            std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize)
+        } else {
+            end
+        };
+        if rv.len() < end {
             energy.tick_energy(constants::additional_output_size_cost(
-                u64::from(end) - rv.len() as u64,
+                end as u64 - rv.len() as u64,
             ))?;
-            rv.resize(end as usize, 0u8);
+            rv.resize(end, 0u8);
         }
-        let written = (&mut rv[offset..end as usize]).write(bytes)?;
+        let written = (&mut rv[offset..end]).write(bytes)?;
         Ok(written as u32)
     }
 
@@ -262,6 +309,7 @@ mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         rv: &mut ReturnValue,
+        limit_return_value_size: bool,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
@@ -270,7 +318,13 @@ mod host {
         energy.tick_energy(constants::write_output_cost(length))?;
         let end = start + length as usize; // this cannot overflow on 64-bit machines.
         ensure!(end <= memory.len(), "Illegal memory access.");
-        let res = write_return_value_helper(rv, energy, offset, &memory[start..end])?;
+        let res = write_return_value_helper(
+            rv,
+            energy,
+            offset,
+            &memory[start..end],
+            limit_return_value_size,
+        )?;
         stack.push_value(res);
         Ok(())
     }
@@ -278,9 +332,11 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `invoke` host function.
     pub fn invoke(
+        support_queries: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
+        max_parameter_size: usize,
     ) -> machine::RunResult<Option<Interrupt>> {
         energy.tick_energy(constants::INVOKE_BASE_COST)?;
         let length = unsafe { stack.pop_u32() } as usize; // length of the instruction payload in memory
@@ -314,11 +370,57 @@ mod host {
             CALL_TAG => {
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
                 let mut cursor = Cursor::new(&memory[start..start + length]);
-                match parse_call_args(energy, &mut cursor) {
+                match parse_call_args(energy, &mut cursor, max_parameter_size) {
                     Ok(Ok(i)) => Ok(Some(i)),
                     Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
                     Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
+            }
+            QUERY_ACCOUNT_BALANCE_TAG if support_queries => {
+                ensure!(
+                    length == ACCOUNT_ADDRESS_SIZE,
+                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
+                Ok(Interrupt::QueryAccountBalance {
+                    address,
+                }
+                .into())
+            }
+            QUERY_CONTRACT_BALANCE_TAG if support_queries => {
+                ensure!(
+                    length == 8 + 8,
+                    "Contract balance queries must have exactly 16 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut buf = [0u8; 8];
+                buf.copy_from_slice(&memory[start..start + 8]);
+                let index = u64::from_le_bytes(buf);
+                buf.copy_from_slice(&memory[start + 8..start + 16]);
+                let subindex = u64::from_le_bytes(buf);
+                let address = ContractAddress {
+                    index,
+                    subindex,
+                };
+                Ok(Interrupt::QueryContractBalance {
+                    address,
+                }
+                .into())
+            }
+            QUERY_EXCHANGE_RATE_TAG if support_queries => {
+                ensure!(
+                    length == 0,
+                    "Exchange rate query must have no payload, but was {}",
+                    length
+                );
+                Ok(Interrupt::QueryExchangeRates.into())
             }
             c => bail!("Illegal instruction code {}.", c),
         }
@@ -356,7 +458,7 @@ mod host {
         let start = unsafe { stack.pop_u32() } as usize;
         let param_num = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
-        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        energy.tick_energy(constants::copy_parameter_cost(length))?;
         if let Some(param) = parameters.get(param_num as usize) {
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
@@ -827,6 +929,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                     stack,
                     &mut self.energy,
                     &mut self.return_value,
+                    self.limit_logs_and_return_values,
                 ),
                 CommonFunc::GetParameterSize => host::get_parameter_size(stack, &[&self.parameter]),
                 CommonFunc::GetParameterSection => {
@@ -838,9 +941,13 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                     &mut self.energy,
                     self.init_ctx.sender_policies(),
                 ),
-                CommonFunc::LogEvent => {
-                    v0::host::log_event(memory, stack, &mut self.energy, &mut self.logs)
-                }
+                CommonFunc::LogEvent => v0::host::log_event(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &mut self.logs,
+                    self.limit_logs_and_return_values,
+                ),
                 CommonFunc::GetSlotTime => v0::host::get_slot_time(stack, self.init_ctx.metadata()),
                 CommonFunc::StateLookupEntry => {
                     host::state_lookup_entry(memory, stack, &mut self.energy, &mut self.state)
@@ -970,6 +1077,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     stack,
                     &mut self.energy,
                     &mut self.stateless.return_value,
+                    self.stateless.params.limit_logs_and_return_values,
                 ),
                 CommonFunc::GetParameterSize => {
                     host::get_parameter_size(stack, &self.stateless.parameters)
@@ -986,9 +1094,13 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                     &mut self.energy,
                     self.stateless.receive_ctx.sender_policies(),
                 ),
-                CommonFunc::LogEvent => {
-                    v0::host::log_event(memory, stack, &mut self.energy, &mut self.stateless.logs)
-                }
+                CommonFunc::LogEvent => v0::host::log_event(
+                    memory,
+                    stack,
+                    &mut self.energy,
+                    &mut self.stateless.logs,
+                    self.stateless.params.limit_logs_and_return_values,
+                ),
                 CommonFunc::GetSlotTime => {
                     v0::host::get_slot_time(stack, self.stateless.receive_ctx.metadata())
                 }
@@ -1043,7 +1155,13 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
-                    return host::invoke(memory, stack, &mut self.energy);
+                    return host::invoke(
+                        self.stateless.params.support_queries,
+                        memory,
+                        stack,
+                        &mut self.energy,
+                        self.stateless.params.max_parameter_size,
+                    );
                 }
                 ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
                     memory,
@@ -1095,30 +1213,43 @@ pub type ParameterRef<'a> = &'a [u8];
 /// on Vec<u8>.
 pub type ParameterVec = Vec<u8>;
 
+/// Collection of information relevant to invoke a init-function.
+#[derive(Debug)]
+pub struct InitInvocation<'a> {
+    /// The amount included in the transaction.
+    pub amount:    Amount,
+    /// The name of the init function to invoke.
+    pub init_name: &'a str,
+    /// A parameter to provide the init function.
+    pub parameter: ParameterRef<'a>,
+    /// The limit on the energy to be used for execution.
+    pub energy:    InterpreterEnergy,
+}
+
 /// Invokes an init-function from a given artifact
 pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
-    amount: Amount,
     init_ctx: impl v0::HasInitContext,
-    init_name: &str,
-    parameter: ParameterRef,
-    energy: InterpreterEnergy,
+    init_invocation: InitInvocation,
+    limit_logs_and_return_values: bool,
     mut loader: BackingStore,
 ) -> ExecResult<InitResult> {
     let mut initial_state = trie::MutableState::initial_state();
     let inner = initial_state.get_inner(&mut loader);
     let state_ref = InstanceState::new(loader, inner);
     let mut host = InitHost {
-        energy,
+        energy: init_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
         state: state_ref,
         return_value: Vec::new(),
-        parameter,
+        parameter: init_invocation.parameter,
+        limit_logs_and_return_values,
         init_ctx,
     };
-    let result =
-        artifact.borrow().run(&mut host, init_name, &[Value::I64(amount.micro_ccd() as i64)]);
+    let result = artifact.borrow().run(&mut host, init_invocation.init_name, &[Value::I64(
+        init_invocation.amount.micro_ccd() as i64,
+    )]);
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
     let logs = std::mem::take(&mut host.logs);
@@ -1315,9 +1446,21 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
-    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
+    invoke_init(
+        artifact,
+        init_ctx,
+        InitInvocation {
+            amount: ctx.amount,
+            init_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
+        limit_logs_and_return_values,
+        loader,
+    )
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1345,6 +1488,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
@@ -1352,7 +1496,18 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
         },
         ctx.source,
     )?;
-    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
+    invoke_init(
+        artifact,
+        init_ctx,
+        InitInvocation {
+            amount: ctx.amount,
+            init_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
+        limit_logs_and_return_values,
+        loader,
+    )
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
@@ -1363,6 +1518,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
@@ -1370,7 +1526,18 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
         },
         ctx.source,
     )?;
-    invoke_init(artifact, ctx.amount, init_ctx, init_name, ctx.parameter, ctx.energy, loader)
+    invoke_init(
+        artifact,
+        init_ctx,
+        InitInvocation {
+            amount: ctx.amount,
+            init_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
+        limit_logs_and_return_values,
+        loader,
+    )
 }
 
 fn process_receive_result<
@@ -1457,6 +1624,53 @@ where
     }
 }
 
+/// Runtime parameters that affect the limits placed on the
+/// entrypoint execution.
+#[derive(Debug, Clone, Copy)]
+pub struct ReceiveParams {
+    /// Maximum size of a parameter that an `invoke` operation can have.
+    pub max_parameter_size:           usize,
+    /// Whether the amount of logs a contract may produce, and the size of the
+    /// logs, is limited.
+    pub limit_logs_and_return_values: bool,
+    /// Whether queries should be supported or not. Queries were introduced in
+    /// protocol 5.
+    pub support_queries:              bool,
+}
+
+impl ReceiveParams {
+    /// Parameters that are in effect in protocol version 4.
+    pub fn new_p4() -> Self {
+        Self {
+            max_parameter_size:           1024,
+            limit_logs_and_return_values: true,
+            support_queries:              false,
+        }
+    }
+
+    /// Parameters that are in effect in protocol version 5 and up.
+    pub fn new_p5() -> Self {
+        Self {
+            max_parameter_size:           u16::MAX.into(),
+            limit_logs_and_return_values: false,
+            support_queries:              true,
+        }
+    }
+}
+
+/// Collection of information relevant to invoke a receive-function.
+#[derive(Debug)]
+pub struct ReceiveInvocation<'a> {
+    /// The amount included in the transaction.
+    pub amount:       Amount,
+    /// The name of the receive function to invoke.
+    pub receive_name: ReceiveName<'a>,
+    /// A parameter to provide the receive function.
+    pub parameter:    ParameterRef<'a>,
+    /// The limit on the energy to be used for execution.
+    pub energy:       InterpreterEnergy,
+}
+
 /// Invokes an receive-function from a given artifact
 pub fn invoke_receive<
     BackingStore: BackingStoreLoad,
@@ -1467,28 +1681,28 @@ pub fn invoke_receive<
     Ctx2: From<Ctx1>,
 >(
     artifact: Art,
-    amount: Amount,
     receive_ctx: Ctx1,
-    receive_name: ReceiveName,
-    param: ParameterRef,
-    energy: InterpreterEnergy,
+    receive_invocation: ReceiveInvocation,
     instance_state: InstanceState<BackingStore>,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<R2, Ctx2>> {
     let mut host = ReceiveHost {
-        energy,
+        energy:    receive_invocation.energy,
         stateless: StateLessReceiveHost {
             activation_frames: constants::MAX_ACTIVATION_FRAMES,
             logs: v0::Logs::new(),
             return_value: Vec::new(),
-            parameters: vec![param],
+            parameters: vec![receive_invocation.parameter],
             receive_ctx,
+            params,
         },
-        state: instance_state,
+        state:     instance_state,
     };
 
-    let result = artifact
-        .borrow()
-        .run(&mut host, receive_name.get_chain_name(), &[Value::I64(amount.micro_ccd() as i64)]);
+    let result =
+        artifact.borrow().run(&mut host, receive_invocation.receive_name.get_chain_name(), &[
+            Value::I64(receive_invocation.amount.micro_ccd() as i64),
+        ]);
     process_receive_result(artifact, host, result)
 }
 
@@ -1593,16 +1807,20 @@ pub fn invoke_receive_from_artifact<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_receive(
         Arc::new(artifact),
-        ctx.amount,
         receive_ctx,
-        receive_name,
-        ctx.parameter,
-        ctx.energy,
+        ReceiveInvocation {
+            energy: ctx.energy,
+            parameter: ctx.parameter,
+            receive_name,
+            amount: ctx.amount,
+        },
         instance_state,
+        params,
     )
 }
 
@@ -1617,6 +1835,7 @@ pub fn invoke_receive_from_source<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
         &ConcordiumAllowedImports {
@@ -1626,12 +1845,15 @@ pub fn invoke_receive_from_source<
     )?;
     invoke_receive(
         Arc::new(artifact),
-        ctx.amount,
         receive_ctx,
-        receive_name,
-        ctx.parameter,
-        ctx.energy,
+        ReceiveInvocation {
+            amount: ctx.amount,
+            receive_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         instance_state,
+        params,
     )
 }
 
@@ -1647,6 +1869,7 @@ pub fn invoke_receive_with_metering_from_source<
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
+    params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         &ConcordiumAllowedImports {
@@ -1656,11 +1879,14 @@ pub fn invoke_receive_with_metering_from_source<
     )?;
     invoke_receive(
         Arc::new(artifact),
-        ctx.amount,
         receive_ctx,
-        receive_name,
-        ctx.parameter,
-        ctx.energy,
+        ReceiveInvocation {
+            amount: ctx.amount,
+            receive_name,
+            parameter: ctx.parameter,
+            energy: ctx.energy,
+        },
         instance_state,
+        params,
     )
 }

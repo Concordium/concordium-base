@@ -19,7 +19,7 @@ use wasm_chain_integration::{
             self, low_level::MutableTrie, EmptyCollector, Loader, MutableState, PersistentState,
         },
         ConcordiumAllowedImports, InstanceState, ProcessedImports, ReceiveContext, ReceiveHost,
-        StateLessReceiveHost,
+        ReceiveParams, StateLessReceiveHost,
     },
     InterpreterEnergy,
 };
@@ -137,6 +137,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             receive_ctx,
                             return_value: Vec::new(),
                             parameters,
+                            params: ReceiveParams::new_p5(),
                         },
                         state,
                     };
@@ -282,6 +283,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             receive_ctx,
                             return_value: Vec::new(),
                             parameters,
+                            params: ReceiveParams::new_p5()
                         },
                         state,
                     };
@@ -383,6 +385,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                             receive_ctx,
                             return_value: Vec::new(),
                             parameters,
+                            params: ReceiveParams::new_p5(),
                         },
                         state,
                     };

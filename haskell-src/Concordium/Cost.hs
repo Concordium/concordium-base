@@ -235,3 +235,15 @@ updateCredentialsVariableCost numCredentials =
   -- e.g., don't add don't remove, and don't update the threshold. These still
   -- have a cost since the way the accounts are stored it will update the stored
   -- account data, which does take up quite a bit of space per credential.
+
+-- |Cost of querying the account balance from a within smart contract instance.
+contractInstanceQueryAccountBalanceCost :: Energy
+contractInstanceQueryAccountBalanceCost = 200
+
+-- |Cost of querying the contract balance from a within smart contract instance.
+contractInstanceQueryContractBalanceCost :: Energy
+contractInstanceQueryContractBalanceCost = 200
+
+-- |Cost of querying the current exchange rates from a within smart contract instance.
+contractInstanceQueryExchangeRatesCost :: Energy
+contractInstanceQueryExchangeRatesCost = 10

@@ -45,31 +45,15 @@ impl<C: Curve> Generators<C> {
 /// - z - the field element z
 /// - first_power - the first power j
 /// - n - the integer n.
-pub fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
+pub fn z_vec<F: Field>(z: F, first_power: u64, n: usize) -> Vec<F> {
     let mut z_n = Vec::with_capacity(n);
-    // let mut z_i = F::one();
-    // FIXME: This should would be better to do with `pow`.
-    // for _ in 0..first_power {
-    //    z_i.mul_assign(&z);
-    //}
-    let exp: [u64; 1] = [first_power as u64];
+    let exp: [u64; 1] = [first_power];
     let mut z_i = z.pow(exp);
     for _ in 0..n {
         z_n.push(z_i);
         z_i.mul_assign(&z);
     }
     z_n
-}
-
-/// Converts the u64 set vector into a vector over the field
-pub fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
-    let n = the_set.len();
-    let mut s_vec = Vec::with_capacity(n);
-    for elem_i in the_set {
-        let s_i = C::scalar_from_u64(*elem_i);
-        s_vec.push(s_i);
-    }
-    s_vec
 }
 
 /// Pads a non-empty field vector to a power of two length by repeating the last
