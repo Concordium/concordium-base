@@ -305,8 +305,8 @@ pub fn verify_inner_product<C: Curve>(
     // 1. Since it is assumed that P_prime_bases starts with G, H and Q, add those
     // first and set the first 2n+1 exponents to 0.
     let mut P_prime_bases = Vec::with_capacity(2 * n + 2);
-    P_prime_bases.extend(G_vec);
-    P_prime_bases.extend(H_vec);
+    P_prime_bases.extend_from_slice(G_vec);
+    P_prime_bases.extend_from_slice(H_vec);
     P_prime_bases.push(*Q);
     P_prime_bases.push(*P_prime);
     let mut P_prime_exponents = Vec::with_capacity(2 * n + 2);
