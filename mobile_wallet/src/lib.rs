@@ -21,10 +21,12 @@ use concordium_base::{
         secret_sharing::Threshold,
         types::*,
     },
-    smart_contracts::{Parameter, OwnedReceiveName},
+    smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
-        self, construct::PreAccountTransaction, ConfigureBakerKeysPayload, ConfigureBakerPayload,
-        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo, TransactionSigner,
+        self,
+        construct::{make_transaction, GivenEnergy, PreAccountTransaction},
+        ConfigureBakerKeysPayload, ConfigureBakerPayload, ConfigureDelegationPayload,
+        ExactSizeTransactionSigner, Memo, Payload, TransactionSigner,
     },
 };
 use dodis_yampolskiy_prf as prf;
@@ -256,14 +258,8 @@ fn get_parameters_as_json(
 ) -> anyhow::Result<Value> {
     let schema_bytes = hex::decode(schema)?;
 
-    let contract_name = &receive_name
-        .as_receive_name()
-        .contract_name()
-        .to_string();
-    let entrypoint_name = &receive_name
-        .as_receive_name()
-        .entrypoint_name()
-        .to_string();
+    let contract_name = &receive_name.as_receive_name().contract_name().to_string();
+    let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();
 
     let module_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
         Ok(versioned) => versioned,
@@ -294,7 +290,8 @@ fn parameters_to_json_aux(input: &str) -> anyhow::Result<String> {
     let parameters: Parameter = Parameter::new_unchecked(hex::decode(serialized_parameters)?);
     let schema: String = try_get(&v, "schema")?;
     let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
-    let parameters_as_json = get_parameters_as_json(parameters, &receive_name, &schema, &schema_version)?;
+    let parameters_as_json =
+        get_parameters_as_json(parameters, &receive_name, &schema, &schema_version)?;
 
     Ok(to_string(&parameters_as_json)?)
 }
@@ -325,6 +322,34 @@ fn sign_message_aux(input: &str) -> anyhow::Result<String> {
         message,
         account_address,
     ))?)
+}
+
+/// Context to create an unsigned transaction.
+#[derive(common::SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransactionContext {
+    pub from:     AccountAddress,
+    pub expiry:   TransactionTime,
+    pub nonce:    Nonce,
+    pub payload:  Payload,
+    pub num_keys: u32,
+    pub energy:   Option<u64>,
+}
+
+fn create_unsigned_transaction_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let ctx: TransactionContext = from_value(v)?;
+    let transaction = make_transaction(
+        ctx.from,
+        ctx.nonce,
+        ctx.expiry,
+        GivenEnergy::Add {
+            num_sigs: ctx.num_keys,
+            energy:   Energy::from(ctx.energy.unwrap_or(0u64)),
+        },
+        ctx.payload,
+    );
+    Ok(common::base16_encode_string(&transaction))
 }
 
 fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
@@ -1468,6 +1493,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => parameters_to_json -> parameters_to_json_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_unsigned_transaction -> create_unsigned_transaction_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

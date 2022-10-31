@@ -666,6 +666,29 @@ The returned value is a JSON representation of the parameters.
 An example input to this request is in the file [parameters_to_json-input.json](files/sign_transaction-input.json).
 An example output to this request is in the file [parameters_to_json-output.json](files/sign_transaction-output.json).
 
+## create_unsigned_transaction_ext
+
+Semantics: Creates a transfer transaction with the provided values.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"numKeys"` ... the number of keys that will be used to sign.
+
+- `"energy"` ... additional energy that should be added to the total. MaxExecutionEnergy for smart contract update / init should be added here. 
+
+- `"payload"` ... the transaction's payload as json.
+
+The returned value is base16 encoded string that represents the transaction and can be used for signing.
+
+An example input to this request is in the file [create_unsigned_transaction-input.json](files/create_unsigned_transaction-input.json).
+An example output to this request is in the file [create_unsigned_transaction-output.json](files/create_unsigned_transaction-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This

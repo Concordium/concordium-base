@@ -3,6 +3,7 @@
 ## 0.18.0
 - Removed the function for converting a serialized account transaction (as bytes) into JSON.
 - Added a function for converting serialized parameters for smart contract updates (as bytes) into JSON.
+- Added a function `create_unsigned_transaction` for creating a transaction.
 
 ## 0.17.0
 - Added a function for signing any account transaction.
