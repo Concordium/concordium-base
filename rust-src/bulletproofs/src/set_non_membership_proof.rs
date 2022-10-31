@@ -318,36 +318,38 @@ pub enum VerificationError {
 /// knowledge of value v that is not in a set S and that is consistent
 /// with a commitment V to v. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
-/// - `the_set` - the set as a vector
+/// - `the_set` - the set as a vector of scalars
 /// - `V` - commitment to `v`
-/// - `proof` - the set membership proof to verify
+/// - `proof` - the set-non-membership proof to verify
 /// - `gens` - generators containing vectors `G` and `H` both of length at least
-///   `|the_set|` (bold **g**,**h** in bluepaper)
+///   `k` where k is the smallest power of two >= `|the_set|` (bold **g**,**h**
+///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
     transcript: &mut RandomOracle,
-    the_set: &[u64],
+    the_set: &[C::Scalar],
     V: &Commitment<C>,
     proof: &SetNonMembershipProof<C>,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
     // Part 1: Setup
-    let n = the_set.len();
-    if !n.is_power_of_two() {
-        return Err(VerificationError::SetSizeNotPowerOfTwo);
-    }
+    // Pad set if not power of two
+    let mut set_vec = the_set.to_vec();
+    pad_vector_to_power_of_two(&mut set_vec);
+    let n = set_vec.len();
     if gens.G_H.len() < n {
         return Err(VerificationError::NotEnoughGenerators);
     }
-    let the_set_vec = get_set_vector::<C>(the_set);
+    // Select generators for vector commitments
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
     // Domain separation
     transcript.add_bytes(b"SetNonMembershipProof");
     // append commitment V to transcript
     transcript.append_message(b"V", &V.0);
-    transcript.append_message(b"theSet", &the_set_vec);
+    transcript.append_message(b"theSet", &set_vec);
 
     // define the commitments A,S
     let A = proof.A;
@@ -387,7 +389,7 @@ pub fn verify<C: Curve>(
     let yn = z_vec(y, 0, n);
     let one_vec = vec![C::Scalar::one(); n];
     let ip_one_yn = inner_product(&one_vec, &yn);
-    let mut zip_s_yn = inner_product(&the_set_vec, &yn);
+    let mut zip_s_yn = inner_product(&set_vec, &yn);
     zip_s_yn.mul_assign(&z);
     let mut delta_yz = ip_one_yn;
     delta_yz.sub_assign(&zip_s_yn);
@@ -431,7 +433,7 @@ pub fn verify<C: Curve>(
     P_prime_exps.append(&mut gexp);
 
     // compute exponent for h, i.e., -s, and add it to P_prime_exps
-    for si in the_set_vec {
+    for si in set_vec {
         let mut hexpi = C::Scalar::zero();
         hexpi.sub_assign(&si);
         P_prime_exps.push(hexpi);
@@ -443,16 +445,23 @@ pub fn verify<C: Curve>(
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    let P_prime_bases = vec![g_hat, v_keys.h, A, S]; // G and H are implicit
+    // P_prime_bases starts with G, H, and Q = g_hat
+    let mut P_prime_bases = Vec::with_capacity(2 * n + 4);
+    P_prime_bases.extend(G);
+    P_prime_bases.extend(H);
+    P_prime_bases.push(g_hat);
+
+    // add remaining bases
+    P_prime_bases.push(v_keys.h);
+    P_prime_bases.push(A);
+    P_prime_bases.push(S);
 
     // Finally verify inner product
     let ip_verification = verify_inner_product_with_scalars(
         transcript,
-        gens,
         &y_inv_n,
         &P_prime_bases,
         &P_prime_exps,
-        &g_hat,
         &proof.ip_proof,
     );
 
