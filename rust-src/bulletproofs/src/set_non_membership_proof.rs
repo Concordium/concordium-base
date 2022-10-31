@@ -476,6 +476,11 @@ mod tests {
     use pairing::bls12_381::G1;
     type SomeCurve = G1;
 
+    /// Converts the u64 set vector into a vector over the field
+    fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
+        the_set.iter().copied().map(C::scalar_from_u64).collect()
+    }
+
     /// generates several values used in tests
     fn generate_helper_values(n: usize) -> (Generators<G1>, CommitmentKey<G1>, Randomness<G1>) {
         let rng = &mut thread_rng();
@@ -489,9 +494,12 @@ mod tests {
     }
 
     /// Generates commitment to v given commitment key and randomness
-    fn get_v_com(v: u64, v_keys: CommitmentKey<G1>, v_rand: Randomness<G1>) -> Commitment<G1> {
-        let v_scalar = SomeCurve::scalar_from_u64(v);
-        let v_value = Value::<SomeCurve>::new(v_scalar);
+    fn get_v_com(
+        v: <SomeCurve as Curve>::Scalar,
+        v_keys: CommitmentKey<G1>,
+        v_rand: Randomness<G1>,
+    ) -> Commitment<G1> {
+        let v_value = Value::<SomeCurve>::new(v);
         let v_com = v_keys.hide(&v_value, &v_rand);
 
         v_com
@@ -502,9 +510,9 @@ mod tests {
     fn test_smp_prove_verify() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
-        let v = 2;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -520,19 +528,27 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// Test that sets with sizes not a power of two are rejected by prove
+    /// Test that sets with sizes not a power of two work
     #[test]
     fn test_smp_prove_not_power_of_two() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 5] = [1, 7, 3, 5, 6];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5, 6]);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
-        let v = 2;
-        let (gens, v_keys, v_rand) = generate_helper_values(n);
+        let k = n.next_power_of_two();
+        let (gens, v_keys, v_rand) = generate_helper_values(k);
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-        assert!(matches!(proof, Err(ProverError::SetSizeNotPowerOfTwo)));
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
     }
 
     /// Test that proof fails if element is in the set
@@ -540,9 +556,9 @@ mod tests {
     fn test_smp_prove_in_set() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
-        let v = 3;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         let mut transcript = RandomOracle::empty();
@@ -550,51 +566,16 @@ mod tests {
         assert!(matches!(proof, Err(ProverError::CouldFindValueInSet)));
     }
 
-    /// Test that verification fails if set has size not a power of two
-    #[test]
-    fn test_smp_verify_not_power_of_two() {
-        let rng = &mut thread_rng();
-
-        // generate proof for set with correct size since otherwise proof generation
-        // fails
-        let the_set: [u64; 4] = [1, 7, 3, 5];
-        let n = the_set.len();
-        let v = 2;
-        let (gens, v_keys, v_rand) = generate_helper_values(n);
-
-        let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-        assert!(proof.is_ok());
-        let proof = proof.unwrap();
-
-        // now define new set and try to verify
-        let invalid_set: [u64; 5] = [1, 7, 3, 5, 6];
-        let v_com = get_v_com(v, v_keys, v_rand);
-        let mut transcript = RandomOracle::empty();
-        let result = verify(
-            &mut transcript,
-            &invalid_set,
-            &v_com,
-            &proof,
-            &gens,
-            &v_keys,
-        );
-        assert!(matches!(
-            result,
-            Err(VerificationError::SetSizeNotPowerOfTwo)
-        ));
-    }
-
     /// Test whether verifying a proof generated for a different v fails to
     /// verify (even if the new v is still not in the set). This should cause an
-    /// inconsistent T0 error.
+    /// invalid T_0 error.
     #[test]
     fn test_smp_verify_different_value() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
-        let v = 2;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -604,7 +585,7 @@ mod tests {
         let proof = proof.unwrap();
 
         // verify
-        let v = 4; // different v still not in the set
+        let v = SomeCurve::scalar_from_u64(42); // different v still in set
         let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
@@ -612,14 +593,14 @@ mod tests {
     }
 
     #[test]
-    /// Test whether verifying with different set (still not containing v)
-    /// fails. This should cause an inconsistent T0 error.
+    /// Test whether verifying with different set (still containing v) fails.
+    /// This should cause an Inconsistent T0.
     fn test_smp_verify_different_set() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
-        let v = 17;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -629,7 +610,7 @@ mod tests {
         let proof = proof.unwrap();
 
         // verify
-        let new_set: [u64; 4] = [2, 7, 3, 5];
+        let new_set = get_set_vector::<SomeCurve>(&[2, 7, 3, 5]);
         let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(&mut transcript, &new_set, &v_com, &proof, &gens, &v_keys);
@@ -637,14 +618,13 @@ mod tests {
     }
 
     #[test]
-    /// Test whether modifying inner product proof causes invalid IP proof
-    /// error.
+    /// Test whether modifying inner proof causes invalid IP proof error.
     fn test_smp_verify_invalid_inner_product() {
         let rng = &mut thread_rng();
 
-        let the_set: [u64; 4] = [1, 7, 3, 5];
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
-        let v = 42;
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         // prove
@@ -664,4 +644,29 @@ mod tests {
             Err(VerificationError::IPVerificationError)
         ));
     }
+
+    #[test]
+    /// Test honest proof supplying more generators than needed
+    fn test_smp_prove_many_generators() {
+        let rng = &mut thread_rng();
+
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(4);
+        let num_gens = 2112;
+        let (gens, v_keys, v_rand) = generate_helper_values(num_gens);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
+    }
+
+
 }
