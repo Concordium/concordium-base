@@ -300,8 +300,6 @@ pub fn prove<C: Curve, R: Rng>(
 /// Error messages detailing why proof verification failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
-    /// The set must have a size of a power of two
-    SetSizeNotPowerOfTwo,
     /// The length of `gens` was less than `|the_set|`
     NotEnoughGenerators,
     /// The consistency check for `t_0` failed
