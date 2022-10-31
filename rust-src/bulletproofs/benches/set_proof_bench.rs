@@ -19,12 +19,12 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let rng = &mut thread_rng();
         // Instance
         let n = 2_usize.pow(i);
-        let mut the_set = Vec::<u64>::with_capacity(n);
-        let v = rng.next_u64(); // random relement
+        let mut the_set = Vec::<<G1 as Curve>::Scalar>::with_capacity(n);
+        let v = G1::generate_scalar(rng); // random element
 
         // Generate (multi)set with n elements not containing v
         while the_set.len() < n {
-            let elem = rng.next_u64();
+            let elem = G1::generate_scalar(rng);
             if elem != v {
                 the_set.push(elem);
             }
@@ -39,14 +39,12 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let B_tilde = G1::generate(rng);
         let v_keys = CommitmentKey { g: B, h: B_tilde };
         let v_rand = Randomness::generate(rng);
-        let v_scalar = G1::scalar_from_u64(v);
-        let v_value = Value::<G1>::new(v_scalar);
+        let v_value = Value::<G1>::new(v);
         let v_com = v_keys.hide(&v_value, &v_rand);
 
         // Commit to w
         let w_rand = Randomness::generate(rng);
-        let w_scalar = G1::scalar_from_u64(w);
-        let w_value = Value::<G1>::new(w_scalar);
+        let w_value = Value::<G1>::new(w);
         let w_com = v_keys.hide(&w_value, &w_rand);
 
         // Get some generators
