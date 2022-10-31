@@ -352,7 +352,7 @@ pub enum VerificationError {
 /// - `V` - commitment to `v`
 /// - `proof` - the set membership proof to verify
 /// - `gens` - generators containing vectors `G` and `H` both of length at least
-///   `k` where k is the smallest power of two >= `|the_set|`(bold **g**,**h**
+///   `k` where k is the smallest power of two >= `|the_set|` (bold **g**,**h**
 ///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
@@ -372,6 +372,8 @@ pub fn verify<C: Curve>(
     if gens.G_H.len() < n {
         return Err(VerificationError::NotEnoughGenerators);
     }
+    // Select generators for vector commitments
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
     // Domain separation
     transcript.add_bytes(b"SetMembershipProof");
@@ -511,16 +513,23 @@ pub fn verify<C: Curve>(
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    let P_prime_bases = vec![v_keys.h, A, S];
+    // P_prime_bases starts with G, H, and Q = g_hat
+    let mut P_prime_bases = Vec::with_capacity(2 * n + 4);
+    P_prime_bases.extend(G);
+    P_prime_bases.extend(H);
+    P_prime_bases.push(g_hat);
+
+    // add remaining bases
+    P_prime_bases.push(v_keys.h);
+    P_prime_bases.push(A);
+    P_prime_bases.push(S);
 
     // Finally verify inner product
     let ip_verification = verify_inner_product_with_scalars(
         transcript,
-        gens,
         &y_inv_n,
         &P_prime_bases,
         &P_prime_exps,
-        &g_hat,
         &proof.ip_proof,
     );
 
@@ -704,5 +713,28 @@ mod tests {
             result,
             Err(VerificationError::IPVerificationError)
         ));
+    }
+
+    #[test]
+    /// Test honest proof supplying more generators than needed
+    fn test_smp_prove_many_generators() {
+        let rng = &mut thread_rng();
+
+        let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
+        let v = SomeCurve::scalar_from_u64(3);
+        let num_gens = 2112;
+        let (gens, v_keys, v_rand) = generate_helper_values(num_gens);
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let v_com = get_v_com(v, v_keys, v_rand);
+        let mut transcript = RandomOracle::empty();
+        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        assert!(result.is_ok());
     }
 }
