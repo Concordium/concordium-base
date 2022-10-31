@@ -96,7 +96,7 @@ pub fn prove<C: Curve, R: Rng>(
     let B_tilde = v_keys.h;
     GH_B_tilde.push(B_tilde);
 
-    // define aliases to amek G and H available again
+    // define aliases to make G and H available again
     let G = &GH_B_tilde[0..n];
     let H = &GH_B_tilde[n..2 * n];
 
