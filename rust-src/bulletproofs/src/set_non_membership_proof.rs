@@ -48,8 +48,8 @@ pub enum ProverError {
 /// consistent with the commitment `V` to `v`. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
 /// - `csprng` - cryptographic safe randomness generator
-/// - `the_set` - the set as a vector
-/// - `v` the value
+/// - `the_set` - the set as a vector of scalars
+/// - `v` the value, a scalar
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
 ///   `k` where k is the smallest power of two >= `|the_set|`
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
