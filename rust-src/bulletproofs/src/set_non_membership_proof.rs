@@ -591,8 +591,8 @@ mod tests {
     }
 
     #[test]
-    /// Test whether verifying with different set (still containing v) fails.
-    /// This should cause an Inconsistent T0.
+    /// Test whether verifying with different set (still not containing v)
+    /// fails. This should cause an Inconsistent T0.
     fn test_smp_verify_different_set() {
         let rng = &mut thread_rng();
 
