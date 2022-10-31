@@ -60,27 +60,24 @@ pub enum ProverError {
 pub fn prove<C: Curve, R: Rng>(
     transcript: &mut RandomOracle,
     csprng: &mut R,
-    the_set: &[u64],
-    v: u64,
+    the_set: &[C::Scalar],
+    v: C::Scalar,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
     v_rand: &Randomness<C>,
 ) -> Result<SetNonMembershipProof<C>, ProverError> {
-    let n = the_set.len();
-    if !n.is_power_of_two() {
-        return Err(ProverError::SetSizeNotPowerOfTwo);
-    }
     // Part 0: Add public inputs to transcript
     // Domain separation
     transcript.add_bytes(b"SetNonMembershipProof");
     // Compute commitment V for v
-    let v_scalar = C::scalar_from_u64(v);
-    let v_value = Value::<C>::new(v_scalar);
+    let v_value = Value::<C>::new(v);
     let V = v_keys.hide(&v_value, v_rand);
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
-    // Convert the u64 set into a field element vector
-    let set_vec = get_set_vector::<C>(the_set);
+    // Pad set if not power of two
+    let mut set_vec = the_set.to_vec();
+    pad_vector_to_power_of_two(&mut set_vec);
+    let n = set_vec.len();
     // Append the set to the transcript
     transcript.append_message(b"theSet", &set_vec);
 
@@ -109,7 +106,7 @@ pub fn prove<C: Curve, R: Rng>(
     let mut A_scalars = Vec::with_capacity(2 * n + 1);
     // Compute a_L_i <- (v - si)^-1
     for si in &set_vec {
-        let mut v_minus_si = v_scalar;
+        let mut v_minus_si = v;
         v_minus_si.sub_assign(si);
         // inverse not defined => difference==0 => v in set
         let v_minus_si_inv = match v_minus_si.inverse() {
@@ -120,7 +117,7 @@ pub fn prove<C: Curve, R: Rng>(
     }
     // Compute a_R_i = v
     for _ in 0..n {
-        A_scalars.push(v_scalar);
+        A_scalars.push(v);
     }
     // generate a_tilde
     A_scalars.push(C::generate_scalar(csprng));
