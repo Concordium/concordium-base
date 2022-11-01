@@ -288,7 +288,7 @@ pub enum Type {
     /// A fixed sized list of bytes.
     ByteArray(u32),
     /// An enum with a tag.
-    EnumTag(BTreeMap<u8, (String, Fields)>),
+    TaggedEnum(BTreeMap<u8, (String, Fields)>),
 }
 
 impl Type {
@@ -708,70 +708,104 @@ impl Deserial for FunctionV1 {
 
 impl Serial for FunctionV2 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        // This index encodes if each of the schemas is set or not.
-        // If the third last bit is set to 1, the parameter schema is set.
-        // If the second last bit is set to 1, the return_value is set.
-        // If the last bit is set to 1, the error schema is set.
-
-        let mut index: u8 = 0;
-
-        if self.parameter.is_some() {
-            index |= 0b100;
+        let parameter = self.parameter.is_some();
+        let return_value = self.return_value.is_some();
+        let error = self.error.is_some();
+        match (parameter, return_value, error) {
+            // parameter
+            (true, false, false) => {
+                out.write_u8(0)?;
+                self.parameter.serial(out)
+            }
+            // return_value
+            (false, true, false) => {
+                out.write_u8(1)?;
+                self.return_value.serial(out)
+            }
+            // parameter + return_value
+            (true, true, false) => {
+                out.write_u8(2)?;
+                self.parameter.serial(out)?;
+                self.return_value.serial(out)
+            }
+            // error
+            (false, false, true) => {
+                out.write_u8(3)?;
+                self.error.serial(out)
+            }
+            // parameter + error
+            (true, false, true) => {
+                out.write_u8(4)?;
+                self.parameter.serial(out)?;
+                self.error.serial(out)
+            }
+            // return_value + error
+            (false, true, true) => {
+                out.write_u8(5)?;
+                self.return_value.serial(out)?;
+                self.error.serial(out)
+            }
+            // parameter + return_value + error
+            (true, true, true) => {
+                out.write_u8(6)?;
+                self.parameter.serial(out)?;
+                self.return_value.serial(out)?;
+                self.error.serial(out)
+            }
+            // no schema: cannot happen
+            (false, false, false) => out.write_u8(7),
         }
-        if self.return_value.is_some() {
-            index |= 0b010;
-        }
-        if self.error.is_some() {
-            index |= 0b001;
-        }
-
-        out.write_u8(index)?;
-
-        if self.parameter.is_some() {
-            self.parameter.serial(out)?;
-        }
-        if self.return_value.is_some() {
-            self.return_value.serial(out)?;
-        }
-        if self.error.is_some() {
-            self.error.serial(out)?;
-        }
-
-        Ok(())
-    }
-}
-
-fn get_bit_at(input: u8, n: u8) -> bool {
-    if n < 8 {
-        input & (1 << n) != 0
-    } else {
-        false
     }
 }
 
 impl Deserial for FunctionV2 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let index: u8 = source.get()?;
-
-        let mut parameter = None;
-        let mut return_value = None;
-        let mut error = None;
-
-        if get_bit_at(index, 2) {
-            parameter = source.get()?;
+        let idx = source.read_u8()?;
+        match idx {
+            // parameter
+            0 => Ok(FunctionV2 {
+                parameter:    source.get()?,
+                return_value: None,
+                error:        None,
+            }),
+            // return_value
+            1 => Ok(FunctionV2 {
+                parameter:    None,
+                return_value: source.get()?,
+                error:        None,
+            }),
+            // parameter + return_value
+            2 => Ok(FunctionV2 {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+                error:        None,
+            }),
+            // error
+            3 => Ok(FunctionV2 {
+                parameter:    None,
+                return_value: None,
+                error:        source.get()?,
+            }),
+            // parameter + error
+            4 => Ok(FunctionV2 {
+                parameter:    source.get()?,
+                return_value: None,
+                error:        source.get()?,
+            }),
+            // return_value + error
+            5 => Ok(FunctionV2 {
+                parameter:    None,
+                return_value: source.get()?,
+                error:        source.get()?,
+            }),
+            // parameter + return_value + error
+            6 => Ok(FunctionV2 {
+                parameter:    source.get()?,
+                return_value: source.get()?,
+                error:        source.get()?,
+            }),
+            _ => Err(ParseError::default()),
         }
-        if get_bit_at(index, 1) {
-            return_value = source.get()?;
-        }
-        if get_bit_at(index, 0) {
-            error = source.get()?;
-        }
-
-        Ok(FunctionV2 {
-            parameter,
-            return_value,
-            error,
-        })
     }
 }
 
@@ -882,7 +916,7 @@ impl Serial for Type {
                 out.write_u8(30)?;
                 len.serial(out)
             }
-            Type::EnumTag(fields) => {
+            Type::TaggedEnum(fields) => {
                 out.write_u8(31)?;
                 fields.serial(out)
             }
@@ -975,7 +1009,7 @@ impl Deserial for Type {
             }
             31 => {
                 let variants = source.get()?;
-                Ok(Type::EnumTag(variants))
+                Ok(Type::TaggedEnum(variants))
             }
 
             _ => Err(ParseError::default()),
@@ -1216,7 +1250,7 @@ mod impls {
                     let fields = fields_ty.to_json(source)?;
                     Ok(json!({ name: fields }))
                 }
-                Type::EnumTag(variants) => {
+                Type::TaggedEnum(variants) => {
                     let idx = u8::deserial(source)?;
 
                     let (name, fields_ty) = variants.get(&idx).ok_or_else(ParseError::default)?;
@@ -1590,7 +1624,7 @@ mod tests {
                         error:        Some(Type::String(SizeLength::U32)),
                     }),
                 ]),
-                event:   Some(Type::EnumTag(event_map)),
+                event:   Some(Type::TaggedEnum(event_map)),
             })]),
         };
 
