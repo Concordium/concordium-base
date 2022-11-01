@@ -7,6 +7,7 @@ use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
+use std::iter::once;
 
 /// Bulletproof style set-non-membership proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
@@ -85,18 +86,22 @@ pub fn prove<C: Curve, R: Rng>(
         return Err(ProverError::NotEnoughGenerators);
     }
 
-    // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
-    let mut GH_B_tilde: Vec<C> = Vec::with_capacity(2 * n + 1);
-    let (mut G, mut H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
-    GH_B_tilde.append(&mut G);
-    GH_B_tilde.append(&mut H);
-
     // Generators for single commitments and blinding
     let B = v_keys.g;
     let B_tilde = v_keys.h;
-    GH_B_tilde.push(B_tilde);
 
-    // define aliases to make G and H available again
+    // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
+    let mut GH_B_tilde: Vec<C> = Vec::with_capacity(2 * n + 1);
+
+    // Get the first n elements (G_i, H_i) from gens, add them to GH_B_tilde, and
+    // also add B_tilde. Finally define G, H as the corresponding subslices.
+    let GH = &gens.G_H[..n];
+    GH_B_tilde.extend(
+        GH.iter()
+            .map(|x| x.0)
+            .chain(GH.iter().map(|x| x.1))
+            .chain(once(B_tilde)),
+    );
     let G = &GH_B_tilde[0..n];
     let H = &GH_B_tilde[n..2 * n];
 
