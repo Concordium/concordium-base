@@ -1159,18 +1159,14 @@ pub type SlotTime = Timestamp;
 
 /// An exchange rate between two quantities. This is never 0, and the exchange
 /// rate should also never be infinite.
-#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
-#[derive(Debug, Clone, Copy)]
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(SerdeSerialize, SerdeDeserialize),
+    serde(try_from = "serde_impl::ExchangeRateJSON")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExchangeRate {
-    #[cfg_attr(
-        feature = "derive-serde",
-        serde(deserialize_with = "serde_impl::deserialize_ensure_non_default")
-    )]
     numerator:   u64,
-    #[cfg_attr(
-        feature = "derive-serde",
-        serde(deserialize_with = "serde_impl::deserialize_ensure_non_default")
-    )]
     denominator: u64,
 }
 
@@ -1617,18 +1613,75 @@ mod serde_impl {
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::{fmt, num};
 
-    /// Function to help checking that a value is not default during
-    /// serialization. This is particularly interesting for various integer
-    /// types, where the default value is 0.
-    pub(crate) fn deserialize_ensure_non_default<'de, D, A>(des: D) -> Result<A, D::Error>
-    where
-        D: Deserializer<'de>,
-        A: de::Deserialize<'de> + Default + PartialEq + Eq, {
-        let s = A::deserialize(des)?;
-        if s == A::default() {
-            return Err(serde::de::Error::custom("Expected a non-default value."));
+    /// An error that may occur when converting from a string to an exchange
+    /// rate.
+    #[derive(Debug, thiserror::Error)]
+    pub enum ExchangeRateConversionError {
+        #[error("Could not convert from decimal: {0}")]
+        FromDecimal(#[from] rust_decimal::Error),
+        #[error("Exchange rate must be strictly positive.")]
+        NotStrictlyPositive,
+        #[error(
+            "Exchange rate is not representable, either it is too large or has too many digits."
+        )]
+        Unrepresentable,
+    }
+
+    impl str::FromStr for ExchangeRate {
+        type Err = ExchangeRateConversionError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            use convert::TryInto;
+
+            let mut decimal = rust_decimal::Decimal::from_str_exact(s)?;
+            decimal.normalize_assign();
+            if decimal.is_zero() || decimal.is_sign_negative() {
+                return Err(ExchangeRateConversionError::NotStrictlyPositive);
+            }
+            let mantissa = decimal.mantissa();
+            let scale = decimal.scale();
+            let denominator: u64 =
+                10u64.checked_pow(scale).ok_or(ExchangeRateConversionError::Unrepresentable)?;
+            let numerator: u64 =
+                mantissa.try_into().map_err(|_| ExchangeRateConversionError::Unrepresentable)?;
+            let g = num_integer::gcd(numerator, denominator);
+            Ok(ExchangeRate {
+                numerator:   numerator / g,
+                denominator: denominator / g,
+            })
         }
-        Ok(s)
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    pub enum ExchangeRateJSON {
+        String(String),
+        Num(f64),
+        Object {
+            numerator:   u64,
+            denominator: u64,
+        },
+    }
+
+    impl convert::TryFrom<ExchangeRateJSON> for ExchangeRate {
+        type Error = ExchangeRateConversionError;
+
+        fn try_from(value: ExchangeRateJSON) -> Result<Self, Self::Error> {
+            match value {
+                ExchangeRateJSON::String(value) => value.parse(),
+                ExchangeRateJSON::Num(v) => v.to_string().parse(),
+                ExchangeRateJSON::Object {
+                    numerator,
+                    denominator,
+                } => {
+                    let g = num_integer::gcd(numerator, denominator);
+                    Ok(ExchangeRate {
+                        numerator:   numerator / g,
+                        denominator: denominator / g,
+                    })
+                }
+            }
+        }
     }
 
     /// Error type for when parsing an account address.
@@ -1796,10 +1849,7 @@ mod serde_impl {
     #[cfg(test)]
     mod test {
         use super::*;
-        use rand::{
-            distributions::{Distribution, Uniform},
-            Rng,
-        };
+        use rand::Rng;
 
         #[test]
         // test amount serialization is correct
@@ -1861,6 +1911,38 @@ mod serde_impl {
                 "".parse::<Amount>(),
                 Err(AmountParseError::ExpectedMore),
                 "Empty string is not a valid amount."
+            );
+        }
+
+        #[test]
+        fn test_exchange_rate_json() {
+            let data = ExchangeRate {
+                numerator:   1,
+                denominator: 100,
+            };
+            assert_eq!(
+                data,
+                serde_json::from_str("{\"numerator\": 1, \"denominator\": 100}").unwrap(),
+                "Exchange rate: case 1"
+            );
+            assert_eq!(
+                data,
+                serde_json::from_value(serde_json::from_str("0.01").unwrap()).unwrap(),
+                "Exchange rate: case 2"
+            );
+            let data2 = ExchangeRate {
+                numerator:   10,
+                denominator: 1,
+            };
+            assert_eq!(data2, serde_json::from_str("10").unwrap(), "Exchange rate: case 3");
+            let data3 = ExchangeRate {
+                numerator:   17,
+                denominator: 39,
+            };
+            assert_eq!(
+                data3,
+                serde_json::from_str(&serde_json::to_string(&data3).unwrap()).unwrap(),
+                "Exchange rate: case 4"
             );
         }
     }
