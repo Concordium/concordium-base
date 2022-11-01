@@ -114,8 +114,8 @@ pub struct ContractV2 {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// The [`Default`] instance produces an empty schema.
 pub struct ContractV3 {
-    pub init:    Option<FunctionV3>,
-    pub receive: BTreeMap<String, FunctionV3>,
+    pub init:    Option<FunctionV2>,
+    pub receive: BTreeMap<String, FunctionV2>,
     pub event:   Option<Type>,
 }
 
@@ -163,106 +163,16 @@ impl FunctionV1 {
 }
 
 /// Describes the schema of an init or a receive function for V1 contracts with
-/// V2 schemas. Differs from [`FunctionV1`] in that a schema for the error can
+/// V3 schemas. Differs from [`FunctionV1`] in that a schema for the error can
 /// be included.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FunctionV2 {
-    Param(Type),
-    /// Rv is short for Return value.
-    Rv(Type),
-    ParamRv {
-        parameter:    Type,
-        return_value: Type,
-    },
-    Error(Type),
-    ParamError {
-        parameter: Type,
-        error:     Type,
-    },
-    RvError {
-        return_value: Type,
-        error:        Type,
-    },
-    ParamRvError {
-        parameter:    Type,
-        return_value: Type,
-        error:        Type,
-    },
-}
-
-impl FunctionV2 {
-    /// Extract the parameter schema if it exists.
-    pub fn parameter(&self) -> Option<&Type> {
-        match self {
-            FunctionV2::Param(ty) => Some(ty),
-            FunctionV2::ParamRv {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV2::ParamError {
-                parameter,
-                ..
-            } => Some(parameter),
-            FunctionV2::ParamRvError {
-                parameter,
-                ..
-            } => Some(parameter),
-            _ => None,
-        }
-    }
-
-    /// Extract the return value schema if it exists.
-    pub fn return_value(&self) -> Option<&Type> {
-        match self {
-            FunctionV2::Rv(rv) => Some(rv),
-            FunctionV2::ParamRv {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV2::RvError {
-                return_value,
-                ..
-            } => Some(return_value),
-            FunctionV2::ParamRvError {
-                return_value,
-                ..
-            } => Some(return_value),
-            _ => None,
-        }
-    }
-
-    /// Extract the error schema if it exists.
-    pub fn error(&self) -> Option<&Type> {
-        match self {
-            FunctionV2::Error(error) => Some(error),
-            FunctionV2::ParamError {
-                error,
-                ..
-            } => Some(error),
-            FunctionV2::RvError {
-                error,
-                ..
-            } => Some(error),
-            FunctionV2::ParamRvError {
-                error,
-                ..
-            } => Some(error),
-            _ => None,
-        }
-    }
-}
-
-/// Describes the schema of an init or a receive function for V1 contracts with
-/// V3 schemas. Differs from [`FunctionV2`] in that a schema for the events can
-/// be included.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionV3 {
+pub struct FunctionV2 {
     pub parameter:    Option<Type>,
     pub return_value: Option<Type>,
     pub error:        Option<Type>,
 }
 
-impl FunctionV3 {
+impl FunctionV2 {
     /// Extract the parameter schema if it exists.
     pub fn parameter(&self) -> Option<&Type> { self.parameter.as_ref() }
 
@@ -798,93 +708,10 @@ impl Deserial for FunctionV1 {
 
 impl Serial for FunctionV2 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            FunctionV2::Param(parameter) => {
-                out.write_u8(0)?;
-                parameter.serial(out)
-            }
-            FunctionV2::Rv(return_value) => {
-                out.write_u8(1)?;
-                return_value.serial(out)
-            }
-            FunctionV2::ParamRv {
-                parameter,
-                return_value,
-            } => {
-                out.write_u8(2)?;
-                parameter.serial(out)?;
-                return_value.serial(out)
-            }
-            FunctionV2::Error(error) => {
-                out.write_u8(3)?;
-                error.serial(out)
-            }
-            FunctionV2::ParamError {
-                parameter,
-                error,
-            } => {
-                out.write_u8(4)?;
-                parameter.serial(out)?;
-                error.serial(out)
-            }
-            FunctionV2::RvError {
-                return_value,
-                error,
-            } => {
-                out.write_u8(5)?;
-                return_value.serial(out)?;
-                error.serial(out)
-            }
-            FunctionV2::ParamRvError {
-                parameter,
-                return_value,
-                error,
-            } => {
-                out.write_u8(6)?;
-                parameter.serial(out)?;
-                return_value.serial(out)?;
-                error.serial(out)
-            }
-        }
-    }
-}
-
-impl Deserial for FunctionV2 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let idx = source.read_u8()?;
-        match idx {
-            0 => Ok(FunctionV2::Param(source.get()?)),
-            1 => Ok(FunctionV2::Rv(source.get()?)),
-            2 => Ok(FunctionV2::ParamRv {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-            }),
-            3 => Ok(FunctionV2::Error(source.get()?)),
-            4 => Ok(FunctionV2::ParamError {
-                parameter: source.get()?,
-                error:     source.get()?,
-            }),
-            5 => Ok(FunctionV2::RvError {
-                return_value: source.get()?,
-                error:        source.get()?,
-            }),
-            6 => Ok(FunctionV2::ParamRvError {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-                error:        source.get()?,
-            }),
-            _ => Err(ParseError::default()),
-        }
-    }
-}
-
-impl Serial for FunctionV3 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         // This index encodes if each of the schemas is set or not.
-        // If the fourth last bit is set to 1, the parameter schema is set.
-        // If the third last bit is set to 1, the return_value schema is set.
-        // If the second last bit is set to 1, the error schema is set.
-        // If the last bit is set to 1, the event schema is set.
+        // If the third last bit is set to 1, the parameter schema is set.
+        // If the second last bit is set to 1, the return_value is set.
+        // If the last bit is set to 1, the error schema is set.
 
         let mut index: u8 = 0;
 
@@ -922,7 +749,7 @@ fn get_bit_at(input: u8, n: u8) -> bool {
     }
 }
 
-impl Deserial for FunctionV3 {
+impl Deserial for FunctionV2 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let index: u8 = source.get()?;
 
@@ -940,7 +767,7 @@ impl Deserial for FunctionV3 {
             error = source.get()?;
         }
 
-        Ok(FunctionV3 {
+        Ok(FunctionV2 {
             parameter,
             return_value,
             error,
@@ -1665,41 +1492,7 @@ mod tests {
 
     #[test]
     fn test_function_v2_serial_deserial_is_id() {
-        let f1 = FunctionV2::Param(Type::String(SizeLength::U32));
-        let f2 = FunctionV2::Rv(Type::U128);
-        let f3 = FunctionV2::ParamRv {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            return_value: Type::ILeb128(3),
-        };
-        let f4 = FunctionV2::Error(Type::ByteList(SizeLength::U32));
-        let f5 = FunctionV2::ParamError {
-            parameter: Type::U8,
-            error:     Type::String(SizeLength::U8),
-        };
-        let f6 = FunctionV2::ParamRvError {
-            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
-            return_value: Type::ILeb128(3),
-            error:        Type::Bool,
-        };
-
-        assert_eq!(serial_deserial(&f1), Ok(f1));
-        assert_eq!(serial_deserial(&f2), Ok(f2));
-        assert_eq!(serial_deserial(&f3), Ok(f3));
-        assert_eq!(serial_deserial(&f4), Ok(f4));
-        assert_eq!(serial_deserial(&f5), Ok(f5));
-        assert_eq!(serial_deserial(&f6), Ok(f6));
-    }
-
-    #[test]
-    fn test_function_v3_serial_deserial_is_id() {
-        let mut event_map = BTreeMap::new();
-        let tag: u8 = 1;
-        event_map.insert(
-            tag,
-            (String::from("EventOne"), Fields::Named(vec![(String::from("value"), Type::U8)])),
-        );
-
-        let f1 = FunctionV3 {
+        let f1 = FunctionV2 {
             parameter:    Some(Type::String(SizeLength::U32)),
             return_value: Some(Type::String(SizeLength::U32)),
             error:        Some(Type::String(SizeLength::U32)),
@@ -1746,12 +1539,21 @@ mod tests {
     fn test_module_v2_serial_deserial_is_id() {
         let m = ModuleV2 {
             contracts: BTreeMap::from([("a".into(), ContractV2 {
-                init:    Some(FunctionV2::Error(Type::U8)),
+                init:    Some(FunctionV2 {
+                    parameter:    Some(Type::String(SizeLength::U32)),
+                    return_value: Some(Type::String(SizeLength::U32)),
+                    error:        Some(Type::String(SizeLength::U32)),
+                }),
                 receive: BTreeMap::from([
-                    ("b".into(), FunctionV2::Rv(Type::String(SizeLength::U32))),
-                    ("c".into(), FunctionV2::ParamError {
-                        parameter: Type::U8,
-                        error:     Type::Bool,
+                    ("b".into(), FunctionV2 {
+                        parameter:    Some(Type::String(SizeLength::U32)),
+                        return_value: Some(Type::String(SizeLength::U32)),
+                        error:        Some(Type::String(SizeLength::U32)),
+                    }),
+                    ("c".into(), FunctionV2 {
+                        parameter:    Some(Type::String(SizeLength::U32)),
+                        return_value: Some(Type::String(SizeLength::U32)),
+                        error:        Some(Type::String(SizeLength::U32)),
                     }),
                 ]),
             })]),
@@ -1771,18 +1573,18 @@ mod tests {
 
         let m = ModuleV3 {
             contracts: BTreeMap::from([("a".into(), ContractV3 {
-                init:    Some(FunctionV3 {
+                init:    Some(FunctionV2 {
                     parameter:    Some(Type::String(SizeLength::U32)),
                     return_value: Some(Type::String(SizeLength::U32)),
                     error:        Some(Type::String(SizeLength::U32)),
                 }),
                 receive: BTreeMap::from([
-                    ("b".into(), FunctionV3 {
+                    ("b".into(), FunctionV2 {
                         parameter:    Some(Type::String(SizeLength::U32)),
                         return_value: Some(Type::String(SizeLength::U32)),
                         error:        Some(Type::String(SizeLength::U32)),
                     }),
-                    ("c".into(), FunctionV3 {
+                    ("c".into(), FunctionV2 {
                         parameter:    Some(Type::String(SizeLength::U32)),
                         return_value: Some(Type::String(SizeLength::U32)),
                         error:        Some(Type::String(SizeLength::U32)),
