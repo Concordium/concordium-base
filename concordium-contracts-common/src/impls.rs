@@ -1114,7 +1114,7 @@ impl<T: HasSize> Seek for Cursor<T> {
                     Err(()) // cannot seek beyond the end
                 } else {
                     // due to two's complement representation of values we do not have to
-                    // distinguish on whether we gorward or backwards. Reinterpreting the bits
+                    // distinguish on whether we go forward or backwards. Reinterpreting the bits
                     // and adding unsigned values is the same as subtracting the
                     // absolute value.
                     let new_offset = end.wrapping_add(delta as u32);
