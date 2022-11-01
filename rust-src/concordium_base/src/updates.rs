@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{base::*, hashes, transactions::PayloadSize};
+use concordium_contracts_common::ExchangeRate;
 use crypto_common::{
     derive, deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
     deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
