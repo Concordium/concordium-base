@@ -336,7 +336,8 @@ pub enum VerificationError {
     SetTooLarge,
     /// The length of `gens` was less than `|the_set|`
     NotEnoughGenerators,
-    /// The consistency check for `t_0` failed
+    /// The consistency check for `t_0` failed, i.e., the commitments from the
+    /// prover are not consistent with the provided values.
     InconsistentT0,
     /// Choice of randomness led to verification failure
     DivisionError,
