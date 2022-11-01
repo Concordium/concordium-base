@@ -1157,6 +1157,56 @@ impl std::error::Error for NewReceiveNameError {}
 /// Time at the beginning of the current slot, in miliseconds since unix epoch.
 pub type SlotTime = Timestamp;
 
+/// An exchange rate between two quantities. This is never 0, and the exchange
+/// rate should also never be infinite.
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
+#[derive(Debug, Clone, Copy)]
+pub struct ExchangeRate {
+    #[cfg_attr(
+        feature = "derive-serde",
+        serde(deserialize_with = "serde_impl::deserialize_ensure_non_default")
+    )]
+    numerator:   u64,
+    #[cfg_attr(
+        feature = "derive-serde",
+        serde(deserialize_with = "serde_impl::deserialize_ensure_non_default")
+    )]
+    denominator: u64,
+}
+
+impl ExchangeRate {
+    /// Attempt to construct an exchange rate from a numerator and denominator.
+    /// The numerator and denominator must both be non-zero, and they have to be
+    /// in reduced form.
+    #[cfg(feature = "derive-serde")]
+    pub fn new(numerator: u64, denominator: u64) -> Option<Self> {
+        if numerator != 0 && denominator != 0 && num_integer::gcd(numerator, denominator) == 1 {
+            Some(Self {
+                numerator,
+                denominator,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Construct an unchecked exchange rate from a numerator and denominator.
+    /// The numerator and denominator must both be non-zero, and they have to be
+    /// in reduced form.
+    pub fn new_unchecked(numerator: u64, denominator: u64) -> Self {
+        Self {
+            numerator,
+            denominator,
+        }
+    }
+
+    /// Get the numerator. This is never 0.
+    pub fn numerator(&self) -> u64 { self.numerator }
+
+    /// Get the denominator. This is never 0.
+    pub fn denominator(&self) -> u64 { self.denominator }
+}
+
 /// Chain metadata accessible to both receive and init methods.
 #[cfg_attr(
     feature = "derive-serde",
@@ -1566,6 +1616,20 @@ mod serde_impl {
     use base58check::*;
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::{fmt, num};
+
+    /// Function to help checking that a value is not default during
+    /// serialization. This is particularly interesting for various integer
+    /// types, where the default value is 0.
+    pub(crate) fn deserialize_ensure_non_default<'de, D, A>(des: D) -> Result<A, D::Error>
+    where
+        D: Deserializer<'de>,
+        A: de::Deserialize<'de> + Default + PartialEq + Eq, {
+        let s = A::deserialize(des)?;
+        if s == A::default() {
+            return Err(serde::de::Error::custom("Expected a non-default value."));
+        }
+        Ok(s)
+    }
 
     /// Error type for when parsing an account address.
     #[derive(Debug, thiserror::Error)]
