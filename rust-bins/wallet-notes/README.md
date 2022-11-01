@@ -669,6 +669,7 @@ An example output to this request is in the file [parameters_to_json-output.json
 ## create_unsigned_transaction_ext
 
 Semantics: Creates a transfer transaction with the provided values.
+This currently only supports smart contract updates and simple transfer.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -681,11 +682,11 @@ must be a valid JSON object with fields
 
 - `"numKeys"` ... the number of keys that will be used to sign.
 
-- `"energy"` ... additional energy that should be added to the total. MaxExecutionEnergy for smart contract update / init should be added here. 
+- `"type"` ... the transaction type tag (i.e. for a simple transfer type = 3). 
 
 - `"payload"` ... the transaction's payload as json.
 
-The returned value is base16 encoded string that represents the transaction and can be used for signing.
+The returned value is base16 encoded string that represents the transaction and can be used for signing, and is valid input for the `sign_transaction` method's transaction field.
 
 An example input to this request is in the file [create_unsigned_transaction-input.json](files/create_unsigned_transaction-input.json).
 An example output to this request is in the file [create_unsigned_transaction-output.json](files/create_unsigned_transaction-output.json).

@@ -1,6 +1,6 @@
 use anyhow::{bail, ensure};
 use concordium_base::{
-    base::{self, Energy, Nonce},
+    base::{self, ContractAddress, Energy, Nonce},
     common::{
         self, base16_decode_string, c_char,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
@@ -24,9 +24,10 @@ use concordium_base::{
     smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
         self,
-        construct::{make_transaction, GivenEnergy, PreAccountTransaction},
+        construct::{update_contract, PreAccountTransaction},
         ConfigureBakerKeysPayload, ConfigureBakerPayload, ConfigureDelegationPayload,
-        ExactSizeTransactionSigner, Memo, Payload, TransactionSigner,
+        ExactSizeTransactionSigner, Memo, TransactionSigner, TransactionType,
+        UpdateContractPayload,
     },
 };
 use dodis_yampolskiy_prf as prf;
@@ -41,7 +42,7 @@ use sha2::{Digest, Sha256};
 use std::{
     cmp::max,
     collections::{BTreeMap, HashMap},
-    convert::TryInto,
+    convert::{TryFrom, TryInto},
     ffi::{CStr, CString},
     str::FromStr,
 };
@@ -324,31 +325,95 @@ fn sign_message_aux(input: &str) -> anyhow::Result<String> {
     ))?)
 }
 
+#[derive(common::SerdeDeserialize)]
+struct MicroCCDAmount {
+    #[serde(rename = "microGtuAmount")]
+    amount: u64,
+}
+
+#[derive(common::SerdeDeserialize)]
+struct AccountAddressJSON {
+    address: String,
+}
+
+#[derive(common::SerdeDeserialize)]
+#[serde(untagged)]
+enum JSONPayload {
+    UpdateContract {
+        amount:       MicroCCDAmount,
+        #[serde(rename = "contractAddress")]
+        address:      ContractAddress,
+        #[serde(rename = "receiveName")]
+        receive_name: String,
+        parameter:    String, // Hex encoded bytes
+        #[serde(rename = "maxContractExecutionEnergy")]
+        energy:       u64,
+    },
+    SimpleTransfer {
+        amount: MicroCCDAmount,
+        to:     AccountAddressJSON,
+    },
+}
+
 /// Context to create an unsigned transaction.
 #[derive(common::SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransactionContext {
-    pub from:     AccountAddress,
-    pub expiry:   TransactionTime,
-    pub nonce:    Nonce,
-    pub payload:  Payload,
-    pub num_keys: u32,
-    pub energy:   Option<u64>,
+    pub from:             AccountAddressJSON,
+    pub expiry:           TransactionTime,
+    pub nonce:            Nonce,
+    #[serde(rename = "type")]
+    pub transaction_type: i32,
+    pub payload:          JSONPayload,
+    pub num_keys:         u32,
 }
 
 fn create_unsigned_transaction_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let ctx: TransactionContext = from_value(v)?;
-    let transaction = make_transaction(
-        ctx.from,
-        ctx.nonce,
-        ctx.expiry,
-        GivenEnergy::Add {
-            num_sigs: ctx.num_keys,
-            energy:   Energy::from(ctx.energy.unwrap_or(0u64)),
-        },
-        ctx.payload,
-    );
+    let transaction_type = TransactionType::try_from(ctx.transaction_type);
+    let transaction = match (transaction_type, ctx.payload) {
+        (
+            Ok(TransactionType::Update),
+            JSONPayload::UpdateContract {
+                amount,
+                address,
+                receive_name,
+                parameter,
+                energy,
+            },
+        ) => {
+            let converted_payload = UpdateContractPayload {
+                amount: Amount {
+                    micro_ccd: amount.amount,
+                },
+                address,
+                receive_name: OwnedReceiveName::try_from(receive_name)?,
+                message: Parameter::new_unchecked(hex::decode(parameter)?),
+            };
+            update_contract(
+                ctx.num_keys,
+                AccountAddress::from_str(&ctx.from.address)?,
+                ctx.nonce,
+                ctx.expiry,
+                converted_payload,
+                Energy::from(energy),
+            )
+        }
+        (Ok(TransactionType::Transfer), JSONPayload::SimpleTransfer { amount, to }) => {
+            transactions::construct::transfer(
+                ctx.num_keys,
+                AccountAddress::from_str(&ctx.from.address)?,
+                ctx.nonce,
+                ctx.expiry,
+                AccountAddress::from_str(&to.address)?,
+                Amount {
+                    micro_ccd: amount.amount,
+                },
+            )
+        }
+        _ => bail!("Could not parse payload."),
+    };
     Ok(common::base16_encode_string(&transaction))
 }
 
