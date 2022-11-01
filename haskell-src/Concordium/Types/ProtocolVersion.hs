@@ -81,7 +81,8 @@ instance FromJSON ProtocolVersion where
 -- term level 'SProtocolVersion's.
 class
     ( IsChainParametersVersion (ChainParametersVersionFor pv),
-      IsAccountVersion (AccountVersionFor pv)
+      IsAccountVersion (AccountVersionFor pv),
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
     where
@@ -216,6 +217,42 @@ instance IsAccountVersion 'AccountV1 where
 instance IsAccountVersion 'AccountV2 where
     accountVersion = SAccountV2
 
+
+-- |Transaction outcomes versions.
+-- The difference between the two versions are only related
+-- to the hashing scheme.
+-- * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+-- All the contents of the transaction summaries are used for computing the hash.
+-- * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+-- exact reject reasons for failed transactions are omitted from the hash. 
+data TransactionOutcomesVersion
+     = TOV0
+     | TOV1
+
+-- |Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
+type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: TransactionOutcomesVersion where
+    TransactionOutcomesVersionFor 'P1 = 'TOV0
+    TransactionOutcomesVersionFor 'P2 = 'TOV0
+    TransactionOutcomesVersionFor 'P3 = 'TOV0
+    TransactionOutcomesVersionFor 'P4 = 'TOV0
+    TransactionOutcomesVersionFor 'P5 = 'TOV1
+
+-- |Supporting type for bringing the 'TransactionOutcomesVersion' to the term level.
+data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
+    STOV0 :: STransactionOutcomesVersion 'TOV0
+    STOV1 :: STransactionOutcomesVersion 'TOV1
+
+class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion)
+    where
+    -- |The singleton associated with the outcomes version.
+    transactionOutcomesVersion :: STransactionOutcomesVersion tov
+
+instance IsTransactionOutcomesVersion 'TOV0 where
+  transactionOutcomesVersion = STOV0
+
+instance IsTransactionOutcomesVersion 'TOV1 where
+  transactionOutcomesVersion = STOV1
+
 -- |A type used at the kind level to denote that delegation is or is not expected to be supported
 -- at an account version. This is intended to give more descriptive type errors in cases where the
 -- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
@@ -303,3 +340,23 @@ supportsV1Contracts SP2 = False
 supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
+
+-- |Whether the protocol version supports upgradable smart contracts.
+-- (Supported in 'P5' and onwards)
+supportsUpgradableContracts :: SProtocolVersion pv -> Bool
+supportsUpgradableContracts spv = case spv of
+  SP1 -> False
+  SP2 -> False
+  SP3 -> False
+  SP4 -> False
+  SP5 -> True
+
+-- |Whether the protocol version supports chain queries in smart contracts.
+-- (Supported in 'P5' and onwards)
+supportsChainQueryContracts :: SProtocolVersion pv -> Bool
+supportsChainQueryContracts spv = case spv of
+  SP1 -> False
+  SP2 -> False
+  SP3 -> False
+  SP4 -> False
+  SP5 -> True

@@ -4,15 +4,12 @@ pub const MAX_CONTRACT_STATE: u32 = 16384; // 16kB
 /// Maximum number of nested function calls.
 pub const MAX_ACTIVATION_FRAMES: u32 = 1024;
 
-/// Maximum size of the init/receive parameter.
-pub const MAX_PARAMETER_SIZE: usize = 1024;
-
 /// Maximum size of a log message.
 pub const MAX_LOG_SIZE: u32 = 512;
 
-/// Maximum number of log messages per execution.
-/// This together with the previous constant limits the amount of data that can
-/// be logged to 16kB.
+/// Maximum number of log messages per execution in *protocol version 4 and
+/// lower*. This, together with the previous constant, limits the amount of data
+/// that can be logged to 16kB.
 pub const MAX_NUM_LOGS: usize = 64;
 
 /// Base cost of a log event call.
@@ -36,16 +33,40 @@ pub const BASE_SIMPLE_TRANSFER_ACTION_COST: u64 = BASE_ACTION_COST + 40000;
 // TODO: These should in principle be const fn, but rust in 1.45.2 u64::from
 // are not marked as const fn, so they are not.
 
-/// Cost of copying the given amount of bytes from the host (e.g., parameter or
+/// Cost of copying the given amount of bytes from the host (e.g., policy or
 /// contract state) to the Wasm memory. The 10 is to account for copying empty
 /// buffers and is based on benchmarks.
 #[inline(always)]
 pub fn copy_from_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
-/// Cost of copying the given amount of bytes to the host (e.g., parameter or
-/// contract state) from the Wasm to host memory. The 10 is to account for
+
+/// Cost of copying the given amount of bytes to the host (e.g., contract state)
+/// from the Wasm to host memory. The 10 is to account for
 /// copying empty buffers and is based on benchmarks.
 #[inline(always)]
 pub fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
+
+/// Cost of copying a V1 parameter between the Wasm memory and the host in
+/// either direction.
+///
+/// - The cost for parameters <= 1kB is: base cost + 1NRG per *kilobyte*.
+/// - The cost for parameters > 1kB is: base cost + 1NRG per *byte*.
+///
+/// Prior to P5, the parameters were limited to 1kB, which is why the cost
+/// scheme is as it is.
+///
+/// Notes on the factors:
+/// - The `10` is to account for copying empty buffers and is based on
+///   benchmarks.
+/// - The `1000` factor makes it so that the cost is 1NRG per byte.
+#[inline(always)]
+pub fn copy_parameter_cost(len: u32) -> u64 {
+    let len = u64::from(len);
+    if len <= 1024 {
+        10 + len
+    } else {
+        10 + 1000 * len
+    }
+}
 
 /// Cost of allocating additional smart contract state. The argument is the
 /// number of additional bytes. The `/100` guarantees that with 3_000_000NRG

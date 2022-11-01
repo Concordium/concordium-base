@@ -1,0 +1,39 @@
+{
+    "hashToSign": "803ac83dee31fbc53d19c992ba4035e441ff8de5f131049e1f2bed5e8400787a",
+    "header": {
+        "energyAmount": 30286,
+        "expiry": 1665141113,
+        "nonce": 1,
+        "payloadSize": 126,
+        "sender": "3eP94feEdmhYiPC1333F9VoV31KGMswonuHk5tqmZrzf761zK5"
+    },
+    "payload": {
+        "update": {
+            "address": {
+                "index": 1673,
+                "subindex": 0
+            },
+            "amount": "0",
+            "message": [
+                {
+                    "amount": 1,
+                    "data": [],
+                    "from": {
+                        "Account": [
+                            "3Y1RLgi5pW3x96xZ7CiDiKsTL9huU92qn6mfxpebwmtkeku8ry"
+                        ]
+                    },
+                    "to": {
+                        "Account": [
+                            "4EdBeGmpnQZWxaiig7FGEhWwmJurYmYsPWXo6owMDxA7ZtJMMH"
+                        ]
+                    },
+                    "token_id": [
+                        1
+                    ]
+                }
+            ],
+            "receiveName": "CIS1-NFT.transfer"
+        }
+    }
+}

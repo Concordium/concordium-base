@@ -21,6 +21,7 @@ unsafe extern "C" fn call_init_v0(
     init_name_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
+    limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
@@ -34,12 +35,23 @@ unsafe extern "C" fn call_init_v0(
     let res = std::panic::catch_unwind(|| {
         let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let limit_logs_and_return_values = limit_logs_and_return_values != 0;
         let init_ctx =
             deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len as usize))
                 .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(&artifact, amount, init_ctx, name, parameter.into(), energy);
+                let res = invoke_init(
+                    &artifact,
+                    init_ctx,
+                    InitInvocation {
+                        amount,
+                        init_name: name,
+                        parameter: parameter.into(),
+                        energy,
+                    },
+                    limit_logs_and_return_values,
+                );
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
@@ -72,6 +84,8 @@ unsafe extern "C" fn call_receive_v0(
     state_bytes_len: size_t,
     param_bytes: *const u8,
     param_bytes_len: size_t,
+    max_parameter_size: size_t,
+    limit_logs_and_return_values: u8,
     energy: InterpreterEnergy,
     output_len: *mut size_t,
 ) -> *mut u8 {
@@ -91,16 +105,21 @@ unsafe extern "C" fn call_receive_v0(
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
         let state = slice_from_c_bytes!(state_bytes, state_bytes_len as usize);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let limit_logs_and_return_values = limit_logs_and_return_values != 0;
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
                 let res = invoke_receive(
                     &artifact,
-                    amount,
                     receive_ctx,
+                    ReceiveInvocation {
+                        amount,
+                        receive_name: name,
+                        parameter: parameter.into(),
+                        energy,
+                    },
                     state,
-                    name,
-                    parameter.into(),
-                    energy,
+                    max_parameter_size,
+                    limit_logs_and_return_values,
                 );
                 match res {
                     Ok(result) => {

@@ -5,6 +5,9 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 module Concordium.Types.Transactions where
 
 import Concordium.Common.Version
@@ -14,6 +17,7 @@ import qualified Data.Sequence as Seq
 import Data.Aeson(FromJSON(..), ToJSON(..))
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
+import Data.Hashable
 import qualified Data.Serialize as S
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
@@ -708,6 +712,12 @@ data SpecialTransactionOutcome =
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
 
+instance HashableTo H.Hash SpecialTransactionOutcome where
+  getHash = H.hash . S.encode
+
+-- Generic instance based on the HashableTo instance
+instance Monad m => MHashableTo m H.Hash SpecialTransactionOutcome
+
 instance S.Serialize SpecialTransactionOutcome where
     put BakingRewards{..} = do
       S.putWord8 0
@@ -814,14 +824,12 @@ instance S.Serialize SpecialTransactionOutcome where
 data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
-    }
-
+}
 makeLenses ''TransactionOutcomes
 
 instance Show TransactionOutcomes where
     show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
 
--- FIXME: More consistent serialization.
 putTransactionOutcomes :: S.Putter TransactionOutcomes
 putTransactionOutcomes TransactionOutcomes{..} = do
     putListOf putTransactionSummary (Vec.toList outcomeValues)
@@ -830,16 +838,34 @@ putTransactionOutcomes TransactionOutcomes{..} = do
 getTransactionOutcomes :: SProtocolVersion pv -> S.Get TransactionOutcomes
 getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
 
--- TODO: fix this to use an lfmb tree. Potentially change storage type to the tree in blockstate too.
--- Does this need to be domain seperated? (Would require serialisation changes?)
-instance HashableTo TransactionOutcomesHashV0 TransactionOutcomes where
-    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
+instance HashableTo TransactionOutcomesHash TransactionOutcomes where
+    getHash transactionoutcomes = TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
-emptyTransactionOutcomes :: TransactionOutcomes
-emptyTransactionOutcomes = TransactionOutcomes Vec.empty Seq.empty
+-- |A simple wrapper around a `Hash`.
+-- No matter the strategy for deriving the 'TrasactionOutcomeHash' we will
+-- always end up with a value of this type.
+newtype TransactionOutcomesHash = TransactionOutcomesHash { tohGet :: H.Hash}
+ deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
-transactionOutcomesFromList :: [TransactionSummary] -> TransactionOutcomes
-transactionOutcomesFromList l =
+emptyTransactionOutcomesV0 :: TransactionOutcomes
+emptyTransactionOutcomesV0 = TransactionOutcomes Vec.empty Seq.empty
+
+{-# NOINLINE emptyTransactionOutcomesHashV1 #-}
+-- |Hash of the empty V1 transaction outcomes structure. This transaction outcomes
+-- structure is used starting in protocol version 5.
+--
+-- This is not the ideal location here, since the merkle structures that define
+-- it are defined in the global state modules, however any other place leads to
+-- problematic module dependencies. We should ideally restructure those so that
+-- we do not have this duplication here.
+emptyTransactionOutcomesHashV1 :: TransactionOutcomesHash
+emptyTransactionOutcomesHashV1 = TransactionOutcomesHash $ H.hashShort
+    ("TransactionOutcomesV1" <>
+     H.hashToShortByteString (H.hash "EmptyLFMBTree") <>
+     H.hashToShortByteString (H.hash "EmptyLFMBTree"))
+
+transactionOutcomesV0FromList :: [TransactionSummary] -> TransactionOutcomes
+transactionOutcomesV0FromList l =
   let outcomeValues = Vec.fromList l
       _outcomeSpecial = Seq.empty
   in TransactionOutcomes{..}
@@ -852,3 +878,4 @@ instance Ixed TransactionOutcomes where
     let x = fromIntegral idx
     in if x >= length outcomeValues then pure outcomes
        else ix x f outcomeValues <&> (\ov -> TransactionOutcomes{outcomeValues=ov,..})
+
