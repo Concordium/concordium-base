@@ -804,6 +804,12 @@ impl Deserial for FunctionV2 {
                 return_value: source.get()?,
                 error:        source.get()?,
             }),
+            // no schema
+            7 => Ok(FunctionV2 {
+                parameter:    None,
+                return_value: None,
+                error:        None,
+            }),
             _ => Err(ParseError::default()),
         }
     }
