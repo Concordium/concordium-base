@@ -140,8 +140,8 @@ fn evaluate_lx_rx_tx<F: Field>(
     lr: &LeftRightPolynomials<F>,
     t_poly: &TPolynomial<F>,
 ) -> (Vec<F>, Vec<F>, F) {
-    let mut x_sq = x;
-    x_sq.mul_assign(&x);
+    //let mut x_sq = x;
+    //x_sq.mul_assign(&x);
     // c = a+b*x
     let eval_x = |(a, b): (&F, &F)| {
         let mut c: F = *b;
@@ -154,13 +154,9 @@ fn evaluate_lx_rx_tx<F: Field>(
     let rx = lr.r_0.iter().zip(lr.r_1.iter()).map(eval_x).collect();
     // Compute t(x)
     // tx <- t_0 + t_1*x + t_2*x^2
-    let mut tx = t_poly.0;
-    let mut tx_1 = t_poly.1;
-    tx_1.mul_assign(&x);
-    tx.add_assign(&tx_1);
-    let mut tx_2 = t_poly.2;
-    tx_2.mul_assign(&x_sq);
-    tx.add_assign(&tx_2);
+    // tx <- t_0 + x*(t_1+x*t_2)
+    let tx = eval_x((&t_poly.1,&t_poly.2));
+    let tx = eval_x((&t_poly.0,&tx));
 
     (lx, rx, tx)
 }
