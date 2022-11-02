@@ -13,8 +13,8 @@ use std::{convert::TryInto, iter::once};
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetMembershipProof<C: Curve> {
-    /// Commitment to the evaluation of the indicator function `I_{v}` on
-    /// the_set
+    /// Commitments to the evaluation of the indicator function `I_{v}` on
+    /// the_set and `I_{v] - 1`
     A:        C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
     S:        C,

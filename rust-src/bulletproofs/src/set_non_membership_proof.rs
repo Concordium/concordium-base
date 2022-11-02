@@ -13,7 +13,8 @@ use std::iter::once;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct SetNonMembershipProof<C: Curve> {
-    /// Commitment to the multiplicative inverse of `v-s_i` for each `i`
+    /// Commitments to the multiplicative inverse of `v-s_i` for each `i`, and
+    /// the all-`v` vector.
     A:        C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
     S:        C,
