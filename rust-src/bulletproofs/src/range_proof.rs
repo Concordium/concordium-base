@@ -15,7 +15,7 @@ pub use crate::utils::Generators;
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
-    /// Commitment to the bits of the value
+    /// Commitments to the bits `a_i` of the value, and `a_i - 1`
     A:        C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
     S:        C,

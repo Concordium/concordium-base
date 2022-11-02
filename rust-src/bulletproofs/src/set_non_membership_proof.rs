@@ -1,4 +1,4 @@
-//! Implementation of set membership proof along the lines of bulletproofs
+//! Implementation of set-non-membership proof along the lines of bulletproofs
 use crate::{inner_product_proof::*, utils::*};
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -7,22 +7,22 @@ use ff::Field;
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
-use std::{convert::TryInto, iter::once};
+use std::iter::once;
 
-/// Bulletproof style set-membership proof
+/// Bulletproof style set-non-membership proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
-pub struct SetMembershipProof<C: Curve> {
-    /// Commitments to the evaluation of the indicator function `I_{v}` on
-    /// the_set and `I_{v] - 1`
+pub struct SetNonMembershipProof<C: Curve> {
+    /// Commitments to the multiplicative inverse of `v-s_i` for each `i`, and
+    /// the all-`v` vector.
     A:        C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
     S:        C,
-    /// Commitment to the t_1 coefficient of polynomial `t(x)`
+    /// Commitment to the `t_1` coefficient of polynomial `t(X)`
     T_1:      C,
-    /// Commitment to the t_2 coefficient of polynomial `t(x)`
+    /// Commitment to the `t_2` coefficient of polynomial `t(X)`
     T_2:      C,
-    /// Evaluation of t(x) at the challenge point `x`
+    /// Evaluation of `t(X)` at the challenge point `x`
     tx:       C::Scalar,
     /// Blinding factor for the commitment to `tx`
     tx_tilde: C::Scalar,
@@ -37,52 +37,24 @@ pub struct SetMembershipProof<C: Curve> {
 pub enum ProverError {
     /// The length of the generator vector `gens` was too short
     NotEnoughGenerators,
-    /// Could not find the value `v` in the given set
-    CouldNotFindValueInSet,
+    /// Could find the value `v` in the given set
+    CouldFindValueInSet,
     /// Could not generate inner product proof
     InnerProductProofFailure,
-    /// Could not invert `y`
+    /// Could not invert an element
     DivisionError,
 }
 
-/// This function takes a set (as a slice) and a value v as input.
-/// If v in S, the function computes bit vectors aL and aR where
-/// aL_i = 1 <=> s_i = v
-/// and a_R is the bit-wise negation of a_L
-/// Note: For multisets this function only sets the first hit to one, to allow
-/// set membership proofs in multisets.
-#[allow(non_snake_case)]
-fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
-    let n = set_slice.len();
-    let mut a_L = Vec::with_capacity(n);
-    let mut a_R = Vec::with_capacity(n);
-    let mut found_element = false;
-    for si in set_slice {
-        let mut bit = F::zero();
-        if (!found_element) && (v == si) {
-            bit = F::one();
-            found_element = true;
-        }
-        a_L.push(bit);
-        bit.sub_assign(&F::one());
-        a_R.push(bit);
-    }
-    if found_element {
-        Some((a_L, a_R))
-    } else {
-        None
-    }
-}
-
-/// This function produces a set membership proof, i.e. a proof of knowledge
-/// of a value v that is in a given set `the_set` and that is consistent with
-/// the commitment `V` to `v`. The arguments are
+/// This function produces a set-non-membership proof, i.e., a proof of
+/// knowledge of a value v that is not in a given set `the_set` and that is
+/// consistent with the commitment `V` to `v`. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
 /// - `csprng` - cryptographic safe randomness generator
 /// - `the_set` - the set as a vector of scalars
 /// - `v` the value, a scalar
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
-///   `k` where k is the smallest power of two >= `|the_set|`
+///   `k` where k is the smallest power of two >= `|the_set|` (bold **g**, **h**
+///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case)]
@@ -94,16 +66,15 @@ pub fn prove<C: Curve, R: Rng>(
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
     v_rand: &Randomness<C>,
-) -> Result<SetMembershipProof<C>, ProverError> {
+) -> Result<SetNonMembershipProof<C>, ProverError> {
     // Part 0: Add public inputs to transcript
     // Domain separation
-    transcript.add_bytes(b"SetMembershipProof");
+    transcript.add_bytes(b"SetNonMembershipProof");
     // Compute commitment V for v
     let v_value = Value::<C>::new(v);
     let V = v_keys.hide(&v_value, v_rand);
     // Append V to the transcript
     transcript.append_message(b"V", &V.0);
-
     // Pad set if not power of two
     let mut set_vec = the_set.to_vec();
     pad_vector_to_power_of_two(&mut set_vec);
@@ -116,45 +87,60 @@ pub fn prove<C: Curve, R: Rng>(
     if gens.G_H.len() < n {
         return Err(ProverError::NotEnoughGenerators);
     }
-    // Select generators for vector commitments
-    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
+
     // Generators for single commitments and blinding
     let B = v_keys.g;
     let B_tilde = v_keys.h;
-    // Compute aL (indicator vector) and aR
-    let (a_L, a_R) = a_L_a_R(&v, &set_vec).ok_or(ProverError::CouldNotFindValueInSet)?;
-    // Setup blinding factors for a_L and a_R
-    let mut s_L = Vec::with_capacity(n);
-    let mut s_R = Vec::with_capacity(n);
-    for _ in 0..n {
-        s_L.push(C::generate_scalar(csprng));
-        s_R.push(C::generate_scalar(csprng));
+
+    // Get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
+    let mut GH_B_tilde: Vec<C> = Vec::with_capacity(2 * n + 1);
+
+    // Get the first n elements (G_i, H_i) from gens, add them to GH_B_tilde, and
+    // also add B_tilde. Finally define G, H as the corresponding subslices.
+    let GH = &gens.G_H[..n];
+    GH_B_tilde.extend(
+        GH.iter()
+            .map(|x| x.0)
+            .chain(GH.iter().map(|x| x.1))
+            .chain(once(B_tilde)),
+    );
+    let G = &GH_B_tilde[0..n];
+    let H = &GH_B_tilde[n..2 * n];
+
+    // Compute A_scalars, that is a_L, a_R and a_tilde
+    let mut A_scalars = Vec::with_capacity(2 * n + 1);
+    // Compute a_L_i <- (v - si)^-1
+    for si in &set_vec {
+        let mut v_minus_si = v;
+        v_minus_si.sub_assign(si);
+        // inverse not defined => difference==0 => v in set
+        let v_minus_si_inv = match v_minus_si.inverse() {
+            Some(inv) => inv,
+            None => return Err(ProverError::CouldFindValueInSet),
+        };
+        A_scalars.push(v_minus_si_inv);
     }
-    // Commitment randomness for A and S
-    let a_tilde = C::generate_scalar(csprng); // Randomness::<C>::generate(csprng);
-    let s_tilde = C::generate_scalar(csprng);
-    // get scalars for A commitment, that is (a_L,a_r,a_tilde)
-    let A_scalars: Vec<C::Scalar> = a_L
-        .iter()
-        .chain(a_R.iter())
-        .copied()
-        .chain(once(a_tilde))
-        .collect();
-    // get scalars for S commitment, that is (s_L,s_r,s_tilde_sum)
-    let S_scalars: Vec<C::Scalar> = s_L
-        .iter()
-        .chain(s_R.iter())
-        .copied()
-        .chain(once(s_tilde))
-        .collect();
-    // get generator vector for blinded vector commitments, i.e. (G,H,B_tilde)
-    let GH_B_tilde: Vec<C> = G
-        .iter()
-        .chain(H.iter())
-        .copied()
-        .chain(once(B_tilde))
-        .collect();
-    // compute A and S commitments using multi exponentiation
+    // Compute a_R_i = v
+    for _ in 0..n {
+        A_scalars.push(v);
+    }
+    // generate a_tilde
+    A_scalars.push(C::generate_scalar(csprng));
+    // Aliases
+    let a_L = &A_scalars[0..n];
+    let a_R = &A_scalars[n..2 * n];
+    let a_tilde = &A_scalars[2 * n];
+    // Compute S_scalars, i.e., the blinding factors
+    let mut S_scalars = Vec::with_capacity(2 * n + 1);
+    for _ in 0..2 * n + 1 {
+        S_scalars.push(C::generate_scalar(csprng));
+    }
+    // Aliases
+    let s_L = &S_scalars[0..n];
+    let s_R = &S_scalars[n..2 * n];
+    let s_tilde = &S_scalars[2 * n];
+
+    // Compute A and S commitments using multi exponentiation
     let window_size = 4;
     let table = multiexp_table(&GH_B_tilde, window_size);
     let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
@@ -167,28 +153,21 @@ pub fn prove<C: Curve, R: Rng>(
     // get challenges y,z from transcript
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
-
     // y_n = (1,y,..,y^(n-1))
     let y_n = z_vec(y, 0, n);
-    // powers of z
-    let z_sq = {
-        let mut z_sq = z;
-        z_sq.mul_assign(&z);
-        z_sq
-    };
-    let z_cb = {
-        let mut z_cb = z_sq;
-        z_cb.mul_assign(&z);
-        z_cb
-    };
+    // ip_y_n = <1,y_n>
+    let mut ip_y_n = C::Scalar::zero();
+    for y_i in &y_n {
+        ip_y_n.add_assign(y_i);
+    }
     // coefficients of l(x) and r(x)
     // compute l_0 and l_1
     let mut l_0 = Vec::with_capacity(n);
     let mut l_1 = Vec::with_capacity(n);
     for i in 0..n {
-        // l_0[i] <- a_L[i] - z
+        // l_0[i] <- a_L[i] + z
         let mut l_0_i = a_L[i];
-        l_0_i.sub_assign(&z);
+        l_0_i.add_assign(&z);
         l_0.push(l_0_i);
         // l_1[i] <- s_L[i]
         l_1.push(s_L[i]);
@@ -197,14 +176,10 @@ pub fn prove<C: Curve, R: Rng>(
     let mut r_0 = Vec::with_capacity(n);
     let mut r_1 = Vec::with_capacity(n);
     for i in 0..n {
-        // r_0[i] <- y_n[i] * (a_R[i] + z) + z^3 + z^2*set_vec[i]
+        // r_0[i] <- y_n[i] * (a_R[i] - s)
         let mut r_0_i = a_R[i];
-        r_0_i.add_assign(&z);
+        r_0_i.sub_assign(&set_vec[i]);
         r_0_i.mul_assign(&y_n[i]);
-        r_0_i.add_assign(&z_cb);
-        let mut z_cb_si = z_sq;
-        z_cb_si.mul_assign(&set_vec[i]);
-        r_0_i.add_assign(&z_cb_si);
         r_0.push(r_0_i);
 
         // r_1[i] <- y_n[i] * s_R[i]
@@ -277,8 +252,9 @@ pub fn prove<C: Curve, R: Rng>(
     tx_2.mul_assign(&x_sq);
     tx.add_assign(&tx_2);
     // Compute the blinding t_x_tilde
-    // t_x_tilde <- z^2*v_rand + t_1_tilde*x + t_2_tilde*x^2
-    let mut tx_tilde = z_sq;
+    // t_x_tilde <- z*<1,y^n>*v_rand + t_1_tilde*x + t_2_tilde*x^2
+    let mut tx_tilde = z;
+    tx_tilde.mul_assign(&ip_y_n);
     tx_tilde.mul_assign(v_rand);
     let mut tx_s1 = t_1_tilde;
     tx_s1.mul_assign(&x);
@@ -288,9 +264,9 @@ pub fn prove<C: Curve, R: Rng>(
     tx_tilde.add_assign(&tx_s2);
     // Compute blinding e_tilde
     // e_tilde <- a_tilde + s_tilde * x
-    let mut e_tilde = s_tilde;
+    let mut e_tilde = *s_tilde;
     e_tilde.mul_assign(&x);
-    e_tilde.add_assign(&a_tilde);
+    e_tilde.add_assign(a_tilde);
     // append tx, tx_tilde, e_tilde to transcript
     transcript.append_message(b"tx", &tx);
     transcript.append_message(b"tx_tilde", &tx_tilde);
@@ -299,9 +275,9 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 5: Inner product proof for tx = <lx,rx>
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
-    // get generator q
+    // get generator Q = B^w
     let Q = B.mul_by_scalar(&w);
-    // compute scalars c such that c*H = H', that is H_prime_scalars = (1, y^-1,..,
+    // compute scalars c such that H' = H^c, that is H_prime_scalars = (1, y^-1,..,
     // y^-(n-1))
     let y_inv = match y.inverse() {
         Some(inv) => inv,
@@ -309,12 +285,11 @@ pub fn prove<C: Curve, R: Rng>(
     };
     let H_prime_scalars = z_vec(y_inv, 0, n);
     // compute inner product proof
-    let proof =
-        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &lx, &rx);
+    let proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, &lx, &rx);
 
     // return set membership proof
     if let Some(ip_proof) = proof {
-        Ok(SetMembershipProof {
+        Ok(SetNonMembershipProof {
             A,
             S,
             T_1,
@@ -332,9 +307,7 @@ pub fn prove<C: Curve, R: Rng>(
 /// Error messages detailing why proof verification failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
-    /// The set size must be representable by an unsigned 64-bit integer
-    SetTooLarge,
-    /// The length of `gens` was less than `|the_set|`
+    /// The length of the generator vector `gens` was too short
     NotEnoughGenerators,
     /// The consistency check for `t_0` failed, i.e., the commitments from the
     /// prover are not consistent with the provided values.
@@ -345,13 +318,13 @@ pub enum VerificationError {
     IPVerificationError,
 }
 
-/// This function verifies a set membership proof, i.e. a proof of knowledge
-/// of value v that is in a set S and that is consistent
+/// This function verifies a set-non-membership proof, i.e., a proof of
+/// knowledge of value v that is not in a set S and that is consistent
 /// with a commitment V to v. The arguments are
 /// - `transcript` - the random oracle for Fiat Shamir
 /// - `the_set` - the set as a vector of scalars
 /// - `V` - commitment to `v`
-/// - `proof` - the set membership proof to verify
+/// - `proof` - the set-non-membership proof to verify
 /// - `gens` - generators containing vectors `G` and `H` both of length at least
 ///   `k` where k is the smallest power of two >= `|the_set|` (bold **g**,**h**
 ///   in bluepaper)
@@ -361,7 +334,7 @@ pub fn verify<C: Curve>(
     transcript: &mut RandomOracle,
     the_set: &[C::Scalar],
     V: &Commitment<C>,
-    proof: &SetMembershipProof<C>,
+    proof: &SetNonMembershipProof<C>,
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
@@ -377,7 +350,7 @@ pub fn verify<C: Curve>(
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
     // Domain separation
-    transcript.add_bytes(b"SetMembershipProof");
+    transcript.add_bytes(b"SetNonMembershipProof");
     // append commitment V to transcript
     transcript.append_message(b"V", &V.0);
     transcript.append_message(b"theSet", &set_vec);
@@ -416,50 +389,20 @@ pub fn verify<C: Curve>(
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
 
-    // compute delta(y,z) = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>)
-    // first compute helper values
-    let mut z2 = z; // z^2
-    z2.mul_assign(&z);
-    let mut z3 = z2; // z^3
-    z3.mul_assign(&z);
-    let n64: u64 = n.try_into().map_err(|_| VerificationError::SetTooLarge)?;
-    let ns = C::scalar_from_u64(n64); // n as scalar
-
-    // compute yn = <1, y_n>
-    let mut yi = C::Scalar::one(); // y^0
-    let mut ip_1_yn = C::Scalar::zero();
-    for _ in 0..n {
-        ip_1_yn.add_assign(&yi);
-        yi.mul_assign(&y);
-    }
-
-    let mut delta_yz = z; // delta_yz = z
-    delta_yz.sub_assign(&z2); // delta_yz = z - z^2
-    delta_yz.mul_assign(&ip_1_yn); // delta_yz = (z - z^2) (<1,y^n>)
-
-    // compute ip_1_s = <1,s>
-    let mut ip_1_s = C::Scalar::zero();
-    for si in &set_vec {
-        ip_1_s.add_assign(si);
-    }
-
-    // compute nz
-    let mut zn = ns;
-    zn.mul_assign(&z);
-
-    // compute z3_term = z^3 (1 - zn - <1,s>)
-    let mut z3_term = C::Scalar::one();
-    z3_term.sub_assign(&zn);
-    z3_term.sub_assign(&ip_1_s);
-    z3_term.mul_assign(&z3);
-
-    // delta_yz = z^3 (1 - zn - <1,s>) + (z - z^2) (<1,y^n>)
-    delta_yz.add_assign(&z3_term);
-    // End of delta_yz computation
+    // compute delta(y,z) = <1, y^n>  - z<s, y^n>
+    let yn = z_vec(y, 0, n);
+    let one_vec = vec![C::Scalar::one(); n];
+    let ip_one_yn = inner_product(&one_vec, &yn);
+    let mut zip_s_yn = inner_product(&set_vec, &yn);
+    zip_s_yn.mul_assign(&z);
+    let mut delta_yz = ip_one_yn;
+    delta_yz.sub_assign(&zip_s_yn);
 
     // Part 2: Verify consistency of t_0, i.e., check that
-    // V^z^2 * g^(delta_yz - t_x) * T_1^x * T_2^x^2 * h^(-tx_tilde)
-    // is the neutral element
+    // V^(z <1, yn>) * g^(delta_yz - tx) * T_1^x * T_2^x^2 * h^(-tx_tilde)
+    // is the neutral element.
+    let mut zip_one_yn = ip_one_yn;
+    zip_one_yn.mul_assign(&z);
     let mut delta_minus_tx = delta_yz;
     delta_minus_tx.sub_assign(&tx);
     let mut x2 = x; // x^2
@@ -468,7 +411,7 @@ pub fn verify<C: Curve>(
     minus_tx_tilde.negate();
 
     let t0_check_base_points = vec![V.0, v_keys.g, T_1, T_2, v_keys.h];
-    let t0_check_exponents = vec![z2, delta_minus_tx, x, x2, minus_tx_tilde];
+    let t0_check_exponents = vec![zip_one_yn, delta_minus_tx, x, x2, minus_tx_tilde];
 
     let rhs = multiexp(&t0_check_base_points, &t0_check_exponents);
     if !rhs.is_zero_point() {
@@ -487,26 +430,17 @@ pub fn verify<C: Curve>(
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
 
-    // get exponent for g, i.e., [-z, -z, ..., -z]
-    let mut minus_z = z;
-    minus_z.negate();
-    let mut minus_z_vec = vec![minus_z; n];
+    // get exponent for **g**, i.e., [z, z, ..., z]
+    let mut gexp = vec![z; n];
 
     let mut P_prime_exps = Vec::with_capacity(2 * n + 4);
-    P_prime_exps.append(&mut minus_z_vec);
+    P_prime_exps.append(&mut gexp);
 
-    // compute exponent for h, i.e., z1 + z^2y^-n * s + z^3y^-n
-    for i in 0..n {
-        let mut hexp = z;
-        let mut z2ynisi = z2;
-        z2ynisi.mul_assign(&y_inv_n[i]);
-        z2ynisi.mul_assign(&set_vec[i]);
-        hexp.add_assign(&z2ynisi);
-        let mut z3yni = z3;
-        z3yni.mul_assign(&y_inv_n[i]);
-        hexp.add_assign(&z3yni);
-
-        P_prime_exps.push(hexp);
+    // compute exponent for **h**, i.e., -s, and add it to P_prime_exps
+    for si in set_vec {
+        let mut hexpi = C::Scalar::zero();
+        hexpi.sub_assign(&si);
+        P_prime_exps.push(hexpi);
     }
 
     // add remaining exponents
@@ -515,7 +449,7 @@ pub fn verify<C: Curve>(
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    // P_prime_bases starts with G, H, and Q = g_hat
+    // P_prime_bases starts with G = **g**, H = **h**, and Q = g_hat
     let mut P_prime_bases = Vec::with_capacity(2 * n + 4);
     P_prime_bases.extend(G);
     P_prime_bases.extend(H);
@@ -579,11 +513,11 @@ mod tests {
 
     #[test]
     /// Test whether verifying an honestly generated proof works
-    fn test_smp_prove_verify() {
+    fn test_snmp_prove_verify() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
-        let v = SomeCurve::scalar_from_u64(3);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
@@ -602,11 +536,11 @@ mod tests {
 
     /// Test that sets with sizes not a power of two work
     #[test]
-    fn test_smp_prove_not_power_of_two() {
+    fn test_snmp_prove_not_power_of_two() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5, 6]);
-        let v = SomeCurve::scalar_from_u64(3);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
         let k = n.next_power_of_two();
         let (gens, v_keys, v_rand) = generate_helper_values(k);
@@ -623,30 +557,30 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// Test that proof fails if element is not in set
+    /// Test that proof fails if element is in the set
     #[test]
-    fn test_smp_prove_not_in_set() {
+    fn test_snmp_prove_in_set() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
-        let v = SomeCurve::scalar_from_u64(4);
+        let v = SomeCurve::scalar_from_u64(3);
         let n = the_set.len();
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
-        assert!(matches!(proof, Err(ProverError::CouldNotFindValueInSet)));
+        assert!(matches!(proof, Err(ProverError::CouldFindValueInSet)));
     }
 
     /// Test whether verifying a proof generated for a different v fails to
-    /// verify (even if the new v is still in the set). This should cause an
+    /// verify (even if the new v is still not in the set). This should cause an
     /// invalid T_0 error.
     #[test]
-    fn test_smp_verify_different_value() {
+    fn test_snmp_verify_different_value() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
-        let v = SomeCurve::scalar_from_u64(3);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
@@ -657,7 +591,7 @@ mod tests {
         let proof = proof.unwrap();
 
         // verify
-        let v = SomeCurve::scalar_from_u64(5); // different v still in set
+        let v = SomeCurve::scalar_from_u64(42); // different v still in set
         let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
@@ -665,13 +599,13 @@ mod tests {
     }
 
     #[test]
-    /// Test whether verifying with different set (still containing v) fails.
-    /// This should cause an Inconsistent T0.
-    fn test_smp_verify_different_set() {
+    /// Test whether verifying with different set (still not containing v)
+    /// fails. This should cause an Inconsistent T0.
+    fn test_snmp_verify_different_set() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
-        let v = SomeCurve::scalar_from_u64(3);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
@@ -691,11 +625,11 @@ mod tests {
 
     #[test]
     /// Test whether modifying inner proof causes invalid IP proof error.
-    fn test_smp_verify_invalid_inner_product() {
+    fn test_snmp_verify_invalid_inner_product() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
-        let v = SomeCurve::scalar_from_u64(3);
+        let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
@@ -719,11 +653,11 @@ mod tests {
 
     #[test]
     /// Test honest proof supplying more generators than needed
-    fn test_smp_prove_many_generators() {
+    fn test_snmp_prove_many_generators() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
-        let v = SomeCurve::scalar_from_u64(3);
+        let v = SomeCurve::scalar_from_u64(4);
         let num_gens = 2112;
         let (gens, v_keys, v_rand) = generate_helper_values(num_gens);
 
