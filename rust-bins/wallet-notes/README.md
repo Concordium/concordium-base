@@ -641,35 +641,29 @@ The returned value is a JSON object containing a list with signatures of the mes
 An example input to this request is in the file [sign_message-input.json](files/sign_message-input.json).
 An example output to this request is in the file [sign_message-output.json](files/sign_message-output.json).
 
-## parameters_to_json
-Semantics: Converts serialized parameters for a contract update (as bytes) into JSON.
+## parameter_to_json
+Semantics: Converts the serialized parameter for a contract update (as bytes) into JSON.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
-- `"parameters"` ... a hex encoding of the serialized parameters.
+- `"parameter"` ... a hex encoding of the serialized parameter.
 
-- `"receiveName"` ... the name of the receive function that the parameters are for.
+- `"receiveName"` ... the name of the receive function that the parameter is for.
 
 - `"schema"` ... hex encoded schema for the corresponding smart contract.
 
 - `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 
-The returned value is a JSON representation of the parameters.
+The returned value is a JSON representation of the parameter.
 
-- `"parameters"` ... hex encoding of the hash of the transaction
+An example input to this request is in the file [parameter_to_json-input.json](files/parameter_to_json-input.json).
+An example output to this request is in the file [parameter_to_json-output.json](files/parameter_to_json-output.json).
 
-- `"header"` ... the transaction header
-
-- `"payload"` ... the transaction payload, the exact contents is dependent on the transaction type. For smart contract updates the `message` field is replaced with a JSON view of the paramaters instead of the hex encoded bytes.
-
-An example input to this request is in the file [parameters_to_json-input.json](files/sign_transaction-input.json).
-An example output to this request is in the file [parameters_to_json-output.json](files/sign_transaction-output.json).
-
-## create_unsigned_transaction_ext
+## create_pre_account_transaction_ext
 
 Semantics: Creates a transfer transaction with the provided values.
-This currently only supports smart contract updates and simple transfer.
+This currently only supports smart contract updates and simple transfers.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -682,14 +676,14 @@ must be a valid JSON object with fields
 
 - `"numKeys"` ... the number of keys that will be used to sign.
 
-- `"type"` ... the transaction type tag (i.e. for a simple transfer type = 3). 
+- `"type"` ... the transaction type tag (i.e. for a simple transfer the value should be "Transfer"). 
 
 - `"payload"` ... the transaction's payload as json.
 
 The returned value is base16 encoded string that represents the transaction and can be used for signing, and is valid input for the `sign_transaction` method's transaction field.
 
-An example input to this request is in the file [create_unsigned_transaction-input.json](files/create_unsigned_transaction-input.json).
-An example output to this request is in the file [create_unsigned_transaction-output.json](files/create_unsigned_transaction-output.json).
+An example input to this request is in the file [create_pre_account_transaction-input.json](files/create_pre_account_transaction-input.json).
+An example output to this request is in the file [create_pre_account_transaction-output.json](files/create_pre_account_transaction-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This

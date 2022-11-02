@@ -27,7 +27,7 @@ char* create_sec_to_pub_transfer(char*, uint8_t*);
 void free_response_string(char*);
 
 char* create_unsigned_transaction(char*, uint8_t*);
-char* parameters_to_json(char*, uint8_t*);
+char* parameter_to_json(char*, uint8_t*);
 
 /*
 $ ./example create_transfer-input.json
@@ -102,8 +102,8 @@ int main(int argc, char *argv[]) {
       if (ends_with(argv[1], "create_transfer-input.json") || ends_with(argv[1], "create_transfer_with_memo-input.json")) {
         out = create_transfer(buffer, &flag);
         return printStr(out, flag);
-      } else if (ends_with(argv[1], "parameters_to_json-input.json")) {
-          out = parameters_to_json(buffer, &flag);
+      } else if (ends_with(argv[1], "parameter_to_json-input.json")) {
+          out = parameter_to_json(buffer, &flag);
           return printStr(out, flag);
       } else if (ends_with(argv[1], "create_unsigned_transaction-input.json")) {
           out = create_unsigned_transaction(buffer, &flag);
