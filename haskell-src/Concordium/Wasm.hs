@@ -78,6 +78,7 @@ module Concordium.Wasm (
   uncheckedMakeReceiveName,
   Parameter(..),
   emptyParameter,
+  parameterLen,
   getParameter,
   getParameterUnchecked,
   putParameter,
@@ -476,6 +477,10 @@ emptyParameter = Parameter BSS.empty
 -- |Put (serialize) a @Parameter@.
 putParameter :: Putter Parameter
 putParameter = putShortByteStringWord16 . parameter
+
+-- |Get the size in bytes of the parameter.
+parameterLen :: Parameter -> Word64
+parameterLen (Parameter p) = fromIntegral (BSS.length p)
 
 -- |Get (deserialize) a @Parameter@ and ensure that its size is valid. The size limit depends on the protocol version.
 getParameter :: SProtocolVersion pv -> Get Parameter
