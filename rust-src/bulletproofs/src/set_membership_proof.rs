@@ -457,8 +457,9 @@ pub fn verify<C: Curve>(
     delta_yz.add_assign(&z3_term);
     // End of delta_yz computation
 
-    // Part 2: Verify consistency of t_0
-    // i.e., check 0 = V^z^2 * g^(delta_yz - t_x) * T_1^x * T_2^x^2 * h^(-tx_tilde)
+    // Part 2: Verify consistency of t_0, i.e., check that
+    // V^z^2 * g^(delta_yz - t_x) * T_1^x * T_2^x^2 * h^(-tx_tilde)
+    // is the neutral element
     let mut delta_minus_tx = delta_yz;
     delta_minus_tx.sub_assign(&tx);
     let mut x2 = x; // x^2

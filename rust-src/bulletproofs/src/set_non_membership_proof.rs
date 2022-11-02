@@ -53,7 +53,8 @@ pub enum ProverError {
 /// - `the_set` - the set as a vector of scalars
 /// - `v` the value, a scalar
 /// - `gens` - generators containing vectors `G` and `H` both of at least length
-///   `k` where k is the smallest power of two >= `|the_set|`
+///   `k` where k is the smallest power of two >= `|the_set|` (bold **g**, **h**
+///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case)]
@@ -274,9 +275,9 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 5: Inner product proof for tx = <lx,rx>
     // get challenge w from transcript
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
-    // get generator q
+    // get generator Q = B^w
     let Q = B.mul_by_scalar(&w);
-    // compute scalars c such that c*H = H', that is H_prime_scalars = (1, y^-1,..,
+    // compute scalars c such that H' = H^c, that is H_prime_scalars = (1, y^-1,..,
     // y^-(n-1))
     let y_inv = match y.inverse() {
         Some(inv) => inv,
@@ -306,7 +307,7 @@ pub fn prove<C: Curve, R: Rng>(
 /// Error messages detailing why proof verification failed
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
-    /// The length of `gens` was less than `|the_set|`
+    /// The length of the generator vector `gens` was too short
     NotEnoughGenerators,
     /// The consistency check for `t_0` failed, i.e., the commitments from the
     /// prover are not consistent with the provided values.
@@ -397,9 +398,9 @@ pub fn verify<C: Curve>(
     let mut delta_yz = ip_one_yn;
     delta_yz.sub_assign(&zip_s_yn);
 
-    // Part 2: Verify consistency of t_0
-    // i.e., check 0 = V^(z <1, yn>) * g^(delta_yz - tx) * T_1^x * T_2^x^2 *
-    // h^(-tx_tilde)
+    // Part 2: Verify consistency of t_0, i.e., check that
+    // V^(z <1, yn>) * g^(delta_yz - tx) * T_1^x * T_2^x^2 * h^(-tx_tilde)
+    // is the neutral element.
     let mut zip_one_yn = ip_one_yn;
     zip_one_yn.mul_assign(&z);
     let mut delta_minus_tx = delta_yz;
@@ -429,13 +430,13 @@ pub fn verify<C: Curve>(
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
 
-    // get exponent for g, i.e., [z, z, ..., z]
+    // get exponent for **g**, i.e., [z, z, ..., z]
     let mut gexp = vec![z; n];
 
     let mut P_prime_exps = Vec::with_capacity(2 * n + 4);
     P_prime_exps.append(&mut gexp);
 
-    // compute exponent for h, i.e., -s, and add it to P_prime_exps
+    // compute exponent for **h**, i.e., -s, and add it to P_prime_exps
     for si in set_vec {
         let mut hexpi = C::Scalar::zero();
         hexpi.sub_assign(&si);
@@ -448,7 +449,7 @@ pub fn verify<C: Curve>(
     P_prime_exps.push(C::Scalar::one());
     P_prime_exps.push(x);
 
-    // P_prime_bases starts with G, H, and Q = g_hat
+    // P_prime_bases starts with G = **g**, H = **h**, and Q = g_hat
     let mut P_prime_bases = Vec::with_capacity(2 * n + 4);
     P_prime_bases.extend(G);
     P_prime_bases.extend(H);
@@ -512,7 +513,7 @@ mod tests {
 
     #[test]
     /// Test whether verifying an honestly generated proof works
-    fn test_smp_prove_verify() {
+    fn test_snmp_prove_verify() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
@@ -535,7 +536,7 @@ mod tests {
 
     /// Test that sets with sizes not a power of two work
     #[test]
-    fn test_smp_prove_not_power_of_two() {
+    fn test_snmp_prove_not_power_of_two() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5, 6]);
@@ -558,7 +559,7 @@ mod tests {
 
     /// Test that proof fails if element is in the set
     #[test]
-    fn test_smp_prove_in_set() {
+    fn test_snmp_prove_in_set() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
@@ -575,7 +576,7 @@ mod tests {
     /// verify (even if the new v is still not in the set). This should cause an
     /// invalid T_0 error.
     #[test]
-    fn test_smp_verify_different_value() {
+    fn test_snmp_verify_different_value() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
@@ -600,7 +601,7 @@ mod tests {
     #[test]
     /// Test whether verifying with different set (still not containing v)
     /// fails. This should cause an Inconsistent T0.
-    fn test_smp_verify_different_set() {
+    fn test_snmp_verify_different_set() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
@@ -624,7 +625,7 @@ mod tests {
 
     #[test]
     /// Test whether modifying inner proof causes invalid IP proof error.
-    fn test_smp_verify_invalid_inner_product() {
+    fn test_snmp_verify_invalid_inner_product() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
@@ -652,7 +653,7 @@ mod tests {
 
     #[test]
     /// Test honest proof supplying more generators than needed
-    fn test_smp_prove_many_generators() {
+    fn test_snmp_prove_many_generators() {
         let rng = &mut thread_rng();
 
         let the_set = get_set_vector::<SomeCurve>(&[1, 7, 3, 5]);
