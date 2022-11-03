@@ -236,7 +236,7 @@ char *get_account_keys_and_randomness(const char *input_ptr, uint8_t *success);
  * The input pointer must point to a null-terminated buffer, otherwise this
  * function will fail in unspecified ways.
  */
-char *sign_transaction(const char *input_ptr, uint8_t *success);
+char *parameter_to_json(const char *input_ptr, uint8_t *success);
 
 /**
  * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -251,7 +251,7 @@ char *sign_transaction(const char *input_ptr, uint8_t *success);
  * The input pointer must point to a null-terminated buffer, otherwise this
  * function will fail in unspecified ways.
  */
-char *transaction_to_json(const char *input_ptr, uint8_t *success);
+char *create_account_transaction(const char *input_ptr, uint8_t *success);
 
 /**
  * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
