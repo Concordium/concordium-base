@@ -510,7 +510,7 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1pre_1account_1transaction(
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1account_1transaction(
     env: JNIEnv,
     _: JClass,
     input: JString,
@@ -531,7 +531,7 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 
     let mut success: u8 = 127;
     let cstr_res = unsafe {
-        let unsafe_res_ptr = create_unsigned_transaction(input_str.as_ptr(), &mut success);
+        let unsafe_res_ptr = create_account_transaction(input_str.as_ptr(), &mut success);
         if unsafe_res_ptr.is_null() {
             return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
         }

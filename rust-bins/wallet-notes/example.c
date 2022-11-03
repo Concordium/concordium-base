@@ -26,7 +26,7 @@ char* create_sec_to_pub_transfer(char*, uint8_t*);
 
 void free_response_string(char*);
 
-char* create_unsigned_transaction(char*, uint8_t*);
+char* create_account_transaction(char*, uint8_t*);
 char* parameter_to_json(char*, uint8_t*);
 
 /*
@@ -105,8 +105,8 @@ int main(int argc, char *argv[]) {
       } else if (ends_with(argv[1], "parameter_to_json-input.json")) {
           out = parameter_to_json(buffer, &flag);
           return printStr(out, flag);
-      } else if (ends_with(argv[1], "create_unsigned_transaction-input.json")) {
-          out = create_unsigned_transaction(buffer, &flag);
+      } else if (ends_with(argv[1], "create_account_transaction-input.json")) {
+          out = create_account_transaction(buffer, &flag);
           return printStr(out, flag);
       } else if (ends_with(argv[1], "create_id_request_and_private_data-input.json")) {
         out = create_id_request_and_private_data(buffer, &flag);

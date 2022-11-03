@@ -660,9 +660,9 @@ The returned value is a JSON representation of the parameter.
 An example input to this request is in the file [parameter_to_json-input.json](files/parameter_to_json-input.json).
 An example output to this request is in the file [parameter_to_json-output.json](files/parameter_to_json-output.json).
 
-## create_pre_account_transaction_ext
+## create_account_transaction_ext
 
-Semantics: Creates a transfer transaction with the provided values.
+Semantics: Creates and signs a transaction with the provided values, including the payload in JSON format.
 This currently only supports smart contract updates and simple transfers.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
@@ -674,16 +674,20 @@ must be a valid JSON object with fields
 
 - `"nonce"` ... nonce of the sender account.
 
-- `"numKeys"` ... the number of keys that will be used to sign.
+- `"keys"` ... mapping with the keys of the sender account.
 
-- `"type"` ... the transaction type tag (i.e. for a simple transfer the value should be "Transfer"). 
+- `"type"` ... the transaction type tag (i.e. for a simple transfer the value should be "Transfer", and smart contract update should be "Update"). 
 
 - `"payload"` ... the transaction's payload as json.
 
-The returned value is base16 encoded string that represents the transaction and can be used for signing, and is valid input for the `sign_transaction` method's transaction field.
+The returned value is a JSON object with the following fields:
 
-An example input to this request is in the file [create_pre_account_transaction-input.json](files/create_pre_account_transaction-input.json).
-An example output to this request is in the file [create_pre_account_transaction-output.json](files/create_pre_account_transaction-output.json).
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction.
+
+An example input to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
+An example output to this request is in the file [create_account_transaction-output.json](files/create_account_transaction-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This

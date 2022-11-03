@@ -343,20 +343,20 @@ enum JSONPayload {
 #[derive(common::SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransactionContext {
-    pub from:     AccountAddress,
-    pub expiry:   TransactionTime,
-    pub nonce:    Nonce,
+    pub from:    AccountAddress,
+    pub expiry:  TransactionTime,
+    pub nonce:   Nonce,
     #[serde(flatten)]
-    pub payload:  JSONPayload,
-    pub num_keys: u32,
+    pub payload: JSONPayload,
+    pub keys:    AccountKeys,
 }
 
-fn create_pre_account_transaction_aux(input: &str) -> anyhow::Result<String> {
+fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let ctx: TransactionContext = from_value(v)?;
-    let transaction = match ctx.payload {
+    let pre_tx = match ctx.payload {
         JSONPayload::Update { payload, energy } => update_contract(
-            ctx.num_keys,
+            ctx.keys.num_keys(),
             ctx.from,
             ctx.nonce,
             ctx.expiry,
@@ -364,7 +364,7 @@ fn create_pre_account_transaction_aux(input: &str) -> anyhow::Result<String> {
             energy,
         ),
         JSONPayload::Transfer { amount, to } => transactions::construct::transfer(
-            ctx.num_keys,
+            ctx.keys.num_keys(),
             ctx.from,
             ctx.nonce,
             ctx.expiry,
@@ -372,7 +372,14 @@ fn create_pre_account_transaction_aux(input: &str) -> anyhow::Result<String> {
             amount,
         ),
     };
-    Ok(common::base16_encode_string(&transaction))
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
+
+    let response = serde_json::json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
 }
 
 fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
@@ -1529,7 +1536,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_pre_account_transaction -> create_pre_account_transaction_aux);
+    => create_account_transaction -> create_account_transaction_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
