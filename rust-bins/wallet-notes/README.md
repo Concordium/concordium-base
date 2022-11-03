@@ -607,25 +607,6 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
 An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
 
-## sign_transaction
-Semantics: Signs the provided transaction and returns the hex encoded transaction along with the signatures on the transaction.
-
-This function takes as input a NUL-terminated UTF8-encoded string. The string
-must be a valid JSON object with fields
-
-- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
-
-- `"keys"` ... mapping with the keys of the sender account.
-
-The returned value is a JSON object with the following fields:
-
-- `"signatures"` ... list with signatures of the transaction with the provided keys.
-
-- `"transaction"` ... the serialized transaction.
-
-An example input to this request is in the file [sign_transaction-input.json](files/sign_transaction-input.json).
-An example output to this request is in the file [sign_transaction-output.json](files/sign_transaction-output.json).
-
 ## sign_message
 Semantics: Signs a message with the provided account keys.
 

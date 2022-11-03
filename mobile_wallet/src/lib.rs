@@ -296,21 +296,6 @@ fn parameter_to_json_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&parameter_as_json)?)
 }
 
-fn sign_transaction_aux(input: &str) -> anyhow::Result<String> {
-    let v: Value = from_str(input)?;
-    let serialized_transaction: String = try_get(&v, "transaction")?;
-    let keys: AccountKeys = try_get(&v, "keys")?;
-    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
-    let (signatures, body) = make_signatures(&keys, pre_tx);
-
-    let response = serde_json::json!({
-        "signatures": signatures,
-        "transaction": hex::encode(&body),
-    });
-
-    Ok(to_string(&response)?)
-}
-
 fn sign_message_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let message: String = try_get(&v, "message")?;
@@ -1495,20 +1480,6 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => get_account_keys_and_randomness -> get_account_keys_and_randomness_aux);
-
-make_wrapper!(
-    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
-    /// UTF8-encoded string. The returned string must be freed by the caller by
-    /// calling the function 'free_response_string'. In case of failure the function
-    /// returns an error message as the response, and sets the 'success' flag to 0.
-    ///
-    /// See rust-bins/wallet-notes/README.md for the description of input and output
-    /// formats.
-    ///
-    /// # Safety
-    /// The input pointer must point to a null-terminated buffer, otherwise this
-    /// function will fail in unspecified ways.
-    => sign_transaction -> sign_transaction_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
