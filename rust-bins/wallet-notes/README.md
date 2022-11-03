@@ -665,7 +665,7 @@ The returned value is a JSON object with the following fields:
 
 - `"signatures"` ... list with signatures of the transaction with the provided keys.
 
-- `"transaction"` ... the serialized transaction.
+- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
 
 An example input to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
 An example output to this request is in the file [create_account_transaction-output.json](files/create_account_transaction-output.json).
