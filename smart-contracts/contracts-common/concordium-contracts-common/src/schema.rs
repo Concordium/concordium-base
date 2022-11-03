@@ -60,6 +60,7 @@ pub struct ModuleV2 {
 
 /// Contains all the contract schemas for a smart contract module V1 with a V3
 /// schema.
+#[cfg_attr(test, derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleV3 {
     pub contracts: BTreeMap<String, ContractV3>,
@@ -111,6 +112,7 @@ pub struct ContractV2 {
 }
 
 /// Describes all the schemas of a V1 smart contract with a V3 schema.
+#[cfg_attr(test, derive(arbitrary::Arbitrary))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// The [`Default`] instance produces an empty schema.
 pub struct ContractV3 {
@@ -165,6 +167,7 @@ impl FunctionV1 {
 /// Describes the schema of an init or a receive function for V1 contracts with
 /// V3 schemas. Differs from [`FunctionV1`] in that a schema for the error can
 /// be included.
+#[cfg_attr(test, derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionV2 {
     pub parameter:    Option<Type>,
@@ -711,107 +714,59 @@ impl Serial for FunctionV2 {
         let parameter = self.parameter.is_some();
         let return_value = self.return_value.is_some();
         let error = self.error.is_some();
-        match (parameter, return_value, error) {
+        let tag: u8 = match (parameter, return_value, error) {
             // parameter
-            (true, false, false) => {
-                out.write_u8(0)?;
-                self.parameter.serial(out)
-            }
+            (true, false, false) => 0,
             // return_value
-            (false, true, false) => {
-                out.write_u8(1)?;
-                self.return_value.serial(out)
-            }
+            (false, true, false) => 1,
             // parameter + return_value
-            (true, true, false) => {
-                out.write_u8(2)?;
-                self.parameter.serial(out)?;
-                self.return_value.serial(out)
-            }
+            (true, true, false) => 2,
             // error
-            (false, false, true) => {
-                out.write_u8(3)?;
-                self.error.serial(out)
-            }
+            (false, false, true) => 3,
             // parameter + error
-            (true, false, true) => {
-                out.write_u8(4)?;
-                self.parameter.serial(out)?;
-                self.error.serial(out)
-            }
+            (true, false, true) => 4,
             // return_value + error
-            (false, true, true) => {
-                out.write_u8(5)?;
-                self.return_value.serial(out)?;
-                self.error.serial(out)
-            }
+            (false, true, true) => 5,
             // parameter + return_value + error
-            (true, true, true) => {
-                out.write_u8(6)?;
-                self.parameter.serial(out)?;
-                self.return_value.serial(out)?;
-                self.error.serial(out)
-            }
+            (true, true, true) => 6,
             // no schema: cannot happen
-            (false, false, false) => out.write_u8(7),
+            (false, false, false) => 7,
+        };
+        out.write_u8(tag)?;
+        if let Some(p) = self.parameter.as_ref() {
+            p.serial(out)?;
         }
+        if let Some(rv) = self.return_value.as_ref() {
+            rv.serial(out)?;
+        }
+        if let Some(err) = self.error.as_ref() {
+            err.serial(out)?;
+        }
+        Ok(())
     }
 }
 
 impl Deserial for FunctionV2 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let idx = source.read_u8()?;
-        match idx {
-            // parameter
-            0 => Ok(FunctionV2 {
-                parameter:    source.get()?,
-                return_value: None,
-                error:        None,
-            }),
-            // return_value
-            1 => Ok(FunctionV2 {
-                parameter:    None,
-                return_value: source.get()?,
-                error:        None,
-            }),
-            // parameter + return_value
-            2 => Ok(FunctionV2 {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-                error:        None,
-            }),
-            // error
-            3 => Ok(FunctionV2 {
-                parameter:    None,
-                return_value: None,
-                error:        source.get()?,
-            }),
-            // parameter + error
-            4 => Ok(FunctionV2 {
-                parameter:    source.get()?,
-                return_value: None,
-                error:        source.get()?,
-            }),
-            // return_value + error
-            5 => Ok(FunctionV2 {
-                parameter:    None,
-                return_value: source.get()?,
-                error:        source.get()?,
-            }),
-            // parameter + return_value + error
-            6 => Ok(FunctionV2 {
-                parameter:    source.get()?,
-                return_value: source.get()?,
-                error:        source.get()?,
-            }),
-            // no schema
-            7 => Ok(FunctionV2 {
-                parameter:    None,
-                return_value: None,
-                error:        None,
-            }),
-            _ => Err(ParseError::default()),
+        let mut r = FunctionV2 {
+            parameter:    None,
+            return_value: None,
+            error:        None,
+        };
+        if idx > 7 {
+            return Err(ParseError::default());
         }
+        if matches!(idx, 0 | 2 | 4 | 6) {
+            let _ = r.parameter.insert(source.get()?);
+        }
+        if matches!(idx, 1 | 2 | 5 | 6) {
+            let _ = r.return_value.insert(source.get()?);
+        }
+        if matches!(idx, 3 | 4 | 5 | 6) {
+            let _ = r.error.insert(source.get()?);
+        }
+        Ok(r)
     }
 }
 
@@ -1603,37 +1558,22 @@ mod tests {
     }
 
     #[test]
-    fn test_module_v3_serial_deserial_is_id() {
-        let mut event_map = BTreeMap::new();
-        let tag: u8 = 1;
-        event_map.insert(
-            tag,
-            (String::from("EventOne"), Fields::Named(vec![(String::from("value"), Type::U8)])),
-        );
+    fn test_module_v3_schema_serial_deserial_is_id() {
+        use rand::prelude::*;
+        use rand_pcg::Pcg64;
 
-        let m = ModuleV3 {
-            contracts: BTreeMap::from([("a".into(), ContractV3 {
-                init:    Some(FunctionV2 {
-                    parameter:    Some(Type::String(SizeLength::U32)),
-                    return_value: Some(Type::String(SizeLength::U32)),
-                    error:        Some(Type::String(SizeLength::U32)),
-                }),
-                receive: BTreeMap::from([
-                    ("b".into(), FunctionV2 {
-                        parameter:    Some(Type::String(SizeLength::U32)),
-                        return_value: Some(Type::String(SizeLength::U32)),
-                        error:        Some(Type::String(SizeLength::U32)),
-                    }),
-                    ("c".into(), FunctionV2 {
-                        parameter:    Some(Type::String(SizeLength::U32)),
-                        return_value: Some(Type::String(SizeLength::U32)),
-                        error:        Some(Type::String(SizeLength::U32)),
-                    }),
-                ]),
-                event:   Some(Type::TaggedEnum(event_map)),
-            })]),
-        };
+        let seed: u64 = random();
+        let mut rng = Pcg64::seed_from_u64(seed);
+        let mut data = [0u8; 100000];
+        rng.fill_bytes(&mut data);
 
-        assert_eq!(serial_deserial(&m), Ok(m));
+        let mut unstructured = Unstructured::new(&data);
+
+        for _ in 0..10000 {
+            let schema = ModuleV3::arbitrary(&mut unstructured).unwrap();
+
+            let res = from_bytes::<ModuleV3>(&to_bytes(&schema)).unwrap();
+            assert_eq!(schema, res);
+        }
     }
 }
