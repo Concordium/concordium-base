@@ -356,9 +356,7 @@ pub fn generate_contract_schema_v3(
                     .or_insert_with(schema::ContractV3::default);
                 contract_schema.event = function_schema_event;
             }
-        }
-
-        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+        } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
                 let function_schema = generate_schema_run(&artifact, name.as_ref())?;
 
@@ -380,8 +378,8 @@ pub fn generate_contract_schema_v3(
 
                 contract_schema.receive.insert(function_name.to_owned(), function_schema);
             } else {
-                // do nothing, some other function that is neither init nor
-                // receive.
+                // do nothing: no event schema and not a schema that was attached to an init/
+                // receive function
             }
         }
     }
