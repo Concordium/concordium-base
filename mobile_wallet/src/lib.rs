@@ -2,7 +2,7 @@ use anyhow::{bail, ensure};
 use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
-        self, base16_decode_string, c_char,
+        self, c_char,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
@@ -24,9 +24,10 @@ use concordium_base::{
     smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
         self,
-        construct::{update_contract, PreAccountTransaction},
+        construct::{init_contract, update_contract, PreAccountTransaction},
         ConfigureBakerKeysPayload, ConfigureBakerPayload, ConfigureDelegationPayload,
-        ExactSizeTransactionSigner, Memo, TransactionSigner, UpdateContractPayload,
+        ExactSizeTransactionSigner, InitContractPayload, Memo, TransactionSigner,
+        UpdateContractPayload,
     },
 };
 use dodis_yampolskiy_prf as prf;
@@ -312,6 +313,12 @@ fn sign_message_aux(input: &str) -> anyhow::Result<String> {
 #[derive(common::SerdeDeserialize)]
 #[serde(tag = "type", content = "payload")]
 enum JSONPayload {
+    InitContract {
+        #[serde(flatten)]
+        payload: InitContractPayload,
+        #[serde(rename = "maxContractExecutionEnergy")]
+        energy:  Energy,
+    },
     Update {
         #[serde(flatten)]
         payload: UpdateContractPayload,
@@ -341,6 +348,14 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
     let ctx: TransactionContext = from_value(v)?;
     let pre_tx = match ctx.payload {
         JSONPayload::Update { payload, energy } => update_contract(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            payload,
+            energy,
+        ),
+        JSONPayload::InitContract { payload, energy } => init_contract(
             ctx.keys.num_keys(),
             ctx.from,
             ctx.nonce,

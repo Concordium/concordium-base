@@ -644,7 +644,13 @@ An example output to this request is in the file [parameter_to_json-output.json]
 ## create_account_transaction_ext
 
 Semantics: Creates and signs a transaction with the provided values, including the payload in JSON format.
-This currently only supports smart contract updates and simple transfers.
+This currently only supports the following transaction types:
+
+| Supported Types                      | type tag       |
+|--------------------------------------|----------------|
+| Smart contract initializtion         | InitContract   |
+| Smart contract update                | Update         |
+| Simple transfer                      | Transfer       |
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -657,7 +663,7 @@ must be a valid JSON object with fields
 
 - `"keys"` ... mapping with the keys of the sender account.
 
-- `"type"` ... the transaction type tag (i.e. for a simple transfer the value should be "Transfer", and smart contract update should be "Update"). 
+- `"type"` ... the transaction type tag (Check the table with supported types above for the expected values).
 
 - `"payload"` ... the transaction's payload as json.
 
