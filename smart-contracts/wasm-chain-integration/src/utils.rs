@@ -378,8 +378,8 @@ pub fn generate_contract_schema_v3(
 
                 contract_schema.receive.insert(function_name.to_owned(), function_schema);
             } else {
-                // do nothing: no event schema and not a schema that was attached to an init/
-                // receive function
+                // do nothing: no event schema and not a schema that was
+                // attached to an init/ receive function
             }
         }
     }
