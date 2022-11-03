@@ -729,7 +729,7 @@ impl Serial for FunctionV2 {
             (false, true, true) => 5,
             // parameter + return_value + error
             (true, true, true) => 6,
-            // no schema: cannot happen
+            // no schema
             (false, false, false) => 7,
         };
         out.write_u8(tag)?;
