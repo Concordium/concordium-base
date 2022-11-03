@@ -174,7 +174,12 @@ impl Deserial for ExchangeRate {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let numerator = source.read_u64()?;
         let denominator = source.read_u64()?;
-        Ok(ExchangeRate::new_unchecked(numerator, denominator))
+
+        if numerator == 0 || denominator == 0 {
+            Err(ParseError::default())
+        } else {
+            Ok(ExchangeRate::new_unchecked(numerator, denominator))
+        }
     }
 }
 
