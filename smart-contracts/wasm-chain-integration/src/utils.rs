@@ -355,7 +355,7 @@ pub fn generate_contract_schema_v3(
                 let contract_schema = contract_schemas
                     .entry(contract_name.to_owned())
                     .or_insert_with(schema::ContractV3::default);
-                contract_schema.event = function_schema_event;
+                contract_schema.event = Some(function_schema_event);
             }
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
