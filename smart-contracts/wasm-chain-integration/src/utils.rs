@@ -337,8 +337,8 @@ pub fn generate_contract_schema_v2(
     }))
 }
 
-/// Tries to generate schemas for parameters and return values of methods for a
-/// contract with a V3 schema.
+/// Tries to generate schemas for events, parameters, return values, and errors
+/// of methods for a contract with a V3 schema.
 pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
@@ -349,6 +349,7 @@ pub fn generate_contract_schema_v3(
     for name in artifact.export.keys() {
         if let Some(rest) = name.as_ref().strip_prefix("concordium_event_schema_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
+                // Generate event schema
                 let function_schema_event = generate_schema_run(&artifact, name.as_ref())?;
 
                 let contract_schema = contract_schemas
@@ -358,6 +359,7 @@ pub fn generate_contract_schema_v3(
             }
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
+                // Generate init-function schema
                 let function_schema = generate_schema_run(&artifact, name.as_ref())?;
 
                 let contract_schema = contract_schemas
@@ -365,9 +367,9 @@ pub fn generate_contract_schema_v3(
                     .or_insert_with(schema::ContractV3::default);
                 contract_schema.init = Some(function_schema);
             } else if rest.contains('.') {
+                // Generate receive-function schema
                 let function_schema = generate_schema_run(&artifact, name.as_ref())?;
 
-                // Generates receive-function parameter schema type
                 let split_name: Vec<_> = rest.splitn(2, '.').collect();
                 let contract_name = split_name[0];
                 let function_name = split_name[1];
