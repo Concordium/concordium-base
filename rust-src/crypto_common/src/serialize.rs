@@ -1,6 +1,7 @@
 pub use crate::impls::*;
 use anyhow::{bail, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use concordium_contracts_common::ExchangeRate;
 use core::cmp;
 use sha2::Digest;
 use std::{
@@ -682,6 +683,21 @@ impl Deserial for SocketAddr {
             IpAddr::deserial(source)?,
             u16::deserial(source)?,
         ))
+    }
+}
+
+impl Serial for ExchangeRate {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
+        self.numerator().serial(target);
+        self.denominator().serial(target);
+    }
+}
+
+impl Deserial for ExchangeRate {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let numerator = source.get()?;
+        let denominator = source.get()?;
+        Self::new(numerator, denominator).ok_or_else(|| anyhow::anyhow!("Invalid exchange rate."))
     }
 }
 
