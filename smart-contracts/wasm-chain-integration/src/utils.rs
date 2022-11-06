@@ -357,6 +357,10 @@ pub fn generate_contract_schema_v3(
                     .or_insert_with(schema::ContractV3::default);
                 contract_schema.event = Some(function_schema_event);
             }
+            // The event schema attached to the init function is globally
+            // available in the smart contract and is applied to all
+            // events logged by receive/init functions. There is no
+            // need to create a separate event schema for receive functions.
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
                 // Generate init-function schema
