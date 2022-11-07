@@ -186,27 +186,6 @@ impl FunctionV2 {
     pub fn error(&self) -> Option<&Type> { self.error.as_ref() }
 }
 
-/// Describes the schema of an init or a receive function for V1 contracts with
-/// V3 schemas. Differs from [`FunctionV2`] in that a schema for the events can
-/// be included.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionV3 {
-    pub parameter:    Option<Type>,
-    pub return_value: Option<Type>,
-    pub error:        Option<Type>,
-}
-
-impl FunctionV3 {
-    /// Extract the parameter schema if it exists.
-    pub fn parameter(&self) -> Option<&Type> { self.parameter.as_ref() }
-
-    /// Extract the return value schema if it exists.
-    pub fn return_value(&self) -> Option<&Type> { self.return_value.as_ref() }
-
-    /// Extract the error schema if it exists.
-    pub fn error(&self) -> Option<&Type> { self.error.as_ref() }
-}
-
 /// Schema for the fields of a struct or some enum variant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
@@ -788,76 +767,6 @@ impl Deserial for FunctionV2 {
             let _ = r.error.insert(source.get()?);
         }
         Ok(r)
-    }
-}
-
-impl Serial for FunctionV3 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        // This index encodes if each of the schemas is set or not.
-        // If the fourth last bit is set to 1, the parameter schema is set.
-        // If the third last bit is set to 1, the return_value schema is set.
-        // If the second last bit is set to 1, the error schema is set.
-        // If the last bit is set to 1, the event schema is set.
-
-        let mut index: u8 = 0;
-
-        if self.parameter.is_some() {
-            index |= 0b100;
-        }
-        if self.return_value.is_some() {
-            index |= 0b010;
-        }
-        if self.error.is_some() {
-            index |= 0b001;
-        }
-
-        out.write_u8(index)?;
-
-        if self.parameter.is_some() {
-            self.parameter.serial(out)?;
-        }
-        if self.return_value.is_some() {
-            self.return_value.serial(out)?;
-        }
-        if self.error.is_some() {
-            self.error.serial(out)?;
-        }
-
-        Ok(())
-    }
-}
-
-fn get_bit_at(input: u8, n: u8) -> bool {
-    if n < 8 {
-        input & (1 << n) != 0
-    } else {
-        false
-    }
-}
-
-impl Deserial for FunctionV3 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let index: u8 = source.get()?;
-
-        let mut parameter = None;
-        let mut return_value = None;
-        let mut error = None;
-
-        if get_bit_at(index, 2) {
-            parameter = source.get()?;
-        }
-        if get_bit_at(index, 1) {
-            return_value = source.get()?;
-        }
-        if get_bit_at(index, 0) {
-            error = source.get()?;
-        }
-
-        Ok(FunctionV3 {
-            parameter,
-            return_value,
-            error,
-        })
     }
 }
 
@@ -1579,24 +1488,6 @@ mod tests {
     #[test]
     fn test_function_v2_serial_deserial_is_id() {
         let f1 = FunctionV2 {
-            parameter:    Some(Type::String(SizeLength::U32)),
-            return_value: Some(Type::String(SizeLength::U32)),
-            error:        Some(Type::String(SizeLength::U32)),
-        };
-
-        assert_eq!(serial_deserial(&f1), Ok(f1));
-    }
-
-    #[test]
-    fn test_function_v3_serial_deserial_is_id() {
-        let mut event_map = BTreeMap::new();
-        let tag: u8 = 1;
-        event_map.insert(
-            tag,
-            (String::from("EventOne"), Fields::Named(vec![(String::from("value"), Type::U8)])),
-        );
-
-        let f1 = FunctionV3 {
             parameter:    Some(Type::String(SizeLength::U32)),
             return_value: Some(Type::String(SizeLength::U32)),
             error:        Some(Type::String(SizeLength::U32)),
