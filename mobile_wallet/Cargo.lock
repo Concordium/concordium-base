@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "base58check",
  "chrono",
@@ -252,7 +252,9 @@ dependencies = [
  "fnv",
  "hashbrown",
  "num-bigint 0.4.3",
+ "num-integer",
  "num-traits",
+ "rust_decimal",
  "serde",
  "serde_json",
  "thiserror",
@@ -912,7 +914,7 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "byteorder",

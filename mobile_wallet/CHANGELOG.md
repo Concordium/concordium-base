@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.0
+- Added support for V3 schema
+
 ## 0.18.0
 - Removed the function for converting a serialized account transaction (as bytes) into JSON.
 - Removed the function for signing any account transaction.

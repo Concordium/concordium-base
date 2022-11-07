@@ -337,6 +337,64 @@ pub fn generate_contract_schema_v2(
     }))
 }
 
+/// Tries to generate schemas for events, parameters, return values, and errors
+/// of methods for a contract with a V3 schema.
+pub fn generate_contract_schema_v3(
+    module_bytes: &[u8],
+) -> ExecResult<schema::VersionedModuleSchema> {
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+
+    let mut contract_schemas = BTreeMap::new();
+
+    for name in artifact.export.keys() {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_event_schema_") {
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                // Generate event schema
+                let function_schema_event = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV3::default);
+                contract_schema.event = Some(function_schema_event);
+            }
+            // The event schema attached to the init function is globally
+            // available in the smart contract and is applied to all
+            // events logged by receive/init functions. There is no
+            // need to create a separate event schema for receive functions.
+        } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                // Generate init-function schema
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV3::default);
+                contract_schema.init = Some(function_schema);
+            } else if rest.contains('.') {
+                // Generate receive-function schema
+                let function_schema = generate_schema_run(&artifact, name.as_ref())?;
+
+                let split_name: Vec<_> = rest.splitn(2, '.').collect();
+                let contract_name = split_name[0];
+                let function_name = split_name[1];
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::ContractV3::default);
+
+                contract_schema.receive.insert(function_name.to_owned(), function_schema);
+            } else {
+                // do nothing: no event schema and not a schema that was
+                // attached to an init/ receive function
+            }
+        }
+    }
+
+    Ok(schema::VersionedModuleSchema::V3(schema::ModuleV3 {
+        contracts: contract_schemas,
+    }))
+}
+
 /// Runs the given schema function and reads the resulting function schema from
 /// memory, attempting to parse it. If this fails, an error is returned.
 fn generate_schema_run<I: TryFromImport, C: RunnableCode, SchemaType: Deserial>(
