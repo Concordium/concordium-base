@@ -411,7 +411,8 @@ impl From<u8> for AttributeTag {
 /// The meaning of attributes is then assigned at the outer layers when the
 /// library is used. In order to make the library as generic (and ultimately
 /// simple) as possible this trait is used.
-pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
+pub trait Attribute<F: Field>:
+    Clone + Sized + Send + Sync + fmt::Display + Serialize + Ord {
     /// Convert an attribute to a field element
     fn to_field_element(&self) -> F;
 }
