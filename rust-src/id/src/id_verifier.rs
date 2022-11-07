@@ -1,3 +1,6 @@
+//! This module exposes functions for verifying various proofs of statements
+//! about a credential on accounts.
+
 use crate::{types::*, utils};
 use bulletproofs::{
     range_proof::{verify_efficient, RangeProof, VerificationError},

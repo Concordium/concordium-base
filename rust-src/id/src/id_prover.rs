@@ -1,3 +1,6 @@
+//! This module exposes functions for proving statements about credentials on
+//! accounts.
+
 use crate::{
     id_proof_types::*,
     sigma_protocols::{
