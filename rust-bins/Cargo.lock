@@ -57,6 +57,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15af2628f6890fe2609a3b91bef4c83450512802e59489f9c1cb1fa5df064a61"
 
 [[package]]
+name = "arrayvec"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "base58check",
  "chrono",
@@ -276,7 +282,9 @@ dependencies = [
  "fnv",
  "hashbrown",
  "num-bigint 0.4.3",
+ "num-integer",
  "num-traits",
+ "rust_decimal",
  "serde",
  "serde_json",
  "thiserror",
@@ -1802,6 +1810,17 @@ dependencies = [
  "serde",
  "serde_json",
  "winapi",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
+dependencies = [
+ "arrayvec",
+ "num-traits",
+ "serde",
 ]
 
 [[package]]

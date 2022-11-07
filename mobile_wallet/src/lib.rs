@@ -2,14 +2,14 @@ use anyhow::{bail, ensure};
 use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
-        self, base16_decode_string, c_char,
+        self, c_char,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
     contracts_common::{
         from_bytes,
         schema::{Type, VersionedModuleSchema},
-        Cursor,
+        AccountAddress, Cursor,
     },
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
@@ -21,9 +21,12 @@ use concordium_base::{
         secret_sharing::Threshold,
         types::*,
     },
+    smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
-        self, construct::PreAccountTransaction, ConfigureBakerKeysPayload, ConfigureBakerPayload,
-        ConfigureDelegationPayload, ExactSizeTransactionSigner, Memo, Payload, TransactionSigner,
+        self,
+        construct::{init_contract, update_contract, PreAccountTransaction},
+        ConfigureBakerKeysPayload, ConfigureBakerPayload, ConfigureDelegationPayload,
+        ExactSizeTransactionSigner, InitContractPayload, Memo, TransactionSigner,
         UpdateContractPayload,
     },
 };
@@ -244,27 +247,36 @@ fn get_receive_schema(
                 None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
             }
         }
+        VersionedModuleSchema::V3(module_schema) => {
+            let contract_schema = module_schema
+                .contracts
+                .get(contract_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
+
+            let entrypoint_parameter = contract_schema
+                .receive
+                .get(entrypoint_name)
+                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
+                .parameter();
+            match entrypoint_parameter {
+                Some(value) => value.clone(),
+                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
+            }
+        }
     };
     Ok(receive_schema)
 }
 
-fn get_parameters_as_json(
-    payload: &UpdateContractPayload,
+fn get_parameter_as_json(
+    parameter: Parameter,
+    receive_name: &OwnedReceiveName,
     schema: &str,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
     let schema_bytes = hex::decode(schema)?;
 
-    let contract_name = &payload
-        .receive_name
-        .as_receive_name()
-        .contract_name()
-        .to_string();
-    let entrypoint_name = &payload
-        .receive_name
-        .as_receive_name()
-        .entrypoint_name()
-        .to_string();
+    let contract_name = &receive_name.as_receive_name().contract_name().to_string();
+    let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();
 
     let module_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
         Ok(versioned) => versioned,
@@ -278,62 +290,27 @@ fn get_parameters_as_json(
     };
     let receive_schema = get_receive_schema(module_schema, contract_name, entrypoint_name)?;
 
-    let parameter_bytes = payload.message.as_ref();
-    let mut parameters_cursor = Cursor::new(&parameter_bytes[..]);
-    match receive_schema.to_json(&mut parameters_cursor) {
+    let mut parameter_cursor = Cursor::new(parameter.as_ref());
+    match receive_schema.to_json(&mut parameter_cursor) {
         Ok(schema) => Ok(schema),
         Err(e) => Err(anyhow::anyhow!(
-            "Unable to parse parameters to JSON: {:?}",
+            "Unable to parse parameter to JSON: {:?}",
             e
         )),
     }
 }
 
-fn transaction_to_json_aux(input: &str) -> anyhow::Result<String> {
+fn parameter_to_json_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
-    let serialized_transaction: String = try_get(&v, "transaction")?;
-    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
+    let serialized_parameter: String = try_get(&v, "parameter")?;
+    let receive_name: OwnedReceiveName = try_get(&v, "receiveName")?;
+    let parameter: Parameter = Parameter::new_unchecked(hex::decode(serialized_parameter)?);
+    let schema: String = try_get(&v, "schema")?;
+    let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
+    let parameter_as_json =
+        get_parameter_as_json(parameter, &receive_name, &schema, &schema_version)?;
 
-    let response = match pre_tx.clone().payload {
-        Payload::Update { payload } => {
-            let schema: String = try_get(&v, "schema")?;
-            let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
-            let parameters_as_json = get_parameters_as_json(&payload, &schema, &schema_version)?;
-
-            serde_json::json!({
-                "hashToSign": pre_tx.hash_to_sign,
-                "header": pre_tx.header,
-                "payload": {
-                    "update": {
-                        "address": payload.address,
-                        "amount": payload.amount,
-                        "message": parameters_as_json,
-                        "receiveName": payload.receive_name
-                    }
-                }
-            })
-        }
-        _ => {
-            serde_json::json!(pre_tx)
-        }
-    };
-
-    Ok(to_string(&response)?)
-}
-
-fn sign_transaction_aux(input: &str) -> anyhow::Result<String> {
-    let v: Value = from_str(input)?;
-    let serialized_transaction: String = try_get(&v, "transaction")?;
-    let keys: AccountKeys = try_get(&v, "keys")?;
-    let pre_tx: PreAccountTransaction = base16_decode_string(&serialized_transaction)?;
-    let (signatures, body) = make_signatures(&keys, pre_tx);
-
-    let response = serde_json::json!({
-        "signatures": signatures,
-        "transaction": hex::encode(&body),
-    });
-
-    Ok(to_string(&response)?)
+    Ok(to_string(&parameter_as_json)?)
 }
 
 fn sign_message_aux(input: &str) -> anyhow::Result<String> {
@@ -347,6 +324,78 @@ fn sign_message_aux(input: &str) -> anyhow::Result<String> {
         message,
         account_address,
     ))?)
+}
+
+#[derive(common::SerdeDeserialize)]
+#[serde(tag = "type", content = "payload")]
+enum JSONPayload {
+    InitContract {
+        #[serde(flatten)]
+        payload: InitContractPayload,
+        #[serde(rename = "maxContractExecutionEnergy")]
+        energy:  Energy,
+    },
+    Update {
+        #[serde(flatten)]
+        payload: UpdateContractPayload,
+        #[serde(rename = "maxContractExecutionEnergy")]
+        energy:  Energy,
+    },
+    Transfer {
+        amount: Amount,
+        to:     AccountAddress,
+    },
+}
+
+/// Context to create an unsigned transaction.
+#[derive(common::SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransactionContext {
+    pub from:    AccountAddress,
+    pub expiry:  TransactionTime,
+    pub nonce:   Nonce,
+    #[serde(flatten)]
+    pub payload: JSONPayload,
+    pub keys:    AccountKeys,
+}
+
+fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let ctx: TransactionContext = from_value(v)?;
+    let pre_tx = match ctx.payload {
+        JSONPayload::Update { payload, energy } => update_contract(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            payload,
+            energy,
+        ),
+        JSONPayload::InitContract { payload, energy } => init_contract(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            payload,
+            energy,
+        ),
+        JSONPayload::Transfer { amount, to } => transactions::construct::transfer(
+            ctx.keys.num_keys(),
+            ctx.from,
+            ctx.nonce,
+            ctx.expiry,
+            to,
+            amount,
+        ),
+    };
+    let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
+
+    let response = serde_json::json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
 }
 
 fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
@@ -1475,7 +1524,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => sign_transaction -> sign_transaction_aux);
+    => parameter_to_json -> parameter_to_json_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -1489,7 +1538,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => transaction_to_json -> transaction_to_json_aux);
+    => create_account_transaction -> create_account_transaction_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

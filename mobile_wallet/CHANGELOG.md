@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0
+- Added support for V3 schema
+
+## 0.18.0
+- Removed the function for converting a serialized account transaction (as bytes) into JSON.
+- Removed the function for signing any account transaction.
+- Added a function for converting serialized parameters for smart contract updates (as bytes) into JSON.
+- Added a function `create_account_transaction` for creating and signing an account transaction.
+
 ## 0.17.0
 - Added a function for signing any account transaction.
 - Added a function for signing a message.

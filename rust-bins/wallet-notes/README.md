@@ -607,25 +607,6 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
 An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
 
-## sign_transaction
-Semantics: Signs the provided transaction and returns the hex encoded transaction along with the signatures on the transaction.
-
-This function takes as input a NUL-terminated UTF8-encoded string. The string
-must be a valid JSON object with fields
-
-- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
-
-- `"keys"` ... mapping with the keys of the sender account.
-
-The returned value is a JSON object with the following fields:
-
-- `"signatures"` ... list with signatures of the transaction with the provided keys.
-
-- `"transaction"` ... the serialized transaction.
-
-An example input to this request is in the file [sign_transaction-input.json](files/sign_transaction-input.json).
-An example output to this request is in the file [sign_transaction-output.json](files/sign_transaction-output.json).
-
 ## sign_message
 Semantics: Signs a message with the provided account keys.
 
@@ -641,29 +622,59 @@ The returned value is a JSON object containing a list with signatures of the mes
 An example input to this request is in the file [sign_message-input.json](files/sign_message-input.json).
 An example output to this request is in the file [sign_message-output.json](files/sign_message-output.json).
 
-## transaction_to_json
-Semantics: Converts a serialized transaction (as bytes) into JSON.
+## parameter_to_json
+Semantics: Converts the serialized parameter for a contract update (as bytes) into JSON.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
-- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
+- `"parameter"` ... a hex encoding of the serialized parameter.
 
-- `"schema"` ... optional, required for update smart contract transactions, hex encoded schema for the corresponding smart contract.
+- `"receiveName"` ... the name of the receive function that the parameter is for.
+
+- `"schema"` ... hex encoded schema for the corresponding smart contract.
 
 - `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 
+The returned value is a JSON representation of the parameter.
+
+An example input to this request is in the file [parameter_to_json-input.json](files/parameter_to_json-input.json).
+An example output to this request is in the file [parameter_to_json-output.json](files/parameter_to_json-output.json).
+
+## create_account_transaction_ext
+
+Semantics: Creates and signs a transaction with the provided values, including the payload in JSON format.
+This currently only supports the following transaction types:
+
+| Supported Types                      | type tag       |
+|--------------------------------------|----------------|
+| Smart contract initializtion         | InitContract   |
+| Smart contract update                | Update         |
+| Simple transfer                      | Transfer       |
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"type"` ... the transaction type tag (Check the table with supported types above for the expected values).
+
+- `"payload"` ... the transaction's payload as json.
+
 The returned value is a JSON object with the following fields:
 
-- `"hashToSign"` ... hex encoding of the hash of the transaction
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
 
-- `"header"` ... the transaction header
+- `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
 
-- `"payload"` ... the transaction payload, the exact contents is dependent on the transaction type. For smart contract updates the `message` field is replaced with a JSON view of the paramaters instead of the hex encoded bytes.
-
-An example input to this request is in the file [transaction_to_json-input.json](files/sign_transaction-input.json).
-An example output to this request is in the file [transaction_to_json-output.json](files/sign_transaction-output.json).
-
+An example input to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
+An example output to this request is in the file [create_account_transaction-output.json](files/create_account_transaction-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This
