@@ -59,6 +59,38 @@ pub enum Interrupt {
 }
 
 impl Interrupt {
+    /// Whether the logs should be cleared for handling this interrupt or not.
+    /// This is somewhat hacky, but it is needed because there are two kinds of
+    /// interrupts. The queries which do not affect the state, and the state
+    /// affecting ones. The latter ones produce "Interrupt" events in the
+    /// scheduler, which record the log trace up to that point in execution.
+    /// The query ones do not.
+    ///
+    /// This is admittedly rather hairy and could be done better. But that is
+    /// the semantics we have now, and changing it is a bigger reorganization.
+    pub(crate) fn should_clear_logs(&self) -> bool {
+        match self {
+            Interrupt::Transfer {
+                ..
+            } => true,
+            Interrupt::Call {
+                ..
+            } => true,
+            Interrupt::Upgrade {
+                ..
+            } => true,
+            Interrupt::QueryAccountBalance {
+                ..
+            } => false,
+            Interrupt::QueryContractBalance {
+                ..
+            } => false,
+            Interrupt::QueryExchangeRates => false,
+        }
+    }
+}
+
+impl Interrupt {
     pub fn to_bytes(&self, out: &mut Vec<u8>) -> anyhow::Result<()> {
         match self {
             Interrupt::Transfer {
@@ -1591,7 +1623,11 @@ where
             // Logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
             // existing logs.
-            let logs = std::mem::take(&mut stateless.logs);
+            let logs = if reason.should_clear_logs() {
+                std::mem::take(&mut stateless.logs)
+            } else {
+                v0::Logs::new()
+            };
             let state_changed = host.state.changed;
             let host = SavedHost {
                 stateless:          stateless.into(),
