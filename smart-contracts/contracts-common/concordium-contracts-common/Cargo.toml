@@ -70,6 +70,7 @@ std = ["fnv/std"]
 derive-serde = ["serde", "serde_json", "std", "base58check", "chrono", "num-bigint", "num-traits", "thiserror", "anyhow", "hex"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
+versioned_schema_helpers = ["hex", "thiserror"]
 
 [lib]
 # Since we don't define an allocator in this crate, we can only produce an rlib
