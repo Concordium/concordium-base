@@ -2,11 +2,10 @@
 
 ## Unreleased changes
 
-## concordium-contracts-common 4.1.0 (Unreleased)
-
 - Add support for smart contract v3 schemas.
 - Add type `ModuleReference` representing a module reference.
-- Implement `SchemaType` for `OwnedEntrypointName`.
+- Implement `SchemaType` for `OwnedEntrypointName` and `OwnedParameter`.
+- Add type `ExchangeRate` representing an exchange rate between two quantities.
 
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
