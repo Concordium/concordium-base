@@ -1429,18 +1429,25 @@ mod serde_impl {
         type Err = AccountAddressParseError;
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {
-            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
+            // The buffer must be large enough to contain the 32 bytes for the address, 4
+            // bytes for a checksum and 1 byte for the version.
+            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE + 4 + 1];
             let len = bs58::decode(v).with_check(Some(1)).into(&mut buf)?;
-            if len != ACCOUNT_ADDRESS_SIZE {
+            // Prepends 1 byte for the version
+            if len != 1 + ACCOUNT_ADDRESS_SIZE {
                 return Err(AccountAddressParseError::InvalidByteLength(len));
             }
-            Ok(AccountAddress(buf))
+            // Copy out the 32 bytes for the account address. Ignoring 1 byte prepended
+            // for the version and the 4 bytes appended for the checksum.
+            let mut address_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+            address_bytes.copy_from_slice(&buf[1..1 + ACCOUNT_ADDRESS_SIZE]);
+            Ok(AccountAddress(address_bytes))
         }
     }
 
     impl fmt::Display for AccountAddress {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", bs58::encode(&self.0).with_check().into_string())
+            write!(f, "{}", bs58::encode(&self.0).with_check_version(1).into_string())
         }
     }
 
@@ -1574,6 +1581,24 @@ mod serde_impl {
             distributions::{Distribution, Uniform},
             Rng,
         };
+
+        #[test]
+        fn test_account_address_to_string_parse_is_id() {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let mut address_bytes = [0u8; 32];
+
+            for _ in 0..1000 {
+                let address = AccountAddress(address_bytes);
+                rng.fill(&mut address_bytes);
+                let parsed: AccountAddress =
+                    address.to_string().parse().expect("Failed to parse address string.");
+                assert_eq!(
+                    parsed, address,
+                    "Parsed account address differs from the expected address."
+                );
+            }
+        }
 
         #[test]
         // test amount serialization is correct
