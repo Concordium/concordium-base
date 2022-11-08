@@ -1019,6 +1019,12 @@ impl Address {
             false
         }
     }
+
+    /// Return `true` if and only if the address is an account address.
+    pub fn is_account(&self) -> bool { matches!(self, Address::Account(_)) }
+
+    /// Return `true` if and only if the address is a contract address.
+    pub fn is_contract(&self) -> bool { matches!(self, Address::Contract(_)) }
 }
 
 impl Serial for AttributeTag {
