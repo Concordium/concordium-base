@@ -1,5 +1,10 @@
 //! Types used to represent statements and proofs.
-//! A statement is what the user is requested to prove.
+//! A statement is what the user is requested to prove by the verifier.
+//! The proofs are for proving properties about the attribute values inside
+//! on-chain commitments that account credentials can have.
+//! Given the statement and relevant secret data (being the attribute value and
+//! the commitment randomness), the user can construct a proof of the statement
+//! (if the statement is true).
 use crate::{constants::AttributeKind, sigma_protocols::dlog::Witness as DlogWitness, types::*};
 use bulletproofs::{
     range_proof::RangeProof, set_membership_proof::SetMembershipProof,
