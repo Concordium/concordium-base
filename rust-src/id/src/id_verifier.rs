@@ -116,24 +116,29 @@ pub fn verify_account_ownership(
 /// - `commitments` - the on-chain commitments of the relevant credential
 /// The function returns `true` iff the statement is true (unless with
 /// negligible probability).
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Proof<C, AttributeType> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {
     pub fn verify(
         &self,
         challenge: &[u8],
         global: &GlobalContext<C>,
         commitments: &CredentialDeploymentCommitments<C>,
+        proofs: &Proof<C, AttributeType>,
     ) -> bool {
         let mut transcript = RandomOracle::domain("id_attribute_proofs");
         transcript.add_bytes(challenge);
         transcript.append_message(b"accountAddress", &self.account);
         transcript.append_message(b"credential", &self.credential);
-        for proof in &self.proofs {
-            match proof {
-                AtomicProof::RevealAttribute {
-                    attribute_tag,
-                    attribute,
-                    proof,
-                } => {
+        if self.statement.statements.len() != proofs.proofs.len() {
+            return false;
+        }
+        for (statement, proof) in self.statement.statements.iter().zip(proofs.proofs.iter()) {
+            match (statement, proof) {
+                (
+                    AtomicStatement::RevealAttribute {
+                        statement: RevealAttributeStatement { attribute_tag },
+                    },
+                    AtomicProof::RevealAttribute { attribute, proof },
+                ) => {
                     let maybe_com = commitments.cmm_attributes.get(attribute_tag);
                     if let Some(com) = maybe_com {
                         // There is a commitment to the relevant attribute. We can then check the
@@ -157,7 +162,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Proof<C, AttributeType> {
                         return false;
                     }
                 }
-                AtomicProof::AttributeInRange { statement, proof } => {
+                (
+                    AtomicStatement::AttributeInRange { statement },
+                    AtomicProof::AttributeInRange { proof },
+                ) => {
                     let maybe_com = commitments.cmm_attributes.get(&statement.attribute_tag);
                     if let Some(com) = maybe_com {
                         // There is a commitment to the relevant attribute. We can then check the
@@ -178,7 +186,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Proof<C, AttributeType> {
                         return false;
                     }
                 }
-                AtomicProof::AttributeInSet { statement, proof } => {
+                (
+                    AtomicStatement::AttributeInSet { statement },
+                    AtomicProof::AttributeInSet { proof },
+                ) => {
                     let maybe_com = commitments.cmm_attributes.get(&statement.attribute_tag);
                     if let Some(com) = maybe_com {
                         let attribute_vec: Vec<_> =
@@ -199,7 +210,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Proof<C, AttributeType> {
                         return false;
                     }
                 }
-                AtomicProof::AttributeNotInSet { statement, proof } => {
+                (
+                    AtomicStatement::AttributeNotInSet { statement },
+                    AtomicProof::AttributeNotInSet { proof },
+                ) => {
                     let maybe_com = commitments.cmm_attributes.get(&statement.attribute_tag);
                     if let Some(com) = maybe_com {
                         let attribute_vec: Vec<_> =
@@ -219,6 +233,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Proof<C, AttributeType> {
                     } else {
                         return false;
                     }
+                }
+                _ => {
+                    return false;
                 }
             }
         }
@@ -448,9 +465,9 @@ mod tests {
 
         // the verifier uses these commitments to verify the proofs
 
-        let result = proof.verify(&challenge, &global, &coms);
+        let result = full_statement.verify(&challenge, &global, &coms, &proof);
         assert!(result);
-        let result2 = proof2.verify(&challenge2, &global, &coms);
+        let result2 = full_statement2.verify(&challenge2, &global, &coms, &proof2);
         assert!(result2);
     }
 }

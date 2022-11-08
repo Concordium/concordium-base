@@ -118,37 +118,33 @@ Attribute<C::Scalar> + SerdeDeserialize<'de>"
 #[serde(tag = "type")]
 pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     RevealAttribute {
-        #[serde(rename = "attributeTag")]
-        attribute_tag: AttributeTag,
-        attribute:     AttributeType,
-        proof:         super::sigma_protocols::common::SigmaProof<DlogWitness<C>>,
+        attribute: AttributeType, /* The verifier has to learn this, so it send together with
+                                   * the proof. */
+        proof:     super::sigma_protocols::common::SigmaProof<DlogWitness<C>>,
     },
     AttributeInRange {
-        statement: AttributeInRangeStatement<C, AttributeType>,
         #[serde(
             rename = "proof",
             serialize_with = "base16_encode",
             deserialize_with = "base16_decode"
         )]
-        proof:     RangeProof<C>,
+        proof: RangeProof<C>,
     },
     AttributeInSet {
-        statement: AttributeInSetStatement<C, AttributeType>,
         #[serde(
             rename = "proof",
             serialize_with = "base16_encode",
             deserialize_with = "base16_decode"
         )]
-        proof:     SetMembershipProof<C>,
+        proof: SetMembershipProof<C>,
     },
     AttributeNotInSet {
-        statement: AttributeNotInSetStatement<C, AttributeType>,
         #[serde(
             rename = "proof",
             serialize_with = "base16_encode",
             deserialize_with = "base16_decode"
         )]
-        proof:     SetNonMembershipProof<C>,
+        proof: SetNonMembershipProof<C>,
     },
 }
 

@@ -31,7 +31,7 @@ use sha2::{Digest, Sha256};
 /// wrapped in a `Some`. Otherwise it returns `None`.
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {
     pub fn prove(
-        self,
+        &self,
         global: &GlobalContext<C>,
         challenge: &[u8],
         secret: Secret<C, AttributeType>,
@@ -50,11 +50,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         for (statement, secret) in self
             .statement
             .statements
-            .into_iter()
+            .iter()
             .zip(secret.secrets.into_iter())
         {
             match (statement, secret) {
-                (AtomicStatement::RevealAttribute { statement }, (attribute, randomness)) => {
+                (AtomicStatement::RevealAttribute { .. }, (attribute, randomness)) => {
                     let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                     transcript.add_bytes(b"RevealAttributeDlogProof");
                     transcript.append_message(b"x", &x);
@@ -69,11 +69,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                         secret: Value::new(*randomness),
                     };
                     let proof = sigma_prove(&mut transcript, &prover, secret, &mut csprng)?;
-                    proofs.push(AtomicProof::RevealAttribute {
-                        attribute_tag: statement.attribute_tag,
-                        attribute,
-                        proof,
-                    });
+                    proofs.push(AtomicProof::RevealAttribute { attribute, proof });
                 }
                 (AtomicStatement::AttributeInSet { statement }, (attribute, randomness)) => {
                     let attribute_scalar = attribute.to_field_element();
@@ -89,7 +85,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                         &randomness,
                     )
                     .ok()?;
-                    let proof = AtomicProof::AttributeInSet { statement, proof };
+                    let proof = AtomicProof::AttributeInSet { proof };
                     proofs.push(proof);
                 }
                 (AtomicStatement::AttributeNotInSet { statement }, (attribute, randomness)) => {
@@ -106,7 +102,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                         &randomness,
                     )
                     .ok()?;
-                    let proof = AtomicProof::AttributeNotInSet { statement, proof };
+                    let proof = AtomicProof::AttributeNotInSet { proof };
                     proofs.push(proof);
                 }
                 (AtomicStatement::AttributeInRange { statement }, (attribute, randomness)) => {
@@ -118,7 +114,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                         &statement.upper,
                         &randomness,
                     )?;
-                    let proof = AtomicProof::AttributeInRange { statement, proof };
+                    let proof = AtomicProof::AttributeInRange { proof };
                     proofs.push(proof);
                 }
             }
