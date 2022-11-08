@@ -1,7 +1,7 @@
 [package]
 name = "concordium-contracts-common-derive"
 authors = ["Concordium <developers@concordium.com>"]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2018"
 license = "MPL-2.0"
 description = "Procedural macros to ease writing for smart contracts on the Concordium blockchain."
