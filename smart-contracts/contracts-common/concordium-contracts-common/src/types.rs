@@ -492,7 +492,7 @@ pub struct Duration {
 impl Duration {
     /// Construct duration from milliseconds.
     #[inline(always)]
-    pub fn from_millis(milliseconds: u64) -> Self {
+    pub const fn from_millis(milliseconds: u64) -> Self {
         Self {
             milliseconds,
         }
@@ -500,19 +500,19 @@ impl Duration {
 
     /// Construct duration from seconds.
     #[inline(always)]
-    pub fn from_seconds(seconds: u64) -> Self { Self::from_millis(seconds * 1000) }
+    pub const fn from_seconds(seconds: u64) -> Self { Self::from_millis(seconds * 1000) }
 
     /// Construct duration from minutes.
     #[inline(always)]
-    pub fn from_minutes(minutes: u64) -> Self { Self::from_millis(minutes * 1000 * 60) }
+    pub const fn from_minutes(minutes: u64) -> Self { Self::from_millis(minutes * 1000 * 60) }
 
     /// Construct duration from hours.
     #[inline(always)]
-    pub fn from_hours(hours: u64) -> Self { Self::from_millis(hours * 1000 * 60 * 60) }
+    pub const fn from_hours(hours: u64) -> Self { Self::from_millis(hours * 1000 * 60 * 60) }
 
     /// Construct duration from days.
     #[inline(always)]
-    pub fn from_days(days: u64) -> Self { Self::from_millis(days * 1000 * 60 * 60 * 24) }
+    pub const fn from_days(days: u64) -> Self { Self::from_millis(days * 1000 * 60 * 60 * 24) }
 
     /// Get number of milliseconds in the duration.
     #[inline(always)]
