@@ -26,6 +26,24 @@ impl<X: Deserial, Y: Deserial> Deserial for (X, Y) {
     }
 }
 
+impl<X: Deserial, Y: Deserial, Z: Deserial> Deserial for (X, Y, Z) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let x = source.get()?;
+        let y = source.get()?;
+        let z = source.get()?;
+        Ok((x, y, z))
+    }
+}
+
+impl<X: Serial, Y: Serial, Z: Serial> Serial for (X, Y, Z) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        Ok(())
+    }
+}
+
 impl Serial for () {
     #[inline(always)]
     fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
@@ -160,6 +178,26 @@ impl Serial for Amount {
 impl Deserial for Amount {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         source.read_u64().map(Amount::from_micro_ccd)
+    }
+}
+
+impl Serial for ExchangeRate {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u64(self.numerator())?;
+        out.write_u64(self.denominator())
+    }
+}
+
+impl Deserial for ExchangeRate {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let numerator = source.read_u64()?;
+        let denominator = source.read_u64()?;
+
+        if numerator == 0 || denominator == 0 {
+            Err(ParseError::default())
+        } else {
+            Ok(ExchangeRate::new_unchecked(numerator, denominator))
+        }
     }
 }
 
