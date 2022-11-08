@@ -1855,8 +1855,8 @@ mod serde_impl {
             let mut address_bytes = [0u8; 32];
 
             for _ in 0..1000 {
-                let address = AccountAddress(address_bytes);
                 rng.fill(&mut address_bytes);
+                let address = AccountAddress(address_bytes);
                 let parsed: AccountAddress =
                     address.to_string().parse().expect("Failed to parse address string.");
                 assert_eq!(
