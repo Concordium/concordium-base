@@ -1,6 +1,6 @@
 [package]
 name = "concordium-contracts-common"
-version = "3.1.0"
+version = "4.1.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license = "MPL-2.0"
@@ -44,9 +44,17 @@ features = ["check"]
 optional = true
 version = "0.4"
 
+[dependencies.num-integer]
+optional = true
+version = "0.1"
+
 [dependencies.num-traits]
 optional = true
 version = "0.2"
+
+[dependencies.rust_decimal]
+optional = true
+version = "1.26"
 
 [dependencies.thiserror]
 optional = true
@@ -60,7 +68,7 @@ version = "1"
 default = ["std"]
 
 std = ["fnv/std"]
-derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "thiserror"]
+derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
 
@@ -73,3 +81,9 @@ crate-type = ["rlib"]
 arbitrary = { version = "0.4", features = ["derive"] }
 rand = "=0.7"
 rand_pcg = "0.2.1"
+
+
+[package.metadata.docs.rs]
+# This sets the default target to `wasm32-unknown-unknown`, and builds both the wasm and x86 targets.
+# This is useful because the some parts of documentation only exist on specific platforms.
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]

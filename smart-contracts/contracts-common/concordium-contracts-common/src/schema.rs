@@ -37,7 +37,7 @@ pub trait SchemaType {
 ///
 /// Older versions of smart contracts might have this embedded in the custom
 /// section labelled `concordium-schema-v1`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleV0 {
     pub contracts: BTreeMap<String, ContractV0>,
 }
@@ -46,9 +46,24 @@ pub struct ModuleV0 {
 ///
 /// Older versions of smart contracts might have this embedded in the custom
 /// section labelled `concordium-schema-v2`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleV1 {
     pub contracts: BTreeMap<String, ContractV1>,
+}
+
+/// Contains all the contract schemas for a smart contract module V1 with a V2
+/// schema.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleV2 {
+    pub contracts: BTreeMap<String, ContractV2>,
+}
+
+/// Contains all the contract schemas for a smart contract module V1 with a V3
+/// schema.
+#[cfg_attr(test, derive(arbitrary::Arbitrary))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleV3 {
+    pub contracts: BTreeMap<String, ContractV3>,
 }
 
 /// Represents the different schema versions.
@@ -65,11 +80,15 @@ pub enum VersionedModuleSchema {
     V0(ModuleV0),
     /// Version 1 schema, only supported by V1 smart contracts.
     V1(ModuleV1),
+    /// Version 2 schema, only supported by V1 smart contracts.
+    V2(ModuleV2),
+    /// Version 3 schema, only supported by V1 smart contracts.
+    V3(ModuleV3),
 }
 
 /// Describes all the schemas of a V0 smart contract.
-/// The [Default] instance produces an empty schema.
-#[derive(Debug, Default, Clone)]
+/// The [`Default`] instance produces an empty schema.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ContractV0 {
     pub state:   Option<Type>,
     pub init:    Option<Type>,
@@ -77,16 +96,40 @@ pub struct ContractV0 {
 }
 
 /// Describes all the schemas of a V1 smart contract.
-#[derive(Debug, Default, Clone)]
-/// The [Default] instance produces an empty schema.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+/// The [`Default`] instance produces an empty schema.
 pub struct ContractV1 {
-    pub init:    Option<Function>,
-    pub receive: BTreeMap<String, Function>,
+    pub init:    Option<FunctionV1>,
+    pub receive: BTreeMap<String, FunctionV1>,
 }
 
-/// Describes the schema of an init or a receive function for V1 contracts.
-#[derive(Debug, Clone)]
-pub enum Function {
+/// Describes all the schemas of a V1 smart contract with a V2 schema.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+/// The [`Default`] instance produces an empty schema.
+pub struct ContractV2 {
+    pub init:    Option<FunctionV2>,
+    pub receive: BTreeMap<String, FunctionV2>,
+}
+
+/// Describes all the schemas of a V1 smart contract with a V3 schema.
+#[cfg_attr(test, derive(arbitrary::Arbitrary))]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+/// The [`Default`] instance produces an empty schema.
+pub struct ContractV3 {
+    pub init:    Option<FunctionV2>,
+    pub receive: BTreeMap<String, FunctionV2>,
+    pub event:   Option<Type>,
+}
+
+impl ContractV3 {
+    /// Extract the event schema if it exists.
+    pub fn event(&self) -> Option<&Type> { self.event.as_ref() }
+}
+
+/// Describes the schema of an init or a receive function for V1 contracts with
+/// V1 schemas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionV1 {
     Parameter(Type),
     ReturnValue(Type),
     Both {
@@ -95,13 +138,13 @@ pub enum Function {
     },
 }
 
-impl Function {
+impl FunctionV1 {
     /// Extract the parameter schema if it exists.
     pub fn parameter(&self) -> Option<&Type> {
         match self {
-            Function::Parameter(ty) => Some(ty),
-            Function::ReturnValue(_) => None,
-            Function::Both {
+            FunctionV1::Parameter(ty) => Some(ty),
+            FunctionV1::ReturnValue(_) => None,
+            FunctionV1::Both {
                 parameter,
                 ..
             } => Some(parameter),
@@ -111,14 +154,36 @@ impl Function {
     /// Extract the return value schema if it exists.
     pub fn return_value(&self) -> Option<&Type> {
         match self {
-            Function::Parameter(_) => None,
-            Function::ReturnValue(rv) => Some(rv),
-            Function::Both {
+            FunctionV1::Parameter(_) => None,
+            FunctionV1::ReturnValue(rv) => Some(rv),
+            FunctionV1::Both {
                 return_value,
                 ..
             } => Some(return_value),
         }
     }
+}
+
+/// Describes the schema of an init or a receive function for V1 contracts with
+/// V3 schemas. Differs from [`FunctionV1`] in that a schema for the error can
+/// be included.
+#[cfg_attr(test, derive(arbitrary::Arbitrary))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionV2 {
+    pub parameter:    Option<Type>,
+    pub return_value: Option<Type>,
+    pub error:        Option<Type>,
+}
+
+impl FunctionV2 {
+    /// Extract the parameter schema if it exists.
+    pub fn parameter(&self) -> Option<&Type> { self.parameter.as_ref() }
+
+    /// Extract the return value schema if it exists.
+    pub fn return_value(&self) -> Option<&Type> { self.return_value.as_ref() }
+
+    /// Extract the error schema if it exists.
+    pub fn error(&self) -> Option<&Type> { self.error.as_ref() }
 }
 
 /// Schema for the fields of a struct or some enum variant.
@@ -224,6 +289,8 @@ pub enum Type {
     ByteList(SizeLength),
     /// A fixed sized list of bytes.
     ByteArray(u32),
+    /// An enum with a tag.
+    TaggedEnum(BTreeMap<u8, (String, Fields)>),
 }
 
 impl Type {
@@ -280,6 +347,9 @@ impl SchemaType for i128 {
 }
 impl SchemaType for Amount {
     fn get_type() -> Type { Type::Amount }
+}
+impl SchemaType for ModuleReference {
+    fn get_type() -> Type { Type::ByteArray(32) }
 }
 impl SchemaType for AccountAddress {
     fn get_type() -> Type { Type::AccountAddress }
@@ -347,6 +417,14 @@ impl SchemaType for OwnedReceiveName {
     fn get_type() -> Type { Type::ReceiveName(SizeLength::U16) }
 }
 
+impl SchemaType for OwnedEntrypointName {
+    fn get_type() -> Type { Type::String(SizeLength::U16) }
+}
+
+impl SchemaType for OwnedParameter {
+    fn get_type() -> Type { Type::ByteList(SizeLength::U16) }
+}
+
 impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
     fn get_type() -> Type { Type::Array(N.try_into().unwrap(), Box::new(A::get_type())) }
 }
@@ -396,6 +474,20 @@ impl Serial for ModuleV1 {
     }
 }
 
+impl Serial for ModuleV2 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.contracts.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Serial for ModuleV3 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.contracts.serial(out)?;
+        Ok(())
+    }
+}
+
 impl Serial for VersionedModuleSchema {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         // Prefix for versioned module schema, used to distinquish from the unversioned.
@@ -407,6 +499,14 @@ impl Serial for VersionedModuleSchema {
             }
             VersionedModuleSchema::V1(module) => {
                 out.write_u8(1)?;
+                module.serial(out)?;
+            }
+            VersionedModuleSchema::V2(module) => {
+                out.write_u8(2)?;
+                module.serial(out)?;
+            }
+            VersionedModuleSchema::V3(module) => {
+                out.write_u8(3)?;
                 module.serial(out)?;
             }
         }
@@ -434,6 +534,26 @@ impl Deserial for ModuleV1 {
     }
 }
 
+impl Deserial for ModuleV2 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ModuleV2 {
+            contracts,
+        })
+    }
+}
+
+impl Deserial for ModuleV3 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ModuleV3 {
+            contracts,
+        })
+    }
+}
+
 impl Deserial for VersionedModuleSchema {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         // First we ensure the prefix is correct.
@@ -450,6 +570,14 @@ impl Deserial for VersionedModuleSchema {
             1 => {
                 let module = source.get()?;
                 Ok(VersionedModuleSchema::V1(module))
+            }
+            2 => {
+                let module = source.get()?;
+                Ok(VersionedModuleSchema::V2(module))
+            }
+            3 => {
+                let module = source.get()?;
+                Ok(VersionedModuleSchema::V3(module))
             }
             _ => Err(ParseError {}),
         }
@@ -469,6 +597,23 @@ impl Serial for ContractV1 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.init.serial(out)?;
         self.receive.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Serial for ContractV2 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.init.serial(out)?;
+        self.receive.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Serial for ContractV3 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.init.serial(out)?;
+        self.receive.serial(out)?;
+        self.event.serial(out)?;
         Ok(())
     }
 }
@@ -499,18 +644,44 @@ impl Deserial for ContractV1 {
     }
 }
 
-impl Serial for Function {
+impl Deserial for ContractV2 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let init = source.get()?;
+        let len: u32 = source.get()?;
+        let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(ContractV2 {
+            init,
+            receive,
+        })
+    }
+}
+
+impl Deserial for ContractV3 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let init = source.get()?;
+        let len: u32 = source.get()?;
+        let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
+        let event = source.get()?;
+        Ok(ContractV3 {
+            init,
+            receive,
+            event,
+        })
+    }
+}
+
+impl Serial for FunctionV1 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
-            Function::Parameter(parameter) => {
+            FunctionV1::Parameter(parameter) => {
                 out.write_u8(0)?;
                 parameter.serial(out)
             }
-            Function::ReturnValue(return_value) => {
+            FunctionV1::ReturnValue(return_value) => {
                 out.write_u8(1)?;
                 return_value.serial(out)
             }
-            Function::Both {
+            FunctionV1::Both {
                 parameter,
                 return_value,
             } => {
@@ -522,18 +693,79 @@ impl Serial for Function {
     }
 }
 
-impl Deserial for Function {
+impl Deserial for FunctionV1 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let idx = source.read_u8()?;
         match idx {
-            0 => Ok(Function::Parameter(source.get()?)),
-            1 => Ok(Function::ReturnValue(source.get()?)),
-            2 => Ok(Function::Both {
+            0 => Ok(FunctionV1::Parameter(source.get()?)),
+            1 => Ok(FunctionV1::ReturnValue(source.get()?)),
+            2 => Ok(FunctionV1::Both {
                 parameter:    source.get()?,
                 return_value: source.get()?,
             }),
             _ => Err(ParseError::default()),
         }
+    }
+}
+
+impl Serial for FunctionV2 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let parameter = self.parameter.is_some();
+        let return_value = self.return_value.is_some();
+        let error = self.error.is_some();
+        let tag: u8 = match (parameter, return_value, error) {
+            // parameter
+            (true, false, false) => 0,
+            // return_value
+            (false, true, false) => 1,
+            // parameter + return_value
+            (true, true, false) => 2,
+            // error
+            (false, false, true) => 3,
+            // parameter + error
+            (true, false, true) => 4,
+            // return_value + error
+            (false, true, true) => 5,
+            // parameter + return_value + error
+            (true, true, true) => 6,
+            // no schema
+            (false, false, false) => 7,
+        };
+        out.write_u8(tag)?;
+        if let Some(p) = self.parameter.as_ref() {
+            p.serial(out)?;
+        }
+        if let Some(rv) = self.return_value.as_ref() {
+            rv.serial(out)?;
+        }
+        if let Some(err) = self.error.as_ref() {
+            err.serial(out)?;
+        }
+        Ok(())
+    }
+}
+
+impl Deserial for FunctionV2 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let idx = source.read_u8()?;
+        let mut r = FunctionV2 {
+            parameter:    None,
+            return_value: None,
+            error:        None,
+        };
+        if idx > 7 {
+            return Err(ParseError::default());
+        }
+        if matches!(idx, 0 | 2 | 4 | 6) {
+            let _ = r.parameter.insert(source.get()?);
+        }
+        if matches!(idx, 1 | 2 | 5 | 6) {
+            let _ = r.return_value.insert(source.get()?);
+        }
+        if matches!(idx, 3 | 4 | 5 | 6) {
+            let _ = r.error.insert(source.get()?);
+        }
+        Ok(r)
     }
 }
 
@@ -644,6 +876,10 @@ impl Serial for Type {
                 out.write_u8(30)?;
                 len.serial(out)
             }
+            Type::TaggedEnum(fields) => {
+                out.write_u8(31)?;
+                fields.serial(out)
+            }
         }
     }
 }
@@ -730,6 +966,10 @@ impl Deserial for Type {
             30 => {
                 let len = u32::deserial(source)?;
                 Ok(Type::ByteArray(len))
+            }
+            31 => {
+                let variants = source.get()?;
+                Ok(Type::TaggedEnum(variants))
             }
 
             _ => Err(ParseError::default()),
@@ -967,6 +1207,13 @@ mod impls {
                         u32::deserial(source)? as usize
                     };
                     let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
+                    let fields = fields_ty.to_json(source)?;
+                    Ok(json!({ name: fields }))
+                }
+                Type::TaggedEnum(variants) => {
+                    let idx = u8::deserial(source)?;
+
+                    let (name, fields_ty) = variants.get(&idx).ok_or_else(ParseError::default)?;
                     let fields = fields_ty.to_json(source)?;
                     Ok(json!({ name: fields }))
                 }
@@ -1216,6 +1463,115 @@ mod tests {
             let schema = Type::arbitrary(&mut unstructured).unwrap();
 
             let res = from_bytes::<Type>(&to_bytes(&schema)).unwrap();
+            assert_eq!(schema, res);
+        }
+    }
+
+    /// Serialize and then deserialize the input.
+    fn serial_deserial<T: Serialize>(t: &T) -> ParseResult<T> { from_bytes::<T>(&to_bytes(t)) }
+
+    #[test]
+    fn test_function_v1_serial_deserial_is_id() {
+        let f1 = FunctionV1::Parameter(Type::String(SizeLength::U32));
+        let f2 = FunctionV1::ReturnValue(Type::U128);
+        let f3 = FunctionV1::Both {
+            parameter:    Type::Set(SizeLength::U8, Box::new(Type::ByteArray(10))),
+            return_value: Type::ILeb128(3),
+        };
+
+        assert_eq!(serial_deserial(&f1), Ok(f1));
+        assert_eq!(serial_deserial(&f2), Ok(f2));
+        assert_eq!(serial_deserial(&f3), Ok(f3));
+    }
+
+    #[test]
+    fn test_function_v2_serial_deserial_is_id() {
+        let f1 = FunctionV2 {
+            parameter:    Some(Type::String(SizeLength::U32)),
+            return_value: Some(Type::String(SizeLength::U32)),
+            error:        Some(Type::String(SizeLength::U32)),
+        };
+
+        assert_eq!(serial_deserial(&f1), Ok(f1));
+    }
+
+    #[test]
+    fn test_module_v0_serial_deserial_is_id() {
+        let m = ModuleV0 {
+            contracts: BTreeMap::from([("a".into(), ContractV0 {
+                init:    Some(Type::U8),
+                receive: BTreeMap::from([
+                    ("b".into(), Type::String(SizeLength::U32)),
+                    ("c".into(), Type::Bool),
+                ]),
+                state:   Some(Type::String(SizeLength::U64)),
+            })]),
+        };
+
+        assert_eq!(serial_deserial(&m), Ok(m));
+    }
+
+    #[test]
+    fn test_module_v1_serial_deserial_is_id() {
+        let m = ModuleV1 {
+            contracts: BTreeMap::from([("a".into(), ContractV1 {
+                init:    Some(FunctionV1::Parameter(Type::U8)),
+                receive: BTreeMap::from([
+                    ("b".into(), FunctionV1::ReturnValue(Type::String(SizeLength::U32))),
+                    ("c".into(), FunctionV1::Both {
+                        parameter:    Type::U8,
+                        return_value: Type::Bool,
+                    }),
+                ]),
+            })]),
+        };
+
+        assert_eq!(serial_deserial(&m), Ok(m));
+    }
+
+    #[test]
+    fn test_module_v2_serial_deserial_is_id() {
+        let m = ModuleV2 {
+            contracts: BTreeMap::from([("a".into(), ContractV2 {
+                init:    Some(FunctionV2 {
+                    parameter:    Some(Type::String(SizeLength::U32)),
+                    return_value: Some(Type::String(SizeLength::U32)),
+                    error:        Some(Type::String(SizeLength::U32)),
+                }),
+                receive: BTreeMap::from([
+                    ("b".into(), FunctionV2 {
+                        parameter:    Some(Type::String(SizeLength::U32)),
+                        return_value: Some(Type::String(SizeLength::U32)),
+                        error:        Some(Type::String(SizeLength::U32)),
+                    }),
+                    ("c".into(), FunctionV2 {
+                        parameter:    Some(Type::String(SizeLength::U32)),
+                        return_value: Some(Type::String(SizeLength::U32)),
+                        error:        Some(Type::String(SizeLength::U32)),
+                    }),
+                ]),
+            })]),
+        };
+
+        assert_eq!(serial_deserial(&m), Ok(m));
+    }
+
+    #[test]
+    fn test_module_v3_schema_serial_deserial_is_id() {
+        use rand::prelude::*;
+        use rand_pcg::Pcg64;
+
+        let seed: u64 = random();
+        let mut rng = Pcg64::seed_from_u64(seed);
+        let mut data = [0u8; 100000];
+        rng.fill_bytes(&mut data);
+
+        let mut unstructured = Unstructured::new(&data);
+
+        for _ in 0..10000 {
+            let schema = ModuleV3::arbitrary(&mut unstructured).unwrap();
+
+            let res = from_bytes::<ModuleV3>(&to_bytes(&schema)).unwrap();
             assert_eq!(schema, res);
         }
     }
