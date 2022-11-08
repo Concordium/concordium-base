@@ -3,13 +3,15 @@ use concordium_base::{
     base::{self, Energy, Nonce},
     common::{
         self, c_char,
+        derive::Serial,
+        serial_vector_no_length, to_bytes,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
-        Deserial,
+        Buffer, Deserial, Serial,
     },
     contracts_common::{
         from_bytes,
         schema::{Type, VersionedModuleSchema},
-        AccountAddress, Cursor,
+        AccountAddress, Address, Cursor,
     },
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
@@ -393,6 +395,62 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
     let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
+}
+
+/// Context to create parameters for a token transfer (smart contract update).
+#[derive(common::SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct TokenTransferContext {
+    pub from:     AccountAddress,
+    pub to:       Address,
+    pub amount:   Amount,
+    pub token_id: String,
+}
+
+#[derive(Serial, Clone)]
+#[size_length = 1]
+pub struct TokenId(pub Vec<u8>);
+
+#[derive(Clone)]
+pub struct Transfer {
+    pub token_id: TokenId,
+    pub amount:   Amount,
+    pub from:     Address,
+    pub to:       Address,
+}
+impl Serial for Transfer {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.token_id.serial(out);
+        self.amount.serial(out);
+        self.from.serial(out);
+        self.to.serial(out);
+        // AdditionalData length
+        0u16.serial(out);
+    }
+}
+
+#[derive(Serial)]
+pub struct TransferParams(#[size_length = 2] pub Vec<Transfer>);
+
+fn serialize_token_transfer_parameters_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let ctx: TokenTransferContext = from_value(v.clone())?;
+
+    let params = TransferParams(
+        [Transfer {
+            token_id: TokenId(hex::decode(ctx.token_id)?),
+            amount:   ctx.amount,
+            from:     Address::Account(ctx.from),
+            to:       ctx.to,
+        }]
+        .to_vec(),
+    );
+
+    let response = serde_json::json!({
+        "parameter": common::base16_encode_string(&to_bytes(&params)),
     });
 
     Ok(to_string(&response)?)
@@ -1539,6 +1597,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_account_transaction -> create_account_transaction_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => serialize_token_transfer_parameters -> serialize_token_transfer_parameters_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

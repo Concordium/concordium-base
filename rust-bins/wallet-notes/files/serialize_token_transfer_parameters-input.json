@@ -1,0 +1,9 @@
+{
+    "tokenId": "10",
+    "amount": "1",
+    "from": "4EdBeGmpnQZWxaiig7FGEhWwmJurYmYsPWXo6owMDxA7ZtJMMH",
+    "to": {
+        "type":  "AddressAccount",
+        "address": "4EdBeGmpnQZWxaiig7FGEhWwmJurYmYsPWXo6owMDxA7ZtJMMH"
+    }
+}
