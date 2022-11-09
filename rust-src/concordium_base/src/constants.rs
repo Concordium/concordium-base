@@ -12,8 +12,7 @@ pub const MAX_REGISTERED_DATA_SIZE: usize = 256;
 pub const MAX_MEMO_SIZE: usize = 256;
 
 /// Maximum allowed length of a smart contract parameter.
-/// This must be kept in sync with maxParameterLen.
-pub const MAX_PARAMETER_LEN: usize = 1024;
+pub const MAX_PARAMETER_LEN: usize = 65535;
 
 /// Maximum allowed size of the Wasm module to deploy on the chain.
 pub const MAX_WASM_MODULE_SIZE: u32 = 8 * 65536;
