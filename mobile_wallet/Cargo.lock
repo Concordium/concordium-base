@@ -291,6 +291,8 @@ dependencies = [
  "itertools",
  "libc",
  "num",
+ "num-bigint 0.4.3",
+ "num-traits",
  "pairing",
  "rand",
  "rand_core 0.5.1",

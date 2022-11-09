@@ -333,6 +333,8 @@ dependencies = [
  "itertools 0.10.5",
  "libc",
  "num",
+ "num-bigint 0.4.3",
+ "num-traits",
  "pairing",
  "rand",
  "rand_core 0.5.1",
@@ -1352,6 +1354,7 @@ dependencies = [
  "rand_chacha",
  "rand_core 0.5.1",
  "rand_hc",
+ "rand_pcg",
 ]
 
 [[package]]
@@ -1415,6 +1418,15 @@ dependencies = [
  "rand_core 0.4.2",
  "rdrand",
  "winapi",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
+dependencies = [
+ "rand_core 0.5.1",
 ]
 
 [[package]]

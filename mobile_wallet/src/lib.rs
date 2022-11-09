@@ -1,15 +1,14 @@
 use anyhow::{bail, ensure};
 use concordium_base::{
     base::{self, Energy, Nonce},
+    cis2_types::{self, AdditionalData},
     common::{
         self, c_char,
-        derive::Serial,
-        serial_vector_no_length, to_bytes,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
-        Buffer, Deserial, Serial,
+        Deserial,
     },
     contracts_common::{
-        from_bytes,
+        self, from_bytes,
         schema::{Type, VersionedModuleSchema},
         AccountAddress, Address, Cursor,
     },
@@ -405,52 +404,28 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
 #[serde(rename_all = "camelCase")]
 struct TokenTransferContext {
     pub from:     AccountAddress,
-    pub to:       Address,
-    pub amount:   Amount,
-    pub token_id: String,
+    pub to:       AccountAddress,
+    pub amount:   cis2_types::TokenAmount,
+    pub token_id: cis2_types::TokenId,
 }
-
-#[derive(Serial, Clone)]
-#[size_length = 1]
-pub struct TokenId(pub Vec<u8>);
-
-#[derive(Clone)]
-pub struct Transfer {
-    pub token_id: TokenId,
-    pub amount:   Amount,
-    pub from:     Address,
-    pub to:       Address,
-}
-impl Serial for Transfer {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        self.token_id.serial(out);
-        self.amount.serial(out);
-        self.from.serial(out);
-        self.to.serial(out);
-        // AdditionalData length
-        0u16.serial(out);
-    }
-}
-
-#[derive(Serial)]
-pub struct TransferParams(#[size_length = 2] pub Vec<Transfer>);
 
 fn serialize_token_transfer_parameters_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
-    let ctx: TokenTransferContext = from_value(v.clone())?;
+    let ctx: TokenTransferContext = from_value(v)?;
 
-    let params = TransferParams(
-        [Transfer {
-            token_id: TokenId(hex::decode(ctx.token_id)?),
+    let params = cis2_types::TransferParams::new_unchecked(
+        [cis2_types::Transfer {
+            token_id: ctx.token_id,
             amount:   ctx.amount,
             from:     Address::Account(ctx.from),
-            to:       ctx.to,
+            to:       cis2_types::Receiver::Account(ctx.to),
+            data:     AdditionalData::default(),
         }]
         .to_vec(),
     );
 
     let response = serde_json::json!({
-        "parameter": common::base16_encode_string(&to_bytes(&params)),
+        "parameter": common::base16_encode_string(&contracts_common::to_bytes(&params)),
     });
 
     Ok(to_string(&response)?)
