@@ -28,6 +28,7 @@ void free_response_string(char*);
 
 char* create_account_transaction(char*, uint8_t*);
 char* parameter_to_json(char*, uint8_t*);
+char* serialize_token_transfer_parameters(char*, uint8_t*);
 
 /*
 $ ./example create_transfer-input.json
@@ -102,6 +103,9 @@ int main(int argc, char *argv[]) {
       if (ends_with(argv[1], "create_transfer-input.json") || ends_with(argv[1], "create_transfer_with_memo-input.json")) {
         out = create_transfer(buffer, &flag);
         return printStr(out, flag);
+      } else if (ends_with(argv[1], "serialize_token_transfer_parameters-input.json")) {
+          out = serialize_token_transfer_parameters(buffer, &flag);
+          return printStr(out, flag);
       } else if (ends_with(argv[1], "parameter_to_json-input.json")) {
           out = parameter_to_json(buffer, &flag);
           return printStr(out, flag);

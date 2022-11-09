@@ -291,6 +291,8 @@ dependencies = [
  "itertools",
  "libc",
  "num",
+ "num-bigint 0.4.3",
+ "num-traits",
  "pairing",
  "rand",
  "rand_core 0.5.1",
@@ -914,7 +916,7 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "byteorder",

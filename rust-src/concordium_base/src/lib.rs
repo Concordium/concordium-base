@@ -12,6 +12,7 @@
 //! may simplify their dependencies. Users are intended to get the re-exported
 //! dependencies through the library, instead of separately.
 pub mod base;
+pub mod cis2_types;
 pub mod constants;
 pub mod hashes;
 mod internal;
