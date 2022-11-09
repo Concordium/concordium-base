@@ -425,7 +425,7 @@ fn serialize_token_transfer_parameters_aux(input: &str) -> anyhow::Result<String
     );
 
     let response = serde_json::json!({
-        "parameter": common::base16_encode_string(&contracts_common::to_bytes(&params)),
+        "parameter": hex::encode(contracts_common::to_bytes(&params)),
     });
 
     Ok(to_string(&response)?)
