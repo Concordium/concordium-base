@@ -1009,436 +1009,345 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
     Ok(len)
 }
 
+// Versioned schema helpers
 #[cfg(feature = "derive-serde")]
 mod impls {
-    use super::*;
-    use crate::constants::*;
-    use num_bigint::{BigInt, BigUint};
-    use num_traits::Zero;
+    use crate::{from_bytes, schema::*};
 
-    impl Fields {
-        pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
-            use serde_json::*;
-
-            match self {
-                Fields::Named(fields) => {
-                    let mut values = map::Map::new();
-                    for (key, ty) in fields.iter() {
-                        let value = ty.to_json(source)?;
-                        values.insert(key.to_string(), value);
-                    }
-                    Ok(Value::Object(values))
-                }
-                Fields::Unnamed(fields) => {
-                    let mut values = Vec::new();
-                    for ty in fields.iter() {
-                        values.push(ty.to_json(source)?);
-                    }
-                    Ok(Value::Array(values))
-                }
-                Fields::None => Ok(Value::Array(vec![])),
-            }
-        }
+    /// Useful for get_versioned_contract_schema(), but it's not currently used
+    /// as input or output to any function, so it isn't public.
+    enum VersionedContractSchema {
+        V0(ContractV0),
+        V1(ContractV1),
+        V2(ContractV2),
+        V3(ContractV3),
     }
 
-    impl From<std::string::FromUtf8Error> for ParseError {
-        fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+    #[derive(Debug, thiserror::Error, Clone, Copy)]
+    pub enum VersionedSchemaError {
+        #[error("Parse error")]
+        ParseError,
+        #[error("Missing Schema Version")]
+        MissingSchemaVersion,
+        #[error("Invalid Schema Version")]
+        InvalidSchemaVersion,
+        #[error("Unable to find contract schema in module schema")]
+        NoContractInModule,
+        #[error("Receive function schema not found in contract schema")]
+        NoReceiveInContract,
+        #[error("Init function schema not found in contract schema")]
+        NoInitInContract,
+        #[error("Receive function schema does not contain a parameter schema")]
+        NoParamsInReceive,
+        #[error("Init function schema does not contain a parameter schema")]
+        NoParamsInInit,
+        #[error("Receive function schema not found in contract schema")]
+        NoErrorInReceive,
+        #[error("Init function schema does not contain an error schema")]
+        NoErrorInInit,
+        #[error("Errors not supported for this module version")]
+        ErrorNotSupported,
+        #[error("Receive function schema has no return value schema")]
+        NoReturnValueInReceive,
+        #[error("Return values not supported for this module version")]
+        ReturnValueNotSupported,
     }
 
-    fn item_list_to_json<R: Read>(
-        source: &mut R,
-        size_len: SizeLength,
-        item_to_json: impl Fn(&mut R) -> ParseResult<serde_json::Value>,
-    ) -> ParseResult<Vec<serde_json::Value>> {
-        let len = deserial_length(source, size_len)?;
-        let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
-        for _ in 0..len {
-            let value = item_to_json(source)?;
-            values.push(value);
-        }
-        Ok(values)
+    impl From<ParseError> for VersionedSchemaError {
+        fn from(_: ParseError) -> Self { VersionedSchemaError::ParseError }
     }
 
-    fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult<String> {
-        let len = deserial_length(source, size_len)?;
-        // we are doing this case analysis so that we have a fast path for safe,
-        // most common, lengths, and a slower one longer ones.
-        if len <= MAX_PREALLOCATED_CAPACITY {
-            let mut bytes = vec![0u8; len];
-            source.read_exact(&mut bytes)?;
-            Ok(String::from_utf8(bytes)?)
-        } else {
-            let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
-            let mut buf = [0u8; 64];
-            let mut read = 0;
-            while read < len {
-                let new = source.read(&mut buf)?;
-                if new == 0 {
-                    break;
-                } else {
-                    read += new;
-                    bytes.extend_from_slice(&buf[..new]);
-                }
+    /// Unpacks a versioned contract schema from a versioned module schema
+    fn get_versioned_contract_schema(
+        versioned_module_schema: &VersionedModuleSchema,
+        contract_name: &str,
+    ) -> Result<VersionedContractSchema, VersionedSchemaError> {
+        let versioned_contract_schema: VersionedContractSchema = match versioned_module_schema {
+            VersionedModuleSchema::V0(module_schema) => {
+                let contract_schema = module_schema
+                    .contracts
+                    .get(contract_name)
+                    .ok_or(VersionedSchemaError::NoContractInModule)?
+                    .clone();
+                VersionedContractSchema::V0(contract_schema)
             }
-            if read == len {
-                Ok(String::from_utf8(bytes)?)
-            } else {
-                Err(ParseError {})
+            VersionedModuleSchema::V1(module_schema) => {
+                let contract_schema = module_schema
+                    .contracts
+                    .get(contract_name)
+                    .ok_or(VersionedSchemaError::NoContractInModule)?
+                    .clone();
+                VersionedContractSchema::V1(contract_schema)
             }
-        }
+            VersionedModuleSchema::V2(module_schema) => {
+                let contract_schema = module_schema
+                    .contracts
+                    .get(contract_name)
+                    .ok_or(VersionedSchemaError::NoContractInModule)?
+                    .clone();
+                VersionedContractSchema::V2(contract_schema)
+            }
+            VersionedModuleSchema::V3(module_schema) => {
+                let contract_schema = module_schema
+                    .contracts
+                    .get(contract_name)
+                    .ok_or(VersionedSchemaError::NoContractInModule)?
+                    .clone();
+                VersionedContractSchema::V3(contract_schema)
+            }
+        };
+
+        Ok(versioned_contract_schema)
     }
 
-    impl Type {
-        /// Uses the schema to deserialize bytes into pretty json
-        pub fn to_json_string_pretty(&self, bytes: &[u8]) -> ParseResult<String> {
-            let source = &mut Cursor::new(bytes);
-            let js = self.to_json(source)?;
-            serde_json::to_string_pretty(&js).map_err(|_| ParseError::default())
+    impl VersionedModuleSchema {
+        /// Get a versioned module schema. First reads header to see if the
+        /// version can be discerned, otherwise tries using provided
+        /// schema_version.
+        pub fn new(
+            schema_bytes: &[u8],
+            schema_version: &Option<u8>,
+        ) -> Result<Self, VersionedSchemaError> {
+            let versioned_module_schema = match from_bytes::<VersionedModuleSchema>(schema_bytes) {
+                Ok(versioned) => versioned,
+                Err(_) => match schema_version {
+                    Some(0) => VersionedModuleSchema::V0(from_bytes(schema_bytes)?),
+                    Some(1) => VersionedModuleSchema::V1(from_bytes(schema_bytes)?),
+                    Some(2) => VersionedModuleSchema::V2(from_bytes(schema_bytes)?),
+                    Some(3) => VersionedModuleSchema::V3(from_bytes(schema_bytes)?),
+                    Some(_) => return Err(VersionedSchemaError::InvalidSchemaVersion),
+                    None => return Err(VersionedSchemaError::MissingSchemaVersion),
+                },
+            };
+            Ok(versioned_module_schema)
         }
 
-        /// Uses the schema to deserialize bytes into json
-        pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
-            use serde_json::*;
-
-            match self {
-                Type::Unit => Ok(Value::Null),
-                Type::Bool => {
-                    let n = bool::deserial(source)?;
-                    Ok(Value::Bool(n))
-                }
-                Type::U8 => {
-                    let n = u8::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::U16 => {
-                    let n = u16::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::U32 => {
-                    let n = u32::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::U64 => {
-                    let n = u64::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::U128 => {
-                    let n = u128::deserial(source)?;
-                    Ok(Value::String(n.to_string()))
-                }
-                Type::I8 => {
-                    let n = i8::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::I16 => {
-                    let n = i16::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::I32 => {
-                    let n = i32::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::I64 => {
-                    let n = i64::deserial(source)?;
-                    Ok(Value::Number(n.into()))
-                }
-                Type::I128 => {
-                    let n = i128::deserial(source)?;
-                    Ok(Value::String(n.to_string()))
-                }
-                Type::Amount => {
-                    let n = Amount::deserial(source)?;
-                    Ok(Value::String(n.micro_ccd().to_string()))
-                }
-                Type::AccountAddress => {
-                    let address = AccountAddress::deserial(source)?;
-                    Ok(Value::String(address.to_string()))
-                }
-                Type::ContractAddress => {
-                    let address = ContractAddress::deserial(source)?;
-                    Ok(Value::String(address.to_string()))
-                }
-                Type::Timestamp => {
-                    let timestamp = Timestamp::deserial(source)?;
-                    Ok(Value::String(timestamp.to_string()))
-                }
-                Type::Duration => {
-                    let duration = Duration::deserial(source)?;
-                    Ok(Value::String(duration.to_string()))
-                }
-                Type::Pair(left_type, right_type) => {
-                    let left = left_type.to_json(source)?;
-                    let right = right_type.to_json(source)?;
-                    Ok(Value::Array(vec![left, right]))
-                }
-                Type::List(size_len, ty) => {
-                    let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
-                    Ok(Value::Array(values))
-                }
-                Type::Set(size_len, ty) => {
-                    let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
-                    Ok(Value::Array(values))
-                }
-                Type::Map(size_len, key_type, value_type) => {
-                    let values = item_list_to_json(source, *size_len, |s| {
-                        let key = key_type.to_json(s)?;
-                        let value = value_type.to_json(s)?;
-                        Ok(Value::Array(vec![key, value]))
-                    })?;
-                    Ok(Value::Array(values))
-                }
-                Type::Array(len, ty) => {
-                    let len: usize = (*len).try_into()?;
-                    let mut values =
-                        Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
-                    for _ in 0..len {
-                        let value = ty.to_json(source)?;
-                        values.push(value);
-                    }
-                    Ok(Value::Array(values))
-                }
-                Type::Struct(fields_ty) => {
-                    let fields = fields_ty.to_json(source)?;
-                    Ok(fields)
-                }
-                Type::Enum(variants) => {
-                    let idx = if variants.len() <= 256 {
-                        u8::deserial(source)? as usize
-                    } else {
-                        u32::deserial(source)? as usize
-                    };
-                    let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
-                    let fields = fields_ty.to_json(source)?;
-                    Ok(json!({ name: fields }))
-                }
-                Type::TaggedEnum(variants) => {
-                    let idx = u8::deserial(source)?;
-
-                    let (name, fields_ty) = variants.get(&idx).ok_or_else(ParseError::default)?;
-                    let fields = fields_ty.to_json(source)?;
-                    Ok(json!({ name: fields }))
-                }
-                Type::String(size_len) => {
-                    let string = deserial_string(source, *size_len)?;
-                    Ok(Value::String(string))
-                }
-                Type::ContractName(size_len) => {
-                    let contract_name = OwnedContractName::new(deserial_string(source, *size_len)?)
-                        .map_err(|_| ParseError::default())?;
-                    let name_without_init = contract_name.as_contract_name().contract_name();
-                    Ok(json!({ "contract": name_without_init }))
-                }
-                Type::ReceiveName(size_len) => {
-                    let owned_receive_name =
-                        OwnedReceiveName::new(deserial_string(source, *size_len)?)
-                            .map_err(|_| ParseError::default())?;
-                    let receive_name = owned_receive_name.as_receive_name();
-                    let contract_name = receive_name.contract_name();
-                    let func_name = receive_name.entrypoint_name();
-                    Ok(json!({"contract": contract_name, "func": func_name}))
-                }
-                Type::ULeb128(constraint) => {
-                    let int = deserial_biguint(source, *constraint)?;
-                    Ok(Value::String(int.to_string()))
-                }
-                Type::ILeb128(constraint) => {
-                    let int = deserial_bigint(source, *constraint)?;
-                    Ok(Value::String(int.to_string()))
-                }
-                Type::ByteList(size_len) => {
-                    let len = deserial_length(source, *size_len)?;
-                    let mut string =
-                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-                    for _ in 0..len {
-                        let byte = source.read_u8()?;
-                        string.push_str(&format!("{:02x?}", byte));
-                    }
-                    Ok(Value::String(string))
-                }
-                Type::ByteArray(len) => {
-                    let len = usize::try_from(*len)?;
-                    let mut string =
-                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-                    for _ in 0..len {
-                        let byte = source.read_u8()?;
-                        string.push_str(&format!("{:02x?}", byte));
-                    }
-                    Ok(Value::String(string))
-                }
-            }
+        /// Returns a receive function's parameter schema from a versioned
+        /// module schema
+        pub fn get_receive_param_schema(
+            &self,
+            contract_name: &str,
+            function_name: &str,
+        ) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+            let param_schema = match versioned_contract_schema {
+                VersionedContractSchema::V0(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .clone(),
+                VersionedContractSchema::V1(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .parameter()
+                    .ok_or(VersionedSchemaError::NoParamsInReceive)?
+                    .clone(),
+                VersionedContractSchema::V2(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .parameter()
+                    .ok_or(VersionedSchemaError::NoParamsInReceive)?
+                    .clone(),
+                VersionedContractSchema::V3(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .parameter()
+                    .ok_or(VersionedSchemaError::NoParamsInReceive)?
+                    .clone(),
+            };
+            Ok(param_schema)
         }
-    }
 
-    fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
-        let mut result = BigUint::zero();
-        let mut shift = 0;
-        for _ in 0..constraint {
-            let byte = source.read_u8()?;
-            let value_byte = BigUint::from(byte & 0b0111_1111);
-            result += value_byte << shift;
-            shift += 7;
-
-            if byte & 0b1000_0000 == 0 {
-                return Ok(result);
-            }
+        /// Returns an init function's parameter schema from a versioned module
+        /// schema
+        pub fn get_init_param_schema(
+            &self,
+            contract_name: &str,
+        ) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+            let param_schema = match versioned_contract_schema {
+                VersionedContractSchema::V0(contract_schema) => contract_schema
+                    .init
+                    .as_ref()
+                    .ok_or(VersionedSchemaError::NoInitInContract)?
+                    .clone(),
+                VersionedContractSchema::V1(contract_schema) => contract_schema
+                    .init
+                    .as_ref()
+                    .ok_or(VersionedSchemaError::NoInitInContract)?
+                    .parameter()
+                    .ok_or(VersionedSchemaError::NoParamsInInit)?
+                    .clone(),
+                VersionedContractSchema::V2(contract_schema) => contract_schema
+                    .init
+                    .as_ref()
+                    .ok_or(VersionedSchemaError::NoInitInContract)?
+                    .parameter()
+                    .ok_or(VersionedSchemaError::NoParamsInInit)?
+                    .clone(),
+                VersionedContractSchema::V3(contract_schema) => contract_schema
+                    .init
+                    .as_ref()
+                    .ok_or(VersionedSchemaError::NoInitInContract)?
+                    .parameter()
+                    .ok_or(VersionedSchemaError::NoParamsInInit)?
+                    .clone(),
+            };
+            Ok(param_schema)
         }
-        Err(ParseError {})
-    }
 
-    fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
-        let mut result = BigInt::zero();
-        let mut shift = 0;
-        for _ in 0..constraint {
-            let byte = source.read_u8()?;
-            let value_byte = BigInt::from(byte & 0b0111_1111);
-            result += value_byte << shift;
-            shift += 7;
-
-            if byte & 0b1000_0000 == 0 {
-                if byte & 0b0100_0000 != 0 {
-                    result -= BigInt::from(2).pow(shift)
+        /// Returns a receive function's error schema from a versioned module
+        /// schema
+        pub fn get_receive_error_schema(
+            &self,
+            contract_name: &str,
+            function_name: &str,
+        ) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+            let param_schema = match versioned_contract_schema {
+                VersionedContractSchema::V0(_) => {
+                    return Err(VersionedSchemaError::ErrorNotSupported)
                 }
-                return Ok(result);
-            }
+                VersionedContractSchema::V1(_) => {
+                    return Err(VersionedSchemaError::ErrorNotSupported)
+                }
+                VersionedContractSchema::V2(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .error()
+                    .ok_or(VersionedSchemaError::NoErrorInReceive)?
+                    .clone(),
+                VersionedContractSchema::V3(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .error()
+                    .ok_or(VersionedSchemaError::NoErrorInReceive)?
+                    .clone(),
+            };
+            Ok(param_schema)
         }
-        Err(ParseError {})
+
+        /// Returns an init function's error schema from a versioned module
+        /// schema
+        pub fn get_init_error_schema(
+            &self,
+            contract_name: &str,
+        ) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+            let param_schema = match versioned_contract_schema {
+                VersionedContractSchema::V0(_) => {
+                    return Err(VersionedSchemaError::ErrorNotSupported)
+                }
+                VersionedContractSchema::V1(_) => {
+                    return Err(VersionedSchemaError::ErrorNotSupported)
+                }
+                VersionedContractSchema::V2(contract_schema) => contract_schema
+                    .init
+                    .as_ref()
+                    .ok_or(VersionedSchemaError::NoInitInContract)?
+                    .error()
+                    .ok_or(VersionedSchemaError::NoErrorInInit)?
+                    .clone(),
+                VersionedContractSchema::V3(contract_schema) => contract_schema
+                    .init
+                    .as_ref()
+                    .ok_or(VersionedSchemaError::NoInitInContract)?
+                    .error()
+                    .ok_or(VersionedSchemaError::NoErrorInInit)?
+                    .clone(),
+            };
+            Ok(param_schema)
+        }
+
+        /// Returns the return value schema from a versioned module schema.
+        pub fn get_receive_return_value_schema(
+            &self,
+            contract_name: &str,
+            function_name: &str,
+        ) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+            let return_value_schema = match versioned_contract_schema {
+                VersionedContractSchema::V0(_) => {
+                    return Err(VersionedSchemaError::ReturnValueNotSupported)
+                }
+                VersionedContractSchema::V1(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .return_value()
+                    .ok_or(VersionedSchemaError::NoReturnValueInReceive)?
+                    .clone(),
+                VersionedContractSchema::V2(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .return_value()
+                    .ok_or(VersionedSchemaError::NoReturnValueInReceive)?
+                    .clone(),
+                VersionedContractSchema::V3(contract_schema) => contract_schema
+                    .receive
+                    .get(function_name)
+                    .ok_or(VersionedSchemaError::NoReceiveInContract)?
+                    .return_value()
+                    .ok_or(VersionedSchemaError::NoReturnValueInReceive)?
+                    .clone(),
+            };
+
+            Ok(return_value_schema)
+        }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
 
-        #[test]
-        fn test_deserial_biguint_0() {
-            let mut cursor = Cursor::new([0]);
-            let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
-            assert_eq!(int, 0u8.into())
+        fn module_schema() -> VersionedModuleSchema {
+            let module_bytes = hex::decode(
+                "ffff02010000000c00000054657374436f6e7472616374010402030100000010000000726563656976655f66756e6374696f6e06060807",
+            )
+            .unwrap();
+            VersionedModuleSchema::new(&module_bytes, &None).unwrap()
         }
 
         #[test]
-        fn test_deserial_biguint_10() {
-            let mut cursor = Cursor::new([10]);
-            let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
-            assert_eq!(int, 10u8.into())
+        fn test_getting_init_param_schema() {
+            let extracted_type = module_schema().get_init_param_schema("TestContract").unwrap();
+            assert_eq!(extracted_type, Type::U8)
         }
 
         #[test]
-        fn test_deserial_biguint_129() {
-            let mut cursor = Cursor::new([129, 1]);
-            let int = deserial_biguint(&mut cursor, 2).expect("Deserialising should not fail");
-            assert_eq!(int, 129u8.into())
+        fn test_getting_receive_param_schema() {
+            let extracted_type = module_schema()
+                .get_receive_param_schema("TestContract", "receive_function")
+                .unwrap();
+            assert_eq!(extracted_type, Type::I8)
         }
 
         #[test]
-        fn test_deserial_biguint_u64_max() {
-            let mut cursor = Cursor::new([255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
-            let int = deserial_biguint(&mut cursor, 10).expect("Deserialising should not fail");
-            assert_eq!(int, u64::MAX.into())
+        fn test_getting_init_error_schema() {
+            let extracted_type = module_schema().get_init_error_schema("TestContract").unwrap();
+            assert_eq!(extracted_type, Type::U16)
         }
 
         #[test]
-        fn test_deserial_biguint_u256_max() {
-            let mut cursor = Cursor::new([
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                255,
-                0b0000_1111,
-            ]);
-            let int = deserial_biguint(&mut cursor, 37).expect("Deserialising should not fail");
-            let u256_max = BigUint::from_bytes_le(&[
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-            ]);
-            assert_eq!(int, u256_max)
+        fn test_getting_receive_error_schema() {
+            let extracted_type = module_schema()
+                .get_receive_error_schema("TestContract", "receive_function")
+                .unwrap();
+            assert_eq!(extracted_type, Type::I16)
         }
 
         #[test]
-        fn test_deserial_biguint_padding_allowed() {
-            let mut cursor = Cursor::new([129, 128, 128, 128, 128, 0]);
-            let int = deserial_biguint(&mut cursor, 6).expect("Deserialising should not fail");
-            assert_eq!(int, 1u8.into())
-        }
-
-        #[test]
-        fn test_deserial_biguint_contraint_fails() {
-            let mut cursor = Cursor::new([129, 1]);
-            deserial_biguint(&mut cursor, 1).expect_err("Deserialising should fail");
-        }
-
-        #[test]
-        fn test_deserial_bigint_0() {
-            let mut cursor = Cursor::new([0]);
-            let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
-            assert_eq!(int, 0u8.into())
-        }
-
-        #[test]
-        fn test_deserial_bigint_10() {
-            let mut cursor = Cursor::new([10]);
-            let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
-            assert_eq!(int, 10u8.into())
-        }
-
-        #[test]
-        fn test_deserial_bigint_neg_10() {
-            let mut cursor = Cursor::new([0b0111_0110]);
-            let int = deserial_bigint(&mut cursor, 2).expect("Deserialising should not fail");
-            assert_eq!(int, (-10).into())
-        }
-
-        #[test]
-        fn test_deserial_bigint_neg_129() {
-            let mut cursor = Cursor::new([0b1111_1111, 0b0111_1110]);
-            let int = deserial_bigint(&mut cursor, 3).expect("Deserialising should not fail");
-            assert_eq!(int, (-129).into())
-        }
-
-        #[test]
-        fn test_deserial_bigint_i64_min() {
-            let mut cursor =
-                Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
-            let int = deserial_bigint(&mut cursor, 10).expect("Deserialising should not fail");
-            assert_eq!(int, BigInt::from(i64::MIN))
-        }
-
-        #[test]
-        fn test_deserial_bigint_constraint_fails() {
-            let mut cursor =
-                Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
-            deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
+        fn test_getting_receive_return_value_schema() {
+            let extracted_type = module_schema()
+                .get_receive_return_value_schema("TestContract", "receive_function")
+                .unwrap();
+            assert_eq!(extracted_type, Type::I32)
         }
     }
 }

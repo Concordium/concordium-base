@@ -1,12 +1,10 @@
-use crate::{schema::*, *};
-//use anyhow::{anyhow, bail, ensure, Context};
+use crate::{constants::*, schema::*, *};
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::Value;
-use std::convert::TryInto;
-use thiserror;
+use std::convert::{TryFrom, TryInto};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError {
     #[error("Failed writing")]
     FailedWriting,
@@ -51,19 +49,12 @@ macro_rules! serial {
     };
 }
 
-// Returns a WrongJsonType error with the provided error message
-macro_rules! wrong_json_type {
-    ($msg:literal) => {
-        Err(JsonError::WrongJsonType($msg.to_string()))
-    };
-}
-
 // Either the given condition holds otherwise the provided error and
 // accompanying message is returned
 macro_rules! ensure {
-    ($err:ident, $cond:expr, $msg:expr) => {
+    ($cond:expr, $err:expr) => {
         if !$cond {
-            return Err(JsonError::$err($msg.to_string()));
+            return Err($err);
         }
     };
 }
@@ -84,7 +75,7 @@ impl Type {
                 if let Value::Bool(b) = json {
                     serial!(b, out)
                 } else {
-                    wrong_json_type!("JSON bool required")
+                    Err(WrongJsonType("JSON boolean required".to_string()))
                 }
             }
             Type::U8 => {
@@ -93,7 +84,7 @@ impl Type {
                     let n: u8 = n.try_into()?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::U16 => {
@@ -102,7 +93,7 @@ impl Type {
                     let n: u16 = n.try_into()?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::U32 => {
@@ -111,7 +102,7 @@ impl Type {
                     let n: u32 = n.try_into()?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::U64 => {
@@ -119,7 +110,7 @@ impl Type {
                     let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::I8 => {
@@ -128,7 +119,7 @@ impl Type {
                     let n: i8 = n.try_into()?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::I16 => {
@@ -137,7 +128,7 @@ impl Type {
                     let n: i16 = n.try_into()?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::I32 => {
@@ -146,7 +137,7 @@ impl Type {
                     let n: i32 = n.try_into()?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::I64 => {
@@ -154,7 +145,7 @@ impl Type {
                     let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON number required")
+                    Err(WrongJsonType("JSON number required".to_string()))
                 }
             }
             Type::Amount => {
@@ -162,7 +153,7 @@ impl Type {
                     let amount: u64 = string.parse()?;
                     serial!(amount, out)
                 } else {
-                    wrong_json_type!("JSON string required")
+                    Err(WrongJsonType("JSON string required".to_string()))
                 }
             }
             Type::AccountAddress => {
@@ -171,15 +162,14 @@ impl Type {
                         string.parse().or(Err(JsonError::FailedParsingAccountAddress))?;
                     serial!(account, out)
                 } else {
-                    wrong_json_type!("JSON string required")
+                    Err(WrongJsonType("JSON string required".to_string()))
                 }
             }
             Type::ContractAddress => {
                 if let Value::Object(fields) = json {
                     ensure!(
-                        FieldError,
                         fields.len() <= 2,
-                        "Only index and optionally subindex are allowed"
+                        FieldError("Only index and optionally subindex are allowed".to_string())
                     );
 
                     let index = fields
@@ -204,7 +194,7 @@ impl Type {
                     };
                     serial!(contract, out)
                 } else {
-                    wrong_json_type!("JSON Object with 'index' field required")
+                    Err(WrongJsonType("JSON Object with 'index' field required".to_string()))
                 }
             }
             Type::Timestamp => {
@@ -212,7 +202,7 @@ impl Type {
                     let timestamp: Timestamp = string.parse()?;
                     serial!(timestamp, out)
                 } else {
-                    wrong_json_type!("JSON String required for timestamp")
+                    Err(WrongJsonType("JSON String required for timestamp".to_string()))
                 }
             }
             Type::Duration => {
@@ -220,16 +210,19 @@ impl Type {
                     let duration: Duration = string.parse()?;
                     serial!(duration, out)
                 } else {
-                    wrong_json_type!("JSON String required for duration")
+                    Err(WrongJsonType("JSON String required for duration".to_string()))
                 }
             }
             Type::Pair(left_type, right_type) => {
                 if let Value::Array(values) = json {
-                    ensure!(PairError, values.len() == 2, "Only pairs of two are supported");
+                    ensure!(
+                        values.len() == 2,
+                        PairError("Only pairs of two are supported".to_string())
+                    );
                     Type::write_bytes_from_json_schema_type(left_type, &values[0], out)?;
                     Type::write_bytes_from_json_schema_type(right_type, &values[1], out)
                 } else {
-                    wrong_json_type!("JSON Array required for a pair")
+                    Err(WrongJsonType("JSON Array required for a pair".to_string()))
                 }
             }
             Type::List(size_len, ty) => {
@@ -241,7 +234,7 @@ impl Type {
                     }
                     Ok(())
                 } else {
-                    wrong_json_type!("JSON Array required")
+                    Err(WrongJsonType("JSON Array required".to_string()))
                 }
             }
             Type::Set(size_len, ty) => {
@@ -253,7 +246,7 @@ impl Type {
                     }
                     Ok(())
                 } else {
-                    wrong_json_type!("JSON Array required")
+                    Err(WrongJsonType("JSON Array required".to_string()))
                 }
             }
             Type::Map(size_len, key_ty, val_ty) => {
@@ -262,41 +255,45 @@ impl Type {
                     write_bytes_for_length_of_size(len, size_len, out)?;
                     for entry in entries {
                         if let Value::Array(pair) = entry {
-                            ensure!(MapError, pair.len() == 2, "Expected key-value pair");
+                            ensure!(
+                                pair.len() == 2,
+                                MapError("Expected key-value pair".to_string())
+                            );
                             Type::write_bytes_from_json_schema_type(key_ty, &pair[0], out)?;
                             Type::write_bytes_from_json_schema_type(val_ty, &pair[1], out)?;
                         } else {
-                            return wrong_json_type!("Expected key value pairs as JSON arrays");
+                            return Err(WrongJsonType(
+                                "Expected key value pairs as JSON arrays".to_string(),
+                            ));
                         }
                     }
                     Ok(())
                 } else {
-                    wrong_json_type!("JSON Array required")
+                    Err(WrongJsonType("JSON Array required".to_string()))
                 }
             }
             Type::Array(len, ty) => {
                 if let Value::Array(values) = json {
                     ensure!(
-                        ArrayError,
                         (values.len() as u32) == *len,
-                        format!(
+                        ArrayError(format!(
                             "Expected array with {} elements, but it had {} elements",
                             len,
                             values.len()
-                        )
+                        ))
                     );
                     for value in values {
                         Type::write_bytes_from_json_schema_type(ty, value, out)?;
                     }
                     Ok(())
                 } else {
-                    wrong_json_type!("JSON Array required")
+                    Err(WrongJsonType("JSON Array required".to_string()))
                 }
             }
             Type::Struct(fields_ty) => write_bytes_from_json_schema_fields(fields_ty, json, out),
             Type::Enum(variants_ty) => {
                 if let Value::Object(map) = json {
-                    ensure!(EnumError, map.len() == 1, "Only one variant allowed");
+                    ensure!(map.len() == 1, EnumError("Only one variant allowed".to_string()));
                     let (variant_name, fields_value) = map.iter().next().unwrap(); // Safe since we already checked the length
                     let schema_fields_opt = variants_ty
                         .iter()
@@ -319,12 +316,14 @@ impl Type {
                         Err(EnumError(format!("Unknown variant: {}", variant_name)))
                     }
                 } else {
-                    wrong_json_type!("JSON Object with one field required for an Enum")
+                    Err(WrongJsonType(
+                        "JSON Object with one field required for an Enum".to_string(),
+                    ))
                 }
             }
             Type::TaggedEnum(variants_ty) => {
                 if let Value::Object(fields) = json {
-                    ensure!(EnumError, fields.len() == 1, "Only one variant allowed.");
+                    ensure!(fields.len() == 1, EnumError("Only one variant allowed.".to_string()));
                     let (variant_name, fields_value) = fields.iter().next().unwrap(); // Safe since we already checked the length
                     let schema_fields_opt = variants_ty
                         .iter()
@@ -337,7 +336,7 @@ impl Type {
                         Err(EnumError(format!("Unknown variant: {}", variant_name)))
                     }
                 } else {
-                    wrong_json_type!("JSON Object required for an EnumTag")
+                    Err(WrongJsonType("JSON Object required for an EnumTag".to_string()))
                 }
             }
             Type::String(size_len) => {
@@ -347,7 +346,7 @@ impl Type {
                     serial_vector_no_length(string.as_bytes(), out)
                         .or(Err(JsonError::FailedWriting))
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
             Type::ContractName(size_len) => {
@@ -356,9 +355,11 @@ impl Type {
                         FieldError("Missing field 'contract' of type JSON String.".to_string())
                     })?;
                     ensure!(
-                        FieldError,
                         fields.len() == 1,
-                        format!("Expected only one field but {} were provided.", fields.len())
+                        FieldError(format!(
+                            "Expected only one field but {} were provided.",
+                            fields.len()
+                        ))
                     );
                     if let Value::String(name) = contract {
                         let contract_name = format!("init_{}", name);
@@ -367,10 +368,10 @@ impl Type {
                         serial_vector_no_length(contract_name.as_bytes(), out)
                             .or(Err(JsonError::FailedWriting))
                     } else {
-                        wrong_json_type!("JSON String required for field 'contract'.")
+                        Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
                     }
                 } else {
-                    wrong_json_type!("JSON Object required for contract name.")
+                    Err(WrongJsonType("JSON Object required for contract name.".to_string()))
                 }
             }
             Type::ReceiveName(size_len) => {
@@ -382,9 +383,11 @@ impl Type {
                         WrongJsonType("Missing field 'func' of type JSON String.".to_string())
                     })?;
                     ensure!(
-                        FieldError,
                         fields.len() == 2,
-                        format!("Expected exactly two fields but {} were provided.", fields.len())
+                        FieldError(format!(
+                            "Expected exactly two fields but {} were provided.",
+                            fields.len()
+                        ))
                     );
                     if let Value::String(contract) = contract {
                         if let Value::String(func) = func {
@@ -394,13 +397,13 @@ impl Type {
                             serial_vector_no_length(receive_name.as_bytes(), out)
                                 .or(Err(JsonError::FailedWriting))
                         } else {
-                            wrong_json_type!("JSON String required for field 'func'.")
+                            Err(WrongJsonType("JSON String required for field 'func'.".to_string()))
                         }
                     } else {
-                        wrong_json_type!("JSON String required for field 'contract'.")
+                        Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
                     }
                 } else {
-                    wrong_json_type!("JSON Object required for contract name.")
+                    Err(WrongJsonType("JSON Object required for contract name.".to_string()))
                 }
             }
             Type::U128 => {
@@ -410,7 +413,7 @@ impl Type {
                         .map_err(|_| ParseError("Could not parse as u128.".to_string()))?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
             Type::I128 => {
@@ -420,7 +423,7 @@ impl Type {
                         .map_err(|_| ParseError("Could not parse as i128.".to_string()))?;
                     serial!(n, out)
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
             Type::ULeb128(constraint) => {
@@ -430,7 +433,7 @@ impl Type {
                         .map_err(|_| ParseError("Could not parse integer.".to_string()))?;
                     serial_biguint(biguint, *constraint, out).or(Err(JsonError::FailedWriting))
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
             Type::ILeb128(constraint) => {
@@ -440,7 +443,7 @@ impl Type {
                         .map_err(|_| ParseError("Could not parse integer.".to_string()))?;
                     serial_bigint(bigint, *constraint, out).or(Err(JsonError::FailedWriting))
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
             Type::ByteList(size_len) => {
@@ -453,23 +456,22 @@ impl Type {
                     }
                     Ok(())
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
             Type::ByteArray(len) => {
                 if let Value::String(string) = json {
                     let bytes = hex::decode(string)?;
                     ensure!(
-                        ByteArrayError,
                         *len == bytes.len() as u32,
-                        "Mismatching number of bytes"
+                        ByteArrayError("Mismatching number of bytes".to_string())
                     );
                     for value in bytes {
                         serial!(value, out)?;
                     }
                     Ok(())
                 } else {
-                    wrong_json_type!("JSON String required")
+                    Err(WrongJsonType("JSON String required".to_string()))
                 }
             }
         }
@@ -522,39 +524,40 @@ fn write_bytes_from_json_schema_fields<W: Write>(
     json: &serde_json::Value,
     out: &mut W,
 ) -> Result<(), JsonError> {
+    use JsonError::*;
+
     match fields {
         Fields::Named(fields) => {
             if let Value::Object(map) = json {
-                ensure!(FieldError, fields.len() >= map.len(), "Too many fields provided");
+                ensure!(
+                    fields.len() >= map.len(),
+                    FieldError("Too many fields provided".to_string())
+                );
                 for (field_name, field_ty) in fields {
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
                         Type::write_bytes_from_json_schema_type(field_ty, field_value, out)?;
                     } else {
-                        return Err(JsonError::FieldError(format!(
-                            "Missing field: {}",
-                            field_name
-                        )));
+                        return Err(FieldError(format!("Missing field: {}", field_name)));
                     }
                 }
                 Ok(())
             } else {
-                wrong_json_type!("JSON Object required for named fields")
+                Err(WrongJsonType("JSON Object required for named fields".to_string()))
             }
         }
         Fields::Unnamed(fields) => {
             if let Value::Array(values) = json {
                 ensure!(
-                    FieldError,
                     fields.len() == values.len(),
-                    format!("Expected {} unnamed fields", fields.len())
+                    FieldError(format!("Expected {} unnamed fields", fields.len()))
                 );
                 for (field_ty, value) in fields.iter().zip(values.iter()) {
                     Type::write_bytes_from_json_schema_type(field_ty, value, out)?;
                 }
                 Ok(())
             } else {
-                wrong_json_type!("JSON Array required for unnamed fields")
+                Err(WrongJsonType("JSON Array required for unnamed fields".to_string()))
             }
         }
         Fields::None => Ok(()),
@@ -725,4 +728,421 @@ mod tests {
         let mut bytes = Vec::new();
         serial_bigint(i64::MIN.into(), 2, &mut bytes).expect_err("Deserialising should fail");
     }
+
+    #[test]
+    fn test_deserial_biguint_0() {
+        let mut cursor = Cursor::new([0]);
+        let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
+        assert_eq!(int, 0u8.into())
+    }
+
+    #[test]
+    fn test_deserial_biguint_10() {
+        let mut cursor = Cursor::new([10]);
+        let int = deserial_biguint(&mut cursor, 1).expect("Deserialising should not fail");
+        assert_eq!(int, 10u8.into())
+    }
+
+    #[test]
+    fn test_deserial_biguint_129() {
+        let mut cursor = Cursor::new([129, 1]);
+        let int = deserial_biguint(&mut cursor, 2).expect("Deserialising should not fail");
+        assert_eq!(int, 129u8.into())
+    }
+
+    #[test]
+    fn test_deserial_biguint_u64_max() {
+        let mut cursor = Cursor::new([255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+        let int = deserial_biguint(&mut cursor, 10).expect("Deserialising should not fail");
+        assert_eq!(int, u64::MAX.into())
+    }
+
+    #[test]
+    fn test_deserial_biguint_u256_max() {
+        let mut cursor = Cursor::new([
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            255,
+            0b0000_1111,
+        ]);
+        let int = deserial_biguint(&mut cursor, 37).expect("Deserialising should not fail");
+        let u256_max = BigUint::from_bytes_le(&[
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        ]);
+        assert_eq!(int, u256_max)
+    }
+
+    #[test]
+    fn test_deserial_biguint_padding_allowed() {
+        let mut cursor = Cursor::new([129, 128, 128, 128, 128, 0]);
+        let int = deserial_biguint(&mut cursor, 6).expect("Deserialising should not fail");
+        assert_eq!(int, 1u8.into())
+    }
+
+    #[test]
+    fn test_deserial_biguint_contraint_fails() {
+        let mut cursor = Cursor::new([129, 1]);
+        deserial_biguint(&mut cursor, 1).expect_err("Deserialising should fail");
+    }
+
+    #[test]
+    fn test_deserial_bigint_0() {
+        let mut cursor = Cursor::new([0]);
+        let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
+        assert_eq!(int, 0u8.into())
+    }
+
+    #[test]
+    fn test_deserial_bigint_10() {
+        let mut cursor = Cursor::new([10]);
+        let int = deserial_bigint(&mut cursor, 1).expect("Deserialising should not fail");
+        assert_eq!(int, 10u8.into())
+    }
+
+    #[test]
+    fn test_deserial_bigint_neg_10() {
+        let mut cursor = Cursor::new([0b0111_0110]);
+        let int = deserial_bigint(&mut cursor, 2).expect("Deserialising should not fail");
+        assert_eq!(int, (-10).into())
+    }
+
+    #[test]
+    fn test_deserial_bigint_neg_129() {
+        let mut cursor = Cursor::new([0b1111_1111, 0b0111_1110]);
+        let int = deserial_bigint(&mut cursor, 3).expect("Deserialising should not fail");
+        assert_eq!(int, (-129).into())
+    }
+
+    #[test]
+    fn test_deserial_bigint_i64_min() {
+        let mut cursor = Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+        let int = deserial_bigint(&mut cursor, 10).expect("Deserialising should not fail");
+        assert_eq!(int, BigInt::from(i64::MIN))
+    }
+
+    #[test]
+    fn test_deserial_bigint_constraint_fails() {
+        let mut cursor = Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
+        deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
+    }
+}
+
+impl Fields {
+    pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
+        use serde_json::*;
+
+        match self {
+            Fields::Named(fields) => {
+                let mut values = map::Map::new();
+                for (key, ty) in fields.iter() {
+                    let value = ty.to_json(source)?;
+                    values.insert(key.to_string(), value);
+                }
+                Ok(Value::Object(values))
+            }
+            Fields::Unnamed(fields) => {
+                let mut values = Vec::new();
+                for ty in fields.iter() {
+                    values.push(ty.to_json(source)?);
+                }
+                Ok(Value::Array(values))
+            }
+            Fields::None => Ok(Value::Array(vec![])),
+        }
+    }
+}
+
+impl From<std::string::FromUtf8Error> for ParseError {
+    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+}
+
+fn item_list_to_json<R: Read>(
+    source: &mut R,
+    size_len: SizeLength,
+    item_to_json: impl Fn(&mut R) -> ParseResult<serde_json::Value>,
+) -> ParseResult<Vec<serde_json::Value>> {
+    let len = deserial_length(source, size_len)?;
+    let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
+    for _ in 0..len {
+        let value = item_to_json(source)?;
+        values.push(value);
+    }
+    Ok(values)
+}
+
+fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult<String> {
+    let len = deserial_length(source, size_len)?;
+    // we are doing this case analysis so that we have a fast path for safe,
+    // most common, lengths, and a slower one longer ones.
+    if len <= MAX_PREALLOCATED_CAPACITY {
+        let mut bytes = vec![0u8; len];
+        source.read_exact(&mut bytes)?;
+        Ok(String::from_utf8(bytes)?)
+    } else {
+        let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
+        let mut buf = [0u8; 64];
+        let mut read = 0;
+        while read < len {
+            let new = source.read(&mut buf)?;
+            if new == 0 {
+                break;
+            } else {
+                read += new;
+                bytes.extend_from_slice(&buf[..new]);
+            }
+        }
+        if read == len {
+            Ok(String::from_utf8(bytes)?)
+        } else {
+            Err(ParseError {})
+        }
+    }
+}
+
+impl Type {
+    /// Uses the schema to deserialize bytes into pretty json
+    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> ParseResult<String> {
+        let source = &mut Cursor::new(bytes);
+        let js = self.to_json(source)?;
+        serde_json::to_string_pretty(&js).map_err(|_| ParseError::default())
+    }
+
+    /// Uses the schema to deserialize bytes into json
+    pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
+        use serde_json::*;
+
+        match self {
+            Type::Unit => Ok(Value::Null),
+            Type::Bool => {
+                let n = bool::deserial(source)?;
+                Ok(Value::Bool(n))
+            }
+            Type::U8 => {
+                let n = u8::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U16 => {
+                let n = u16::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U32 => {
+                let n = u32::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U64 => {
+                let n = u64::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U128 => {
+                let n = u128::deserial(source)?;
+                Ok(Value::String(n.to_string()))
+            }
+            Type::I8 => {
+                let n = i8::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I16 => {
+                let n = i16::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I32 => {
+                let n = i32::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I64 => {
+                let n = i64::deserial(source)?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I128 => {
+                let n = i128::deserial(source)?;
+                Ok(Value::String(n.to_string()))
+            }
+            Type::Amount => {
+                let n = Amount::deserial(source)?;
+                Ok(Value::String(n.micro_ccd().to_string()))
+            }
+            Type::AccountAddress => {
+                let address = AccountAddress::deserial(source)?;
+                Ok(Value::String(address.to_string()))
+            }
+            Type::ContractAddress => {
+                let address = ContractAddress::deserial(source)?;
+                Ok(Value::String(address.to_string()))
+            }
+            Type::Timestamp => {
+                let timestamp = Timestamp::deserial(source)?;
+                Ok(Value::String(timestamp.to_string()))
+            }
+            Type::Duration => {
+                let duration = Duration::deserial(source)?;
+                Ok(Value::String(duration.to_string()))
+            }
+            Type::Pair(left_type, right_type) => {
+                let left = left_type.to_json(source)?;
+                let right = right_type.to_json(source)?;
+                Ok(Value::Array(vec![left, right]))
+            }
+            Type::List(size_len, ty) => {
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
+                Ok(Value::Array(values))
+            }
+            Type::Set(size_len, ty) => {
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
+                Ok(Value::Array(values))
+            }
+            Type::Map(size_len, key_type, value_type) => {
+                let values = item_list_to_json(source, *size_len, |s| {
+                    let key = key_type.to_json(s)?;
+                    let value = value_type.to_json(s)?;
+                    Ok(Value::Array(vec![key, value]))
+                })?;
+                Ok(Value::Array(values))
+            }
+            Type::Array(len, ty) => {
+                let len: usize = (*len).try_into()?;
+                let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
+                for _ in 0..len {
+                    let value = ty.to_json(source)?;
+                    values.push(value);
+                }
+                Ok(Value::Array(values))
+            }
+            Type::Struct(fields_ty) => {
+                let fields = fields_ty.to_json(source)?;
+                Ok(fields)
+            }
+            Type::Enum(variants) => {
+                let idx = if variants.len() <= 256 {
+                    u8::deserial(source)? as usize
+                } else {
+                    u32::deserial(source)? as usize
+                };
+                let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
+                let fields = fields_ty.to_json(source)?;
+                Ok(json!({ name: fields }))
+            }
+            Type::TaggedEnum(variants) => {
+                let idx = u8::deserial(source)?;
+
+                let (name, fields_ty) = variants.get(&idx).ok_or_else(ParseError::default)?;
+                let fields = fields_ty.to_json(source)?;
+                Ok(json!({ name: fields }))
+            }
+            Type::String(size_len) => {
+                let string = deserial_string(source, *size_len)?;
+                Ok(Value::String(string))
+            }
+            Type::ContractName(size_len) => {
+                let contract_name = OwnedContractName::new(deserial_string(source, *size_len)?)
+                    .map_err(|_| ParseError::default())?;
+                let name_without_init = contract_name.as_contract_name().contract_name();
+                Ok(json!({ "contract": name_without_init }))
+            }
+            Type::ReceiveName(size_len) => {
+                let owned_receive_name = OwnedReceiveName::new(deserial_string(source, *size_len)?)
+                    .map_err(|_| ParseError::default())?;
+                let receive_name = owned_receive_name.as_receive_name();
+                let contract_name = receive_name.contract_name();
+                let func_name = receive_name.entrypoint_name();
+                Ok(json!({"contract": contract_name, "func": func_name}))
+            }
+            Type::ULeb128(constraint) => {
+                let int = deserial_biguint(source, *constraint)?;
+                Ok(Value::String(int.to_string()))
+            }
+            Type::ILeb128(constraint) => {
+                let int = deserial_bigint(source, *constraint)?;
+                Ok(Value::String(int.to_string()))
+            }
+            Type::ByteList(size_len) => {
+                let len = deserial_length(source, *size_len)?;
+                let mut string =
+                    String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+                for _ in 0..len {
+                    let byte = source.read_u8()?;
+                    string.push_str(&format!("{:02x?}", byte));
+                }
+                Ok(Value::String(string))
+            }
+            Type::ByteArray(len) => {
+                let len = usize::try_from(*len)?;
+                let mut string =
+                    String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+                for _ in 0..len {
+                    let byte = source.read_u8()?;
+                    string.push_str(&format!("{:02x?}", byte));
+                }
+                Ok(Value::String(string))
+            }
+        }
+    }
+}
+
+fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
+    let mut result = BigUint::zero();
+    let mut shift = 0;
+    for _ in 0..constraint {
+        let byte = source.read_u8()?;
+        let value_byte = BigUint::from(byte & 0b0111_1111);
+        result += value_byte << shift;
+        shift += 7;
+
+        if byte & 0b1000_0000 == 0 {
+            return Ok(result);
+        }
+    }
+    Err(ParseError {})
+}
+
+fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
+    let mut result = BigInt::zero();
+    let mut shift = 0;
+    for _ in 0..constraint {
+        let byte = source.read_u8()?;
+        let value_byte = BigInt::from(byte & 0b0111_1111);
+        result += value_byte << shift;
+        shift += 7;
+
+        if byte & 0b1000_0000 == 0 {
+            if byte & 0b0100_0000 != 0 {
+                result -= BigInt::from(2).pow(shift)
+            }
+            return Ok(result);
+        }
+    }
+    Err(ParseError {})
 }
