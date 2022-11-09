@@ -3,6 +3,7 @@
 use crate::ExecResult;
 use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{from_bytes, schema, Cursor, Deserial};
+use rand::{prelude::*, RngCore};
 use std::{collections::BTreeMap, default::Default};
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
@@ -65,9 +66,12 @@ impl<I> machine::Host<I> for TrapHost {
 
 /// A host which traps for any function call apart from `report_error` which it
 /// prints to standard out.
-pub struct TestHost;
+pub struct TestHost<R: RngCore> {
+    /// A rng for randomised testing.
+    rng: Option<R>,
+}
 
-impl validate::ValidateImportExport for TestHost {
+impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
     /// Simply ensure that there are no duplicates.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn validate_import_function(
@@ -97,6 +101,7 @@ impl validate::ValidateImportExport for TestHost {
 pub enum ReportError {
     /// An error reported by `report_error`
     Reported {
+        quickcheck: bool,
         filename: String,
         line:     u32,
         column:   u32,
@@ -117,6 +122,7 @@ impl std::fmt::Display for ReportError {
                 line,
                 column,
                 msg,
+                quickcheck: _,
             } => write!(f, "{}, {}:{}:{}", msg, filename, line, column),
             ReportError::Other {
                 msg,
@@ -125,7 +131,7 @@ impl std::fmt::Display for ReportError {
     }
 }
 
-impl machine::Host<ArtifactNamedImport> for TestHost {
+impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
     type Interrupt = NoInterrupt;
 
     fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> {
@@ -152,12 +158,33 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
             let filename =
                 std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
                     .to_owned();
+            let quickcheck_u32 = unsafe { stack.pop_u32() };
+            ensure!(quickcheck_u32 == 0 || quickcheck_u32 == 1, "Cannot convert {} to a boolean, must be 0 or 1", quickcheck_u32);
+            let quickcheck = quickcheck_u32 != 0;
             bail!(ReportError::Reported {
+                quickcheck,
                 filename,
                 line,
                 column,
                 msg
             })
+        } else if f.matches("concordium", "get_random") {
+            let size = unsafe { stack.pop_u32() } as usize;
+            let dest = unsafe { stack.pop_u32() } as usize;
+            ensure!(dest + size <= memory.len(), "Illegal memory access.");
+            // if the `rng` field of `TestHost` contains some value, use it, otherwise instantiate a new RNG
+            match self.rng.as_mut() {
+                Some(r) => {
+                    r.try_fill_bytes(&mut memory[dest..dest + size])?;
+                    Ok(None)
+                },
+                None => {
+                    bail!("Expected initialised RNG.");
+                }
+            }
+            // let rng = self.rng.as_mut().ok_or(e)?;
+            // rng.try_fill_bytes(&mut memory[dest..dest + size])?;
+            //Ok(None)
         } else {
             bail!("Unsupported host function call.")
         }
@@ -172,12 +199,14 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
 /// The result is None if the test passed, or an error message
 /// if it failed. The error message is the one reported to by report_error, or
 /// some internal invariant violation.
-pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<ReportError>)>> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<(String, Option<ReportError>)>> {
+    let rng = SmallRng::seed_from_u64(seed);
+    let mut host = TestHost { rng: Some(rng) };
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
     let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            let res = artifact.run(&mut TestHost, name, &[]);
+            let res = artifact.run(&mut host, name, &[]);
             match res {
                 Ok(_) => out.push((test_name.to_owned(), None)),
                 Err(msg) => {
@@ -203,7 +232,8 @@ pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<R
 pub fn generate_contract_schema_v0(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host: TestHost<SmallRng> = TestHost { rng: None}; // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -256,7 +286,8 @@ pub fn generate_contract_schema_v0(
 pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host: TestHost<SmallRng> = TestHost { rng: None}; // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -299,7 +330,8 @@ pub fn generate_contract_schema_v1(
 pub fn generate_contract_schema_v2(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host: TestHost<SmallRng> = TestHost { rng: None}; // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -342,7 +374,8 @@ pub fn generate_contract_schema_v2(
 pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host: TestHost<SmallRng> = TestHost { rng: None}; // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
