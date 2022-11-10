@@ -65,9 +65,10 @@ impl<I> machine::Host<I> for TrapHost {
 }
 
 /// A host which traps for any function call apart from `report_error` which it
-/// prints to standard out.
+/// prints to standard out and `get_random` that calls a random number
+/// generator.
 pub struct TestHost<R: RngCore> {
-    /// A rng for randomised testing.
+    /// A RNG for randomised testing.
     rng: Option<R>,
 }
 
@@ -176,28 +177,24 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
             let size = unsafe { stack.pop_u32() } as usize;
             let dest = unsafe { stack.pop_u32() } as usize;
             ensure!(dest + size <= memory.len(), "Illegal memory access.");
-            // if the `rng` field of `TestHost` contains some value, use it, otherwise
-            // instantiate a new RNG
             match self.rng.as_mut() {
                 Some(r) => {
                     r.try_fill_bytes(&mut memory[dest..dest + size])?;
                     Ok(None)
                 }
                 None => {
-                    bail!("Expected initialised RNG.");
+                    bail!("Expected an initialized RNG.");
                 }
             }
-            // let rng = self.rng.as_mut().ok_or(e)?;
-            // rng.try_fill_bytes(&mut memory[dest..dest + size])?;
-            //Ok(None)
         } else {
             bail!("Unsupported host function call.")
         }
     }
 }
 
-/// Instantiates the module with an external function to report back errors.
-/// Then tries to run exported test-functions, which are present if compile with
+/// Instantiates the module with an external function to report back errors and
+/// a seed that is used to instantiate a RNG for randomized testing. Then tries
+/// to run exported test-functions, which are present if compile with
 /// the wasm-test feature.
 ///
 /// The return value is a list of pairs (test_name, result)

@@ -242,7 +242,6 @@ dependencies = [
 [[package]]
 name = "concordium-contracts-common"
 version = "4.1.0"
-
 dependencies = [
  "base58check",
  "chrono",
