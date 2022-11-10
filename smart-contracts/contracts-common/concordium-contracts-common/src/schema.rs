@@ -201,7 +201,6 @@ pub enum Fields {
     None,
 }
 
-// TODO: Extend with LEB128
 /// Type of the variable used to encode the length of Sets, List, Maps
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
