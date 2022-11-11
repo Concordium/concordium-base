@@ -1,8 +1,8 @@
 {-# LANGUAGE DerivingVia #-}
 {-|
-Definition of cost functions for the different transactions.
+ Definition of cost functions for the different transactions.
 
-* @SPEC: <$DOCS/Transactions#transaction-cost>
+ * @SPEC: <$DOCS/Transactions#transaction-cost>
 -}
 module Concordium.Cost where
 

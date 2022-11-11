@@ -1,36 +1,36 @@
 {-# LANGUAGE DerivingVia, GADTs, ScopedTypeVariables, OverloadedStrings, DataKinds, KindSignatures, TypeApplications #-}
 {-|
-Module      : Concordium.Wasm
-Description : Types used in the smart contract framework.
+ Module      : Concordium.Wasm
+ Description : Types used in the smart contract framework.
 
-Basic types used in the Smart Contract Framework. A contract is a piece of
-functionality that extends the base features that are built in the blockchain.
+ Basic types used in the Smart Contract Framework. A contract is a piece of
+ functionality that extends the base features that are built in the blockchain.
 
-=Definition
+ = Definition
 
-A /Smart Contract Module/ is a set of /Contracts/. Each Contract has one @init@
-method and zero or more @receive@ methods.
+ A /Smart Contract Module/ is a set of /Contracts/. Each Contract has one @init@
+ method and zero or more @receive@ methods.
 
-A /Module/ is received from the user in serialized wasm format
-(i.e. 'WasmModule') and processed into an 'InstrumentedModule'. An
-'InstrumentedModule' can then be instantiated using the associated
-'ModuleInterface' which specifies the names of the exposed methods.
+ A /Module/ is received from the user in serialized wasm format
+ (i.e. 'WasmModule') and processed into an 'InstrumentedModule'. An
+ 'InstrumentedModule' can then be instantiated using the associated
+ 'ModuleInterface' which specifies the names of the exposed methods.
 
-During its lifetime, a contract holds a 'ContractState' that can be interpreted
-by the Interpreter and might contain variables used in the contract code.
+ During its lifetime, a contract holds a 'ContractState' that can be interpreted
+ by the Interpreter and might contain variables used in the contract code.
 
-Calling a method (both for a @receive@ and @init@ method) requires some
-additional data that is specified in 'ReceiveContext' and 'InitContext'
-respectively.
+ Calling a method (both for a @receive@ and @init@ method) requires some
+ additional data that is specified in 'ReceiveContext' and 'InitContext'
+ respectively.
 
-=Interpreter
+ = Interpreter
 
-The interpreter runs a method of the smart contract on a given 'ContractState'.
+ The interpreter runs a method of the smart contract on a given 'ContractState'.
 
-An execution of a contract can either be successful (which would generate a
-'SuccessfulResultData') or fail (generating a 'ContractExecutionFailure'). If an
-execution is successful, then an 'ActionsTree' is returned together with the new
-'ContractState' and a list of events logged by the contract ('ContractEvent').
+ An execution of a contract can either be successful (which would generate a
+ 'SuccessfulResultData') or fail (generating a 'ContractExecutionFailure'). If an
+ execution is successful, then an 'ActionsTree' is returned together with the new
+ 'ContractState' and a list of events logged by the contract ('ContractEvent').
 -}
 module Concordium.Wasm (
   -- * Constants
