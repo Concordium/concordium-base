@@ -3,29 +3,29 @@ module Main where
 import Test.Hspec
 
 import qualified ConcordiumTests.Common.Version
-import qualified ConcordiumTests.Crypto.SHA256
+import qualified ConcordiumTests.Crypto.BlsSignature
+import qualified ConcordiumTests.Crypto.Ed25519DlogProofs
 import qualified ConcordiumTests.Crypto.Ed25519Signature
-import qualified ConcordiumTests.Crypto.VRF
+import qualified ConcordiumTests.Crypto.EncryptedTransfers
 import qualified ConcordiumTests.Crypto.FFIDataTypes
 import qualified ConcordiumTests.Crypto.FFIVerify
-import qualified ConcordiumTests.Crypto.BlsSignature
+import qualified ConcordiumTests.Crypto.SHA256
+import qualified ConcordiumTests.Crypto.VRF
 import qualified ConcordiumTests.Data.Base58Encoding
 import qualified ConcordiumTests.ID.Types
-import qualified ConcordiumTests.Crypto.Ed25519DlogProofs
-import qualified ConcordiumTests.Crypto.EncryptedTransfers
 import qualified ConcordiumTests.Utils.Encryption
+import qualified Genesis.ParametersSpec
+import qualified Types.AccountEncryptedAmountSpec
+import qualified Types.AddressesSpec
+import qualified Types.AmountFraction
+import qualified Types.AmountSpec
+import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.TransactionSerializationSpec
-import qualified Types.AmountSpec
-import qualified Types.UpdatesSpec
-import qualified Types.AccountEncryptedAmountSpec
-import qualified Types.AmountFraction
 import qualified Types.TransactionSummarySpec
-import qualified Types.AddressesSpec
-import qualified Types.ParametersSpec
-import qualified Genesis.ParametersSpec
+import qualified Types.UpdatesSpec
 
-main :: IO  ()
+main :: IO ()
 main = hspec $ parallel $ do
     ConcordiumTests.Common.Version.tests
     ConcordiumTests.Crypto.FFIVerify.tests

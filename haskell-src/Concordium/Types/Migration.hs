@@ -1,6 +1,6 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
 
 module Concordium.Types.Migration where
 
@@ -147,14 +147,15 @@ migrateAccountStake StateMigrationParametersP4ToP5 =
 migratePendingChangeEffective :: P4.StateMigrationData -> PendingChangeEffective 'AccountV0 -> PendingChangeEffective 'AccountV1
 migratePendingChangeEffective P4.StateMigrationData{..} (PendingChangeEffectiveV0 eff) =
     PendingChangeEffectiveV1 $
-         addDuration
-             migrationPreviousGenesisTime
-             (migrationPreviousEpochDuration * fromIntegral eff)
+        addDuration
+            migrationPreviousGenesisTime
+            (migrationPreviousEpochDuration * fromIntegral eff)
 
 -- |Migrate the stake pending change from the representation used by protocol
 -- version @oldpv@ to the representation used by the protocol version @pv@. The
 -- migration parameters supply auxiliary data needed for the migration.
-migrateStakePendingChange :: forall oldpv pv .
+migrateStakePendingChange ::
+    forall oldpv pv.
     StateMigrationParameters oldpv pv ->
     StakePendingChange (AccountVersionFor oldpv) ->
     StakePendingChange (AccountVersionFor pv)
@@ -162,7 +163,7 @@ migrateStakePendingChange StateMigrationParametersTrivial = id
 migrateStakePendingChange StateMigrationParametersP1P2 = id
 migrateStakePendingChange StateMigrationParametersP2P3 = id
 migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
-  NoChange -> NoChange
-  ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
-  RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
+    NoChange -> NoChange
+    ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
+    RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
 migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1

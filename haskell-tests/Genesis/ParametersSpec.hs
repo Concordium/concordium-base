@@ -9,8 +9,8 @@ import Test.QuickCheck
 
 import qualified Data.Aeson as AE
 
-import Concordium.Types.ProtocolVersion
 import Concordium.Genesis.Parameters
+import Concordium.Types.ProtocolVersion
 
 import Generators
 
@@ -29,17 +29,17 @@ checkJSONToFromIsIdentityV1 cp = do
 testJSON :: ChainParametersVersion -> Int -> Int -> Spec
 testJSON cpv size num =
     modifyMaxSuccess (const num) $
-    specify ("GenesisChainParameters JSON (" ++ show cpv ++ ") of size = " ++ show size ++ ":") $
-    case cpv of
-        ChainParametersV0 ->
-            forAll (resize size genGenesisChainParametersV0) checkJSONToFromIsIdentityV0
-        ChainParametersV1 ->
-            forAll (resize size genGenesisChainParametersV1) checkJSONToFromIsIdentityV1
+        specify ("GenesisChainParameters JSON (" ++ show cpv ++ ") of size = " ++ show size ++ ":") $
+            case cpv of
+                ChainParametersV0 ->
+                    forAll (resize size genGenesisChainParametersV0) checkJSONToFromIsIdentityV0
+                ChainParametersV1 ->
+                    forAll (resize size genGenesisChainParametersV1) checkJSONToFromIsIdentityV1
 
 tests :: Spec
 tests = do
-  describe "GenesisChainParameters JSON tests" $ do
-    testJSON ChainParametersV0 25 1000
-    testJSON ChainParametersV0 50 500
-    testJSON ChainParametersV1 25 1000
-    testJSON ChainParametersV1 50 500
+    describe "GenesisChainParameters JSON tests" $ do
+        testJSON ChainParametersV0 25 1000
+        testJSON ChainParametersV0 50 500
+        testJSON ChainParametersV1 25 1000
+        testJSON ChainParametersV1 50 500

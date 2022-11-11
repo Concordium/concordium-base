@@ -14,9 +14,8 @@ import Concordium.Types
 
 -- |Genesis data for the P2 protocol version. The initial variant is here
 -- because it might be used in the future, at present it is not used.
-data GenesisDataP2
-    = GDP2Initial {
-      -- |The immutable genesis parameters.
+data GenesisDataP2 = GDP2Initial
+    { -- |The immutable genesis parameters.
       genesisCore :: !Base.CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
@@ -78,9 +77,9 @@ getRegenesisDataV4 =
 -- |Serialize genesis data in the V4 format.
 putGenesisDataV4 :: Putter GenesisDataP2
 putGenesisDataV4 GDP2Initial{..} = do
-  putWord8 0
-  put genesisCore
-  put genesisInitialState
+    putWord8 0
+    put genesisCore
+    put genesisInitialState
 
 -- |Deserialize genesis configuration from the serialized genesis data.
 --
@@ -95,20 +94,22 @@ getGenesisConfigurationV4 genHash = do
     getWord8 >>= \case
         0 -> do
             _gcCore <- get
-            return Base.GenesisConfiguration{
-                _gcTag = 0,
-                _gcCurrentHash = genHash,
-                _gcFirstGenesis = genHash,
-                ..
-                }
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 0,
+                      _gcCurrentHash = genHash,
+                      _gcFirstGenesis = genHash,
+                      ..
+                    }
         1 -> do
-          _gcCore <- get
-          _gcFirstGenesis <- get
-          return Base.GenesisConfiguration{
-            _gcTag = 1,
-            _gcCurrentHash = genHash,
-            ..
-            }
+            _gcCore <- get
+            _gcFirstGenesis <- get
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 1,
+                      _gcCurrentHash = genHash,
+                      ..
+                    }
         _ -> fail "Unrecognised genesis data type"
 
 -- |Deserialize genesis data with a version tag. The expected version tag is 4
@@ -139,17 +140,17 @@ parametersToGenesisData = uncurry GDP2Initial . Base.parametersToState
 -- contrast, for the initial P2 genesis the initial state is hashed as is.
 genesisBlockHash :: GenesisDataP2 -> BlockHash
 genesisBlockHash GDP2Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
-  put genesisSlot
-  put P2
-  putWord8 0 -- initial variant
-  put genesisCore
-  put genesisInitialState
+    put genesisSlot
+    put P2
+    putWord8 0 -- initial variant
+    put genesisCore
+    put genesisInitialState
 
 -- |Compute the block hash of the regenesis data as defined by the specified
 -- protocol. This becomes the block hash of the genesis block of the new chain
 -- after the protocol update.
 regenesisBlockHash :: RegenesisP2 -> BlockHash
-regenesisBlockHash GDP2Regenesis{genesisRegenesis=Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+regenesisBlockHash GDP2Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P2
     putWord8 1 -- regenesis variant
@@ -161,7 +162,7 @@ regenesisBlockHash GDP2Regenesis{genesisRegenesis=Base.RegenesisData{..}} = Bloc
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP2 -> BlockHash
-firstGenesisBlockHash GDP2Regenesis{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP2Regenesis{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP2 -> Word8

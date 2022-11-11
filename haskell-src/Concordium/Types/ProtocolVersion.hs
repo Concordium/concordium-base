@@ -217,17 +217,16 @@ instance IsAccountVersion 'AccountV1 where
 instance IsAccountVersion 'AccountV2 where
     accountVersion = SAccountV2
 
-
 -- |Transaction outcomes versions.
 -- The difference between the two versions are only related
 -- to the hashing scheme.
 -- * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
 -- All the contents of the transaction summaries are used for computing the hash.
 -- * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
--- exact reject reasons for failed transactions are omitted from the hash. 
+-- exact reject reasons for failed transactions are omitted from the hash.
 data TransactionOutcomesVersion
-     = TOV0
-     | TOV1
+    = TOV0
+    | TOV1
 
 -- |Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
 type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: TransactionOutcomesVersion where
@@ -242,16 +241,15 @@ data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
     STOV0 :: STransactionOutcomesVersion 'TOV0
     STOV1 :: STransactionOutcomesVersion 'TOV1
 
-class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion)
-    where
+class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
     -- |The singleton associated with the outcomes version.
     transactionOutcomesVersion :: STransactionOutcomesVersion tov
 
 instance IsTransactionOutcomesVersion 'TOV0 where
-  transactionOutcomesVersion = STOV0
+    transactionOutcomesVersion = STOV0
 
 instance IsTransactionOutcomesVersion 'TOV1 where
-  transactionOutcomesVersion = STOV1
+    transactionOutcomesVersion = STOV1
 
 -- |A type used at the kind level to denote that delegation is or is not expected to be supported
 -- at an account version. This is intended to give more descriptive type errors in cases where the
@@ -266,8 +264,10 @@ instance IsTransactionOutcomesVersion 'TOV1 where
 -- This is more meaningful than @Couldn't match type: 'False with: 'True@.
 -- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
 data DelegationSupport
-    = DelegationSupported AccountVersion -- ^Delegation is supported at the account version
-    | DelegationNotSupported AccountVersion -- ^Delegation is not supported at the account version
+    = -- |Delegation is supported at the account version
+      DelegationSupported AccountVersion
+    | -- |Delegation is not supported at the account version
+      DelegationNotSupported AccountVersion
 
 -- |Type-level predicate that determines if an account version supports delegation.
 type family AVSupportsDelegationB (av :: AccountVersion) :: DelegationSupport where
@@ -311,7 +311,7 @@ data DelegationChainParameters (pv :: ProtocolVersion) where
 -- @ChainParametersVersionFor pv ~ 'ChainParametersV1@ is required:
 --
 -- > case delegationChainParameters @pv of
--- >    DelegationChainParametersV1 -> {- here: ChainParametersVersionFor pv ~ 'ChainParametersV1 -}
+-- >    DelegationChainParametersV1 -> {\- here: ChainParametersVersionFor pv ~ 'ChainParametersV1 -\}
 delegationChainParameters :: forall pv. (IsProtocolVersion pv, SupportsDelegation pv) => DelegationChainParameters pv
 delegationChainParameters = case protocolVersion @pv of
     SP4 -> DelegationChainParametersV1
@@ -345,18 +345,18 @@ supportsV1Contracts SP5 = True
 -- (Supported in 'P5' and onwards)
 supportsUpgradableContracts :: SProtocolVersion pv -> Bool
 supportsUpgradableContracts spv = case spv of
-  SP1 -> False
-  SP2 -> False
-  SP3 -> False
-  SP4 -> False
-  SP5 -> True
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> True
 
 -- |Whether the protocol version supports chain queries in smart contracts.
 -- (Supported in 'P5' and onwards)
 supportsChainQueryContracts :: SProtocolVersion pv -> Bool
 supportsChainQueryContracts spv = case spv of
-  SP1 -> False
-  SP2 -> False
-  SP3 -> False
-  SP4 -> False
-  SP5 -> True
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> True

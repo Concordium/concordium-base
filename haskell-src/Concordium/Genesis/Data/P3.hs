@@ -14,9 +14,8 @@ import Concordium.Types
 
 -- |Genesis data for the P3 protocol version. The initial variant is here
 -- because it might be used in the future, at present it is not used.
-data GenesisDataP3
-    = GDP3Initial {
-      -- |The immutable genesis parameters.
+data GenesisDataP3 = GDP3Initial
+    { -- |The immutable genesis parameters.
       genesisCore :: !Base.CoreGenesisParameters,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
@@ -30,7 +29,7 @@ data GenesisDataP3
 -- The relationship between the new state and the state of the
 -- terminal block of the old chain should be defined by the
 -- chain update mechanism used.
-newtype RegenesisP3 = GDP3Regenesis { genesisRegenesis :: Base.RegenesisData }
+newtype RegenesisP3 = GDP3Regenesis {genesisRegenesis :: Base.RegenesisData}
     deriving (Eq, Show)
 
 instance Base.BasicGenesisData GenesisDataP3 where
@@ -78,9 +77,9 @@ getRegenesisDataV5 =
 -- |Serialize genesis data in the V5 format.
 putGenesisDataV5 :: Putter GenesisDataP3
 putGenesisDataV5 GDP3Initial{..} = do
-  putWord8 0
-  put genesisCore
-  put genesisInitialState
+    putWord8 0
+    put genesisCore
+    put genesisInitialState
 
 -- |Deserialize genesis configuration from the serialized genesis data.
 --
@@ -95,20 +94,22 @@ getGenesisConfigurationV5 genHash = do
     getWord8 >>= \case
         0 -> do
             _gcCore <- get
-            return Base.GenesisConfiguration{
-                _gcTag = 0,
-                _gcCurrentHash = genHash,
-                _gcFirstGenesis = genHash,
-                ..
-                }
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 0,
+                      _gcCurrentHash = genHash,
+                      _gcFirstGenesis = genHash,
+                      ..
+                    }
         1 -> do
-          _gcCore <- get
-          _gcFirstGenesis <- get
-          return Base.GenesisConfiguration{
-            _gcTag = 1,
-            _gcCurrentHash = genHash,
-            ..
-            }
+            _gcCore <- get
+            _gcFirstGenesis <- get
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 1,
+                      _gcCurrentHash = genHash,
+                      ..
+                    }
         _ -> fail "Unrecognised genesis data type"
 
 -- |Deserialize genesis data with a version tag. The expected version tag is 5
@@ -139,17 +140,17 @@ parametersToGenesisData = uncurry GDP3Initial . Base.parametersToState
 -- contrast, for the initial P3 genesis the initial state is hashed as is.
 genesisBlockHash :: GenesisDataP3 -> BlockHash
 genesisBlockHash GDP3Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
-  put genesisSlot
-  put P3
-  putWord8 0 -- initial variant
-  put genesisCore
-  put genesisInitialState
+    put genesisSlot
+    put P3
+    putWord8 0 -- initial variant
+    put genesisCore
+    put genesisInitialState
 
 -- |Compute the block hash of the regenesis data as defined by the specified
 -- protocol. This becomes the block hash of the genesis block of the new chain
 -- after the protocol update.
 regenesisBlockHash :: RegenesisP3 -> BlockHash
-regenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+regenesisBlockHash GDP3Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P3
     putWord8 1 -- regenesis variant
@@ -161,7 +162,7 @@ regenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = Bloc
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP3 -> BlockHash
-firstGenesisBlockHash GDP3Regenesis{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP3Regenesis{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP3 -> Word8

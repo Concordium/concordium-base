@@ -14,7 +14,7 @@ module Concordium.Types.ProtocolVersion.JustForCPV1 (
     justForCPV1,
     justForCPV1A,
     unJustForCPV1,
-    maybeForCPV1
+    maybeForCPV1,
 ) where
 
 import Data.Serialize
@@ -40,11 +40,11 @@ justForCPV1 a =
 
 -- |Build a 'JustForCPV' inside an 'Applicative' functor.
 -- If chain parameter version 0, then 'NothingForCPV1' otherwise 'JustForCPV1' with @a@.
-justForCPV1A
-    :: forall cpv f a
-     . (Applicative f, IsChainParametersVersion cpv)
-     => f a
-     -> f (JustForCPV1 cpv a)
+justForCPV1A ::
+    forall cpv f a.
+    (Applicative f, IsChainParametersVersion cpv) =>
+    f a ->
+    f (JustForCPV1 cpv a)
 justForCPV1A a =
     case chainParametersVersion @cpv of
         SCPV0 -> pure NothingForCPV1
