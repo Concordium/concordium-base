@@ -246,4 +246,4 @@ contractInstanceQueryContractBalanceCost = 200
 
 -- |Cost of querying the current exchange rates from a within smart contract instance.
 contractInstanceQueryExchangeRatesCost :: Energy
-contractInstanceQueryExchangeRatesCost = 10
+contractInstanceQueryExchangeRatesCost = 100
