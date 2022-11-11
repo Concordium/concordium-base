@@ -676,7 +676,7 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
 An example output to this request is in the file [create_account_transaction-output.json](files/create_account_transaction-output.json).
 
-### serialize_token_transfer_parameters
+## serialize_token_transfer_parameters
 Semantics: Converts the given parameters into a serialized base16 string that can be used to create an update smart contract transaction's payload.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
@@ -684,11 +684,7 @@ must be a valid JSON object with fields
 
 - `"from"` ... address of the sender account.
 
-- `"to"` ... address of the receiver account or contract. This should be a JSON object with two fields:
-  
-  - `"type"` ... The value should be "AddressAccount" or "AddressContract" depending on which type the receiver is.
-
-  - `"address"` ... If the receiver is an account, this should be the base58 encoding of the account's address. If it is a contract, this field should be a JSON object with the fields `index` and `subindex`, both numbers.
+- `"to"` ... address of the receiver account.
 
 - `"amount"` ... string containing the amount wanted to be transferred.
 
