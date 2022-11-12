@@ -1,5 +1,5 @@
-# Workflow triggered by pushes to the master branch and PRs targeting it
-# (as long as the commits contain Rust code changes).
+# Workflow triggered by pushes to the main branch and PRs targeting it
+# (as long as the commits contain Haskell code changes).
 
 # The workflow consists of the single job 'fourmolu'
 # which checks formatting of the Haskell sources using the 'fourmolu' tool.
@@ -38,12 +38,6 @@ jobs:
 
     - name: Checkout project
       uses: actions/checkout@v2
-      with:
-        submodules: recursive
-
-    - name: Setup the project
-      run: |
-        stack setup
 
     - name: Run fourmolu
       run: |
