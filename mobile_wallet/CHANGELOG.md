@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.20.0
+- Added function for proving id statements.
+
 ## 0.19.0
 - Added support for V3 schema
 

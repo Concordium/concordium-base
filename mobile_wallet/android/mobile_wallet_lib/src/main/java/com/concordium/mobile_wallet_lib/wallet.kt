@@ -4,6 +4,7 @@ external fun create_id_request_and_private_data(input: String) : ReturnValue
 external fun create_credential(input: String) : ReturnValue
 external fun create_id_request_and_private_data_v1(input: String) : ReturnValue
 external fun generate_recovery_request(input: String) : ReturnValue
+external fun prove_id_statement(input: String) : ReturnValue
 external fun create_credential_v1(input: String) : ReturnValue
 external fun generate_accounts(input: String) : ReturnValue
 external fun create_transfer(input: String) : ReturnValue

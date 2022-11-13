@@ -109,14 +109,15 @@ pub fn verify_account_ownership(
     utils::verify_account_ownership_proof(&public_data.keys, public_data.threshold, proof, to_sign)
 }
 
-/// Function for verifying a proof of a statement.
-/// The arguments are
-/// - `challenge` - slice to challenge bytes chosen by the verifier
-/// - `global` - the on-chain cryptographic parameters
-/// - `commitments` - the on-chain commitments of the relevant credential
-/// The function returns `true` iff the statement is true (unless with
-/// negligible probability).
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {
+    /// Function for verifying a proof of a statement.
+    /// The arguments are
+    /// - `challenge` - slice to challenge bytes chosen by the verifier
+    /// - `global` - the on-chain cryptographic parameters
+    /// - `commitments` - the on-chain commitments of the relevant credential
+    /// The function returns `true` if the statement is true.
+    /// If the statement is false, the function returns false with overwhelming
+    /// probabilty.
     pub fn verify(
         &self,
         challenge: &[u8],
@@ -252,6 +253,7 @@ mod tests {
     use rand::*;
     use std::{
         collections::{btree_map::BTreeMap, BTreeSet},
+        convert::TryFrom,
         marker::PhantomData,
     };
 
@@ -324,6 +326,28 @@ mod tests {
         };
     }
 
+    // For testing purposes
+    struct TestRandomness {
+        randomness: BTreeMap<AttributeTag, PedersenRandomness<G1>>,
+    }
+
+    impl HasAttributeRandomness<G1> for TestRandomness {
+        type ErrorType = ImpossibleError;
+
+        fn get_attribute_commitment_randomness(
+            &self,
+            attribute_tag: AttributeTag,
+        ) -> Result<PedersenRandomness<G1>, Self::ErrorType> {
+            match self.randomness.get(&attribute_tag) {
+                Some(r) => Ok(r.clone()),
+                _ => {
+                    let mut csprng = rand::thread_rng();
+                    Ok(PedersenRandomness::generate(&mut csprng))
+                }
+            }
+        }
+    }
+
     #[test]
     fn test_verify_id_attributes_proofs() {
         let point: G1 = Curve::hash_to_group(b"some_bytes");
@@ -384,10 +408,15 @@ mod tests {
         // Some other statements constructed using helper functions
         let statement2 = Statement::new()
             .older_than(18)
+            .unwrap()
             .younger_than(35)
+            .unwrap()
             .residence_in(set)
+            .unwrap()
             .residence_not_in(set2)
-            .doc_expiry_no_earlier_than(AttributeKind(String::from("20240304")));
+            .unwrap()
+            .doc_expiry_no_earlier_than(AttributeKind(String::from("20240304")))
+            .unwrap();
         let full_statement2 = StatementWithContext {
             account:    AccountAddress([1; 32]),
             credential: point,
@@ -417,34 +446,43 @@ mod tests {
             &mut csprng,
         );
 
-        let name_secret = (attribute_name, name_randomness);
-        let dob_secret = (attribute_dob, dob_randomness);
-        let country_secret = (attribute_country, country_randomness);
-        let expiry_secret = (attribute_doc_expiry, expiry_randomness);
+        // the attribute list
+        let mut alist = BTreeMap::new();
+        alist.insert(AttributeTag::from(0u8), attribute_name);
+        alist.insert(AttributeTag::from(3u8), attribute_dob);
+        alist.insert(AttributeTag::from(4u8), attribute_country);
+        alist.insert(AttributeTag::from(10u8), attribute_doc_expiry);
 
-        let full_secret = Secret {
-            secrets: vec![name_secret, country_secret.clone(), dob_secret.clone()],
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let attribute_list: AttributeList<_, AttributeKind> = AttributeList {
+            valid_to,
+            created_at,
+            max_accounts: 237,
+            alist,
+            _phantom: Default::default(),
         };
 
-        let full_secret2 = Secret {
-            secrets: vec![
-                dob_secret.clone(),
-                dob_secret,
-                country_secret.clone(),
-                country_secret,
-                expiry_secret,
-            ],
-        };
+        // the commitment randomness in a map so it be looked up when relevant.
+        let mut randomness = BTreeMap::new();
+        randomness.insert(AttributeTag::from(0u8), name_randomness);
+        randomness.insert(AttributeTag::from(3u8), dob_randomness);
+        randomness.insert(AttributeTag::from(4u8), country_randomness);
+        randomness.insert(AttributeTag::from(10u8), expiry_randomness);
+
+        let attribute_randomness = TestRandomness { randomness };
 
         // Construct proof of statement from secret
-        let challenge = [0, 1, 2, 3, 4]; // verifiers challenge
-        let proof = full_statement.prove(&global, &challenge, full_secret);
+        let challenge = [0u8; 32]; // verifiers challenge
+        let proof =
+            full_statement.prove(&global, &challenge, &attribute_list, &attribute_randomness);
         assert!(proof.is_some());
         let proof = proof.unwrap();
 
         // Prove the second statement
-        let challenge2 = [0, 1, 200, 3, 4]; // verifiers challenge
-        let proof2 = full_statement2.prove(&global, &challenge2, full_secret2);
+        let challenge2 = [1u8; 32]; // verifiers challenge
+        let proof2 =
+            full_statement2.prove(&global, &challenge2, &attribute_list, &attribute_randomness);
         assert!(proof2.is_some());
         let proof2 = proof2.unwrap();
 

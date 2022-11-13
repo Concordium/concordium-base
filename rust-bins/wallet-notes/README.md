@@ -112,12 +112,80 @@ must be a valid JSON object with fields
 - `"identityIndex"` ... an integer indicating the index of identity.
 - `"timestamp"` ... an integer indicating the number of seconds since the unix epoch by the time of generating the request.
 
-The output of this function is a JSON object with two keys
+The output of this function is a JSON object with the following field
 - "idRecoveryRequest" - this is the identity object request that should be sent to
   the identity provider
 
 An example of input is in the file [generate-recovery-request-input.json](files/generate-recovery-request-input.json).
 An example of output is in the file [generate-recovery-request-output.json](files/generate-recovery-request-output.json).
+
+## prove_id_statement
+
+Semantics: Generates a proof of a statement about the attribute values inside the on-chain commitments of a user's account credential.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+- `"global"` ... is a JSON object that describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+- `"seed"` ... is a hex encoded seed phrase from which the commitment randomness is generated.
+- `"net"` ... either the string `"Mainnet"` or `"Testnet"`.
+- `"identityIndex"` ... an integer indicating the index of identity.
+- `"accountNumber"` ... an integer indicating the index of identity.
+- `"identityObject"` ... the identity object the user are proving statements about. Contains the attribute  values needed for generating the proofs.
+- `"statement"` ... is a JSON object with the fields
+    - `"account"` ... the address of the relevant account
+    - `"credential"` ... credential ID of the relevant credential
+    - `"statements"` ... the list of statements to be proved (if they are true)
+- `"challenge"` ... the verifier's challenge, 32 bytes.
+
+Each statement in the list is of the form
+```json
+{
+  "type": "...",
+  ...
+}
+```
+where the value of `"type"` is either `"RevealAttribute"`, `"AttributeInRange"`, `"AttributeInSet"`, `"AttributeNotInSet"`.
+If `"type"` is `"RevealAttribute"`, then the following fields are also expected
+- `"attributeTag"` ... the attribute tag, one of those listed below
+
+If `"type"` is `"AttributeInRange"`, then the following fields are also expected
+- `"attributeTag"` ... the attribute tag, one of those listed below
+- `"lower"` ... the lower bound of the attribute value range
+- `"upper"` ... the upper bound of the attribute value range
+
+If `"type"` is `"AttributeInSet"`, then the following fields are also expected
+- `"attributeTag"` ... the attribute tag, one of those listed below
+- `"set"` ... a list of elements from the set of attribute values
+
+If `"type"` is `"AttributeNotInSet"`, then the following fields are also expected
+- `"attributeTag"` ... the attribute tag, one of those listed below
+- `"set"` ... a list of elements from the set of attribute values
+
+an attribute tag is always one of the following strings
+- `"firstName"`,
+- `"lastName"`,
+- `"sex"`,
+- `"dob"`,
+- `"countryOfResidence"`,
+- `"nationality"`,
+- `"idDocType"`,
+- `"idDocNo"`,
+- `"idDocIssuer"`,
+- `"idDocIssuedAt"`,
+- `"idDocExpiresAt"`,
+- `"nationalIdNo"`,
+- `"taxIdNo"`,
+- `"lei"`
+
+The output of this function is a JSON object with the following field
+- `"idProof"` - this is the proof that should be sent to the verifier.
+
+An example of input is in the file [prove-id-statement-input.json](files/prove-id-statement-input.json).
+An example of output is in the file [prove-id-statement-output.json](files/prove-id-statement-output.json).
 
 ## check_account_address
 

@@ -34,11 +34,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         &self,
         global: &GlobalContext<C>,
         challenge: &[u8],
-        secret: Secret<C, AttributeType>,
+        attribute_values: &impl HasAttributeValues<C::Scalar, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C>,
     ) -> Option<Proof<C, AttributeType>> {
-        if self.statement.statements.len() != secret.secrets.len() {
-            return None;
-        }
         let mut proofs: Vec<AtomicProof<C, AttributeType>> =
             Vec::with_capacity(self.statement.statements.len());
 
@@ -47,14 +45,15 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         transcript.append_message(b"accountAddress", &self.account);
         transcript.append_message(b"credential", &self.credential);
         let mut csprng = rand::thread_rng();
-        for (statement, secret) in self
-            .statement
-            .statements
-            .iter()
-            .zip(secret.secrets.into_iter())
-        {
-            match (statement, secret) {
-                (AtomicStatement::RevealAttribute { .. }, (attribute, randomness)) => {
+        for atomic_statement in self.statement.statements.iter() {
+            match atomic_statement {
+                AtomicStatement::RevealAttribute { statement } => {
+                    let attribute = attribute_values
+                        .get_attribute_value(statement.attribute_tag)?
+                        .clone();
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
                     let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                     transcript.add_bytes(b"RevealAttributeDlogProof");
                     transcript.append_message(b"x", &x);
@@ -71,7 +70,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                     let proof = sigma_prove(&mut transcript, &prover, secret, &mut csprng)?;
                     proofs.push(AtomicProof::RevealAttribute { attribute, proof });
                 }
-                (AtomicStatement::AttributeInSet { statement }, (attribute, randomness)) => {
+                AtomicStatement::AttributeInSet { statement } => {
+                    let attribute =
+                        attribute_values.get_attribute_value(statement.attribute_tag)?;
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
                     let attribute_scalar = attribute.to_field_element();
                     let attribute_vec: Vec<_> =
                         statement.set.iter().map(|x| x.to_field_element()).collect();
@@ -88,7 +92,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                     let proof = AtomicProof::AttributeInSet { proof };
                     proofs.push(proof);
                 }
-                (AtomicStatement::AttributeNotInSet { statement }, (attribute, randomness)) => {
+                AtomicStatement::AttributeNotInSet { statement } => {
+                    let attribute =
+                        attribute_values.get_attribute_value(statement.attribute_tag)?;
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
                     let attribute_scalar = attribute.to_field_element();
                     let attribute_vec: Vec<_> =
                         statement.set.iter().map(|x| x.to_field_element()).collect();
@@ -105,11 +114,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                     let proof = AtomicProof::AttributeNotInSet { proof };
                     proofs.push(proof);
                 }
-                (AtomicStatement::AttributeInRange { statement }, (attribute, randomness)) => {
+                AtomicStatement::AttributeInRange { statement } => {
+                    let attribute =
+                        attribute_values.get_attribute_value(statement.attribute_tag)?;
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
                     let proof = prove_attribute_in_range(
                         global.bulletproof_generators(),
                         &global.on_chain_commitment_key,
-                        &attribute,
+                        attribute,
                         &statement.lower,
                         &statement.upper,
                         &randomness,
@@ -119,13 +133,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
                 }
             }
         }
-        let account = self.account;
-        let credential = self.credential;
-        Some(Proof {
-            account,
-            credential,
-            proofs,
-        })
+        Some(Proof { proofs })
     }
 }
 

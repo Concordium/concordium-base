@@ -19,7 +19,7 @@ use concordium_base::{
         pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
         ps_sig,
         secret_sharing::Threshold,
-        types::*,
+        types::*, id_proof_types::{StatementWithContext},
     },
     smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
@@ -1054,6 +1054,34 @@ fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
+/// For proving statements about id attributes
+fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let global: GlobalContext<ArCurve> = try_get(&v, "global")?;
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+
+
+    let wallet = parse_wallet_input(&v)?;
+    let identity_provider_index = ip_info.ip_identity.0;
+    let identity_index: u32 = try_get(&v, "identityIndex")?;
+    let acc_num: u8 = try_get(&v, "accountNumber")?;
+    let credential_context = CredentialContext {
+        wallet,
+        identity_provider_index,
+        identity_index,
+        credential_index: u32::from(acc_num),
+    };
+
+    let statement: StatementWithContext<ArCurve, AttributeKind> = try_get(&v, "statement")?;
+    let id_object: IdentityObjectV1<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
+    let challenge: [u8; 32] = try_get(&v, "challenge")?;
+    let proof = statement.prove(&global, &challenge, &id_object.alist, &credential_context);
+    let response = serde_json::json!({
+        "idProof": common::Versioned::new(common::VERSION_0, proof),
+    });
+    Ok(to_string(&response)?)
+}
+
 fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
 
@@ -1410,6 +1438,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => generate_recovery_request -> generate_recovery_request_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => prove_id_statement -> prove_id_statement_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

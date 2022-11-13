@@ -14,9 +14,8 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 use pairing::bls12_381::G1;
-use pedersen_scheme::Randomness as PedersenRandomness;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
-use std::{collections::BTreeSet, marker::PhantomData};
+use std::{collections::BTreeSet, convert::TryFrom, marker::PhantomData, str::FromStr};
 
 /// For the case where the verifier wants the user to show the value of an
 /// attribute and prove that it is indeed the value inside the on-chain
@@ -24,6 +23,7 @@ use std::{collections::BTreeSet, marker::PhantomData};
 /// seing the proof, the value is not present here.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct RevealAttributeStatement {
+    /// The attribute that the verifier wants the user to reveal.
     #[serde(rename = "attributeTag")]
     pub attribute_tag: AttributeTag,
 }
@@ -37,11 +37,14 @@ pub struct RevealAttributeStatement {
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The attribute that the verifier wants the user to prove is in a range.
     #[serde(rename = "attributeTag")]
     pub attribute_tag: AttributeTag,
+    /// The lower bound on the range.
     #[serde(rename = "lower")]
     pub lower:         AttributeType,
-    #[serde(rename = "lower")]
+    #[serde(rename = "upper")]
+    /// The upper bound of the range.
     pub upper:         AttributeType,
     #[serde(skip)]
     pub _phantom:      PhantomData<C>,
@@ -55,9 +58,10 @@ pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scala
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The attribute that the verifier wants the user prove lies in a set.
     #[serde(rename = "attributeTag")]
     pub attribute_tag: AttributeTag,
-    // #[set_size_length = 2]
+    /// The set that the attribute should lie in.
     #[serde(rename = "set")]
     pub set:           std::collections::BTreeSet<AttributeType>,
     #[serde(skip)]
@@ -72,15 +76,18 @@ pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeNotInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The attribute that the verifier wants the user to prove does not lie in a set.
     #[serde(rename = "attributeTag")]
     pub attribute_tag: AttributeTag,
+    /// The set that the attribute should not lie in.
     #[serde(rename = "set")]
     pub set:           std::collections::BTreeSet<AttributeType>,
     #[serde(skip)]
     pub _phantom:      PhantomData<C>,
 }
 
-/// The different types of statements.
+/// Statements are composed of one or more atomic statements.
+/// This type defines the different types of atomic statements.
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
@@ -90,22 +97,27 @@ Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 #[serde(tag = "type")]
 pub enum AtomicStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The atomic statement stating that an attribute should be revealed.
     RevealAttribute {
+        #[serde(flatten)]
         statement: RevealAttributeStatement,
     },
+    /// The atomic statement stating that an attribute is in a range.
     AttributeInRange {
+        #[serde(flatten)]
         statement: AttributeInRangeStatement<C, AttributeType>,
     },
+    /// The atomic statement stating that an attribute is in a set.
     AttributeInSet {
+        #[serde(flatten)]
         statement: AttributeInSetStatement<C, AttributeType>,
     },
+    /// The atomic statement stating that an attribute is not in a set.
     AttributeNotInSet {
+        #[serde(flatten)]
         statement: AttributeNotInSetStatement<C, AttributeType>,
     },
 }
-
-/// The secret is always an attribute value together with randomness.
-pub type AtomicSecret<C, AttributeType> = (AttributeType, PedersenRandomness<C>);
 
 /// The different types of proofs, corresponding to the statements above.
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
@@ -117,11 +129,13 @@ Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 #[serde(tag = "type")]
 pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Revealing an attribute and a proof that it equals the attribute value inside the attribute commitment.
     RevealAttribute {
-        attribute: AttributeType, /* The verifier has to learn this, so it send together with
+        attribute: AttributeType, /* The verifier has to learn this, so it is sent together with
                                    * the proof. */
         proof:     super::sigma_protocols::common::SigmaProof<DlogWitness<C>>,
     },
+    /// A proof that an attribute is in a range
     AttributeInRange {
         #[serde(
             rename = "proof",
@@ -130,6 +144,7 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         )]
         proof: RangeProof<C>,
     },
+    /// A proof that an attribute is in a set
     AttributeInSet {
         #[serde(
             rename = "proof",
@@ -138,6 +153,7 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         )]
         proof: SetMembershipProof<C>,
     },
+    /// A proof that an attribute is not in a set
     AttributeNotInSet {
         #[serde(
             rename = "proof",
@@ -148,27 +164,22 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     },
 }
 
-/// A statement about a credential on an account.
+/// A statement with a context is a statement about credential on an account,
+/// the context being the account and the credential.
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The account address of the credential that the statement is about.
     pub account:    AccountAddress,
     #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
+    /// The credential that the statement is about.
     pub credential: CredId<C>,
+    /// The statement composed by one or more atomic statements.
+    #[serde(flatten)]
     pub statement:  Statement<C, AttributeType>,
-}
-
-/// A secret needed for proving a statement
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
-))]
-pub struct Secret<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub secrets: Vec<AtomicSecret<C, AttributeType>>,
 }
 
 /// A statement is a list of atomic statements.
@@ -178,6 +189,7 @@ pub struct Secret<C: Curve, AttributeType: Attribute<C::Scalar>> {
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct Statement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// The list of atomic statements
     pub statements: Vec<AtomicStatement<C, AttributeType>>,
 }
 
@@ -187,105 +199,118 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Default for Statement<C, Att
 
 /// Helper functions for constructing statements
 impl Statement<G1, AttributeKind> {
-    pub fn older_than(mut self, age: u64) -> Self {
+    /// For stating that the user is at least `age` years old.
+    /// The functions returns `None` if
+    /// - the current year does not fit into a u64, or
+    /// - the given age is larger than the current year.
+    /// Otherwise it returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "older than" statement.
+    pub fn older_than(mut self, age: u64) -> Option<Self> {
         use chrono::Datelike;
         let now = chrono::Utc::now();
-        let date_years_ago = format!(
-            "{:04}{:02}{:02}",
-            (now.year() as u64) - age,
-            now.month(),
-            now.day()
-        );
+        let year = u64::try_from(now.year()).ok()?;
+        let years_ago = year.checked_sub(age)?;
+        let date_years_ago = format!("{:04}{:02}{:02}", years_ago, now.month(), now.day());
         let upper = AttributeKind(date_years_ago);
         let lower = AttributeKind(String::from("18000101"));
 
         let statement = AttributeInRangeStatement::<G1, _> {
-            attribute_tag: AttributeTag(3u8), // DOB tag
+            attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
-        self
+        Some(self)
     }
 
-    pub fn younger_than(mut self, age: u64) -> Self {
+    /// For stating that the user is strictly younger than `age` years old.
+    /// The functions returns `None` if
+    /// - the current year does not fit into a u64, or
+    /// - the given age is larger than the current year.
+    /// Otherwise it returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "younger than" statement.
+    pub fn younger_than(mut self, age: u64) -> Option<Self> {
         use chrono::Datelike;
         let now = chrono::Utc::now();
-        let date_years_ago = format!(
-            "{:04}{:02}{:02}",
-            (now.year() as u64) - age,
-            now.month(),
-            now.day()
-        );
-        let today = format!(
-            "{:04}{:02}{:02}",
-            (now.year() as u64),
-            now.month(),
-            now.day()
-        );
+        let year = u64::try_from(now.year()).ok()?;
+        let years_ago = year.checked_sub(age)?;
+        let date_years_ago = format!("{:04}{:02}{:02}", years_ago, now.month(), now.day());
+        let today = format!("{:04}{:02}{:02}", year, now.month(), now.day());
         let lower = AttributeKind(date_years_ago);
         let upper = AttributeKind(today);
 
         let statement = AttributeInRangeStatement::<G1, _> {
-            attribute_tag: AttributeTag(3u8), // DOB tag
+            attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
-        self
+        Some(self)
     }
 
-    pub fn age_in_range(mut self, lower: u64, upper: u64) -> Self {
+    /// For stating that the user's age in years is in `[lower, upper)`.
+    /// The functions returns `None` if
+    /// - the current year does not fit into a u64, or
+    /// - the given lower or upper bound is larger than the current year.
+    /// Otherwise it returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "age in range" statement.
+    pub fn age_in_range(mut self, lower: u64, upper: u64) -> Option<Self> {
         use chrono::Datelike;
         let now = chrono::Utc::now();
-        let lower_date = format!(
-            "{:04}{:02}{:02}",
-            (now.year() as u64) - lower,
-            now.month(),
-            now.day()
-        );
-        let upper_date = format!(
-            "{:04}{:02}{:02}",
-            (now.year() as u64) - upper,
-            now.month(),
-            now.day()
-        );
+        let year = u64::try_from(now.year()).ok()?;
+        let lower_year = year.checked_sub(lower)?;
+        let upper_year = year.checked_sub(upper)?;
+        let lower_date = format!("{:04}{:02}{:02}", lower_year, now.month(), now.day());
+        let upper_date = format!("{:04}{:02}{:02}", upper_year, now.month(), now.day());
         let lower = AttributeKind(lower_date);
         let upper = AttributeKind(upper_date);
 
         let statement = AttributeInRangeStatement::<G1, _> {
-            attribute_tag: AttributeTag(3u8), // DOB tag
+            attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
-        self
+        Some(self)
     }
 
-    pub fn doc_expiry_no_earlier_than(mut self, lower: AttributeKind) -> Self {
-        let upper = AttributeKind(String::from("30000101"));
+    /// For stating that the user's document expiry is at least `lower`.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document expiry no earlier than" statement.
+    pub fn doc_expiry_no_earlier_than(mut self, lower: AttributeKind) -> Option<Self> {
+        let upper = AttributeKind(String::from("99990101"));
 
         let statement = AttributeInRangeStatement::<G1, _> {
-            attribute_tag: AttributeTag(10u8), // doc expiry
+            attribute_tag: AttributeTag::from_str("idDocExpiresAt").ok()?, // doc expiry
             lower,
             upper,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
-        self
+        Some(self)
     }
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> {
+    /// For constructing the empty statement.
     pub fn new() -> Self { Self::default() }
 
+    /// For revealing an attribute. This is resquests the user to reveal the
+    /// attribute value corresponding to `attribute_tag` and to prove that
+    /// the value is the one inside the on-chain commitment.
+    /// The function returns the statements in `self` composed with the "reveal
+    /// attribute" statement.
     pub fn reveal_attribute(mut self, attribute_tag: AttributeTag) -> Self {
         let statement = RevealAttributeStatement { attribute_tag };
         self.statements
@@ -293,6 +318,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         self
     }
 
+    /// For stating that an attribute is in `[lower, upper)`.
+    /// The function returns the statements in `self` composed with the range
+    /// statement.
     pub fn in_range(
         mut self,
         tag: AttributeTag,
@@ -310,6 +338,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         self
     }
 
+    /// For stating that an attribute is in a set.
+    /// The function returns the statements in `self` composed with the "member
+    /// of" statement.
     pub fn member_of(mut self, tag: AttributeTag, set: BTreeSet<AttributeType>) -> Self {
         let statement = AttributeInSetStatement {
             attribute_tag: tag,
@@ -321,6 +352,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         self
     }
 
+    /// For stating that that an attribute does not lie in a set.
+    /// The function returns the statements in `self` composed with the "not
+    /// member of" statement.
     pub fn not_member_of(mut self, tag: AttributeTag, set: BTreeSet<AttributeType>) -> Self {
         let statement = AttributeNotInSetStatement {
             attribute_tag: tag,
@@ -332,49 +366,75 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         self
     }
 
-    pub fn residence_in(mut self, set: BTreeSet<AttributeType>) -> Self {
+    /// For stating that the user's country of residence is in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "residence in" statement.
+    pub fn residence_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
         let statement = AttributeInSetStatement {
-            attribute_tag: AttributeTag(4u8), // country of residence
+            attribute_tag: AttributeTag::from_str("countryOfResidence").ok()?, /* country of
+                                                                                * residence */
             set,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeInSet { statement });
-        self
+        Some(self)
     }
 
-    pub fn residence_not_in(mut self, set: BTreeSet<AttributeType>) -> Self {
+    /// For stating that the user's country of residence does not lie in set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "residence not in" statement.
+    pub fn residence_not_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
         let statement = AttributeNotInSetStatement {
-            attribute_tag: AttributeTag(4u8), // country of residence
+            attribute_tag: AttributeTag::from_str("countryOfResidence").ok()?, /* country of
+                                                                                * residence */
             set,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeNotInSet { statement });
-        self
+        Some(self)
     }
 
-    pub fn document_issuer(&mut self, set: BTreeSet<AttributeType>) -> &mut Self {
+    /// For stating that the user's document issuer is in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document issuer in" statement.
+    pub fn document_issuer_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
         let statement = AttributeInSetStatement {
-            attribute_tag: AttributeTag(4u8),
+            attribute_tag: AttributeTag::from_str("idDocIssuer").ok()?,
             set,
             _phantom: PhantomData::default(),
         };
         self.statements
             .push(AtomicStatement::AttributeInSet { statement });
-        self
+        Some(self)
+    }
+
+    /// For stating that the user's document issuer does not lie in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document issuer not in" statement.
+    pub fn document_issuer_not_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
+        let statement = AttributeInSetStatement {
+            attribute_tag: AttributeTag::from_str("idDocIssuer").ok()?,
+            set,
+            _phantom: PhantomData::default(),
+        };
+        self.statements
+            .push(AtomicStatement::AttributeInSet { statement });
+        Some(self)
     }
 }
 
-/// A proof about a credential on an account
+/// A proof of a statement, composed of one or more atomic proofs.
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct Proof<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub account:    AccountAddress,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    pub credential: CredId<C>,
-    pub proofs:     Vec<AtomicProof<C, AttributeType>>,
+    pub proofs: Vec<AtomicProof<C, AttributeType>>,
 }

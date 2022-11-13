@@ -587,6 +587,14 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub _phantom:     std::marker::PhantomData<F>,
 }
 
+impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeType>
+    for AttributeList<F, AttributeType>
+{
+    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType> {
+        self.alist.get(&attribute_tag)
+    }
+}
+
 #[derive(Debug, Serialize)]
 /// In our case C: will be G1 and T will be G1 for now A secret credential is
 /// a scalar raising a generator to this scalar gives a public credentials. If
@@ -2358,6 +2366,10 @@ pub trait HasAttributeRandomness<C: Curve> {
         &self,
         attribute_tag: AttributeTag,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
+}
+
+pub trait HasAttributeValues<F: Field, AttributeType: Attribute<F>> {
+    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType>;
 }
 
 /// The empty type, here used as an impossible error in the implemention of
