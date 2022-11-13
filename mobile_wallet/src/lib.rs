@@ -16,10 +16,11 @@ use concordium_base::{
     id::{
         self, account_holder,
         constants::{ArCurve, AttributeKind},
+        id_proof_types::StatementWithContext,
         pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
         ps_sig,
         secret_sharing::Threshold,
-        types::*, id_proof_types::{StatementWithContext},
+        types::*,
     },
     smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
@@ -1059,7 +1060,6 @@ fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let global: GlobalContext<ArCurve> = try_get(&v, "global")?;
     let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
-
 
     let wallet = parse_wallet_input(&v)?;
     let identity_provider_index = ip_info.ip_identity.0;

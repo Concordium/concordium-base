@@ -76,7 +76,8 @@ pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeNotInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// The attribute that the verifier wants the user to prove does not lie in a set.
+    /// The attribute that the verifier wants the user to prove does not lie in
+    /// a set.
     #[serde(rename = "attributeTag")]
     pub attribute_tag: AttributeTag,
     /// The set that the attribute should not lie in.
@@ -129,7 +130,8 @@ Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 #[serde(tag = "type")]
 pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Revealing an attribute and a proof that it equals the attribute value inside the attribute commitment.
+    /// Revealing an attribute and a proof that it equals the attribute value
+    /// inside the attribute commitment.
     RevealAttribute {
         attribute: AttributeType, /* The verifier has to learn this, so it is sent together with
                                    * the proof. */
