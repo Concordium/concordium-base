@@ -456,7 +456,7 @@ impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use chrono::offset::TimeZone;
         let time = self.timestamp_millis() as i64;
-        let date = chrono::Utc.timestamp_millis(time);
+        let date = chrono::Utc.timestamp_millis_opt(time).single().ok_or(fmt::Error)?;
         write!(f, "{}", date.to_rfc3339())
     }
 }
@@ -1091,7 +1091,7 @@ impl<'a> AsRef<[u8]> for Parameter<'a> {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct OwnedParameter(pub Vec<u8>);
 
-impl<'a> AsRef<[u8]> for OwnedParameter {
+impl AsRef<[u8]> for OwnedParameter {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] { self.0.as_ref() }
 }
@@ -1452,8 +1452,13 @@ mod policy_json {
                 if year < 1000 {
                     return Err(serde::de::Error::custom("Year out of range."));
                 }
-                let dt = chrono::naive::NaiveDate::from_ymd(i32::from(year), u32::from(month), 1)
-                    .and_hms(0, 0, 0);
+                let dt =
+                    chrono::naive::NaiveDate::from_ymd_opt(i32::from(year), u32::from(month), 1)
+                        .ok_or_else(|| serde::de::Error::custom("Invalid year or month."))?
+                        .and_hms_opt(0, 0, 0)
+                        .ok_or_else(|| {
+                            serde::de::Error::custom("Could not convert YearMonth to a date.")
+                        })?;
                 let timestamp: u64 = dt.timestamp_millis().try_into().map_err(|_| {
                     serde::de::Error::custom("Times before 1970 are not supported.")
                 })?;
