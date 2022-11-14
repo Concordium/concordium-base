@@ -154,8 +154,9 @@ The CI is configured to check two things
 - the [rust fmt](https://github.com/rust-lang/rustfmt) tool is run to check the
   formatting. Unfortunately the stable version of the tool is quite outdated, so
   we use a nightly version, which is updated a few times a year. Thus in order
-  for the CI to pass you will need to install the relevant nightly version (for
-  which see the [./.github/workflows/rustfmt.yaml](.github/workflows/rustfmt.yaml) file).
+  for the CI to pass you will need to install the relevant nightly version, see
+  see the `rustfmt` job in the file [.github/workflows/build-test-sources.yaml](.github/workflows/build-test-sources.yaml),
+  look for `nightly-...`).
 
 ## Overall workflow
 
