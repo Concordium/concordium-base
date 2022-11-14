@@ -492,7 +492,7 @@ pub struct Duration {
 impl Duration {
     /// Construct duration from milliseconds.
     #[inline(always)]
-    pub fn from_millis(milliseconds: u64) -> Self {
+    pub const fn from_millis(milliseconds: u64) -> Self {
         Self {
             milliseconds,
         }
@@ -500,19 +500,19 @@ impl Duration {
 
     /// Construct duration from seconds.
     #[inline(always)]
-    pub fn from_seconds(seconds: u64) -> Self { Self::from_millis(seconds * 1000) }
+    pub const fn from_seconds(seconds: u64) -> Self { Self::from_millis(seconds * 1000) }
 
     /// Construct duration from minutes.
     #[inline(always)]
-    pub fn from_minutes(minutes: u64) -> Self { Self::from_millis(minutes * 1000 * 60) }
+    pub const fn from_minutes(minutes: u64) -> Self { Self::from_millis(minutes * 1000 * 60) }
 
     /// Construct duration from hours.
     #[inline(always)]
-    pub fn from_hours(hours: u64) -> Self { Self::from_millis(hours * 1000 * 60 * 60) }
+    pub const fn from_hours(hours: u64) -> Self { Self::from_millis(hours * 1000 * 60 * 60) }
 
     /// Construct duration from days.
     #[inline(always)]
-    pub fn from_days(days: u64) -> Self { Self::from_millis(days * 1000 * 60 * 60 * 24) }
+    pub const fn from_days(days: u64) -> Self { Self::from_millis(days * 1000 * 60 * 60 * 24) }
 
     /// Get number of milliseconds in the duration.
     #[inline(always)]
@@ -1607,9 +1607,7 @@ impl std::error::Error for ParseError {}
 
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
-    // FIXME: This is duplicated from crypto/id/types.
     use super::*;
-    use base58check::*;
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::{fmt, num};
 
@@ -1689,10 +1687,7 @@ mod serde_impl {
     pub enum AccountAddressParseError {
         /// Failed parsing the Base58Check encoding.
         #[error("Invalid Base58Check encoding.")]
-        InvalidBase58Check(FromBase58CheckError),
-        /// Base58Check version byte is not 1.
-        #[error("Invalid version byte, expected 1, but got {0}.")]
-        InvalidBase58CheckVersion(u8),
+        InvalidBase58Check(#[from] bs58::decode::Error),
         /// The decoded bytes are not of length 32.
         #[error("Invalid number of bytes, expected 32, but got {0}.")]
         InvalidByteLength(usize),
@@ -1703,23 +1698,25 @@ mod serde_impl {
         type Err = AccountAddressParseError;
 
         fn from_str(v: &str) -> Result<Self, Self::Err> {
-            let (version, body) =
-                v.from_base58check().map_err(AccountAddressParseError::InvalidBase58Check)?;
-            if version != 1 {
-                return Err(AccountAddressParseError::InvalidBase58CheckVersion(version));
+            // The buffer must be large enough to contain the 32 bytes for the address, 4
+            // bytes for a checksum and 1 byte for the version.
+            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE + 4 + 1];
+            let len = bs58::decode(v).with_check(Some(1)).into(&mut buf)?;
+            // Prepends 1 byte for the version
+            if len != 1 + ACCOUNT_ADDRESS_SIZE {
+                return Err(AccountAddressParseError::InvalidByteLength(len));
             }
-            if body.len() != ACCOUNT_ADDRESS_SIZE {
-                return Err(AccountAddressParseError::InvalidByteLength(body.len()));
-            }
-            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-            buf.copy_from_slice(&body);
-            Ok(AccountAddress(buf))
+            // Copy out the 32 bytes for the account address. Ignoring 1 byte prepended
+            // for the version and the 4 bytes appended for the checksum.
+            let mut address_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+            address_bytes.copy_from_slice(&buf[1..1 + ACCOUNT_ADDRESS_SIZE]);
+            Ok(AccountAddress(address_bytes))
         }
     }
 
     impl fmt::Display for AccountAddress {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0.to_base58check(1))
+            write!(f, "{}", bs58::encode(&self.0).with_check_version(1).into_string())
         }
     }
 
@@ -1850,6 +1847,24 @@ mod serde_impl {
     mod test {
         use super::*;
         use rand::Rng;
+
+        #[test]
+        fn test_account_address_to_string_parse_is_id() {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let mut address_bytes = [0u8; 32];
+
+            for _ in 0..1000 {
+                rng.fill(&mut address_bytes);
+                let address = AccountAddress(address_bytes);
+                let parsed: AccountAddress =
+                    address.to_string().parse().expect("Failed to parse address string.");
+                assert_eq!(
+                    parsed, address,
+                    "Parsed account address differs from the expected address."
+                );
+            }
+        }
 
         #[test]
         // test amount serialization is correct
