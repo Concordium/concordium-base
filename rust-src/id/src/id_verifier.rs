@@ -127,7 +127,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     ) -> bool {
         let mut transcript = RandomOracle::domain("id_attribute_proofs");
         transcript.add_bytes(challenge);
-        transcript.append_message(b"accountAddress", &self.account);
         transcript.append_message(b"credential", &self.credential);
         if self.statement.statements.len() != proofs.proofs.len() {
             return false;
@@ -388,7 +387,6 @@ mod tests {
 
         // full statement
         let full_statement = StatementWithContext {
-            account:    AccountAddress([1; 32]),
             credential: point,
             statement:  Statement {
                 statements: vec![
@@ -418,7 +416,6 @@ mod tests {
             .doc_expiry_no_earlier_than(AttributeKind(String::from("20240304")))
             .unwrap();
         let full_statement2 = StatementWithContext {
-            account:    AccountAddress([1; 32]),
             credential: point,
             statement:  statement2,
         };

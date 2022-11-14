@@ -1,4 +1,4 @@
-use anyhow::{bail, ensure};
+use anyhow::{bail, ensure, Context};
 use concordium_base::{
     base::{self, Energy, Nonce},
     cis2_types::{self, AdditionalData},
@@ -17,7 +17,7 @@ use concordium_base::{
     id::{
         self, account_holder,
         constants::{ArCurve, AttributeKind},
-        id_proof_types::StatementWithContext,
+        id_proof_types::{Statement, StatementWithContext},
         pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
         ps_sig,
         secret_sharing::Threshold,
@@ -1105,10 +1105,21 @@ fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
         credential_index: u32::from(acc_num),
     };
 
-    let statement: StatementWithContext<ArCurve, AttributeKind> = try_get(&v, "statement")?;
+    let cred_id = credential_context
+        .wallet
+        .get_prf_key(identity_provider_index, identity_index)?
+        .prf(&global.on_chain_commitment_key.g, acc_num)?;
+
+    let statement: Statement<ArCurve, AttributeKind> = try_get(&v, "statements")?;
+    let statement = StatementWithContext {
+        credential: cred_id,
+        statement,
+    };
     let id_object: IdentityObjectV1<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
     let challenge: [u8; 32] = try_get(&v, "challenge")?;
-    let proof = statement.prove(&global, &challenge, &id_object.alist, &credential_context);
+    let proof = statement
+        .prove(&global, &challenge, &id_object.alist, &credential_context)
+        .context("Could not produce proof.")?;
     let response = serde_json::json!({
         "idProof": common::Versioned::new(common::VERSION_0, proof),
     });

@@ -42,7 +42,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
 
         let mut transcript = RandomOracle::domain("id_attribute_proofs");
         transcript.add_bytes(challenge);
-        transcript.append_message(b"accountAddress", &self.account);
         transcript.append_message(b"credential", &self.credential);
         let mut csprng = rand::thread_rng();
         for atomic_statement in self.statement.statements.iter() {

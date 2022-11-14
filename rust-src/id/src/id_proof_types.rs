@@ -166,21 +166,18 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     },
 }
 
-/// A statement with a context is a statement about credential on an account,
-/// the context being the account and the credential.
+/// A statement with a context is a statement about a credential,
+/// the context being the credential.
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// The account address of the credential that the statement is about.
-    pub account:    AccountAddress,
     #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
     /// The credential that the statement is about.
     pub credential: CredId<C>,
     /// The statement composed by one or more atomic statements.
-    #[serde(flatten)]
     pub statement:  Statement<C, AttributeType>,
 }
 
@@ -190,6 +187,7 @@ pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
+#[serde(transparent)]
 pub struct Statement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The list of atomic statements
     pub statements: Vec<AtomicStatement<C, AttributeType>>,
