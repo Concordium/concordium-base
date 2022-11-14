@@ -6,6 +6,8 @@
 - Add type `ModuleReference` representing a module reference.
 - Implement `SchemaType` for `OwnedEntrypointName` and `OwnedParameter`.
 - Add type `ExchangeRate` representing an exchange rate between two quantities.
+- Make the following functions `const`: `Duration::from_millis`, `Duration::from_seconds`, `Duration::from_minutes`, `Duration::from_hours` and `Duration::from_days`.
+
 
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
