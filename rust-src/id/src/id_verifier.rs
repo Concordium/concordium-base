@@ -460,7 +460,7 @@ mod tests {
             _phantom: Default::default(),
         };
 
-        // the commitment randomness in a map so it be looked up when relevant.
+        // the commitment randomness in a map so it can be looked up when relevant.
         let mut randomness = BTreeMap::new();
         randomness.insert(AttributeTag::from(0u8), name_randomness);
         randomness.insert(AttributeTag::from(3u8), dob_randomness);
@@ -501,8 +501,8 @@ mod tests {
         // the verifier uses these commitments to verify the proofs
 
         let result = full_statement.verify(&challenge, &global, &coms, &proof);
-        assert!(result);
+        assert!(result, "Statement should verify.");
         let result2 = full_statement2.verify(&challenge2, &global, &coms, &proof2);
-        assert!(result2);
+        assert!(result2, "Statement 2 should verify.");
     }
 }

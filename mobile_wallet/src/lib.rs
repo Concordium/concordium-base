@@ -1088,7 +1088,10 @@ fn generate_recovery_request_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
-/// For proving statements about id attributes
+/// For proving statements about id attributes. Given a list of statements to be
+/// proved, it extracts the relevant attribute values from the user's identity
+/// object and calculates the commitment randomness deterministically from the
+/// hd wallet seed. Upon success it outputs a proof of the statements.
 fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let global: GlobalContext<ArCurve> = try_get(&v, "global")?;

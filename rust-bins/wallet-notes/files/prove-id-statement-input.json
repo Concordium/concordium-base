@@ -71,33 +71,38 @@
         },
         "signature": "80044474fdbaaaf15f5b348320365b912ad94d9b083093721d27bebbddbe87e4392f30133d4b3b514d33b1772224365baaa9da08d4ad18225f299e3683ba92dcb5bdf6eb08cf31bf1ca5bbe115c97e8a2ad2aa86c774718a6821afcd3c4cc06b"
       },
-    "statement": {
-        "account": "2xBpaHottqhwFZURMZW4uZduQvpxNDSy46iXMYs9kceNGaPpZX",
-        "credential": "855c45f03936ba3a5dac06466ad29f9cf56bc70bd55b0a60a2c8239b1867de8a4354232d852d2817d39c0279649e0d4e",
-        "statements": [
-            {
-                "type": "RevealAttribute",
-                "attributeTag": "firstName"
-            },
-            {
-                "type": "AttributeInSet",
-                "attributeTag": "countryOfResidence",
-                "set": [
-                    "DE",
-                    "DK",
-                    "NO",
-                    "SE",
-                    "UK"
-                ]
-            },
-            {
-                "type": "AttributeInRange",
-                "attributeTag": "dob",
-                "lower": "19950505",
-                "upper": "19990505"
-            }
-        ]
-    },
+    "statements": [
+        {
+            "type": "RevealAttribute",
+            "attributeTag": "firstName"
+        },
+        {
+            "type": "AttributeInSet",
+            "attributeTag": "countryOfResidence",
+            "set": [
+                "DE",
+                "DK",
+                "NO",
+                "SE",
+                "UK"
+            ]
+        },
+        {
+            "type": "AttributeNotInSet",
+            "attributeTag": "countryOfResidence",
+            "set": [
+                "NO",
+                "SE",
+                "UK"
+            ]
+        },
+        {
+            "type": "AttributeInRange",
+            "attributeTag": "dob",
+            "lower": "19950505",
+            "upper": "19990505"
+        }
+    ],
     "challenge": [
         0,
         0,

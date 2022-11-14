@@ -135,10 +135,7 @@ must be a valid JSON object with fields
 - `"identityIndex"` ... an integer indicating the index of identity.
 - `"accountNumber"` ... an integer indicating the index of identity.
 - `"identityObject"` ... the identity object the user are proving statements about. Contains the attribute  values needed for generating the proofs.
-- `"statement"` ... is a JSON object with the fields
-    - `"account"` ... the address of the relevant account
-    - `"credential"` ... credential ID of the relevant credential
-    - `"statements"` ... the list of statements to be proved (if they are true)
+- `"statements"` ... the list of statements to be proved (if they are true)
 - `"challenge"` ... the verifier's challenge, 32 bytes.
 
 Each statement in the list is of the form
@@ -159,11 +156,11 @@ If `"type"` is `"AttributeInRange"`, then the following fields are also expected
 
 If `"type"` is `"AttributeInSet"`, then the following fields are also expected
 - `"attributeTag"` ... the attribute tag, one of those listed below
-- `"set"` ... a list of elements from the set of attribute values
+- `"set"` ... a list of elements from the set of attribute values. No duplicates allowed.
 
 If `"type"` is `"AttributeNotInSet"`, then the following fields are also expected
 - `"attributeTag"` ... the attribute tag, one of those listed below
-- `"set"` ... a list of elements from the set of attribute values
+- `"set"` ... a list of elements from the set of attribute values. No duplicates allowed.
 
 an attribute tag is always one of the following strings
 - `"firstName"`,
