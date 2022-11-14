@@ -125,7 +125,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         commitments: &CredentialDeploymentCommitments<C>,
         proofs: &Proof<C, AttributeType>,
     ) -> bool {
-        let mut transcript = RandomOracle::domain("id_attribute_proofs");
+        let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
+        transcript.append_message(b"ctx", &global);
         transcript.add_bytes(challenge);
         transcript.append_message(b"credential", &self.credential);
         if self.statement.statements.len() != proofs.proofs.len() {

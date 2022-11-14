@@ -40,7 +40,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         let mut proofs: Vec<AtomicProof<C, AttributeType>> =
             Vec::with_capacity(self.statement.statements.len());
 
-        let mut transcript = RandomOracle::domain("id_attribute_proofs");
+        let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
+        transcript.append_message(b"ctx", &global);
         transcript.add_bytes(challenge);
         transcript.append_message(b"credential", &self.credential);
         let mut csprng = rand::thread_rng();
