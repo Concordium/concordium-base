@@ -17,7 +17,6 @@ import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Word
 import Foreign.Marshal
-import Foreign.Marshal.Utils
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe

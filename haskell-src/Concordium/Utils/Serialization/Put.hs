@@ -10,7 +10,6 @@ module Concordium.Utils.Serialization.Put where
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Control.Monad.Trans.Class
 import Data.ByteString.Builder
 import Data.Serialize
 import System.IO
