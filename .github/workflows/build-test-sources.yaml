@@ -207,7 +207,7 @@ jobs:
     # Must be done before running any tests.
     - name: Build all Haskell components
       run: |
-        stack build --test --bench --force-dirty --ghc-options=-split-sections --no-run-tests --no-run-benchmarks
+        stack build --test --bench --force-dirty --ghc-options=-split-sections --no-run-tests --no-run-benchmarks --ghc-options "-Werror"
 
     # Run Rust and Haskell tests. Could run in parallel in separate jobs.
     - name: Test haskell
