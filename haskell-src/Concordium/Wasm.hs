@@ -491,8 +491,8 @@ instance Serialize ReceiveName where
 -- The parameter is limited to 1kB in size. This is ensured
 -- by deserialization methods.
 newtype Parameter = Parameter {parameter :: ShortByteString}
-    deriving (Eq, Show)
-    deriving (AE.ToJSON, AE.FromJSON) via ByteStringHex
+    deriving (Eq)
+    deriving (AE.ToJSON, AE.FromJSON, Show) via ByteStringHex
 
 -- |Parameter of size 0.
 emptyParameter :: Parameter
@@ -757,8 +757,8 @@ getActionsTree' size = go HM.empty 0
 
 -- |Event as reported by contract execution.
 newtype ContractEvent = ContractEvent BSS.ShortByteString
-    deriving (Eq, Show)
-    deriving (AE.ToJSON, AE.FromJSON) via ByteStringHex
+    deriving (Eq)
+    deriving (AE.ToJSON, AE.FromJSON, Show) via ByteStringHex
 
 instance Serialize ContractEvent where
     put (ContractEvent ev) = putShortByteStringWord32 ev
