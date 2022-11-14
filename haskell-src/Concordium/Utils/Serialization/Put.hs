@@ -1,5 +1,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 -- |This module defines the 'MonadPut' typeclass, which generalizes the 'PutM'
 -- monad.  The main purpose of this generalization is to allow efficient
 -- serialization to a file in a monadic context, where it may be undesirable
@@ -8,8 +9,8 @@ module Concordium.Utils.Serialization.Put where
 
 import Control.Applicative
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Class
 import Control.Monad.Reader
+import Control.Monad.Trans.Class
 import Data.ByteString.Builder
 import Data.Serialize
 import System.IO
@@ -18,6 +19,7 @@ import System.IO
 class Monad m => MonadPut m where
     -- |Output a 'Builder'.
     build :: Builder -> m ()
+
     -- |Lift a value from the 'PutM' monad.
     liftPut :: PutM a -> m a
     liftPut p = do

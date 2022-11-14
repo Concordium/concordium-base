@@ -1,18 +1,17 @@
-module Concordium.ID.Parameters
-  (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
-  where
+module Concordium.ID.Parameters (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
+where
 
 import Concordium.Crypto.FFIHelpers
 
-import Foreign.ForeignPtr
-import Foreign.Ptr
-import Foreign.C.Types
-import Data.Word
+import Control.DeepSeq
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize
-import Control.DeepSeq
+import Data.Word
+import Foreign.C.Types
+import Foreign.ForeignPtr
+import Foreign.Ptr
 
 import qualified Data.Aeson as AE
 import System.IO.Unsafe
@@ -34,27 +33,27 @@ withGlobalContext (GlobalContext fp) = withForeignPtr fp
 
 -- This instance is different from the Rust one, it puts the length information up front.
 instance Serialize GlobalContext where
-  get = do
-    v <- getWord32be
-    bs <- getByteString (fromIntegral v)
-    case fromBytesHelper freeGlobalContext globalContextFromBytes bs of
-      Nothing -> fail "Cannot decode GlobalContext."
-      Just x -> return (GlobalContext x)
+    get = do
+        v <- getWord32be
+        bs <- getByteString (fromIntegral v)
+        case fromBytesHelper freeGlobalContext globalContextFromBytes bs of
+            Nothing -> fail "Cannot decode GlobalContext."
+            Just x -> return (GlobalContext x)
 
-  put (GlobalContext e) =
-    let bs = toBytesHelper globalContextToBytes e
-    in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
+    put (GlobalContext e) =
+        let bs = toBytesHelper globalContextToBytes e
+        in  putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
 -- NB: This instance should only be used for testing. It is not guaranteed to be
 -- semantically meaningful.
 instance Eq GlobalContext where
-  (GlobalContext e1) == (GlobalContext e2) = tob e1 == tob e2
-    where
-      tob = toBytesHelper globalContextToBytes
+    (GlobalContext e1) == (GlobalContext e2) = tob e1 == tob e2
+      where
+        tob = toBytesHelper globalContextToBytes
 
 -- Show instance uses the JSON instance to pretty print the structure.
 instance Show GlobalContext where
-  show = BS8.unpack . globalContextToJSON
+    show = BS8.unpack . globalContextToJSON
 
 jsonToGlobalContext :: BS.ByteString -> Maybe GlobalContext
 jsonToGlobalContext bs = GlobalContext <$> fromJSONHelper freeGlobalContext globalContextFromJSONFFI bs
@@ -73,19 +72,19 @@ dummyGlobalContext = GlobalContext $ unsafePerformIO (newForeignPtr freeGlobalCo
 -- configuration data, or similar one-off uses.
 
 instance AE.FromJSON GlobalContext where
-  parseJSON v@(AE.Object _) =
-    -- this is a terrible hack to avoid writing duplicate instances
-    -- hack in the sense of performance
-    case jsonToGlobalContext (BSL.toStrict (AE.encode v)) of
-      Nothing -> fail "Could not decode GlobalContext."
-      Just ipinfo -> return ipinfo
-  parseJSON _ = fail "GlobalContext: Expected object."
+    parseJSON v@(AE.Object _) =
+        -- this is a terrible hack to avoid writing duplicate instances
+        -- hack in the sense of performance
+        case jsonToGlobalContext (BSL.toStrict (AE.encode v)) of
+            Nothing -> fail "Could not decode GlobalContext."
+            Just ipinfo -> return ipinfo
+    parseJSON _ = fail "GlobalContext: Expected object."
 
 instance AE.ToJSON GlobalContext where
-  toJSON ipinfo =
-    case AE.decodeStrict (globalContextToJSON ipinfo) of
-      Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
-      Just v -> v
+    toJSON ipinfo =
+        case AE.decodeStrict (globalContextToJSON ipinfo) of
+            Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
+            Just v -> v
 
 -- Instances for benchmarking
 instance NFData GlobalContext where

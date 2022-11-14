@@ -1,35 +1,36 @@
-{-# LANGUAGE BangPatterns, RankNTypes #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
+
 module Concordium.Utils where
 
+import Control.Monad
+import Control.Monad.Except
+import Control.Monad.State.Class
+import Data.Char
 import qualified Data.HashMap.Strict as H
 import Data.Hashable
 import qualified Data.Map.Strict as M
+import Data.Maybe
+import Data.Monoid (First)
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import Lens.Micro.Internal
 import Lens.Micro.Platform
-import Data.Monoid (First)
-import Control.Monad
-import qualified Data.Set as Set
-import Control.Monad.State.Class
-import Data.Maybe
-import Data.Char
-import Control.Monad.Except
 
 -- |Strict version of `At`.
 --
 -- The implementations should be fairly similar to the implementation in `micro-platforms` but values
 -- must be evaluated with bang patterns for removing laziness.
 class (Ixed m) => At' m where
-  at' :: Index m -> Lens' m (Maybe (IxValue m))
+    at' :: Index m -> Lens' m (Maybe (IxValue m))
 
 instance (Hashable k, Eq k) => At' (H.HashMap k v) where
-  at' k f = H.alterF f k
-  {-# INLINE at' #-}
+    at' k f = H.alterF f k
+    {-# INLINE at' #-}
 
 instance Ord k => At' (M.Map k v) where
-  at' k f = M.alterF f k
-  {-# INLINE at' #-}
-
+    at' k f = M.alterF f k
+    {-# INLINE at' #-}
 
 -- *Strict versions of some lenses.
 (?~!) :: ASetter s t a (Maybe b) -> b -> s -> t
@@ -54,7 +55,6 @@ use' :: MonadState s m => Getting a s a -> m a
 use' l = gets' (view l)
 {-# INLINE use' #-}
 
-
 (.=!) :: MonadState s m => ASetter s s a b -> b -> m ()
 l .=! x = modify' (l .~ x)
 {-# INLINE (.=!) #-}
@@ -66,7 +66,6 @@ l %=! f = modify' (l %~ f)
 {-# INLINE (%=!) #-}
 
 infix 4 %=!
-
 
 (<~!) :: MonadState s m => ASetter s s a b -> m b -> m ()
 l <~! mb = mb >>= (l .=!)
@@ -82,9 +81,9 @@ infix 4 ?=!
 
 (%%=!) :: MonadState s m => LensLike ((,) r) s s a b -> (a -> (r, b)) -> m r
 l %%=! f = do
-  (r, s) <- gets (l f)
-  put $! s
-  return r
+    (r, s) <- gets (l f)
+    put $! s
+    return r
 {-# INLINE (%%=!) #-}
 
 infix 4 %%=!
@@ -108,6 +107,7 @@ l <.=! b = l <%=! const b
 infix 4 <.=!
 
 -- * Strict sequence cons and snoc.
+
 -- Data.Sequence is strict in its length, but there are no strict insertion functions in the library.
 -- Since consing often leads to memory leaks with sequences we provide here strict insertion functions.
 
@@ -129,21 +129,21 @@ singleton' !x = Seq.singleton x
 -- *Strict list insertions.
 {-# INLINE cons' #-}
 cons' :: a -> [a] -> [a]
-cons' !x = (x:)
+cons' !x = (x :)
 
 -- *Strict functions on pairs.
 
 -- |Force the evaluation of the components of the pair.
-($!!) :: ((a,b) -> c) -> (a,b) -> c
-f $!! (!x, !y) = f (x,y)
+($!!) :: ((a, b) -> c) -> (a, b) -> c
+f $!! (!x, !y) = f (x, y)
 {-# INLINE ($!!) #-}
 
 -- * Helper lenses
 
 nonEmpty :: (Monoid (f v), Foldable f) => Lens' (Maybe (f v)) (f v)
 nonEmpty afb s = f <$> afb (fromMaybe mempty s)
-    where
-        f y = if null y then Nothing else Just y
+  where
+    f y = if null y then Nothing else Just y
 {-# INLINE nonEmpty #-}
 
 -- * Monadic conditionals
@@ -165,7 +165,7 @@ whenAddToSet val setLens act = do
 -- (This is used in Template Haskell for generating JSON serialization code.)
 firstLower :: String -> String
 firstLower [] = []
-firstLower (c:cs) = toLower c : cs
+firstLower (c : cs) = toLower c : cs
 
 -- | In the 'Left' case of an 'Either', transform the error using the given function and
 -- "rethrow" it in the current 'MonadError'.

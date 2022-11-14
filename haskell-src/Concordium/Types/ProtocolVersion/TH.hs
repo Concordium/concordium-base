@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+
 -- |Template Haskell functions for supporting polymorphism over protocol versions.
 module Concordium.Types.ProtocolVersion.TH (onPV, casePV) where
 

@@ -14,13 +14,13 @@ binarySearchI valToKey vec key = search 0 (Vec.length vec - 1)
         LT ->
             let midIndex = lowIndex + (highIndex - lowIndex) `div` 2
                 midVal = vec Vec.! midIndex
-             in case compare key (valToKey midVal) of
+            in  case compare key (valToKey midVal) of
                     LT -> search lowIndex (midIndex - 1)
                     EQ -> Just (midIndex, midVal)
                     GT -> search (midIndex + 1) highIndex
         EQ ->
             let val = vec Vec.! lowIndex
-             in if key == valToKey val
+            in  if key == valToKey val
                     then Just (lowIndex, val)
                     else Nothing
         GT -> Nothing
@@ -58,8 +58,8 @@ binarySearchIM resolve valToKey vec key = search 0 (Vec.length vec - 1)
                 GT -> search (midIndex + 1) highIndex
         EQ -> do
             val <- resolve $ vec Vec.! lowIndex
-            return
-                $! if key == valToKey val
+            return $!
+                if key == valToKey val
                     then Just (lowIndex, val)
                     else Nothing
         GT -> return Nothing

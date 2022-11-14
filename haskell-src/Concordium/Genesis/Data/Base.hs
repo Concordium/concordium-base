@@ -1,22 +1,24 @@
-{-# LANGUAGE KindSignatures, DataKinds, ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Concordium.Genesis.Data.Base where
 
 import Control.Monad
-import Data.Serialize
-import Data.Word
-import qualified Data.Vector as Vec
 import qualified Data.Map.Strict as Map
+import Data.Serialize
+import qualified Data.Vector as Vec
+import Data.Word
 import Lens.Micro.Platform
 
-import Concordium.Types
-import Concordium.Types.Parameters
-import Concordium.Types.AnonymityRevokers
-import Concordium.Types.IdentityProviders
-import Concordium.Types.Updates
-import Concordium.Utils.Serialization
 import Concordium.Genesis.Account
 import Concordium.Genesis.Parameters
+import Concordium.Types
+import Concordium.Types.AnonymityRevokers
+import Concordium.Types.IdentityProviders
+import Concordium.Types.Parameters
+import Concordium.Types.Updates
+import Concordium.Utils.Serialization
 
 -- |A class that provides access to fields of genesis data that
 -- are expected to be stable across versions.
@@ -35,7 +37,6 @@ class BasicGenesisData gd where
 
     -- |The epoch length in slots
     gdEpochLength :: gd -> EpochLength
-
 
 -- |Core parameters that are set at genesis.
 -- These parameters are not updatable (except via protocol update) and
@@ -56,20 +57,21 @@ data CoreGenesisParameters = CoreGenesisParameters
 
 -- |Extract the core genesis parameters.
 coreGenesisParameters :: BasicGenesisData gd => gd -> CoreGenesisParameters
-coreGenesisParameters gd = CoreGenesisParameters{
-    genesisTime = gdGenesisTime gd,
-    genesisSlotDuration = gdSlotDuration gd,
-    genesisEpochLength = gdEpochLength gd,
-    genesisFinalizationParameters = gdFinalizationParameters gd,
-    genesisMaxBlockEnergy = gdMaxBlockEnergy gd
-    }
+coreGenesisParameters gd =
+    CoreGenesisParameters
+        { genesisTime = gdGenesisTime gd,
+          genesisSlotDuration = gdSlotDuration gd,
+          genesisEpochLength = gdEpochLength gd,
+          genesisFinalizationParameters = gdFinalizationParameters gd,
+          genesisMaxBlockEnergy = gdMaxBlockEnergy gd
+        }
 
 instance BasicGenesisData CoreGenesisParameters where
-  gdGenesisTime = genesisTime
-  gdSlotDuration = genesisSlotDuration
-  gdMaxBlockEnergy = genesisMaxBlockEnergy
-  gdFinalizationParameters = genesisFinalizationParameters
-  gdEpochLength = genesisEpochLength
+    gdGenesisTime = genesisTime
+    gdSlotDuration = genesisSlotDuration
+    gdMaxBlockEnergy = genesisMaxBlockEnergy
+    gdFinalizationParameters = genesisFinalizationParameters
+    gdEpochLength = genesisEpochLength
 
 instance Serialize CoreGenesisParameters where
     put CoreGenesisParameters{..} = do
@@ -92,28 +94,29 @@ instance Serialize CoreGenesisParameters where
 --
 -- The intention is that this structured can always be deserialized from a
 -- serialized @GenesisData@ provided the hash of the genesis data is known.
-data GenesisConfiguration = GenesisConfiguration {
-  -- |The tag used when deserializing genesis data. This determines the variant
-  -- of the genesis data that is to be deserialized. The allowed values depend
-  -- on the protocol version. For each protocol there is a function
-  -- 'genesisVariantTag' that determines the allowed values for this tag.
-  _gcTag :: !Word8,
-  -- |Genesis parameters.
-  _gcCore :: !CoreGenesisParameters,
-  -- |Hash of the genesis block of the chain. This is carried over on protocol
-  -- updates.
-  _gcFirstGenesis :: !BlockHash,
-  -- |Hash of the current genesis block. Each protocol update introduces a new
-  -- genesis block.
-  _gcCurrentHash :: !BlockHash
-  } deriving (Eq, Show)
+data GenesisConfiguration = GenesisConfiguration
+    { -- |The tag used when deserializing genesis data. This determines the variant
+      -- of the genesis data that is to be deserialized. The allowed values depend
+      -- on the protocol version. For each protocol there is a function
+      -- 'genesisVariantTag' that determines the allowed values for this tag.
+      _gcTag :: !Word8,
+      -- |Genesis parameters.
+      _gcCore :: !CoreGenesisParameters,
+      -- |Hash of the genesis block of the chain. This is carried over on protocol
+      -- updates.
+      _gcFirstGenesis :: !BlockHash,
+      -- |Hash of the current genesis block. Each protocol update introduces a new
+      -- genesis block.
+      _gcCurrentHash :: !BlockHash
+    }
+    deriving (Eq, Show)
 
 instance BasicGenesisData GenesisConfiguration where
-  gdGenesisTime = gdGenesisTime . _gcCore
-  gdSlotDuration = gdSlotDuration . _gcCore
-  gdMaxBlockEnergy = gdMaxBlockEnergy . _gcCore
-  gdFinalizationParameters = gdFinalizationParameters . _gcCore
-  gdEpochLength = gdEpochLength . _gcCore
+    gdGenesisTime = gdGenesisTime . _gcCore
+    gdSlotDuration = gdSlotDuration . _gcCore
+    gdMaxBlockEnergy = gdMaxBlockEnergy . _gcCore
+    gdFinalizationParameters = gdFinalizationParameters . _gcCore
+    gdEpochLength = gdEpochLength . _gcCore
 
 -- |Serialize genesis configuration. This is done in such a way that
 -- 'getGenesisConfiguration' can parse it.
@@ -122,21 +125,21 @@ putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> 
 
 -- | Common data in the "regenesis" block, which is the first block of the chain after
 -- the protocol update takes effect.
-data RegenesisData = RegenesisData {
-    -- |The immutable genesis parameters.
-    -- (These need not be invariant across re-genesis.)
-    genesisCore :: !CoreGenesisParameters,
-    -- |The hash of the first genesis block in the chain.
-    genesisFirstGenesis :: !BlockHash,
-    -- |The hash of the preceding (re)genesis block.
-    genesisPreviousGenesis :: !BlockHash,
-    -- |The hash of the last finalized block that terminated the chain before the
-    -- new genesis.
-    genesisTerminalBlock :: !BlockHash,
-    -- |The hash of the block state for the regenesis.
-    genesisStateHash :: !StateHash
-  } deriving(Eq, Show)
-
+data RegenesisData = RegenesisData
+    { -- |The immutable genesis parameters.
+      -- (These need not be invariant across re-genesis.)
+      genesisCore :: !CoreGenesisParameters,
+      -- |The hash of the first genesis block in the chain.
+      genesisFirstGenesis :: !BlockHash,
+      -- |The hash of the preceding (re)genesis block.
+      genesisPreviousGenesis :: !BlockHash,
+      -- |The hash of the last finalized block that terminated the chain before the
+      -- new genesis.
+      genesisTerminalBlock :: !BlockHash,
+      -- |The hash of the block state for the regenesis.
+      genesisStateHash :: !StateHash
+    }
+    deriving (Eq, Show)
 
 getRegenesisData :: Get RegenesisData
 getRegenesisData = do
@@ -215,7 +218,8 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
 -- It is required that an account with address matching the one in the genesis chain parameters
 -- is present in the vector of genesis accounts, or else this function will error.
 toChainParameters :: Vec.Vector GenesisAccount -> GenesisChainParameters' cpv -> ChainParameters' cpv
-toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..} where
+toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..}
+  where
     _cpElectionDifficulty = gcpElectionDifficulty
     _cpExchangeRates = gcpExchangeRates
     _cpCooldownParameters = gcpCooldownParameters
@@ -241,13 +245,13 @@ parametersToState GenesisParameters{..} =
     genesisFinalizationParameters = gpFinalizationParameters
     genesisCryptographicParameters = gpCryptographicParameters
     genesisIdentityProviders =
-      case filter (\(k, v) -> k /= ipIdentity v) (Map.toList (idProviders gpIdentityProviders)) of
-        [] -> gpIdentityProviders
-        ips -> error $ "Inconsistent identity provider ids: " ++ show ips
+        case filter (\(k, v) -> k /= ipIdentity v) (Map.toList (idProviders gpIdentityProviders)) of
+            [] -> gpIdentityProviders
+            ips -> error $ "Inconsistent identity provider ids: " ++ show ips
     genesisAnonymityRevokers =
-      case filter (\(k, v) -> k /= arIdentity v) (Map.toList (arRevokers gpAnonymityRevokers)) of
-        [] -> gpAnonymityRevokers
-        ars -> error $ "Inconsistent anonymity revoker ids: " ++ show ars
+        case filter (\(k, v) -> k /= arIdentity v) (Map.toList (arRevokers gpAnonymityRevokers)) of
+            [] -> gpAnonymityRevokers
+            ars -> error $ "Inconsistent anonymity revoker ids: " ++ show ars
     genesisMaxBlockEnergy = gpMaxBlockEnergy
     genesisUpdateKeys = gpUpdateKeys
     genesisChainParameters = toChainParameters genesisAccounts gpChainParameters

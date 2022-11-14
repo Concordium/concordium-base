@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs #-}
-{-|
-  Module      : Concordium.Contants
-  Description : Constants for serialization, various limits, etc.
--}
+
+-- |
+--  Module      : Concordium.Contants
+--  Description : Constants for serialization, various limits, etc.
 module Concordium.Constants where
 
-import Data.Word
 import Concordium.Types.ProtocolVersion
+import Data.Word
 
 -- |Maximum number of incoming encrypted amounts on an account before we start
 -- aggregating the oldest one.

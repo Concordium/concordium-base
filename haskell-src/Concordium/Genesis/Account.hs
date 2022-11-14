@@ -97,17 +97,19 @@ instance FromJSON GenesisAccount where
         gaAddress <- obj .: "address"
         gaThreshold <- obj .: "accountThreshold"
         gaBalance <- obj .: "balance"
-        gaCredentials <- obj .:? "credentials" >>= \case
-            Nothing -> do
-                Versioned{..} <- obj .: "credential"
-                unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
-                gaCredential <- parseJSON vValue
-                return (Map.singleton ID.initialCredentialIndex gaCredential)
-            Just Versioned{..} -> do
-                unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
-                parseJSON vValue
-        unless (Map.member ID.initialCredentialIndex gaCredentials) $ fail $
-            "Genesis account must have a credential with index" ++ show ID.initialCredentialIndex  ++ "."
+        gaCredentials <-
+            obj .:? "credentials" >>= \case
+                Nothing -> do
+                    Versioned{..} <- obj .: "credential"
+                    unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
+                    gaCredential <- parseJSON vValue
+                    return (Map.singleton ID.initialCredentialIndex gaCredential)
+                Just Versioned{..} -> do
+                    unless (vVersion == 0) $ fail "Only V0 credentials supported in genesis."
+                    parseJSON vValue
+        unless (Map.member ID.initialCredentialIndex gaCredentials) $
+            fail $
+                "Genesis account must have a credential with index" ++ show ID.initialCredentialIndex ++ "."
         gaBaker <- obj .:? "baker"
         -- Check that bakers do not stake more than their balance.
         case gaBaker of
@@ -136,8 +138,9 @@ getGenesisAccountGD3 = label "GenesisAccount" $ do
     gaAddress <- get
     gaThreshold <- get
     gaCredentials <- getSafeMapOf get get
-    unless (isJust $ Map.lookup ID.initialCredentialIndex gaCredentials) $ fail $
-        "A genesis account must have a credential with index " ++ show ID.initialCredentialIndex ++ "."
+    unless (isJust $ Map.lookup ID.initialCredentialIndex gaCredentials) $
+        fail $
+            "A genesis account must have a credential with index " ++ show ID.initialCredentialIndex ++ "."
     -- Account amount
     gaBalance <- get
     -- Baker
