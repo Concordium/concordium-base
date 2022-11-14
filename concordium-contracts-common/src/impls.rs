@@ -636,7 +636,7 @@ impl SerialCtx for &str {
         out: &mut W,
     ) -> Result<(), W::Err> {
         schema::serial_length(self.len(), size_len, out)?;
-        serial_vector_no_length(&self.as_bytes().to_vec(), out)
+        serial_vector_no_length(self.as_bytes(), out)
     }
 }
 
