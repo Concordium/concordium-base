@@ -231,6 +231,48 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_generate
 }
 
 #[no_mangle]
+/// The JNI wrapper for the `prove_id_statement` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_prove_1id_1statement(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = prove_id_statement(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
 /// The JNI wrapper for the `generate_accounts` method.
 /// The `input` parameter must be a properly initalized `java.lang.String` that
 /// is non-null. The input must be valid JSON according to specified format

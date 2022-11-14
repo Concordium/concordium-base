@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.21.0
+- Added function for proving id statements.
+
 ## 0.20.0
 - Added a function serialize_token_transfer_parameters to serialize parameters for CIS-2 transfers from JSON.
 

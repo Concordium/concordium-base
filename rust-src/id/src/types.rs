@@ -411,7 +411,8 @@ impl From<u8> for AttributeTag {
 /// The meaning of attributes is then assigned at the outer layers when the
 /// library is used. In order to make the library as generic (and ultimately
 /// simple) as possible this trait is used.
-pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
+pub trait Attribute<F: Field>:
+    Clone + Sized + Send + Sync + fmt::Display + Serialize + Ord {
     /// Convert an attribute to a field element
     fn to_field_element(&self) -> F;
 }
@@ -584,6 +585,14 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub alist:        BTreeMap<AttributeTag, AttributeType>,
     #[serde(skip)]
     pub _phantom:     std::marker::PhantomData<F>,
+}
+
+impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeType>
+    for AttributeList<F, AttributeType>
+{
+    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType> {
+        self.alist.get(&attribute_tag)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -2357,6 +2366,10 @@ pub trait HasAttributeRandomness<C: Curve> {
         &self,
         attribute_tag: AttributeTag,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
+}
+
+pub trait HasAttributeValues<F: Field, AttributeType: Attribute<F>> {
+    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType>;
 }
 
 /// The empty type, here used as an impossible error in the implemention of

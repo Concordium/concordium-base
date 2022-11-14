@@ -1,14 +1,141 @@
-use crate::types::*;
+//! This module exposes functions for proving statements about credentials on
+//! accounts.
+
+use crate::{
+    id_proof_types::*,
+    sigma_protocols::{
+        common::prove as sigma_prove,
+        dlog::{Dlog, DlogSecret},
+    },
+    types::*,
+};
 use bulletproofs::{
     range_proof::{prove_given_scalars, RangeProof},
+    set_membership_proof::prove as prove_set_membership,
+    set_non_membership_proof::prove as prove_set_non_membership,
     utils::Generators,
 };
-use curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Value};
 use ed25519_dalek as ed25519;
 use ff::Field;
 use pedersen_scheme::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness};
 use random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
+
+/// Function for producing a proof of a statement.
+/// The arguments are
+/// - `global` - the on-chain cryptographic parameters
+/// - `challenge` - slice to challenge bytes chosen by the verifier
+/// - `secret` - the secret data needed to produce the proof
+/// Upon success the function will return a proof of the statement
+/// wrapped in a `Some`. Otherwise it returns `None`.
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {
+    pub fn prove(
+        &self,
+        global: &GlobalContext<C>,
+        challenge: &[u8],
+        attribute_values: &impl HasAttributeValues<C::Scalar, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C>,
+    ) -> Option<Proof<C, AttributeType>> {
+        let mut proofs: Vec<AtomicProof<C, AttributeType>> =
+            Vec::with_capacity(self.statement.statements.len());
+
+        let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
+        transcript.append_message(b"ctx", &global);
+        transcript.add_bytes(challenge);
+        transcript.append_message(b"credential", &self.credential);
+        let mut csprng = rand::thread_rng();
+        for atomic_statement in self.statement.statements.iter() {
+            match atomic_statement {
+                AtomicStatement::RevealAttribute { statement } => {
+                    let attribute = attribute_values
+                        .get_attribute_value(statement.attribute_tag)?
+                        .clone();
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
+                    let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
+                    transcript.add_bytes(b"RevealAttributeDlogProof");
+                    transcript.append_message(b"x", &x);
+                    // This is the Dlog proof section 9.2.4 from the Bluepaper.
+                    let h = global.on_chain_commitment_key.h;
+                    let h_r = h.mul_by_scalar(&randomness);
+                    let prover = Dlog {
+                        public: h_r, // C g^-x = h^r
+                        coeff:  h,   // h
+                    };
+                    let secret = DlogSecret {
+                        secret: Value::new(*randomness),
+                    };
+                    let proof = sigma_prove(&mut transcript, &prover, secret, &mut csprng)?;
+                    proofs.push(AtomicProof::RevealAttribute { attribute, proof });
+                }
+                AtomicStatement::AttributeInSet { statement } => {
+                    let attribute =
+                        attribute_values.get_attribute_value(statement.attribute_tag)?;
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
+                    let attribute_scalar = attribute.to_field_element();
+                    let attribute_vec: Vec<_> =
+                        statement.set.iter().map(|x| x.to_field_element()).collect();
+                    let proof = prove_set_membership(
+                        &mut transcript,
+                        &mut csprng,
+                        &attribute_vec,
+                        attribute_scalar,
+                        global.bulletproof_generators(),
+                        &global.on_chain_commitment_key,
+                        &randomness,
+                    )
+                    .ok()?;
+                    let proof = AtomicProof::AttributeInSet { proof };
+                    proofs.push(proof);
+                }
+                AtomicStatement::AttributeNotInSet { statement } => {
+                    let attribute =
+                        attribute_values.get_attribute_value(statement.attribute_tag)?;
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
+                    let attribute_scalar = attribute.to_field_element();
+                    let attribute_vec: Vec<_> =
+                        statement.set.iter().map(|x| x.to_field_element()).collect();
+                    let proof = prove_set_non_membership(
+                        &mut transcript,
+                        &mut csprng,
+                        &attribute_vec,
+                        attribute_scalar,
+                        global.bulletproof_generators(),
+                        &global.on_chain_commitment_key,
+                        &randomness,
+                    )
+                    .ok()?;
+                    let proof = AtomicProof::AttributeNotInSet { proof };
+                    proofs.push(proof);
+                }
+                AtomicStatement::AttributeInRange { statement } => {
+                    let attribute =
+                        attribute_values.get_attribute_value(statement.attribute_tag)?;
+                    let randomness = attribute_randomness
+                        .get_attribute_commitment_randomness(statement.attribute_tag)
+                        .ok()?;
+                    let proof = prove_attribute_in_range(
+                        global.bulletproof_generators(),
+                        &global.on_chain_commitment_key,
+                        attribute,
+                        &statement.lower,
+                        &statement.upper,
+                        &randomness,
+                    )?;
+                    let proof = AtomicProof::AttributeInRange { proof };
+                    proofs.push(proof);
+                }
+            }
+        }
+        Some(Proof { proofs })
+    }
+}
 
 /// Function for proving ownership of an account. The parameters are
 /// - data - the CredentialData containing the private keys of the prover
