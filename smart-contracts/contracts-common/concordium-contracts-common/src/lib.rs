@@ -89,6 +89,8 @@ mod traits;
 mod impls;
 pub mod constants;
 pub mod schema;
+#[cfg(feature = "derive-serde")]
+pub mod schema_json;
 mod types;
 
 pub use concordium_contracts_common_derive::*;
