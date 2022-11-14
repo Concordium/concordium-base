@@ -64,11 +64,15 @@ version = "1.0"
 path = "../concordium-contracts-common-derive"
 version = "1"
 
+[dependencies.hex]
+optional = true
+version = "0.4"
+
 [features]
 default = ["std"]
 
 std = ["fnv/std"]
-derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror"]
+derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
 
