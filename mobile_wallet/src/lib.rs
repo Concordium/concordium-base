@@ -7,11 +7,7 @@ use concordium_base::{
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
-    contracts_common::{
-        self, from_bytes,
-        schema::{Type, VersionedModuleSchema},
-        AccountAddress, Address, Cursor,
-    },
+    contracts_common::{self, schema::VersionedModuleSchema, AccountAddress, Address, Cursor},
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
     id::{
@@ -198,76 +194,6 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
-fn get_receive_schema(
-    versioned_module_schema: VersionedModuleSchema,
-    contract_name: &String,
-    entrypoint_name: &String,
-) -> anyhow::Result<Type> {
-    let receive_schema = match versioned_module_schema {
-        VersionedModuleSchema::V0(module_schema) => {
-            let contract_schema = module_schema
-                .contracts
-                .get(contract_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
-
-            contract_schema
-                .receive
-                .get(entrypoint_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
-                .clone()
-        }
-        VersionedModuleSchema::V1(module_schema) => {
-            let contract_schema = module_schema
-                .contracts
-                .get(contract_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
-
-            let entrypoint_parameter = contract_schema
-                .receive
-                .get(entrypoint_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
-                .parameter();
-            match entrypoint_parameter {
-                Some(value) => value.clone(),
-                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
-            }
-        }
-        VersionedModuleSchema::V2(module_schema) => {
-            let contract_schema = module_schema
-                .contracts
-                .get(contract_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
-
-            let entrypoint_parameter = contract_schema
-                .receive
-                .get(entrypoint_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
-                .parameter();
-            match entrypoint_parameter {
-                Some(value) => value.clone(),
-                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
-            }
-        }
-        VersionedModuleSchema::V3(module_schema) => {
-            let contract_schema = module_schema
-                .contracts
-                .get(contract_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find contract inside module"))?;
-
-            let entrypoint_parameter = contract_schema
-                .receive
-                .get(entrypoint_name)
-                .ok_or_else(|| anyhow::anyhow!("Unable to find receive schema"))?
-                .parameter();
-            match entrypoint_parameter {
-                Some(value) => value.clone(),
-                None => return Err(anyhow::anyhow!("Missing parameter for entrypoint")),
-            }
-        }
-    };
-    Ok(receive_schema)
-}
-
 fn get_parameter_as_json(
     parameter: Parameter,
     receive_name: &OwnedReceiveName,
@@ -276,20 +202,11 @@ fn get_parameter_as_json(
 ) -> anyhow::Result<Value> {
     let schema_bytes = hex::decode(schema)?;
 
-    let contract_name = &receive_name.as_receive_name().contract_name().to_string();
+    let contract_name = receive_name.as_receive_name().contract_name();
     let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();
 
-    let module_schema = match from_bytes::<VersionedModuleSchema>(&schema_bytes) {
-        Ok(versioned) => versioned,
-        Err(_) => match schema_version {
-            Some(0) => VersionedModuleSchema::V0(from_bytes(&schema_bytes)?),
-            Some(1) => VersionedModuleSchema::V1(from_bytes(&schema_bytes)?),
-            Some(2) => VersionedModuleSchema::V2(from_bytes(&schema_bytes)?),
-            Some(_) => return Err(anyhow::anyhow!("Invalid schema version")),
-            None => return Err(anyhow::anyhow!("Missing schema version")),
-        },
-    };
-    let receive_schema = get_receive_schema(module_schema, contract_name, entrypoint_name)?;
+    let module_schema = VersionedModuleSchema::new(&schema_bytes, schema_version)?;
+    let receive_schema = module_schema.get_receive_param_schema(contract_name, entrypoint_name)?;
 
     let mut parameter_cursor = Cursor::new(parameter.as_ref());
     match receive_schema.to_json(&mut parameter_cursor) {

@@ -259,6 +259,7 @@ dependencies = [
  "concordium-contracts-common-derive",
  "fnv",
  "hashbrown",
+ "hex",
  "num-bigint 0.4.3",
  "num-integer",
  "num-traits",
