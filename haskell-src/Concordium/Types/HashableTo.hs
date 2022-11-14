@@ -1,11 +1,12 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Concordium.Types.HashableTo where
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LBS
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Parameters (GlobalContext)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.Serialize (encode)
 
 class HashableTo hash d where
@@ -22,10 +23,10 @@ instance HashableTo H.Hash v => HashableTo H.Hash (Maybe v) where
     getHash (Just v) = H.hash ("Just" <> (H.hashToByteString $ getHash v))
 
 instance HashableTo H.Hash GlobalContext where
-  getHash val =
-    H.hash $
-      "CryptoParams"
-        <> encode val
+    getHash val =
+        H.hash $
+            "CryptoParams"
+                <> encode val
 
 -- | While the HashableTo typeclass expects the value
 -- to be hashable in a pure environment, sometimes a value

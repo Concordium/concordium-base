@@ -2,8 +2,8 @@
 
 module Types.TransactionSummarySpec where
 
-import Data.Serialize
 import qualified Data.Aeson as AE
+import Data.Serialize
 import Test.Hspec
 import Test.QuickCheck
 
@@ -12,12 +12,10 @@ import Concordium.Types.ProtocolVersion
 
 import Generators
 
-
 testTransactionTypesSerialIdentity :: Expectation
 testTransactionTypesSerialIdentity = mapM_ testEncDec transactionTypes
   where
     testEncDec tt = decode (encode tt) `shouldBe` Right tt
-
 
 -- |Test that decoding is the inverse of encoding for 'Event's.
 testEventSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
@@ -31,15 +29,13 @@ testEventJSONSerializationIdentity spv = forAll (genEvent spv) $ \e -> AE.either
 testRejectReasonSerializationIdentity :: RejectReason -> Property
 testRejectReasonSerializationIdentity e = decode (encode e) === Right e
 
-
 -- |Test that decoding is the inverse of encoding for 'ValidResult's.
 testValidResultSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testValidResultSerializationIdentity spv = forAll (genValidResult spv) $ \e -> runGet (getValidResult spv) (runPut $ putValidResult e) === Right e
 
-
 -- |Test that decoding is the inverse of encoding for 'TransactionSummary's.
 testTransactionSummarySerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
-testTransactionSummarySerializationIdentity spv = forAll (genTransactionSummary spv) $ \e ->  runGet (getTransactionSummary spv) (runPut $ putTransactionSummary e) === Right e
+testTransactionSummarySerializationIdentity spv = forAll (genTransactionSummary spv) $ \e -> runGet (getTransactionSummary spv) (runPut $ putTransactionSummary e) === Right e
 
 tests :: Spec
 tests = describe "Transaction summaries" $ do
@@ -54,6 +50,6 @@ tests = describe "Transaction summaries" $ do
     versionedTests SP4
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
-          specify "Event: serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventSerializationIdentity spv
-          specify "ValidResult: serialize then deserialize is identity" $ withMaxSuccess 1000 $ testValidResultSerializationIdentity spv
-          specify "TransactionSummary: serialize then deserialize is identity" $ withMaxSuccess 1000 $ testTransactionSummarySerializationIdentity spv
+        specify "Event: serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventSerializationIdentity spv
+        specify "ValidResult: serialize then deserialize is identity" $ withMaxSuccess 1000 $ testValidResultSerializationIdentity spv
+        specify "TransactionSummary: serialize then deserialize is identity" $ withMaxSuccess 1000 $ testTransactionSummarySerializationIdentity spv

@@ -76,8 +76,9 @@ module Concordium.Types.Accounts (
     AccountInfo (..),
     AccountStakingInfo (..),
     toAccountStakingInfo,
+
     -- * Account structure version
-    AccountStructureVersion(..),
+    AccountStructureVersion (..),
     AccountStructureVersionFor,
 ) where
 
@@ -98,16 +99,17 @@ import Concordium.Types.HashableTo
 
 -- |The version of the account structure. This is used to index types that vary the account
 -- structure.
-data AccountStructureVersion =
-    AccountStructureV0 -- ^Account structure used prior to P5
-    | AccountStructureV1 -- ^Account structure used from P5
+data AccountStructureVersion
+    = -- |Account structure used prior to P5
+      AccountStructureV0
+    | -- |Account structure used from P5
+      AccountStructureV1
 
 -- |The account structure version associated with an account version.
 type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructureVersion where
     AccountStructureVersionFor 'AccountV0 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
-
 
 -- |The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo

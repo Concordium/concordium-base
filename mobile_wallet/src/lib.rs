@@ -1,15 +1,16 @@
 use anyhow::{bail, ensure};
 use concordium_base::{
     base::{self, Energy, Nonce},
+    cis2_types::{self, AdditionalData},
     common::{
         self, c_char,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
     contracts_common::{
-        from_bytes,
+        self, from_bytes,
         schema::{Type, VersionedModuleSchema},
-        AccountAddress, Cursor,
+        AccountAddress, Address, Cursor,
     },
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
@@ -394,6 +395,38 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
     let response = serde_json::json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
+}
+
+/// Context to create parameters for a token transfer (smart contract update).
+#[derive(common::SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct TokenTransferContext {
+    pub from:     AccountAddress,
+    pub to:       AccountAddress,
+    pub amount:   cis2_types::TokenAmount,
+    pub token_id: cis2_types::TokenId,
+}
+
+fn serialize_token_transfer_parameters_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let ctx: TokenTransferContext = from_value(v)?;
+
+    let params = cis2_types::TransferParams::new_unchecked(
+        [cis2_types::Transfer {
+            token_id: ctx.token_id,
+            amount:   ctx.amount,
+            from:     Address::Account(ctx.from),
+            to:       cis2_types::Receiver::Account(ctx.to),
+            data:     AdditionalData::default(),
+        }]
+        .to_vec(),
+    );
+
+    let response = serde_json::json!({
+        "parameter": hex::encode(contracts_common::to_bytes(&params)),
     });
 
     Ok(to_string(&response)?)
@@ -1581,6 +1614,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_account_transaction -> create_account_transaction_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => serialize_token_transfer_parameters -> serialize_token_transfer_parameters_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated

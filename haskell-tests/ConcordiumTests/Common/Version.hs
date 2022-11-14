@@ -4,9 +4,9 @@ import Concordium.Common.Version
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 
-import Test.QuickCheck
-import Test.Hspec
 import Data.Aeson
+import Test.Hspec
+import Test.QuickCheck
 
 testVersionTestVector :: Property
 testVersionTestVector = S.encode (Version 1700794014) === (BS.pack [0x86, 0xab, 0x80, 0x9d, 0x1e])
@@ -22,7 +22,6 @@ genVersion = Version <$> arbitrary
 
 tests :: Spec
 tests = describe "Concordium.Common" $ do
-  specify "versioning test vector" $ testVersionTestVector
-  it "versioning binary encoding" $ withMaxSuccess 1000 $ testSerialize
-  it "versioning json encoding" $ withMaxSuccess 1000 $ testJSON
-
+    specify "versioning test vector" $ testVersionTestVector
+    it "versioning binary encoding" $ withMaxSuccess 1000 $ testSerialize
+    it "versioning json encoding" $ withMaxSuccess 1000 $ testJSON

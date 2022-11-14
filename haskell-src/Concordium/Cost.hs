@@ -1,13 +1,13 @@
 {-# LANGUAGE DerivingVia #-}
-{-|
-Definition of cost functions for the different transactions.
 
-* @SPEC: <$DOCS/Transactions#transaction-cost>
--}
+-- |
+-- Definition of cost functions for the different transactions.
+--
+-- * @SPEC: <$DOCS/Transactions#transaction-cost>
 module Concordium.Cost where
 
-import Concordium.Types
 import Concordium.ID.Types as ID
+import Concordium.Types
 import qualified Concordium.Wasm as Wasm
 import Data.Word
 
@@ -16,29 +16,29 @@ import Data.Word
 --
 --   * @toEnergy (fromEnergy x) <= x@
 class ResourceMeasure a where
-  toEnergy :: a -> Energy
-  fromEnergy :: Energy -> a
+    toEnergy :: a -> Energy
+    fromEnergy :: Energy -> a
 
 instance ResourceMeasure Energy where
-  {-# INLINE toEnergy #-}
-  toEnergy = id
-  {-# INLINE fromEnergy #-}
-  fromEnergy = id
+    {-# INLINE toEnergy #-}
+    toEnergy = id
+    {-# INLINE fromEnergy #-}
+    fromEnergy = id
 
 -- |Measures the cost of running the interpreter.
 instance ResourceMeasure Wasm.InterpreterEnergy where
-  {-# INLINE toEnergy #-}
-  toEnergy = fromInterpreterEnergy
-  {-# INLINE fromEnergy #-}
-  fromEnergy = toInterpreterEnergy
+    {-# INLINE toEnergy #-}
+    toEnergy = fromInterpreterEnergy
+    {-# INLINE fromEnergy #-}
+    fromEnergy = toInterpreterEnergy
 
 -- |Measures the cost of __storing__ the given amount of bytes of smart contract
 -- state.
 instance ResourceMeasure Wasm.ByteSize where
-  {-# INLINE toEnergy #-}
-  toEnergy = fromIntegral
-  {-# INLINE fromEnergy #-}
-  fromEnergy = fromIntegral
+    {-# INLINE toEnergy #-}
+    toEnergy = fromIntegral
+    {-# INLINE fromEnergy #-}
+    fromEnergy = fromIntegral
 
 -- * Cost factors
 
@@ -54,13 +54,11 @@ toInterpreterEnergy = (* interpreterEnergyFactor) . fromIntegral
 fromInterpreterEnergy :: Wasm.InterpreterEnergy -> Energy
 fromInterpreterEnergy = fromIntegral . (`div` interpreterEnergyFactor)
 
-
 -- * Costs for top-level account transactions
 
 -- |The NRG cost is assigned according to the formula A * numSignatures + B *
 -- size + C_t where C_t is transaction specific cost and A and B are transaction
 -- independent factors.
---
 
 -- |The A constant for NRG assignment.
 constA :: Energy
@@ -124,12 +122,14 @@ configureDelegationCost = 300
 
 -- |C_t for updating account credentials
 updateCredentialsCost ::
-  Int -- ^ The number of credentials on the account before the update.
-  -> [Int] -- ^ A list of keys attached to each new credential.
-  -> Energy
+    -- | The number of credentials on the account before the update.
+    Int ->
+    -- | A list of keys attached to each new credential.
+    [Int] ->
+    Energy
 updateCredentialsCost numCredentials =
-   (updateCredentialsBaseCost +)
-   . updateCredentialsVariableCost numCredentials
+    (updateCredentialsBaseCost +)
+        . updateCredentialsVariableCost numCredentials
 
 -- |C_t for registering data on chain.
 registerDataCost :: Energy
@@ -142,32 +142,41 @@ deployModuleCost size = fromIntegral size `div` 10
 
 -- |C_t for initializing a contract instance.
 initializeContractInstanceCost ::
-  Wasm.InterpreterEnergy -- ^ How much energy it took to execute the initialization code.
-  -> Word64 -- ^ Size in bytes of the smart contract module that the instance is created from.
-  -> Maybe Wasm.ByteSize -- ^ Size of the initial smart contract state if initialization succeeded.
-  -> Energy
+    -- | How much energy it took to execute the initialization code.
+    Wasm.InterpreterEnergy ->
+    -- | Size in bytes of the smart contract module that the instance is created from.
+    Word64 ->
+    -- | Size of the initial smart contract state if initialization succeeded.
+    Maybe Wasm.ByteSize ->
+    Energy
 initializeContractInstanceCost ie ms ss =
-  lookupModule ms + toEnergy ie + maybe 0 ((initializeContractInstanceCreateCost +) . toEnergy) ss + initializeContractInstanceBaseCost
+    lookupModule ms + toEnergy ie + maybe 0 ((initializeContractInstanceCreateCost +) . toEnergy) ss + initializeContractInstanceBaseCost
 
 -- |C_t for updating smart contract state.
 -- This will be applied to each smart contract that is affected by the transaction.
 updateContractInstanceCost ::
-  Wasm.InterpreterEnergy -- ^ How much energy it t ook to execute the update code.
-  -> Word64 -- ^ Size in bytes of the module the contract code belongs to.
-  -> Wasm.ByteSize -- ^ Size of the original state.
-  -> Maybe Wasm.ByteSize -- ^ Size of the new state, if update was successful.
-  -> Energy
+    -- | How much energy it t ook to execute the update code.
+    Wasm.InterpreterEnergy ->
+    -- | Size in bytes of the module the contract code belongs to.
+    Word64 ->
+    -- | Size of the original state.
+    Wasm.ByteSize ->
+    -- | Size of the new state, if update was successful.
+    Maybe Wasm.ByteSize ->
+    Energy
 updateContractInstanceCost ie ms se ss =
-  lookupModule ms + lookupContractState se + toEnergy ie + maybe 0 toEnergy ss + updateContractInstanceBaseCost
+    lookupModule ms + lookupContractState se + toEnergy ie + maybe 0 toEnergy ss + updateContractInstanceBaseCost
 
 -- |C_t for updating existing credential keys. Parametrised by amount of
 -- existing credentials and new keys. Due to the way the accounts are stored a
 -- new copy of all credentials will be created, so we need to account for that
 -- storage increase.
 updateCredentialKeysCost ::
-  Int -- ^ The number of existing credentials on the account.
-  -> Int -- ^ The number of keys that will belong to the credential.
-  -> Energy
+    -- | The number of existing credentials on the account.
+    Int ->
+    -- | The number of keys that will belong to the credential.
+    Int ->
+    Energy
 updateCredentialKeysCost numCredentials numKeys = 500 * fromIntegral numCredentials + 100 * fromIntegral numKeys
 
 -- * NRG assignments for non-account transactions.
@@ -176,9 +185,11 @@ updateCredentialKeysCost numCredentials numKeys = 500 * fromIntegral numCredenti
 -- regardless of the details of the data. It is not charged directly, but it is accounted for
 -- in block energy.
 deployCredential ::
-  ID.CredentialType -- ^ Type of the credential. Initial credentials are cheaper.
-  -> Int -- ^Number of keys belonging to the credential.
-  -> Energy
+    -- | Type of the credential. Initial credentials are cheaper.
+    ID.CredentialType ->
+    -- |Number of keys belonging to the credential.
+    Int ->
+    Energy
 deployCredential ID.Initial numKeys = 1000 + 100 * fromIntegral numKeys
 deployCredential ID.Normal numKeys = 54000 + 100 * fromIntegral numKeys
 
@@ -186,9 +197,11 @@ deployCredential ID.Normal numKeys = 54000 + 100 * fromIntegral numKeys
 
 -- |The cost A * numKeys + B * size
 baseCost ::
-  Word64 -- ^ The size of the transaction body in bytes.
-  -> Int -- ^ The number of keys that signed the transaction.
-  -> Energy
+    -- | The size of the transaction body in bytes.
+    Word64 ->
+    -- | The number of keys that signed the transaction.
+    Int ->
+    Energy
 baseCost size numKeys = constA * fromIntegral numKeys + constB * fromIntegral size
 
 -- |Fixed cost per generated inter-contract message.
@@ -225,16 +238,20 @@ updateCredentialsBaseCost = 500
 
 -- |Variable cost of updating credentials.
 updateCredentialsVariableCost ::
-  Int -- ^ The number of credentials on the account before the update.
-  -> [Int] -- ^ A list of keys attached to each new credential.
-  -> Energy
+    -- | The number of credentials on the account before the update.
+    Int ->
+    -- | A list of keys attached to each new credential.
+    [Int] ->
+    Energy
 updateCredentialsVariableCost numCredentials =
-  (500 * fromIntegral numCredentials +)
-  . sum . map (deployCredential ID.Normal)
-  -- the 500 * numCredentials is to account for transactions which do nothing,
-  -- e.g., don't add don't remove, and don't update the threshold. These still
-  -- have a cost since the way the accounts are stored it will update the stored
-  -- account data, which does take up quite a bit of space per credential.
+    (500 * fromIntegral numCredentials +)
+        . sum
+        . map (deployCredential ID.Normal)
+
+-- the 500 * numCredentials is to account for transactions which do nothing,
+-- e.g., don't add don't remove, and don't update the threshold. These still
+-- have a cost since the way the accounts are stored it will update the stored
+-- account data, which does take up quite a bit of space per credential.
 
 -- |Cost of querying the account balance from a within smart contract instance.
 contractInstanceQueryAccountBalanceCost :: Energy
@@ -246,4 +263,4 @@ contractInstanceQueryContractBalanceCost = 200
 
 -- |Cost of querying the current exchange rates from a within smart contract instance.
 contractInstanceQueryExchangeRatesCost :: Energy
-contractInstanceQueryExchangeRatesCost = 10
+contractInstanceQueryExchangeRatesCost = 100

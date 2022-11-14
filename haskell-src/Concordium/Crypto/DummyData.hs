@@ -1,44 +1,48 @@
 -- | Dummy values generated for the tests
-
 module Concordium.Crypto.DummyData (
-  -- * BlockSignature
-  randomBlockKeyPair
-  , genBlockKeyPair
-  -- * BlsSignature
-  , randomBlsSecretKey
-  , secretBlsKeyGen
-  , generateBlsSecretKeyFromSeed
-  -- * Ed25519
-  , randomEd25519KeyPair
-  , genEd25519KeyPair
-  -- * SigScheme
-  , genSigSchemeKeyPair
-  -- * Standard keys
-  , mateuszKP
-  , alesKP
-  , alesVK
-  , thomasKP
-  , thomasVK
-  , accountVFKeyFrom
-  ) where
+    -- * BlockSignature
+    randomBlockKeyPair,
+    genBlockKeyPair,
 
-import System.Random
+    -- * BlsSignature
+    randomBlsSecretKey,
+    secretBlsKeyGen,
+    generateBlsSecretKeyFromSeed,
+
+    -- * Ed25519
+    randomEd25519KeyPair,
+    genEd25519KeyPair,
+
+    -- * SigScheme
+    genSigSchemeKeyPair,
+
+    -- * Standard keys
+    mateuszKP,
+    alesKP,
+    alesVK,
+    thomasKP,
+    thomasVK,
+    accountVFKeyFrom,
+) where
+
 import Concordium.Crypto.BlockSignature as Block
 import Concordium.Crypto.BlsSignature as Bls
 import Concordium.Crypto.Ed25519Signature as Ed25519
 import Concordium.Crypto.SignatureScheme as SigScheme
-import Test.QuickCheck
-import Foreign.C.Types
-import Foreign.Ptr
-import Foreign.ForeignPtr
-import System.IO.Unsafe
-import Data.Serialize
 import qualified Data.ByteString as BS
+import Data.Serialize
+import Foreign.C.Types
+import Foreign.ForeignPtr
+import Foreign.Ptr
+import System.IO.Unsafe
+import System.Random
+import Test.QuickCheck
 
 {-# WARNING randomBlockKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 randomBlockKeyPair :: RandomGen g => g -> (Block.KeyPair, g)
-randomBlockKeyPair g = let ((signKey, verifyKey), g') = randomEd25519KeyPair g
-                  in (KeyPair{..}, g')
+randomBlockKeyPair g =
+    let ((signKey, verifyKey), g') = randomEd25519KeyPair g
+    in  (KeyPair{..}, g')
 
 {-# WARNING genBlockKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 genBlockKeyPair :: Gen Block.KeyPair
@@ -53,40 +57,39 @@ randomBlsSecretKey :: (RandomGen g) => g -> (Bls.SecretKey, g)
 randomBlsSecretKey gen = (sk, gen')
   where
     (nextSeed, gen') = random gen
-    sk = generateBlsSecretKeyFromSeed $ (fromIntegral::Int->CSize) nextSeed
+    sk = generateBlsSecretKeyFromSeed $ (fromIntegral :: Int -> CSize) nextSeed
 
 -- | Provides deterministic key generation for testing purposes.
 {-# WARNING secretBlsKeyGen "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 secretBlsKeyGen :: Gen Bls.SecretKey
-secretBlsKeyGen = resize (2^(30 :: Int)) $ fst . randomBlsSecretKey . mkStdGen <$> arbitrary
+secretBlsKeyGen = resize (2 ^ (30 :: Int)) $ fst . randomBlsSecretKey . mkStdGen <$> arbitrary
 
 -- | Provides deterministic key generation for testing purposes.
 {-# WARNING generateBlsSecretKeyFromSeed "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 generateBlsSecretKeyFromSeed :: CSize -> Bls.SecretKey
 generateBlsSecretKeyFromSeed seed = unsafePerformIO $ do
-  ptr <- generateSecretKeyPtrFromSeed seed
-  Bls.SecretKey <$> newForeignPtr freeSecretKey ptr
+    ptr <- generateSecretKeyPtrFromSeed seed
+    Bls.SecretKey <$> newForeignPtr freeSecretKey ptr
 
 {-# WARNING randomEd25519KeyPair "Not cryptographically secure, DO NOT USE IN PRODUCTION." #-}
 randomEd25519KeyPair :: RandomGen g => g -> ((Ed25519.SignKey, Ed25519.VerifyKey), g)
 randomEd25519KeyPair gen = ((signKey, deriveVerifyKey signKey), gen')
-        where
-            (gen0, gen') = split gen
-            privKeyBytes = BS.pack $ take signKeySize $ randoms gen0
-            signKey =
-              case decode privKeyBytes of
-                Left _ -> error "Any sequence of bytes is a valid private key in this scheme."
-                Right sk -> sk
-
+  where
+    (gen0, gen') = split gen
+    privKeyBytes = BS.pack $ take signKeySize $ randoms gen0
+    signKey =
+        case decode privKeyBytes of
+            Left _ -> error "Any sequence of bytes is a valid private key in this scheme."
+            Right sk -> sk
 
 {-# WARNING genEd25519KeyPair "Not cryptographically secure, DO NOT USE IN PRODUCTION." #-}
 genEd25519KeyPair :: Gen (Ed25519.SignKey, Ed25519.VerifyKey)
 genEd25519KeyPair = do
-  privKeyBytes <- BS.pack <$> vector signKeySize
-  let signKey = case decode privKeyBytes of
-                  Left _ -> error "Any sequence of bytes is a valid private key in this scheme."
-                  Right sk -> sk
-  return (signKey, deriveVerifyKey signKey)
+    privKeyBytes <- BS.pack <$> vector signKeySize
+    let signKey = case decode privKeyBytes of
+            Left _ -> error "Any sequence of bytes is a valid private key in this scheme."
+            Right sk -> sk
+    return (signKey, deriveVerifyKey signKey)
 
 {-# WARNING genSigSchemeKeyPair "Not cryptographically secure, DO NOT USE IN PRODUCTION." #-}
 genSigSchemeKeyPair :: Gen SigScheme.KeyPair

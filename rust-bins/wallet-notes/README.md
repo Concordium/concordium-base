@@ -709,7 +709,7 @@ The returned value is a JSON representation of the parameter.
 An example input to this request is in the file [parameter_to_json-input.json](files/parameter_to_json-input.json).
 An example output to this request is in the file [parameter_to_json-output.json](files/parameter_to_json-output.json).
 
-## create_account_transaction_ext
+## create_account_transaction
 
 Semantics: Creates and signs a transaction with the provided values, including the payload in JSON format.
 This currently only supports the following transaction types:
@@ -743,6 +743,25 @@ The returned value is a JSON object with the following fields:
 
 An example input to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
 An example output to this request is in the file [create_account_transaction-output.json](files/create_account_transaction-output.json).
+
+## serialize_token_transfer_parameters
+Semantics: Converts the given parameters into a serialized base16 string that can be used to create an update smart contract transaction's payload.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"to"` ... address of the receiver account.
+
+- `"amount"` ... string containing the amount wanted to be transferred.
+
+- `"tokenId"` ... a hex encoding of the id of the token, which should be transferred.
+
+The returned value is a JSON representation of the parameter.
+
+An example input to this request is in the file [serialize_token_transfer_parameters-input.json](files/serialize_token_transfer_parameters-input.json).
+An example output to this request is in the file [serialize_token_transfer_parameters-output.json](files/serialize_token_transfer_parameters-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This

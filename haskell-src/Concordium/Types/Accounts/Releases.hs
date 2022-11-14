@@ -21,7 +21,8 @@ data ScheduledRelease = ScheduledRelease
       releaseAmount :: !Amount,
       -- |The transactions that contribute to this release.
       releaseTransactions :: ![TransactionHash]
-    } deriving (Eq, Show)
+    }
+    deriving (Eq, Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''ScheduledRelease)
 
@@ -35,6 +36,7 @@ data AccountReleaseSummary = AccountReleaseSummary
       releaseTotal :: !Amount,
       -- |The scheduled releases.
       releaseSchedule :: ![ScheduledRelease]
-    } deriving (Eq, Show)
+    }
+    deriving (Eq, Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''AccountReleaseSummary)

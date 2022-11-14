@@ -26,6 +26,8 @@ rand = "0.7"
 num = "0.4"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
+num-bigint = "0.4"
+num-traits = "0.2"
 
 # Local dependencies
 random_oracle = { version = "*", path = "../random_oracle/" }
@@ -36,6 +38,9 @@ concordium-contracts-common = { version = "*", path = "../../concordium-contract
 encrypted_transfers = { version = "*", path = "../encrypted_transfers", default-features = false }
 aggregate_sig = {version = "0", path = "../aggregate_sig", default-features = false }
 ecvrf = { version = "*", path = "../ecvrf", default-features = false }
+
+[dev-dependencies]
+rand = {version = "0.7", features = ["small_rng"]}
 
 [lib]
 name = "concordium_base"

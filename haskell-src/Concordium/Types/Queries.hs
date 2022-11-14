@@ -24,15 +24,15 @@ import Data.Word
 
 import Concordium.Types
 import Concordium.Types.Accounts
+import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
+import qualified Concordium.Types.IdentityProviders as IPS
+import Concordium.Types.Parameters (CooldownParameters, GASRewards, MintDistribution, PoolParameters, TimeParameters, TransactionFeeDistribution)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
 import Concordium.Utils
-import Concordium.Types.Parameters (MintDistribution, PoolParameters, CooldownParameters, TimeParameters, TransactionFeeDistribution, GASRewards)
-import qualified Concordium.Types.AnonymityRevokers as ARS
-import qualified Concordium.Types.IdentityProviders as IPS
 
 -- |Result type for @getConsensusStatus@ queries.  A number of fields are not defined when no blocks
 -- have so far been received, verified or finalized. In such cases, the values will be 'Nothing'.
@@ -316,26 +316,28 @@ data RewardStatus' t
 type RewardStatus = RewardStatus' UTCTime
 
 instance ToJSON RewardStatus where
-    toJSON RewardStatusV0{..} = object [
-            "totalAmount" .= rsTotalAmount,
-            "totalEncryptedAmount" .= rsTotalEncryptedAmount,
-            "bakingRewardAccount" .= rsBakingRewardAccount,
-            "finalizationRewardAccount" .= rsFinalizationRewardAccount,
-            "gasAccount" .= rsGasAccount,
-            "protocolVersion" .= rsProtocolVersion
-        ]
-    toJSON RewardStatusV1{..} = object [
-            "totalAmount" .= rsTotalAmount,
-            "totalEncryptedAmount" .= rsTotalEncryptedAmount,
-            "bakingRewardAccount" .= rsBakingRewardAccount,
-            "finalizationRewardAccount" .= rsFinalizationRewardAccount,
-            "gasAccount" .= rsGasAccount,
-            "foundationTransactionRewards" .= rsFoundationTransactionRewards,
-            "nextPaydayTime" .= rsNextPaydayTime,
-            "nextPaydayMintRate" .= rsNextPaydayMintRate,
-            "totalStakedCapital" .= rsTotalStakedCapital,
-            "protocolVersion" .= rsProtocolVersion
-        ]
+    toJSON RewardStatusV0{..} =
+        object
+            [ "totalAmount" .= rsTotalAmount,
+              "totalEncryptedAmount" .= rsTotalEncryptedAmount,
+              "bakingRewardAccount" .= rsBakingRewardAccount,
+              "finalizationRewardAccount" .= rsFinalizationRewardAccount,
+              "gasAccount" .= rsGasAccount,
+              "protocolVersion" .= rsProtocolVersion
+            ]
+    toJSON RewardStatusV1{..} =
+        object
+            [ "totalAmount" .= rsTotalAmount,
+              "totalEncryptedAmount" .= rsTotalEncryptedAmount,
+              "bakingRewardAccount" .= rsBakingRewardAccount,
+              "finalizationRewardAccount" .= rsFinalizationRewardAccount,
+              "gasAccount" .= rsGasAccount,
+              "foundationTransactionRewards" .= rsFoundationTransactionRewards,
+              "nextPaydayTime" .= rsNextPaydayTime,
+              "nextPaydayMintRate" .= rsNextPaydayMintRate,
+              "totalStakedCapital" .= rsTotalStakedCapital,
+              "protocolVersion" .= rsProtocolVersion
+            ]
 
 instance FromJSON RewardStatus where
     parseJSON = withObject "RewardStatus" $ \obj -> do
@@ -345,14 +347,14 @@ instance FromJSON RewardStatus where
         rsFinalizationRewardAccount <- obj .: "finalizationRewardAccount"
         rsGasAccount <- obj .: "gasAccount"
         rsProtocolVersion <- obj .: "protocolVersion"
-        if rsProtocolVersion >= P4 then do
-            rsFoundationTransactionRewards <- obj .: "foundationTransactionRewards"
-            rsNextPaydayTime <- obj .: "nextPaydayTime"
-            rsNextPaydayMintRate <- obj .: "nextPaydayMintRate"
-            rsTotalStakedCapital <- obj .: "totalStakedCapital"
-            return RewardStatusV1{..}
-        else
-            return RewardStatusV0{..}
+        if rsProtocolVersion >= P4
+            then do
+                rsFoundationTransactionRewards <- obj .: "foundationTransactionRewards"
+                rsNextPaydayTime <- obj .: "nextPaydayTime"
+                rsNextPaydayMintRate <- obj .: "nextPaydayMintRate"
+                rsTotalStakedCapital <- obj .: "totalStakedCapital"
+                return RewardStatusV1{..}
+            else return RewardStatusV0{..}
 
 -- |Summary of a baker.
 data BakerSummary = BakerSummary
@@ -474,11 +476,11 @@ makePoolPendingChange ::
 makePoolPendingChange NoChange = PPCNoChange
 makePoolPendingChange (ReduceStake ppcBakerEquityCapital et) =
     PPCReduceBakerCapital{..}
-    where
-        ppcEffectiveTime = timestampToUTCTime et
+  where
+    ppcEffectiveTime = timestampToUTCTime et
 makePoolPendingChange (RemoveStake et) = PPCRemovePool{..}
-    where
-        ppcEffectiveTime = timestampToUTCTime et
+  where
+    ppcEffectiveTime = timestampToUTCTime et
 
 -- |Information about the status of a baker pool in the current reward period.
 data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
@@ -558,99 +560,101 @@ $( deriveJSON
  )
 
 -- | Pending chain parameters update effect.
-data PendingUpdateEffect =
-  -- |Updates to the root keys.
-  PUERootKeys !(U.HigherLevelKeys U.RootKeysKind)
-  -- |Updates to the level 1 keys.
-  | PUELevel1Keys !(U.HigherLevelKeys U.Level1KeysKind)
-  -- |Updates to the level 2 keys.
-  | PUELevel2KeysV0 !(U.Authorizations 'ChainParametersV0)
-  -- |Updates to the level 2 keys.
-  | PUELevel2KeysV1 !(U.Authorizations 'ChainParametersV1)
-  -- |Protocol updates.
-  | PUEProtocol !U.ProtocolUpdate
-  -- |Updates to the election difficulty parameter.
-  | PUEElectionDifficulty !ElectionDifficulty
-  -- |Updates to the euro:energy exchange rate.
-  | PUEEuroPerEnergy !ExchangeRate
-  -- |Updates to the CCD:euro exchange rate.
-  | PUEMicroCCDPerEuro !ExchangeRate
-  -- |Updates to the foundation account.
-  | PUEFoundationAccount !AccountAddress
-  -- |Updates to the mint distribution.
-  | PUEMintDistributionV0 !(MintDistribution 'ChainParametersV0)
-  -- |Updates to the mint distribution.
-  | PUEMintDistributionV1 !(MintDistribution 'ChainParametersV1)
-  -- |Updates to the transaction fee distribution.
-  | PUETransactionFeeDistribution !TransactionFeeDistribution
-  -- |Updates to the GAS rewards.
-  | PUEGASRewards !GASRewards
-  -- |Updates pool parameters.
-  | PUEPoolParametersV0 !(PoolParameters 'ChainParametersV0)
-  | PUEPoolParametersV1 !(PoolParameters 'ChainParametersV1)
-  -- |Adds a new anonymity revoker.
-  | PUEAddAnonymityRevoker !ARS.ArInfo
-  -- |Adds a new identity provider.
-  | PUEAddIdentityProvider !IPS.IpInfo
-  -- |Updates to cooldown parameters for chain parameters version 1.
-  | PUECooldownParameters !(CooldownParameters 'ChainParametersV1)
-  -- |Updates to time parameters for chain parameters version 1.
-  | PUETimeParameters !(TimeParameters 'ChainParametersV1)
+data PendingUpdateEffect
+    = -- |Updates to the root keys.
+      PUERootKeys !(U.HigherLevelKeys U.RootKeysKind)
+    | -- |Updates to the level 1 keys.
+      PUELevel1Keys !(U.HigherLevelKeys U.Level1KeysKind)
+    | -- |Updates to the level 2 keys.
+      PUELevel2KeysV0 !(U.Authorizations 'ChainParametersV0)
+    | -- |Updates to the level 2 keys.
+      PUELevel2KeysV1 !(U.Authorizations 'ChainParametersV1)
+    | -- |Protocol updates.
+      PUEProtocol !U.ProtocolUpdate
+    | -- |Updates to the election difficulty parameter.
+      PUEElectionDifficulty !ElectionDifficulty
+    | -- |Updates to the euro:energy exchange rate.
+      PUEEuroPerEnergy !ExchangeRate
+    | -- |Updates to the CCD:euro exchange rate.
+      PUEMicroCCDPerEuro !ExchangeRate
+    | -- |Updates to the foundation account.
+      PUEFoundationAccount !AccountAddress
+    | -- |Updates to the mint distribution.
+      PUEMintDistributionV0 !(MintDistribution 'ChainParametersV0)
+    | -- |Updates to the mint distribution.
+      PUEMintDistributionV1 !(MintDistribution 'ChainParametersV1)
+    | -- |Updates to the transaction fee distribution.
+      PUETransactionFeeDistribution !TransactionFeeDistribution
+    | -- |Updates to the GAS rewards.
+      PUEGASRewards !GASRewards
+    | -- |Updates pool parameters.
+      PUEPoolParametersV0 !(PoolParameters 'ChainParametersV0)
+    | PUEPoolParametersV1 !(PoolParameters 'ChainParametersV1)
+    | -- |Adds a new anonymity revoker.
+      PUEAddAnonymityRevoker !ARS.ArInfo
+    | -- |Adds a new identity provider.
+      PUEAddIdentityProvider !IPS.IpInfo
+    | -- |Updates to cooldown parameters for chain parameters version 1.
+      PUECooldownParameters !(CooldownParameters 'ChainParametersV1)
+    | -- |Updates to time parameters for chain parameters version 1.
+      PUETimeParameters !(TimeParameters 'ChainParametersV1)
 
 -- | Next available sequence numbers for updating any of the chain parameters.
-data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers {
-    -- |Updates to the root keys.
-    _nusnRootKeys :: !U.UpdateSequenceNumber,
-    -- |Updates to the level 1 keys.
-    _nusnLevel1Keys :: !U.UpdateSequenceNumber,
-    -- |Updates to the level 2 keys.
-    _nusnLevel2Keys :: !U.UpdateSequenceNumber,
-    -- |Protocol updates.
-    _nusnProtocol :: !U.UpdateSequenceNumber,
-    -- |Updates to the election difficulty parameter.
-    _nusnElectionDifficulty :: !U.UpdateSequenceNumber,
-    -- |Updates to the euro:energy exchange rate.
-    _nusnEuroPerEnergy :: !U.UpdateSequenceNumber,
-    -- |Updates to the CCD:euro exchange rate.
-    _nusnMicroCCDPerEuro :: !U.UpdateSequenceNumber,
-    -- |Updates to the foundation account.
-    _nusnFoundationAccount :: !U.UpdateSequenceNumber,
-    -- |Updates to the mint distribution.
-    _nusnMintDistribution :: !U.UpdateSequenceNumber,
-    -- |Updates to the transaction fee distribution.
-    _nusnTransactionFeeDistribution :: !U.UpdateSequenceNumber,
-    -- |Updates to the GAS rewards.
-    _nusnGASRewards :: !U.UpdateSequenceNumber,
-    -- |Updates pool parameters.
-    _nusnPoolParameters :: !U.UpdateSequenceNumber,
-    -- |Adds a new anonymity revoker.
-    _nusnAddAnonymityRevoker :: !U.UpdateSequenceNumber,
-    -- |Adds a new identity provider.
-    _nusnAddIdentityProvider :: !U.UpdateSequenceNumber,
-    -- |Updates to cooldown parameters for chain parameters version 1.
-    _nusnCooldownParameters :: !U.UpdateSequenceNumber,
-    -- |Updates to time parameters for chain parameters version 1.
-    _nusnTimeParameters :: !U.UpdateSequenceNumber
-} deriving (Show, Eq)
+data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
+    { -- |Updates to the root keys.
+      _nusnRootKeys :: !U.UpdateSequenceNumber,
+      -- |Updates to the level 1 keys.
+      _nusnLevel1Keys :: !U.UpdateSequenceNumber,
+      -- |Updates to the level 2 keys.
+      _nusnLevel2Keys :: !U.UpdateSequenceNumber,
+      -- |Protocol updates.
+      _nusnProtocol :: !U.UpdateSequenceNumber,
+      -- |Updates to the election difficulty parameter.
+      _nusnElectionDifficulty :: !U.UpdateSequenceNumber,
+      -- |Updates to the euro:energy exchange rate.
+      _nusnEuroPerEnergy :: !U.UpdateSequenceNumber,
+      -- |Updates to the CCD:euro exchange rate.
+      _nusnMicroCCDPerEuro :: !U.UpdateSequenceNumber,
+      -- |Updates to the foundation account.
+      _nusnFoundationAccount :: !U.UpdateSequenceNumber,
+      -- |Updates to the mint distribution.
+      _nusnMintDistribution :: !U.UpdateSequenceNumber,
+      -- |Updates to the transaction fee distribution.
+      _nusnTransactionFeeDistribution :: !U.UpdateSequenceNumber,
+      -- |Updates to the GAS rewards.
+      _nusnGASRewards :: !U.UpdateSequenceNumber,
+      -- |Updates pool parameters.
+      _nusnPoolParameters :: !U.UpdateSequenceNumber,
+      -- |Adds a new anonymity revoker.
+      _nusnAddAnonymityRevoker :: !U.UpdateSequenceNumber,
+      -- |Adds a new identity provider.
+      _nusnAddIdentityProvider :: !U.UpdateSequenceNumber,
+      -- |Updates to cooldown parameters for chain parameters version 1.
+      _nusnCooldownParameters :: !U.UpdateSequenceNumber,
+      -- |Updates to time parameters for chain parameters version 1.
+      _nusnTimeParameters :: !U.UpdateSequenceNumber
+    }
+    deriving (Show, Eq)
 
 -- | Build the struct containing all of the next available sequence numbers for updating any of the
 -- chain parameters
 updateQueuesNextSequenceNumbers :: UQ.PendingUpdates cpv -> NextUpdateSequenceNumbers
-updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} = NextUpdateSequenceNumbers {
-  _nusnRootKeys = UQ._uqNextSequenceNumber _pRootKeysUpdateQueue,
-  _nusnLevel1Keys = UQ._uqNextSequenceNumber _pLevel1KeysUpdateQueue,
-  _nusnLevel2Keys = UQ._uqNextSequenceNumber _pLevel2KeysUpdateQueue,
-  _nusnProtocol = UQ._uqNextSequenceNumber _pProtocolQueue,
-  _nusnElectionDifficulty = UQ._uqNextSequenceNumber _pElectionDifficultyQueue,
-  _nusnEuroPerEnergy = UQ._uqNextSequenceNumber _pEuroPerEnergyQueue,
-  _nusnMicroCCDPerEuro = UQ._uqNextSequenceNumber _pMicroGTUPerEuroQueue,
-  _nusnFoundationAccount = UQ._uqNextSequenceNumber _pFoundationAccountQueue,
-  _nusnMintDistribution = UQ._uqNextSequenceNumber _pMintDistributionQueue,
-  _nusnTransactionFeeDistribution = UQ._uqNextSequenceNumber _pTransactionFeeDistributionQueue,
-  _nusnGASRewards = UQ._uqNextSequenceNumber _pGASRewardsQueue,
-  _nusnPoolParameters = UQ._uqNextSequenceNumber _pPoolParametersQueue,
-  _nusnAddAnonymityRevoker = UQ._uqNextSequenceNumber _pAddAnonymityRevokerQueue,
-  _nusnAddIdentityProvider = UQ._uqNextSequenceNumber _pAddIdentityProviderQueue,
-  _nusnCooldownParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pCooldownParametersQueue,
-  _nusnTimeParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber  _pTimeParametersQueue
-  }
+updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
+    NextUpdateSequenceNumbers
+        { _nusnRootKeys = UQ._uqNextSequenceNumber _pRootKeysUpdateQueue,
+          _nusnLevel1Keys = UQ._uqNextSequenceNumber _pLevel1KeysUpdateQueue,
+          _nusnLevel2Keys = UQ._uqNextSequenceNumber _pLevel2KeysUpdateQueue,
+          _nusnProtocol = UQ._uqNextSequenceNumber _pProtocolQueue,
+          _nusnElectionDifficulty = UQ._uqNextSequenceNumber _pElectionDifficultyQueue,
+          _nusnEuroPerEnergy = UQ._uqNextSequenceNumber _pEuroPerEnergyQueue,
+          _nusnMicroCCDPerEuro = UQ._uqNextSequenceNumber _pMicroGTUPerEuroQueue,
+          _nusnFoundationAccount = UQ._uqNextSequenceNumber _pFoundationAccountQueue,
+          _nusnMintDistribution = UQ._uqNextSequenceNumber _pMintDistributionQueue,
+          _nusnTransactionFeeDistribution = UQ._uqNextSequenceNumber _pTransactionFeeDistributionQueue,
+          _nusnGASRewards = UQ._uqNextSequenceNumber _pGASRewardsQueue,
+          _nusnPoolParameters = UQ._uqNextSequenceNumber _pPoolParametersQueue,
+          _nusnAddAnonymityRevoker = UQ._uqNextSequenceNumber _pAddAnonymityRevokerQueue,
+          _nusnAddIdentityProvider = UQ._uqNextSequenceNumber _pAddIdentityProviderQueue,
+          _nusnCooldownParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pCooldownParametersQueue,
+          _nusnTimeParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pTimeParametersQueue
+        }

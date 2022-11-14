@@ -91,7 +91,7 @@ makeStateMigrationParametersP3toP4
 
 -- |The baker pool information to assign to existing bakers on migrating from 'P3' to 'P4'.
 defaultBakerPoolInfo :: StateMigrationData -> BakerPoolInfo
-defaultBakerPoolInfo StateMigrationData{migrationProtocolUpdateData=ProtocolUpdateData{..}} =
+defaultBakerPoolInfo StateMigrationData{migrationProtocolUpdateData = ProtocolUpdateData{..}} =
     BakerPoolInfo
         { _poolOpenStatus = updateDefaultPoolState,
           _poolMetadataUrl = emptyUrlText,
@@ -99,14 +99,13 @@ defaultBakerPoolInfo StateMigrationData{migrationProtocolUpdateData=ProtocolUpda
         }
 
 -- |Initial genesis data for the P4 protocol version.
-data GenesisDataP4
-    = GDP4Initial
-        { -- |The immutable genesis parameters.
-          genesisCore :: !Base.CoreGenesisParameters,
-          -- |Serialized initial block state.
-          -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
-          genesisInitialState :: !(Base.GenesisState 'P4)
-        }
+data GenesisDataP4 = GDP4Initial
+    { -- |The immutable genesis parameters.
+      genesisCore :: !Base.CoreGenesisParameters,
+      -- |Serialized initial block state.
+      -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
+      genesisInitialState :: !(Base.GenesisState 'P4)
+    }
     deriving (Eq, Show)
 
 -- |The regenesis represents a reset of the protocol with a new genesis block.
@@ -118,8 +117,8 @@ data GenesisDataP4
 --
 -- There are two variants, one when migrating from P3, and another one for an
 -- update from P4 to P4.
-data RegenesisP4 = 
-    GDP4MigrateFromP3
+data RegenesisP4
+    = GDP4MigrateFromP3
         { genesisRegenesis :: !Base.RegenesisData,
           genesisMigration :: !StateMigrationData
         }
@@ -192,28 +191,31 @@ getGenesisConfigurationV6 genHash = do
     getWord8 >>= \case
         0 -> do
             _gcCore <- get
-            return Base.GenesisConfiguration{
-                _gcTag = 0,
-                _gcCurrentHash = genHash,
-                _gcFirstGenesis = genHash,
-                ..
-                }
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 0,
+                      _gcCurrentHash = genHash,
+                      _gcFirstGenesis = genHash,
+                      ..
+                    }
         1 -> do
-          _gcCore <- get
-          _gcFirstGenesis <- get
-          return Base.GenesisConfiguration{
-            _gcTag = 1,
-            _gcCurrentHash = genHash,
-            ..
-            }
+            _gcCore <- get
+            _gcFirstGenesis <- get
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 1,
+                      _gcCurrentHash = genHash,
+                      ..
+                    }
         2 -> do
-          _gcCore <- get
-          _gcFirstGenesis <- get
-          return Base.GenesisConfiguration{
-            _gcTag = 2,
-            _gcCurrentHash = genHash,
-            ..
-            }
+            _gcCore <- get
+            _gcFirstGenesis <- get
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 2,
+                      _gcCurrentHash = genHash,
+                      ..
+                    }
         _ -> fail "Unrecognised genesis data type"
 
 -- |Deserialize genesis data with a version tag. The expected version tag is 6
@@ -276,8 +278,8 @@ regenesisBlockHash GDP4MigrateFromP3{genesisRegenesis = Base.RegenesisData{..}, 
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP4 -> BlockHash
-firstGenesisBlockHash GDP4MigrateFromP3{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
-firstGenesisBlockHash GDP4Regenesis{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP4MigrateFromP3{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP4Regenesis{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP4 -> Word8

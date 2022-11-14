@@ -1,8 +1,8 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | This module implements QuickCheck generators for types that are commonly used in tests.
 module Generators where
@@ -12,14 +12,14 @@ import Test.QuickCheck
 import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
-import Data.Word
-import Data.Ratio
 import qualified Data.Map.Strict as Map
+import Data.Ratio
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as Vec
-import qualified Data.Sequence as Seq
+import Data.Word
 import System.IO.Unsafe
 import System.Random
 
@@ -34,14 +34,14 @@ import Concordium.Crypto.Proofs
 import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Crypto.SignatureScheme
 import qualified Concordium.Crypto.VRF as VRF
+import Concordium.Genesis.Parameters
 import Concordium.ID.DummyData
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Execution
+import Concordium.Types.Parameters
 import Concordium.Types.Transactions
 import Concordium.Types.Updates
-import Concordium.Types.Parameters
-import Concordium.Genesis.Parameters
 import qualified Concordium.Wasm as Wasm
 import qualified Data.FixedByteString as FBS
 
@@ -80,8 +80,8 @@ genAccountAddress = AccountAddress . FBS.pack <$> vector accountAddressSize
 
 genAccountAliases :: AccountAddress -> Gen AccountAddress
 genAccountAliases (AccountAddress addr) = do
-  suffix <- vector 3
-  return $ AccountAddress . FBS.pack $ (take accountAddressPrefixSize (FBS.unpack addr) ++ suffix)
+    suffix <- vector 3
+    return $ AccountAddress . FBS.pack $ (take accountAddressPrefixSize (FBS.unpack addr) ++ suffix)
 
 genCAddress :: Gen ContractAddress
 genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSubindex <$> arbitrary)
@@ -123,8 +123,9 @@ genCapitalBound = CapitalBound . makeAmountFraction <$> arbitrary `suchThat` (\x
 
 genInclusiveRangeOfAmountFraction :: Gen (InclusiveRange AmountFraction)
 genInclusiveRangeOfAmountFraction = do
-    (irMin, irMax) <- ((,) <$> genAmountFraction <*> genAmountFraction)
-                        `suchThat` (\(i0, i1) -> i0 <= i1)
+    (irMin, irMax) <-
+        ((,) <$> genAmountFraction <*> genAmountFraction)
+            `suchThat` (\(i0, i1) -> i0 <= i1)
     return InclusiveRange{..}
 
 genPayload :: ProtocolVersion -> Gen Payload
@@ -173,9 +174,9 @@ genPayloadDeployModule :: ProtocolVersion -> Gen Payload
 genPayloadDeployModule pv =
     let genV0 = DeployModule . Wasm.WasmModuleV0 . Wasm.WasmModuleV . Wasm.ModuleSource <$> Generators.genByteString
         genV1 = DeployModule . Wasm.WasmModuleV1 . Wasm.WasmModuleV . Wasm.ModuleSource <$> Generators.genByteString
-    in if pv <= P3 then -- protocol versions <= 3 only allow version 0 Wasm modules.
-               genV0
-        else oneof [genV0, genV1]
+    in  if pv <= P3 -- protocol versions <= 3 only allow version 0 Wasm modules.
+            then genV0
+            else oneof [genV0, genV1]
 
 genPayloadInitContract :: Gen Payload
 genPayloadInitContract = do
@@ -252,14 +253,15 @@ genPayloadConfigureBaker = do
         sigPair <- (,) <$> (BlockSig.verifyKey <$> genBlockKeyPair) <*> genDlogProof
         elecPair <- (,) <$> (VRF.publicKey <$> arbitrary) <*> genDlogProof
         aggPair <- genAggregationVerifyKeyAndProof
-        return BakerKeysWithProofs{
-            bkwpElectionVerifyKey = fst elecPair,
-            bkwpProofElection = snd elecPair,
-            bkwpSignatureVerifyKey = fst sigPair,
-            bkwpProofSig = snd sigPair,
-            bkwpAggregationVerifyKey = fst aggPair,
-            bkwpProofAggregation = snd aggPair
-        }
+        return
+            BakerKeysWithProofs
+                { bkwpElectionVerifyKey = fst elecPair,
+                  bkwpProofElection = snd elecPair,
+                  bkwpSignatureVerifyKey = fst sigPair,
+                  bkwpProofSig = snd sigPair,
+                  bkwpAggregationVerifyKey = fst aggPair,
+                  bkwpProofAggregation = snd aggPair
+                }
     cbMetadataURL <- liftArbitrary genUrlText
     cbTransactionFeeCommission <- liftArbitrary genAmountFraction
     cbBakingRewardCommission <- liftArbitrary genAmountFraction
@@ -302,7 +304,7 @@ genIndices = do
             nextIndex <- choose (nextIdx, 255)
             if nextIndex == 255
                 then return (KeyIndex nextIndex : is)
-                else go (KeyIndex nextIndex : is) (nextIndex + 1) (n -1)
+                else go (KeyIndex nextIndex : is) (nextIndex + 1) (n - 1)
     reverse <$> go [] 0 maxLen
 
 genAccountKeysMap :: Gen (Map.Map KeyIndex VerifyKey)
@@ -356,9 +358,10 @@ genCommissionRates =
 
 genCommissionRanges :: Gen CommissionRanges
 genCommissionRanges =
-    CommissionRanges <$> genInclusiveRangeOfAmountFraction
-                     <*> genInclusiveRangeOfAmountFraction
-                     <*> genInclusiveRangeOfAmountFraction
+    CommissionRanges
+        <$> genInclusiveRangeOfAmountFraction
+        <*> genInclusiveRangeOfAmountFraction
+        <*> genInclusiveRangeOfAmountFraction
 
 genChainParametersV0 :: Gen (ChainParameters' 'ChainParametersV0)
 genChainParametersV0 = do
@@ -479,16 +482,15 @@ genEncryptedAmount = EncryptedAmount <$> genElgamalCipher <*> genElgamalCipher
 
 genAccountEncryptedAmount :: Gen AccountEncryptedAmount
 genAccountEncryptedAmount = do
-  _selfAmount <- genEncryptedAmount
-  _startIndex <- EncryptedAmountAggIndex <$> arbitrary
-  len <- choose (0,100)
-  _incomingEncryptedAmounts <- Seq.replicateM len genEncryptedAmount
-  numAgg <- arbitrary
-  aggAmount <- genEncryptedAmount
-  if numAgg == Just 1 || numAgg == Just 0 then
-    return AccountEncryptedAmount{_aggregatedAmount = Nothing,..}
-  else
-    return AccountEncryptedAmount{_aggregatedAmount = (aggAmount,) <$> numAgg,..}
+    _selfAmount <- genEncryptedAmount
+    _startIndex <- EncryptedAmountAggIndex <$> arbitrary
+    len <- choose (0, 100)
+    _incomingEncryptedAmounts <- Seq.replicateM len genEncryptedAmount
+    numAgg <- arbitrary
+    aggAmount <- genEncryptedAmount
+    if numAgg == Just 1 || numAgg == Just 0
+        then return AccountEncryptedAmount{_aggregatedAmount = Nothing, ..}
+        else return AccountEncryptedAmount{_aggregatedAmount = (aggAmount,) <$> numAgg, ..}
 
 genContractEvent :: Gen Wasm.ContractEvent
 genContractEvent = Wasm.ContractEvent . BSS.pack <$> arbitrary
@@ -525,82 +527,87 @@ genWasmVersion spv
 
 genEvent :: IsProtocolVersion pv => SProtocolVersion pv -> Gen Event
 genEvent spv =
-        oneof
-            ([ ModuleDeployed <$> genModuleRef,
-              ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent,
-              Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> genWasmVersion spv <*> listOf genContractEvent,
-              Transferred <$> genAddress <*> genAmount <*> genAddress,
-              AccountCreated <$> genAccountAddress,
-              CredentialDeployed <$> genCredentialId <*> genAccountAddress,
-              genBakerAdded,
-              BakerRemoved <$> genBakerId <*> genAccountAddress,
-              BakerStakeIncreased <$> genBakerId <*> genAccountAddress <*> genAmount,
-              BakerStakeDecreased <$> genBakerId <*> genAccountAddress <*> genAmount,
-              BakerSetRestakeEarnings <$> genBakerId <*> genAccountAddress <*> arbitrary,
-              genBakerKeysUpdated,
-              CredentialKeysUpdated <$> genCredentialId,
-              NewEncryptedAmount <$> genAccountAddress <*> (EncryptedAmountIndex <$> arbitrary) <*> genEncryptedAmount,
-              EncryptedAmountsRemoved <$> genAccountAddress <*> genEncryptedAmount <*> genEncryptedAmount <*> (EncryptedAmountAggIndex <$> arbitrary),
-              AmountAddedByDecryption <$> genAccountAddress <*> genAmount,
-              EncryptedSelfAmountAdded <$> genAccountAddress <*> genEncryptedAmount <*> genAmount,
-              UpdateEnqueued <$> genTransactionTime <*> genUpdatePayload (chainParametersVersionFor spv),
-              genTransferredWithSchedule,
-              genCredentialsUpdated,
-              DataRegistered <$> genRegisteredData
-            ] ++ maybeMemo ++ maybeV1ContractEvents ++ maybeDelegationEvents ++ maybeUpgrade)
-      where
-        maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
-        maybeMemo = if supportsMemo spv then [TransferMemo <$> genMemo] else []
-        maybeV1ContractEvents =
-                if supportsV1Contracts spv then
-                    [Interrupted <$> genCAddress <*> listOf genContractEvent,
-                     Resumed <$> genCAddress <*> arbitrary
-                    ]
-                else
-                    []
-        maybeDelegationEvents =
-                if supportsDelegation spv then
-                    [BakerSetOpenStatus <$> genBakerId <*> genAccountAddress <*> arbitrary,
-                     BakerSetMetadataURL <$> genBakerId <*> genAccountAddress <*> genUrlText,
-                     BakerSetTransactionFeeCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
-                     BakerSetBakingRewardCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
-                     BakerSetFinalizationRewardCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
-                     DelegationStakeIncreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
-                     DelegationStakeDecreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
-                     DelegationSetRestakeEarnings <$> genDelegatorId <*> genAccountAddress <*> arbitrary,
-                     DelegationSetDelegationTarget <$> genDelegatorId <*> genAccountAddress <*> genDelegationTarget,
-                     DelegationAdded <$> genDelegatorId <*> genAccountAddress,
-                     DelegationRemoved <$> genDelegatorId <*> genAccountAddress
-                    ]
-                else
-                    []
-        genBakerAdded = do
-            ebaBakerId <- genBakerId
-            ebaAccount <- genAccountAddress
-            ebaSignKey <- BlockSig.verifyKey <$> genBlockKeyPair
-            ebaElectionKey <- VRF.publicKey <$> arbitrary
-            (ebaAggregationKey, _) <- genAggregationVerifyKeyAndProof
-            ebaStake <- arbitrary
-            ebaRestakeEarnings <- arbitrary
-            return BakerAdded{..}
-        genBakerKeysUpdated = do
-            ebkuBakerId <- genBakerId
-            ebkuAccount <- genAccountAddress
-            ebkuSignKey <- BlockSig.verifyKey <$> genBlockKeyPair
-            ebkuElectionKey <- VRF.publicKey <$> arbitrary
-            (ebkuAggregationKey, _) <- genAggregationVerifyKeyAndProof
-            return BakerKeysUpdated{..}
-        genTransferredWithSchedule = do
-            etwsFrom <- genAccountAddress
-            etwsTo <- genAccountAddress
-            etwsAmount <- listOf ((,) <$> genTimestamp <*> genAmount)
-            return TransferredWithSchedule{..}
-        genCredentialsUpdated = do
-            cuAccount <- genAccountAddress
-            cuNewCredIds <- listOf genCredentialId
-            cuRemovedCredIds <- listOf genCredentialId
-            cuNewThreshold <- AccountThreshold <$> choose (1, maxBound)
-            return CredentialsUpdated{..}
+    oneof
+        ( [ ModuleDeployed <$> genModuleRef,
+            ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent,
+            Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> genWasmVersion spv <*> listOf genContractEvent,
+            Transferred <$> genAddress <*> genAmount <*> genAddress,
+            AccountCreated <$> genAccountAddress,
+            CredentialDeployed <$> genCredentialId <*> genAccountAddress,
+            genBakerAdded,
+            BakerRemoved <$> genBakerId <*> genAccountAddress,
+            BakerStakeIncreased <$> genBakerId <*> genAccountAddress <*> genAmount,
+            BakerStakeDecreased <$> genBakerId <*> genAccountAddress <*> genAmount,
+            BakerSetRestakeEarnings <$> genBakerId <*> genAccountAddress <*> arbitrary,
+            genBakerKeysUpdated,
+            CredentialKeysUpdated <$> genCredentialId,
+            NewEncryptedAmount <$> genAccountAddress <*> (EncryptedAmountIndex <$> arbitrary) <*> genEncryptedAmount,
+            EncryptedAmountsRemoved <$> genAccountAddress <*> genEncryptedAmount <*> genEncryptedAmount <*> (EncryptedAmountAggIndex <$> arbitrary),
+            AmountAddedByDecryption <$> genAccountAddress <*> genAmount,
+            EncryptedSelfAmountAdded <$> genAccountAddress <*> genEncryptedAmount <*> genAmount,
+            UpdateEnqueued <$> genTransactionTime <*> genUpdatePayload (chainParametersVersionFor spv),
+            genTransferredWithSchedule,
+            genCredentialsUpdated,
+            DataRegistered <$> genRegisteredData
+          ]
+            ++ maybeMemo
+            ++ maybeV1ContractEvents
+            ++ maybeDelegationEvents
+            ++ maybeUpgrade
+        )
+  where
+    maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
+    maybeMemo = if supportsMemo spv then [TransferMemo <$> genMemo] else []
+    maybeV1ContractEvents =
+        if supportsV1Contracts spv
+            then
+                [ Interrupted <$> genCAddress <*> listOf genContractEvent,
+                  Resumed <$> genCAddress <*> arbitrary
+                ]
+            else []
+    maybeDelegationEvents =
+        if supportsDelegation spv
+            then
+                [ BakerSetOpenStatus <$> genBakerId <*> genAccountAddress <*> arbitrary,
+                  BakerSetMetadataURL <$> genBakerId <*> genAccountAddress <*> genUrlText,
+                  BakerSetTransactionFeeCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
+                  BakerSetBakingRewardCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
+                  BakerSetFinalizationRewardCommission <$> genBakerId <*> genAccountAddress <*> genAmountFraction,
+                  DelegationStakeIncreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
+                  DelegationStakeDecreased <$> genDelegatorId <*> genAccountAddress <*> genAmount,
+                  DelegationSetRestakeEarnings <$> genDelegatorId <*> genAccountAddress <*> arbitrary,
+                  DelegationSetDelegationTarget <$> genDelegatorId <*> genAccountAddress <*> genDelegationTarget,
+                  DelegationAdded <$> genDelegatorId <*> genAccountAddress,
+                  DelegationRemoved <$> genDelegatorId <*> genAccountAddress
+                ]
+            else []
+    genBakerAdded = do
+        ebaBakerId <- genBakerId
+        ebaAccount <- genAccountAddress
+        ebaSignKey <- BlockSig.verifyKey <$> genBlockKeyPair
+        ebaElectionKey <- VRF.publicKey <$> arbitrary
+        (ebaAggregationKey, _) <- genAggregationVerifyKeyAndProof
+        ebaStake <- arbitrary
+        ebaRestakeEarnings <- arbitrary
+        return BakerAdded{..}
+    genBakerKeysUpdated = do
+        ebkuBakerId <- genBakerId
+        ebkuAccount <- genAccountAddress
+        ebkuSignKey <- BlockSig.verifyKey <$> genBlockKeyPair
+        ebkuElectionKey <- VRF.publicKey <$> arbitrary
+        (ebkuAggregationKey, _) <- genAggregationVerifyKeyAndProof
+        return BakerKeysUpdated{..}
+    genTransferredWithSchedule = do
+        etwsFrom <- genAccountAddress
+        etwsTo <- genAccountAddress
+        etwsAmount <- listOf ((,) <$> genTimestamp <*> genAmount)
+        return TransferredWithSchedule{..}
+    genCredentialsUpdated = do
+        cuAccount <- genAccountAddress
+        cuNewCredIds <- listOf genCredentialId
+        cuRemovedCredIds <- listOf genCredentialId
+        cuNewThreshold <- AccountThreshold <$> choose (1, maxBound)
+        return CredentialsUpdated{..}
 
 instance Arbitrary RejectReason where
     arbitrary =
@@ -663,26 +670,26 @@ instance Arbitrary RejectReason where
 
 genValidResult :: IsProtocolVersion pv => SProtocolVersion pv -> Gen ValidResult
 genValidResult spv =
-        oneof
-            [ TxSuccess <$> (liftArbitrary $ genEvent spv),
-              TxReject <$> arbitrary
-            ]
+    oneof
+        [ TxSuccess <$> (liftArbitrary $ genEvent spv),
+          TxReject <$> arbitrary
+        ]
 
 genTransactionSummary :: IsProtocolVersion pv => SProtocolVersion pv -> Gen TransactionSummary
 genTransactionSummary spv = do
-        tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
-        tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
-        tsCost <- genAmount
-        tsEnergyCost <- Energy <$> arbitrary
-        tsType <-
-            oneof
-                [ TSTAccountTransaction <$> arbitrary,
-                  TSTCredentialDeploymentTransaction <$> elements [Initial, Normal],
-                  TSTUpdateTransaction <$> arbitraryBoundedEnum
-                ]
-        tsResult <- genValidResult spv
-        tsIndex <- TransactionIndex <$> arbitrary
-        return TransactionSummary{..}
+    tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
+    tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
+    tsCost <- genAmount
+    tsEnergyCost <- Energy <$> arbitrary
+    tsType <-
+        oneof
+            [ TSTAccountTransaction <$> arbitrary,
+              TSTCredentialDeploymentTransaction <$> elements [Initial, Normal],
+              TSTUpdateTransaction <$> arbitraryBoundedEnum
+            ]
+    tsResult <- genValidResult spv
+    tsIndex <- TransactionIndex <$> arbitrary
+    return TransactionSummary{..}
 
 schemes :: [SchemeId]
 schemes = [Ed25519]
@@ -812,10 +819,11 @@ genRatioOfWord64 = do
     return $ num % den
 
 genLeverageFactor :: Gen LeverageFactor
-genLeverageFactor = LeverageFactor <$> do
-    den <- choose (1, maxBound)
-    num <- choose (den, maxBound) -- to make sure that the leverage factor is >= 1
-    return $ num % den
+genLeverageFactor =
+    LeverageFactor <$> do
+        den <- choose (1, maxBound)
+        num <- choose (den, maxBound) -- to make sure that the leverage factor is >= 1
+        return $ num % den
 
 genExchangeRate :: Gen ExchangeRate
 genExchangeRate = ExchangeRate <$> genRatioOfWord64
@@ -867,8 +875,8 @@ genRootUpdate scpv =
         [ RootKeysRootUpdate <$> genHigherLevelKeys,
           Level1KeysRootUpdate <$> genHigherLevelKeys,
           case scpv of
-              SCPV0 -> Level2KeysRootUpdate <$> genAuthorizations
-              SCPV1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
+            SCPV0 -> Level2KeysRootUpdate <$> genAuthorizations
+            SCPV1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
         ]
 
 genLevel1Update :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen Level1Update
@@ -876,46 +884,47 @@ genLevel1Update scpv =
     oneof
         [ Level1KeysLevel1Update <$> genHigherLevelKeys,
           case scpv of
-              SCPV0 -> Level2KeysLevel1Update <$> genAuthorizations
-              SCPV1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
+            SCPV0 -> Level2KeysLevel1Update <$> genAuthorizations
+            SCPV1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
         ]
 
 genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
 genLevel2UpdatePayload scpv =
     case scpv of
-        SCPV0 -> 
+        SCPV0 ->
             oneof
                 [ ProtocolUpdatePayload <$> genProtocolUpdate,
-                ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
-                EuroPerEnergyUpdatePayload <$> genExchangeRate,
-                MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
-                FoundationAccountUpdatePayload <$> genAccountAddress,
-                MintDistributionUpdatePayload <$> genMintDistribution scpv,
-                TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
-                GASRewardsUpdatePayload <$> genGASRewards,
-                BakerStakeThresholdUpdatePayload <$> genPoolParametersV0
+                  ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
+                  EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                  MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                  FoundationAccountUpdatePayload <$> genAccountAddress,
+                  MintDistributionUpdatePayload <$> genMintDistribution scpv,
+                  TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                  GASRewardsUpdatePayload <$> genGASRewards,
+                  BakerStakeThresholdUpdatePayload <$> genPoolParametersV0
                 ]
-        SCPV1 -> 
+        SCPV1 ->
             oneof
                 [ ProtocolUpdatePayload <$> genProtocolUpdate,
-                ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
-                EuroPerEnergyUpdatePayload <$> genExchangeRate,
-                MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
-                FoundationAccountUpdatePayload <$> genAccountAddress,
-                MintDistributionCPV1UpdatePayload <$> genMintDistribution scpv,
-                TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
-                GASRewardsUpdatePayload <$> genGASRewards,
-                CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
-                PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
-                TimeParametersCPV1UpdatePayload <$> genTimeParametersV1
+                  ElectionDifficultyUpdatePayload <$> genElectionDifficulty,
+                  EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                  MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                  FoundationAccountUpdatePayload <$> genAccountAddress,
+                  MintDistributionCPV1UpdatePayload <$> genMintDistribution scpv,
+                  TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                  GASRewardsUpdatePayload <$> genGASRewards,
+                  CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
+                  PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
+                  TimeParametersCPV1UpdatePayload <$> genTimeParametersV1
                 ]
 
 genUpdatePayload :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen UpdatePayload
-genUpdatePayload scpv = 
-    oneof [ genLevel2UpdatePayload scpv,
-            RootUpdatePayload <$> genRootUpdate scpv,
-            Level1UpdatePayload <$> genLevel1Update scpv
-          ]
+genUpdatePayload scpv =
+    oneof
+        [ genLevel2UpdatePayload scpv,
+          RootUpdatePayload <$> genRootUpdate scpv,
+          Level1UpdatePayload <$> genLevel1Update scpv
+        ]
 
 genRawUpdateInstruction :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen RawUpdateInstruction
 genRawUpdateInstruction scpv = do

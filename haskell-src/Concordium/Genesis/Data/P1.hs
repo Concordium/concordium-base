@@ -9,8 +9,8 @@ import Data.Word
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
-import Concordium.Types
 import Concordium.Genesis.Parameters
+import Concordium.Types
 
 -- |The initial genesis data for the P1 protocol version.
 --  It specifies how the initial state should be configured.
@@ -21,13 +21,12 @@ import Concordium.Genesis.Parameters
 data GenesisDataP1
     = -- |An initial genesis block.
       GDP1Initial
-        { -- |The immutable genesis parameters.
-          genesisCore :: !Base.CoreGenesisParameters,
-          -- |The blueprint for the initial state at genesis.
-          genesisInitialState :: !(Base.GenesisState 'P1)
-        }
+      { -- |The immutable genesis parameters.
+        genesisCore :: !Base.CoreGenesisParameters,
+        -- |The blueprint for the initial state at genesis.
+        genesisInitialState :: !(Base.GenesisState 'P1)
+      }
     deriving (Eq, Show)
-
 
 -- |The regenesis represents a reset of the protocol with a new genesis block.
 --  This does not include the full new state, but only its hash.
@@ -90,22 +89,23 @@ getGenesisConfigurationV3 genHash = do
     getWord8 >>= \case
         0 -> do
             _gcCore <- get
-            return Base.GenesisConfiguration{
-                _gcTag = 0,
-                _gcCurrentHash = genHash,
-                _gcFirstGenesis = genHash,
-                ..
-                }
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 0,
+                      _gcCurrentHash = genHash,
+                      _gcFirstGenesis = genHash,
+                      ..
+                    }
         1 -> do
-          _gcCore <- get
-          _gcFirstGenesis <- get
-          return Base.GenesisConfiguration{
-            _gcTag = 1,
-            _gcCurrentHash = genHash,
-            ..
-            }
+            _gcCore <- get
+            _gcFirstGenesis <- get
+            return
+                Base.GenesisConfiguration
+                    { _gcTag = 1,
+                      _gcCurrentHash = genHash,
+                      ..
+                    }
         _ -> fail "Unrecognised genesis data type"
-
 
 -- |Serialize genesis data in the V3 format.
 putGenesisDataV3 :: Putter GenesisDataP1
@@ -149,7 +149,7 @@ genesisBlockHash GDP1Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
 -- protocol. This becomes the block hash of the genesis block of the new chain
 -- after the protocol update.
 regenesisBlockHash :: RegenesisP1 -> BlockHash
-regenesisBlockHash GDP1Regenesis{genesisRegenesis=Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+regenesisBlockHash GDP1Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P1
     putWord8 1 -- Regenesis
@@ -161,7 +161,7 @@ regenesisBlockHash GDP1Regenesis{genesisRegenesis=Base.RegenesisData{..}} = Bloc
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP1 -> BlockHash
-firstGenesisBlockHash GDP1Regenesis{genesisRegenesis=Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP1Regenesis{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP1 -> Word8

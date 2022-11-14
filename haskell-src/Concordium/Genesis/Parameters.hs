@@ -1,4 +1,9 @@
-{-# LANGUAGE OverloadedStrings, KindSignatures, DataKinds, ScopedTypeVariables, TypeApplications, GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Concordium.Genesis.Parameters where
 
@@ -18,21 +23,21 @@ import Concordium.Types.Updates
 -- genesis data from JSON files.
 data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParameters
     { -- |Election difficulty parameter.
-      gcpElectionDifficulty :: !ElectionDifficulty
-    ,  -- |Exchange rates.
-      gcpExchangeRates :: !ExchangeRates
-    , -- |Cooldown parameters.
-      gcpCooldownParameters :: !(CooldownParameters cpv)
-    , -- |Time parameters.
-      gcpTimeParameters :: !(TimeParameters cpv)
-    , -- |LimitAccountCreation: the maximum number of accounts
+      gcpElectionDifficulty :: !ElectionDifficulty,
+      -- |Exchange rates.
+      gcpExchangeRates :: !ExchangeRates,
+      -- |Cooldown parameters.
+      gcpCooldownParameters :: !(CooldownParameters cpv),
+      -- |Time parameters.
+      gcpTimeParameters :: !(TimeParameters cpv),
+      -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
-      gcpAccountCreationLimit :: !CredentialsPerBlockLimit
-    , -- |Reward parameters.
-      gcpRewardParameters :: !(RewardParameters cpv)
-    , -- |Foundation account address.
-      gcpFoundationAccount :: !AccountAddress
-    , -- |Minimum threshold required for registering as a baker.
+      gcpAccountCreationLimit :: !CredentialsPerBlockLimit,
+      -- |Reward parameters.
+      gcpRewardParameters :: !(RewardParameters cpv),
+      -- |Foundation account address.
+      gcpFoundationAccount :: !AccountAddress,
+      -- |Minimum threshold required for registering as a baker.
       gcpPoolParameters :: !(PoolParameters cpv)
     }
     deriving (Eq, Show)
@@ -40,13 +45,13 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
 type GenesisChainParameters pv = GenesisChainParameters' (ChainParametersVersionFor pv)
 
 instance IsChainParametersVersion cpv => FromJSON (GenesisChainParameters' cpv) where
-    parseJSON = case chainParametersVersion @cpv of 
-      SCPV0 -> parseJSONForGCPV0
-      SCPV1 -> parseJSONForGCPV1
+    parseJSON = case chainParametersVersion @cpv of
+        SCPV0 -> parseJSONForGCPV0
+        SCPV1 -> parseJSONForGCPV1
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV0'.
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
-parseJSONForGCPV0 = 
+parseJSONForGCPV0 =
     withObject "GenesisChainParameters" $ \v -> do
         gcpElectionDifficulty <- v .: "electionDifficulty"
         _erEuroPerEnergy <- v .: "euroPerEnergy"
@@ -64,7 +69,7 @@ parseJSONForGCPV0 =
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
 parseJSONForGCPV1 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV1)
-parseJSONForGCPV1 = 
+parseJSONForGCPV1 =
     withObject "GenesisChainParametersV1" $ \v -> do
         gcpElectionDifficulty <- v .: "electionDifficulty"
         _erEuroPerEnergy <- v .: "euroPerEnergy"
@@ -96,14 +101,14 @@ parseJSONForGCPV1 =
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
     toJSON GenesisChainParameters{..} =
         object
-            [ "electionDifficulty" AE..= gcpElectionDifficulty
-            , "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates
-            , "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates
-            , "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs gcpCooldownParameters
-            , "accountCreationLimit" AE..= gcpAccountCreationLimit
-            , "rewardParameters" AE..= gcpRewardParameters
-            , "foundationAccount" AE..= gcpFoundationAccount
-            , "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold gcpPoolParameters
+            [ "electionDifficulty" AE..= gcpElectionDifficulty,
+              "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
+              "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
+              "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs gcpCooldownParameters,
+              "accountCreationLimit" AE..= gcpAccountCreationLimit,
+              "rewardParameters" AE..= gcpRewardParameters,
+              "foundationAccount" AE..= gcpFoundationAccount,
+              "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold gcpPoolParameters
             ]
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
@@ -141,29 +146,29 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
 --   correspond to an account in 'gpInitialAccounts'.
 data GenesisParameters pv = GenesisParameters
     { -- |Time at which genesis occurs.
-      gpGenesisTime :: Timestamp
-    , -- |Duration of each slot.
-      gpSlotDuration :: Duration
-    , -- |Initial nonce for seeding the leadership election.
-      gpLeadershipElectionNonce :: LeadershipElectionNonce
-    , -- |Number of slots that constitute an epoch.
-      gpEpochLength :: EpochLength
-    , -- |Parameters affecting finalization.
-      gpFinalizationParameters :: FinalizationParameters
-    , -- |Cryptographic parameters.
-      gpCryptographicParameters :: CryptographicParameters
-    , -- |The identity providers present at genesis.
-      gpIdentityProviders :: IdentityProviders
-    , -- |The anonymity revokers present at genesis.
-      gpAnonymityRevokers :: AnonymityRevokers
-    , -- |Initial accounts. Since an account can be a baker, it is important that the
+      gpGenesisTime :: Timestamp,
+      -- |Duration of each slot.
+      gpSlotDuration :: Duration,
+      -- |Initial nonce for seeding the leadership election.
+      gpLeadershipElectionNonce :: LeadershipElectionNonce,
+      -- |Number of slots that constitute an epoch.
+      gpEpochLength :: EpochLength,
+      -- |Parameters affecting finalization.
+      gpFinalizationParameters :: FinalizationParameters,
+      -- |Cryptographic parameters.
+      gpCryptographicParameters :: CryptographicParameters,
+      -- |The identity providers present at genesis.
+      gpIdentityProviders :: IdentityProviders,
+      -- |The anonymity revokers present at genesis.
+      gpAnonymityRevokers :: AnonymityRevokers,
+      -- |Initial accounts. Since an account can be a baker, it is important that the
       -- order of the accounts matches the assigned baker ids.
-      gpInitialAccounts :: [GenesisAccount]
-    , -- |Maximum total energy that can be consumed by the transactions in a block
-      gpMaxBlockEnergy :: Energy
-    , -- |The collection of update keys for performing updates
-      gpUpdateKeys :: UpdateKeysCollection (ChainParametersVersionFor pv)
-    , -- |The initial (updatable) chain parameters
+      gpInitialAccounts :: [GenesisAccount],
+      -- |Maximum total energy that can be consumed by the transactions in a block
+      gpMaxBlockEnergy :: Energy,
+      -- |The collection of update keys for performing updates
+      gpUpdateKeys :: UpdateKeysCollection (ChainParametersVersionFor pv),
+      -- |The initial (updatable) chain parameters
       gpChainParameters :: GenesisChainParameters pv
     }
 
@@ -183,16 +188,17 @@ instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) wher
             hasBaker _ = True
         unless (any hasBaker gpInitialAccounts) $ fail "Must have at least one baker at genesis"
         let
-            validateBaker (bid, GenesisAccount{gaBaker = Just bkr})
-              = unless (gbBakerId bkr == bid) $ fail $ "Expected baker id " ++ show bid ++ " but was " ++ show (gbBakerId bkr)
+            validateBaker (bid, GenesisAccount{gaBaker = Just bkr}) =
+                unless (gbBakerId bkr == bid) $ fail $ "Expected baker id " ++ show bid ++ " but was " ++ show (gbBakerId bkr)
             validateBaker _ = return ()
-        mapM_ validateBaker (zip [0..] gpInitialAccounts)
+        mapM_ validateBaker (zip [0 ..] gpInitialAccounts)
         gpMaxBlockEnergy <- v .: "maxBlockEnergy"
         gpUpdateKeys <- v .: "updateKeys"
         gpChainParameters <- v .: "chainParameters"
         let facct = gcpFoundationAccount gpChainParameters
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $
-            fail $ "Foundation account (" ++ show facct ++ ") is not in initialAccounts"
+            fail $
+                "Foundation account (" ++ show facct ++ ") is not in initialAccounts"
         return GenesisParameters{..}
 
 -- |Version number identifying the current version of the genesis parameter format.
