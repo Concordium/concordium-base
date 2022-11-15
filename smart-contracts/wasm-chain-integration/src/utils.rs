@@ -67,9 +67,11 @@ impl<I> machine::Host<I> for TrapHost {
 /// A host which traps for any function call apart from `report_error` which it
 /// prints to standard out and `get_random` that calls a random number
 /// generator.
-pub struct TestHost<R: RngCore> {
+pub struct TestHost<R> {
     /// A RNG for randomised testing.
     rng: Option<R>,
+    /// A flag set to `true` if the RNG was used.
+    rng_used: bool,
 }
 
 impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
@@ -159,15 +161,8 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
             let filename =
                 std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
                     .to_owned();
-            let quickcheck_u32 = unsafe { stack.pop_u32() };
-            ensure!(
-                quickcheck_u32 == 0 || quickcheck_u32 == 1,
-                "Cannot convert {} to a boolean, must be 0 or 1",
-                quickcheck_u32
-            );
-            let quickcheck = quickcheck_u32 != 0;
             bail!(ReportError::Reported {
-                quickcheck,
+                quickcheck: self.rng_used,
                 filename,
                 line,
                 column,
@@ -177,6 +172,7 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
             let size = unsafe { stack.pop_u32() } as usize;
             let dest = unsafe { stack.pop_u32() } as usize;
             ensure!(dest + size <= memory.len(), "Illegal memory access.");
+            self.rng_used = true;
             match self.rng.as_mut() {
                 Some(r) => {
                     r.try_fill_bytes(&mut memory[dest..dest + size])?;
@@ -205,15 +201,21 @@ pub fn run_module_tests(
     module_bytes: &[u8],
     seed: u64,
 ) -> ExecResult<Vec<(String, Option<ReportError>)>> {
-    let rng = SmallRng::seed_from_u64(seed);
-    let mut host = TestHost {
-        rng: Some(rng),
+    let host = TestHost {
+        rng: Some(SmallRng::seed_from_u64(seed)),
+        rng_used: false,
     };
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
     let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            let res = artifact.run(&mut host, name, &[]);
+            // create a `TestHost` instance for each test
+            let mut test_host = TestHost {
+                rng: Some(SmallRng::seed_from_u64(seed)),
+                // initially, set the flag to `false`, so it can be flipped later, once it was used
+                rng_used: false,
+            };
+            let res = artifact.run(&mut test_host, name, &[]);
             match res {
                 Ok(_) => out.push((test_name.to_owned(), None)),
                 Err(msg) => {
@@ -241,6 +243,7 @@ pub fn generate_contract_schema_v0(
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
         rng: None,
+        rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
@@ -297,6 +300,7 @@ pub fn generate_contract_schema_v1(
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
         rng: None,
+        rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
@@ -343,6 +347,7 @@ pub fn generate_contract_schema_v2(
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
         rng: None,
+        rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
@@ -389,6 +394,7 @@ pub fn generate_contract_schema_v3(
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
         rng: None,
+        rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
