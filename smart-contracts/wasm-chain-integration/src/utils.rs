@@ -69,7 +69,7 @@ impl<I> machine::Host<I> for TrapHost {
 /// generator.
 pub struct TestHost<R> {
     /// A RNG for randomised testing.
-    rng: Option<R>,
+    rng:      Option<R>,
     /// A flag set to `true` if the RNG was used.
     rng_used: bool,
 }
@@ -202,7 +202,7 @@ pub fn run_module_tests(
     seed: u64,
 ) -> ExecResult<Vec<(String, Option<ReportError>)>> {
     let host = TestHost {
-        rng: Some(SmallRng::seed_from_u64(seed)),
+        rng:      Some(SmallRng::seed_from_u64(seed)),
         rng_used: false,
     };
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
@@ -211,7 +211,7 @@ pub fn run_module_tests(
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
             // create a `TestHost` instance for each test
             let mut test_host = TestHost {
-                rng: Some(SmallRng::seed_from_u64(seed)),
+                rng:      Some(SmallRng::seed_from_u64(seed)),
                 // initially, set the flag to `false`, so it can be flipped later, once it was used
                 rng_used: false,
             };
@@ -242,7 +242,7 @@ pub fn generate_contract_schema_v0(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
-        rng: None,
+        rng:      None,
         rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
@@ -299,7 +299,7 @@ pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
-        rng: None,
+        rng:      None,
         rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
@@ -346,7 +346,7 @@ pub fn generate_contract_schema_v2(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
-        rng: None,
+        rng:      None,
         rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
@@ -393,7 +393,7 @@ pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host: TestHost<SmallRng> = TestHost {
-        rng: None,
+        rng:      None,
         rng_used: false,
     }; // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
