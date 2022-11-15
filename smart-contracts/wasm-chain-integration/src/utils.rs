@@ -194,7 +194,7 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
 
 /// Instantiates the module with an external function to report back errors and
 /// a seed that is used to instantiate a RNG for randomized testing. Then tries
-/// to run exported test-functions, which are present if compile with
+/// to run exported test-functions, which are present if compiled with
 /// the wasm-test feature.
 ///
 /// The return value is a list of pairs (test_name, result)
