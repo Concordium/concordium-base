@@ -74,6 +74,27 @@ pub struct TestHost<R> {
     rng_used: bool,
 }
 
+impl TestHost<SmallRng> {
+    /// Create a new `TestHost` instance without a RNG instance
+    pub fn uninitialized() -> Self {
+        TestHost {
+            rng:      None,
+            rng_used: false,
+        }
+    }
+}
+
+impl<R: RngCore> TestHost<R> {
+    /// Create a new `TestHost` instance with the given RNG and set the flag to
+    /// unused.
+    pub fn new(rng: R) -> Self {
+        TestHost {
+            rng:      Some(rng),
+            rng_used: false,
+        }
+    }
+}
+
 impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
     /// Simply ensure that there are no duplicates.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -201,20 +222,13 @@ pub fn run_module_tests(
     module_bytes: &[u8],
     seed: u64,
 ) -> ExecResult<Vec<(String, Option<ReportError>)>> {
-    let host = TestHost {
-        rng:      Some(SmallRng::seed_from_u64(seed)),
-        rng_used: false,
-    };
+    let host = TestHost::new(SmallRng::seed_from_u64(seed));
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
     let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            // create a `TestHost` instance for each test
-            let mut test_host = TestHost {
-                rng:      Some(SmallRng::seed_from_u64(seed)),
-                // initially, set the flag to `false`, so it can be flipped later, once it was used
-                rng_used: false,
-            };
+            // create a `TestHost` instance for each test with the usage flag set to `false`
+            let mut test_host = TestHost::new(SmallRng::seed_from_u64(seed));
             let res = artifact.run(&mut test_host, name, &[]);
             match res {
                 Ok(_) => out.push((test_name.to_owned(), None)),
@@ -241,10 +255,7 @@ pub fn run_module_tests(
 pub fn generate_contract_schema_v0(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host: TestHost<SmallRng> = TestHost {
-        rng:      None,
-        rng_used: false,
-    }; // The RNG is not relevant for schema generation
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
@@ -298,10 +309,7 @@ pub fn generate_contract_schema_v0(
 pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host: TestHost<SmallRng> = TestHost {
-        rng:      None,
-        rng_used: false,
-    }; // The RNG is not relevant for schema generation
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
@@ -345,10 +353,7 @@ pub fn generate_contract_schema_v1(
 pub fn generate_contract_schema_v2(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host: TestHost<SmallRng> = TestHost {
-        rng:      None,
-        rng_used: false,
-    }; // The RNG is not relevant for schema generation
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
@@ -392,10 +397,7 @@ pub fn generate_contract_schema_v2(
 pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host: TestHost<SmallRng> = TestHost {
-        rng:      None,
-        rng_used: false,
-    }; // The RNG is not relevant for schema generation
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
