@@ -128,7 +128,7 @@ impl TryFrom<String> for UrlText {
 }
 
 /// The status of whether a baking pool allows delegators to join.
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
+#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Debug, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 pub enum OpenStatus {
@@ -156,7 +156,7 @@ impl Deserial for OpenStatus {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Debug, Clone)]
 #[serde(rename_all = "camelCase", tag = "delegateType")]
 /// Target of delegation.
 pub enum DelegationTarget {
@@ -204,7 +204,7 @@ impl Deserial for DelegationTarget {
 /// Additional information about a baking pool.
 /// This information is added with the introduction of delegation in protocol
 /// version 4.
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Serial, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BakerPoolInfo {
     /// Whether the pool allows delegators.
@@ -501,7 +501,7 @@ impl BakerAggregationSignKey {
 }
 
 #[repr(transparent)]
-#[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
+#[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq)]
 /// Public key corresponding to [`BakerAggregationVerifyKey`].
 pub struct BakerAggregationVerifyKey {
     pub(crate) verify_key: aggregate_sig::PublicKey<AggregateSigPairing>,
@@ -532,7 +532,7 @@ impl BakerSignatureSignKey {
 }
 
 #[repr(transparent)]
-#[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
+#[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq, Eq)]
 /// A public key that corresponds to [`BakerSignatureVerifyKey`].
 pub struct BakerSignatureVerifyKey {
     pub(crate) verify_key: ed25519_dalek::PublicKey,
@@ -563,7 +563,7 @@ impl BakerElectionSignKey {
 }
 
 #[repr(transparent)]
-#[derive(SerdeBase16Serialize, Serialize, Clone, Debug)]
+#[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq, Eq)]
 /// A public key that corresponds to [`BakerElectionSignKey`].
 pub struct BakerElectionVerifyKey {
     pub(crate) verify_key: ecvrf::PublicKey,
@@ -763,7 +763,9 @@ impl std::fmt::Display for UpdateKeysIndex {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr)]
+#[derive(
+    Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, FromStr, PartialEq, Eq,
+)]
 #[serde(transparent)]
 /// Representation of the election difficulty as parts per `100_000`. The
 /// election difficulty is never more than `1`.
@@ -834,7 +836,7 @@ impl fmt::Display for PartsPerHundredThousands {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serialize, Debug, Clone, Copy)]
+#[derive(SerdeSerialize, SerdeDeserialize, PartialEq, Eq, Serialize, Debug, Clone, Copy)]
 pub struct CommissionRates {
     /// Fraction of finalization rewards charged by the pool owner.
     #[serde(rename = "finalizationCommission")]

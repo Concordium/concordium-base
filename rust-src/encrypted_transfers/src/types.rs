@@ -33,7 +33,7 @@ impl From<u64> for EncryptedAmountIndex {
     fn from(index: u64) -> Self { EncryptedAmountIndex { index } }
 }
 
-#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
+#[derive(PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize, Debug)]
 /// An encrypted amount, in two chunks in "little endian limbs". That is, the
 /// first chunk represents the low 32 bits of an amount, and the second chunk
 /// represents the high 32 bits. The JSON serialization of this is just base16
