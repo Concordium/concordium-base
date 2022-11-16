@@ -1049,7 +1049,7 @@ impl Type {
                 let idx = if variants.len() <= 256 {
                     u8::deserial(source)? as usize
                 } else {
-                    u32::deserial(source)? as usize
+                    u16::deserial(source)? as usize
                 };
                 let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
                 let fields = fields_ty.to_json(source)?;
