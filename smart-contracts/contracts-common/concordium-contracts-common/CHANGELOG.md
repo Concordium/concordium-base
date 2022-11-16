@@ -8,6 +8,7 @@
 - Add type `ExchangeRate` representing an exchange rate between two quantities.
 - Make the following functions `const`: `Duration::from_millis`, `Duration::from_seconds`, `Duration::from_minutes`, `Duration::from_hours` and `Duration::from_days`.
 - Add `is_account` and `is_contract` methods to the `Address` type.
+- Deserialized `Enum` variant indices were erronously output as `u32` when more than `256` enum variants are specified. These are now output as `u16` as intended.
 
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
