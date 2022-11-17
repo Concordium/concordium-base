@@ -206,20 +206,20 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
     }
 }
 
+/// The type of results returned after running a test.
+/// The value is a pair (test_name, result). The result is None if the test
+/// passed, or an error message and a boolean flag if it failed. The error
+/// message is the one reported to by report_error, or some internal invariant
+/// violation. The flag shows whether randomness was used.
+type TestResult = (String, Option<(ReportError, bool)>);
+
 /// Instantiates the module with an external function to report back errors and
 /// a seed that is used to instantiate a RNG for randomized testing. Then tries
 /// to run exported test-functions, which are present if compiled with
 /// the wasm-test feature.
 ///
-/// The return value is a list of pairs (test_name, result)
-/// The result is None if the test passed, or an error message and a boolean
-/// flag if it failed. The error message is the one reported to by report_error,
-/// or some internal invariant violation. The flag shows whether randomness was
-/// used.
-pub fn run_module_tests(
-    module_bytes: &[u8],
-    seed: u64,
-) -> ExecResult<Vec<(String, Option<(ReportError, bool)>)>> {
+/// The return value is a list of test results.
+pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestResult>> {
     let host = TestHost::new(SmallRng::seed_from_u64(seed));
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
     let mut out = Vec::with_capacity(artifact.export.len());
