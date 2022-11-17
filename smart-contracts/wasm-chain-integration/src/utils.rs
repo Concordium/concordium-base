@@ -3,6 +3,7 @@
 use crate::ExecResult;
 use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{from_bytes, schema, Cursor, Deserial};
+use rand::{prelude::*, RngCore};
 use std::{collections::BTreeMap, default::Default};
 use wasm_transform::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
@@ -64,10 +65,37 @@ impl<I> machine::Host<I> for TrapHost {
 }
 
 /// A host which traps for any function call apart from `report_error` which it
-/// prints to standard out.
-pub struct TestHost;
+/// prints to standard out and `get_random` that calls a random number
+/// generator.
+pub struct TestHost<R> {
+    /// A RNG for randomised testing.
+    rng:      Option<R>,
+    /// A flag set to `true` if the RNG was used.
+    rng_used: bool,
+}
 
-impl validate::ValidateImportExport for TestHost {
+impl TestHost<SmallRng> {
+    /// Create a new `TestHost` instance without a RNG instance.
+    pub const fn uninitialized() -> Self {
+        TestHost {
+            rng:      None,
+            rng_used: false,
+        }
+    }
+}
+
+impl<R: RngCore> TestHost<R> {
+    /// Create a new `TestHost` instance with the given RNG and set the flag to
+    /// unused.
+    pub fn new(rng: R) -> Self {
+        TestHost {
+            rng:      Some(rng),
+            rng_used: false,
+        }
+    }
+}
+
+impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
     /// Simply ensure that there are no duplicates.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn validate_import_function(
@@ -125,7 +153,7 @@ impl std::fmt::Display for ReportError {
     }
 }
 
-impl machine::Host<ArtifactNamedImport> for TestHost {
+impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
     type Interrupt = NoInterrupt;
 
     fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> {
@@ -158,37 +186,62 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
                 column,
                 msg
             })
+        } else if f.matches("concordium", "get_random") {
+            let size = unsafe { stack.pop_u32() } as usize;
+            let dest = unsafe { stack.pop_u32() } as usize;
+            ensure!(dest + size <= memory.len(), "Illegal memory access.");
+            self.rng_used = true;
+            match self.rng.as_mut() {
+                Some(r) => {
+                    r.try_fill_bytes(&mut memory[dest..dest + size])?;
+                    Ok(None)
+                }
+                None => {
+                    bail!("Expected an initialized RNG.");
+                }
+            }
         } else {
             bail!("Unsupported host function call.")
         }
     }
 }
 
-/// Instantiates the module with an external function to report back errors.
-/// Then tries to run exported test-functions, which are present if compile with
+/// The type of results returned after running a test.
+/// The value is a pair (test_name, result). The result is None if the test
+/// passed, or an error message and a boolean flag if it failed. The error
+/// message is the one reported to by report_error, or some internal invariant
+/// violation. The flag shows whether randomness was used.
+type TestResult = (String, Option<(ReportError, bool)>);
+
+/// Instantiates the module with an external function to report back errors and
+/// a seed that is used to instantiate a RNG for randomized testing. Then tries
+/// to run exported test-functions, which are present if compiled with
 /// the wasm-test feature.
 ///
-/// The return value is a list of pairs (test_name, result)
-/// The result is None if the test passed, or an error message
-/// if it failed. The error message is the one reported to by report_error, or
-/// some internal invariant violation.
-pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<ReportError>)>> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+/// The return value is a list of test results.
+pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestResult>> {
+    let host = TestHost::new(SmallRng::seed_from_u64(seed));
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
     let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            let res = artifact.run(&mut TestHost, name, &[]);
+            // create a `TestHost` instance for each test with the usage flag set to `false`
+            let mut test_host = TestHost::new(SmallRng::seed_from_u64(seed));
+            let res = artifact.run(&mut test_host, name, &[]);
             match res {
                 Ok(_) => out.push((test_name.to_owned(), None)),
                 Err(msg) => {
                     if let Some(err) = msg.downcast_ref::<ReportError>() {
-                        out.push((test_name.to_owned(), Some(err.clone())));
+                        out.push((test_name.to_owned(), Some((err.clone(), test_host.rng_used))));
                     } else {
                         out.push((
                             test_name.to_owned(),
-                            Some(ReportError::Other {
-                                msg: msg.to_string(),
-                            }),
+                            Some((
+                                ReportError::Other {
+                                    msg: msg.to_string(),
+                                },
+                                test_host.rng_used,
+                            )),
                         ))
                     }
                 }
@@ -203,7 +256,8 @@ pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<R
 pub fn generate_contract_schema_v0(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -256,7 +310,8 @@ pub fn generate_contract_schema_v0(
 pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -299,7 +354,8 @@ pub fn generate_contract_schema_v1(
 pub fn generate_contract_schema_v2(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -342,7 +398,8 @@ pub fn generate_contract_schema_v2(
 pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
+    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
 
     let mut contract_schemas = BTreeMap::new();
 

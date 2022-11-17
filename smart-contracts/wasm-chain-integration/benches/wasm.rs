@@ -266,13 +266,15 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.measurement_time(Duration::from_secs(10));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_INSTRUCTIONS)).unwrap();
-        let module = validate::validate_module(&TestHost, &skeleton).unwrap();
+        let module = validate::validate_module(&TestHost::uninitialized(), &skeleton).unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
         for n in [0, 1, 10000, 100000, 200000].iter() {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "foo_extern", &[Value::I64(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost::uninitialized(), "foo_extern", &[Value::I64(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -281,13 +283,15 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let skeleton =
             parse::parse_skeleton(black_box(CONTRACT_BYTES_MEMORY_INSTRUCTIONS)).unwrap();
-        let module = validate::validate_module(&TestHost, &skeleton).unwrap();
+        let module = validate::validate_module(&TestHost::uninitialized(), &skeleton).unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
         for n in [1, 10, 50, 100, 250, 500, 1000, 1024].iter() {
             group.bench_with_input(format!("allocate n = {} pages", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "foo_extern", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost::uninitialized(), "foo_extern", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -300,7 +304,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u32 n = {} times", n / 4), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u32", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost::uninitialized(), "write_u32", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -313,7 +319,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u64 n = {} times", n / 8), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u64", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost::uninitialized(), "write_u64", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -326,7 +334,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u32", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u32_u8", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost::uninitialized(), "write_u32_u8", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -339,7 +349,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u64", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact.run(&mut TestHost, "write_u64_u8", &[Value::I32(*m)]).is_ok(),
+                        artifact
+                            .run(&mut TestHost::uninitialized(), "write_u64_u8", &[Value::I32(*m)])
+                            .is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -362,7 +374,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             .throughput(criterion::Throughput::Elements(nrg));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
-        let mut module = validate::validate_module(&TestHost, &skeleton).unwrap();
+        let mut module = validate::validate_module(&TestHost::uninitialized(), &skeleton).unwrap();
         module.inject_metering().unwrap();
         let artifact = module.compile::<MeteringImport>().unwrap();
 

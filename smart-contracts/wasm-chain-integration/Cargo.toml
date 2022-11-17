@@ -37,6 +37,7 @@ futures = {version = "0.3", optional = true }
 arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
 wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
 wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main", optional = true }
+rand = { version = "=0.8", features = ["small_rng"] }
 
 [dependencies.wasm-transform]
 path = "../wasm-transform"
