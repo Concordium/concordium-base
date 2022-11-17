@@ -2,12 +2,15 @@
 
 ## Unreleased changes
 
-- Add support for smart contract v3 schemas.
+- Add support for smart contract V3 schemas.
 - Add type `ModuleReference` representing a module reference.
 - Implement `SchemaType` for `OwnedEntrypointName` and `OwnedParameter`.
 - Add type `ExchangeRate` representing an exchange rate between two quantities.
 - Make the following functions `const`: `Duration::from_millis`, `Duration::from_seconds`, `Duration::from_minutes`, `Duration::from_hours` and `Duration::from_days`.
 - Add `is_account` and `is_contract` methods to the `Address` type.
+- When deserializing according to `Enum` schema type, variant indices were
+  erroneously parsed as `u32` when more than 256 enum variants are specified.
+  These are now parsed as `u16` as intended.
 
 ## concordium-contracts-common 4.0.0 (2022-08-24)
 
