@@ -75,7 +75,7 @@ pub struct TestHost<R> {
 }
 
 impl TestHost<SmallRng> {
-    /// Create a new `TestHost` instance without a RNG instance
+    /// Create a new `TestHost` instance without a RNG instance.
     pub const fn uninitialized() -> Self {
         TestHost {
             rng:      None,
