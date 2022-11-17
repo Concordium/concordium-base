@@ -125,10 +125,10 @@ impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
 pub enum ReportError {
     /// An error reported by `report_error`
     Reported {
-        filename:   String,
-        line:       u32,
-        column:     u32,
-        msg:        String,
+        filename: String,
+        line:     u32,
+        column:   u32,
+        msg:      String,
     },
     /// Some other source of error. We only have the description, and no
     /// location.
@@ -212,9 +212,10 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
 /// the wasm-test feature.
 ///
 /// The return value is a list of pairs (test_name, result)
-/// The result is None if the test passed, or an error message
-/// if it failed. The error message is the one reported to by report_error, or
-/// some internal invariant violation.
+/// The result is None if the test passed, or an error message and a boolean
+/// flag if it failed. The error message is the one reported to by report_error,
+/// or some internal invariant violation. The flag shows whether randomness was
+/// used.
 pub fn run_module_tests(
     module_bytes: &[u8],
     seed: u64,
@@ -235,9 +236,12 @@ pub fn run_module_tests(
                     } else {
                         out.push((
                             test_name.to_owned(),
-                            Some((ReportError::Other {
-                                msg: msg.to_string(),
-                            }, test_host.rng_used)),
+                            Some((
+                                ReportError::Other {
+                                    msg: msg.to_string(),
+                                },
+                                test_host.rng_used,
+                            )),
                         ))
                     }
                 }
