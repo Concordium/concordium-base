@@ -76,7 +76,7 @@ pub struct TestHost<R> {
 
 impl TestHost<SmallRng> {
     /// Create a new `TestHost` instance without a RNG instance
-    pub fn uninitialized() -> Self {
+    pub const fn uninitialized() -> Self {
         TestHost {
             rng:      None,
             rng_used: false,
@@ -125,7 +125,6 @@ impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
 pub enum ReportError {
     /// An error reported by `report_error`
     Reported {
-        quickcheck: bool,
         filename:   String,
         line:       u32,
         column:     u32,
@@ -146,7 +145,6 @@ impl std::fmt::Display for ReportError {
                 line,
                 column,
                 msg,
-                quickcheck: _,
             } => write!(f, "{}, {}:{}:{}", msg, filename, line, column),
             ReportError::Other {
                 msg,
@@ -183,7 +181,6 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
                 std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
                     .to_owned();
             bail!(ReportError::Reported {
-                quickcheck: self.rng_used,
                 filename,
                 line,
                 column,
@@ -221,7 +218,7 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
 pub fn run_module_tests(
     module_bytes: &[u8],
     seed: u64,
-) -> ExecResult<Vec<(String, Option<ReportError>)>> {
+) -> ExecResult<Vec<(String, Option<(ReportError, bool)>)>> {
     let host = TestHost::new(SmallRng::seed_from_u64(seed));
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
     let mut out = Vec::with_capacity(artifact.export.len());
@@ -234,13 +231,13 @@ pub fn run_module_tests(
                 Ok(_) => out.push((test_name.to_owned(), None)),
                 Err(msg) => {
                     if let Some(err) = msg.downcast_ref::<ReportError>() {
-                        out.push((test_name.to_owned(), Some(err.clone())));
+                        out.push((test_name.to_owned(), Some((err.clone(), test_host.rng_used))));
                     } else {
                         out.push((
                             test_name.to_owned(),
-                            Some(ReportError::Other {
+                            Some((ReportError::Other {
                                 msg: msg.to_string(),
-                            }),
+                            }, test_host.rng_used)),
                         ))
                     }
                 }
