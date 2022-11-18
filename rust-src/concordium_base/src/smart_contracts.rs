@@ -15,7 +15,9 @@ use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
 use thiserror::Error;
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Copy, Clone, Display)]
+#[derive(
+    SerdeSerialize, SerdeDeserialize, Debug, Copy, Clone, Display, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[serde(try_from = "u8", into = "u8")]
 #[repr(u8)]
 /// Version of the module. This determines the chain API that the module can
@@ -75,7 +77,20 @@ pub enum ModuleRefMarker {}
 /// This reference is used when creating new instances.
 pub type ModuleRef = hashes::HashBytes<ModuleRefMarker>;
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Clone, Debug, AsRef, From, Into)]
+#[derive(
+    SerdeSerialize,
+    SerdeDeserialize,
+    Serial,
+    Clone,
+    Debug,
+    AsRef,
+    From,
+    Into,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+)]
 #[serde(transparent)]
 /// Unparsed Wasm module source.
 pub struct ModuleSource {
@@ -101,7 +116,7 @@ impl Deserial for ModuleSource {
     }
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serialize, Clone, Debug)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 /// Unparsed module with a version indicating what operations are allowed.
 pub struct WasmModule {
     pub version: WasmVersion,

@@ -1671,7 +1671,7 @@ pub enum CredentialType {
 /// Account credential with values and commitments, but without proofs.
 /// Serialization must match the serializaiton of `AccountCredential` in
 /// Haskell.
-#[derive(SerdeSerialize, SerdeDeserialize, Debug)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "type", content = "contents")]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",

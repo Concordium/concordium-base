@@ -74,7 +74,7 @@ impl Deserial for Version {
 /// which is serialized using variable integer encoding.
 /// The caller is responsible for ensuring the data structure `T`
 /// is compatible with the version number.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Eq, PartialEq, SerdeSerialize, SerdeDeserialize)]
 pub struct Versioned<T> {
     #[serde(rename = "v")]
     pub version: Version,
