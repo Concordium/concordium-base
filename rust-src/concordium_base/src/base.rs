@@ -792,6 +792,10 @@ impl ElectionDifficulty {
     }
 }
 
+impl From<ElectionDifficulty> for rust_decimal::Decimal {
+    fn from(ed: ElectionDifficulty) -> Self { ed.parts_per_hundred_thousands.into() }
+}
+
 #[repr(transparent)]
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Into)]
 /// A fraction between 0 and 1 with a precision of 1/100_000.
@@ -814,6 +818,10 @@ impl PartsPerHundredThousands {
     /// Construct a new fraction, but does not check that the resulting fraction
     /// is valid.
     pub fn new_unchecked(parts: u32) -> Self { Self { parts } }
+}
+
+impl From<PartsPerHundredThousands> for rust_decimal::Decimal {
+    fn from(pp: PartsPerHundredThousands) -> Self { rust_decimal::Decimal::new(pp.parts.into(), 5) }
 }
 
 impl Serial for PartsPerHundredThousands {
