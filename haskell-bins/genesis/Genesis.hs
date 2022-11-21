@@ -381,7 +381,7 @@ printTimeParametersV1 :: TimeParameters 'ChainParametersV1 -> IO ()
 printTimeParametersV1 tp = do
     putStrLn $ "  - time parameters:"
     putStrLn $ "    + reward period length (in epochs): " ++ show (tp ^. tpRewardPeriodLength)
-    putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpRewardPeriodLength)
+    putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpMintPerPayday)
 
 printPoolParametersV1 :: PoolParameters 'ChainParametersV1 -> IO ()
 printPoolParametersV1 pp = do
