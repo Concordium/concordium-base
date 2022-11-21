@@ -2094,6 +2094,16 @@ pub mod construct {
     }
 
     /// Register the sender account as a baker.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
     pub fn add_baker(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2123,6 +2133,16 @@ pub mod construct {
     }
 
     /// Update keys of the baker associated with the sender account.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
     pub fn update_baker_keys(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2147,6 +2167,16 @@ pub mod construct {
     }
 
     /// Deregister the account as a baker.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
     pub fn remove_baker(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2168,6 +2198,16 @@ pub mod construct {
     }
 
     /// Update the amount the account stakes for being a baker.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
     pub fn update_baker_stake(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2191,6 +2231,16 @@ pub mod construct {
 
     /// Update whether the earnings are automatically added to the baker's stake
     /// or not.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
     pub fn update_baker_restake_earnings(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2532,6 +2582,17 @@ pub mod send {
     }
 
     /// Register the sender account as a baker.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
+    #[allow(deprecated)]
     pub fn add_baker(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2554,6 +2615,17 @@ pub mod send {
     }
 
     /// Update keys of the baker associated with the sender account.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
+    #[allow(deprecated)]
     pub fn update_baker_keys(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2565,6 +2637,17 @@ pub mod send {
     }
 
     /// Deregister the account as a baker.
+    ///
+    /// **Note that this transaction only applies to protocol versions 1-3.**
+    /// Use [`configure_baker`](Self::configure_baker) instead for protocols
+    /// after 4.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
+    #[allow(deprecated)]
     pub fn remove_baker(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2575,6 +2658,13 @@ pub mod send {
     }
 
     /// Update the amount the account stakes for being a baker.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
+    #[allow(deprecated)]
     pub fn update_baker_stake(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2588,6 +2678,13 @@ pub mod send {
 
     /// Update whether the earnings are automatically added to the baker's stake
     /// or not.
+    #[deprecated(
+        since = "2.0.0",
+        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+                instead."
+    )]
+    #[doc(hidden)]
+    #[allow(deprecated)]
     pub fn update_baker_restake_earnings(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
