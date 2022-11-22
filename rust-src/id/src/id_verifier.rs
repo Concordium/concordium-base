@@ -51,8 +51,8 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 /// The function outputs a bool, indicating whether the proof is correct or not,
 /// i.e., wether is attribute inside the commitment lies in [lower,upper).
 /// This is done by verifying that the attribute inside the commitment satisfies
-/// that attribute-upper+2^n and attribute-lower lie in [0, 2^n).
-/// For further details about this technique, see page 15 in https://arxiv.org/pdf/1907.06381.pdf.
+/// that `attribute-upper+2^n` and attribute-lower lie in `[0, 2^n)`.
+/// For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
