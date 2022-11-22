@@ -1,4 +1,6 @@
 use crate::{constants, to_bytes, Serial};
+#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
+use alloc::{boxed::Box, collections::BTreeMap};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
@@ -13,6 +15,8 @@ use quickcheck::Gen;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
+#[cfg(all(feature = "std", feature = "concordium-quickcheck"))]
+use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
@@ -722,15 +726,12 @@ impl quickcheck::Arbitrary for ContractAddress {
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         let index = self.index;
         let subindex = self.subindex;
-        let iter = index
-            .shrink()
-            .map(move |i| {
-                subindex.shrink().map(move |si| ContractAddress {
-                    index:    i,
-                    subindex: si,
-                })
+        let iter = index.shrink().flat_map(move |i| {
+            subindex.shrink().map(move |si| ContractAddress {
+                index:    i,
+                subindex: si,
             })
-            .flatten();
+        });
         Box::new(iter)
     }
 }
@@ -1421,17 +1422,14 @@ impl quickcheck::Arbitrary for AttributeValue {
         let size = self.inner[0];
         let data: &[u8] = &self.inner[1..=size as usize];
         let vs = data.to_vec().shrink();
-        Box::new(
-            vs.map(|v| {
-                let mut inner = [0u8; 32];
-                inner[1..=v.len() as usize].copy_from_slice(&v);
-                inner[0] = v.len() as u8;
-                AttributeValue {
-                    inner,
-                }
-            })
-            .into_iter(),
-        )
+        Box::new(vs.map(|v| {
+            let mut inner = [0u8; 32];
+            inner[1..=v.len() as usize].copy_from_slice(&v);
+            inner[0] = v.len() as u8;
+            AttributeValue {
+                inner,
+            }
+        }))
     }
 }
 
@@ -1559,7 +1557,6 @@ fn gen_no_dup_kv_vec<A: quickcheck::Arbitrary + Ord, B: quickcheck::Arbitrary>(
     g: &mut Gen,
     size: usize,
 ) -> Vec<(A, B)> {
-    use std::collections::BTreeMap;
     let mut m: BTreeMap<A, B> = BTreeMap::new();
     for _ in 0..size {
         let k = A::arbitrary(g);
@@ -1591,14 +1588,12 @@ fn gen_range_u8(g: &mut Gen, range: core::ops::Range<u8>) -> u8 {
 /// validity date `valid_to`.
 #[cfg(feature = "concordium-quickcheck")]
 fn valid_owned_policy(op: &OwnedPolicy) -> bool {
-    match op {
-        OwnedPolicy {
-            identity_provider: _,
-            created_at,
-            valid_to,
-            items: _,
-        } => created_at <= valid_to,
-    }
+    let OwnedPolicy {
+        created_at,
+        valid_to,
+        ..
+    } = op;
+    created_at <= valid_to
 }
 
 #[cfg(feature = "concordium-quickcheck")]
@@ -1618,7 +1613,7 @@ impl quickcheck::Arbitrary for OwnedPolicy {
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         let identity_provider = self.identity_provider;
-        let created_at = self.created_at.clone();
+        let created_at = self.created_at;
         let valid_to = self.valid_to;
         let items = self.items.clone();
         let iter = identity_provider
