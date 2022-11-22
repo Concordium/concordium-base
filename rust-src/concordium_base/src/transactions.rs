@@ -2100,7 +2100,7 @@ pub mod construct {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2139,7 +2139,7 @@ pub mod construct {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2173,7 +2173,7 @@ pub mod construct {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2204,7 +2204,7 @@ pub mod construct {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2237,7 +2237,7 @@ pub mod construct {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2588,7 +2588,7 @@ pub mod send {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2621,7 +2621,7 @@ pub mod send {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2643,7 +2643,7 @@ pub mod send {
     /// after 4.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2660,7 +2660,7 @@ pub mod send {
     /// Update the amount the account stakes for being a baker.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
@@ -2680,7 +2680,7 @@ pub mod send {
     /// or not.
     #[deprecated(
         since = "2.0.0",
-        note = "This transaction only applies to protocol version 1-3. Use configure_baker \
+        note = "This transaction only applies to protocol versions 1-3. Use configure_baker \
                 instead."
     )]
     #[doc(hidden)]
