@@ -43,6 +43,7 @@ jobs:
           - "derive-serde"
           - "fuzz"
           - "sdk"
+          - "concordium-quickcheck"
         target:
           - wasm32-unknown-unknown
           - x86_64-unknown-linux-gnu
