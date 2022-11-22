@@ -187,7 +187,7 @@ pub fn prove_ownership_of_account(
 /// The function outputs a proof that the attribute is in the given range, i.e.
 /// that lower <= attribute < upper.
 /// This is done by proving that attribute-upper+2^n and attribute-lower lie in
-/// [0, 2^n). For further details about this technique, see page 15 in https://arxiv.org/pdf/1907.06381.pdf.
+/// [0, 2^n). For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     gens: &Generators<C>,
     keys: &PedersenKey<C>,

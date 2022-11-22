@@ -425,7 +425,7 @@ impl AuthorizationsV1 {
 }
 
 /// Together with [`Authorizations`] this defines a type family allowing us to
-/// map [`ChainParametersVersion0`] and [`ChainParametersVersion1`] to the
+/// map [`ChainParameterVersion0`] and [`ChainParameterVersion1`] to the
 /// corresponding `Authorizations` version.
 pub trait AuthorizationsFamily {
     type Output: std::fmt::Debug;
