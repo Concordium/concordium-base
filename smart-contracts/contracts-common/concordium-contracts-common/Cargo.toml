@@ -13,6 +13,8 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 arbitrary = { version = "0.4", features = ["derive"], optional = true }
+getrandom = { version = "0.2", features = ["custom"], optional = true }
+quickcheck = { version = "1.0.3", optional = true }
 
 [dependencies.hashbrown]
 version = "0.11"
@@ -72,6 +74,7 @@ version = "0.4"
 default = ["std"]
 
 std = ["fnv/std"]
+concordium-quickcheck = ["getrandom", "quickcheck"]
 derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex"]
 sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
