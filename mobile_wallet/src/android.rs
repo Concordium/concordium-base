@@ -8,7 +8,7 @@ use crate::{
     create_id_request_and_private_data_v1, create_pub_to_sec_transfer, create_sec_to_pub_transfer,
     create_transfer, decrypt_encrypted_amount, generate_accounts, generate_baker_keys,
     generate_recovery_request, get_account_keys_and_randomness, get_identity_keys_and_randomness,
-    parameter_to_json, serialize_token_transfer_parameters, sign_message,
+    parameter_to_json, prove_id_statement, serialize_token_transfer_parameters, sign_message,
 };
 use jni::{
     objects::{JClass, JString, JValue},
