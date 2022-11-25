@@ -738,8 +738,38 @@ The returned value is a JSON object with the following fields:
 
 - `"transaction"` ... a hex encoding of the serialized transaction without signatures, i.e. the serialized header, type and payload.
 
-An example input to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
+If the `type` is `Update` then the payload must have the following fields
+- `amount` (string containing a u64), the amount of CCD to transfer with the call
+- `address`, an object with fields `index` and `subindex`, both u64.
+- `receiveName`, string, the name of the entrypoint to invoke
+- `message`, the parameter to invoke the contract with, encoded as a hex string
+
+Additionally it must have either a field `maxEnergy` or
+`maxContractExecutionEnergy`. Both are `u64`. The `maxEnergy` field specifies
+the total energy the transaction can spend. If `maxContractExecutionEnergy` is
+specified then it only specifies the maximum energy for the execution. The
+library will add the overhead based on the number of signatures and the size of
+the transaction to the total energy allowed to be spent by the transaction.
+
+An example payload for an `Update` type is 
+```json
+{
+  "amount": "0",
+  "address": {
+    "index": 1673,
+    "subindex": 0
+  },
+  "receiveName": "CIS1-NFT.transfer",
+  "message": "010001010100000000000000004dcc43ed4d3bd27e2c0918ee75b61e61807d77cf587f7b447996b983971a56f000aa05dd88c26078e6315d051fa1e80cf67e9fcec66709cc2688e959864cef2ca50000",
+  "maxEnergy": 1000
+}
+```
+
+An example with input with `maxContractExecutionEnergy` to this request is in the file [create_account_transaction-input.json](files/create_account_transaction-input.json).
 An example output to this request is in the file [create_account_transaction-output.json](files/create_account_transaction-output.json).
+
+An example input with `maxEnergy` to this request is in the file [2-create_account_transaction-input.json](files/2-create_account_transaction-input.json).
+An example output to this request is in the file [2-create_account_transaction-output.json](files/2-create_account_transaction-output.json).
 
 ## serialize_token_transfer_parameters
 Semantics: Converts the given parameters into a serialized base16 string that can be used to create an update smart contract transaction's payload.
