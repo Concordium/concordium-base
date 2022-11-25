@@ -22,7 +22,7 @@ use concordium_base::{
     smart_contracts::{OwnedReceiveName, Parameter},
     transactions::{
         self,
-        construct::{init_contract, update_contract, PreAccountTransaction},
+        construct::{GivenEnergy, PreAccountTransaction},
         ConfigureBakerKeysPayload, ConfigureBakerPayload, ConfigureDelegationPayload,
         ExactSizeTransactionSigner, InitContractPayload, Memo, TransactionSigner,
         UpdateContractPayload,
@@ -246,19 +246,30 @@ fn sign_message_aux(input: &str) -> anyhow::Result<String> {
 }
 
 #[derive(common::SerdeDeserialize)]
+/// Either total energy that can be spent by the transaction, or just the energy
+/// for execution. Which one is more suitable to specify depenends a bit on the
+/// context, so we support both.
+enum SpecifiedEnergy {
+    #[serde(rename = "maxContractExecutionEnergy")]
+    ExecutionOnly(Energy),
+    #[serde(rename = "maxEnergy")]
+    Total(Energy),
+}
+
+#[derive(common::SerdeDeserialize)]
 #[serde(tag = "type", content = "payload")]
 enum JSONPayload {
     InitContract {
         #[serde(flatten)]
         payload: InitContractPayload,
-        #[serde(rename = "maxContractExecutionEnergy")]
-        energy:  Energy,
+        #[serde(flatten)]
+        energy:  SpecifiedEnergy,
     },
     Update {
         #[serde(flatten)]
         payload: UpdateContractPayload,
-        #[serde(rename = "maxContractExecutionEnergy")]
-        energy:  Energy,
+        #[serde(flatten)]
+        energy:  SpecifiedEnergy,
     },
     Transfer {
         amount: Amount,
@@ -282,22 +293,32 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let ctx: TransactionContext = from_value(v)?;
     let pre_tx = match ctx.payload {
-        JSONPayload::Update { payload, energy } => update_contract(
-            ctx.keys.num_keys(),
-            ctx.from,
-            ctx.nonce,
-            ctx.expiry,
-            payload,
-            energy,
-        ),
-        JSONPayload::InitContract { payload, energy } => init_contract(
-            ctx.keys.num_keys(),
-            ctx.from,
-            ctx.nonce,
-            ctx.expiry,
-            payload,
-            energy,
-        ),
+        JSONPayload::Update { payload, energy } => {
+            let energy = match energy {
+                SpecifiedEnergy::ExecutionOnly(energy) => GivenEnergy::Add {
+                    energy,
+                    num_sigs: ctx.keys.num_keys(),
+                },
+                SpecifiedEnergy::Total(e) => GivenEnergy::Absolute(e),
+            };
+            let payload = transactions::Payload::Update { payload };
+            transactions::construct::make_transaction(
+                ctx.from, ctx.nonce, ctx.expiry, energy, payload,
+            )
+        }
+        JSONPayload::InitContract { payload, energy } => {
+            let energy = match energy {
+                SpecifiedEnergy::ExecutionOnly(energy) => GivenEnergy::Add {
+                    energy,
+                    num_sigs: ctx.keys.num_keys(),
+                },
+                SpecifiedEnergy::Total(e) => GivenEnergy::Absolute(e),
+            };
+            let payload = transactions::Payload::InitContract { payload };
+            transactions::construct::make_transaction(
+                ctx.from, ctx.nonce, ctx.expiry, energy, payload,
+            )
+        }
         JSONPayload::Transfer { amount, to } => transactions::construct::transfer(
             ctx.keys.num_keys(),
             ctx.from,

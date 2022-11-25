@@ -1,0 +1,30 @@
+{
+    "from": "3ZFGxLtnUUSJGW2WqjMh1DDjxyq5rnytCwkSqxFTpsWSFdQnNn",
+    "expiry": 1585699200,
+    "nonce": 1,
+    "keys": {
+        "keys": {
+            "0": {
+                "keys": {
+                    "0": {
+                        "signKey": "ddd7c42e98b3045b0c4354c6a04b47e1b82d80f5cd5519e15611c1650cc9b688",
+                        "verifyKey": "aea59e7e13baead319f9a86c951b43cc9e44a5e7a559aac7d8011106e4e2b7e5"
+                    }
+                },
+                "threshold": 1
+            }
+        },
+        "threshold": 1
+    },
+    "type": "Update",
+    "payload": {
+        "amount": "0",
+        "address": {
+            "index": 1673,
+            "subindex": 0
+        },
+        "receiveName": "CIS1-NFT.transfer",
+        "message": "010001010100000000000000004dcc43ed4d3bd27e2c0918ee75b61e61807d77cf587f7b447996b983971a56f000aa05dd88c26078e6315d051fa1e80cf67e9fcec66709cc2688e959864cef2ca50000",
+        "maxEnergy": 1000
+    }
+}

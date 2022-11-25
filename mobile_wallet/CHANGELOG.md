@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.0
+- Support `maxEnergy` in addition to `maxContractExecutionEnergy` in `Update`
+  and `Init` payloads in the `create_account_transaction` function.
+
 ## 0.21.0
 - Added function for proving id statements.
 
