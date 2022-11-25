@@ -143,6 +143,7 @@ jobs:
         toolchain: ${{ matrix.plan.rust }}
         override: true
         components: clippy
+        target: aarch64-linux-android
     # Lightweight check that Rust code compiles.
     # Catching failure here avoids restoring of Haskell caches.
     - name: Check that all Rust targets build
@@ -151,6 +152,7 @@ jobs:
         cargo check --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
         cargo check --manifest-path idiss/Cargo.toml --workspace
         cargo check --manifest-path mobile_wallet/Cargo.toml --workspace
+        cargo check --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
         cargo check --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
     # Rust code linting.
     # Could be run in parallel in a separate job
