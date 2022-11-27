@@ -640,12 +640,16 @@ impl BakerCredentials {
 }
 
 // FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
-#[derive(SerdeBase16Serialize, Serialize, Debug, Clone, Copy)]
+#[derive(SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef)]
 /// A registration ID of a credential. This ID is generated from the user's PRF
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
 /// the same PRF key, but different counter values cannot easily be linked
 /// together.
 pub struct CredentialRegistrationID(id::constants::ArCurve);
+
+impl CredentialRegistrationID {
+    pub fn new(g: id::constants::ArCurve) -> Self { Self(g) }
+}
 
 impl fmt::Display for CredentialRegistrationID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

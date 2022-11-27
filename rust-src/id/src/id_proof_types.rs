@@ -31,7 +31,7 @@ pub struct RevealAttributeStatement {
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a range. The statement is that the attribute value lies in `[lower,
 /// upper)` in the scalar field.
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -52,7 +52,7 @@ pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scala
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a set of attributes.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -70,7 +70,7 @@ pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// not in a set of attributes.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -89,7 +89,7 @@ pub struct AttributeNotInSetStatement<C: Curve, AttributeType: Attribute<C::Scal
 
 /// Statements are composed of one or more atomic statements.
 /// This type defines the different types of atomic statements.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
 SerdeSerialize",
@@ -182,7 +182,7 @@ pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
 }
 
 /// A statement is a list of atomic statements.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"

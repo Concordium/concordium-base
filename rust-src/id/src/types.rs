@@ -379,9 +379,9 @@ impl fmt::Display for AttributeTag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let l: usize = (*self).into();
         if l < ATTRIBUTE_NAMES.len() {
-            write!(f, "{}", ATTRIBUTE_NAMES[l])
+            f.write_str(ATTRIBUTE_NAMES[l])
         } else {
-            Err(fmt::Error)
+            write!(f, "UNNAMED#{}", l)
         }
     }
 }
@@ -393,7 +393,11 @@ impl std::str::FromStr for AttributeTag {
         if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == s) {
             Ok(AttributeTag(idx as u8))
         } else {
-            Err(anyhow!("{} tag unknown.", s))
+            match s.strip_prefix("UNNAMED#").and_then(|x| x.parse().ok()) {
+                Some(num) if num < 254 => Ok(AttributeTag(num)), // 254 is the capacity of the
+                // BLS curve field
+                _ => Err(anyhow!("Unrecognized attribute tag.")),
+            }
         }
     }
 }
