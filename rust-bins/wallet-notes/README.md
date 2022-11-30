@@ -697,7 +697,7 @@ must be a valid JSON object with fields
 
 - `"receiveName"` ... the name of the receive function that the parameter is for.
 
-- `"schema"` ... hex encoded schema for the corresponding smart contract.
+- `"schema"` ... base64 encoded schema for the corresponding smart contract.
 
 - `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 

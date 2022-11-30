@@ -201,7 +201,7 @@ fn get_parameter_as_json(
     schema: &str,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
-    let schema_bytes = hex::decode(schema)?;
+    let schema_bytes = base64::decode(schema)?;
 
     let contract_name = receive_name.as_receive_name().contract_name();
     let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();

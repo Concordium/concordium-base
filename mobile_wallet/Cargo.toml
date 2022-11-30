@@ -1,6 +1,6 @@
 [package]
 name = "mobile_wallet"
-version = "0.22.0"
+version = "0.23.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -22,6 +22,7 @@ either = "1.6"
 sha2 = "0.10"
 libc = "0.2"
 thiserror = "1.0"
+base64 = "0.13"
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
