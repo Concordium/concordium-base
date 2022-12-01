@@ -854,6 +854,10 @@ impl<'a> ContractName<'a> {
     #[inline(always)]
     pub fn get_chain_name(self) -> &'a str { self.0 }
 
+    /// Convert a `ContractName` to its owned counterpart. This is an expensive
+    /// operation that requires memory allocation.
+    pub fn to_owned(&self) -> OwnedContractName { OwnedContractName(self.0.to_owned()) }
+
     /// Extract the contract name by removing the "init_" prefix.
     #[inline(always)]
     pub fn contract_name(self) -> &'a str { self.get_chain_name().strip_prefix("init_").unwrap() }
@@ -1094,6 +1098,10 @@ impl<'a> EntrypointName<'a> {
         is_valid_entrypoint_name(name)?;
         Ok(Self(name))
     }
+
+    /// Convert a `EntrypointName` to its owned counterpart. This is an
+    /// expensive operation that requires memory allocation.
+    pub fn to_owned(&self) -> OwnedEntrypointName { OwnedEntrypointName(self.0.to_owned()) }
 
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is

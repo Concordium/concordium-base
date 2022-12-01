@@ -3,6 +3,7 @@
 ## Unreleased changes
 
 - Implement `quickcheck::Arbitrary` for `Timestamp`, `AccountAddress`, `ContractAddress`, `Address`,  `ChainMetadata`, `AttributeTag`, `AttributeValue` and `OwnedPolicy`.
+- Add `to_owned` method to `EntrypointName` and `ContractName` types.
 
 ## concordium-contracts-common 5.0.0 (2022-11-21)
 
