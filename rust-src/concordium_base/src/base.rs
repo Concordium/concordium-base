@@ -677,7 +677,7 @@ pub struct UpdateKeyPair {
         deserialize_with = "crypto_common::base16_decode"
     )]
     pub secret: ed25519_dalek::SecretKey,
-    #[serde(rename = "verifyKey")]
+    #[serde(flatten)]
     pub public: UpdatePublicKey,
 }
 
