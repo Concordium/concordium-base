@@ -427,6 +427,36 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
             .push(AtomicStatement::AttributeInSet { statement });
         Some(self)
     }
+
+    /// For stating that the user's nationality is in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document issuer in" statement.
+    pub fn nationality_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
+        let statement = AttributeInSetStatement {
+            attribute_tag: AttributeTag::from_str("nationality").ok()?,
+            set,
+            _phantom: PhantomData::default(),
+        };
+        self.statements
+            .push(AtomicStatement::AttributeInSet { statement });
+        Some(self)
+    }
+
+    /// For stating that the user's nationality does not lie in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document issuer not in" statement.
+    pub fn nationality_not_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
+        let statement = AttributeInSetStatement {
+            attribute_tag: AttributeTag::from_str("nationality").ok()?,
+            set,
+            _phantom: PhantomData::default(),
+        };
+        self.statements
+            .push(AtomicStatement::AttributeInSet { statement });
+        Some(self)
+    }
 }
 
 /// A proof of a statement, composed of one or more atomic proofs.
