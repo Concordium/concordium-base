@@ -265,8 +265,8 @@ impl Statement<G1, AttributeKind> {
         use chrono::Datelike;
         let now = chrono::Utc::now();
         let year = u64::try_from(now.year()).ok()?;
-        let lower_year = year.checked_sub(lower)?;
-        let upper_year = year.checked_sub(upper)?;
+        let lower_year = year.checked_sub(upper)?;
+        let upper_year = year.checked_sub(lower)?;
         let lower_date = format!("{:04}{:02}{:02}", lower_year, now.month(), now.day());
         let upper_date = format!("{:04}{:02}{:02}", upper_year, now.month(), now.day());
         let lower = AttributeKind(lower_date);
