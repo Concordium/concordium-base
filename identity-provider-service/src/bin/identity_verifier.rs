@@ -224,6 +224,9 @@ async fn main() {
                     };
                     input.remove("expiry");
 
+                    // Remove all attributes that are empty strings
+                    input.retain(|_, v| !v.is_empty());
+
                     // The signature was valid, so save the received attributes to the file
                     // database.
                     let file = match std::fs::File::create(
