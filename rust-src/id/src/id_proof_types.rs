@@ -448,13 +448,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
     /// `statement` is composed by the statements in `self` and
     /// the "document issuer not in" statement.
     pub fn nationality_not_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
-        let statement = AttributeInSetStatement {
+        let statement = AttributeNotInSetStatement {
             attribute_tag: AttributeTag::from_str("nationality").ok()?,
             set,
             _phantom: PhantomData::default(),
         };
         self.statements
-            .push(AtomicStatement::AttributeInSet { statement });
+            .push(AtomicStatement::AttributeNotInSet { statement });
         Some(self)
     }
 }
