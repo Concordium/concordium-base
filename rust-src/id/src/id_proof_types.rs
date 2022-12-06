@@ -31,7 +31,7 @@ pub struct RevealAttributeStatement {
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a range. The statement is that the attribute value lies in `[lower,
 /// upper)` in the scalar field.
-#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -52,7 +52,7 @@ pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scala
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a set of attributes.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -70,7 +70,7 @@ pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// not in a set of attributes.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -89,7 +89,7 @@ pub struct AttributeNotInSetStatement<C: Curve, AttributeType: Attribute<C::Scal
 
 /// Statements are composed of one or more atomic statements.
 /// This type defines the different types of atomic statements.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
 SerdeSerialize",
@@ -182,7 +182,7 @@ pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
 }
 
 /// A statement is a list of atomic statements.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -265,8 +265,8 @@ impl Statement<G1, AttributeKind> {
         use chrono::Datelike;
         let now = chrono::Utc::now();
         let year = u64::try_from(now.year()).ok()?;
-        let lower_year = year.checked_sub(lower)?;
-        let upper_year = year.checked_sub(upper)?;
+        let lower_year = year.checked_sub(upper)?;
+        let upper_year = year.checked_sub(lower)?;
         let lower_date = format!("{:04}{:02}{:02}", lower_year, now.month(), now.day());
         let upper_date = format!("{:04}{:02}{:02}", upper_year, now.month(), now.day());
         let lower = AttributeKind(lower_date);
@@ -418,13 +418,43 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
     /// `statement` is composed by the statements in `self` and
     /// the "document issuer not in" statement.
     pub fn document_issuer_not_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
-        let statement = AttributeInSetStatement {
+        let statement = AttributeNotInSetStatement {
             attribute_tag: AttributeTag::from_str("idDocIssuer").ok()?,
             set,
             _phantom: PhantomData::default(),
         };
         self.statements
+            .push(AtomicStatement::AttributeNotInSet { statement });
+        Some(self)
+    }
+
+    /// For stating that the user's nationality is in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document issuer in" statement.
+    pub fn nationality_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
+        let statement = AttributeInSetStatement {
+            attribute_tag: AttributeTag::from_str("nationality").ok()?,
+            set,
+            _phantom: PhantomData::default(),
+        };
+        self.statements
             .push(AtomicStatement::AttributeInSet { statement });
+        Some(self)
+    }
+
+    /// For stating that the user's nationality does not lie in a set.
+    /// The function returns `Some(statement)` where
+    /// `statement` is composed by the statements in `self` and
+    /// the "document issuer not in" statement.
+    pub fn nationality_not_in(mut self, set: BTreeSet<AttributeType>) -> Option<Self> {
+        let statement = AttributeNotInSetStatement {
+            attribute_tag: AttributeTag::from_str("nationality").ok()?,
+            set,
+            _phantom: PhantomData::default(),
+        };
+        self.statements
+            .push(AtomicStatement::AttributeNotInSet { statement });
         Some(self)
     }
 }

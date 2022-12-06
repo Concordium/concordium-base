@@ -117,7 +117,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     /// - `commitments` - the on-chain commitments of the relevant credential
     /// The function returns `true` if the statement is true.
     /// If the statement is false, the function returns false with overwhelming
-    /// probabilty.
+    /// probability.
     pub fn verify(
         &self,
         challenge: &[u8],
@@ -125,14 +125,37 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         commitments: &CredentialDeploymentCommitments<C>,
         proofs: &Proof<C, AttributeType>,
     ) -> bool {
+        self.statement
+            .verify(challenge, global, &self.credential, commitments, proofs)
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> {
+    /// Function for verifying a proof of a statement.
+    /// The arguments are
+    /// - `challenge` - slice to challenge bytes chosen by the verifier
+    /// - `global` - the on-chain cryptographic parameters
+    /// - `credential` - the credential for which this statement applies
+    /// - `commitments` - the on-chain commitments of the relevant credential
+    /// The function returns `true` if the statement is true.
+    /// If the statement is false, the function returns false with overwhelming
+    /// probability.
+    pub fn verify(
+        &self,
+        challenge: &[u8],
+        global: &GlobalContext<C>,
+        credential: &CredId<C>,
+        commitments: &CredentialDeploymentCommitments<C>,
+        proofs: &Proof<C, AttributeType>,
+    ) -> bool {
         let mut transcript = RandomOracle::domain("Concordium ID2.0 proof");
         transcript.append_message(b"ctx", &global);
         transcript.add_bytes(challenge);
-        transcript.append_message(b"credential", &self.credential);
-        if self.statement.statements.len() != proofs.proofs.len() {
+        transcript.append_message(b"credential", credential);
+        if self.statements.len() != proofs.proofs.len() {
             return false;
         }
-        for (statement, proof) in self.statement.statements.iter().zip(proofs.proofs.iter()) {
+        for (statement, proof) in self.statements.iter().zip(proofs.proofs.iter()) {
             match (statement, proof) {
                 (
                     AtomicStatement::RevealAttribute {
