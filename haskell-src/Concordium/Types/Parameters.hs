@@ -37,7 +37,7 @@ type CryptographicParameters = GlobalContext
 -- 'MintPerSlotForCPV0'
 data MintPerSlotForCPV0 cpv where
     MintPerSlotForCPV0Some :: {_mpsMintPerSlot :: !MintRate} -> MintPerSlotForCPV0 'ChainParametersV0
-    MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1
+    MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1   
 
 instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) where
     put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
@@ -45,6 +45,7 @@ instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) wher
     get = case chainParametersVersion @cpv of
         SCPV0 -> MintPerSlotForCPV0Some <$> get
         SCPV1 -> return MintPerSlotForCPV0None
+        SCPV2 -> return MintPerSlotForCPV0None
 
 -- |Lens for '_mpsMintPerSlot'
 {-# INLINE mpsMintPerSlot #-}
@@ -328,6 +329,15 @@ data CooldownParameters (cpv :: ChainParametersVersion) where
           _cpDelegatorCooldown :: !DurationSeconds
         } ->
         CooldownParameters 'ChainParametersV1
+    CooldownParametersV2 ::
+        { -- |Number of seconds that pool owners must cooldown
+          -- when reducing their equity capital or closing the pool.
+          _cpPoolOwnerCooldown :: !DurationSeconds,
+          -- |Number of seconds that a delegator must cooldown
+          -- when reducing their delegated stake.
+          _cpDelegatorCooldown :: !DurationSeconds
+        } ->
+        CooldownParameters 'ChainParametersV1
 
 instance ToJSON (CooldownParameters cpv) where
     toJSON CooldownParametersV0{..} =
@@ -339,12 +349,21 @@ instance ToJSON (CooldownParameters cpv) where
             [ "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown,
               "delegatorCooldown" AE..= _cpDelegatorCooldown
             ]
+    toJSON CooldownParametersV2{..} =
+        object
+            [ "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown,
+              "delegatorCooldown" AE..= _cpDelegatorCooldown
+            ]
 
 parseCooldownParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (CooldownParameters cpv)
 parseCooldownParametersJSON = case chainParametersVersion @cpv of
     SCPV0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
     SCPV1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
+            <$> v .: "poolOwnerCooldown"
+            <*> v .: "delegatorCooldown"
+    SCPV2 -> withObject "CooldownParametersV2" $ \v ->
+        CooldownParametersV2
             <$> v .: "poolOwnerCooldown"
             <*> v .: "delegatorCooldown"
 
@@ -388,6 +407,7 @@ getCooldownParameters :: forall cpv. IsChainParametersVersion cpv => Get (Cooldo
 getCooldownParameters = case chainParametersVersion @cpv of
     SCPV0 -> CooldownParametersV0 <$> get
     SCPV1 -> CooldownParametersV1 <$> get <*> get
+    SCPV2 -> CooldownParametersV1 <$> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) where
     put = putCooldownParameters
@@ -696,6 +716,7 @@ getPoolParameters :: forall cpv. IsChainParametersVersion cpv => Get (PoolParame
 getPoolParameters = case chainParametersVersion @cpv of
     SCPV0 -> PoolParametersV0 <$> get
     SCPV1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
+    SCPV2 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
     put = putPoolParameters

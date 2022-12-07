@@ -1,6 +1,6 @@
 cabal-version: 1.24
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -55,6 +55,7 @@ library
       Concordium.Genesis.Data.P3
       Concordium.Genesis.Data.P4
       Concordium.Genesis.Data.P5
+      Concordium.Genesis.Data.P6
       Concordium.Genesis.Parameters
       Concordium.ID.Account
       Concordium.ID.AnonymityRevoker
@@ -146,12 +147,12 @@ library
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if os(windows)
     extra-libraries:
         userenv
         ws2_32
         bcrypt
-  default-language: Haskell2010
 
 executable generate-update-keys
   main-is: Main.hs
@@ -331,11 +332,11 @@ test-suite test
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if flag(static)
     ld-options: -static
   if !os(windows)
     ghc-options: -dynamic
-  default-language: Haskell2010
 
 benchmark bls-perf
   type: exitcode-stdio-1.0
@@ -383,9 +384,9 @@ benchmark bls-perf
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if !os(windows)
     ghc-options: -dynamic
-  default-language: Haskell2010
 
 benchmark ed25519-perf
   type: exitcode-stdio-1.0
@@ -433,9 +434,9 @@ benchmark ed25519-perf
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if !os(windows)
     ghc-options: -dynamic
-  default-language: Haskell2010
 
 benchmark ed25519dlog-perf
   type: exitcode-stdio-1.0
@@ -483,9 +484,9 @@ benchmark ed25519dlog-perf
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if !os(windows)
     ghc-options: -dynamic
-  default-language: Haskell2010
 
 benchmark sha256-perf
   type: exitcode-stdio-1.0
@@ -533,9 +534,9 @@ benchmark sha256-perf
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if !os(windows)
     ghc-options: -dynamic
-  default-language: Haskell2010
 
 benchmark verify-credential-perf
   type: exitcode-stdio-1.0
@@ -583,6 +584,6 @@ benchmark verify-credential-perf
     , transformers >=0.5
     , unordered-containers >=0.2
     , vector >=0.12
+  default-language: Haskell2010
   if !os(windows)
     ghc-options: -dynamic
-  default-language: Haskell2010
