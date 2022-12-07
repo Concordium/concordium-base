@@ -313,9 +313,8 @@ delegationSupport = case accountVersion @av of
     SAccountV2 -> SAVDelegationSupported
 
 -- |A GADT that witnesses the chain parameter version for a protocol version that supports delegation.
--- Currently, protocol versions that support delegation (P4 and P5) have chain parameters
+-- Currently, all protocol versions that support delegation (P4 and P5) have chain parameters
 -- version 1.
--- P6 have chain parameters version 2.
 data DelegationChainParameters (pv :: ProtocolVersion) where
     DelegationChainParametersV1 :: (ChainParametersVersionFor pv ~ 'ChainParametersV1) => DelegationChainParameters pv
 
