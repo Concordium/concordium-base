@@ -154,7 +154,6 @@ type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParameters
 data SChainParametersVersion (cpv :: ChainParametersVersion) where
     SCPV0 :: SChainParametersVersion 'ChainParametersV0
     SCPV1 :: SChainParametersVersion 'ChainParametersV1
-    SCPV2 :: SChainParametersVersion 'ChainParametersV1
 
 -- |Type class for relating type-level 'ChainParametersVersion's with
 -- term level 'SChainParameters's.
@@ -177,7 +176,7 @@ chainParametersVersionFor spv = case spv of
     SP3 -> SCPV0
     SP4 -> SCPV1
     SP5 -> SCPV1
-    SP6 -> SCPV2
+    SP6 -> SCPV1
 
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
 demoteChainParameterVersion SCPV0 = ChainParametersV0
@@ -333,6 +332,7 @@ delegationChainParameters :: forall pv. (IsProtocolVersion pv, SupportsDelegatio
 delegationChainParameters = case protocolVersion @pv of
     SP4 -> DelegationChainParametersV1
     SP5 -> DelegationChainParametersV1
+    SP6 -> DelegationChainParametersV1
 
 -- |Whether the protocol version supports memo functionality.
 -- (Memos are supported in 'P2' onwards.)
