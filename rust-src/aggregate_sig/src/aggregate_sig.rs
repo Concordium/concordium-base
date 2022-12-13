@@ -32,6 +32,14 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
+    /// Sign a message using the SecretKey, where the message is prepended by the public key
+    pub fn sign_prepend_pk(&self, m: &[u8]) -> Signature<P> {
+        let pk = PublicKey::from_secret(&self);
+        let mut pk_m = to_bytes(&pk);
+        pk_m.extend_from_slice(&m); // PK || m
+        self.sign(&pk_m)
+    }
+
     /// Prove knowledge of the secret key with respect to the challenge given
     /// via the random oracle.
     pub fn prove<R: Rng>(&self, csprng: &mut R, ro: &mut RandomOracle) -> Proof<P> {
@@ -83,6 +91,14 @@ impl<P: Pairing> PublicKey<P> {
         let g1_hash = P::G1::hash_to_group(m);
         // compute pairings in parallel
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
+    }
+
+    /// Verifies a single message and signature pair, where the messages is prepended
+    /// by the public key
+    pub fn verify_prepend_pk(&self, m: &[u8], signature: Signature<P>) -> bool {
+        let mut pk_m = to_bytes(&self);
+        pk_m.extend_from_slice(&m); // PK || m
+        self.verify(&pk_m, signature)
     }
 
     /// Check proof of knowledge of the secret key with respect to the public
@@ -157,6 +173,32 @@ pub fn verify_aggregate_sig<P: Pairing>(
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
             let g1_hash = P::G1::hash_to_group(m);
+            let paired = P::pair(&g1_hash, &pk.0);
+            let mut p = prod;
+            p.mul_assign(&paired);
+            p
+        })
+        .reduce(<P::TargetField as Field>::one, |prod, x| {
+            let mut p = prod;
+            p.mul_assign(&x);
+            p
+        });
+
+    P::pair(&signature.0, &P::G2::one_point()) == product
+}
+
+/// Verifies an aggregate signature on pairs `(messages m_i, PK_i)` `for i=1..n`
+/// but where each message is prepended with the corresponding public key.
+pub fn verify_aggregate_sig_prepend_pk<P: Pairing>(
+    m_pk_pairs: &[(&[u8], PublicKey<P>)],
+    signature: Signature<P>,
+) -> bool {
+    let product = m_pk_pairs
+        .par_iter()
+        .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
+            let mut pk_m = to_bytes(&pk);
+            pk_m.extend_from_slice(&m); // PK || m
+            let g1_hash = P::G1::hash_to_group(&pk_m);
             let paired = P::pair(&g1_hash, &pk.0);
             let mut p = prod;
             p.mul_assign(&paired);
@@ -282,6 +324,17 @@ mod test {
         }};
     }
 
+    macro_rules! aggregate_sigs_prepend_pk {
+        ($messages:expr, $sks:expr) => {{
+            let mut sig = $sks[0].sign_prepend_pk(&$messages[0]);
+            for i in 1..$sks.len() {
+                let my_sig = $sks[i].sign_prepend_pk(&$messages[i]);
+                sig = sig.aggregate(my_sig);
+            }
+            sig
+        }};
+    }
+
     #[test]
     fn test_verify_aggregate_sig() {
         let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
@@ -291,6 +344,7 @@ mod test {
         for _ in 0..TEST_ITERATIONS {
             let ms = get_random_messages(SIGNERS, &mut rng);
             let sig = aggregate_sigs!(ms, sks);
+            let sig_prepend_pk = aggregate_sigs_prepend_pk!(ms, sks);
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
             for i in 0..SIGNERS {
@@ -299,6 +353,7 @@ mod test {
 
             // signature should verify
             assert!(verify_aggregate_sig(&m_pk_pairs, sig));
+            assert!(verify_aggregate_sig_prepend_pk(&m_pk_pairs, sig_prepend_pk));
 
             let (m_, pk_) = m_pk_pairs.pop().unwrap();
             let new_pk = PublicKey::<Bls12>::from_secret(&SecretKey::<Bls12>::generate(&mut rng));
@@ -306,6 +361,7 @@ mod test {
 
             // altering a public key should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
+            assert!(!verify_aggregate_sig_prepend_pk(&m_pk_pairs, sig_prepend_pk));
 
             let new_m: [u8; 32] = rng.gen::<[u8; 32]>();
             m_pk_pairs.pop();
@@ -313,6 +369,7 @@ mod test {
 
             // altering a message should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
+            assert!(!verify_aggregate_sig_prepend_pk(&m_pk_pairs, sig));
         }
     }
 

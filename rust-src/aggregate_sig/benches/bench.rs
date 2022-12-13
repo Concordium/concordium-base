@@ -89,6 +89,28 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
     });
 }
 
+fn bench_verify_aggregate_sig_prepend_pk(c: &mut Criterion) {
+    let mut csprng = thread_rng();
+    let n = 200;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let ms: Vec<_> = n_rand_ms_of_length!(n, 1000, csprng);
+
+    let mut agg_sig = sks[0].sign_prepend_pk(&ms[0]);
+    for i in 1..n {
+        let new_sig = sks[i].sign_prepend_pk(&ms[i]);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_prepend_pk", move |b| {
+        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
+        for i in 0..n {
+            let m_pk = (ms[i].as_slice(), pks[i]);
+            m_pk_pairs.push(m_pk);
+        }
+        b.iter(|| verify_aggregate_sig_prepend_pk(&m_pk_pairs, agg_sig))
+    });
+}
+
 fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
@@ -137,6 +159,7 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
 criterion_group!(sign_and_verify, bench_sign_and_verify);
 criterion_group!(aggregate, bench_aggregate_sig);
 criterion_group!(verify_aggregate, bench_verify_aggregate_sig);
+criterion_group!(verify_aggregate_prepend_pk, bench_verify_aggregate_sig_prepend_pk);
 criterion_group!(
     verify_aggregate_trusted_keys,
     bench_verify_aggregate_sig_trusted_keys
@@ -145,6 +168,7 @@ criterion_group!(
 criterion_main!(
     // sign_and_verify,
     // aggregate,
-    // verify_aggregate,
+    verify_aggregate,
+    verify_aggregate_prepend_pk,
     verify_aggregate_trusted_keys
 );
