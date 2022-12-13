@@ -2,12 +2,16 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Concordium.Types.Parameters where
 
@@ -18,6 +22,7 @@ import Data.Aeson.Types
 import Data.Maybe
 import Data.Ratio
 import Data.Serialize
+import Data.Singletons.TH
 import Data.Word
 import Lens.Micro.Platform
 import Test.QuickCheck.Arbitrary
@@ -29,31 +34,125 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils
 
+pattern SChainParametersV0 :: () => (cpv ~ 'ChainParametersV0) => SChainParametersVersion cpv
+pattern SChainParametersV0 = SCPV0
+
+pattern SChainParametersV1 :: () => (cpv ~ 'ChainParametersV1) => SChainParametersVersion cpv
+pattern SChainParametersV1 = SCPV1
+
+pattern SChainParametersV2 :: () => (cpv ~ 'ChainParametersV2) => SChainParametersVersion cpv
+pattern SChainParametersV2 = SCPV2
+
+type instance Sing = SChainParametersVersion
+type instance Sing = SProtocolVersion
+
+$( singletons
+    [d|
+        data ParameterType
+            = PTElectionDifficulty
+            | PTTimeParameters
+            | PTMintPerSlot
+            | PTConsensus2TimingParameters
+            | PTBlockEnergyLimit
+
+        data ParameterSupport
+            = SupportedParameter
+            | UnsupportedParameter
+
+        isSupported :: ParameterType -> ChainParametersVersion -> ParameterSupport
+        isSupported PTElectionDifficulty ChainParametersV0 = SupportedParameter
+        isSupported PTElectionDifficulty ChainParametersV1 = SupportedParameter
+        isSupported PTElectionDifficulty ChainParametersV2 = UnsupportedParameter
+        isSupported PTTimeParameters ChainParametersV0 = UnsupportedParameter
+        isSupported PTTimeParameters ChainParametersV1 = SupportedParameter
+        isSupported PTTimeParameters ChainParametersV2 = SupportedParameter
+        isSupported PTMintPerSlot ChainParametersV0 = SupportedParameter
+        isSupported PTMintPerSlot ChainParametersV1 = UnsupportedParameter
+        isSupported PTMintPerSlot ChainParametersV2 = UnsupportedParameter
+        isSupported PTConsensus2TimingParameters ChainParametersV0 = UnsupportedParameter
+        isSupported PTConsensus2TimingParameters ChainParametersV1 = UnsupportedParameter
+        isSupported PTConsensus2TimingParameters ChainParametersV2 = SupportedParameter
+        isSupported PTBlockEnergyLimit ChainParametersV0 = UnsupportedParameter
+        isSupported PTBlockEnergyLimit ChainParametersV1 = UnsupportedParameter
+        isSupported PTBlockEnergyLimit ChainParametersV2 = SupportedParameter
+        |]
+ )
+
+-- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
+-- otherwise.
+data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
+    NoParam :: (IsSupported pt cpv ~ 'UnsupportedParameter) => OParam pt cpv a
+    SomeParam :: (IsSupported pt cpv ~ 'SupportedParameter) => !a -> OParam pt cpv a
+
+unOParam :: (IsSupported pt cpv ~ 'SupportedParameter) => OParam pt cpv a -> a
+unOParam (SomeParam a) = a
+
+instance Functor (OParam pt cpv) where
+    fmap _ NoParam = NoParam
+    fmap f (SomeParam v) = SomeParam (f v)
+
+instance Foldable (OParam pt cpv) where
+    foldr _ b NoParam = b
+    foldr f b (SomeParam a) = f a b
+
+    foldl _ b NoParam = b
+    foldl f b (SomeParam a) = f b a
+
+    foldMap _ NoParam = mempty
+    foldMap f (SomeParam a) = f a
+
+instance Traversable (OParam pt cpv) where
+    traverse _ NoParam = pure NoParam
+    traverse f (SomeParam a) = SomeParam <$> f a
+
+instance (Eq a) => Eq (OParam pt cpv a) where
+    NoParam == NoParam = True
+    SomeParam a == SomeParam b = a == b
+
+instance (Ord a) => Ord (OParam pt cpv a) where
+    compare NoParam NoParam = EQ
+    compare (SomeParam a) (SomeParam b) = compare a b
+
+instance (Show a) => Show (OParam pt cpv a) where
+    show NoParam = "<parameter type unsupported>"
+    show (SomeParam a) = show a
+
+instance (Serialize a, SingI pt, IsChainParametersVersion cpv) => Serialize (OParam pt cpv a) where
+    put NoParam = return ()
+    put (SomeParam a) = put a
+
+    get = whenSupported get
+
+whenSupported :: forall pt cpv f a. (Applicative f, SingI pt, IsChainParametersVersion cpv) => f a -> f (OParam pt cpv a)
+whenSupported m = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
+    SUnsupportedParameter -> pure NoParam
+    SSupportedParameter -> SomeParam <$> m
+
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
--- |The mint-per-slot rate is part of the 'MintDistribution' parameters for 'ChainParametersV0',
--- but as of 'ChainParametersV1' is replaced by a mint-per-payday rate in the 'TimeParameters'.
--- 'MintPerSlotForCPV0'
-data MintPerSlotForCPV0 cpv where
-    MintPerSlotForCPV0Some :: {_mpsMintPerSlot :: !MintRate} -> MintPerSlotForCPV0 'ChainParametersV0
-    MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1
+-- -- |The mint-per-slot rate is part of the 'MintDistribution' parameters for 'ChainParametersV0',
+-- -- but as of 'ChainParametersV1' is replaced by a mint-per-payday rate in the 'TimeParameters'.
+-- -- 'MintPerSlotForCPV0'
+-- data MintPerSlotForCPV0 cpv where
+--     MintPerSlotForCPV0Some :: {_mpsMintPerSlot :: !MintRate} -> MintPerSlotForCPV0 'ChainParametersV0
+--     MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1
 
-instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) where
-    put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
-    put MintPerSlotForCPV0None = return ()
-    get = case chainParametersVersion @cpv of
-        SCPV0 -> MintPerSlotForCPV0Some <$> get
-        SCPV1 -> return MintPerSlotForCPV0None
+-- instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) where
+--     put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
+--     put MintPerSlotForCPV0None = return ()
+--     get = case chainParametersVersion @cpv of
+--         SCPV0 -> MintPerSlotForCPV0Some <$> get
+--         SCPV1 -> return MintPerSlotForCPV0None
 
--- |Lens for '_mpsMintPerSlot'
-{-# INLINE mpsMintPerSlot #-}
-mpsMintPerSlot :: Lens' (MintPerSlotForCPV0 'ChainParametersV0) MintRate
-mpsMintPerSlot =
-    lens _mpsMintPerSlot (\mps x -> mps{_mpsMintPerSlot = x})
+-- -- |Lens for '_mpsMintPerSlot'
+-- {-# INLINE mpsMintPerSlot #-}
+-- mpsMintPerSlot :: Lens' (MintPerSlotForCPV0 'ChainParametersV0) MintRate
+-- mpsMintPerSlot =
+--     lens _mpsMintPerSlot (\mps x -> mps{_mpsMintPerSlot = x})
 
-deriving instance Eq (MintPerSlotForCPV0 cpv)
-deriving instance Show (MintPerSlotForCPV0 cpv)
+-- deriving instance Eq (MintPerSlotForCPV0 cpv)
+-- deriving instance Show (MintPerSlotForCPV0 cpv)
 
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
@@ -62,7 +161,7 @@ deriving instance Show (MintPerSlotForCPV0 cpv)
 -- The remaining amount is the platform development charge.
 data MintDistribution cpv = MintDistribution
     { -- |Mint rate per slot
-      _mdMintPerSlot :: !(MintPerSlotForCPV0 cpv),
+      _mdMintPerSlot :: !(OParam 'PTMintPerSlot cpv MintRate),
       -- |BakingRewMintFrac: the fraction allocated to baker rewards
       _mdBakingReward :: !AmountFraction,
       -- |FinRewMintFrac: the fraction allocated to finalization rewards
@@ -82,16 +181,11 @@ instance ToJSON (MintDistribution cpv) where
                    ]
             )
       where
-        mintPerSlot = case _mdMintPerSlot of
-            MintPerSlotForCPV0Some{..} -> ["mintPerSlot" AE..= _mpsMintPerSlot]
-            MintPerSlotForCPV0None -> []
+        mintPerSlot = foldMap (\mintRate -> ["mintPerSlot" AE..= mintRate]) _mdMintPerSlot
 
 instance IsChainParametersVersion cpv => FromJSON (MintDistribution cpv) where
     parseJSON = withObject "MintDistribution" $ \v -> do
-        _mdMintPerSlot <- case chainParametersVersion @cpv of
-            SCPV0 -> MintPerSlotForCPV0Some <$> v .: "mintPerSlot"
-            SCPV1 -> return MintPerSlotForCPV0None
-
+        _mdMintPerSlot <- whenSupported (v .: "mintPerSlot")
         _mdBakingReward <- v .: "bakingReward"
         _mdFinalizationReward <- v .: "finalizationReward"
         unless (isJust (_mdBakingReward `addAmountFraction` _mdFinalizationReward)) $ fail "Amount fractions exceed 100%"
@@ -112,7 +206,7 @@ instance IsChainParametersVersion cpv => HashableTo Hash.Hash (MintDistribution 
 instance Arbitrary (MintDistribution 'ChainParametersV1) where
     arbitrary = do
         (x, y) <- arbitrary `suchThat` (\(x, y) -> isJust $ addAmountFraction x y)
-        return $ MintDistribution MintPerSlotForCPV0None x y
+        return $ MintDistribution NoParam x y
 
 instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
 
@@ -307,10 +401,22 @@ instance HasExchangeRates ExchangeRates where
     {-# INLINE energyRate #-}
     energyRate = to _erEnergyRate
 
+$( singletons
+    [d|
+        data CooldownParametersVersion = CooldownParametersVersion0 | CooldownParametersVersion1
+
+        cooldownParametersVersionFor :: ChainParametersVersion -> CooldownParametersVersion
+        cooldownParametersVersionFor ChainParametersV0 = CooldownParametersVersion0
+        cooldownParametersVersionFor ChainParametersV1 = CooldownParametersVersion1
+        cooldownParametersVersionFor ChainParametersV2 = CooldownParametersVersion1
+        |]
+ )
+
 -- |Version-indexed type of cooldown parameters.
 -- This is a GADT to provide instances of 'Eq' and 'Show'.
 data CooldownParameters (cpv :: ChainParametersVersion) where
     CooldownParametersV0 ::
+        (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion0) =>
         { -- |Number of additional epochs that bakers must cool down when
           -- removing stake. The cool-down will effectively be 2 epochs
           -- longer than this value, since at any given time, the bakers
@@ -318,8 +424,9 @@ data CooldownParameters (cpv :: ChainParametersVersion) where
           -- been determined.
           _cpBakerExtraCooldownEpochs :: Epoch
         } ->
-        CooldownParameters 'ChainParametersV0
+        CooldownParameters cpv
     CooldownParametersV1 ::
+        (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) =>
         { -- |Number of seconds that pool owners must cooldown
           -- when reducing their equity capital or closing the pool.
           _cpPoolOwnerCooldown :: !DurationSeconds,
@@ -327,7 +434,7 @@ data CooldownParameters (cpv :: ChainParametersVersion) where
           -- when reducing their delegated stake.
           _cpDelegatorCooldown :: !DurationSeconds
         } ->
-        CooldownParameters 'ChainParametersV1
+        CooldownParameters cpv
 
 instance ToJSON (CooldownParameters cpv) where
     toJSON CooldownParametersV0{..} =
@@ -341,12 +448,14 @@ instance ToJSON (CooldownParameters cpv) where
             ]
 
 parseCooldownParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (CooldownParameters cpv)
-parseCooldownParametersJSON = case chainParametersVersion @cpv of
-    SCPV0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
-    SCPV1 -> withObject "CooldownParametersV1" $ \v ->
+parseCooldownParametersJSON = case sCooldownParametersVersionFor (chainParametersVersion @cpv) of
+    SCooldownParametersVersion0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
+    SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
-            <$> v .: "poolOwnerCooldown"
-            <*> v .: "delegatorCooldown"
+            <$> v
+            .: "poolOwnerCooldown"
+            <*> v
+            .: "delegatorCooldown"
 
 instance IsChainParametersVersion cpv => FromJSON (CooldownParameters cpv) where
     parseJSON = parseCooldownParametersJSON
@@ -385,9 +494,9 @@ instance HashableTo Hash.Hash (CooldownParameters cpv) where
 instance Monad m => MHashableTo m Hash.Hash (CooldownParameters cpv)
 
 getCooldownParameters :: forall cpv. IsChainParametersVersion cpv => Get (CooldownParameters cpv)
-getCooldownParameters = case chainParametersVersion @cpv of
-    SCPV0 -> CooldownParametersV0 <$> get
-    SCPV1 -> CooldownParametersV1 <$> get <*> get
+getCooldownParameters = case sCooldownParametersVersionFor (chainParametersVersion @cpv) of
+    SCooldownParametersVersion0 -> CooldownParametersV0 <$> get
+    SCooldownParametersVersion1 -> CooldownParametersV1 <$> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) where
     put = putCooldownParameters
@@ -397,8 +506,6 @@ instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) wher
 -- length and the mint rate per payday.  These are coupled as a change to either affects the
 -- overall rate of minting.
 data TimeParameters (cpv :: ChainParametersVersion) where
-    -- |For 'ChainParametersV0', there are no time parameters.
-    TimeParametersV0 :: TimeParameters 'ChainParametersV0
     -- |For 'ChainParametersV1', the time parameters are the reward period length and mint rate per
     -- payday.
     TimeParametersV1 ::
@@ -407,17 +514,17 @@ data TimeParameters (cpv :: ChainParametersVersion) where
           -- |Mint rate per payday (as a proportion of the extant supply).
           _tpMintPerPayday :: !MintRate
         } ->
-        TimeParameters 'ChainParametersV1
+        TimeParameters cpv
 
 -- |Lens for '_tpRewardPeriodLength'
 {-# INLINE tpRewardPeriodLength #-}
-tpRewardPeriodLength :: Lens' (TimeParameters 'ChainParametersV1) RewardPeriodLength
+tpRewardPeriodLength :: Lens' (TimeParameters cpv) RewardPeriodLength
 tpRewardPeriodLength =
     lens _tpRewardPeriodLength (\tp x -> tp{_tpRewardPeriodLength = x})
 
 -- |Lens for '_tpMintPerPayday'
 {-# INLINE tpMintPerPayday #-}
-tpMintPerPayday :: Lens' (TimeParameters 'ChainParametersV1) MintRate
+tpMintPerPayday :: Lens' (TimeParameters cpv) MintRate
 tpMintPerPayday =
     lens _tpMintPerPayday (\tp x -> tp{_tpMintPerPayday = x})
 
@@ -427,29 +534,26 @@ deriving instance Show (TimeParameters cpv)
 -- |Serialize 'TimeParameters'.
 -- (This dispatches on the GADT, and so does not require @IsChainParameters cpv@.)
 putTimeParameters :: Putter (TimeParameters cpv)
-putTimeParameters TimeParametersV0 = return ()
 putTimeParameters TimeParametersV1{..} = do
     put _tpRewardPeriodLength
     put _tpMintPerPayday
 
 -- |Deserialize 'TimeParameters'.
-getTimeParameters :: forall cpv. IsChainParametersVersion cpv => Get (TimeParameters cpv)
-getTimeParameters = case chainParametersVersion @cpv of
-    SCPV0 -> return TimeParametersV0
-    SCPV1 -> TimeParametersV1 <$> get <*> get
+getTimeParameters :: forall cpv. Get (TimeParameters cpv)
+getTimeParameters = TimeParametersV1 <$> get <*> get
 
-instance IsChainParametersVersion cpv => Serialize (TimeParameters cpv) where
+instance Serialize (TimeParameters cpv) where
     put = putTimeParameters
     get = getTimeParameters
 
-instance ToJSON (TimeParameters 'ChainParametersV1) where
+instance ToJSON (TimeParameters cpv) where
     toJSON TimeParametersV1{..} =
         object
             [ "rewardPeriodLength" AE..= _tpRewardPeriodLength,
               "mintPerPayday" AE..= _tpMintPerPayday
             ]
 
-instance FromJSON (TimeParameters 'ChainParametersV1) where
+instance FromJSON (TimeParameters cpv) where
     parseJSON = withObject "TimeParametersV1" $ \v ->
         TimeParametersV1 <$> v .: "rewardPeriodLength" <*> v .: "mintPerPayday"
 
@@ -579,16 +683,29 @@ instance FromJSON CapitalBound where
         when (cb == AmountFraction 0) $ fail "zero-valued capital bound"
         return $ CapitalBound cb
 
+$( singletons
+    [d|
+        data PoolParametersVersion = PoolParametersVersion0 | PoolParametersVersion1
+
+        poolParametersVersionFor :: ChainParametersVersion -> PoolParametersVersion
+        poolParametersVersionFor ChainParametersV0 = PoolParametersVersion0
+        poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
+        poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
+        |]
+ )
+
 -- |The 'PoolParameters' abstracts the parameters that affect baking pools. Prior to P4, there
 -- is no concept of a baking pool as such, so the pool parameters are considered just to be the
 -- baker stake threshold. From P4 onwards, a broader range of parameters is included.
 data PoolParameters cpv where
     PoolParametersV0 ::
+        (PoolParametersVersionFor cpv ~ 'PoolParametersVersion0) =>
         { -- |Minimum threshold required for registering as a baker.
           _ppBakerStakeThreshold :: Amount
         } ->
-        PoolParameters 'ChainParametersV0
+        PoolParameters cpv
     PoolParametersV1 ::
+        (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
         { -- |Commission rates charged for passive delegation.
           _ppPassiveCommissions :: !CommissionRates,
           -- |Bounds on the commission rates that may be charged by bakers.
@@ -601,7 +718,7 @@ data PoolParameters cpv where
           -- to equity capital.
           _ppLeverageBound :: !LeverageFactor
         } ->
-        PoolParameters 'ChainParametersV1
+        PoolParameters cpv
 
 instance ToJSON (PoolParameters cpv) where
     toJSON PoolParametersV0{..} =
@@ -622,9 +739,9 @@ instance ToJSON (PoolParameters cpv) where
             ]
 
 parsePoolParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (PoolParameters cpv)
-parsePoolParametersJSON = case chainParametersVersion @cpv of
-    SCPV0 -> withObject "PoolParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
-    SCPV1 -> withObject "PoolParametersV1" $ \v -> do
+parsePoolParametersJSON = case sPoolParametersVersionFor (chainParametersVersion @cpv) of
+    SPoolParametersVersion0 -> withObject "PoolParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
+    SPoolParametersVersion1 -> withObject "PoolParametersV1" $ \v -> do
         _finalizationCommission <- v .: "passiveFinalizationCommission"
         _bakingCommission <- v .: "passiveBakingCommission"
         _transactionCommission <- v .: "passiveTransactionCommission"
@@ -693,9 +810,9 @@ instance HashableTo Hash.Hash (PoolParameters cpv) where
 instance Monad m => MHashableTo m Hash.Hash (PoolParameters cpv)
 
 getPoolParameters :: forall cpv. IsChainParametersVersion cpv => Get (PoolParameters cpv)
-getPoolParameters = case chainParametersVersion @cpv of
-    SCPV0 -> PoolParametersV0 <$> get
-    SCPV1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
+getPoolParameters = case sPoolParametersVersionFor (chainParametersVersion @cpv) of
+    SPoolParametersVersion0 -> PoolParametersV0 <$> get
+    SPoolParametersVersion1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
 
 instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
     put = putPoolParameters
@@ -703,6 +820,31 @@ instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
 
 deriving instance Eq (PoolParameters cpv)
 deriving instance Show (PoolParameters cpv)
+
+data Consensus2TimingParameters = Consensus2TimingParameters
+    { -- |The base value for triggering a timeout.
+      c2tpTimeoutBase :: Duration,
+      -- |Factor for increasing the timeout. Must be greater than 1.
+      c2tpTimeoutIncrease :: Ratio Word64,
+      -- |Factor for decreasing the timeout. Must be between 0 and 1.
+      c2tpTimeoutDecrease :: Ratio Word64,
+      -- |Minimum time between blocks.
+      c2tpMinTime :: Duration
+    }
+    deriving (Eq, Show)
+
+instance Serialize Consensus2TimingParameters where
+    put Consensus2TimingParameters{..} = do
+        put c2tpTimeoutBase
+        put c2tpTimeoutIncrease
+        put c2tpTimeoutDecrease
+        put c2tpMinTime
+    get = do
+        c2tpTimeoutBase <- get
+        c2tpTimeoutIncrease <- get
+        c2tpTimeoutDecrease <- get
+        c2tpMinTime <- get
+        return Consensus2TimingParameters{..}
 
 -- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 -- reflects changes to the chain parameters across different protocol versions.
@@ -714,7 +856,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       -- |Cooldown parameters.
       _cpCooldownParameters :: !(CooldownParameters cpv),
       -- |Time parameters.
-      _cpTimeParameters :: !(TimeParameters cpv),
+      _cpTimeParameters :: !(OParam 'PTTimeParameters cpv (TimeParameters cpv)),
       -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
       _cpAccountCreationLimit :: !CredentialsPerBlockLimit,
@@ -724,7 +866,8 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFoundationAccount :: !AccountIndex,
       -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
       -- for becoming a baker.
-      _cpPoolParameters :: !(PoolParameters cpv)
+      _cpPoolParameters :: !(PoolParameters cpv),
+      _cpConsensus2TimingParameters :: !(OParam 'PTConsensus2TimingParameters cpv Consensus2TimingParameters)
     }
     deriving (Eq, Show)
 
@@ -749,14 +892,14 @@ putChainParameters ChainParameters{..} = do
     put _cpElectionDifficulty
     put _cpExchangeRates
     putCooldownParameters _cpCooldownParameters
-    putTimeParameters _cpTimeParameters
+    -- mapM_ putTimeParameters _cpTimeParameters
     put _cpAccountCreationLimit
     put _cpRewardParameters
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
 
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
-getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <*> getTimeParameters <*> get <*> get <*> get <*> getPoolParameters
+getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <*> get <*> get <*> get <*> get <*> getPoolParameters <*> get
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
     put = putChainParameters
@@ -773,18 +916,24 @@ parseJSONForCPV0 =
         _cpElectionDifficulty <- v .: "electionDifficulty"
         _cpExchangeRates <-
             makeExchangeRates
-                <$> v .: "euroPerEnergy"
-                <*> v .: "microGTUPerEuro"
+                <$> v
+                .: "euroPerEnergy"
+                <*> v
+                .: "microGTUPerEuro"
         _cpCooldownParameters <-
             CooldownParametersV0
-                <$> v .: "bakerCooldownEpochs"
+                <$> v
+                .: "bakerCooldownEpochs"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _cpPoolParameters <-
             PoolParametersV0
-                <$> v .: "minimumThresholdForBaking"
-        return ChainParameters{_cpTimeParameters = TimeParametersV0, ..}
+                <$> v
+                .: "minimumThresholdForBaking"
+        let _cpTimeParameters = NoParam
+        let _cpConsensus2TimingParameters = NoParam
+        return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
 parseJSONForCPV1 =
@@ -808,13 +957,13 @@ parseJSONForCPV1 =
         _ppLeverageBound <- v .: "leverageBound"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
-        let
-            _cpCooldownParameters = CooldownParametersV1{..}
-            _cpTimeParameters = TimeParametersV1{..}
+        let _cpCooldownParameters = CooldownParametersV1{..}
+            _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            _cpConsensus2TimingParameters = NoParam
         return ChainParameters{..}
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
@@ -854,8 +1003,8 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "minimumEquityCapital" AE..= _ppMinimumEquityCapital _cpPoolParameters,
                   "capitalBound" AE..= _ppCapitalBound _cpPoolParameters,
                   "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
-                  "rewardPeriodLength" AE..= _tpRewardPeriodLength _cpTimeParameters,
-                  "mintPerPayday" AE..= _tpMintPerPayday _cpTimeParameters
+                  "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
+                  "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters)
                 ]
 
 -- |Parameters that affect finalization.

@@ -141,6 +141,9 @@ library
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -198,6 +201,9 @@ executable generate-update-keys
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -250,6 +256,9 @@ executable genesis
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -326,6 +335,9 @@ test-suite test
     , primitive >=0.7
     , random
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -378,6 +390,9 @@ benchmark bls-perf
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -428,6 +443,9 @@ benchmark ed25519-perf
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -478,6 +496,9 @@ benchmark ed25519dlog-perf
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -528,6 +549,9 @@ benchmark sha256-perf
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -578,6 +602,9 @@ benchmark verify-credential-perf
     , primitive >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8

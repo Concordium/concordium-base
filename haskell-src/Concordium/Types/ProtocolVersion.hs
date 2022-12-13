@@ -140,7 +140,7 @@ promoteProtocolVersion P4 = SomeProtocolVersion SP4
 promoteProtocolVersion P5 = SomeProtocolVersion SP5
 promoteProtocolVersion P6 = SomeProtocolVersion SP6
 
-data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
+data ChainParametersVersion = ChainParametersV0 | ChainParametersV1 | ChainParametersV2
     deriving (Eq, Show)
 
 type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParametersVersion where
@@ -154,6 +154,7 @@ type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParameters
 data SChainParametersVersion (cpv :: ChainParametersVersion) where
     SCPV0 :: SChainParametersVersion 'ChainParametersV0
     SCPV1 :: SChainParametersVersion 'ChainParametersV1
+    SCPV2 :: SChainParametersVersion 'ChainParametersV2
 
 -- |Type class for relating type-level 'ChainParametersVersion's with
 -- term level 'SChainParameters's.
@@ -169,6 +170,10 @@ instance IsChainParametersVersion 'ChainParametersV1 where
     chainParametersVersion = SCPV1
     {-# INLINE chainParametersVersion #-}
 
+instance IsChainParametersVersion 'ChainParametersV2 where
+    chainParametersVersion = SCPV2
+    {-# INLINE chainParametersVersion #-}
+
 chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
 chainParametersVersionFor spv = case spv of
     SP1 -> SCPV0
@@ -181,6 +186,8 @@ chainParametersVersionFor spv = case spv of
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
 demoteChainParameterVersion SCPV0 = ChainParametersV0
 demoteChainParameterVersion SCPV1 = ChainParametersV1
+demoteChainParameterVersion SCPV2 = ChainParametersV2
+
 -- * Account versions
 
 -- |A data kind used for parametrising account-related types.
