@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 5.1.0 (2022-12-14)
+
 - Implement `quickcheck::Arbitrary` for `Timestamp`, `AccountAddress`, `ContractAddress`, `Address`,  `ChainMetadata`, `AttributeTag`, `AttributeValue` and `OwnedPolicy`.
 
 ## concordium-contracts-common 5.0.0 (2022-11-21)
