@@ -41,7 +41,7 @@ onPV :: Q Exp -> Q Exp
 onPV ce = do
     pvcs <- protocolVersionConstructors
     let fillPats _ [] = return []
-        fillPats cs (m@(Match (ConP n _ _) _ _ ) : ms) = (m :) <$> fillPats (filter (/= n) cs) ms
+        fillPats cs (m@(Match (ConP n _ _) _ _) : ms) = (m :) <$> fillPats (filter (/= n) cs) ms
         fillPats cs ((Match WildP b d) : ms) = return $ [Match (ConP c [] []) b d | c <- cs] ++ ms
         fillPats _ _ = fail "Unable to analyze pattern"
     ce >>= \case

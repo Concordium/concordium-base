@@ -23,9 +23,9 @@ instance S.Serialize Version where
       where
         encode7 :: Word32 -> [Word8]
         encode7 n = case go n of
-          (x : xs) -> reverse (x : map (`setBit` 7) xs)
-          -- does not happen, since `go n /= []` for any `n`.
-          [] -> fail "Failed to serialize version number"
+            (x : xs) -> reverse (x : map (`setBit` 7) xs)
+            -- does not happen, since `go n /= []` for any `n`.
+            [] -> fail "Failed to serialize version number"
           where
             go x =
                 let (d, m) = x `quotRem` 128
