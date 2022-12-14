@@ -188,11 +188,10 @@ pub extern "C" fn bls_verify_aggregate_prepend_pk(
         unsafe { slice::from_raw_parts(m_ptr, pks_len) }
     };
 
-    let ms: Vec<&[u8]> = ms_
+    let ms = ms_
         .iter()
         .zip(m_lens_.iter())
-        .map(|(&ptr, &m_len)| slice_from_c_bytes!(ptr, m_len))
-        .collect();
+        .map(|(&ptr, &m_len)| slice_from_c_bytes!(ptr, m_len));
 
     let pks_: &[*mut PublicKey<Bls12>] = if pks_len == 0 {
         &[]
@@ -202,7 +201,7 @@ pub extern "C" fn bls_verify_aggregate_prepend_pk(
     // Collecting the public keys in a vector is currently necessary as
     // verify_aggregate_sig_trusted_keys takes an array of public keys.
     // It might be desirable to make it take references instead.
-    let pks: Vec<PublicKey<Bls12>> = pks_.iter().map(|pk| *from_ptr!(*pk)).collect();
+    let pks = pks_.iter().map(|pk| *from_ptr!(*pk));
     let m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = ms.into_iter().zip(pks.into_iter()).collect();
     let sig = from_ptr!(sig_ptr);
     u8::from(verify_aggregate_sig_prepend_pk(&m_pk_pairs, *sig))

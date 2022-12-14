@@ -35,9 +35,9 @@ impl<P: Pairing> SecretKey<P> {
     /// Sign a message using the SecretKey, where the message is prepended by
     /// the public key This implements Sign from Section 3.2.1 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.1
     pub fn sign_prepend_pk(&self, m: &[u8]) -> Signature<P> {
-        let pk = PublicKey::from_secret(&self);
+        let pk = PublicKey::from_secret(self);
         let mut pk_m = to_bytes(&pk);
-        pk_m.extend_from_slice(&m); // PK || m
+        pk_m.extend_from_slice(m); // PK || m
         self.sign(&pk_m)
     }
 
@@ -99,7 +99,7 @@ impl<P: Pairing> PublicKey<P> {
     /// This implements Sign from Section 3.2.2 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.2
     pub fn verify_prepend_pk(&self, m: &[u8], signature: Signature<P>) -> bool {
         let mut pk_m = to_bytes(&self);
-        pk_m.extend_from_slice(&m); // PK || m
+        pk_m.extend_from_slice(m); // PK || m
         self.verify(&pk_m, signature)
     }
 
@@ -204,7 +204,7 @@ pub fn verify_aggregate_sig_prepend_pk<P: Pairing>(
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
             let mut pk_m = to_bytes(&pk);
-            pk_m.extend_from_slice(&m); // PK || m
+            pk_m.extend_from_slice(m); // PK || m
             let g1_hash = P::G1::hash_to_group(&pk_m);
             let paired = P::pair(&g1_hash, &pk.0);
             let mut p = prod;
