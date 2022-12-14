@@ -12,6 +12,7 @@ import Test.Hspec
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Data.Word
+import Control.Monad
 
 
 genSecretKey :: Gen SecretKey
@@ -23,16 +24,11 @@ genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
 genKeyPairsAndMessages :: Gen [((SecretKey, PublicKey), [Word8])]
 genKeyPairsAndMessages = do
-    pair1 <- genKeyPair
-    pair2 <- genKeyPair
-    pair3 <- genKeyPair
-    -- m1 :: [Word8] <- arbitrary
-    -- m2 :: [Word8] <- arbitrary
-    -- m3 :: [Word8] <- arbitrary
-    let m1 = [1,2,3]
-    let m2 = m1 --[5,2,3,4]
-    let m3 = m2 --[7,2,3,5,6]
-    return [(pair1,m1), (pair2, m2), (pair3, m3)]
+    n <- choose (10,200)
+    replicateM n $ do
+        kp <- genKeyPair
+        m :: [Word8] <- resize 100 arbitrary
+        return (kp, m)
 
 forAllSK :: Testable prop => (SecretKey -> prop) -> Property
 forAllSK = forAll genSecretKey
@@ -143,7 +139,7 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
     it "bls_signature_collision" $ withMaxSuccess 10000 $ testNoSignatureCollision
     it "bls_sign_and_verify" $ withMaxSuccess 10000 $ testSignAndVerify
     it "bls_sign_and_verify_prepend_pk" $ withMaxSuccess 10000 $ testSignAndVerifyPrependPK
-    it "bls_verify_aggregated_sig_prepend_pk" $ withMaxSuccess 10000 $ testVerifyAggratedSigPrependPK
+    it "bls_verify_aggregated_sig_prepend_pk" $ withMaxSuccess 1000 $ testVerifyAggratedSigPrependPK
     it "bls_sign_and_verify_collision" $ withMaxSuccess 10000 $ testSignAndVerifyCollision
     it "bls_serialize_sk" $ withMaxSuccess 10000 $ testSerializeSecretKey
     it "bls_serialize_pk" $ withMaxSuccess 10000 $ testSerializePublicKey

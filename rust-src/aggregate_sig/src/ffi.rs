@@ -188,9 +188,11 @@ pub extern "C" fn bls_verify_aggregate_prepend_pk(
         unsafe { slice::from_raw_parts(m_ptr, pks_len) }
     };
 
-    let ms: Vec<&[u8]> = ms_.iter().zip(m_lens_.iter()).map(|(&ptr, &m_len)| {
-        slice_from_c_bytes!(ptr, m_len)
-    }).collect();
+    let ms: Vec<&[u8]> = ms_
+        .iter()
+        .zip(m_lens_.iter())
+        .map(|(&ptr, &m_len)| slice_from_c_bytes!(ptr, m_len))
+        .collect();
 
     let pks_: &[*mut PublicKey<Bls12>] = if pks_len == 0 {
         &[]
@@ -309,12 +311,11 @@ mod test {
 
             let m1_ptr: *const u8 = &m1 as *const _;
             let m2_ptr: *const u8 = &m2 as *const _;
-            let m_ptr: *const *const u8 = &[m1_ptr,m2_ptr] as *const _;
+            let m_ptr: *const *const u8 = &[m1_ptr, m2_ptr] as *const _;
 
             let m1_len: size_t = 32;
             let m2_len: size_t = 16;
-            let m_len: *const size_t = &[m1_len,m2_len] as *const _;
-
+            let m_len: *const size_t = &[m1_len, m2_len] as *const _;
 
             let pks_ptr: *const *mut PublicKey<Bls12> =
                 &[&mut pk1 as *mut _, &mut pk2 as *mut _] as *const *mut _;

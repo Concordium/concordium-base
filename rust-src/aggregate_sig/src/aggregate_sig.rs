@@ -32,7 +32,8 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
-    /// Sign a message using the SecretKey, where the message is prepended by the public key
+    /// Sign a message using the SecretKey, where the message is prepended by
+    /// the public key This implements Sign from Section 3.2.1 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.1
     pub fn sign_prepend_pk(&self, m: &[u8]) -> Signature<P> {
         let pk = PublicKey::from_secret(&self);
         let mut pk_m = to_bytes(&pk);
@@ -93,8 +94,9 @@ impl<P: Pairing> PublicKey<P> {
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
 
-    /// Verifies a single message and signature pair, where the messages is prepended
-    /// by the public key
+    /// Verifies a single message and signature pair, where the messages is
+    /// prepended by the public key
+    /// This implements Sign from Section 3.2.2 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.2
     pub fn verify_prepend_pk(&self, m: &[u8], signature: Signature<P>) -> bool {
         let mut pk_m = to_bytes(&self);
         pk_m.extend_from_slice(&m); // PK || m
@@ -189,10 +191,15 @@ pub fn verify_aggregate_sig<P: Pairing>(
 
 /// Verifies an aggregate signature on pairs `(messages m_i, PK_i)` `for i=1..n`
 /// but where each message is prepended with the corresponding public key.
+/// This implements AggregateVerify from Section 3.2.3 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.3.
 pub fn verify_aggregate_sig_prepend_pk<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
     signature: Signature<P>,
 ) -> bool {
+    // verifying against the empty set of signers always fails
+    if m_pk_pairs.is_empty() {
+        return false;
+    }
     let product = m_pk_pairs
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
@@ -361,7 +368,10 @@ mod test {
 
             // altering a public key should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
-            assert!(!verify_aggregate_sig_prepend_pk(&m_pk_pairs, sig_prepend_pk));
+            assert!(!verify_aggregate_sig_prepend_pk(
+                &m_pk_pairs,
+                sig_prepend_pk
+            ));
 
             let new_m: [u8; 32] = rng.gen::<[u8; 32]>();
             m_pk_pairs.pop();

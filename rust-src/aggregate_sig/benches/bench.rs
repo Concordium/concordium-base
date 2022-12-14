@@ -159,7 +159,10 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
 criterion_group!(sign_and_verify, bench_sign_and_verify);
 criterion_group!(aggregate, bench_aggregate_sig);
 criterion_group!(verify_aggregate, bench_verify_aggregate_sig);
-criterion_group!(verify_aggregate_prepend_pk, bench_verify_aggregate_sig_prepend_pk);
+criterion_group!(
+    verify_aggregate_prepend_pk,
+    bench_verify_aggregate_sig_prepend_pk
+);
 criterion_group!(
     verify_aggregate_trusted_keys,
     bench_verify_aggregate_sig_trusted_keys

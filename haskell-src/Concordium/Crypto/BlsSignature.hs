@@ -311,20 +311,20 @@ verifyAggregate m pks sig = unsafePerformIO $ do
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
 
 -- |Verify a signature on the list of bytestrings under the list of public keys
+-- The messages are prepended with the publics before verifying.
+-- This is for messages that are not necessarilly all different.
 verifyAggregatePrependPK :: [ByteString] -> [PublicKey] -> Signature -> Bool
 verifyAggregatePrependPK ms pks sig = unsafePerformIO $ do
     -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
-    (ms', lens) <- withMessageArray [] [] ms
-    withArray ms' $ \m' ->
-        withArray lens $ \mlen ->
-            withSignature sig $ \sig' ->
-                withKeyArray [] pks $ \arrlen -> \headptr ->
-                    (== 1) <$> verifyBlsAggregatePrependPK (m') (castPtr mlen) headptr (fromIntegral arrlen) sig'
+    withMessageArray [] [] ms $ \m' mlen ->
+        withSignature sig $ \sig' ->
+            withKeyArray [] pks $ \arrlen -> \headptr ->
+                (== 1) <$> verifyBlsAggregatePrependPK (m') (castPtr mlen) headptr (fromIntegral arrlen) sig'
   where
     withKeyArray ps [] f = withArrayLen ps f
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
-    withMessageArray ms' lens [] = return (ms', lens)
-    withMessageArray ms' lens (m : ms_) = BS.unsafeUseAsCStringLen m $ \(m', mlen) -> withMessageArray (castPtr m' : ms') (mlen : lens) ms_
+    withMessageArray ms' lens [] f = withArray ms' $ \m' -> withArray lens (f m')
+    withMessageArray ms' lens (m : ms_) f = BS.unsafeUseAsCStringLen m $ \(m', mlen) -> withMessageArray (castPtr m' : ms') (mlen : lens) ms_ f
 
 -- |Create a proof of knowledge of your secret key
 proveKnowledgeOfSK :: ByteString -> SecretKey -> IO Proof
