@@ -1,19 +1,18 @@
-{-# OPTIONS_GHC -Wno-deprecations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature
 import Concordium.Crypto.DummyData
+import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import Data.Serialize
+import Data.Word
 import Test.Hspec
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
-import Data.Word
-import Control.Monad
-
 
 genSecretKey :: Gen SecretKey
 genSecretKey = secretBlsKeyGen
@@ -21,10 +20,9 @@ genSecretKey = secretBlsKeyGen
 genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
-
 genKeyPairsAndMessages :: Gen [((SecretKey, PublicKey), [Word8])]
 genKeyPairsAndMessages = do
-    n <- choose (10,200)
+    n <- choose (10, 200)
     replicateM n $ do
         kp <- genKeyPair
         m :: [Word8] <- resize 100 arbitrary
@@ -66,7 +64,7 @@ testVerifyAggratedSigPrependPK = forAllKPsAndMessages $ \keyPairsAndMessages ->
         sig = aggregateMany sigs
         ms = map (BS.pack . snd) keyPairsAndMessages
         pks = map (snd . fst) keyPairsAndMessages
-    in verifyAggregatePrependPK ms pks sig
+    in  verifyAggregatePrependPK ms pks sig
 
 testSignAndVerifyCollision :: Property
 testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
