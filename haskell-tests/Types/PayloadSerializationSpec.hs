@@ -62,7 +62,11 @@ checkPayload spv e =
 
 modifyPayloadBitmap :: (Word16 -> Word16) -> BS.ByteString -> BS.ByteString
 modifyPayloadBitmap f bs =
-    let Right ((header, bitmap), rest) = S.runGetState ((,) <$> S.getWord8 <*> S.getWord16be) bs 0
+    let res = S.runGetState ((,) <$> S.getWord8 <*> S.getWord16be) bs 0
+        ((header, bitmap), rest) = case res of
+                                       Right v -> v
+                                       -- This does not happen
+                                       Left _ -> error "res should be Right" 
     in  S.runPut (S.putWord8 header <> S.putWord16be (f bitmap)) `BS.append` rest
 
 -- | 'genPayloadWithInvalidBitmap' @sizeOfBitmap@ @payload@ will update the @payload@ by setting
