@@ -17,7 +17,7 @@ derive_more = "0.99"
 
 
 [dependencies.concordium-contracts-common]
-version = "4.0"
+version = "5"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
