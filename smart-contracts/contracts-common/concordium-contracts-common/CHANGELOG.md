@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+- Add methods `serial_value` and `serial_value_into` on the `Type`.
+  They are more ergonomic to use than `write_bytes_from_json_schema_type` which
+  is marked as deprecated and will be removed in future versions.
+
 ## concordium-contracts-common 5.1.0 (2022-12-14)
 
 - Implement `quickcheck::Arbitrary` for `Timestamp`, `AccountAddress`, `ContractAddress`, `Address`,  `ChainMetadata`, `AttributeTag`, `AttributeValue` and `OwnedPolicy`.
