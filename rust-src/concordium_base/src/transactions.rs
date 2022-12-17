@@ -719,6 +719,17 @@ impl Deserial for RegisteredData {
     }
 }
 
+/// Mapping of credential indices to account credentials with proofs.
+/// This structure is used when sending transactions that update credentials.
+pub type AccountCredentialsMap = BTreeMap<
+    CredentialIndex,
+    CredentialDeploymentInfo<
+        id::constants::IpPairing,
+        id::constants::ArCurve,
+        id::constants::AttributeKind,
+    >,
+>;
+
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
 #[serde(rename_all = "camelCase")]
 /// Payload of an account transaction.
@@ -803,14 +814,7 @@ pub enum Payload {
     /// Update the account's credentials.
     UpdateCredentials {
         /// New credentials to add.
-        new_cred_infos: BTreeMap<
-            CredentialIndex,
-            CredentialDeploymentInfo<
-                id::constants::IpPairing,
-                id::constants::ArCurve,
-                id::constants::AttributeKind,
-            >,
-        >,
+        new_cred_infos:  AccountCredentialsMap,
         /// Ids of credentials to remove.
         remove_cred_ids: Vec<CredentialRegistrationID>,
         /// The new account threshold.
@@ -1702,6 +1706,16 @@ pub mod cost {
     /// Additional cost of removing a baker.
     pub const REMOVE_BAKER: Energy = Energy { energy: 300 };
 
+    /// Additional cost of updating existing credential keys. Parametrised by
+    /// amount of existing credentials and new keys. Due to the way the
+    /// accounts are stored a new copy of all credentials will be created,
+    /// so we need to account for that storage increase.
+    pub fn update_credential_keys(num_credentials_before: u16, num_keys: u16) -> Energy {
+        Energy {
+            energy: 500u64 * u64::from(num_credentials_before) + 100 * u64::from(num_keys),
+        }
+    }
+
     /// Additional cost of updating account's credentials, parametrized by
     /// - the number of credentials on the account before the update
     /// - list of keys of credentials to be added.
@@ -1743,8 +1757,8 @@ pub mod cost {
         }
     }
 
-    /// Helper function. This together with [UPDATE_CREDENTIALS_BASE] determine
-    /// the cost of deploying a credential.
+    /// Helper function. This together with [`UPDATE_CREDENTIALS_BASE`]
+    /// determine the cost of deploying a credential.
     fn update_credentials_variable(num_credentials_before: u16, num_keys: &[u16]) -> Energy {
         // the 500 * num_credentials_before is to account for transactions which do
         // nothing, e.g., don't add don't remove, and don't update the
@@ -2400,6 +2414,81 @@ pub mod construct {
         )
     }
 
+    /// Construct a transaction to update keys of a single credential on an
+    /// account. The transaction specific arguments are
+    ///
+    /// - `num_existing_credentials` - the number of existing credentials on the
+    ///   account. This will affect the estimated transaction cost. It is safe
+    ///   to over-approximate this.
+    /// - `cred_id` - `credId` of a credential whose keys are to be updated.
+    /// - `keys` - the new keys associated with the credential.
+    pub fn update_credential_keys(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        num_existing_credentials: u16,
+        cred_id: CredentialRegistrationID,
+        keys: CredentialPublicKeys,
+    ) -> PreAccountTransaction {
+        let num_cred_keys = keys.keys.len() as u16;
+        let payload = Payload::UpdateCredentialKeys { cred_id, keys };
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add {
+                energy: cost::update_credential_keys(num_existing_credentials, num_cred_keys),
+                num_sigs,
+            },
+            payload,
+        )
+    }
+
+    /// Construct a transaction to update credentials on an account.
+    /// The transaction specific arguments are
+    ///
+    /// - `num_existing_credentials` - the number of existing credentials on the
+    ///   account. This will affect the estimated transaction cost. It is safe
+    ///   to over-approximate this.
+    /// - `new_credentials` - the new credentials to be deployed to the account
+    ///   with the desired indices. The credential with index 0 cannot be
+    ///   replaced.
+    /// - `remove_credentials` - the list of credentials, by `credId`'s, to be
+    ///   removed
+    /// - `new_threshold` - the new account threshold.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_credentials(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        num_existing_credentials: u16,
+        new_credentials: AccountCredentialsMap,
+        remove_credentials: Vec<CredentialRegistrationID>,
+        new_threshold: AccountThreshold,
+    ) -> PreAccountTransaction {
+        let num_cred_keys = new_credentials
+            .iter()
+            .map(|(_, v)| v.values.cred_key_info.keys.len() as u16)
+            .collect::<Vec<_>>();
+        let payload = Payload::UpdateCredentials {
+            new_cred_infos: new_credentials,
+            remove_cred_ids: remove_credentials,
+            new_threshold,
+        };
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add {
+                energy: cost::update_credentials(num_existing_credentials, &num_cred_keys),
+                num_sigs,
+            },
+            payload,
+        )
+    }
+
     /// An upper bound on the amount of energy to spend on a transaction.
     /// Transaction costs have two components, one is based on the size of the
     /// transaction and the number of signatures, and then there is a
@@ -2725,6 +2814,71 @@ pub mod send {
     ) -> AccountTransaction<EncodedPayload> {
         construct::configure_delegation(signer.num_keys(), sender, nonce, expiry, payload)
             .sign(signer)
+    }
+
+    /// Construct a transaction to update keys of a single credential on an
+    /// account. The transaction specific arguments are
+    ///
+    /// - `num_existing_credentials` - the number of existing credentials on the
+    ///   account. This will affect the estimated transaction cost. It is safe
+    ///   to over-approximate this.
+    /// - `cred_id` - `credId` of a credential whose keys are to be updated.
+    /// - `keys` - the new keys associated with the credential.
+    pub fn update_credential_keys(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        num_existing_credentials: u16,
+        cred_id: CredentialRegistrationID,
+        keys: CredentialPublicKeys,
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::update_credential_keys(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            num_existing_credentials,
+            cred_id,
+            keys,
+        )
+        .sign(signer)
+    }
+
+    /// Construct a transaction to update credentials on an account.
+    /// The transaction specific arguments are
+    ///
+    /// - `num_existing_credentials` - the number of existing credentials on the
+    ///   account. This will affect the estimated transaction cost. It is safe
+    ///   to over-approximate this.
+    /// - `new_credentials` - the new credentials to be deployed to the account
+    ///   with the desired indices. The credential with index 0 cannot be
+    ///   replaced.
+    /// - `remove_credentials` - the list of credentials, by `credId`'s, to be
+    ///   removed
+    /// - `new_threshold` - the new account threshold.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_credentials(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        num_existing_credentials: u16,
+        new_credentials: AccountCredentialsMap,
+        remove_credentials: Vec<CredentialRegistrationID>,
+        new_threshold: AccountThreshold,
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::update_credentials(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            num_existing_credentials,
+            new_credentials,
+            remove_credentials,
+            new_threshold,
+        )
+        .sign(signer)
     }
 
     /// Construct a transction to register the given piece of data.
