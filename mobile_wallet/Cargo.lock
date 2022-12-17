@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "4.1.0"
+version = "5.1.0"
 dependencies = [
  "bs58",
  "chrono",
