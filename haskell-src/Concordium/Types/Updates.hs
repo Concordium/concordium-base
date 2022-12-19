@@ -147,9 +147,6 @@ instance Serialize AccessStructure where
         when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
 
--- |Type for an access structure that was added in 'ChainParametersV0'.
-type AccessStructureForCPV1 cpv = JustForCPV1 cpv AccessStructure
-
 -- |The set of keys authorized for chain updates, together with
 -- access structures determining which keys are authorized for
 -- which update types. This is the payload of an update to authorization.
@@ -180,9 +177,9 @@ data Authorizations cpv = Authorizations
       -- |Parameter keys: IdentityProviderIdentity and IpInfo
       asAddIdentityProvider :: !AccessStructure,
       -- |Parameter keys: Cooldown periods for pool owners and delegators
-      asCooldownParameters :: !(AccessStructureForCPV1 cpv),
+      asCooldownParameters :: !(OParam 'PTCooldownParametersAccessStructure cpv AccessStructure),
       -- |Parameter keys: Length of reward period / payday
-      asTimeParameters :: !(AccessStructureForCPV1 cpv)
+      asTimeParameters :: !(OParam 'PTTimeParameters cpv AccessStructure)
     }
 
 deriving instance Eq (Authorizations cpv)
@@ -230,12 +227,8 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asPoolParameters <- getChecked
     asAddAnonymityRevoker <- getChecked
     asAddIdentityProvider <- getChecked
-    (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
-        SCPV0 -> return (NothingForCPV1, NothingForCPV1)
-        SCPV1 -> do
-            cp <- getChecked
-            tp <- getChecked
-            return (JustForCPV1 cp, JustForCPV1 tp)
+    asCooldownParameters <- whenSupported getChecked
+    asTimeParameters <- whenSupported getChecked
     return Authorizations{..}
 
 instance IsChainParametersVersion cpv => Serialize (Authorizations cpv) where
@@ -276,12 +269,8 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asPoolParameters <- parseAS "poolParameters"
     asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
     asAddIdentityProvider <- parseAS "addIdentityProvider"
-    (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
-        SCPV0 -> return (NothingForCPV1, NothingForCPV1)
-        SCPV1 -> do
-            cp <- parseAS "cooldownParameters"
-            tp <- parseAS "timeParameters"
-            return (JustForCPV1 cp, JustForCPV1 tp)
+    asCooldownParameters <- whenSupported $ parseAS "cooldownParameters"
+    asTimeParameters <- whenSupported $ parseAS "timeParameters"
     return Authorizations{..}
 
 instance IsChainParametersVersion cpv => AE.FromJSON (Authorizations cpv) where
@@ -313,12 +302,8 @@ instance AE.ToJSON (Authorizations cpv) where
                 [ "authorizedKeys" AE..= accessPublicKeys,
                   "threshold" AE..= accessThreshold
                 ]
-        cooldownParameters = case asCooldownParameters of
-            NothingForCPV1 -> []
-            JustForCPV1 as -> ["cooldownParameters" AE..= t as]
-        timeParameters = case asTimeParameters of
-            NothingForCPV1 -> []
-            JustForCPV1 as -> ["timeParameters" AE..= t as]
+        cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
+        timeParameters = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
 
 -----------------
 
@@ -918,11 +903,11 @@ extractKeysIndices p =
         TimeParametersCPV1UpdatePayload{} -> f' asTimeParameters
   where
     f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
-    f' v = keysForCPV1 . v . level2Keys
-    g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0 .. (fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
-    keysForCPV1 :: AccessStructureForCPV1 cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
-    keysForCPV1 (JustForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
-    keysForCPV1 NothingForCPV1 = (Set.empty, 1)
+    f' v = keysForOParam . v . level2Keys
+    g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    keysForOParam :: OParam pt cpv AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
+    keysForOParam (SomeParam AccessStructure{..}) = (accessPublicKeys, accessThreshold)
+    keysForOParam NoParam = (Set.empty, 1)
 
 -- The latter case happens if the UpdateKeysCollection is used with chain parameter version 0 but the update payload is
 -- is a cooldown parameter update or a time parameter update, which only exists in chain parameter version 1.

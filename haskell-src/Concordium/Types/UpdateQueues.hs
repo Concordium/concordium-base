@@ -44,17 +44,7 @@ data UpdateQueue e = UpdateQueue
 
 makeLenses ''UpdateQueue
 
-type UpdateQueueForCPV1 (cpv :: ChainParametersVersion) e =
-    JustForCPV1 cpv (UpdateQueue e)
-
-putUpdateQueueForCPV1 :: (Serialize e) => Putter (UpdateQueueForCPV1 cpv e)
-putUpdateQueueForCPV1 NothingForCPV1 = return ()
-putUpdateQueueForCPV1 (JustForCPV1 uq) = putUpdateQueueV0 uq
-
-getUpdateQueueForCPV1 :: forall cpv e. (Serialize e, IsChainParametersVersion cpv) => Get (UpdateQueueForCPV1 cpv e)
-getUpdateQueueForCPV1 = case chainParametersVersion @cpv of
-    SCPV0 -> return NothingForCPV1
-    SCPV1 -> JustForCPV1 <$> getUpdateQueueV0
+type OUpdateQueue (pt :: ParameterType) (cpv :: ChainParametersVersion) e = OParam pt cpv (UpdateQueue e)
 
 instance HashableTo H.Hash e => HashableTo H.Hash (UpdateQueue e) where
     getHash UpdateQueue{..} = H.hash $ runPut $ do
@@ -146,8 +136,8 @@ data PendingUpdates cpv = PendingUpdates
       _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations cpv)),
       -- |Protocol updates.
       _pProtocolQueue :: !(UpdateQueue ProtocolUpdate),
-      -- |Updates to the election difficulty parameter.
-      _pElectionDifficultyQueue :: !(UpdateQueue ElectionDifficulty),
+      -- |Updates to the election difficulty parameter (CPV0 and CPV1 only).
+      _pElectionDifficultyQueue :: !(OUpdateQueue 'PTElectionDifficulty cpv ElectionDifficulty),
       -- |Updates to the euro:energy exchange rate.
       _pEuroPerEnergyQueue :: !(UpdateQueue ExchangeRate),
       -- |Updates to the GTU:euro exchange rate.
@@ -166,10 +156,12 @@ data PendingUpdates cpv = PendingUpdates
       _pAddAnonymityRevokerQueue :: !(UpdateQueue ARS.ArInfo),
       -- |Adds a new identity provider.
       _pAddIdentityProviderQueue :: !(UpdateQueue IPS.IpInfo),
-      -- |Updates to cooldown parameters for chain parameters version 1.
-      _pCooldownParametersQueue :: !(UpdateQueueForCPV1 cpv (CooldownParameters 'ChainParametersV1)),
-      -- |Updates to time parameters for chain parameters version 1.
-      _pTimeParametersQueue :: !(UpdateQueueForCPV1 cpv (TimeParameters 'ChainParametersV1))
+      -- |Updates to cooldown parameters (CPV1 onwards).
+      _pCooldownParametersQueue :: !(OUpdateQueue 'PTCooldownParametersAccessStructure cpv (CooldownParameters cpv)),
+      -- |Updates to time parameters (CPV1 onwards)
+      _pTimeParametersQueue :: !(OUpdateQueue 'PTTimeParameters cpv (TimeParameters cpv)),
+      -- |Updates to the consensus version 2 timing parameters (CPV2 onwards).
+      _pConsensus2TimingParametersQueue :: !(OUpdateQueue 'PTConsensus2TimingParameters cpv Consensus2TimingParameters)
     }
     deriving (Show, Eq)
 
@@ -182,7 +174,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                 <> hsh _pLevel1KeysUpdateQueue
                 <> hsh _pLevel2KeysUpdateQueue
                 <> hsh _pProtocolQueue
-                <> hsh _pElectionDifficultyQueue
+                <> ohsh _pElectionDifficultyQueue
                 <> hsh _pEuroPerEnergyQueue
                 <> hsh _pMicroGTUPerEuroQueue
                 <> hsh _pFoundationAccountQueue
@@ -192,15 +184,18 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                 <> hsh _pPoolParametersQueue
                 <> hsh _pAddAnonymityRevokerQueue
                 <> hsh _pAddIdentityProviderQueue
-                <> hshForCPV1 _pCooldownParametersQueue
-                <> hshForCPV1 _pTimeParametersQueue
+                <> ohsh _pCooldownParametersQueue
+                <> ohsh _pTimeParametersQueue
+                <> ohsh _pConsensus2TimingParametersQueue
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
         -- For CPV1, produce the hash. For CPV0, produce the empty string.
-        hshForCPV1 :: HashableTo H.Hash e => UpdateQueueForCPV1 cpv e -> BS.ByteString
-        hshForCPV1 NothingForCPV1 = BS.empty
-        hshForCPV1 (JustForCPV1 uq) = hsh uq
+        ohsh :: HashableTo H.Hash e => OUpdateQueue pt cpv e -> BS.ByteString
+        ohsh = foldMap hsh
+
+-- ohsh NoParam = BS.empty
+-- ohsh (SomeParam uq) = hsh uq
 
 -- |Serialize the pending updates.
 putPendingUpdatesV0 :: IsChainParametersVersion cpv => Putter (PendingUpdates cpv)
@@ -209,7 +204,7 @@ putPendingUpdatesV0 PendingUpdates{..} = do
     putUpdateQueueV0 _pLevel1KeysUpdateQueue
     putUpdateQueueV0With putAuthorizations _pLevel2KeysUpdateQueue
     putUpdateQueueV0 _pProtocolQueue
-    putUpdateQueueV0 _pElectionDifficultyQueue
+    mapM_ putUpdateQueueV0 _pElectionDifficultyQueue
     putUpdateQueueV0 _pEuroPerEnergyQueue
     putUpdateQueueV0 _pMicroGTUPerEuroQueue
     putUpdateQueueV0 _pFoundationAccountQueue
@@ -219,49 +214,70 @@ putPendingUpdatesV0 PendingUpdates{..} = do
     putUpdateQueueV0 _pPoolParametersQueue
     putUpdateQueueV0 _pAddAnonymityRevokerQueue
     putUpdateQueueV0 _pAddIdentityProviderQueue
-    putUpdateQueueForCPV1 _pCooldownParametersQueue
-    putUpdateQueueForCPV1 _pTimeParametersQueue
+    mapM_ putUpdateQueueV0 _pCooldownParametersQueue
+    mapM_ putUpdateQueueV0 _pTimeParametersQueue
+    mapM_ putUpdateQueueV0 _pConsensus2TimingParametersQueue
 
 -- |Deserialize pending updates. The 'StateMigrationParameters' allow an old format to be
 -- deserialized as a new format by applying the migration.
 getPendingUpdates :: forall oldpv pv. (IsProtocolVersion oldpv) => StateMigrationParameters oldpv pv -> Get (PendingUpdates (ChainParametersVersionFor pv))
 getPendingUpdates migration = do
-    _pRootKeysUpdateQueue <- getUpdateQueueV0
-    _pLevel1KeysUpdateQueue <- getUpdateQueueV0
+    _pRootKeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys RootKeysKind)
+    _pLevel1KeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys Level1KeysKind)
     -- Any pending updates to the authorizations are migrated.
     _pLevel2KeysUpdateQueue <- getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
-    _pProtocolQueue <- getUpdateQueueV0
-    _pElectionDifficultyQueue <- getUpdateQueueV0
-    _pEuroPerEnergyQueue <- getUpdateQueueV0
-    _pMicroGTUPerEuroQueue <- getUpdateQueueV0
-    _pFoundationAccountQueue <- getUpdateQueueV0
+    _pProtocolQueue <- getUpdateQueueV0 @ProtocolUpdate
+    oldElectionDifficultyQueue <- whenSupported @'PTElectionDifficulty @(ChainParametersVersionFor oldpv) $ getUpdateQueueV0 @ElectionDifficulty
+    _pEuroPerEnergyQueue <- getUpdateQueueV0 @ExchangeRate
+    _pMicroGTUPerEuroQueue <- getUpdateQueueV0 @ExchangeRate
+    _pFoundationAccountQueue <- getUpdateQueueV0 @AccountIndex
     _pMintDistributionQueue <- getUpdateQueueV0With (migrateMintDistribution migration <$> get)
-    _pTransactionFeeDistributionQueue <- getUpdateQueueV0
-    _pGASRewardsQueue <- getUpdateQueueV0
+    _pTransactionFeeDistributionQueue <- getUpdateQueueV0 @TransactionFeeDistribution
+    _pGASRewardsQueue <- getUpdateQueueV0 @GASRewards
     _pPoolParametersQueue <- getUpdateQueueV0With (migratePoolParameters migration <$> get)
-    _pAddAnonymityRevokerQueue <- getUpdateQueueV0
-    _pAddIdentityProviderQueue <- getUpdateQueueV0
-    -- Cooldown and time parameters are only part of CPV1
-    (_pCooldownParametersQueue, _pTimeParametersQueue) <- case migration of
+    _pAddAnonymityRevokerQueue <- getUpdateQueueV0 @ARS.ArInfo
+    _pAddIdentityProviderQueue <- getUpdateQueueV0 @IPS.IpInfo
+    oldCooldownParametersQueue <-
+        whenSupported @'PTCooldownParametersAccessStructure @(ChainParametersVersionFor oldpv) $
+            getUpdateQueueV0 @(CooldownParameters (ChainParametersVersionFor oldpv))
+    oldTimeParametersQueue <-
+        whenSupported @'PTTimeParameters @(ChainParametersVersionFor oldpv) $
+            getUpdateQueueV0 @(TimeParameters (ChainParametersVersionFor oldpv))
+    oldConsensus2TimingParametersQueue <-
+        whenSupported @'PTConsensus2TimingParameters @(ChainParametersVersionFor oldpv) $
+            getUpdateQueueV0 @Consensus2TimingParameters
+    -- Cooldown and time parameters are only part of CPV1 and onwards.
+    case migration of
         StateMigrationParametersTrivial -> do
-            _pCooldownParametersQueue <- getUpdateQueueForCPV1
-            _pTimeParametersQueue <- getUpdateQueueForCPV1
-            return (_pCooldownParametersQueue, _pTimeParametersQueue)
+            let _pElectionDifficultyQueue = oldElectionDifficultyQueue
+            let _pCooldownParametersQueue = oldCooldownParametersQueue
+            let _pTimeParametersQueue = oldTimeParametersQueue
+            let _pConsensus2TimingParametersQueue = oldConsensus2TimingParametersQueue
+            return PendingUpdates{..}
         StateMigrationParametersP1P2 -> do
-            _pCooldownParametersQueue <- getUpdateQueueForCPV1
-            _pTimeParametersQueue <- getUpdateQueueForCPV1
-            return (_pCooldownParametersQueue, _pTimeParametersQueue)
+            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
+            _pCooldownParametersQueue <- whenSupported getUpdateQueueV0
+            _pTimeParametersQueue <- whenSupported getUpdateQueueV0
+            let _pConsensus2TimingParametersQueue = NoParam
+            return PendingUpdates{..}
         StateMigrationParametersP2P3 -> do
-            _pCooldownParametersQueue <- getUpdateQueueForCPV1
-            _pTimeParametersQueue <- getUpdateQueueForCPV1
-            return (_pCooldownParametersQueue, _pTimeParametersQueue)
-        StateMigrationParametersP3ToP4 _ ->
-            return (JustForCPV1 emptyUpdateQueue, JustForCPV1 emptyUpdateQueue)
+            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
+            _pCooldownParametersQueue <- whenSupported getUpdateQueueV0
+            _pTimeParametersQueue <- whenSupported getUpdateQueueV0
+            let _pConsensus2TimingParametersQueue = NoParam
+            return PendingUpdates{..}
+        StateMigrationParametersP3ToP4 _ -> do
+            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
+            let _pCooldownParametersQueue = SomeParam emptyUpdateQueue
+            let _pTimeParametersQueue = SomeParam emptyUpdateQueue
+            let _pConsensus2TimingParametersQueue = NoParam
+            return PendingUpdates{..}
         StateMigrationParametersP4ToP5 -> do
-            _pCooldownParametersQueue <- getUpdateQueueForCPV1
-            _pTimeParametersQueue <- getUpdateQueueForCPV1
-            return (_pCooldownParametersQueue, _pTimeParametersQueue)
-    return PendingUpdates{..}
+            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
+            _pCooldownParametersQueue <- whenSupported getUpdateQueueV0
+            _pTimeParametersQueue <- whenSupported getUpdateQueueV0
+            let _pConsensus2TimingParametersQueue = NoParam
+            return PendingUpdates{..}
 
 pendingUpdatesV0ToJSON :: PendingUpdates 'ChainParametersV0 -> Value
 pendingUpdatesV0ToJSON PendingUpdates{..} =
@@ -270,7 +286,7 @@ pendingUpdatesV0ToJSON PendingUpdates{..} =
           "level1Keys" AE..= _pLevel1KeysUpdateQueue,
           "level2Keys" AE..= _pLevel2KeysUpdateQueue,
           "protocol" AE..= _pProtocolQueue,
-          "electionDifficulty" AE..= _pElectionDifficultyQueue,
+          "electionDifficulty" AE..= unOParam _pElectionDifficultyQueue,
           "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
           "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
           "foundationAccount" AE..= _pFoundationAccountQueue,
@@ -285,8 +301,8 @@ pendingUpdatesV0ToJSON PendingUpdates{..} =
 pendingUpdatesV1ToJSON :: PendingUpdates 'ChainParametersV1 -> Value
 pendingUpdatesV1ToJSON
     PendingUpdates
-        { _pCooldownParametersQueue = JustForCPV1 cpq,
-          _pTimeParametersQueue = JustForCPV1 tpq,
+        { _pCooldownParametersQueue = SomeParam cpq,
+          _pTimeParametersQueue = SomeParam tpq,
           ..
         } =
         object
@@ -294,7 +310,7 @@ pendingUpdatesV1ToJSON
               "level1Keys" AE..= _pLevel1KeysUpdateQueue,
               "level2Keys" AE..= _pLevel2KeysUpdateQueue,
               "protocol" AE..= _pProtocolQueue,
-              "electionDifficulty" AE..= _pElectionDifficultyQueue,
+              "electionDifficulty" AE..= unOParam _pElectionDifficultyQueue,
               "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
               "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
               "foundationAccount" AE..= _pFoundationAccountQueue,
@@ -308,6 +324,32 @@ pendingUpdatesV1ToJSON
               "timeParameters" AE..= tpq
             ]
 
+pendingUpdatesV2ToJSON :: PendingUpdates 'ChainParametersV2 -> Value
+pendingUpdatesV2ToJSON
+    PendingUpdates
+        { _pCooldownParametersQueue = SomeParam cpq,
+          _pTimeParametersQueue = SomeParam tpq,
+          ..
+        } =
+        object
+            [ "rootKeys" AE..= _pRootKeysUpdateQueue,
+              "level1Keys" AE..= _pLevel1KeysUpdateQueue,
+              "level2Keys" AE..= _pLevel2KeysUpdateQueue,
+              "protocol" AE..= _pProtocolQueue,
+              "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
+              "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
+              "foundationAccount" AE..= _pFoundationAccountQueue,
+              "mintDistribution" AE..= _pMintDistributionQueue,
+              "transactionFeeDistribution" AE..= _pTransactionFeeDistributionQueue,
+              "gasRewards" AE..= _pGASRewardsQueue,
+              "poolParameters" AE..= _pPoolParametersQueue,
+              "addAnonymityRevoker" AE..= _pAddAnonymityRevokerQueue,
+              "addIdentityProvider" AE..= _pAddIdentityProviderQueue,
+              "cooldownParameters" AE..= cpq,
+              "timeParameters" AE..= tpq,
+              "consensus2TimingParameters" AE..= unOParam _pConsensus2TimingParametersQueue
+            ]
+
 instance IsChainParametersVersion cpv => ToJSON (PendingUpdates cpv) where
     toJSON = case chainParametersVersion @cpv of
         SCPV0 -> pendingUpdatesV0ToJSON
@@ -319,7 +361,7 @@ parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
     _pLevel2KeysUpdateQueue <- o AE..: "level2Keys"
     _pProtocolQueue <- o AE..: "protocol"
-    _pElectionDifficultyQueue <- o AE..: "electionDifficulty"
+    _pElectionDifficultyQueue <- SomeParam <$> o AE..: "electionDifficulty"
     _pEuroPerEnergyQueue <- o AE..: "euroPerEnergy"
     _pMicroGTUPerEuroQueue <- o AE..: "microGTUPerEuro"
     _pFoundationAccountQueue <- o AE..: "foundationAccount"
@@ -329,8 +371,9 @@ parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     _pPoolParametersQueue <- o AE..: "bakerStakeThreshold"
     _pAddAnonymityRevokerQueue <- o AE..: "addAnonymityRevoker"
     _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
-    let _pCooldownParametersQueue = NothingForCPV1
-    let _pTimeParametersQueue = NothingForCPV1
+    let _pCooldownParametersQueue = NoParam
+    let _pTimeParametersQueue = NoParam
+    let _pConsensus2TimingParametersQueue = NoParam
     return PendingUpdates{..}
 
 parsePendingUpdatesV1 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV1)
@@ -339,7 +382,7 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
     _pLevel2KeysUpdateQueue <- o AE..: "level2Keys"
     _pProtocolQueue <- o AE..: "protocol"
-    _pElectionDifficultyQueue <- o AE..: "electionDifficulty"
+    _pElectionDifficultyQueue <- SomeParam <$> o AE..: "electionDifficulty"
     _pEuroPerEnergyQueue <- o AE..: "euroPerEnergy"
     _pMicroGTUPerEuroQueue <- o AE..: "microGTUPerEuro"
     _pFoundationAccountQueue <- o AE..: "foundationAccount"
@@ -351,8 +394,9 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
     cooldownQueue <- o AE..: "cooldownParameters"
     timeQueue <- o AE..: "timeParameters"
-    let _pCooldownParametersQueue = JustForCPV1 cooldownQueue
-    let _pTimeParametersQueue = JustForCPV1 timeQueue
+    let _pCooldownParametersQueue = SomeParam cooldownQueue
+    let _pTimeParametersQueue = SomeParam timeQueue
+    let _pConsensus2TimingParametersQueue = NoParam
     return PendingUpdates{..}
 
 instance IsChainParametersVersion cpv => FromJSON (PendingUpdates cpv) where
@@ -368,6 +412,7 @@ emptyPendingUpdates =
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
+        (pureWhenSupported emptyUpdateQueue)
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
@@ -377,9 +422,9 @@ emptyPendingUpdates =
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
-        emptyUpdateQueue
-        (justForCPV1 emptyUpdateQueue)
-        (justForCPV1 emptyUpdateQueue)
+        (pureWhenSupported emptyUpdateQueue)
+        (pureWhenSupported emptyUpdateQueue)
+        (pureWhenSupported emptyUpdateQueue)
 
 -- |Current state of updatable parameters and update queues.
 data Updates' (cpv :: ChainParametersVersion) = Updates

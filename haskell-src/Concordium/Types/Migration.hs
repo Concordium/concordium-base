@@ -24,8 +24,8 @@ migrateAuthorizations StateMigrationParametersP1P2 auths = auths
 migrateAuthorizations StateMigrationParametersP2P3 auths = auths
 migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{..} =
     Authorizations
-        { asCooldownParameters = JustForCPV1 updateCooldownParametersAccessStructure,
-          asTimeParameters = JustForCPV1 updateTimeParametersAccessStructure,
+        { asCooldownParameters = SomeParam updateCooldownParametersAccessStructure,
+          asTimeParameters = SomeParam updateTimeParametersAccessStructure,
           ..
         }
   where
@@ -55,7 +55,7 @@ migrateMintDistribution StateMigrationParametersTrivial mint = mint
 migrateMintDistribution StateMigrationParametersP1P2 mint = mint
 migrateMintDistribution StateMigrationParametersP2P3 mint = mint
 migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
-    MintDistribution{_mdMintPerSlot = MintPerSlotForCPV0None, ..}
+    MintDistribution{_mdMintPerSlot = NoParam, ..}
 migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 
 -- |Apply a state migration to a 'PoolParameters' structure.
@@ -88,13 +88,15 @@ migrateChainParameters StateMigrationParametersP2P3 cps = cps
 migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParameters{..} =
     ChainParameters
         { _cpCooldownParameters = updateCooldownParameters,
-          _cpTimeParameters = updateTimeParameters,
+          _cpTimeParameters = SomeParam updateTimeParameters,
           _cpRewardParameters =
             RewardParameters
                 { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+          _cpElectionDifficulty = SomeParam (unOParam _cpElectionDifficulty),
+          _cpConsensus2TimingParameters = NoParam,
           ..
         }
   where

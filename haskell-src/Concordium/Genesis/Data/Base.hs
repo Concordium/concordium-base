@@ -230,6 +230,7 @@ toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{.
         Nothing -> error "Foundation account is missing"
         Just i -> fromIntegral i
     _cpPoolParameters = gcpPoolParameters
+    _cpConsensus2TimingParameters = gcpConsensus2TimingParameters
 
 -- |Convert 'GenesisParameters' to genesis data.
 -- This is an auxiliary function since much of the behaviour is shared between protocol versions.

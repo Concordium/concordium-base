@@ -629,10 +629,12 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       _nusnAddAnonymityRevoker :: !U.UpdateSequenceNumber,
       -- |Adds a new identity provider.
       _nusnAddIdentityProvider :: !U.UpdateSequenceNumber,
-      -- |Updates to cooldown parameters for chain parameters version 1.
+      -- |Updates to cooldown parameters for chain parameters version 1 onwards.
       _nusnCooldownParameters :: !U.UpdateSequenceNumber,
-      -- |Updates to time parameters for chain parameters version 1.
-      _nusnTimeParameters :: !U.UpdateSequenceNumber
+      -- |Updates to time parameters for chain parameters version 1 onwards.
+      _nusnTimeParameters :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 timing parameters.
+      _nusnConsensus2TimingParameters :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -645,7 +647,7 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnLevel1Keys = UQ._uqNextSequenceNumber _pLevel1KeysUpdateQueue,
           _nusnLevel2Keys = UQ._uqNextSequenceNumber _pLevel2KeysUpdateQueue,
           _nusnProtocol = UQ._uqNextSequenceNumber _pProtocolQueue,
-          _nusnElectionDifficulty = UQ._uqNextSequenceNumber _pElectionDifficultyQueue,
+          _nusnElectionDifficulty = mNextSequenceNumber _pElectionDifficultyQueue,
           _nusnEuroPerEnergy = UQ._uqNextSequenceNumber _pEuroPerEnergyQueue,
           _nusnMicroCCDPerEuro = UQ._uqNextSequenceNumber _pMicroGTUPerEuroQueue,
           _nusnFoundationAccount = UQ._uqNextSequenceNumber _pFoundationAccountQueue,
@@ -655,6 +657,11 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnPoolParameters = UQ._uqNextSequenceNumber _pPoolParametersQueue,
           _nusnAddAnonymityRevoker = UQ._uqNextSequenceNumber _pAddAnonymityRevokerQueue,
           _nusnAddIdentityProvider = UQ._uqNextSequenceNumber _pAddIdentityProviderQueue,
-          _nusnCooldownParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pCooldownParametersQueue,
-          _nusnTimeParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pTimeParametersQueue
+          _nusnCooldownParameters = mNextSequenceNumber _pCooldownParametersQueue,
+          _nusnTimeParameters = mNextSequenceNumber _pTimeParametersQueue,
+          _nusnConsensus2TimingParameters = mNextSequenceNumber _pConsensus2TimingParametersQueue
         }
+  where
+    -- Get the next sequence number or 1, if not supported.
+    mNextSequenceNumber :: UQ.OUpdateQueue pt cpv e -> U.UpdateSequenceNumber
+    mNextSequenceNumber = foldr (const . UQ._uqNextSequenceNumber) 1
