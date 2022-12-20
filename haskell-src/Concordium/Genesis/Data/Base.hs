@@ -220,7 +220,6 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
 toChainParameters :: Vec.Vector GenesisAccount -> GenesisChainParameters' cpv -> ChainParameters' cpv
 toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..}
   where
-    _cpElectionDifficulty = gcpElectionDifficulty
     _cpExchangeRates = gcpExchangeRates
     _cpCooldownParameters = gcpCooldownParameters
     _cpTimeParameters = gcpTimeParameters
@@ -230,7 +229,7 @@ toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{.
         Nothing -> error "Foundation account is missing"
         Just i -> fromIntegral i
     _cpPoolParameters = gcpPoolParameters
-    _cpConsensus2TimingParameters = gcpConsensus2TimingParameters
+    _cpConsensusParameters = gcpConsensusParameters
 
 -- |Convert 'GenesisParameters' to genesis data.
 -- This is an auxiliary function since much of the behaviour is shared between protocol versions.

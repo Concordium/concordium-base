@@ -55,7 +55,8 @@ $( singletons
             = PTElectionDifficulty
             | PTTimeParameters
             | PTMintPerSlot
-            | PTConsensus2TimingParameters
+            | PTTimeoutParameters
+            | PTMinBlockTime
             | PTBlockEnergyLimit
             | PTCooldownParametersAccessStructure
 
@@ -73,9 +74,12 @@ $( singletons
         isSupported PTMintPerSlot ChainParametersV0 = SupportedParameter
         isSupported PTMintPerSlot ChainParametersV1 = UnsupportedParameter
         isSupported PTMintPerSlot ChainParametersV2 = UnsupportedParameter
-        isSupported PTConsensus2TimingParameters ChainParametersV0 = UnsupportedParameter
-        isSupported PTConsensus2TimingParameters ChainParametersV1 = UnsupportedParameter
-        isSupported PTConsensus2TimingParameters ChainParametersV2 = SupportedParameter
+        isSupported PTTimeoutParameters ChainParametersV0 = UnsupportedParameter
+        isSupported PTTimeoutParameters ChainParametersV1 = UnsupportedParameter
+        isSupported PTTimeoutParameters ChainParametersV2 = SupportedParameter
+        isSupported PTMinBlockTime ChainParametersV0 = UnsupportedParameter
+        isSupported PTMinBlockTime ChainParametersV1 = UnsupportedParameter
+        isSupported PTMinBlockTime ChainParametersV2 = SupportedParameter
         isSupported PTBlockEnergyLimit ChainParametersV0 = UnsupportedParameter
         isSupported PTBlockEnergyLimit ChainParametersV1 = UnsupportedParameter
         isSupported PTBlockEnergyLimit ChainParametersV2 = SupportedParameter
@@ -465,28 +469,34 @@ parseCooldownParametersJSON = case sCooldownParametersVersionFor (chainParameter
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
             <$> v
-                .: "poolOwnerCooldown"
+            .: "poolOwnerCooldown"
             <*> v
-                .: "delegatorCooldown"
+            .: "delegatorCooldown"
 
 instance IsChainParametersVersion cpv => FromJSON (CooldownParameters cpv) where
     parseJSON = parseCooldownParametersJSON
 
 -- |Lens for '_cpBakerExtraCooldownEpochs'
 {-# INLINE cpBakerExtraCooldownEpochs #-}
-cpBakerExtraCooldownEpochs :: Lens' (CooldownParameters 'ChainParametersV0) Epoch
+cpBakerExtraCooldownEpochs ::
+    (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion0) =>
+    Lens' (CooldownParameters cpv) Epoch
 cpBakerExtraCooldownEpochs =
     lens _cpBakerExtraCooldownEpochs (\cp x -> cp{_cpBakerExtraCooldownEpochs = x})
 
 -- |Lens for '_cpPoolOwnerCooldown'
 {-# INLINE cpPoolOwnerCooldown #-}
-cpPoolOwnerCooldown :: Lens' (CooldownParameters 'ChainParametersV1) DurationSeconds
+cpPoolOwnerCooldown ::
+    (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) =>
+    Lens' (CooldownParameters cpv) DurationSeconds
 cpPoolOwnerCooldown =
     lens _cpPoolOwnerCooldown (\cp x -> cp{_cpPoolOwnerCooldown = x})
 
 -- |Lens for '_cpDelegatorCooldown'
 {-# INLINE cpDelegatorCooldown #-}
-cpDelegatorCooldown :: Lens' (CooldownParameters 'ChainParametersV1) DurationSeconds
+cpDelegatorCooldown ::
+    (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) =>
+    Lens' (CooldownParameters cpv) DurationSeconds
 cpDelegatorCooldown =
     lens _cpDelegatorCooldown (\cp x -> cp{_cpDelegatorCooldown = x})
 
@@ -772,37 +782,49 @@ instance IsChainParametersVersion cpv => FromJSON (PoolParameters cpv) where
 
 -- |Lens for '_ppBakerStakeThreshold'
 {-# INLINE ppBakerStakeThreshold #-}
-ppBakerStakeThreshold :: Lens' (PoolParameters 'ChainParametersV0) Amount
+ppBakerStakeThreshold ::
+    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion0) =>
+    Lens' (PoolParameters cpv) Amount
 ppBakerStakeThreshold =
     lens _ppBakerStakeThreshold (\pp x -> pp{_ppBakerStakeThreshold = x})
 
 -- |Lens for '_ppPassiveCommissions'
 {-# INLINE ppPassiveCommissions #-}
-ppPassiveCommissions :: Lens' (PoolParameters 'ChainParametersV1) CommissionRates
+ppPassiveCommissions ::
+    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
+    Lens' (PoolParameters cpv) CommissionRates
 ppPassiveCommissions =
     lens _ppPassiveCommissions (\pp x -> pp{_ppPassiveCommissions = x})
 
 -- |Lens for '_ppCommissionBounds'
 {-# INLINE ppCommissionBounds #-}
-ppCommissionBounds :: Lens' (PoolParameters 'ChainParametersV1) CommissionRanges
+ppCommissionBounds ::
+    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
+    Lens' (PoolParameters cpv) CommissionRanges
 ppCommissionBounds =
     lens _ppCommissionBounds (\pp x -> pp{_ppCommissionBounds = x})
 
 -- |Lens for '_ppMinimumEquityCapital'
 {-# INLINE ppMinimumEquityCapital #-}
-ppMinimumEquityCapital :: Lens' (PoolParameters 'ChainParametersV1) Amount
+ppMinimumEquityCapital ::
+    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
+    Lens' (PoolParameters cpv) Amount
 ppMinimumEquityCapital =
     lens _ppMinimumEquityCapital (\pp x -> pp{_ppMinimumEquityCapital = x})
 
 -- |Lens for '_ppCapitalBound'
 {-# INLINE ppCapitalBound #-}
-ppCapitalBound :: Lens' (PoolParameters 'ChainParametersV1) CapitalBound
+ppCapitalBound ::
+    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
+    Lens' (PoolParameters cpv) CapitalBound
 ppCapitalBound =
     lens _ppCapitalBound (\pp x -> pp{_ppCapitalBound = x})
 
 -- |Lens for '_ppLeverageBound'
 {-# INLINE ppLeverageBound #-}
-ppLeverageBound :: Lens' (PoolParameters 'ChainParametersV1) LeverageFactor
+ppLeverageBound ::
+    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
+    Lens' (PoolParameters cpv) LeverageFactor
 ppLeverageBound =
     lens _ppLeverageBound (\pp x -> pp{_ppLeverageBound = x})
 
@@ -833,67 +855,118 @@ instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
 deriving instance Eq (PoolParameters cpv)
 deriving instance Show (PoolParameters cpv)
 
-data Consensus2TimingParameters = Consensus2TimingParameters
+-- |Parameters controlling consensus timeouts for the consensus protocol version 2.
+data TimeoutParameters = TimeoutParameters
     { -- |The base value for triggering a timeout.
-      c2tpTimeoutBase :: Duration,
+      tpTimeoutBase :: Duration,
       -- |Factor for increasing the timeout. Must be greater than 1.
-      c2tpTimeoutIncrease :: Ratio Word64,
+      tpTimeoutIncrease :: Ratio Word64,
       -- |Factor for decreasing the timeout. Must be between 0 and 1.
-      c2tpTimeoutDecrease :: Ratio Word64,
-      -- |Minimum time between blocks.
-      c2tpMinTime :: Duration
+      tpTimeoutDecrease :: Ratio Word64
     }
     deriving (Eq, Show)
 
-instance Serialize Consensus2TimingParameters where
-    put Consensus2TimingParameters{..} = do
-        put c2tpTimeoutBase
-        put c2tpTimeoutIncrease
-        put c2tpTimeoutDecrease
-        put c2tpMinTime
+instance Serialize TimeoutParameters where
+    put TimeoutParameters{..} = do
+        put tpTimeoutBase
+        put tpTimeoutIncrease
+        put tpTimeoutDecrease
     get = do
-        c2tpTimeoutBase <- get
-        c2tpTimeoutIncrease <- get
-        unless (c2tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
-        c2tpTimeoutDecrease <- get
-        unless (c2tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
-        unless (c2tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
-        c2tpMinTime <- get
-        return Consensus2TimingParameters{..}
+        tpTimeoutBase <- get
+        tpTimeoutIncrease <- get
+        unless (tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
+        tpTimeoutDecrease <- get
+        unless (tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
+        unless (tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
+        return TimeoutParameters{..}
 
-instance ToJSON Consensus2TimingParameters where
-    toJSON Consensus2TimingParameters{..} =
+instance ToJSON TimeoutParameters where
+    toJSON TimeoutParameters{..} =
         object
-            [ "timeoutBase" AE..= c2tpTimeoutBase,
-              "timeoutIncrease" AE..= c2tpTimeoutIncrease,
-              "timeoutDecrease" AE..= c2tpTimeoutDecrease,
-              "minTime" AE..= c2tpMinTime
+            [ "timeoutBase" AE..= tpTimeoutBase,
+              "timeoutIncrease" AE..= tpTimeoutIncrease,
+              "timeoutDecrease" AE..= tpTimeoutDecrease
             ]
 
-instance FromJSON Consensus2TimingParameters where
-    parseJSON = withObject "Consensus2TimingParameters" $ \o -> do
-        c2tpTimeoutBase <- o .: "timeoutBase"
-        c2tpTimeoutIncrease <- o .: "timeoutIncrease"
-        unless (c2tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
-        c2tpTimeoutDecrease <- o .: "timeoutDecrease"
-        unless (c2tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
-        unless (c2tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
-        c2tpMinTime <- o .: "minTime"
-        return Consensus2TimingParameters{..}
+instance FromJSON TimeoutParameters where
+    parseJSON = withObject "TimeoutParameters" $ \o -> do
+        tpTimeoutBase <- o .: "timeoutBase"
+        tpTimeoutIncrease <- o .: "timeoutIncrease"
+        unless (tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
+        tpTimeoutDecrease <- o .: "timeoutDecrease"
+        unless (tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
+        unless (tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
+        return TimeoutParameters{..}
 
-instance HashableTo Hash.Hash Consensus2TimingParameters where
+instance HashableTo Hash.Hash TimeoutParameters where
     getHash = Hash.hash . encode
 
-instance (Monad m) => MHashableTo m Hash.Hash Consensus2TimingParameters
+instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 
--- instance T
+$( singletons
+    [d|
+        -- \|Consensus parameters
+        data ConsensusParametersVersion
+            = ConsensusParametersVersion0 -- \^Election difficulty
+            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time
+
+        consensusParametersVersionFor :: ChainParametersVersion -> ConsensusParametersVersion
+        consensusParametersVersionFor ChainParametersV0 = ConsensusParametersVersion0
+        consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
+        consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
+        |]
+ )
+
+data ConsensusParameters (cpv :: ChainParametersVersion) where
+    ConsensusParametersV0 ::
+        (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion0) =>
+        { -- |Election difficulty parameter.
+            _cpElectionDifficulty :: !ElectionDifficulty
+        } ->
+        ConsensusParameters cpv
+    ConsensusParametersV1 ::
+        (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+        {
+            -- |Parameters controlling round timeouts.
+            _cpTimeoutParameters :: !TimeoutParameters,
+            -- |Minimum time interval between blocks.
+            _cpMinBlockTime :: !Duration,
+            -- |Maximum energy allowed per block.
+            _cpBlockEnergyLimit :: !Energy
+        } ->
+        ConsensusParameters cpv
+
+coerceConsensusParameters :: (ConsensusParametersVersionFor cpv1 ~ ConsensusParametersVersionFor cpv2) =>
+    ConsensusParameters cpv1 -> ConsensusParameters cpv2
+coerceConsensusParameters ConsensusParametersV0{..} = ConsensusParametersV0{..}
+coerceConsensusParameters ConsensusParametersV1{..} = ConsensusParametersV1{..}
+
+deriving instance Eq (ConsensusParameters cpv)
+
+deriving instance Show (ConsensusParameters cpv)
+
+instance IsChainParametersVersion cpv => Serialize (ConsensusParameters cpv) where
+    put ConsensusParametersV0{..} = put _cpElectionDifficulty
+    put ConsensusParametersV1{..} = do
+        put _cpTimeoutParameters
+        put _cpMinBlockTime
+        put _cpBlockEnergyLimit
+    get = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
+        SConsensusParametersVersion0 -> ConsensusParametersV0 <$> get
+        SConsensusParametersVersion1 -> do
+            _cpTimeoutParameters <- get
+            _cpMinBlockTime <- get
+            _cpBlockEnergyLimit <- get
+            return ConsensusParametersV1{..}
 
 -- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 -- reflects changes to the chain parameters across different protocol versions.
 data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
     { -- |Election difficulty parameter.
       -- (CPV0 and CPV1 only.)
-      _cpElectionDifficulty :: !(OParam 'PTElectionDifficulty cpv ElectionDifficulty),
+      --_cpElectionDifficulty :: !(OParam 'PTElectionDifficulty cpv ElectionDifficulty),
+      -- |Consensus parameters.
+      _cpConsensusParameters :: !(ConsensusParameters cpv),
       -- |Exchange rates.
       _cpExchangeRates :: !ExchangeRates,
       -- |Cooldown parameters.
@@ -909,8 +982,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFoundationAccount :: !AccountIndex,
       -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
       -- for becoming a baker.
-      _cpPoolParameters :: !(PoolParameters cpv),
-      _cpConsensus2TimingParameters :: !(OParam 'PTConsensus2TimingParameters cpv Consensus2TimingParameters)
+      _cpPoolParameters :: !(PoolParameters cpv)
     }
     deriving (Eq, Show)
 
@@ -932,17 +1004,17 @@ instance HasRewardParameters (ChainParameters' cpv) cpv where
 
 putChainParameters :: IsChainParametersVersion cpv => Putter (ChainParameters' cpv)
 putChainParameters ChainParameters{..} = do
-    put _cpElectionDifficulty
+    put _cpConsensusParameters
     put _cpExchangeRates
     putCooldownParameters _cpCooldownParameters
-    -- mapM_ putTimeParameters _cpTimeParameters
+    put _cpTimeParameters
     put _cpAccountCreationLimit
     put _cpRewardParameters
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
 
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
-getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <*> get <*> get <*> get <*> get <*> getPoolParameters <*> get
+getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <*> get <*> get <*> get <*> get <*> getPoolParameters
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
     put = putChainParameters
@@ -956,32 +1028,33 @@ instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (Cha
 parseJSONForCPV0 :: Value -> Parser (ChainParameters' 'ChainParametersV0)
 parseJSONForCPV0 =
     withObject "ChainParameters" $ \v -> do
-        _cpElectionDifficulty <- SomeParam <$> v .: "electionDifficulty"
+        _cpElectionDifficulty <- v .: "electionDifficulty"
+        let _cpConsensusParameters = ConsensusParametersV0{..}
         _cpExchangeRates <-
             makeExchangeRates
                 <$> v
-                    .: "euroPerEnergy"
+                .: "euroPerEnergy"
                 <*> v
-                    .: "microGTUPerEuro"
+                .: "microGTUPerEuro"
         _cpCooldownParameters <-
             CooldownParametersV0
                 <$> v
-                    .: "bakerCooldownEpochs"
+                .: "bakerCooldownEpochs"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _cpPoolParameters <-
             PoolParametersV0
                 <$> v
-                    .: "minimumThresholdForBaking"
+                .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
-        let _cpConsensus2TimingParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
 parseJSONForCPV1 =
     withObject "ChainParametersV1" $ \v -> do
-        _cpElectionDifficulty <- SomeParam <$> v .: "electionDifficulty"
+        _cpElectionDifficulty <- v .: "electionDifficulty"
+        let _cpConsensusParameters = ConsensusParametersV0{..}
         _cpEuroPerEnergy <- v .: "euroPerEnergy"
         _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -1006,13 +1079,11 @@ parseJSONForCPV1 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            _cpConsensus2TimingParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
 parseJSONForCPV2 =
     withObject "ChainParametersV2" $ \v -> do
-        let _cpElectionDifficulty = NoParam
         _cpEuroPerEnergy <- v .: "euroPerEnergy"
         _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -1031,17 +1102,19 @@ parseJSONForCPV2 =
         _ppLeverageBound <- v .: "leverageBound"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
-        c2tpTimeoutBase <- v .: "timeoutBase"
-        c2tpTimeoutIncrease <- v .: "timeoutIncrease"
-        c2tpTimeoutDecrease <- v .: "timeoutDecrease"
-        c2tpMinTime <- v .: "minTime"
+        tpTimeoutBase <- v .: "timeoutBase"
+        tpTimeoutIncrease <- v .: "timeoutIncrease"
+        tpTimeoutDecrease <- v .: "timeoutDecrease"
+        let _cpTimeoutParameters = TimeoutParameters{..}
+        _cpMinBlockTime <- v .: "minBlockTime"
+        _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            _cpConsensus2TimingParameters = SomeParam Consensus2TimingParameters{..}
+            _cpConsensusParameters = ConsensusParametersV1{..}
         return ChainParameters{..}
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
@@ -1054,7 +1127,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
     toJSON ChainParameters{..} = case chainParametersVersion @cpv of
         SCPV0 ->
             object
-                [ "electionDifficulty" AE..= unOParam _cpElectionDifficulty,
+                [ "electionDifficulty" AE..= _cpElectionDifficulty _cpConsensusParameters,
                   "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
                   "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,
                   "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs _cpCooldownParameters,
@@ -1065,7 +1138,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                 ]
         SCPV1 ->
             object
-                [ "electionDifficulty" AE..= unOParam _cpElectionDifficulty,
+                [ "electionDifficulty" AE..= _cpElectionDifficulty _cpConsensusParameters,
                   "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
                   "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,
                   "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown _cpCooldownParameters,
@@ -1105,10 +1178,11 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
                   "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
                   "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters),
-                  "timeoutBase" AE..= c2tpTimeoutBase (unOParam _cpConsensus2TimingParameters),
-                  "timeoutIncrease" AE..= c2tpTimeoutIncrease (unOParam _cpConsensus2TimingParameters),
-                  "timeoutDecrease" AE..= c2tpTimeoutDecrease (unOParam _cpConsensus2TimingParameters),
-                  "minTime" AE..= c2tpMinTime (unOParam _cpConsensus2TimingParameters)
+                  "timeoutBase" AE..= tpTimeoutBase (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutIncrease" AE..= tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutDecrease" AE..= tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
+                  "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
+                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters
                 ]
 
 -- |Parameters that affect finalization.

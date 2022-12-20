@@ -95,8 +95,7 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
-          _cpElectionDifficulty = SomeParam (unOParam _cpElectionDifficulty),
-          _cpConsensus2TimingParameters = NoParam,
+          _cpConsensusParameters = coerceConsensusParameters _cpConsensusParameters,
           ..
         }
   where

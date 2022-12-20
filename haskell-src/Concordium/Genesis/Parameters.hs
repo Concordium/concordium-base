@@ -22,8 +22,8 @@ import Concordium.Types.Updates
 -- |Representation format for the chain parameters at genesis.  This is used in the construction of
 -- genesis data from JSON files.
 data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParameters
-    { -- |Election difficulty parameter.
-      gcpElectionDifficulty :: !(OParam 'PTElectionDifficulty cpv ElectionDifficulty),
+    { -- |Consensus parameters.
+      gcpConsensusParameters :: !(ConsensusParameters cpv),
       -- |Exchange rates.
       gcpExchangeRates :: !ExchangeRates,
       -- |Cooldown parameters.
@@ -38,9 +38,7 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress,
       -- |Minimum threshold required for registering as a baker.
-      gcpPoolParameters :: !(PoolParameters cpv),
-      -- |Timing parameters for version 2 consensus.
-      gcpConsensus2TimingParameters :: !(OParam 'PTConsensus2TimingParameters cpv Consensus2TimingParameters)
+      gcpPoolParameters :: !(PoolParameters cpv)
     }
     deriving (Eq, Show)
 
@@ -56,7 +54,7 @@ instance IsChainParametersVersion cpv => FromJSON (GenesisChainParameters' cpv) 
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
 parseJSONForGCPV0 =
     withObject "GenesisChainParameters" $ \v -> do
-        gcpElectionDifficulty <- SomeParam <$> v .: "electionDifficulty"
+        gcpConsensusParameters <- ConsensusParametersV0 <$> v .: "electionDifficulty"
         _erEuroPerEnergy <- v .: "euroPerEnergy"
         _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpBakerExtraCooldownEpochs <- v .: "bakerCooldownEpochs"
@@ -68,14 +66,13 @@ parseJSONForGCPV0 =
             gcpTimeParameters = NoParam
             gcpPoolParameters = PoolParametersV0{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
-            gcpConsensus2TimingParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
 parseJSONForGCPV1 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV1)
 parseJSONForGCPV1 =
     withObject "GenesisChainParametersV1" $ \v -> do
-        gcpElectionDifficulty <- SomeParam <$> v .: "electionDifficulty"
+        gcpConsensusParameters <- ConsensusParametersV0 <$> v .: "electionDifficulty"
         _erEuroPerEnergy <- v .: "euroPerEnergy"
         _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -100,14 +97,12 @@ parseJSONForGCPV1 =
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            gcpConsensus2TimingParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
 parseJSONForGCPV2 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV2)
 parseJSONForGCPV2 =
     withObject "GenesisChainParametersV2" $ \v -> do
-        let gcpElectionDifficulty = NoParam
         _erEuroPerEnergy <- v .: "euroPerEnergy"
         _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -126,23 +121,25 @@ parseJSONForGCPV2 =
         _ppLeverageBound <- v .: "leverageBound"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
-        c2tpTimeoutBase <- v .: "timeoutBase"
-        c2tpTimeoutIncrease <- v .: "timeoutIncrease"
-        c2tpTimeoutDecrease <- v .: "timeoutDecrease"
-        c2tpMinTime <- v .: "minTime"
+        tpTimeoutBase <- v .: "timeoutBase"
+        tpTimeoutIncrease <- v .: "timeoutIncrease"
+        tpTimeoutDecrease <- v .: "timeoutDecrease"
+        _cpMinBlockTime <- v .: "minBlockTime"
+        _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            gcpConsensus2TimingParameters = SomeParam Consensus2TimingParameters{..}
+            _cpTimeoutParameters = TimeoutParameters{..}
+            gcpConsensusParameters = ConsensusParametersV1{..}
         return GenesisChainParameters{..}
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
     toJSON GenesisChainParameters{..} =
         object
-            [ "electionDifficulty" AE..= unOParam gcpElectionDifficulty,
+            [ "electionDifficulty" AE..= _cpElectionDifficulty gcpConsensusParameters,
               "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
               "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
               "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs gcpCooldownParameters,
@@ -155,7 +152,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
 instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
     toJSON GenesisChainParameters{..} =
         object
-            [ "electionDifficulty" AE..= unOParam gcpElectionDifficulty,
+            [ "electionDifficulty" AE..= _cpElectionDifficulty gcpConsensusParameters,
               "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
               "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
               "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,
