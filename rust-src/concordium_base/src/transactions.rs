@@ -1758,7 +1758,7 @@ pub mod cost {
     }
 
     /// Helper function. This together with [`UPDATE_CREDENTIALS_BASE`]
-    /// determine the cost of deploying a credential.
+    /// determines the cost of updating credentials on an account.
     fn update_credentials_variable(num_credentials_before: u16, num_keys: &[u16]) -> Energy {
         // the 500 * num_credentials_before is to account for transactions which do
         // nothing, e.g., don't add don't remove, and don't update the
