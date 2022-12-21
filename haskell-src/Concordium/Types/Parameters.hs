@@ -26,6 +26,7 @@ import Data.Maybe
 import Data.Ratio
 import Data.Serialize
 import Data.Singletons.TH
+import Data.Bool.Singletons
 import Data.Word
 import Lens.Micro.Platform
 import Test.QuickCheck.Arbitrary
@@ -36,18 +37,6 @@ import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils
-
-pattern SChainParametersV0 :: () => (cpv ~ 'ChainParametersV0) => SChainParametersVersion cpv
-pattern SChainParametersV0 = SCPV0
-
-pattern SChainParametersV1 :: () => (cpv ~ 'ChainParametersV1) => SChainParametersVersion cpv
-pattern SChainParametersV1 = SCPV1
-
-pattern SChainParametersV2 :: () => (cpv ~ 'ChainParametersV2) => SChainParametersVersion cpv
-pattern SChainParametersV2 = SCPV2
-
-type instance Sing = SChainParametersVersion
-type instance Sing = SProtocolVersion
 
 $( singletons
     [d|
@@ -60,42 +49,38 @@ $( singletons
             | PTBlockEnergyLimit
             | PTCooldownParametersAccessStructure
 
-        data ParameterSupport
-            = SupportedParameter
-            | UnsupportedParameter
-
-        isSupported :: ParameterType -> ChainParametersVersion -> ParameterSupport
-        isSupported PTElectionDifficulty ChainParametersV0 = SupportedParameter
-        isSupported PTElectionDifficulty ChainParametersV1 = SupportedParameter
-        isSupported PTElectionDifficulty ChainParametersV2 = UnsupportedParameter
-        isSupported PTTimeParameters ChainParametersV0 = UnsupportedParameter
-        isSupported PTTimeParameters ChainParametersV1 = SupportedParameter
-        isSupported PTTimeParameters ChainParametersV2 = SupportedParameter
-        isSupported PTMintPerSlot ChainParametersV0 = SupportedParameter
-        isSupported PTMintPerSlot ChainParametersV1 = UnsupportedParameter
-        isSupported PTMintPerSlot ChainParametersV2 = UnsupportedParameter
-        isSupported PTTimeoutParameters ChainParametersV0 = UnsupportedParameter
-        isSupported PTTimeoutParameters ChainParametersV1 = UnsupportedParameter
-        isSupported PTTimeoutParameters ChainParametersV2 = SupportedParameter
-        isSupported PTMinBlockTime ChainParametersV0 = UnsupportedParameter
-        isSupported PTMinBlockTime ChainParametersV1 = UnsupportedParameter
-        isSupported PTMinBlockTime ChainParametersV2 = SupportedParameter
-        isSupported PTBlockEnergyLimit ChainParametersV0 = UnsupportedParameter
-        isSupported PTBlockEnergyLimit ChainParametersV1 = UnsupportedParameter
-        isSupported PTBlockEnergyLimit ChainParametersV2 = SupportedParameter
-        isSupported PTCooldownParametersAccessStructure ChainParametersV0 = UnsupportedParameter
-        isSupported PTCooldownParametersAccessStructure ChainParametersV1 = SupportedParameter
-        isSupported PTCooldownParametersAccessStructure ChainParametersV2 = SupportedParameter
+        isSupported :: ParameterType -> ChainParametersVersion -> Bool
+        isSupported PTElectionDifficulty ChainParametersV0 = True
+        isSupported PTElectionDifficulty ChainParametersV1 = True
+        isSupported PTElectionDifficulty ChainParametersV2 = False
+        isSupported PTTimeParameters ChainParametersV0 = False
+        isSupported PTTimeParameters ChainParametersV1 = True
+        isSupported PTTimeParameters ChainParametersV2 = True
+        isSupported PTMintPerSlot ChainParametersV0 = True
+        isSupported PTMintPerSlot ChainParametersV1 = False
+        isSupported PTMintPerSlot ChainParametersV2 = False
+        isSupported PTTimeoutParameters ChainParametersV0 = False
+        isSupported PTTimeoutParameters ChainParametersV1 = False
+        isSupported PTTimeoutParameters ChainParametersV2 = True
+        isSupported PTMinBlockTime ChainParametersV0 = False
+        isSupported PTMinBlockTime ChainParametersV1 = False
+        isSupported PTMinBlockTime ChainParametersV2 = True
+        isSupported PTBlockEnergyLimit ChainParametersV0 = False
+        isSupported PTBlockEnergyLimit ChainParametersV1 = False
+        isSupported PTBlockEnergyLimit ChainParametersV2 = True
+        isSupported PTCooldownParametersAccessStructure ChainParametersV0 = False
+        isSupported PTCooldownParametersAccessStructure ChainParametersV1 = True
+        isSupported PTCooldownParametersAccessStructure ChainParametersV2 = True
         |]
  )
 
 -- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 -- otherwise.
 data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
-    NoParam :: (IsSupported pt cpv ~ 'UnsupportedParameter) => OParam pt cpv a
-    SomeParam :: (IsSupported pt cpv ~ 'SupportedParameter) => !a -> OParam pt cpv a
+    NoParam :: (IsSupported pt cpv ~ 'False) => OParam pt cpv a
+    SomeParam :: (IsSupported pt cpv ~ 'True) => !a -> OParam pt cpv a
 
-unOParam :: (IsSupported pt cpv ~ 'SupportedParameter) => OParam pt cpv a -> a
+unOParam :: (IsSupported pt cpv ~ 'True) => OParam pt cpv a -> a
 unOParam (SomeParam a) = a
 
 instance Functor (OParam pt cpv) where
@@ -136,13 +121,13 @@ instance (Serialize a, SingI pt, IsChainParametersVersion cpv) => Serialize (OPa
 
 whenSupported :: forall pt cpv f a. (Applicative f, SingI pt, IsChainParametersVersion cpv) => f a -> f (OParam pt cpv a)
 whenSupported m = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
-    SUnsupportedParameter -> pure NoParam
-    SSupportedParameter -> SomeParam <$> m
+    SFalse -> pure NoParam
+    STrue -> SomeParam <$> m
 
 pureWhenSupported :: forall pt cpv a. (SingI pt, IsChainParametersVersion cpv) => a -> OParam pt cpv a
 pureWhenSupported v = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
-    SUnsupportedParameter -> NoParam
-    SSupportedParameter -> SomeParam v
+    SFalse -> NoParam
+    STrue -> SomeParam v
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
@@ -158,8 +143,8 @@ type CryptographicParameters = GlobalContext
 --     put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
 --     put MintPerSlotForCPV0None = return ()
 --     get = case chainParametersVersion @cpv of
---         SCPV0 -> MintPerSlotForCPV0Some <$> get
---         SCPV1 -> return MintPerSlotForCPV0None
+--         SChainParametersV0 -> MintPerSlotForCPV0Some <$> get
+--         SChainParametersV1 -> return MintPerSlotForCPV0None
 
 -- -- |Lens for '_mpsMintPerSlot'
 -- {-# INLINE mpsMintPerSlot #-}
@@ -1117,13 +1102,13 @@ parseJSONForCPV2 =
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of
-        SCPV0 -> parseJSONForCPV0
-        SCPV1 -> parseJSONForCPV1
-        SCPV2 -> parseJSONForCPV2
+        SChainParametersV0 -> parseJSONForCPV0
+        SChainParametersV1 -> parseJSONForCPV1
+        SChainParametersV2 -> parseJSONForCPV2
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cpv) where
     toJSON ChainParameters{..} = case chainParametersVersion @cpv of
-        SCPV0 ->
+        SChainParametersV0 ->
             object
                 [ "electionDifficulty" AE..= _cpElectionDifficulty _cpConsensusParameters,
                   "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
@@ -1134,7 +1119,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "foundationAccountIndex" AE..= _cpFoundationAccount,
                   "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold _cpPoolParameters
                 ]
-        SCPV1 ->
+        SChainParametersV1 ->
             object
                 [ "electionDifficulty" AE..= _cpElectionDifficulty _cpConsensusParameters,
                   "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
@@ -1156,7 +1141,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
                   "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters)
                 ]
-        SCPV2 ->
+        SChainParametersV2 ->
             object
                 [ "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
                   "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,

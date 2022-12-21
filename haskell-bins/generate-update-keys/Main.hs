@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications, DataKinds #-}
 
 -- |A tool for generating update keys and authorizations for
 --    chain updates.  The generated authorizations can be used
@@ -17,6 +18,8 @@ import System.Exit
 import System.FilePath
 
 import Concordium.Crypto.SignatureScheme
+import Concordium.Types.Parameters
+import Concordium.Types.ProtocolVersion
 import Concordium.Types.Updates
 
 data AuthDetails = AuthDetails
@@ -105,7 +108,7 @@ commonParameters =
         <*> option readHigherAuthDetails (metavar "HACSTR" <> long "level1-keys" <> help "Threshold and number of level 1 keys to generate")
         <*> option readAuthDetails (metavar "ACSTR" <> long "emergency" <> help "Emergency update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "protocol" <> help "Protocol update access structure")
-        <*> option readAuthDetails (metavar "ACSTR" <> long "consensus" <> help "Consensus update access structure")
+        <*> option readAuthDetails (metavar "ACSTR" <> long "consensus" <> help "Consensus parameters update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "euro-energy" <> help "Euro:energy rate update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "gtu-euro" <> help "GTU:Euro rate update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "foundation-account" <> help "Foundation account update access structure")
@@ -149,7 +152,7 @@ generateKeys guk = do
     when (cukKeyCount == 0) $ die "At least one level 2 key is required."
     asEmergency <- makeAS cukEmergency "Emergency update access structure"
     asProtocol <- makeAS cukProtocol "Protocol update access structure"
-    asParamElectionDifficulty <- makeAS cukElectionDifficulty "Election difficulty update access structure"
+    asParamConsensusParameters <- makeAS cukConsensusParameters "Election difficulty/consensus parameters update access structure"
     asParamEuroPerEnergy <- makeAS cukEuroEnergy "Euro-energy rate update access structure"
     asParamMicroGTUPerEuro <- makeAS cukGTUEuro "GTU-Euro rate update access structure"
     asParamFoundationAccount <- makeAS cukFoundationAccount "Foundation account update access structure"
@@ -162,22 +165,23 @@ generateKeys guk = do
     let asKeys = Vec.empty -- Placeholder; replaced in doGenerateKeys
     case guk of
         GenerateUpdateKeysCPV0{} ->
-            doGenerateKeys
+            doGenerateKeys @'ChainParametersV0
                 Authorizations
-                    { asCooldownParameters = NothingForCPV1,
-                      asTimeParameters = NothingForCPV1,
+                    { asCooldownParameters = NoParam,
+                      asTimeParameters = NoParam,
                       ..
                     }
         GenerateUpdateKeysCPV1{..} -> do
             asCooldownParameters <-
-                JustForCPV1
+                SomeParam
                     <$> makeAS gukCooldownParameters "Add identity provider access structure"
             asTimeParameters <-
-                JustForCPV1
+                SomeParam
                     <$> makeAS gukCooldownParameters "Add identity provider access structure"
-            doGenerateKeys Authorizations{..}
+            doGenerateKeys @'ChainParametersV1 Authorizations{..}
   where
     CommonUpdateKeys{..} = gukCommon guk
+    doGenerateKeys :: IsChainParametersVersion cpv => Authorizations cpv -> IO ()
     doGenerateKeys level2KeysPre = do
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0 .. cukKeyCount - 1]]

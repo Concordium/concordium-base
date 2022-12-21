@@ -1,3 +1,4 @@
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
@@ -34,7 +35,7 @@ checkUpdateInstructionSerialization spv = checkSerialization (getUpdateInstructi
 -- we get back the value we started with.
 testSerializeUpdatePayload :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testSerializeUpdatePayload spv =
-    forAll (resize 50 $ genUpdatePayload $ chainParametersVersionFor spv) $ checkUpdatePayloadSerialization $ spv
+    forAll (resize 50 $ genUpdatePayload $ sChainParametersVersionFor spv) $ checkUpdatePayloadSerialization $ spv
 
 -- |Test that if we JSON-encode and decode an 'UpdatePayload',
 -- we get back the value we started with.
@@ -72,7 +73,7 @@ testUpdateInstruction spv keyGen isValid =
                 label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate kc ui)
                     .&&. label "Serialization check" (checkUpdateInstructionSerialization spv ui)
   where
-    scpv = chainParametersVersionFor spv
+    scpv = sChainParametersVersionFor spv
     f :: UpdatePayload -> UpdateKeysCollection cpv -> [Sig.KeyPair] -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
     f pld ukc availableKeys = do
         let (keyIndices, thr) = extractKeysIndices pld ukc
@@ -133,8 +134,8 @@ combineKeys kg1 kg2 keys authIxs threshold = do
 
 tests :: Spec
 tests = parallel $ do
-    specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV0
-    specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV1
+    specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV0
+    specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV1
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3

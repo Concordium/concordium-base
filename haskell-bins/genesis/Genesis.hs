@@ -21,6 +21,7 @@ import Data.Maybe
 import Data.Ratio
 import qualified Data.Serialize as S
 import Data.Time.Format
+import Data.Singletons
 import qualified Data.Vector as Vec
 import Lens.Micro.Platform
 import System.Console.CmdArgs
@@ -296,7 +297,10 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
     printAccessStructure "emergency" asEmergency
     printAccessStructure "protocol" asProtocol
-    printAccessStructure "election difficulty" asParamElectionDifficulty
+    if isSupported PTElectionDifficulty (fromSing (sChainParametersVersionFor spv)) then
+        printAccessStructure "election difficulty" asParamConsensusParameters
+    else
+        printAccessStructure "consensus parameters" asParamConsensusParameters
     printAccessStructure "euro per energy" asParamEuroPerEnergy
     printAccessStructure "microGTU per euro" asParamMicroGTUPerEuro
     printAccessStructure "foundation account" asParamFoundationAccount
@@ -400,10 +404,10 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
 
     printInitialChainParameters :: IO ()
     printInitialChainParameters = do
-        case chainParametersVersionFor spv of
-            SCPV0 -> printInitialChainParametersV0 genesisChainParameters
-            SCPV1 -> printInitialChainParametersV1 genesisChainParameters
-            SCPV2 -> printInitialChainParametersV2 genesisChainParameters
+        case sChainParametersVersionFor spv of
+            SChainParametersV0 -> printInitialChainParametersV0 genesisChainParameters
+            SChainParametersV1 -> printInitialChainParametersV1 genesisChainParameters
+            SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
 
 printCooldownParametersV1 ::
     CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1 =>

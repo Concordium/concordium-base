@@ -371,9 +371,9 @@ pendingUpdatesV2ToJSON
 
 instance IsChainParametersVersion cpv => ToJSON (PendingUpdates cpv) where
     toJSON = case chainParametersVersion @cpv of
-        SCPV0 -> pendingUpdatesV0ToJSON
-        SCPV1 -> pendingUpdatesV1ToJSON
-        SCPV2 -> pendingUpdatesV2ToJSON
+        SChainParametersV0 -> pendingUpdatesV0ToJSON
+        SChainParametersV1 -> pendingUpdatesV1ToJSON
+        SChainParametersV2 -> pendingUpdatesV2ToJSON
 
 parsePendingUpdatesV0 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV0)
 parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
@@ -450,9 +450,9 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
 
 instance IsChainParametersVersion cpv => FromJSON (PendingUpdates cpv) where
     parseJSON = case chainParametersVersion @cpv of
-        SCPV0 -> parsePendingUpdatesV0
-        SCPV1 -> parsePendingUpdatesV1
-        SCPV2 -> parsePendingUpdatesV2
+        SChainParametersV0 -> parsePendingUpdatesV0
+        SChainParametersV1 -> parsePendingUpdatesV1
+        SChainParametersV2 -> parsePendingUpdatesV2
 
 -- |Initial pending updates with empty queues.
 emptyPendingUpdates :: forall cpv. IsChainParametersVersion cpv => PendingUpdates cpv

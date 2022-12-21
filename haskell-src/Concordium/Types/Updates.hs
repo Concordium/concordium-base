@@ -245,9 +245,9 @@ instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (A
 parseAuthorizationsJSON :: forall cpv. IsChainParametersVersion cpv => AE.Value -> AE.Parser (Authorizations cpv)
 parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asKeys <- Vec.fromList <$> v .: "keys"
-    let
-        parseAS x =
-            v .: x
+    let parseAS x =
+            v
+                .: x
                 >>= AE.withObject
                     (AE.toString x)
                     ( \o -> do
@@ -266,7 +266,7 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asProtocol <- parseAS "protocol"
     asParamEuroPerEnergy <- parseAS "euroPerEnergy"
     asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
-    asParamConsensusParameters <- consensusParametersParser 
+    asParamConsensusParameters <- consensusParametersParser
     asParamFoundationAccount <- parseAS "foundationAccount"
     asParamMintDistribution <- parseAS "mintDistribution"
     asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
@@ -387,6 +387,10 @@ data RootUpdate
       Level2KeysRootUpdateV1
         { l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
         }
+    | -- |Update the level 2 keys in chain parameters version 2
+      Level2KeysRootUpdateV2
+        { l2kruAuthorizationsV2 :: !(Authorizations 'ChainParametersV2)
+        }
     deriving (Eq, Show)
 
 putRootUpdate :: Putter RootUpdate
@@ -402,6 +406,9 @@ putRootUpdate Level2KeysRootUpdate{..} = do
 putRootUpdate Level2KeysRootUpdateV1{..} = do
     putWord8 3
     putAuthorizations l2kruAuthorizationsV1
+putRootUpdate Level2KeysRootUpdateV2{..} = do
+    putWord8 4
+    putAuthorizations l2kruAuthorizationsV2
 
 getRootUpdate :: SChainParametersVersion cpv -> Get RootUpdate
 getRootUpdate scpv = label "RootUpdate" $ do
@@ -411,6 +418,7 @@ getRootUpdate scpv = label "RootUpdate" $ do
         1 -> Level1KeysRootUpdate <$> get
         2 | isCPV ChainParametersV0 -> Level2KeysRootUpdate <$> getAuthorizations
         3 | isCPV ChainParametersV1 -> Level2KeysRootUpdateV1 <$> getAuthorizations
+        4 | isCPV ChainParametersV2 -> Level2KeysRootUpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
   where
     isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -423,6 +431,7 @@ instance AE.FromJSON RootUpdate where
             "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysRootUpdateV1 <$> o .: "updatePayload"
+            "level2KeysUpdateV2" -> Level2KeysRootUpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON RootUpdate where
@@ -446,6 +455,11 @@ instance AE.ToJSON RootUpdate where
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kruAuthorizationsV1
             ]
+    toJSON Level2KeysRootUpdateV2{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
+              "updatePayload" AE..= l2kruAuthorizationsV2
+            ]
 
 --------------------
 
@@ -465,6 +479,9 @@ data Level1Update
     | Level2KeysLevel1UpdateV1
         { l2kl1uAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
         }
+    | Level2KeysLevel1UpdateV2
+        { l2kl1uAuthorizationsV2 :: !(Authorizations 'ChainParametersV2)
+        }
 
 deriving instance Eq Level1Update
 deriving instance Show Level1Update
@@ -479,6 +496,9 @@ putLevel1Update Level2KeysLevel1Update{..} = do
 putLevel1Update Level2KeysLevel1UpdateV1{..} = do
     putWord8 2
     putAuthorizations l2kl1uAuthorizationsV1
+putLevel1Update Level2KeysLevel1UpdateV2{..} = do
+    putWord8 3
+    putAuthorizations l2kl1uAuthorizationsV2
 
 getLevel1Update :: SChainParametersVersion scpv -> Get Level1Update
 getLevel1Update scpv = label "Level1Update" $ do
@@ -487,6 +507,7 @@ getLevel1Update scpv = label "Level1Update" $ do
         0 -> Level1KeysLevel1Update <$> get
         1 | isCPV ChainParametersV0 -> Level2KeysLevel1Update <$> getAuthorizations
         2 | isCPV ChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
+        3 | isCPV ChainParametersV2 -> Level2KeysLevel1UpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
   where
     isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -498,6 +519,7 @@ instance AE.FromJSON Level1Update where
             "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysLevel1UpdateV1 <$> o .: "updatePayload"
+            "level2KeysUpdateV2" -> Level2KeysLevel1UpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON Level1Update where
@@ -515,6 +537,11 @@ instance AE.ToJSON Level1Update where
         AE.object
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kl1uAuthorizationsV1
+            ]
+    toJSON Level2KeysLevel1UpdateV2{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
+              "updatePayload" AE..= l2kl1uAuthorizationsV2
             ]
 
 ----------------------
@@ -867,17 +894,25 @@ getUpdatePayload spv =
         11 -> Level1UpdatePayload <$> getLevel1Update scpv
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
-        14 | isCPV ChainParametersV1 -> CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
-        15 | isCPV ChainParametersV1 -> PoolParametersCPV1UpdatePayload <$> getPoolParameters
-        16 | isCPV ChainParametersV1 -> TimeParametersCPV1UpdatePayload <$> getTimeParameters
-        17 | isCPV ChainParametersV1 -> MintDistributionCPV1UpdatePayload <$> get
+        14
+            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
+                CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
+        15
+            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
+                PoolParametersCPV1UpdatePayload <$> getPoolParameters
+        16
+            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
+                TimeParametersCPV1UpdatePayload <$> getTimeParameters
+        17
+            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
+                MintDistributionCPV1UpdatePayload <$> get
         18 | isCPV ChainParametersV2 -> TimeoutParametersUpdatePayload <$> get
         19 | isCPV ChainParametersV2 -> MinBlockTimeUpdatePayload <$> get
         20 | isCPV ChainParametersV2 -> BlockEnergyLimitUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     isCPV cpv = cpv == demoteChainParameterVersion scpv
-    scpv = chainParametersVersionFor spv
+    scpv = sChainParametersVersionFor spv
 
 $( deriveJSON
     defaultOptions
@@ -908,9 +943,11 @@ updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
 updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload Level2KeysRootUpdateV2{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level2KeysLevel1UpdateV2{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
@@ -970,7 +1007,7 @@ checkEnoughKeys ::
     Bool
 checkEnoughKeys (knownIndices, thr) ks =
     let numOfAuthorizedKeysReceived = Set.size (ks `Set.intersection` knownIndices)
-    in  numOfAuthorizedKeysReceived >= fromIntegral thr
+     in numOfAuthorizedKeysReceived >= fromIntegral thr
             && numOfAuthorizedKeysReceived == Set.size ks
 
 --------------------

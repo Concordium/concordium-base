@@ -46,9 +46,9 @@ type GenesisChainParameters pv = GenesisChainParameters' (ChainParametersVersion
 
 instance IsChainParametersVersion cpv => FromJSON (GenesisChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of
-        SCPV0 -> parseJSONForGCPV0
-        SCPV1 -> parseJSONForGCPV1
-        SCPV2 -> parseJSONForGCPV2
+        SChainParametersV0 -> parseJSONForGCPV0
+        SChainParametersV1 -> parseJSONForGCPV1
+        SChainParametersV2 -> parseJSONForGCPV2
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV0'.
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
@@ -153,6 +153,30 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
     toJSON GenesisChainParameters{..} =
         object
             [ "electionDifficulty" AE..= _cpElectionDifficulty gcpConsensusParameters,
+              "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
+              "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
+              "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,
+              "delegatorCooldown" AE..= _cpDelegatorCooldown gcpCooldownParameters,
+              "accountCreationLimit" AE..= gcpAccountCreationLimit,
+              "rewardParameters" AE..= gcpRewardParameters,
+              "foundationAccount" AE..= gcpFoundationAccount,
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions gcpPoolParameters),
+              "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "minimumEquityCapital" AE..= _ppMinimumEquityCapital gcpPoolParameters,
+              "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
+              "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
+              "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam gcpTimeParameters),
+              "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters)
+            ]
+
+instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
+    toJSON GenesisChainParameters{..} =
+        object
+            [ -- "consensusParameters" AE..= gcpConsensusParameters, -- FIXME!
               "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
               "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
               "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,

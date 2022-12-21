@@ -1,7 +1,14 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -28,19 +35,110 @@ module Concordium.Types.ProtocolVersion where
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Serialize
+import Data.Singletons.TH
+
 import Data.Word
 
--- |An enumeration of the supported versions of the consensus protocol.
--- Binary and JSON serializations are as Word64 corresponding to the protocol number.
-data ProtocolVersion
-    = P1
-    | P2
-    | P3
-    | P4
-    | P5
-    | P6
-    deriving (Eq, Show, Ord)
+$( singletons
+    [d|
+        -- \|An enumeration of the supported versions of the consensus protocol.
+        -- Binary and JSON serializations are as Word64 corresponding to the protocol number.
+        data ProtocolVersion
+            = P1
+            | P2
+            | P3
+            | P4
+            | P5
+            | P6
 
+        data ChainParametersVersion
+            = ChainParametersV0
+            | ChainParametersV1
+            | ChainParametersV2
+
+        chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
+        chainParametersVersionFor P1 = ChainParametersV0
+        chainParametersVersionFor P2 = ChainParametersV0
+        chainParametersVersionFor P3 = ChainParametersV0
+        chainParametersVersionFor P4 = ChainParametersV1
+        chainParametersVersionFor P5 = ChainParametersV1
+        chainParametersVersionFor P6 = ChainParametersV2
+
+        -- \* Account versions
+
+        -- \|A data kind used for parametrising account-related types.
+        -- This is used rather than 'ProtocolVersion' to coalesce cases where different protocol versions
+        -- share the same account format.
+        data AccountVersion
+            = -- \|Account version used in P1, P2, and P3.
+              AccountV0
+            | -- \|Account version used in P4. Adds stake delegation.
+              AccountV1
+            | -- \|Account version used in P5. Modifies hashing.
+              AccountV2
+
+        -- \|'AccountVersion' associated with a 'ProtocolVersion'.
+        accountVersionFor :: ProtocolVersion -> AccountVersion
+        accountVersionFor P1 = AccountV0
+        accountVersionFor P2 = AccountV0
+        accountVersionFor P3 = AccountV0
+        accountVersionFor P4 = AccountV1
+        accountVersionFor P5 = AccountV2
+        accountVersionFor P6 = AccountV2
+
+        -- \|Transaction outcomes versions.
+        -- The difference between the two versions are only related
+        -- to the hashing scheme.
+        -- \* 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+        -- All the contents of the transaction summaries are used for computing the hash.
+        -- \* 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+        -- exact reject reasons for failed transactions are omitted from the hash.
+        data TransactionOutcomesVersion
+            = TOV0
+            | TOV1
+
+        -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
+        transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
+        transactionOutcomesVersionFor P1 = TOV0
+        transactionOutcomesVersionFor P2 = TOV0
+        transactionOutcomesVersionFor P3 = TOV0
+        transactionOutcomesVersionFor P4 = TOV0
+        transactionOutcomesVersionFor P5 = TOV1
+        transactionOutcomesVersionFor P6 = TOV1
+
+        -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
+        -- at an account version. This is intended to give more descriptive type errors in cases where the
+        -- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
+        -- @AVSupportsDelegation 'AccountV0@ will give a type error:
+        --
+        -- @
+        --   Couldn't match type: 'DelegationNotSupported 'AccountV0
+        --   with: 'DelegationSupported 'AccountV0
+        -- @
+        --
+        -- This is more meaningful than @Couldn't match type: 'False with: 'True@.
+        -- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
+        data DelegationSupport
+            = -- \|Delegation is supported at the account version
+              DelegationSupported AccountVersion
+            | -- \|Delegation is not supported at the account version
+              DelegationNotSupported AccountVersion
+
+        supportsDelegation :: AccountVersion -> DelegationSupport
+        supportsDelegation AccountV0 = DelegationNotSupported AccountV0
+        supportsDelegation AccountV1 = DelegationSupported AccountV1
+        supportsDelegation AccountV2 = DelegationSupported AccountV2
+        |]
+ )
+
+deriving instance Eq ProtocolVersion
+deriving instance Ord ProtocolVersion
+deriving instance Show ProtocolVersion
+
+deriving instance Eq ChainParametersVersion
+deriving instance Show ChainParametersVersion
+
+{-
 -- |The singleton type associated with 'ProtocolVersion'.
 -- There is a unique constructor of 'SProtocolVersion' for
 -- each constructor of 'ProtocolVersion'.
@@ -51,6 +149,7 @@ data SProtocolVersion (pv :: ProtocolVersion) where
     SP4 :: SProtocolVersion 'P4
     SP5 :: SProtocolVersion 'P5
     SP6 :: SProtocolVersion 'P6
+-}
 
 protocolVersionToWord64 :: ProtocolVersion -> Word64
 protocolVersionToWord64 P1 = 1
@@ -81,6 +180,137 @@ instance FromJSON ProtocolVersion where
         x <- parseJSON v
         protocolVersionFromWord64 x
 
+-- |An existentially quantified protocol version.
+data SomeProtocolVersion where
+    SomeProtocolVersion :: (IsProtocolVersion pv) => SProtocolVersion pv -> SomeProtocolVersion
+
+-- |Promote a 'ProtocolVersion' to an 'SProtocolVersion'. This is wrapped in the existential
+-- type 'SomeProtocolVersion'.
+promoteProtocolVersion :: ProtocolVersion -> SomeProtocolVersion
+promoteProtocolVersion P1 = SomeProtocolVersion SP1
+promoteProtocolVersion P2 = SomeProtocolVersion SP2
+promoteProtocolVersion P3 = SomeProtocolVersion SP3
+promoteProtocolVersion P4 = SomeProtocolVersion SP4
+promoteProtocolVersion P5 = SomeProtocolVersion SP5
+promoteProtocolVersion P6 = SomeProtocolVersion SP6
+
+-- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
+demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
+demoteProtocolVersion = fromSing
+
+type IsAccountVersion (av :: AccountVersion) = SingI av
+type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
+type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
+
+-- type IsProtocolVersion (pv :: ProtocolVersion) =
+--     ( SingI pv,
+--       IsChainParametersVersion (ChainParametersVersionFor pv),
+--       IsAccountVersion (AccountVersionFor pv),
+--       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+--     )
+
+class
+    ( SingI pv,
+      IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAccountVersion (AccountVersionFor pv),
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+    ) =>
+    IsProtocolVersion (pv :: ProtocolVersion)
+
+instance 
+    ( SingI pv,
+      IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAccountVersion (AccountVersionFor pv),
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+    ) =>
+    IsProtocolVersion (pv :: ProtocolVersion)
+
+protocolVersion :: IsProtocolVersion pv => SProtocolVersion pv
+protocolVersion = sing
+
+accountVersion :: IsAccountVersion av => SAccountVersion av
+accountVersion = sing
+
+chainParametersVersion :: IsChainParametersVersion cpv => SChainParametersVersion cpv
+chainParametersVersion = sing
+
+demoteChainParameterVersion :: SChainParametersVersion cpv -> ChainParametersVersion
+demoteChainParameterVersion = fromSing
+
+-- -- |Type-level predicate that determines if an account version supports delegation.
+-- type family AVSupportsDelegationB (av :: AccountVersion) :: DelegationSupport where
+--     AVSupportsDelegationB 'AccountV0 = 'DelegationNotSupported 'AccountV0
+--     AVSupportsDelegationB av = 'DelegationSupported av
+
+-- |Constraint that an account version supports delegation.
+--
+-- TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
+type AVSupportsDelegation (av :: AccountVersion) = SupportsDelegation av ~ 'DelegationSupported av
+
+-- |Constraint that a protocol version supports delegation.
+-- type SupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
+
+-- |A GADT that covers the cases for whether an account version supports delegation or not.
+-- The case that it doesn't is limited to 'AccountV0', and in the other case, this provides an
+-- instance of 'AVSupportsDelegation'.
+data SAVDelegationSupport (av :: AccountVersion) where
+    SAVDelegationNotSupported :: SAVDelegationSupport 'AccountV0
+    SAVDelegationSupported :: AVSupportsDelegation av => SAVDelegationSupport av
+
+-- |Determine if delegation is supported at the account version.
+delegationSupport :: forall av. (IsAccountVersion av) => SAVDelegationSupport av
+{-# INLINE delegationSupport #-}
+delegationSupport = case accountVersion @av of
+    SAccountV0 -> SAVDelegationNotSupported
+    SAccountV1 -> SAVDelegationSupported
+    SAccountV2 -> SAVDelegationSupported
+
+-- |Whether the protocol supports delegation functionality.
+protocolSupportsDelegation :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsDelegation #-}
+protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
+    SDelegationSupported{} -> True
+    _ -> False
+
+-- |Whether the protocol version supports memo functionality.
+-- (Memos are supported in 'P2' onwards.)
+supportsMemo :: SProtocolVersion pv -> Bool
+supportsMemo SP1 = False
+supportsMemo _ = True
+
+-- |Whether the protocol version supports V1 smart contracts.
+-- (V1 contracts are supported in 'P4' onwards.)
+supportsV1Contracts :: SProtocolVersion pv -> Bool
+supportsV1Contracts SP1 = False
+supportsV1Contracts SP2 = False
+supportsV1Contracts SP3 = False
+supportsV1Contracts SP4 = True
+supportsV1Contracts SP5 = True
+supportsV1Contracts SP6 = True
+
+-- |Whether the protocol version supports upgradable smart contracts.
+-- (Supported in 'P5' and onwards)
+supportsUpgradableContracts :: SProtocolVersion pv -> Bool
+supportsUpgradableContracts spv = case spv of
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> True
+    SP6 -> True
+
+-- |Whether the protocol version supports chain queries in smart contracts.
+-- (Supported in 'P5' and onwards)
+supportsChainQueryContracts :: SProtocolVersion pv -> Bool
+supportsChainQueryContracts spv = case spv of
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> True
+    SP6 -> True
+
+{-
 -- |Type class for relating type-level 'ProtocolVersion's with
 -- term level 'SProtocolVersion's.
 class
@@ -152,9 +382,9 @@ type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParameters
     ChainParametersVersionFor 'P6 = 'ChainParametersV1
 
 data SChainParametersVersion (cpv :: ChainParametersVersion) where
-    SCPV0 :: SChainParametersVersion 'ChainParametersV0
-    SCPV1 :: SChainParametersVersion 'ChainParametersV1
-    SCPV2 :: SChainParametersVersion 'ChainParametersV2
+    SChainParametersV0 :: SChainParametersVersion 'ChainParametersV0
+    SChainParametersV1 :: SChainParametersVersion 'ChainParametersV1
+    SChainParametersV2 :: SChainParametersVersion 'ChainParametersV2
 
 -- |Type class for relating type-level 'ChainParametersVersion's with
 -- term level 'SChainParameters's.
@@ -163,30 +393,30 @@ class IsChainParametersVersion (cpv :: ChainParametersVersion) where
     chainParametersVersion :: SChainParametersVersion cpv
 
 instance IsChainParametersVersion 'ChainParametersV0 where
-    chainParametersVersion = SCPV0
+    chainParametersVersion = SChainParametersV0
     {-# INLINE chainParametersVersion #-}
 
 instance IsChainParametersVersion 'ChainParametersV1 where
-    chainParametersVersion = SCPV1
+    chainParametersVersion = SChainParametersV1
     {-# INLINE chainParametersVersion #-}
 
 instance IsChainParametersVersion 'ChainParametersV2 where
-    chainParametersVersion = SCPV2
+    chainParametersVersion = SChainParametersV2
     {-# INLINE chainParametersVersion #-}
 
 chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
 chainParametersVersionFor spv = case spv of
-    SP1 -> SCPV0
-    SP2 -> SCPV0
-    SP3 -> SCPV0
-    SP4 -> SCPV1
-    SP5 -> SCPV1
-    SP6 -> SCPV1
+    SP1 -> SChainParametersV0
+    SP2 -> SChainParametersV0
+    SP3 -> SChainParametersV0
+    SP4 -> SChainParametersV1
+    SP5 -> SChainParametersV1
+    SP6 -> SChainParametersV1
 
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
-demoteChainParameterVersion SCPV0 = ChainParametersV0
-demoteChainParameterVersion SCPV1 = ChainParametersV1
-demoteChainParameterVersion SCPV2 = ChainParametersV2
+demoteChainParameterVersion SChainParametersV0 = ChainParametersV0
+demoteChainParameterVersion SChainParametersV1 = ChainParametersV1
+demoteChainParameterVersion SChainParametersV2 = ChainParametersV2
 
 -- * Account versions
 
@@ -387,3 +617,4 @@ supportsChainQueryContracts spv = case spv of
     SP4 -> False
     SP5 -> True
     SP6 -> True
+-}
