@@ -17,7 +17,6 @@ import System.Exit
 import System.FilePath
 
 import Concordium.Crypto.SignatureScheme
-import Concordium.Types.ProtocolVersion.JustForCPV1
 import Concordium.Types.Updates
 
 data AuthDetails = AuthDetails
@@ -63,7 +62,7 @@ data CommonUpdateKeys = CommonUpdateKeys
       -- |Key indices (and thresholds) to use for each update type
       cukEmergency :: AuthDetails,
       cukProtocol :: AuthDetails,
-      cukElectionDifficulty :: AuthDetails,
+      cukConsensusParameters :: AuthDetails,
       cukEuroEnergy :: AuthDetails,
       cukGTUEuro :: AuthDetails,
       cukFoundationAccount :: AuthDetails,
@@ -106,7 +105,7 @@ commonParameters =
         <*> option readHigherAuthDetails (metavar "HACSTR" <> long "level1-keys" <> help "Threshold and number of level 1 keys to generate")
         <*> option readAuthDetails (metavar "ACSTR" <> long "emergency" <> help "Emergency update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "protocol" <> help "Protocol update access structure")
-        <*> option readAuthDetails (metavar "ACSTR" <> long "election" <> help "Election difficulty update access structure")
+        <*> option readAuthDetails (metavar "ACSTR" <> long "consensus" <> help "Consensus update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "euro-energy" <> help "Euro:energy rate update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "gtu-euro" <> help "GTU:Euro rate update access structure")
         <*> option readAuthDetails (metavar "ACSTR" <> long "foundation-account" <> help "Foundation account update access structure")

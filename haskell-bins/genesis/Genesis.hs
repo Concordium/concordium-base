@@ -315,7 +315,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printInitialChainParametersV0 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
-        putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+        putStrLn $ "  - election difficulty: " ++ show (_cpElectionDifficulty _cpConsensusParameters)
         putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_erEuroPerEnergy _cpExchangeRates)
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_erMicroGTUPerEuro _cpExchangeRates)
         putStrLn $ "  - baker extra cooldown epochs: " ++ show (_cpBakerExtraCooldownEpochs _cpCooldownParameters)
@@ -344,7 +344,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printInitialChainParametersV1 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
-        putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+        putStrLn $ "  - election difficulty: " ++ show (_cpElectionDifficulty _cpConsensusParameters)
         putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
         printCooldownParametersV1 _cpCooldownParameters
@@ -391,13 +391,8 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
         putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
         mapM_ printTimeParametersV1 _cpTimeParameters
-        let (SomeParam Consensus2TimingParameters{..}) = _cpConsensus2TimingParameters
-        putStrLn "    + Timing parameters:"
-        putStrLn $ "      * timeout base: " ++ show c2tpTimeoutBase ++ " ms"
-        putStrLn $ "      * timeout increase factor: " ++ show c2tpTimeoutIncrease
-        putStrLn $ "      * timeout decrease factor: " ++ show c2tpTimeoutDecrease
-        putStrLn $ "      * min time between blocks: " ++ show c2tpMinTime ++ " ms"
-
+        printConsensusParametersV1 _cpConsensusParameters
+        
         let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
                 Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
                 Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
@@ -423,6 +418,18 @@ printTimeParametersV1 tp = do
     putStrLn $ "  - time parameters:"
     putStrLn $ "    + reward period length (in epochs): " ++ show (tp ^. tpRewardPeriodLength)
     putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpMintPerPayday)
+
+printConsensusParametersV1 ::
+  (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+  ConsensusParameters cpv ->
+  IO ()
+printConsensusParametersV1 ConsensusParametersV1{..} = do
+        putStrLn "    + Timing parameters:"
+        putStrLn $ "      * timeout base: " ++ show (tpTimeoutBase _cpTimeoutParameters)  ++ " ms"
+        putStrLn $ "      * timeout increase factor: " ++ show (tpTimeoutIncrease _cpTimeoutParameters)
+        putStrLn $ "      * timeout decrease factor: " ++ show (tpTimeoutDecrease _cpTimeoutParameters)
+        putStrLn $ "  + Minimum block time:"  ++ show _cpMinBlockTime ++ " ms"
+        putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
 
 printPoolParametersV1 ::
     (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>

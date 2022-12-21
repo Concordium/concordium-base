@@ -78,7 +78,6 @@ library
       Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
-      Concordium.Types.ProtocolVersion.JustForCPV1
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.SeedState

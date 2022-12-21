@@ -2,7 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -287,8 +286,8 @@ getPendingUpdates migration = do
             let _pCooldownParametersQueue = SomeParam emptyUpdateQueue
             let _pTimeParametersQueue = SomeParam emptyUpdateQueue
             let _pTimeoutParametersQueue = NoParam
-            let _pMinBlockTimeQueue = oldMinBlockTimeQueue
-            let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
+            let _pMinBlockTimeQueue = NoParam
+            let _pBlockEnergyLimitQueue = NoParam
             return PendingUpdates{..}
         StateMigrationParametersP4ToP5 -> do
             let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)

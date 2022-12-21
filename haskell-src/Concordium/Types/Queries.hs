@@ -633,8 +633,12 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       _nusnCooldownParameters :: !U.UpdateSequenceNumber,
       -- |Updates to time parameters for chain parameters version 1 onwards.
       _nusnTimeParameters :: !U.UpdateSequenceNumber,
-      -- |Updates to the consensus version 2 timing parameters.
-      _nusnConsensus2TimingParameters :: !U.UpdateSequenceNumber
+      -- |Updates to the consensus version 2 timeout parameters.
+      _nusnTimeoutParameters :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 min. block time.
+      _nusnMinBlockTime :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 block energy limit.
+      _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -659,7 +663,9 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnAddIdentityProvider = UQ._uqNextSequenceNumber _pAddIdentityProviderQueue,
           _nusnCooldownParameters = mNextSequenceNumber _pCooldownParametersQueue,
           _nusnTimeParameters = mNextSequenceNumber _pTimeParametersQueue,
-          _nusnConsensus2TimingParameters = mNextSequenceNumber _pConsensus2TimingParametersQueue
+          _nusnTimeoutParameters = mNextSequenceNumber _pTimeoutParametersQueue,
+          _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
+          _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue
         }
   where
     -- Get the next sequence number or 1, if not supported.

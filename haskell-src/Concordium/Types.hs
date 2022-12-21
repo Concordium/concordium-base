@@ -167,7 +167,6 @@ module Concordium.Types (
 
     -- * Protocol version
     module Concordium.Types.ProtocolVersion,
-    module Concordium.Types.ProtocolVersion.JustForCPV1,
 
     -- * Account address identifications.
     AccountAddressEq (..),
@@ -194,7 +193,6 @@ import Concordium.ID.Types
 import Concordium.Types.Block
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
-import Concordium.Types.ProtocolVersion.JustForCPV1
 import Concordium.Types.SmartContracts
 import qualified Data.FixedByteString as FBS
 

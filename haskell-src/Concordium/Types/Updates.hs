@@ -156,8 +156,10 @@ data Authorizations cpv = Authorizations
       asEmergency :: !AccessStructure,
       -- |New protocol update keys
       asProtocol :: !AccessStructure,
-      -- |Parameter keys: election difficulty
-      asParamElectionDifficulty :: !AccessStructure,
+      -- |Parameter keys: Consensus parameters
+      -- Either 'ConsensusParametersV0' or 'ConsensusParametersV1' depending
+      -- on the chain parameter version.
+      asParamConsensusParameters :: !AccessStructure,
       -- |Parameter keys: Euro:NRG
       asParamEuroPerEnergy :: !AccessStructure,
       -- |Parameter keys: microGTU:Euro
@@ -191,7 +193,7 @@ putAuthorizations Authorizations{..} = do
     mapM_ put asKeys
     put asEmergency
     put asProtocol
-    put asParamElectionDifficulty
+    put asParamConsensusParameters
     put asParamEuroPerEnergy
     put asParamMicroGTUPerEuro
     put asParamFoundationAccount
@@ -217,7 +219,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
                 Nothing -> return r
     asEmergency <- getChecked
     asProtocol <- getChecked
-    asParamElectionDifficulty <- getChecked
+    asParamConsensusParameters <- getChecked
     asParamEuroPerEnergy <- getChecked
     asParamMicroGTUPerEuro <- getChecked
     asParamFoundationAccount <- getChecked
@@ -257,11 +259,14 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
                                 | fromIntegral maxKeyIndex >= Vec.length asKeys -> fail "invalid key index"
                             _ -> return AccessStructure{..}
                     )
+        consensusParametersParser = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
+            SConsensusParametersVersion0 -> parseAS "electionDifficulty"
+            SConsensusParametersVersion1 -> parseAS "consensusParameters"
     asEmergency <- parseAS "emergency"
     asProtocol <- parseAS "protocol"
-    asParamElectionDifficulty <- parseAS "electionDifficulty"
     asParamEuroPerEnergy <- parseAS "euroPerEnergy"
     asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
+    asParamConsensusParameters <- consensusParametersParser 
     asParamFoundationAccount <- parseAS "foundationAccount"
     asParamMintDistribution <- parseAS "mintDistribution"
     asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
@@ -276,13 +281,13 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
 instance IsChainParametersVersion cpv => AE.FromJSON (Authorizations cpv) where
     parseJSON = parseAuthorizationsJSON
 
-instance AE.ToJSON (Authorizations cpv) where
+instance forall cpv. IsChainParametersVersion cpv => AE.ToJSON (Authorizations cpv) where
     toJSON Authorizations{..} =
         AE.object
             ( [ "keys" AE..= Vec.toList asKeys,
                 "emergency" AE..= t asEmergency,
                 "protocol" AE..= t asProtocol,
-                "electionDifficulty" AE..= t asParamElectionDifficulty,
+                consensusParameters,
                 "euroPerEnergy" AE..= t asParamEuroPerEnergy,
                 "microGTUPerEuro" AE..= t asParamMicroGTUPerEuro,
                 "foundationAccount" AE..= t asParamFoundationAccount,
@@ -304,6 +309,9 @@ instance AE.ToJSON (Authorizations cpv) where
                 ]
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
         timeParameters = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
+        consensusParameters = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
+            SConsensusParametersVersion0 -> "electionDifficulty" AE..= t asParamConsensusParameters
+            SConsensusParametersVersion1 -> "consensusParameters" AE..= t asParamConsensusParameters
 
 -----------------
 
@@ -623,7 +631,7 @@ instance IsChainParametersVersion cpv => AE.FromJSON (UpdateKeysCollection cpv) 
         level2Keys <- v .: "level2Keys"
         return UpdateKeysCollection{..}
 
-instance AE.ToJSON (UpdateKeysCollection cpv) where
+instance IsChainParametersVersion cpv => AE.ToJSON (UpdateKeysCollection cpv) where
     toJSON UpdateKeysCollection{..} =
         AE.object
             [ "rootKeys" AE..= rootKeys,
@@ -672,6 +680,12 @@ data UpdateType
       UpdateCooldownParameters
     | -- |Update for time parameters, but not used by chain parameter version 0
       UpdateTimeParameters
+    | -- |Update timeout parameters for consensus version 2
+      UpdateTimeoutParameters
+    | -- |Update minimum block time for consensus version 2
+      UpdateMinBlockTime
+    | -- |Update block energy limit for consensus version 2
+      UpdateBlockEnergyLimit
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -701,6 +715,9 @@ instance Serialize UpdateType where
     put UpdateAddIdentityProvider = putWord8 14
     put UpdateCooldownParameters = putWord8 15
     put UpdateTimeParameters = putWord8 16
+    put UpdateTimeoutParameters = putWord8 17
+    put UpdateMinBlockTime = putWord8 19
+    put UpdateBlockEnergyLimit = putWord8 20
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -719,6 +736,9 @@ instance Serialize UpdateType where
             14 -> return UpdateAddIdentityProvider
             15 -> return UpdateCooldownParameters
             16 -> return UpdateTimeParameters
+            17 -> return UpdateTimeoutParameters
+            19 -> return UpdateMinBlockTime
+            20 -> return UpdateBlockEnergyLimit
             n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -801,6 +821,12 @@ data UpdatePayload
       TimeParametersCPV1UpdatePayload !(TimeParameters 'ChainParametersV1)
     | -- |Update the distribution of newly minted GTU in chain parameters version 1
       MintDistributionCPV1UpdatePayload !(MintDistribution 'ChainParametersV1)
+    | -- |Update the timeout parameters
+      TimeoutParametersUpdatePayload !TimeoutParameters
+    | -- |Update the minimum block time
+      MinBlockTimeUpdatePayload !Duration
+    | -- |Update block energy limit
+      BlockEnergyLimitUpdatePayload !Energy
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -821,6 +847,9 @@ putUpdatePayload (CooldownParametersCPV1UpdatePayload u) = putWord8 14 >> putCoo
 putUpdatePayload (PoolParametersCPV1UpdatePayload u) = putWord8 15 >> putPoolParameters u
 putUpdatePayload (TimeParametersCPV1UpdatePayload u) = putWord8 16 >> putTimeParameters u
 putUpdatePayload (MintDistributionCPV1UpdatePayload u) = putWord8 17 >> put u
+putUpdatePayload (TimeoutParametersUpdatePayload u) = putWord8 18 >> put u
+putUpdatePayload (MinBlockTimeUpdatePayload u) = putWord8 19 >> put u
+putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
@@ -842,6 +871,9 @@ getUpdatePayload spv =
         15 | isCPV ChainParametersV1 -> PoolParametersCPV1UpdatePayload <$> getPoolParameters
         16 | isCPV ChainParametersV1 -> TimeParametersCPV1UpdatePayload <$> getTimeParameters
         17 | isCPV ChainParametersV1 -> MintDistributionCPV1UpdatePayload <$> get
+        18 | isCPV ChainParametersV2 -> TimeoutParametersUpdatePayload <$> get
+        19 | isCPV ChainParametersV2 -> MinBlockTimeUpdatePayload <$> get
+        20 | isCPV ChainParametersV2 -> BlockEnergyLimitUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -879,13 +911,16 @@ updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
+updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
+updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
+updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
 extractKeysIndices p =
     case p of
         ProtocolUpdatePayload{} -> f asProtocol
-        ElectionDifficultyUpdatePayload{} -> f asParamElectionDifficulty
+        ElectionDifficultyUpdatePayload{} -> f asParamConsensusParameters
         EuroPerEnergyUpdatePayload{} -> f asParamEuroPerEnergy
         MicroGTUPerEuroUpdatePayload{} -> f asParamMicroGTUPerEuro
         FoundationAccountUpdatePayload{} -> f asParamFoundationAccount
@@ -901,6 +936,9 @@ extractKeysIndices p =
         CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
         PoolParametersCPV1UpdatePayload{} -> f asPoolParameters
         TimeParametersCPV1UpdatePayload{} -> f' asTimeParameters
+        TimeoutParametersUpdatePayload{} -> f asParamConsensusParameters
+        MinBlockTimeUpdatePayload{} -> f asParamConsensusParameters
+        BlockEnergyLimitUpdatePayload{} -> f asParamConsensusParameters
   where
     f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
     f' v = keysForOParam . v . level2Keys

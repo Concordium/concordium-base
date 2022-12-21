@@ -962,9 +962,7 @@ instance IsChainParametersVersion cpv => Serialize (ConsensusParameters cpv) whe
 -- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 -- reflects changes to the chain parameters across different protocol versions.
 data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
-    { -- |Election difficulty parameter.
-      -- (CPV0 and CPV1 only.)
-      --_cpElectionDifficulty :: !(OParam 'PTElectionDifficulty cpv ElectionDifficulty),
+    { 
       -- |Consensus parameters.
       _cpConsensusParameters :: !(ConsensusParameters cpv),
       -- |Exchange rates.
