@@ -234,6 +234,9 @@ accountVersion = sing
 chainParametersVersion :: IsChainParametersVersion cpv => SChainParametersVersion cpv
 chainParametersVersion = sing
 
+transactionOutcomesVersion :: IsTransactionOutcomesVersion tov => STransactionOutcomesVersion tov
+transactionOutcomesVersion = sing
+
 demoteChainParameterVersion :: SChainParametersVersion cpv -> ChainParametersVersion
 demoteChainParameterVersion = fromSing
 
