@@ -217,7 +217,7 @@ class
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
-instance 
+instance
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
       IsAccountVersion (AccountVersionFor pv),

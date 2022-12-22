@@ -22,11 +22,11 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Aeson.Types
+import Data.Bool.Singletons
 import Data.Maybe
 import Data.Ratio
 import Data.Serialize
 import Data.Singletons.TH
-import Data.Bool.Singletons
 import Data.Word
 import Lens.Micro.Platform
 import Test.QuickCheck.Arbitrary
@@ -80,6 +80,7 @@ data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
     NoParam :: (IsSupported pt cpv ~ 'False) => OParam pt cpv a
     SomeParam :: (IsSupported pt cpv ~ 'True) => !a -> OParam pt cpv a
 
+-- |Unwrap the 'OParam' when the parameter is supported.
 unOParam :: (IsSupported pt cpv ~ 'True) => OParam pt cpv a -> a
 unOParam (SomeParam a) = a
 
@@ -131,29 +132,6 @@ pureWhenSupported v = case sIsSupported (sing @pt) (chainParametersVersion @cpv)
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
-
--- -- |The mint-per-slot rate is part of the 'MintDistribution' parameters for 'ChainParametersV0',
--- -- but as of 'ChainParametersV1' is replaced by a mint-per-payday rate in the 'TimeParameters'.
--- -- 'MintPerSlotForCPV0'
--- data MintPerSlotForCPV0 cpv where
---     MintPerSlotForCPV0Some :: {_mpsMintPerSlot :: !MintRate} -> MintPerSlotForCPV0 'ChainParametersV0
---     MintPerSlotForCPV0None :: MintPerSlotForCPV0 'ChainParametersV1
-
--- instance IsChainParametersVersion cpv => Serialize (MintPerSlotForCPV0 cpv) where
---     put MintPerSlotForCPV0Some{..} = put _mpsMintPerSlot
---     put MintPerSlotForCPV0None = return ()
---     get = case chainParametersVersion @cpv of
---         SChainParametersV0 -> MintPerSlotForCPV0Some <$> get
---         SChainParametersV1 -> return MintPerSlotForCPV0None
-
--- -- |Lens for '_mpsMintPerSlot'
--- {-# INLINE mpsMintPerSlot #-}
--- mpsMintPerSlot :: Lens' (MintPerSlotForCPV0 'ChainParametersV0) MintRate
--- mpsMintPerSlot =
---     lens _mpsMintPerSlot (\mps x -> mps{_mpsMintPerSlot = x})
-
--- deriving instance Eq (MintPerSlotForCPV0 cpv)
--- deriving instance Show (MintPerSlotForCPV0 cpv)
 
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
@@ -454,9 +432,9 @@ parseCooldownParametersJSON = case sCooldownParametersVersionFor (chainParameter
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
             <$> v
-            .: "poolOwnerCooldown"
+                .: "poolOwnerCooldown"
             <*> v
-            .: "delegatorCooldown"
+                .: "delegatorCooldown"
 
 instance IsChainParametersVersion cpv => FromJSON (CooldownParameters cpv) where
     parseJSON = parseCooldownParametersJSON
@@ -906,23 +884,24 @@ data ConsensusParameters (cpv :: ChainParametersVersion) where
     ConsensusParametersV0 ::
         (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion0) =>
         { -- |Election difficulty parameter.
-            _cpElectionDifficulty :: !ElectionDifficulty
+          _cpElectionDifficulty :: !ElectionDifficulty
         } ->
         ConsensusParameters cpv
     ConsensusParametersV1 ::
         (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-        {
-            -- |Parameters controlling round timeouts.
-            _cpTimeoutParameters :: !TimeoutParameters,
-            -- |Minimum time interval between blocks.
-            _cpMinBlockTime :: !Duration,
-            -- |Maximum energy allowed per block.
-            _cpBlockEnergyLimit :: !Energy
+        { -- |Parameters controlling round timeouts.
+          _cpTimeoutParameters :: !TimeoutParameters,
+          -- |Minimum time interval between blocks.
+          _cpMinBlockTime :: !Duration,
+          -- |Maximum energy allowed per block.
+          _cpBlockEnergyLimit :: !Energy
         } ->
         ConsensusParameters cpv
 
-coerceConsensusParameters :: (ConsensusParametersVersionFor cpv1 ~ ConsensusParametersVersionFor cpv2) =>
-    ConsensusParameters cpv1 -> ConsensusParameters cpv2
+coerceConsensusParameters ::
+    (ConsensusParametersVersionFor cpv1 ~ ConsensusParametersVersionFor cpv2) =>
+    ConsensusParameters cpv1 ->
+    ConsensusParameters cpv2
 coerceConsensusParameters ConsensusParametersV0{..} = ConsensusParametersV0{..}
 coerceConsensusParameters ConsensusParametersV1{..} = ConsensusParametersV1{..}
 
@@ -947,8 +926,7 @@ instance IsChainParametersVersion cpv => Serialize (ConsensusParameters cpv) whe
 -- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 -- reflects changes to the chain parameters across different protocol versions.
 data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
-    { 
-      -- |Consensus parameters.
+    { -- |Consensus parameters.
       _cpConsensusParameters :: !(ConsensusParameters cpv),
       -- |Exchange rates.
       _cpExchangeRates :: !ExchangeRates,
@@ -1016,20 +994,20 @@ parseJSONForCPV0 =
         _cpExchangeRates <-
             makeExchangeRates
                 <$> v
-                .: "euroPerEnergy"
+                    .: "euroPerEnergy"
                 <*> v
-                .: "microGTUPerEuro"
+                    .: "microGTUPerEuro"
         _cpCooldownParameters <-
             CooldownParametersV0
                 <$> v
-                .: "bakerCooldownEpochs"
+                    .: "bakerCooldownEpochs"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _cpPoolParameters <-
             PoolParametersV0
                 <$> v
-                .: "minimumThresholdForBaking"
+                    .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
         return ChainParameters{..}
 

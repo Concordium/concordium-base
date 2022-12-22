@@ -20,8 +20,8 @@ import qualified Data.Map.Strict as OrdMap
 import Data.Maybe
 import Data.Ratio
 import qualified Data.Serialize as S
-import Data.Time.Format
 import Data.Singletons
+import Data.Time.Format
 import qualified Data.Vector as Vec
 import Lens.Micro.Platform
 import System.Console.CmdArgs
@@ -297,10 +297,9 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
     printAccessStructure "emergency" asEmergency
     printAccessStructure "protocol" asProtocol
-    if isSupported PTElectionDifficulty (fromSing (sChainParametersVersionFor spv)) then
-        printAccessStructure "election difficulty" asParamConsensusParameters
-    else
-        printAccessStructure "consensus parameters" asParamConsensusParameters
+    if isSupported PTElectionDifficulty (fromSing (sChainParametersVersionFor spv))
+        then printAccessStructure "election difficulty" asParamConsensusParameters
+        else printAccessStructure "consensus parameters" asParamConsensusParameters
     printAccessStructure "euro per energy" asParamEuroPerEnergy
     printAccessStructure "microGTU per euro" asParamMicroGTUPerEuro
     printAccessStructure "foundation account" asParamFoundationAccount
@@ -396,7 +395,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
         mapM_ printTimeParametersV1 _cpTimeParameters
         printConsensusParametersV1 _cpConsensusParameters
-        
+
         let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
                 Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
                 Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
@@ -424,16 +423,16 @@ printTimeParametersV1 tp = do
     putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpMintPerPayday)
 
 printConsensusParametersV1 ::
-  (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-  ConsensusParameters cpv ->
-  IO ()
+    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+    ConsensusParameters cpv ->
+    IO ()
 printConsensusParametersV1 ConsensusParametersV1{..} = do
-        putStrLn "    + Timing parameters:"
-        putStrLn $ "      * timeout base: " ++ show (tpTimeoutBase _cpTimeoutParameters)  ++ " ms"
-        putStrLn $ "      * timeout increase factor: " ++ show (tpTimeoutIncrease _cpTimeoutParameters)
-        putStrLn $ "      * timeout decrease factor: " ++ show (tpTimeoutDecrease _cpTimeoutParameters)
-        putStrLn $ "  + Minimum block time:"  ++ show _cpMinBlockTime ++ " ms"
-        putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
+    putStrLn "    + Timing parameters:"
+    putStrLn $ "      * timeout base: " ++ show (tpTimeoutBase _cpTimeoutParameters) ++ " ms"
+    putStrLn $ "      * timeout increase factor: " ++ show (tpTimeoutIncrease _cpTimeoutParameters)
+    putStrLn $ "      * timeout decrease factor: " ++ show (tpTimeoutDecrease _cpTimeoutParameters)
+    putStrLn $ "  + Minimum block time:" ++ show _cpMinBlockTime ++ " ms"
+    putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
 
 printPoolParametersV1 ::
     (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
@@ -501,7 +500,7 @@ showAsJSON indent v =
         offset = replicate indent ' '
         indentLine :: Int -> LBS8.ByteString -> LBS8.ByteString
         indentLine idx line = if idx > 0 then LBS8.pack offset <> line else line
-     in LBS8.unpack . LBS8.unlines . zipWith indentLine [0 ..] $ (LBS8.lines bs)
+    in  LBS8.unpack . LBS8.unlines . zipWith indentLine [0 ..] $ (LBS8.lines bs)
 
 printAccessStructure :: String -> AccessStructure -> IO ()
 printAccessStructure n AccessStructure{..} = putStrLn $ "  - " ++ n ++ " update: " ++ show accessThreshold ++ " of " ++ show (toList accessPublicKeys)
@@ -513,7 +512,7 @@ showRatio :: (Show a, Integral a) => Ratio a -> String
 showRatio r =
     let num = numerator r
         den = denominator r
-     in show num ++ " / " ++ show den ++ " (approx " ++ show (realToFrac r :: Double) ++ ")"
+    in  show num ++ " / " ++ show den ++ " (approx " ++ show (realToFrac r :: Double) ++ ")"
 
 showExchangeRate :: ExchangeRate -> String
 showExchangeRate (ExchangeRate r) = showRatio r

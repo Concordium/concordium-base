@@ -176,8 +176,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV1) where
 instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
     toJSON GenesisChainParameters{..} =
         object
-            [ -- "consensusParameters" AE..= gcpConsensusParameters, -- FIXME!
-              "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
+            [ "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
               "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
               "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,
               "delegatorCooldown" AE..= _cpDelegatorCooldown gcpCooldownParameters,
@@ -194,7 +193,12 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
               "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
               "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam gcpTimeParameters),
-              "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters)
+              "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters),
+              "timeoutBase" AE..= tpTimeoutBase (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutIncrease" AE..= tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutDecrease" AE..= tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
+              "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters
             ]
 
 -- | 'GenesisParameters' provides a convenient abstraction for

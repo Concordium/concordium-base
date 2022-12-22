@@ -1,5 +1,6 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications, DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |A tool for generating update keys and authorizations for
 --    chain updates.  The generated authorizations can be used

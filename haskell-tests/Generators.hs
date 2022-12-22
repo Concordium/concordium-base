@@ -174,7 +174,7 @@ genPayloadDeployModule :: ProtocolVersion -> Gen Payload
 genPayloadDeployModule pv =
     let genV0 = DeployModule . Wasm.WasmModuleV0 . Wasm.WasmModuleV . Wasm.ModuleSource <$> Generators.genByteString
         genV1 = DeployModule . Wasm.WasmModuleV1 . Wasm.WasmModuleV . Wasm.ModuleSource <$> Generators.genByteString
-     in if pv <= P3 -- protocol versions <= 3 only allow version 0 Wasm modules.
+    in  if pv <= P3 -- protocol versions <= 3 only allow version 0 Wasm modules.
             then genV0
             else oneof [genV0, genV1]
 
@@ -387,8 +387,9 @@ genChainParametersV1 = do
     _cpPoolParameters <- genPoolParametersV1
     return ChainParameters{..}
 
-genConsensusParametersV1 :: (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1)
-    => Gen (ConsensusParameters cpv)
+genConsensusParametersV1 ::
+    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+    Gen (ConsensusParameters cpv)
 genConsensusParametersV1 = do
     _cpTimeoutParameters <- genTimeoutParameters
     _cpMinBlockTime <- genDuration
@@ -406,7 +407,6 @@ genChainParametersV2 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     return ChainParameters{..}
-
 
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
 genGenesisChainParametersV0 = do
@@ -482,8 +482,8 @@ genDuration = Duration <$> arbitrary
 genTimeoutParameters :: Gen TimeoutParameters
 genTimeoutParameters = do
     tpTimeoutBase <- genDuration
-    tpTimeoutIncrease <- arbitrary
-    tpTimeoutDecrease <- arbitrary
+    tpTimeoutIncrease <- arbitrary `suchThat` (> 1)
+    tpTimeoutDecrease <- arbitrary `suchThat` (\x -> x > 0 && x < 1)
     return TimeoutParameters{..}
 
 transactionTypes :: [TransactionType]
