@@ -47,20 +47,22 @@ This has the following parameters
 - `--port` (also envar `IDENTITY_PROVIDER_SERVICE_PORT`), the port on which the server will start listening.
 
 - `--retrieve-base` (envar `RETRIEVE_BASE`), the URL where this server can be
-  reached by the wallet. Example https://id-service.eu.staging.concordium.com
+  reached by the wallet. Example https://id-service.testnet.concordium.com
 
 - `--id-verification-url` (envar `ID_VERIFICATION_URL`), the Url where the
   identity verifier can be reached, example `http://localhost:8101/api/verify`.
-  The server will make POST requests to the URL.
+  The server will redirect the user/wallet to a URL derived from this one. As a
+  result this must be **publicly accessible**.
 
 - `--id-verification-query-url` (env var `ID_VERIFICATION_QUERY_URL`), the URL where the
   identity verifier can be reached for GET queries for attributes, example `http://localhost:8101/api/verify`.
-  The server will make GET requests to the URL. This can be private. If not
-  given it defaults to the value of `--id-verification-url`.
+  Only the identity provider server will make GET requests to the URL, so this
+  can be private. If not given it defaults to the value of
+  `--id-verification-url`.
 
 
 - `--wallet-proxy-base` (envar `WALLET_PROXY_BASE`), the base Url of the wallet
-  proxy. Example https://wallet-proxy.eu.staging.concordium.com.
+  proxy. Example https://wallet-proxy.testnet.concordium.com.
   This cannot have a path component, the way it is currently set-up. If that is
   necessary (e.g., if we want to deploy this behind a proxy) we need to change
   the use of this parameter a little bit.

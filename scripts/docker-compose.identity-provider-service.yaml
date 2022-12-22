@@ -9,8 +9,9 @@ services:
       - IDENTITY_PROVIDER=/identity_provider.json
       - GLOBAL_CONTEXT=/global.json
       - RETRIEVE_BASE=https://id-service.eu.staging.concordium.com
-      - ID_VERIFICATION_URL=http://identity-verifier:7012/api/verify
-      - WALLET_PROXY_BASE=https://wallet-proxy.eu.staging.concordium.com
+      - ID_VERIFICATION_URL=http://localhost:7012/api/verify
+      - ID_VERIFICATION_QUERY_URL=http://identity-verifier:7012/api/verify
+      - WALLET_PROXY_BASE=https://wallet-proxy.testnet.concordium.com
     ports:
       - "7011:7011"
   identity-verifier:
