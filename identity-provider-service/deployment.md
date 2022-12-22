@@ -42,7 +42,7 @@ This has the following parameters
   This should point to `ip_private_keys/identity_provider-1.json` in genesis-data.
 
 - `--global` points to a file with cryptographic parameters, should point to
-  global.json in genesis_data. Can also be supplied by `GLOBAL` environment variable.
+  global.json in genesis_data. Can also be supplied by `GLOBAL_CONTEXT` environment variable.
 
 - `--port` (also envar `IDENTITY_PROVIDER_SERVICE_PORT`), the port on which the server will start listening.
 
