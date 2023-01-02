@@ -314,7 +314,10 @@ fn handle_sign_pio_v0(app: IpV0) -> anyhow::Result<()> {
     println!(
         "Wrote initial account transaction to file {}. Submit it before {}.",
         &app.out_icdi.to_string_lossy(),
-        chrono::Local.timestamp(message_expiry.seconds as i64, 0),
+        chrono::Local
+            .timestamp_opt(message_expiry.seconds as i64, 0)
+            .earliest()
+            .context("Unable to display expiry time.")?,
     );
     println!(
         "Address of the initial account will be {}.",
