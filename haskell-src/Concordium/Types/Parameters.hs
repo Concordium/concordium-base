@@ -48,6 +48,7 @@ $( singletons
             | PTMinBlockTime
             | PTBlockEnergyLimit
             | PTCooldownParametersAccessStructure
+            | PTFinalizationProof
 
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
         isSupported PTElectionDifficulty ChainParametersV0 = True
@@ -71,6 +72,9 @@ $( singletons
         isSupported PTCooldownParametersAccessStructure ChainParametersV0 = False
         isSupported PTCooldownParametersAccessStructure ChainParametersV1 = True
         isSupported PTCooldownParametersAccessStructure ChainParametersV2 = True
+        isSupported PTFinalizationProof ChainParametersV0 = True
+        isSupported PTFinalizationProof ChainParametersV1 = True
+        isSupported PTFinalizationProof ChainParametersV2 = False
         |]
  )
 
@@ -233,12 +237,12 @@ instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 
 -- |Parameters that determine the proportion of the GAS account that is paid to the baker (pool)
 -- under various circumstances.
-data GASRewards = GASRewards
+data GASRewards cpv = GASRewards
     { -- |BakerPrevTransFrac: fraction paid to baker
       _gasBaker :: !AmountFraction,
       -- |FeeAddFinalisationProof: fraction paid for including a
       -- finalization proof in a block.
-      _gasFinalizationProof :: !AmountFraction,
+      _gasFinalizationProof :: !(OParam 'PTFinalizationProof cpv AmountFraction),
       -- |FeeAccountCreation: fraction paid for including each
       -- account creation transaction in a block.
       _gasAccountCreation :: !AmountFraction,
@@ -250,11 +254,31 @@ data GASRewards = GASRewards
 
 makeClassy ''GASRewards
 
+instance AE.ToJSON (GASRewards cpv) where
+    toJSON GASRewards{..} =
+        object
+            ( "baker" AE..= _gasBaker : finalizationProof
+                ++ [
+                     "accountCreation" AE..= _gasAccountCreation,
+                     "chainUpdate" AE..= _gasChainUpdate
+                   ]
+            )
+      where
+        finalizationProof = foldMap (\finProof -> ["finalizationProof" AE..= finProof]) _gasFinalizationProof
+
+instance IsChainParametersVersion cpv => AE.FromJSON (GASRewards cpv) where
+    parseJSON = withObject "RewardParameters" $ \v -> do
+        _gasBaker <- v .: "baker"
+        _gasFinalizationProof <- whenSupported $ v .: "finalizationProof"
+        _gasAccountCreation <- v .: "accountCreation"
+        _gasChainUpdate <- v .: "chainUpdate"
+        return GASRewards{..}
+
 -- JSON serialization for the GASRewards structure with fields "baker", "finalizationProof",
 -- "accountCreation" and "chainUpdate".
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
+-- $(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
 
-instance Serialize GASRewards where
+instance IsChainParametersVersion cpv => Serialize (GASRewards cpv) where
     put GASRewards{..} = do
         put _gasBaker
         put _gasFinalizationProof
@@ -267,10 +291,10 @@ instance Serialize GASRewards where
         _gasChainUpdate <- get
         return GASRewards{..}
 
-instance HashableTo Hash.Hash GASRewards where
+instance IsChainParametersVersion cpv => HashableTo Hash.Hash (GASRewards cpv) where
     getHash = Hash.hash . encode
 
-instance Monad m => MHashableTo m Hash.Hash GASRewards
+instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (GASRewards cpv)
 
 -- |Parameters affecting rewards.
 -- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
@@ -280,7 +304,7 @@ data RewardParameters cpv = RewardParameters
       -- |Distribution of transaction fees.
       _rpTransactionFeeDistribution :: !TransactionFeeDistribution,
       -- |Rewards paid from the GAS account.
-      _rpGASRewards :: !GASRewards
+      _rpGASRewards :: !(GASRewards cpv)
     }
     deriving (Eq, Show)
 
@@ -292,7 +316,7 @@ instance HasMintDistribution (RewardParameters cpv) cpv where
 instance HasTransactionFeeDistribution (RewardParameters cpv) where
     transactionFeeDistribution = rpTransactionFeeDistribution
 
-instance HasGASRewards (RewardParameters cpv) where
+instance HasGASRewards (RewardParameters cpv) cpv where
     gASRewards = rpGASRewards
 
 instance AE.ToJSON (RewardParameters cpv) where

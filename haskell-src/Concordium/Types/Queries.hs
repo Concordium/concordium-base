@@ -585,8 +585,10 @@ data PendingUpdateEffect
       PUEMintDistributionV1 !(MintDistribution 'ChainParametersV1)
     | -- |Updates to the transaction fee distribution.
       PUETransactionFeeDistribution !TransactionFeeDistribution
-    | -- |Updates to the GAS rewards.
-      PUEGASRewards !GASRewards
+    | -- |Updates to the GAS rewards in CPV0 and CPV1.
+      PUEGASRewardsV0 !(GASRewards 'ChainParametersV0)
+    | -- |Updates to the GAS rewards in CPV2.
+      PUEGASRewardsV1 !(GASRewards 'ChainParametersV2)
     | -- |Updates pool parameters.
       PUEPoolParametersV0 !(PoolParameters 'ChainParametersV0)
     | PUEPoolParametersV1 !(PoolParameters 'ChainParametersV1)

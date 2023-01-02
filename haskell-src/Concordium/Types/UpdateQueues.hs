@@ -148,7 +148,7 @@ data PendingUpdates cpv = PendingUpdates
       -- |Updates to the transaction fee distribution.
       _pTransactionFeeDistributionQueue :: !(UpdateQueue TransactionFeeDistribution),
       -- |Updates to the GAS rewards.
-      _pGASRewardsQueue :: !(UpdateQueue GASRewards),
+      _pGASRewardsQueue :: !(UpdateQueue (GASRewards cpv)),
       -- |Updates pool parameters.
       _pPoolParametersQueue :: !(UpdateQueue (PoolParameters cpv)),
       -- |Adds a new anonymity revoker.
@@ -236,7 +236,7 @@ getPendingUpdates migration = do
     _pFoundationAccountQueue <- getUpdateQueueV0 @AccountIndex
     _pMintDistributionQueue <- getUpdateQueueV0With (migrateMintDistribution migration <$> get)
     _pTransactionFeeDistributionQueue <- getUpdateQueueV0 @TransactionFeeDistribution
-    _pGASRewardsQueue <- getUpdateQueueV0 @GASRewards
+    _pGASRewardsQueue <- getUpdateQueueV0With (migrateGASRewards migration <$> get)
     _pPoolParametersQueue <- getUpdateQueueV0With (migratePoolParameters migration <$> get)
     _pAddAnonymityRevokerQueue <- getUpdateQueueV0 @ARS.ArInfo
     _pAddIdentityProviderQueue <- getUpdateQueueV0 @IPS.IpInfo

@@ -829,7 +829,7 @@ data UpdatePayload
     | -- |Update the distribution of transaction fees
       TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
     | -- |Update the GAS rewards
-      GASRewardsUpdatePayload !GASRewards
+      GASRewardsUpdatePayload !(GASRewards 'ChainParametersV0)
     | -- |Update the minimum amount to register as a baker with chain parameter version 0
       BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
     | -- |Root level update
@@ -854,6 +854,8 @@ data UpdatePayload
       MinBlockTimeUpdatePayload !Duration
     | -- |Update block energy limit
       BlockEnergyLimitUpdatePayload !Energy
+    | -- |Update the GAS rewards
+      GASRewardsCPV2UpdatePayload !(GASRewards 'ChainParametersV2)
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -877,12 +879,15 @@ putUpdatePayload (MintDistributionCPV1UpdatePayload u) = putWord8 17 >> put u
 putUpdatePayload (TimeoutParametersUpdatePayload u) = putWord8 18 >> put u
 putUpdatePayload (MinBlockTimeUpdatePayload u) = putWord8 19 >> put u
 putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
+putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
     getWord8 >>= \case
         1 -> ProtocolUpdatePayload <$> get
-        2 -> ElectionDifficultyUpdatePayload <$> get
+        2
+            | isCPV ChainParametersV0 || isCPV ChainParametersV1 ->
+                ElectionDifficultyUpdatePayload <$> get
         3 -> EuroPerEnergyUpdatePayload <$> get
         4 -> MicroGTUPerEuroUpdatePayload <$> get
         5 -> FoundationAccountUpdatePayload <$> get

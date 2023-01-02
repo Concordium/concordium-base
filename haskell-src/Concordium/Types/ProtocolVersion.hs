@@ -138,19 +138,6 @@ deriving instance Show ProtocolVersion
 deriving instance Eq ChainParametersVersion
 deriving instance Show ChainParametersVersion
 
-{-
--- |The singleton type associated with 'ProtocolVersion'.
--- There is a unique constructor of 'SProtocolVersion' for
--- each constructor of 'ProtocolVersion'.
-data SProtocolVersion (pv :: ProtocolVersion) where
-    SP1 :: SProtocolVersion 'P1
-    SP2 :: SProtocolVersion 'P2
-    SP3 :: SProtocolVersion 'P3
-    SP4 :: SProtocolVersion 'P4
-    SP5 :: SProtocolVersion 'P5
-    SP6 :: SProtocolVersion 'P6
--}
-
 protocolVersionToWord64 :: ProtocolVersion -> Word64
 protocolVersionToWord64 P1 = 1
 protocolVersionToWord64 P2 = 2

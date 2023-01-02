@@ -73,6 +73,21 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 
+-- |Apply a state migration to a 'GASRewards' structure.
+--
+-- [P4 to P5]: the finalization proof reward is removed.
+migrateGASRewards ::
+    forall oldpv pv.
+    StateMigrationParameters oldpv pv ->
+    GASRewards (ChainParametersVersionFor oldpv) ->
+    GASRewards (ChainParametersVersionFor pv)
+migrateGASRewards StateMigrationParametersTrivial gr = gr
+migrateGASRewards StateMigrationParametersP1P2 gr = gr
+migrateGASRewards StateMigrationParametersP2P3 gr = gr
+migrateGASRewards StateMigrationParametersP3ToP4{} GASRewards{_gasFinalizationProof = SomeParam fp, ..} = GASRewards{_gasFinalizationProof = SomeParam fp, ..}
+migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
+-- FIXME: Add P5 -> P6
+
 -- |Apply a state migration to a 'ChainParameters' structure.
 --
 -- [P3 to P4]: the new cooldown, time and pool parameters are given by the migration parameters;
@@ -92,6 +107,7 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
           _cpRewardParameters =
             RewardParameters
                 { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
