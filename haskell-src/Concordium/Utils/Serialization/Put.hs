@@ -1,6 +1,7 @@
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 -- |This module defines the 'MonadPut' typeclass, which generalizes the 'PutM'
 -- monad.  The main purpose of this generalization is to allow efficient
 -- serialization to a file in a monadic context, where it may be undesirable
