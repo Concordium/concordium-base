@@ -1028,7 +1028,7 @@ impl Type {
             }
             Type::ContractAddress => {
                 let address = ContractAddress::deserial(source)?;
-                Ok(Value::String(address.to_string()))
+                Ok(serde_json::to_value(address).map_err(|_| ParseError {})?)
             }
             Type::Timestamp => {
                 let timestamp = Timestamp::deserial(source)?;
