@@ -12,7 +12,7 @@ default = ["ffi"]
 [dependencies]
 rand = "=0.7"
 sha2 = "0.10"
-rayon = "1.5"
+rayon = "1.6"
 generic-array = "0.14"
 pairing = "0.15"
 ff = "0.5"
