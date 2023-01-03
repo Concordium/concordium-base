@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 -- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
 -- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
@@ -77,6 +78,8 @@ $( singletons
         isSupported PTFinalizationProof ChainParametersV2 = False
         |]
  )
+
+type IsParameterType (pt :: ParameterType) = SingI pt
 
 -- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 -- otherwise.
@@ -921,6 +924,38 @@ data ConsensusParameters (cpv :: ChainParametersVersion) where
           _cpBlockEnergyLimit :: !Energy
         } ->
         ConsensusParameters cpv
+
+-- |Lens for '_cpElectionDifficulty'
+{-# INLINE cpElectionDifficulty #-}
+cpElectionDifficulty ::
+    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion0) =>
+    Lens' (ConsensusParameters cpv) ElectionDifficulty
+cpElectionDifficulty =
+    lens _cpElectionDifficulty (\cp x -> cp{_cpElectionDifficulty = x})
+
+-- |Lens for '_cpTimeoutParameters'
+{-# INLINE cpTimeoutParameters #-}
+cpTimeoutParameters ::
+    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+    Lens' (ConsensusParameters cpv) TimeoutParameters
+cpTimeoutParameters =
+    lens _cpTimeoutParameters (\cp x -> cp{_cpTimeoutParameters = x})
+
+-- |Lens for '_cpMinBlockTime'
+{-# INLINE cpMinBlockTime #-}
+cpMinBlockTime ::
+    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+    Lens' (ConsensusParameters cpv) Duration
+cpMinBlockTime =
+    lens _cpMinBlockTime (\cp x -> cp{_cpMinBlockTime = x})
+
+-- |Lens for '_cpBlockEnergyLimit'
+{-# INLINE cpBlockEnergyLimit #-}
+cpBlockEnergyLimit ::
+    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
+    Lens' (ConsensusParameters cpv) Energy
+cpBlockEnergyLimit =
+    lens _cpBlockEnergyLimit (\cp x -> cp{_cpBlockEnergyLimit = x})
 
 coerceConsensusParameters ::
     (ConsensusParametersVersionFor cpv1 ~ ConsensusParametersVersionFor cpv2) =>
