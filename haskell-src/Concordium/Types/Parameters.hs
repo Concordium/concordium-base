@@ -137,6 +137,10 @@ pureWhenSupported v = case sIsSupported (sing @pt) (chainParametersVersion @cpv)
     SFalse -> NoParam
     STrue -> SomeParam v
 
+maybeWhenSupported :: b -> (a -> b) -> OParam pt cpv a -> b
+maybeWhenSupported b _ NoParam = b
+maybeWhenSupported _ f (SomeParam a) = f a
+
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 

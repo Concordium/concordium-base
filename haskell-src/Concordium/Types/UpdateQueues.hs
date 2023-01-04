@@ -193,7 +193,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
-        -- For CPV1, produce the hash. For CPV0, produce the empty string.
+        -- For SomeParam, produce the hash. For NoParam, produce the empty string.
         ohsh :: HashableTo H.Hash e => OUpdateQueue pt cpv e -> BS.ByteString
         ohsh = foldMap hsh
 
