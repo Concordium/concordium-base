@@ -15,6 +15,9 @@ import Data.Word
 import Database.Persist.Class
 import Database.Persist.Sql
 
+import qualified Concordium.Crypto.SHA256 as Hash
+import Concordium.Types.HashableTo
+
 -- |YearMonth used store expiry (validTo) and creation (createdAt).
 -- The year is in Gregorian calendar and months are numbered from 1, i.e.,
 -- 1 is January, ..., 12 is December.
@@ -71,6 +74,11 @@ instance PersistFieldSql Timestamp where
 newtype Duration = Duration {durationMillis :: Word64}
     deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, Bounded, S.Serialize, FromJSON, ToJSON)
 
+instance HashableTo Hash.Hash Duration where
+    getHash = Hash.hash . S.encode
+
+instance (Monad m) => MHashableTo m Hash.Hash Duration
+  
 -- | Convert a 'Timestamp' to a 'UTCTime'
 timestampToUTCTime :: Timestamp -> UTCTime
 timestampToUTCTime ts = posixSecondsToUTCTime $ fromIntegral (tsMillis ts) / 1000

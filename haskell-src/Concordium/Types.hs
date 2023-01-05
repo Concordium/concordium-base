@@ -750,6 +750,11 @@ applyAmountDelta del amt =
 newtype Energy = Energy {_energy :: Word64}
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON) via Word64
 
+instance HashableTo Hash.Hash Energy where
+    getHash = Hash.hash . S.encode
+
+instance (Monad m) => MHashableTo m Hash.Hash Energy
+
 instance S.Serialize Energy where
     get = Energy <$> G.getWord64be
     put (Energy v) = P.putWord64be v

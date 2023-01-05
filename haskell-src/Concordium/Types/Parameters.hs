@@ -91,6 +91,8 @@ data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
 unOParam :: (IsSupported pt cpv ~ 'True) => OParam pt cpv a -> a
 unOParam (SomeParam a) = a
 
+instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
+
 instance Functor (OParam pt cpv) where
     fmap _ NoParam = NoParam
     fmap f (SomeParam v) = SomeParam (f v)

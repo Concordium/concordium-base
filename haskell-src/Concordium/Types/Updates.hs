@@ -937,6 +937,7 @@ updateType FoundationAccountUpdatePayload{} = UpdateFoundationAccount
 updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
+updateType GASRewardsCPV2UpdatePayload{} = UpdateGASRewards
 updateType BakerStakeThresholdUpdatePayload{} = UpdatePoolParameters
 updateType AddAnonymityRevokerUpdatePayload{} = UpdateAddAnonymityRevoker
 updateType AddIdentityProviderUpdatePayload{} = UpdateAddIdentityProvider
@@ -970,6 +971,7 @@ extractKeysIndices p =
         MintDistributionCPV1UpdatePayload{} -> f asParamMintDistribution
         TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
         GASRewardsUpdatePayload{} -> f asParamGASRewards
+        GASRewardsCPV2UpdatePayload{} -> f asParamGASRewards
         BakerStakeThresholdUpdatePayload{} -> f asPoolParameters
         RootUpdatePayload{} -> g rootKeys
         Level1UpdatePayload{} -> g level1Keys
