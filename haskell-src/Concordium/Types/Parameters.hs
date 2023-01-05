@@ -91,8 +91,6 @@ data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
 unOParam :: (IsSupported pt cpv ~ 'True) => OParam pt cpv a -> a
 unOParam (SomeParam a) = a
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
-
 instance Functor (OParam pt cpv) where
     fmap _ NoParam = NoParam
     fmap f (SomeParam v) = SomeParam (f v)
@@ -711,6 +709,9 @@ $( singletons
         poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
         |]
  )
+
+deriving instance Eq PoolParametersVersion
+deriving instance Show PoolParametersVersion
 
 -- |The 'PoolParameters' abstracts the parameters that affect baking pools. Prior to P4, there
 -- is no concept of a baking pool as such, so the pool parameters are considered just to be the
