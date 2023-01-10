@@ -86,6 +86,7 @@ migrateGASRewards StateMigrationParametersP1P2 gr = gr
 migrateGASRewards StateMigrationParametersP2P3 gr = gr
 migrateGASRewards StateMigrationParametersP3ToP4{} GASRewards{_gasFinalizationProof = SomeParam fp, ..} = GASRewards{_gasFinalizationProof = SomeParam fp, ..}
 migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
+
 -- FIXME: Add P5 -> P6
 
 -- |Apply a state migration to a 'ChainParameters' structure.

@@ -28,7 +28,7 @@ import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
-import Concordium.Types.Parameters (CooldownParameters, GASRewards, MintDistribution, PoolParameters, TimeParameters, TransactionFeeDistribution, MintDistributionVersion(MintDistributionVersion0, MintDistributionVersion1))
+import Concordium.Types.Parameters (CooldownParameters, GASRewards, MintDistribution, MintDistributionVersion (MintDistributionVersion0, MintDistributionVersion1), PoolParameters, TimeParameters, TransactionFeeDistribution)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U

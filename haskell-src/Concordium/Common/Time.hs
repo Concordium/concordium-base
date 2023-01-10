@@ -78,7 +78,7 @@ instance HashableTo Hash.Hash Duration where
     getHash = Hash.hash . S.encode
 
 instance (Monad m) => MHashableTo m Hash.Hash Duration
-  
+
 -- | Convert a 'Timestamp' to a 'UTCTime'
 timestampToUTCTime :: Timestamp -> UTCTime
 timestampToUTCTime ts = posixSecondsToUTCTime $ fromIntegral (tsMillis ts) / 1000
