@@ -299,7 +299,7 @@ instance forall cpv. IsChainParametersVersion cpv => AE.ToJSON (Authorizations c
                 "addIdentityProvider" AE..= t asAddIdentityProvider
               ]
                 ++ cooldownParameters
-                ++ timeParameters
+                ++ timeParameters'
             )
       where
         t AccessStructure{..} =
@@ -308,7 +308,7 @@ instance forall cpv. IsChainParametersVersion cpv => AE.ToJSON (Authorizations c
                   "threshold" AE..= accessThreshold
                 ]
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
-        timeParameters = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
+        timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
         consensusParameters = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
             SConsensusParametersVersion0 -> "electionDifficulty" AE..= t asParamConsensusParameters
             SConsensusParametersVersion1 -> "consensusParameters" AE..= t asParamConsensusParameters
@@ -825,7 +825,7 @@ data UpdatePayload
     | -- |Update the address of the foundation account
       FoundationAccountUpdatePayload !AccountAddress
     | -- |Update the distribution of newly minted GTU in chain parameters version 0
-      MintDistributionUpdatePayload !(MintDistribution 'ChainParametersV0)
+      MintDistributionUpdatePayload !(MintDistribution 'MintDistributionVersion0)
     | -- |Update the distribution of transaction fees
       TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
     | -- |Update the GAS rewards
@@ -847,7 +847,7 @@ data UpdatePayload
     | -- |Time parameters with chain parameter version 1
       TimeParametersCPV1UpdatePayload !(TimeParameters 'ChainParametersV1)
     | -- |Update the distribution of newly minted GTU in chain parameters version 1
-      MintDistributionCPV1UpdatePayload !(MintDistribution 'ChainParametersV1)
+      MintDistributionCPV1UpdatePayload !(MintDistribution 'MintDistributionVersion1)
     | -- |Update the timeout parameters
       TimeoutParametersUpdatePayload !TimeoutParameters
     | -- |Update the minimum block time

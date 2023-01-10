@@ -425,18 +425,18 @@ instance AE.ToJSON (RewardParameters cpv) where
 
 instance IsChainParametersVersion cpv => AE.FromJSON (RewardParameters cpv) where
     parseJSON = withObject "RewardParameters" $ \v -> do
-        _rpMintDistribution <- v .: "mintDistribution"
+        _rpMintDistribution <- withIsMintDistributionVersion (chainParametersVersion @cpv) $ v .: "mintDistribution"
         _rpTransactionFeeDistribution <- v .: "transactionFeeDistribution"
         _rpGASRewards <- v .: "gASRewards"
         return RewardParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (RewardParameters cpv) where
     put RewardParameters{..} = do
-        put _rpMintDistribution
+        withIsMintDistributionVersion (chainParametersVersion @cpv) $ put _rpMintDistribution
         put _rpTransactionFeeDistribution
         put _rpGASRewards
     get = do
-        _rpMintDistribution <- get
+        _rpMintDistribution <- withIsMintDistributionVersion (chainParametersVersion @cpv) get
         _rpTransactionFeeDistribution <- get
         _rpGASRewards <- get
         return RewardParameters{..}

@@ -144,7 +144,7 @@ data PendingUpdates cpv = PendingUpdates
       -- |Updates to the foundation account.
       _pFoundationAccountQueue :: !(UpdateQueue AccountIndex),
       -- |Updates to the mint distribution.
-      _pMintDistributionQueue :: !(UpdateQueue (MintDistribution cpv)),
+      _pMintDistributionQueue :: !(UpdateQueue (MintDistribution (MintDistributionVersionFor cpv))),
       -- |Updates to the transaction fee distribution.
       _pTransactionFeeDistributionQueue :: !(UpdateQueue TransactionFeeDistribution),
       -- |Updates to the GAS rewards.
@@ -181,7 +181,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                 <> hsh _pEuroPerEnergyQueue
                 <> hsh _pMicroGTUPerEuroQueue
                 <> hsh _pFoundationAccountQueue
-                <> hsh _pMintDistributionQueue
+                <> withIsMintDistributionVersion (chainParametersVersion @cpv) (hsh _pMintDistributionQueue)
                 <> hsh _pTransactionFeeDistributionQueue
                 <> hsh _pGASRewardsQueue
                 <> hsh _pPoolParametersQueue
@@ -211,7 +211,7 @@ putPendingUpdatesV0 PendingUpdates{..} = do
     putUpdateQueueV0 _pEuroPerEnergyQueue
     putUpdateQueueV0 _pMicroGTUPerEuroQueue
     putUpdateQueueV0 _pFoundationAccountQueue
-    putUpdateQueueV0 _pMintDistributionQueue
+    withIsMintDistributionVersion (chainParametersVersion @cpv) $ putUpdateQueueV0 _pMintDistributionQueue
     putUpdateQueueV0 _pTransactionFeeDistributionQueue
     putUpdateQueueV0 _pGASRewardsQueue
     putUpdateQueueV0 _pPoolParametersQueue
@@ -234,7 +234,7 @@ getPendingUpdates migration = do
     _pEuroPerEnergyQueue <- getUpdateQueueV0 @ExchangeRate
     _pMicroGTUPerEuroQueue <- getUpdateQueueV0 @ExchangeRate
     _pFoundationAccountQueue <- getUpdateQueueV0 @AccountIndex
-    _pMintDistributionQueue <- getUpdateQueueV0With (migrateMintDistribution migration <$> get)
+    _pMintDistributionQueue <- withIsMintDistributionVersion (chainParametersVersion @(ChainParametersVersionFor oldpv)) $ getUpdateQueueV0With (migrateMintDistribution migration <$> get)
     _pTransactionFeeDistributionQueue <- getUpdateQueueV0 @TransactionFeeDistribution
     _pGASRewardsQueue <- getUpdateQueueV0With (migrateGASRewards migration <$> get)
     _pPoolParametersQueue <- getUpdateQueueV0With (migratePoolParameters migration <$> get)

@@ -28,7 +28,7 @@ import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
-import Concordium.Types.Parameters (CooldownParameters, GASRewards, MintDistribution, PoolParameters, TimeParameters, TransactionFeeDistribution)
+import Concordium.Types.Parameters (CooldownParameters, GASRewards, MintDistribution, PoolParameters, TimeParameters, TransactionFeeDistribution, MintDistributionVersion(MintDistributionVersion0, MintDistributionVersion1))
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
@@ -580,9 +580,9 @@ data PendingUpdateEffect
     | -- |Updates to the foundation account.
       PUEFoundationAccount !AccountAddress
     | -- |Updates to the mint distribution.
-      PUEMintDistributionV0 !(MintDistribution 'ChainParametersV0)
+      PUEMintDistributionV0 !(MintDistribution 'MintDistributionVersion0)
     | -- |Updates to the mint distribution.
-      PUEMintDistributionV1 !(MintDistribution 'ChainParametersV1)
+      PUEMintDistributionV1 !(MintDistribution 'MintDistributionVersion1)
     | -- |Updates to the transaction fee distribution.
       PUETransactionFeeDistribution !TransactionFeeDistribution
     | -- |Updates to the GAS rewards in CPV0 and CPV1.

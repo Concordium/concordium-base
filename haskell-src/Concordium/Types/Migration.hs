@@ -49,13 +49,13 @@ migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
 migrateMintDistribution ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    MintDistribution (ChainParametersVersionFor oldpv) ->
-    MintDistribution (ChainParametersVersionFor pv)
+    MintDistribution (MintDistributionVersionFor (ChainParametersVersionFor oldpv)) ->
+    MintDistribution (MintDistributionVersionFor (ChainParametersVersionFor pv))
 migrateMintDistribution StateMigrationParametersTrivial mint = mint
 migrateMintDistribution StateMigrationParametersP1P2 mint = mint
 migrateMintDistribution StateMigrationParametersP2P3 mint = mint
 migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
-    MintDistribution{_mdMintPerSlot = NoParam, ..}
+    MintDistribution{_mdMintPerSlot = CFalse, ..}
 migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 
 -- |Apply a state migration to a 'PoolParameters' structure.
